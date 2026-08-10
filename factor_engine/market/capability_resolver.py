@@ -131,27 +131,10 @@ def operator_support(
 
     contract = contract_for(name)
 
-    # Production certification gate (market-independent).
-    if production and ctx.provider_profile == "production":
-        prod = _production_allowlist()
-        # R17-042: a SUCCESSFULLY LOADED EMPTY allowlist means 0 operators are
-        # production-certified — it must fail every operator closed, NOT degrade
-        # the gate to a no-op.  ``_production_allowlist`` already raises on build
-        # failure; here we distinguish "loaded, empty" (restrict everything) from
-        # "not loaded" (impossible — raised above).
-        if name not in prod:
-            return MarketSupport(
-                canonical=raw_name, market=market,
-                status=MarketStatus.RESEARCH_ONLY,
-                reason_codes=("NOT_PRODUCTION_CERTIFIED",),
-                notes="not on the production allowlist (empty allowlist == 0 "
-                      "operators certified, R17-042); research may opt in explicitly",
-            )
-
-    # P0-015: ``ashare_*`` prefix is a HARD A-share lock unless an explicit
-    # contract opts the operator into US.  This is a safety net for new ashare_*
-    # ops (e.g. ashare_suspension_episode_length) that are not enumerated in the
-    # price-limit family set — we should never rely on remembering to add each one.
+    # STRUCTURAL gates first (R17-042): a market-mechanism operator is
+    # *structurally* unavailable in a market regardless of certification, so the
+    # production-certification gate must not mask it.  Order:
+    #   ashare_* lock -> intrinsic markets -> required capabilities.
     if name.startswith("ashare_") and market != "ashare":
         if contract is None or "us" not in contract.intrinsic_markets:
             return MarketSupport(
@@ -189,6 +172,24 @@ def operator_support(
                 missing_capabilities=tuple(missing),
                 reason_codes=("MISSING_CAPABILITY",),
                 notes=contract.notes,
+            )
+
+    # Production certification gate (market-independent, runs AFTER structural
+    # gates so a market-blocked operator is never masked by an empty allowlist).
+    if production and ctx.provider_profile == "production":
+        prod = _production_allowlist()
+        # R17-042: a SUCCESSFULLY LOADED EMPTY allowlist means 0 operators are
+        # production-certified — it must fail every operator closed, NOT degrade
+        # the gate to a no-op.  ``_production_allowlist`` already raises on build
+        # failure; here we distinguish "loaded, empty" (restrict everything) from
+        # "not loaded" (impossible — raised above).
+        if name not in prod:
+            return MarketSupport(
+                canonical=raw_name, market=market,
+                status=MarketStatus.RESEARCH_ONLY,
+                reason_codes=("NOT_PRODUCTION_CERTIFIED",),
+                notes="not on the production allowlist (empty allowlist == 0 "
+                      "operators certified, R17-042); research may opt in explicitly",
             )
 
     # Generic mathematical operator: both markets, input-dependent.  NOT

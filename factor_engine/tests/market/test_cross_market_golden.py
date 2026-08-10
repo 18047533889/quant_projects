@@ -183,16 +183,27 @@ def test_pit_ashare_uses_pubdate_us_uses_filing_date() -> None:
 def test_table_collision_isolation() -> None:
     from fields import MULTI_MARKET_FIELD_REGISTRY
 
-    # StockValuationDaily / StockIndicator / StockCapitalDaily exist in BOTH
-    # markets but must not share a contract.
+    # StockValuationDaily / StockIndicator exist in BOTH markets and must not
+    # share a contract.  R17-019: US StockCapitalDaily is split into
+    # USStockCapitalSplitEvent + USTickerSharesPITEvent (no single US
+    # StockCapitalDaily table), so only the surviving shared names are checked
+    # for cross-market collision.
     for market in ("ashare", "us"):
         reg = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
-        for table in ("StockValuationDaily", "StockIndicator", "StockCapitalDaily"):
+        for table in ("StockValuationDaily", "StockIndicator"):
             spec = reg.resolve_table(table)
             assert spec is not None, f"{market}.{table} should exist"
             assert spec.dataset.startswith("us_") if market == "us" else spec.dataset.startswith("ashare_"), (
                 f"{market}.{table} leaked into wrong dataset {spec.dataset}"
             )
+    # R17-019: the US capital split tables are US-only; A-share keeps
+    # StockCapitalDaily (S1 state).
+    us_split = MULTI_MARKET_FIELD_REGISTRY.registry_for("us").resolve_table("USStockCapitalSplitEvent")
+    assert us_split is not None and us_split.dataset == "us_stock_capital_split"
+    us_pit = MULTI_MARKET_FIELD_REGISTRY.registry_for("us").resolve_table("USTickerSharesPITEvent")
+    assert us_pit is not None and us_pit.dataset == "us_stock_capital_shares"
+    a_cap = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table("StockCapitalDaily")
+    assert a_cap is not None and a_cap.dataset == "ashare_stock_capital_daily"
 
 
 # ---------------------------------------------------------------------------

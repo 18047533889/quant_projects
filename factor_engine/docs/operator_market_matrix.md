@@ -1,10 +1,9 @@
 # Operator × Market 能力矩阵
 
-覆盖 canonical：**1362** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
+覆盖 canonical：**1426** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
 
 | canonical | A | US | 说明 |
 | --- | --- | --- | --- |
-| ADL | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ADX | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ATR_WILDER | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | CMF | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -79,6 +78,7 @@
 | atan | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | atan2 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | average_turnover | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
+| baseline_scaled_wasserstein_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | benchmark_excess_return | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | benchmark_relative_price | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | bollinger_pct_b | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -151,6 +151,7 @@
 | composition_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | composition_ilr_balance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | composition_js_divergence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| composition_normalized_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | constant | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | corwin_schultz_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cos | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -169,10 +170,12 @@
 | cs_fill_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_fill_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_hartigan_dip | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_huber_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_impute_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_impute_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_isolation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_isotonic_residual | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_isotonic_residual_lagged_direction | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_knn_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_knn_graph_dirichlet_energy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_knn_local_gradient_norm | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -181,6 +184,7 @@
 | cs_knn_neighbor_retention | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_knn_peer_mean_ex_self | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_knn_tangent_residual | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_lad_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_local_curvature | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_local_density | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_local_density_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -189,13 +193,16 @@
 | cs_mahalanobis_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_multi_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| cs_multi_robust_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_multi_ridge_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_neighbor_gap | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_neutralize | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_pct_rank | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_physical_panel_coverage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_quantile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_quantile_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_rank_churn | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_rank_combined_churn | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_rank_composition_churn | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_rank_copula_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_rank_copula_mi | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_rank_gaussian | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -205,13 +212,15 @@
 | cs_residual_percentile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_ridge_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_robust_mahalanobis_mad | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| cs_robust_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_shrinkage_mahalanobis | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_sliced_wasserstein_copula_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_spline_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_std | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_sum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_tail_breadth | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_tail_retention | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_trimmed_ols_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| cs_universe_coverage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_valid_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_weighted_demean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | cs_weighted_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -245,6 +254,7 @@
 | event_cluster_mean_size | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_cumulative_return_past | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_decay_asof | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| event_fano_excess | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_fano_factor | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_frequency | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_hawkes_branching_ratio_proxy | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
@@ -317,6 +327,7 @@
 | fin_expense_sales_divergence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_fair_value_income_dependence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_financing_gap | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| fin_fundamental_strength_coverage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_fundamental_strength_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_goodwill_intensity | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_goodwill_risk_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -350,6 +361,9 @@
 | fin_pct_change | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_percentile_history | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_percentile_vs_prior_history | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| fin_period_restated | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| fin_period_revision_age | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| fin_period_revision_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_positive_streak | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_qoq | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | fin_quarter_from_cumulative | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -417,6 +431,7 @@
 | ge | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_corr_mst_length | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_current_members_tail_coexceedance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_decay_linear | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_distribution_js_divergence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_ex_self_mad | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -446,6 +461,7 @@
 | group_percentile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_quantile_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_rank | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_rank_weighted_value | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_return_dispersion_exposure | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_signal_attraction_share | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_skewness | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -453,7 +469,6 @@
 | group_std | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_sum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_tail_centrality | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_tail_coexceedance_density | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_tail_lead_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_tail_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_topk_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -475,6 +490,8 @@
 | holder_concentration_change | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_concentration_slope | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_count_change_rate | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
+| holder_disclosure_count | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| holder_disclosure_coverage | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | holder_entry_share | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_exit_share | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_float_concentration_gap | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
@@ -497,6 +514,7 @@
 | holder_share_weighted_rank_migration | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_shareholder_network_centrality | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | holder_shareholder_overlap_ratio | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
+| holder_topk_share_sum | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | holder_weighted_churn | ✓ | PROVIDER_REQUIRED | US provider required: TOP_HOLDERS |
 | hump_decay | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ichimoku_cloud_position | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -731,6 +749,9 @@
 | period_lag | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | period_stability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | piotroski_f_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| piotroski_f_score_tolerant | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| piotroski_observed_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| piotroski_partial_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | power | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | price_impact | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | price_spread_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -746,7 +767,8 @@
 | relation_concentration_acceleration | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_diffusion_score | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_distinct_count | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
-| relation_distribution_kurtosis | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| relation_distribution_excess_kurtosis | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| relation_distribution_pearson_kurtosis | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_distribution_skew | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_entropy | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_entropy_change | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
@@ -756,6 +778,7 @@
 | relation_hhi_change | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_overlap_ratio | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_peer_weighted_mean_ex_self | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| relation_rank_entity_mobility | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_rank_mobility | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_rank_weighted_sum | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | relation_share_mobility | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
@@ -779,6 +802,7 @@
 | revision_delta | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | rogers_satchell_vol | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | roll_spread_proxy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| rolling_adl_flow | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | rolling_beta_to_market | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | rolling_obv | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | rolling_pvt | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -813,7 +837,10 @@
 | state_ewm_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | state_hold | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | state_latch | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| state_since_reduce | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| state_since_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| state_since_last | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| state_since_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| state_since_sum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | state_since_trend_tstat | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | state_slew_limit | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | subtract | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -830,9 +857,12 @@
 | ts_abdi_ranaldo_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_abs_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_abs_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_abs_entropy_nats | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_abs_entropy_normalized | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_active_information_storage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_activity_clock_age | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_activity_clock_lagged_value | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_activity_clock_lagged_value_prior | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ar_coeff_stability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ar_coefficient | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ar_fitted_value | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -853,14 +883,17 @@
 | ts_autocorr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_autocorr_decay_half_life | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_autocorrelation_time | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_autocorrelation_time_initial_positive_sequence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_average_volume | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_bds_statistic | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_best_lag_corr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_best_lag_corr_excess | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_best_lag_corr_raw | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_beta | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_beta_break_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_beta_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_betti_1_max_persistence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_bicoherence_max | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_bicoherence_top_decile_excess | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_bicoherence_top_decile_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_binned_response_curvature | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_binned_response_monotonicity | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_bottomk_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -898,9 +931,9 @@
 | ts_cross_spectral_phase | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_crossing_acceleration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_crossing_speed | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_cumulative_deviation_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_current_drawdown_area | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_current_drawdown_duration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_cusum_break_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_cusum_pressure | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_cusum_vol_break_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_days_since | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -915,8 +948,10 @@
 | ts_delay | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_delay_intrinsic_dimension | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_delta | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_detrended_level_spectral_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_dfa_hurst | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_distance_corr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_distance_correlation_partial_proxy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_distance_cov | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_distance_to_high | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_distance_to_low | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -924,11 +959,18 @@
 | ts_distance_to_support | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_dmd_dominant_frequency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_dmd_dominant_growth_rate | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_level_dominant_frequency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_level_dominant_growth_rate | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_level_mode_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_dmd_mode_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_return_dominant_frequency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_return_dominant_growth_rate | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_dmd_return_mode_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_dominant_cycle_period | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_downside_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_edge_effective_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_effective_transfer_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_effective_turning_rate | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ema | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_endpoint_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_energy_break_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -966,8 +1008,11 @@
 | ts_first_passage_conditional_time | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_first_passage_hit_probability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_fisher_information_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_forbidden_ordinal_pattern_excess | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_forbidden_ordinal_pattern_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_forbidden_ordinal_pattern_signed_excess | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_fractional_difference | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_fractional_difference_discarded_weight_mass | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gap_fill_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gap_reversion_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gap_survival_duration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -976,6 +1021,7 @@
 | ts_garch_standardized_shock | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_garch_vol_surprise | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_generalized_hurst_exponent | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_generalized_hurst_spread_q1_q4 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gjr_garch_vol_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gjr_leverage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_glr_mean_shift_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -988,7 +1034,8 @@
 | ts_har_rv_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_har_rv_forecast_error_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_har_rv_innovation_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_har_rv_next_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_har_rv_next_var_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_har_rv_next_vol_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_hartigan_dip | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_higuchi_fractal_dimension | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_hill_tail_index | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -998,7 +1045,8 @@
 | ts_huber_regression_coeff_prior | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_huber_regression_forecast_error | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_huber_regression_forecast_error_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_huber_regression_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_huber_regression_in_sample_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_huber_regression_predictive_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_huber_regression_resid_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_hurst_dfa | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_hvg_assortativity | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1047,11 +1095,13 @@
 | ts_leverage_effect | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_line_convergence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_line_parallelism | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_lo_mackinlay_vr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_lo_mackinlay_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_local_lyapunov_exponent | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_location_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_log_return | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_lower_partial_moment | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_lower_tail_dependence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_lower_tail_coexceedance_probability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_lz_complexity | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mad | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_market_liquidity_beta | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1076,11 +1126,13 @@
 | ts_max_drawdown_activity_cost | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_mean_abs_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_excess_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_reversion_half_life | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_reversion_ou_approx_half_life | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_median_abs_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_min | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_min_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mmd_rbf_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1100,7 +1152,7 @@
 | ts_multi_regression_resid_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multifractal_asymmetry | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multifractal_curvature | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_multifractal_width | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_multifractal_spectrum_width | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multiscale_entropy_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multiscale_permutation_entropy_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multiscale_trend_consensus | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1122,7 +1174,6 @@
 | ts_overnight_intraday_sign_agreement | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_overnight_intraday_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_partial_corr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_partial_distance_correlation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_pastor_stambaugh_liquidity_gamma | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_path_efficiency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_path_leadlag_area | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1151,6 +1202,7 @@
 | ts_prev_low | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_price_delay | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_product | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_pseudocount_sample_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_qn_scale | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_beta_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1160,6 +1212,7 @@
 | ts_quantile_range | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_regression_beta | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_regression_coeff | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_quantile_regression_coeff_prior | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_regression_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_regression_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_quantile_skew | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1195,18 +1248,24 @@
 | ts_resistance_break | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_resistance_fit_r2 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_resistance_level | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_resistance_log_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_resistance_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_response_slope_asymmetry | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_return_spectral_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ridge_regression_coeff | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ridge_regression_coeff_prior | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ridge_regression_forecast_error | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ridge_regression_forecast_error_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_ridge_regression_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_ridge_regression_in_sample_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_ridge_regression_predictive_resid | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ridge_regression_resid_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_robust_zscore | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_robust_zscore_inclusive | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_robust_zscore_prior | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_roll_effective_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_rolling_sr_gaussian_mean_shift_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_roughness | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_rqa_determinism_fixed_rr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_rqa_laminarity_fixed_rr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_run_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_run_efficiency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_run_strength | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1245,6 +1304,7 @@
 | ts_support_break | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_support_fit_r2 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_support_level | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_support_log_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_support_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_swing_amplitude | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_swing_amplitude_atr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1263,6 +1323,7 @@
 | ts_topk_std | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_topk_sum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_transfer_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_transfer_entropy_peak_excess | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_transfer_entropy_peak_lag | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_transfer_entropy_peak_strength | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_transition_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1277,21 +1338,23 @@
 | ts_turnover_age_dispersion | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_cost_dispersion | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_cost_entropy | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
+| ts_turnover_cost_entropy_vol_scaled | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_turnover_cost_mode_distance | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_cost_quantile_distance | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_cost_skew | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_holding_age | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_near_cost_mass | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
+| ts_turnover_old_mass | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_turnover_profit_share | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_turnover_reference_price | ✓ | PROVIDER_REQUIRED | US provider required: DAILY_TURNOVER |
 | ts_two_state_regime_probability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_upper_partial_moment | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_upper_tail_dependence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_upper_tail_coexceedance_probability | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_upside_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_valid_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_value_at_argextreme | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_var | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_variance_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_variance_ratio_proxy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_variance_ratio_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_variogram_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_vector_path_curvature | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1313,6 +1376,7 @@
 | ts_wavelet_high_frequency_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_wavelet_low_frequency_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_wavelet_lowpass_reconstruct | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_weighted_downside_deviation | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_weighted_drawdown_area | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_weighted_expected_shortfall | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_weighted_permutation_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1350,8 +1414,8 @@
 | volume_acceleration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_autocorr | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_momentum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| volume_price_range_density | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_shock | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| volume_to_range | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_volatility | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_weighted_momentum | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | volume_weighted_return | INPUT_DEPENDENT | INPUT_DEPENDENT |  |

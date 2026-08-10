@@ -2,49 +2,13 @@
   "schema_version": "factor_engine.operator_market_capabilities.v2",
   "generated_by": "market/capability_resolver.build_market_operator_manifest",
   "counts": {
-    "total": 1362,
+    "total": 1426,
     "unknown": 0,
     "not_reviewed": 0,
-    "explicit_contract": 63,
-    "fallback_default": 1136
+    "explicit_contract": 60,
+    "fallback_default": 1200
   },
   "operators": {
-    "ADL": {
-      "canonical": "ADL",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "ADL",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "ADL",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
     "ADX": {
       "canonical": "ADX",
       "contract_origin": "fallback_default",
@@ -2871,6 +2835,42 @@
         "notes": "A-share daily turnover feed; US has no isomorphic D1 turnover (do not fake it with volume)"
       }
     },
+    "baseline_scaled_wasserstein_distance": {
+      "canonical": "baseline_scaled_wasserstein_distance",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "baseline_scaled_wasserstein_distance",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "baseline_scaled_wasserstein_distance",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "benchmark_excess_return": {
       "canonical": "benchmark_excess_return",
       "contract_origin": "fallback_default",
@@ -5463,6 +5463,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "composition_normalized_entropy": {
+      "canonical": "composition_normalized_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_normalized_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_normalized_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "constant": {
       "canonical": "constant",
       "contract_origin": "fallback_default",
@@ -6111,6 +6147,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "cs_huber_resid": {
+      "canonical": "cs_huber_resid",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_huber_resid",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_huber_resid",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "cs_impute_mean": {
       "canonical": "cs_impute_mean",
       "contract_origin": "fallback_default",
@@ -6243,6 +6315,42 @@
       },
       "us": {
         "canonical": "cs_isotonic_residual",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_isotonic_residual_lagged_direction": {
+      "canonical": "cs_isotonic_residual_lagged_direction",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_isotonic_residual_lagged_direction",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_isotonic_residual_lagged_direction",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -6543,6 +6651,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "cs_lad_resid": {
+      "canonical": "cs_lad_resid",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_lad_resid",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_lad_resid",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "cs_local_curvature": {
       "canonical": "cs_local_curvature",
       "contract_origin": "fallback_default",
@@ -6831,8 +6975,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "cs_multi_robust_resid": {
-      "canonical": "cs_multi_robust_resid",
+    "cs_multi_ridge_resid": {
+      "canonical": "cs_multi_ridge_resid",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -6841,7 +6985,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "cs_multi_robust_resid",
+        "canonical": "cs_multi_ridge_resid",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -6854,7 +6998,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "cs_multi_robust_resid",
+        "canonical": "cs_multi_ridge_resid",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -6975,6 +7119,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "cs_physical_panel_coverage": {
+      "canonical": "cs_physical_panel_coverage",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_physical_panel_coverage",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_physical_panel_coverage",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "cs_quantile": {
       "canonical": "cs_quantile",
       "contract_origin": "fallback_default",
@@ -7071,6 +7251,78 @@
       },
       "us": {
         "canonical": "cs_rank_churn",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_rank_combined_churn": {
+      "canonical": "cs_rank_combined_churn",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_rank_combined_churn",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_rank_combined_churn",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_rank_composition_churn": {
+      "canonical": "cs_rank_composition_churn",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_rank_composition_churn",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_rank_composition_churn",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -7407,42 +7659,6 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "cs_robust_resid": {
-      "canonical": "cs_robust_resid",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "cs_robust_resid",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "cs_robust_resid",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
     "cs_shrinkage_mahalanobis": {
       "canonical": "cs_shrinkage_mahalanobis",
       "contract_origin": "fallback_default",
@@ -7623,6 +7839,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "cs_tail_breadth": {
+      "canonical": "cs_tail_breadth",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_tail_breadth",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_tail_breadth",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "cs_tail_retention": {
       "canonical": "cs_tail_retention",
       "contract_origin": "fallback_default",
@@ -7647,6 +7899,78 @@
       },
       "us": {
         "canonical": "cs_tail_retention",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_trimmed_ols_resid": {
+      "canonical": "cs_trimmed_ols_resid",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_trimmed_ols_resid",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_trimmed_ols_resid",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_universe_coverage": {
+      "canonical": "cs_universe_coverage",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_universe_coverage",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_universe_coverage",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -8873,6 +9197,46 @@
       },
       "us": {
         "canonical": "event_decay_asof",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "event_fano_excess": {
+      "canonical": "event_fano_excess",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "event_fano_excess",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "event_fano_excess",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
@@ -11555,6 +11919,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "fin_fundamental_strength_coverage": {
+      "canonical": "fin_fundamental_strength_coverage",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_fundamental_strength_coverage",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_fundamental_strength_coverage",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "fin_fundamental_strength_score": {
       "canonical": "fin_fundamental_strength_score",
       "contract_origin": "fallback_default",
@@ -12731,6 +13131,114 @@
       },
       "us": {
         "canonical": "fin_percentile_vs_prior_history",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fin_period_restated": {
+      "canonical": "fin_period_restated",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_period_restated",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_period_restated",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fin_period_revision_age": {
+      "canonical": "fin_period_revision_age",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_period_revision_age",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_period_revision_age",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fin_period_revision_count": {
+      "canonical": "fin_period_revision_count",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_period_revision_count",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_period_revision_count",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -15261,6 +15769,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "group_current_members_tail_coexceedance": {
+      "canonical": "group_current_members_tail_coexceedance",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_current_members_tail_coexceedance",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_current_members_tail_coexceedance",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "group_decay_linear": {
       "canonical": "group_decay_linear",
       "contract_origin": "fallback_default",
@@ -16305,6 +16849,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "group_rank_weighted_value": {
+      "canonical": "group_rank_weighted_value",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_rank_weighted_value",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_rank_weighted_value",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "group_return_dispersion_exposure": {
       "canonical": "group_return_dispersion_exposure",
       "contract_origin": "fallback_default",
@@ -16545,42 +17125,6 @@
       },
       "us": {
         "canonical": "group_tail_centrality",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "group_tail_coexceedance_density": {
-      "canonical": "group_tail_coexceedance_density",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_tail_coexceedance_density",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_tail_coexceedance_density",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -17427,6 +17971,86 @@
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
         "notes": "A-share top-holder feeds; US has no same-structure holder feed (a 13F/institutional provider would unblock US)"
+      }
+    },
+    "holder_disclosure_count": {
+      "canonical": "holder_disclosure_count",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "holder_disclosure_count",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "holder_disclosure_count",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "holder_disclosure_coverage": {
+      "canonical": "holder_disclosure_coverage",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "holder_disclosure_coverage",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "holder_disclosure_coverage",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "holder_entry_share": {
@@ -18471,6 +19095,46 @@
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
         "notes": "A-share top-holder feeds; US has no same-structure holder feed (a 13F/institutional provider would unblock US)"
+      }
+    },
+    "holder_topk_share_sum": {
+      "canonical": "holder_topk_share_sum",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "holder_topk_share_sum",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "holder_topk_share_sum",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "holder_weighted_churn": {
@@ -21177,12 +21841,13 @@
     },
     "intra_limit_duration": {
       "canonical": "intra_limit_duration",
-      "contract_origin": "explicit",
+      "contract_origin": "typed_derived",
       "intrinsic_markets": [
         "ashare"
       ],
       "required_capabilities": [
-        "DAILY_PRICE_LIMITS"
+        "DAILY_PRICE_LIMITS",
+        "FULL_MINUTE_OHLCV"
       ],
       "price_basis": "RAW_OFFICIAL_LIMIT",
       "ashare": {
@@ -21190,7 +21855,8 @@
         "market": "ashare",
         "status": "CERTIFIED_NATIVE",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [],
@@ -21198,14 +21864,15 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       },
       "us": {
         "canonical": "intra_limit_duration",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [
@@ -21215,17 +21882,18 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       }
     },
     "intra_limit_first_hit_time": {
       "canonical": "intra_limit_first_hit_time",
-      "contract_origin": "explicit",
+      "contract_origin": "typed_derived",
       "intrinsic_markets": [
         "ashare"
       ],
       "required_capabilities": [
-        "DAILY_PRICE_LIMITS"
+        "DAILY_PRICE_LIMITS",
+        "FULL_MINUTE_OHLCV"
       ],
       "price_basis": "RAW_OFFICIAL_LIMIT",
       "ashare": {
@@ -21233,7 +21901,8 @@
         "market": "ashare",
         "status": "CERTIFIED_NATIVE",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [],
@@ -21241,14 +21910,15 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       },
       "us": {
         "canonical": "intra_limit_first_hit_time",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [
@@ -21258,17 +21928,18 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       }
     },
     "intra_limit_reopen_count": {
       "canonical": "intra_limit_reopen_count",
-      "contract_origin": "explicit",
+      "contract_origin": "typed_derived",
       "intrinsic_markets": [
         "ashare"
       ],
       "required_capabilities": [
-        "DAILY_PRICE_LIMITS"
+        "DAILY_PRICE_LIMITS",
+        "FULL_MINUTE_OHLCV"
       ],
       "price_basis": "RAW_OFFICIAL_LIMIT",
       "ashare": {
@@ -21276,7 +21947,8 @@
         "market": "ashare",
         "status": "CERTIFIED_NATIVE",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [],
@@ -21284,14 +21956,15 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       },
       "us": {
         "canonical": "intra_limit_reopen_count",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [
-          "DAILY_PRICE_LIMITS"
+          "DAILY_PRICE_LIMITS",
+          "FULL_MINUTE_OHLCV"
         ],
         "missing_capabilities": [],
         "reason_codes": [
@@ -21301,7 +21974,7 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": false,
-        "notes": "A-share daily static price limit mechanism; US LULD/halt is not an equivalent"
+        "notes": "minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)"
       }
     },
     "intra_longest_above_vwap_streak": {
@@ -28323,6 +28996,114 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "piotroski_f_score_tolerant": {
+      "canonical": "piotroski_f_score_tolerant",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "piotroski_f_score_tolerant",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "piotroski_f_score_tolerant",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "piotroski_observed_count": {
+      "canonical": "piotroski_observed_count",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "piotroski_observed_count",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "piotroski_observed_count",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "piotroski_partial_score": {
+      "canonical": "piotroski_partial_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "piotroski_partial_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "piotroski_partial_score",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "power": {
       "canonical": "power",
       "contract_origin": "fallback_default",
@@ -28899,8 +29680,8 @@
         "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
-    "relation_distribution_kurtosis": {
-      "canonical": "relation_distribution_kurtosis",
+    "relation_distribution_excess_kurtosis": {
+      "canonical": "relation_distribution_excess_kurtosis",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -28909,7 +29690,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "relation_distribution_kurtosis",
+        "canonical": "relation_distribution_excess_kurtosis",
         "market": "ashare",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
@@ -28924,7 +29705,47 @@
         "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
-        "canonical": "relation_distribution_kurtosis",
+        "canonical": "relation_distribution_excess_kurtosis",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "relation_distribution_pearson_kurtosis": {
+      "canonical": "relation_distribution_pearson_kurtosis",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "relation_distribution_pearson_kurtosis",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "relation_distribution_pearson_kurtosis",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
@@ -29285,6 +30106,46 @@
       },
       "us": {
         "canonical": "relation_peer_weighted_mean_ex_self",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "relation_rank_entity_mobility": {
+      "canonical": "relation_rank_entity_mobility",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "relation_rank_entity_mobility",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "relation_rank_entity_mobility",
         "market": "us",
         "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
@@ -30163,6 +31024,42 @@
       },
       "us": {
         "canonical": "roll_spread_proxy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "rolling_adl_flow": {
+      "canonical": "rolling_adl_flow",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "rolling_adl_flow",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "rolling_adl_flow",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -31409,8 +32306,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "state_since_reduce": {
-      "canonical": "state_since_reduce",
+    "state_since_count": {
+      "canonical": "state_since_count",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -31419,7 +32316,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "state_since_reduce",
+        "canonical": "state_since_count",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -31432,7 +32329,115 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "state_since_reduce",
+        "canonical": "state_since_count",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "state_since_last": {
+      "canonical": "state_since_last",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "state_since_last",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "state_since_last",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "state_since_mean": {
+      "canonical": "state_since_mean",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "state_since_mean",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "state_since_mean",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "state_since_sum": {
+      "canonical": "state_since_sum",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "state_since_sum",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "state_since_sum",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -32031,6 +33036,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_abs_entropy_nats": {
+      "canonical": "ts_abs_entropy_nats",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_abs_entropy_nats",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_abs_entropy_nats",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_abs_entropy_normalized": {
+      "canonical": "ts_abs_entropy_normalized",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_abs_entropy_normalized",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_abs_entropy_normalized",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_active_information_storage": {
       "canonical": "ts_active_information_storage",
       "contract_origin": "fallback_default",
@@ -32127,6 +33204,42 @@
       },
       "us": {
         "canonical": "ts_activity_clock_lagged_value",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_activity_clock_lagged_value_prior": {
+      "canonical": "ts_activity_clock_lagged_value_prior",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_activity_clock_lagged_value_prior",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_activity_clock_lagged_value_prior",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -32859,6 +33972,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_autocorrelation_time_initial_positive_sequence": {
+      "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_average_volume": {
       "canonical": "ts_average_volume",
       "contract_origin": "fallback_default",
@@ -32931,8 +34080,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_best_lag_corr": {
-      "canonical": "ts_best_lag_corr",
+    "ts_best_lag_corr_excess": {
+      "canonical": "ts_best_lag_corr_excess",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -32941,7 +34090,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_best_lag_corr",
+        "canonical": "ts_best_lag_corr_excess",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -32954,7 +34103,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_best_lag_corr",
+        "canonical": "ts_best_lag_corr_excess",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_best_lag_corr_raw": {
+      "canonical": "ts_best_lag_corr_raw",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_best_lag_corr_raw",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_best_lag_corr_raw",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -33111,8 +34296,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_bicoherence_max": {
-      "canonical": "ts_bicoherence_max",
+    "ts_bicoherence_top_decile_excess": {
+      "canonical": "ts_bicoherence_top_decile_excess",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -33121,7 +34306,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_bicoherence_max",
+        "canonical": "ts_bicoherence_top_decile_excess",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -33134,7 +34319,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_bicoherence_max",
+        "canonical": "ts_bicoherence_top_decile_excess",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_bicoherence_top_decile_mean": {
+      "canonical": "ts_bicoherence_top_decile_mean",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_bicoherence_top_decile_mean",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_bicoherence_top_decile_mean",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -34479,6 +35700,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_cumulative_deviation_score": {
+      "canonical": "ts_cumulative_deviation_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_cumulative_deviation_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_cumulative_deviation_score",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_current_drawdown_area": {
       "canonical": "ts_current_drawdown_area",
       "contract_origin": "fallback_default",
@@ -34539,42 +35796,6 @@
       },
       "us": {
         "canonical": "ts_current_drawdown_duration",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "ts_cusum_break_score": {
-      "canonical": "ts_cusum_break_score",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "ts_cusum_break_score",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "ts_cusum_break_score",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -35091,6 +36312,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_detrended_level_spectral_entropy": {
+      "canonical": "ts_detrended_level_spectral_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_detrended_level_spectral_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_detrended_level_spectral_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_dfa_hurst": {
       "canonical": "ts_dfa_hurst",
       "contract_origin": "fallback_default",
@@ -35151,6 +36408,42 @@
       },
       "us": {
         "canonical": "ts_distance_corr",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_distance_correlation_partial_proxy": {
+      "canonical": "ts_distance_correlation_partial_proxy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_distance_correlation_partial_proxy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_distance_correlation_partial_proxy",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -35415,6 +36708,114 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_dmd_level_dominant_frequency": {
+      "canonical": "ts_dmd_level_dominant_frequency",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_level_dominant_frequency",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_level_dominant_frequency",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_level_dominant_growth_rate": {
+      "canonical": "ts_dmd_level_dominant_growth_rate",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_level_dominant_growth_rate",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_level_dominant_growth_rate",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_level_mode_concentration": {
+      "canonical": "ts_dmd_level_mode_concentration",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_level_mode_concentration",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_level_mode_concentration",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_dmd_mode_concentration": {
       "canonical": "ts_dmd_mode_concentration",
       "contract_origin": "fallback_default",
@@ -35439,6 +36840,114 @@
       },
       "us": {
         "canonical": "ts_dmd_mode_concentration",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_return_dominant_frequency": {
+      "canonical": "ts_dmd_return_dominant_frequency",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_return_dominant_frequency",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_return_dominant_frequency",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_return_dominant_growth_rate": {
+      "canonical": "ts_dmd_return_dominant_growth_rate",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_return_dominant_growth_rate",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_return_dominant_growth_rate",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_return_mode_concentration": {
+      "canonical": "ts_dmd_return_mode_concentration",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_return_mode_concentration",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_return_mode_concentration",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -35583,6 +37092,42 @@
       },
       "us": {
         "canonical": "ts_effective_transfer_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_effective_turning_rate": {
+      "canonical": "ts_effective_turning_rate",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_effective_turning_rate",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_effective_turning_rate",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -36927,6 +38472,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_forbidden_ordinal_pattern_excess": {
+      "canonical": "ts_forbidden_ordinal_pattern_excess",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_forbidden_ordinal_pattern_excess",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_forbidden_ordinal_pattern_excess",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_forbidden_ordinal_pattern_ratio": {
       "canonical": "ts_forbidden_ordinal_pattern_ratio",
       "contract_origin": "fallback_default",
@@ -36963,6 +38544,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_forbidden_ordinal_pattern_signed_excess": {
+      "canonical": "ts_forbidden_ordinal_pattern_signed_excess",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_forbidden_ordinal_pattern_signed_excess",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_forbidden_ordinal_pattern_signed_excess",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_fractional_difference": {
       "canonical": "ts_fractional_difference",
       "contract_origin": "fallback_default",
@@ -36987,6 +38604,42 @@
       },
       "us": {
         "canonical": "ts_fractional_difference",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_fractional_difference_discarded_weight_mass": {
+      "canonical": "ts_fractional_difference_discarded_weight_mass",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_fractional_difference_discarded_weight_mass",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_fractional_difference_discarded_weight_mass",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -37275,6 +38928,42 @@
       },
       "us": {
         "canonical": "ts_generalized_hurst_exponent",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_generalized_hurst_spread_q1_q4": {
+      "canonical": "ts_generalized_hurst_spread_q1_q4",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_generalized_hurst_spread_q1_q4",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_generalized_hurst_spread_q1_q4",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -37719,8 +39408,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_har_rv_next_forecast": {
-      "canonical": "ts_har_rv_next_forecast",
+    "ts_har_rv_next_var_forecast": {
+      "canonical": "ts_har_rv_next_var_forecast",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -37729,7 +39418,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_har_rv_next_forecast",
+        "canonical": "ts_har_rv_next_var_forecast",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -37742,7 +39431,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_har_rv_next_forecast",
+        "canonical": "ts_har_rv_next_var_forecast",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_har_rv_next_vol_forecast": {
+      "canonical": "ts_har_rv_next_vol_forecast",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_har_rv_next_vol_forecast",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_har_rv_next_vol_forecast",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -38079,8 +39804,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_huber_regression_resid": {
-      "canonical": "ts_huber_regression_resid",
+    "ts_huber_regression_in_sample_resid": {
+      "canonical": "ts_huber_regression_in_sample_resid",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -38089,7 +39814,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_huber_regression_resid",
+        "canonical": "ts_huber_regression_in_sample_resid",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -38102,7 +39827,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_huber_regression_resid",
+        "canonical": "ts_huber_regression_in_sample_resid",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_huber_regression_predictive_resid": {
+      "canonical": "ts_huber_regression_predictive_resid",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_huber_regression_predictive_resid",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_huber_regression_predictive_resid",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -39853,6 +41614,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_lo_mackinlay_vr": {
+      "canonical": "ts_lo_mackinlay_vr",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_lo_mackinlay_vr",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_lo_mackinlay_vr",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_lo_mackinlay_z": {
+      "canonical": "ts_lo_mackinlay_z",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_lo_mackinlay_z",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_lo_mackinlay_z",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_local_lyapunov_exponent": {
       "canonical": "ts_local_lyapunov_exponent",
       "contract_origin": "fallback_default",
@@ -39997,8 +41830,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_lower_tail_dependence": {
-      "canonical": "ts_lower_tail_dependence",
+    "ts_lower_tail_coexceedance_probability": {
+      "canonical": "ts_lower_tail_coexceedance_probability",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -40007,7 +41840,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_lower_tail_dependence",
+        "canonical": "ts_lower_tail_coexceedance_probability",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -40020,7 +41853,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_lower_tail_dependence",
+        "canonical": "ts_lower_tail_coexceedance_probability",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -40897,6 +42730,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_mean_abs_deviation": {
+      "canonical": "ts_mean_abs_deviation",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_mean_abs_deviation",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_mean_abs_deviation",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_mean_excess_slope": {
       "canonical": "ts_mean_excess_slope",
       "contract_origin": "fallback_default",
@@ -41065,6 +42934,42 @@
       },
       "us": {
         "canonical": "ts_median",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_median_abs_deviation": {
+      "canonical": "ts_median_abs_deviation",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_median_abs_deviation",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_median_abs_deviation",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -41761,8 +43666,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_multifractal_width": {
-      "canonical": "ts_multifractal_width",
+    "ts_multifractal_spectrum_width": {
+      "canonical": "ts_multifractal_spectrum_width",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -41771,7 +43676,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_multifractal_width",
+        "canonical": "ts_multifractal_spectrum_width",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -41784,7 +43689,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_multifractal_width",
+        "canonical": "ts_multifractal_spectrum_width",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -42541,42 +44446,6 @@
       },
       "us": {
         "canonical": "ts_partial_corr",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "ts_partial_distance_correlation": {
-      "canonical": "ts_partial_distance_correlation",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "ts_partial_distance_correlation",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "ts_partial_distance_correlation",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -43597,6 +45466,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_pseudocount_sample_entropy": {
+      "canonical": "ts_pseudocount_sample_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_pseudocount_sample_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_pseudocount_sample_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_qn_scale": {
       "canonical": "ts_qn_scale",
       "contract_origin": "fallback_default",
@@ -43909,6 +45814,42 @@
       },
       "us": {
         "canonical": "ts_quantile_regression_coeff",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_quantile_regression_coeff_prior": {
+      "canonical": "ts_quantile_regression_coeff_prior",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_quantile_regression_coeff_prior",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_quantile_regression_coeff_prior",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45181,6 +47122,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_resistance_log_slope": {
+      "canonical": "ts_resistance_log_slope",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_resistance_log_slope",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_resistance_log_slope",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_resistance_slope": {
       "canonical": "ts_resistance_slope",
       "contract_origin": "fallback_default",
@@ -45241,6 +47218,42 @@
       },
       "us": {
         "canonical": "ts_response_slope_asymmetry",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_return_spectral_entropy": {
+      "canonical": "ts_return_spectral_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_return_spectral_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_return_spectral_entropy",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45397,8 +47410,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_ridge_regression_resid": {
-      "canonical": "ts_ridge_regression_resid",
+    "ts_ridge_regression_in_sample_resid": {
+      "canonical": "ts_ridge_regression_in_sample_resid",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -45407,7 +47420,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_ridge_regression_resid",
+        "canonical": "ts_ridge_regression_in_sample_resid",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45420,7 +47433,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_ridge_regression_resid",
+        "canonical": "ts_ridge_regression_in_sample_resid",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_ridge_regression_predictive_resid": {
+      "canonical": "ts_ridge_regression_predictive_resid",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_ridge_regression_predictive_resid",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_ridge_regression_predictive_resid",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45469,8 +47518,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_robust_zscore": {
-      "canonical": "ts_robust_zscore",
+    "ts_robust_zscore_inclusive": {
+      "canonical": "ts_robust_zscore_inclusive",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -45479,7 +47528,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_robust_zscore",
+        "canonical": "ts_robust_zscore_inclusive",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45492,7 +47541,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_robust_zscore",
+        "canonical": "ts_robust_zscore_inclusive",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_robust_zscore_prior": {
+      "canonical": "ts_robust_zscore_prior",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_robust_zscore_prior",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_robust_zscore_prior",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -45601,6 +47686,78 @@
       },
       "us": {
         "canonical": "ts_roughness",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_rqa_determinism_fixed_rr": {
+      "canonical": "ts_rqa_determinism_fixed_rr",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_rqa_determinism_fixed_rr",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_rqa_determinism_fixed_rr",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_rqa_laminarity_fixed_rr": {
+      "canonical": "ts_rqa_laminarity_fixed_rr",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_rqa_laminarity_fixed_rr",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_rqa_laminarity_fixed_rr",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -46981,6 +49138,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_support_log_slope": {
+      "canonical": "ts_support_log_slope",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_support_log_slope",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_support_log_slope",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_support_slope": {
       "canonical": "ts_support_slope",
       "contract_origin": "fallback_default",
@@ -47629,6 +49822,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_transfer_entropy_peak_excess": {
+      "canonical": "ts_transfer_entropy_peak_excess",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_transfer_entropy_peak_excess",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_transfer_entropy_peak_excess",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_transfer_entropy_peak_lag": {
       "canonical": "ts_transfer_entropy_peak_lag",
       "contract_origin": "fallback_default",
@@ -48163,6 +50392,42 @@
         "notes": "A-share daily turnover feed; US has no isomorphic D1 turnover (do not fake it with volume)"
       }
     },
+    "ts_turnover_cost_entropy_vol_scaled": {
+      "canonical": "ts_turnover_cost_entropy_vol_scaled",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_turnover_cost_entropy_vol_scaled",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_turnover_cost_entropy_vol_scaled",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_turnover_cost_mode_distance": {
       "canonical": "ts_turnover_cost_mode_distance",
       "contract_origin": "typed_derived",
@@ -48393,6 +50658,42 @@
         "notes": "A-share daily turnover feed; US has no isomorphic D1 turnover (do not fake it with volume)"
       }
     },
+    "ts_turnover_old_mass": {
+      "canonical": "ts_turnover_old_mass",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_turnover_old_mass",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_turnover_old_mass",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_turnover_profit_share": {
       "canonical": "ts_turnover_profit_share",
       "contract_origin": "typed_derived",
@@ -48557,8 +50858,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_upper_tail_dependence": {
-      "canonical": "ts_upper_tail_dependence",
+    "ts_upper_tail_coexceedance_probability": {
+      "canonical": "ts_upper_tail_coexceedance_probability",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -48567,7 +50868,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_upper_tail_dependence",
+        "canonical": "ts_upper_tail_coexceedance_probability",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -48580,7 +50881,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_upper_tail_dependence",
+        "canonical": "ts_upper_tail_coexceedance_probability",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -48737,8 +51038,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_variance_ratio": {
-      "canonical": "ts_variance_ratio",
+    "ts_variance_ratio_proxy": {
+      "canonical": "ts_variance_ratio_proxy",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -48747,7 +51048,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_variance_ratio",
+        "canonical": "ts_variance_ratio_proxy",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -48760,7 +51061,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_variance_ratio",
+        "canonical": "ts_variance_ratio_proxy",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -49517,6 +51818,42 @@
       },
       "us": {
         "canonical": "ts_wavelet_lowpass_reconstruct",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_weighted_downside_deviation": {
+      "canonical": "ts_weighted_downside_deviation",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_weighted_downside_deviation",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_weighted_downside_deviation",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -50931,6 +53268,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "volume_price_range_density": {
+      "canonical": "volume_price_range_density",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "volume_price_range_density",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "volume_price_range_density",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "volume_shock": {
       "canonical": "volume_shock",
       "contract_origin": "fallback_default",
@@ -50955,42 +53328,6 @@
       },
       "us": {
         "canonical": "volume_shock",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "volume_to_range": {
-      "canonical": "volume_to_range",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "volume_to_range",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "volume_to_range",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],

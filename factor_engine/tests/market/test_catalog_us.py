@@ -55,8 +55,10 @@ def test_us_dividend_declaration_pit() -> None:
     table = US_FIELD_REGISTRY.resolve_table("StockDividend")
     assert table.knowledge_time_column == "declaration_date"
     assert table.effective_time_column == "ex_dividend_date"
+    # R17-021: cash_amount is USD PER SHARE in the declared currency, not a bare
+    # USD amount (currency varies ~12.2% non-USD).
     div = US_FIELD_REGISTRY.require("cash_amount")
-    assert div.unit == "USD"
+    assert div.unit == "USD/share"
     assert "currency" in div.metadata.get("note", "")
 
 
@@ -81,5 +83,7 @@ def test_us_no_industry_or_status() -> None:
 
 
 def test_us_catalog_registers_cleanly() -> None:
-    assert len(US_FIELD_REGISTRY.tables()) == 16
+    # R17-019: the dual-schema StockCapitalDaily is split into
+    # USStockCapitalSplitEvent + USTickerSharesPITEvent (net +1 table).
+    assert len(US_FIELD_REGISTRY.tables()) == 17
     assert len(US_FIELD_REGISTRY.fields()) >= 70

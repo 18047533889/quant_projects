@@ -1066,14 +1066,23 @@ class DataAccessSource(DataSource):
             if dataset_market:
                 from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
+                # Market registry returns a FieldSpec directly (or None).
                 resolved = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
                     dataset_market, name, table=self.dataset, strict=False
                 )
-            else:
-                from fields import FIELD_REGISTRY
+                if resolved is None:
+                    if production:
+                        raise UnknownFieldSemanticError(
+                            f"unknown field {name!r} in dataset {self.dataset!r}"
+                        )
+                    return None
+                return resolved
+            from fields import FIELD_REGISTRY
 
-                resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
+            resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
         except Exception as exc:
+            if isinstance(exc, UnknownFieldSemanticError):
+                raise
             if production:
                 raise FieldRegistryUnavailable(
                     f"field registry lookup failed for {name!r} dataset={self.dataset!r}: "

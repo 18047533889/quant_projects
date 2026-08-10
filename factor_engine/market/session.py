@@ -231,7 +231,8 @@ US_SESSION = SessionSpec(
     early_close_policy="down_weight",
     bar_convention="bar_start",
     notes="09:30-16:00 Eastern (bar-start, 390 bars); DST via America/New_York; "
-          "early-close dates are ~tens of true days in all history (R17-055)",
+          "early close dates are ~tens of true days in all history, not per-year "
+          "(R17-055)",
 )
 
 _SESSION_BY_MARKET = {"ashare": ASHARE_SESSION, "us": US_SESSION}
