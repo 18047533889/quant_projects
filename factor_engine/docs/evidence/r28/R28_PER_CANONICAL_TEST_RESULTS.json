@@ -1,7 +1,7 @@
 {
- "git_sha": "e0008c785aa5b458f2c3bdf2ab292c7a5893a2e9",
+ "git_sha": "d93539d6a106951ae823e098aea0ff76e887b913",
  "canonical_set_digest": "06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81",
- "generated_at": "2026-08-10T23:28:10+0800",
+ "generated_at": "2026-08-10T23:29:45+0800",
  "rows": [
   {
    "canonical": "ADX",
@@ -4961,10 +4961,10 @@
   },
   {
    "canonical": "panel_rolling_elastic_net_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_elastic_net_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_elastic_net_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[panel_rolling_elastic_net_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[panel_rolling_elastic_net_forecast]"
   },
   {
    "canonical": "panel_rolling_pca_explained_ratio",
@@ -5003,17 +5003,17 @@
   },
   {
    "canonical": "panel_rolling_pcr_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_pcr_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_pcr_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[panel_rolling_pcr_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[panel_rolling_pcr_forecast]"
   },
   {
    "canonical": "panel_rolling_pls_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_pls_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[panel_rolling_pls_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[panel_rolling_pls_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[panel_rolling_pls_forecast]"
   },
   {
    "canonical": "parkinson_vol",
@@ -6123,17 +6123,17 @@
   },
   {
    "canonical": "ts_ar_prior_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ar_prior_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ar_prior_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_ar_prior_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_ar_prior_forecast]"
   },
   {
    "canonical": "ts_ar_prior_innovation",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ar_prior_innovation]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ar_prior_innovation];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_ar_prior_innovation];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_ar_prior_innovation]"
   },
   {
    "canonical": "ts_ar_prior_innovation_z",
@@ -6725,17 +6725,17 @@
   },
   {
    "canonical": "ts_dmd_dominant_frequency",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_dmd_dominant_frequency]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_dmd_dominant_frequency];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_dmd_dominant_frequency];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_dmd_dominant_frequency]"
   },
   {
    "canonical": "ts_dmd_dominant_growth_rate",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_dmd_dominant_growth_rate]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_dmd_dominant_growth_rate];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_dmd_dominant_growth_rate];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_dmd_dominant_growth_rate]"
   },
   {
    "canonical": "ts_dmd_level_dominant_frequency",
@@ -7138,10 +7138,10 @@
   },
   {
    "canonical": "ts_garch_next_vol_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_garch_next_vol_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_garch_next_vol_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_garch_next_vol_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_garch_next_vol_forecast]"
   },
   {
    "canonical": "ts_garch_persistence",
@@ -7152,10 +7152,10 @@
   },
   {
    "canonical": "ts_garch_standardized_shock",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_garch_standardized_shock]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_garch_standardized_shock];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_garch_standardized_shock];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_garch_standardized_shock]"
   },
   {
    "canonical": "ts_garch_vol_surprise",
@@ -7180,10 +7180,10 @@
   },
   {
    "canonical": "ts_gjr_garch_vol_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_gjr_garch_vol_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_gjr_garch_vol_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_gjr_garch_vol_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_gjr_garch_vol_forecast]"
   },
   {
    "canonical": "ts_gjr_leverage",
@@ -7243,10 +7243,10 @@
   },
   {
    "canonical": "ts_har_rv_forecast",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_har_rv_forecast]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_har_rv_forecast];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_har_rv_forecast];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_har_rv_forecast]"
   },
   {
    "canonical": "ts_har_rv_forecast_error_z",
@@ -7523,24 +7523,24 @@
   },
   {
    "canonical": "ts_kalman_innovation_z",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_innovation_z]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_innovation_z];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_kalman_innovation_z];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_kalman_innovation_z]"
   },
   {
    "canonical": "ts_kalman_level",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_level]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_level];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_kalman_level];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_kalman_level]"
   },
   {
    "canonical": "ts_kalman_trend",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_trend]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_kalman_trend];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_kalman_trend];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_kalman_trend]"
   },
   {
    "canonical": "ts_kernel_granger_score",
@@ -8020,10 +8020,10 @@
   },
   {
    "canonical": "ts_multi_regression_coeff_prior",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_multi_regression_coeff_prior]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_multi_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_multi_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_multi_regression_coeff_prior]"
   },
   {
    "canonical": "ts_multi_regression_coeff_stability",
@@ -8265,10 +8265,10 @@
   },
   {
    "canonical": "ts_path_signature_area",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_path_signature_area]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_path_signature_area];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_path_signature_area];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_path_signature_area]"
   },
   {
    "canonical": "ts_path_signature_depth2_norm",
@@ -8531,10 +8531,10 @@
   },
   {
    "canonical": "ts_quantile_regression_coeff_prior",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_quantile_regression_coeff_prior]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_quantile_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_quantile_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_quantile_regression_coeff_prior]"
   },
   {
    "canonical": "ts_quantile_regression_resid",
@@ -8818,10 +8818,10 @@
   },
   {
    "canonical": "ts_ridge_regression_coeff_prior",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ridge_regression_coeff_prior]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_ridge_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_ridge_regression_coeff_prior];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_ridge_regression_coeff_prior]"
   },
   {
    "canonical": "ts_ridge_regression_forecast_error",
@@ -9301,10 +9301,10 @@
   },
   {
    "canonical": "ts_transfer_entropy",
-   "test_count": 1,
+   "test_count": 3,
    "latest_status": "passed",
    "failure_count": 0,
-   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_transfer_entropy]"
+   "node_ids": "tests.operators.r28.test_all_canonicals_execute::test_canonical_executes[ts_transfer_entropy];tests.operators.r28.test_model_causality_gates::test_model_prefix_invariance[ts_transfer_entropy];tests.operators.r28.test_model_causality_gates::test_model_future_perturbation[ts_transfer_entropy]"
   },
   {
    "canonical": "ts_transfer_entropy_peak_excess",

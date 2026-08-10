@@ -1,12 +1,12 @@
 {
- "git_sha": "e0008c785aa5b458f2c3bdf2ab292c7a5893a2e9",
+ "git_sha": "d93539d6a106951ae823e098aea0ff76e887b913",
  "canonical_set_digest": "06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81",
- "generated_at": "2026-08-10T23:28:10+0800",
- "tests": 1436,
+ "generated_at": "2026-08-10T23:29:45+0800",
+ "tests": 1528,
  "failures": 0,
  "errors": 0,
- "skipped": 0,
- "time": 548.074,
+ "skipped": 6,
+ "time": 682.511,
  "canonicals": 1436,
  "canonicals_with_test": 1436,
  "canonicals_zero_test": 0
