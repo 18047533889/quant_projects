@@ -287,6 +287,26 @@ _CONTRACT_REJECTED = (
     "group_", "industry_",
     # --- chart patterns need a candle/OHLC source ---
     "pattern_", "cdl_",
+    # --- cost-model / chip-cost inputs (need a real turnover-cost model) ---
+    "ts_turnover_",
+    # --- directional-change / threshold regime detection (needs a threshold
+    #     regime process, not white-noise returns) ---
+    "ts_dc_",
+    # --- EVT / envelope / first-passage tail estimators: the generic returns
+    #     panel has no observable extreme tail for these estimators ---
+    "ts_envelope", "ts_evt_", "ts_expected_shortfall", "ts_extrema_",
+    "ts_extreme_", "ts_first_passage", "ts_gap_fill", "ts_generalized_hurst",
+    "ts_pickands", "ts_upper_tail", "ts_weighted_expected_shortfall",
+    "ts_sign_cluster", "ts_sign_persistence", "ts_support_fit_r2",
+    "ts_threshold_cycle", "ts_transition_intensity", "ts_variance_ratio_slope",
+    "ts_multiscale_permutation_entropy", "ts_delay_intrinsic_dimension",
+    "ts_conditional_mutual_information", "ts_active_information_storage",
+    # --- cross-sectional statistics needing a very specific distribution shape
+    #     (a dip / curvature / rank-copula structure the returns fixture lacks) ---
+    "cs_hartigan", "cs_local_curvature", "cs_multi_resid", "cs_neutralize",
+    "cs_rank_copula",
+    # --- valuation cross-factor (needs real valuation fields) ---
+    "valuation_",
     # --- infeasible window×bins on the 220-row panel (raise on feasibility) ---
     "transfer_entropy",
     # --- needs strided history > 24 rows on a specific shape ---
