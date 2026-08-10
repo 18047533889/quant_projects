@@ -18,7 +18,12 @@ from logging_utils import get_logger
 from workspace_paths import quant_projects_root
 
 from .datasource import DataSource
-from .field_plan import NormalizedFieldPlan, plan_from_catalog_field, plan_from_field_spec
+from .field_plan import (
+    NormalizedFieldPlan,
+    _market_from_dataset,
+    plan_from_catalog_field,
+    plan_from_field_spec,
+)
 
 logger = get_logger("storage.data_access_source")
 
@@ -769,6 +774,11 @@ class DataAccessSource(DataSource):
 
     @_lazy_scan.setter
     def _lazy_scan(self, value: bool) -> None:
+        # R20-111：restore 路径不经 ``_assert_open`` 直接回写；若 source 已关闭
+        # 说明运行态被破坏 —— 记录 corrupted-state（research warning / production
+        # abort），不再静默吞掉。
+        if getattr(self, "_closed", False):
+            self._mark_corrupted("lazy_scan restore on closed source")
         _source_tls.lazy_overrides.setdefault(self, {})["_lazy_scan"] = bool(value)
 
     @property
@@ -781,6 +791,8 @@ class DataAccessSource(DataSource):
 
     @read_auto.setter
     def read_auto(self, value: bool) -> None:
+        if getattr(self, "_closed", False):
+            self._mark_corrupted("read_auto restore on closed source")
         _source_tls.lazy_overrides.setdefault(self, {})["read_auto"] = bool(value)
 
     @property
@@ -801,7 +813,7 @@ class DataAccessSource(DataSource):
         """R20-111：记录运行态被破坏（restore 失败等）。research 记 warning，
         production 下后续 ``_assert_healthy`` 直接 abort。"""
         self._corrupted_state = str(reason)
-        _logger.error("DataAccessSource corrupted-state: %s", reason)
+        logger.error("DataAccessSource corrupted-state: %s", reason)
 
     def _assert_healthy(self) -> None:
         """R20-111：production 下 corrupted-state 必须 abort，不能继续用坏 source。"""
@@ -812,7 +824,7 @@ class DataAccessSource(DataSource):
                 raise RuntimeError(
                     f"DataAccessSource is in corrupted state: {self._corrupted_state}"
                 )
-            _logger.warning(
+            logger.warning(
                 "DataAccessSource corrupted-state (research continues): %s",
                 self._corrupted_state,
             )
@@ -1034,7 +1046,6 @@ class DataAccessSource(DataSource):
         allowed).
         """
         try:
-            from fields import FIELD_REGISTRY
             from fields.registry import (
                 AmbiguousField,
                 ResolvedField,
@@ -1048,7 +1059,20 @@ class DataAccessSource(DataSource):
                 ) from exc
             return None
         try:
-            resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
+            # R17-001: resolve within the dataset's MARKET registry (dataset names
+            # are market-prefixed: ashare_* / us_*), never the legacy A-share-only
+            # registry.  A US dataset's fields must not be hit by A-share aliases.
+            dataset_market = _market_from_dataset(self.dataset)
+            if dataset_market:
+                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+                resolved = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
+                    dataset_market, name, table=self.dataset, strict=False
+                )
+            else:
+                from fields import FIELD_REGISTRY
+
+                resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
         except Exception as exc:
             if production:
                 raise FieldRegistryUnavailable(
@@ -1837,9 +1861,18 @@ class DataAccessSource(DataSource):
             physical_name = self.fields.get(name)
             if physical_name is None:
                 try:
-                    from fields import FIELD_REGISTRY
+                    # R17-001: resolve within the dataset's market registry.
+                    _mkt = _market_from_dataset(self.dataset)
+                    if _mkt:
+                        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-                    spec = FIELD_REGISTRY.get(name, table=self.dataset)
+                        spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
+                            _mkt, name, table=self.dataset, strict=False
+                        )
+                    else:
+                        from fields import FIELD_REGISTRY
+
+                        spec = FIELD_REGISTRY.get(name, table=self.dataset)
                     if spec is not None and spec.dataset == self.dataset:
                         physical_name = spec.source_name
                 except Exception:

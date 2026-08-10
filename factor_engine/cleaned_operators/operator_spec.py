@@ -866,7 +866,11 @@ def check_financial_grain_contract(formula: str) -> list[str]:
     import ast
     import logging
 
-    from fields import resolve_field
+    # R17-001/036: the QoQ-on-YTD validator resolves field flow semantics through
+    # the market-aware resolver with an EXPLICIT A-share context (the current
+    # single-market DSL formula grammar) instead of the implicit legacy fallback.
+    from fields.resolver import resolve_market_field
+    from market.context import ASHARE_CONTEXT
 
     logger = logging.getLogger(__name__)
     errors: list[str] = []
@@ -894,7 +898,8 @@ def check_financial_grain_contract(formula: str) -> list[str]:
             continue
         field_name = node.args[0].id
         periods = _periods_of(node)
-        spec = resolve_field(field_name)
+        resolved = resolve_market_field(field_name, ASHARE_CONTEXT, strict=False)
+        spec = resolved.spec if resolved is not None else None
         if spec is None:
             continue
         flow = getattr(spec, "flow_semantics", None)

@@ -54,9 +54,12 @@ def _embed_field_contract(ref: FieldRef, spec: Any) -> FieldRef:
         table_name = getattr(ref, "table", None) or getattr(spec, "table", None)
         if table_name:
             try:
-                from fields import FIELD_REGISTRY
+                # R17-001: resolve the table in the DSL's explicit A-share context.
+                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-                table_spec = FIELD_REGISTRY.resolve_table(str(table_name))
+                table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table(
+                    str(table_name)
+                )
                 if table_spec is not None:
                     values["current_snapshot_only"] = bool(
                         getattr(table_spec, "current_snapshot_only", False)
@@ -112,13 +115,19 @@ def field(
     input; a catalog field with ``mining_allowed=False`` then raises.
     """
 
-    from fields import FIELD_REGISTRY
+    # R17-001: the DSL ``field()`` API resolves through the market-aware resolver
+    # with an EXPLICIT A-share context (the current single-market DSL default) —
+    # never the implicit legacy fallback.
+    from fields.resolver import resolve_market_field
+    from market.context import ASHARE_CONTEXT
 
-    spec = FIELD_REGISTRY.get(name, table=table, strict=False)
+    resolved = resolve_market_field(name, ASHARE_CONTEXT, table=table, strict=False)
+    spec = resolved.spec if resolved is not None else None
     if spec is None and table is None:
         # Anchor preference: bare ambiguous OHLCV-family names keep the daily
         # panel binding so legacy recipes stay catalog-bound.
-        spec = FIELD_REGISTRY.get(name, table="StockDailyBar", strict=False)
+        resolved = resolve_market_field(name, ASHARE_CONTEXT, table="StockDailyBar", strict=False)
+        spec = resolved.spec if resolved is not None else None
     if spec is None:
         if strict:
             qualifier = f" in table {table!r}" if table else ""
@@ -131,6 +140,8 @@ def field(
         from api.source_ref import source_col
 
         transport = source_col(spec.table, spec.source_name).name
+    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
     return _embed_field_contract(
         FieldRef(
             name=transport,
@@ -138,7 +149,8 @@ def field(
             canonical_name=spec.name,
             table=spec.table,
             source_name=spec.source_name,
-            catalog_hash=FIELD_REGISTRY.catalog_hash(),
+            # R17-001: the DSL's explicit A-share market registry hash.
+            catalog_hash=MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").catalog_hash(),
         ),
         spec,
     )

@@ -2,11 +2,9 @@
 """ClickHouse 数据源：长表只读，返回与引擎一致的 MultiIndex Series。"""
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from logging_utils import get_logger
-from workspace_paths import quant_projects_root
 
 from .datasource import DataSource
 from .field_plan import NormalizedFieldPlan, plan_from_field_spec
@@ -15,17 +13,10 @@ logger = get_logger("storage.clickhouse_source")
 
 
 def _ensure_data_access_importable() -> None:
-    """将 quant_projects 根目录加入 sys.path。
-    
-    参数:
-        无
-    
-    返回:
-        无
-    """
-    root = str(quant_projects_root())
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
+    from storage.data_access_loader import ensure_data_access_importable
+
+    ensure_data_access_importable()
 
 
 class ClickHouseSource(DataSource):
@@ -170,7 +161,15 @@ class ClickHouseSource(DataSource):
         返回:
             tuple[list[str], dict[str, str]]
         """
-        from fields import FIELD_REGISTRY
+        # R17-001: resolve within the table's market registry when the table name
+        # declares one (us_* / ashare_*); otherwise keep the legacy A-share
+        # registry for bare logical-table names.
+        table_lower = str(self.table or "").strip().lower()
+        clickhouse_market = (
+            "us" if table_lower.startswith("us_")
+            else "ashare" if table_lower.startswith("ashare_") or table_lower.startswith("cn_")
+            else None
+        )
 
         physical: list[str] = []
         output_names: dict[str, str] = {}
@@ -182,7 +181,16 @@ class ClickHouseSource(DataSource):
                 output_names[src] = name
             spec = None
             try:
-                spec = FIELD_REGISTRY.get(name, table=self.table)
+                if clickhouse_market:
+                    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+                    spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
+                        clickhouse_market, name, table=self.table, strict=False
+                    )
+                else:
+                    from fields import FIELD_REGISTRY
+
+                    spec = FIELD_REGISTRY.get(name, table=self.table)
             except Exception:
                 spec = None
             if spec is not None:

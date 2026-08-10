@@ -98,8 +98,10 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         domain="capital", join_policy="exact", strict_pit_allowed=True,
         metadata={"pit_reason": "shares snapshot; exact equi-join; PIT-safe"},
     ),
+    # R17-018: dataset name aligns with the DataAccess registry
+    # (us_stock_indices_components, not us_stock_index_components).
     _table(
-        "StockIndicesComponents", "us_stock_index_components", instrument="Symbol",
+        "StockIndicesComponents", "us_stock_indices_components", instrument="Symbol",
         domain="index", table_kind="relation", join_policy="exact",
         required_parameters=("IndexName",), cardinality="one_to_many",
         strict_pit_allowed=True,
@@ -112,9 +114,9 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
     _table(
         "USStockCapitalSplitEvent", "us_stock_capital_split", instrument="ticker",
         domain="capital", table_kind="event", join_policy="exact",
-        time="execution_date", effective="execution_date", strict_pit_allowed=False,
+        time="TradeDate", effective="execution_date", strict_pit_allowed=False,
         metadata={"pit_reason": "split/adjustment EVENT rows (effective execution_date); "
-                                "not a PIT-safe level table; event-only semantics (R17-019)"},
+                                "partition key TradeDate matches DataAccess (R17-019)"},
     ),
     _table(
         "USTickerSharesPITEvent", "us_stock_capital_shares", instrument="ticker",
@@ -190,7 +192,8 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
     _table("Calendar", "us_calendar", time="trade_date", instrument=None,
            domain="calendar", table_kind="calendar",
            strict_pit_allowed=True, metadata={"pit_reason": "calendar reference; PIT-safe"}),
-    _table("EarlyClose", "us_early_close", time="date", instrument=None,
+    # R17-018: DataAccess registry name is us_is_early_close.
+    _table("EarlyClose", "us_is_early_close", time="date", instrument=None,
            domain="calendar", table_kind="calendar",
            strict_pit_allowed=True, metadata={"pit_reason": "calendar reference; PIT-safe"}),
     _table("UniverseDaily", "us_universe_daily", time="trade_date", instrument="ticker",

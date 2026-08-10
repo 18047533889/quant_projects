@@ -179,18 +179,24 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     _table("StockStatus", "ashare_stock_status", domain="status", join_policy="state_asof",
            strict_pit_allowed=True,
            metadata={"pit_reason": "S1 daily snapshot; exact join when fresh, carry age recorded (R17-072)"}),
+    # R17-062: A-share TopTen* are S1 snapshots keyed by (TradeDate, Symbol, Rank)
+    # with PubDate/ReportPeriod metadata.  time_column = TradeDate matches the
+    # DataAccess partition key; knowledge = PubDate is the visibility date.
     _table(
-        "StockTopTenShareholder", "ashare_stock_topten_shareholder", time="PubDate",
+        "StockTopTenShareholder", "ashare_stock_topten_shareholder", time="TradeDate",
         domain="ownership", table_kind="relation", join_policy="relation_pit",
         knowledge="PubDate", period="ReportPeriodEndDate", cardinality="one_to_many",
-        strict_pit_allowed=True, metadata={"pit_reason": "relation_pit on PubDate; PIT-safe"},
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "S1 snapshot keyed by TradeDate; relation_pit on "
+                                "PubDate visibility; PIT-safe (R17-062)"},
     ),
     _table(
         "StockTopTenFloatShareholder", "ashare_stock_topten_float_shareholder",
-        time="PubDate", domain="ownership", table_kind="relation",
+        time="TradeDate", domain="ownership", table_kind="relation",
         join_policy="relation_pit", knowledge="PubDate", period="ReportPeriodEndDate",
         cardinality="one_to_many", strict_pit_allowed=True,
-        metadata={"pit_reason": "relation_pit on PubDate; PIT-safe"},
+        metadata={"pit_reason": "S1 snapshot keyed by TradeDate; relation_pit on "
+                                "PubDate visibility; PIT-safe (R17-062)"},
     ),
 )
 

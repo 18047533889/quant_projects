@@ -684,9 +684,14 @@ class LQTPLogicalDataSource(_Base):
         documented A-share default ``bar_end``.
         """
         try:
-            from fields import FIELD_REGISTRY
+            # R17-001: the LQTP source is A-share-only; resolve StockMinuteBar in
+            # the A-share market registry explicitly, never the implicit legacy
+            # default.
+            from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-            table_spec = FIELD_REGISTRY.resolve_table("StockMinuteBar")
+            table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").resolve_table(
+                "StockMinuteBar"
+            )
             if table_spec is not None:
                 metadata = dict(getattr(table_spec, "metadata", None) or {})
                 declared = str(

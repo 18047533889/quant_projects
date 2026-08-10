@@ -60,7 +60,11 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     import ast
-    from fields import FIELD_REGISTRY
+    # R17-001: the production-DSL gate resolves through the market-aware resolver
+    # with an EXPLICIT A-share context (the current single-market production DSL),
+    # never the implicit legacy fallback.
+    from fields.resolver import resolve_market_field
+    from market.context import ASHARE_CONTEXT
 
     try:
         tree = ast.parse(str(formula), mode="eval")
@@ -77,7 +81,8 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
             and isinstance(node.args[0].value, str)
         ):
             continue
-        spec = FIELD_REGISTRY.get(node.args[0].value, strict=False)
+        resolved = resolve_market_field(node.args[0].value, ASHARE_CONTEXT, strict=False)
+        spec = resolved.spec if resolved is not None else None
         if spec is not None and spec.table != "StockDailyBar":
             bare_secondary.append(spec.name)
     if bare_secondary:
@@ -1074,20 +1079,40 @@ def validate_manifest_for_execution(
 
 
 def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> list[str]:
-    """挖掘搜索空间分层 allowlist。
+    """挖掘搜索空间分层 allowlist（R18-001 authority 收口）。
+
+    R18-001: 自动挖掘**只允许**走 ``get_direct_use_mining_operators()`` 这个
+    direct-use authority。旧的 ``backend.fastpath_allowlists`` 只表达 backend
+    execution capability（"这个算子能编译/能执行"），**不能决定矿工能看什么**
+    （"这个算子是否适合自动挖因子"）。所以这里：
+
+    * ``research``（探索）—— 所有 retained DIRECT_* 算子（未认证也允许，供
+      exploration 用）。
+    * ``production`` / ``production_fastpath`` —— DIRECT_* 且 ``directly_usable``
+      的算子，再与 backend capability 交集（只作执行能力 cross-check）。
 
     ``tier``：``research`` | ``production`` | ``production_fastpath``
     """
-    tier_key = resolve_mining_allowlist_tier(tier)
-    if tier_key == "research":
-        from backend.fastpath_allowlists import research_allowlist
+    from mining.direct_use import (
+        DirectUseContext,
+        get_direct_use_mining_operators,
+    )
 
-        return sorted(research_allowlist())
+    tier_key = resolve_mining_allowlist_tier(tier)
+    admission = "eligible" if tier_key != "research" else "all"
+    rows = get_direct_use_mining_operators(
+        DirectUseContext(), admission=admission
+    )
+    direct = {r.canonical for r in rows}
+    if tier_key == "research":
+        return sorted(direct)
     if tier_key == "production":
         from backend.fastpath_allowlists import production_allowlist
 
-        return sorted(production_allowlist())
-    return list_production_fastpath_allowlist()
+        capable = set(production_allowlist())
+    else:
+        capable = set(list_production_fastpath_allowlist())
+    return sorted(direct & capable)
 
 
 def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
@@ -1228,13 +1253,21 @@ def default_typed_mining_search_space_config(
         tags = list(getattr(meta, "tags", None) or [])
         values = _typed_tag_values(tags)
         params = list(entry.get("param_names") or getattr(meta, "param_names", None) or [])
-        # review #295: scalar knobs (window/lag/...) are NEVER data inputs.
-        # The typed search space must list the PANEL inputs as ``inputs`` and
-        # keep the searchable scalar knobs in a separate ``scalar_parameters``
-        # list so a campaign generator never samples a panel as a scalar.
-        from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+        # R18-002: data inputs / scalar parameters / context / group / event are
+        # FIVE separate lists.  ``inputs`` (kept for backward compat) equals
+        # exactly the data-input list — a window/lag/threshold scalar knob is
+        # NEVER a data input.
+        from mining.direct_use import (
+            split_input_slots,
+            terminal_allowed_for,
+        )
 
-        scalar_params, panel_inputs = split_scalar_panel_params(params, meta, canonical)
+        slot_split = split_input_slots(canonical, entry)
+        data_inputs = slot_split["data_inputs"]
+        scalar_params = slot_split["scalar_parameters"]
+        context_inputs = slot_split["context_inputs"]
+        group_inputs = slot_split["group_inputs"]
+        event_inputs = slot_split["event_inputs"]
         cost = float(values.get("cost", entry.get("cost", 1.0)))
         if not cost > 0:
             raise ValueError(f"operator {canonical!r} has invalid mining cost {cost!r}")
@@ -1251,9 +1284,13 @@ def default_typed_mining_search_space_config(
         cardinality = "group" if scope in {"group", "cross_sectional"} else "panel"
         signature_entry = {
             "name": canonical,
-            "inputs": params,
-            "panel_inputs": panel_inputs,
+            # R18-002: ``inputs`` == data inputs ONLY (never scalar knobs).
+            "inputs": data_inputs,
+            "data_inputs": data_inputs,
             "scalar_parameters": scalar_params,
+            "context_inputs": context_inputs,
+            "group_inputs": group_inputs,
+            "event_inputs": event_inputs,
             "input_units": input_units,
             "output": getattr(meta, "return_type", None) or entry.get("return_type") or "series",
             "signature": values.get("signature") or f"{','.join(params)}->series",
@@ -1263,17 +1300,20 @@ def default_typed_mining_search_space_config(
             "unit": output_unit,
             "cost": cost,
         }
-        try:
-            from mining.operator_catalog import _ROLE_AST_POSITIONS, assign_mining_role
+        # R18-004: role resolution failure is a HARD ERROR for a mining search
+        # space — never emit an operator signature with a missing role.
+        from mining.operator_catalog import _ROLE_AST_POSITIONS, assign_mining_role
 
-            role = assign_mining_role(canonical, entry)
-            signature_entry["mining_role"] = role.value
-            signature_entry["allowed_ast_positions"] = list(_ROLE_AST_POSITIONS.get(role, ()))
-            signature_entry["terminal_allowed"] = role.value not in {
-                "state", "condition", "event", "group_state", "global_state",
-            }
-        except Exception:
-            pass
+        role = assign_mining_role(canonical, entry)
+        signature_entry["mining_role"] = role.value
+        signature_entry["allowed_ast_positions"] = list(_ROLE_AST_POSITIONS.get(role, ()))
+        # R18-003: terminal_allowed comes from a single POSITIVE authority
+        # (resolve_direct_use), never from an exclusion set that lets
+        # INTERNAL/RESEARCH/LEGACY fall through as terminal.
+        signature_entry["terminal_allowed"] = terminal_allowed_for(canonical, entry)
+        from mining.direct_use import resolve_direct_use_status
+
+        signature_entry["direct_use_status"] = resolve_direct_use_status(canonical, entry).value
         signatures.append(signature_entry)
 
     return {

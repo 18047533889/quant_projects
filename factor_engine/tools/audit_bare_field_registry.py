@@ -41,6 +41,38 @@ _LEGACY_ALLOWLIST = {
     "fields/__init__.py",
 }
 
+#: Documented ``market=None`` fallback branches: functions whose PRIMARY path is
+#: market-aware (``resolve_market_field``) and that fall back to the legacy
+#: A-share resolver ONLY when the caller cannot prove a market.  Each is
+#: audited to route through ``resolve_market_field`` first when a market is
+#: available (R17-037).  Keyed by ``path:line`` of the legacy call.
+_LEGACY_FALLBACK_SITES = {
+    # ir/analyzer.py — _price_basis_of_field / _flow_semantics_of_field /
+    # Analyzer._resolve_field_ir use resolve_market_field when market is given.
+    "ir/analyzer.py:601",
+    "ir/analyzer.py:604",
+    "ir/analyzer.py:677",
+    "ir/analyzer.py:680",
+    "ir/analyzer.py:1054",
+    "ir/analyzer.py:1056",
+    # ir/types.py — infer_field_type(market=...) primary path is market-aware.
+    "ir/types.py:86",
+    "ir/types.py:88",
+    # storage/sources/field_plan.py — _resolve_table_spec uses the market registry
+    # when a market is known; the legacy else-branch is the market=None fallback.
+    "storage/sources/field_plan.py:172",
+    # storage/sources/data_access_source.py — _table_pit_allowed resolves per-market
+    # when plan.market is set; legacy else-branch is the market=None fallback;
+    # _field_spec resolves per-market when the dataset declares a market, else the
+    # legacy else-branch is the dataset-without-market fallback.
+    "storage/sources/data_access_source.py:1400",
+    "storage/sources/data_access_source.py:1875",
+    "storage/sources/data_access_source.py:1075",
+    # storage/sources/clickhouse_source.py — market-aware when the table name
+    # declares one; legacy else-branch is the bare-table fallback.
+    "storage/sources/clickhouse_source.py:202",
+}
+
 
 def _is_production_source(path: Path) -> bool:
     rel = path.relative_to(REPO).as_posix()
@@ -65,6 +97,11 @@ def scan() -> dict[str, list[str]]:
         text = py.read_text(encoding="utf-8")
         hits: list[str] = []
         for lineno, line in enumerate(text.splitlines(), 1):
+            site = f"{rel}:{lineno}"
+            # R17-001: a documented market=None fallback branch is allowed ONLY
+            # because its primary path is market-aware (resolve_market_field).
+            if site in _LEGACY_FALLBACK_SITES:
+                continue
             if _IMPORT_RE.search(line) and not line.strip().startswith("#"):
                 hits.append(f"{lineno}: bare `from fields import ... resolve_field`")
             if (
