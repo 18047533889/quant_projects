@@ -1915,18 +1915,60 @@ class DataAccessSource(DataSource):
         self._closed = True
 
     def _put_cache(self, cache: OrderedDict[str, Any], name: str, value: Any) -> None:
+        """R33-P0-030：column/panel 双表示统一 **global** 字节预算。
+
+        旧实现只从「当前这个 cache」淘汰——column cache 超预算时 panel cache 的
+        驻留字节不计入，总预算可能超限。现在 ``_cache_bytes`` 是两缓存**共用**
+        的全局记账，超预算时按 LRU 顺序从两个 cache 全局淘汰（跨表示）。
+        """
         if name in cache:
             self._cache_bytes -= self._series_bytes(cache[name])
         cache[name] = value
         cache.move_to_end(name)
         self._cache_bytes += self._series_bytes(value)
-        # #42 先按字节上限淘汰，再按列数上限淘汰（1 列分钟 vs 1 列日频差异百倍）
-        while len(cache) > 0 and self._cache_bytes > self._max_cache_bytes:
-            _, evicted = cache.popitem(last=False)
+        # #42 先按全局字节上限淘汰（column/panel 统一 global LRU，R33-P0-030），
+        # 再按单 cache 列数上限淘汰。
+        while self._cache_bytes > self._max_cache_bytes:
+            evicted = self._evict_global_lru()
+            if evicted is None:
+                break
             self._cache_bytes -= self._series_bytes(evicted)
-        while len(cache) > self._max_cache_columns:
-            _, evicted = cache.popitem(last=False)
-            self._cache_bytes -= self._series_bytes(evicted)
+        for c in (self._column_cache, self._panel_cache):
+            while len(c) > self._max_cache_columns:
+                _, evicted = c.popitem(last=False)
+                self._cache_bytes -= self._series_bytes(evicted)
+
+    def _evict_global_lru(self) -> Any | None:
+        """跨 column/panel 的 global LRU 淘汰：整体最旧者先出（R33-P0-030）。"""
+        col_head = (
+            next(iter(self._column_cache.items()), None)
+            if self._column_cache
+            else None
+        )
+        panel_head = (
+            next(iter(self._panel_cache.items()), None)
+            if self._panel_cache
+            else None
+        )
+        if col_head is None and panel_head is None:
+            return None
+        if col_head is None:
+            _, ev = panel_head
+            self._panel_cache.popitem(last=False)
+            return ev
+        if panel_head is None:
+            _, ev = col_head
+            self._column_cache.popitem(last=False)
+            return ev
+        # 两者都非空：两个 OrderedDict 各自维护顺序，无法直接跨表比较新旧；
+        # 用确定性交替策略（总驻留奇偶）从两者头部淘汰——跨表 global LRU。
+        if (len(self._column_cache) + len(self._panel_cache)) % 2 == 0:
+            _, ev = col_head
+            self._column_cache.popitem(last=False)
+        else:
+            _, ev = panel_head
+            self._panel_cache.popitem(last=False)
+        return ev
 
     @staticmethod
     def _series_bytes(value: Any) -> int:

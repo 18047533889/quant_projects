@@ -33,11 +33,19 @@ def is_production_mode(mode: str | None = None) -> bool:
 def production_data_event_auto_publish_enabled() -> bool:
     """production DataEvent 自动 stage+publish 是否启用（R14 复查 P0-1 方案 A）。
 
-    默认**关闭**：逐 factor ``publish_factor_lake`` 不是 visibility transaction——
-    f1 成功、f2 失败会产生 mixed published state。生产事件默认直接拒绝（不落任何
-    staging/published）；显式 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1`` 才启用
-    （实验性，真正 event transaction 留待后续）。research 事件不受此门影响。
+    R34 P0-039：严格 production 下 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH`` 这个
+    env bypass **必须不存在**。production DataEvent 统一走原子两阶段
+    GenerationTransaction——全部 factor stage 到 staging、全部成功后才逐
+    factor publish（任一 stage 失败即 reject，published 因子湖零 mixed
+    generation）。该路径由 ``incremental_scheduler`` 强制执行（write_target
+    强制 staging），不再由 env 门控：
+
+    - production 模式：env 被忽略，恒返回 ``True``（production 事件只有原子
+      两阶段一条路，无 bypass 可关）。
+    - research 模式：保留显式 env 启用的实验性两阶段发布。
     """
+    if is_production_mode():
+        return True  # production: 唯一路径即原子两阶段，无 env escape hatch
     return _truthy_env("DATA_EVENT_PRODUCTION_AUTO_PUBLISH")
 
 

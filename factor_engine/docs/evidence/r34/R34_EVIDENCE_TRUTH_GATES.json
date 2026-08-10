@@ -1,0 +1,162 @@
+{
+  "generated_by": "scripts/audit_r34_evidence.py",
+  "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+  "passed": 12,
+  "not_run": 0,
+  "failed": 0,
+  "total": 12,
+  "gates": {
+    "R34_CURRENT_HEAD_BOUND": {
+      "gate_id": "R34_CURRENT_HEAD_BOUND",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_HEAD.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_CLEAN_TREE_CERTIFICATION": {
+      "gate_id": "R34_CLEAN_TREE_CERTIFICATION",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_HEAD.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_ZERO_HARDCODED_TRUE_GATES": {
+      "gate_id": "R34_ZERO_HARDCODED_TRUE_GATES",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_ZERO_PRESENCE_ONLY_HARD_GATES": {
+      "gate_id": "R34_ZERO_PRESENCE_ONLY_HARD_GATES",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES": {
+      "gate_id": "R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_AUDIT_NEGATIVE_CONTROL_PASS": {
+      "gate_id": "R34_AUDIT_NEGATIVE_CONTROL_PASS",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_AUDIT_NEGATIVE_CONTROL.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_ZERO_STALE_R28_ARTIFACTS": {
+      "gate_id": "R34_ZERO_STALE_R28_ARTIFACTS",
+      "status": "PASS",
+      "executed_cases": 8,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {
+        "artifact_count": 8
+      }
+    },
+    "R34_ZERO_STALE_R30_ARTIFACTS": {
+      "gate_id": "R34_ZERO_STALE_R30_ARTIFACTS",
+      "status": "PASS",
+      "executed_cases": 8,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {
+        "artifact_count": 8
+      }
+    },
+    "R34_ZERO_STALE_R31_ARTIFACTS": {
+      "gate_id": "R34_ZERO_STALE_R31_ARTIFACTS",
+      "status": "PASS",
+      "executed_cases": 4,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {
+        "artifact_count": 4
+      }
+    },
+    "R34_ZERO_STALE_R32_ARTIFACTS": {
+      "gate_id": "R34_ZERO_STALE_R32_ARTIFACTS",
+      "status": "PASS",
+      "executed_cases": 13,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {
+        "artifact_count": 13
+      }
+    },
+    "R34_ZERO_STALE_FACTOR_OPERATOR_EVIDENCE": {
+      "gate_id": "R34_ZERO_STALE_FACTOR_OPERATOR_EVIDENCE",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    },
+    "R34_ZERO_STALE_PRIMITIVE_EVIDENCE": {
+      "gate_id": "R34_ZERO_STALE_PRIMITIVE_EVIDENCE",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "evidence_files": [
+        "docs/evidence/r34/R34_EVIDENCE_FRESHNESS.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+      "details": {}
+    }
+  }
+}

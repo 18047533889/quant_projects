@@ -18,23 +18,30 @@ must NOT assume the same close can be both the last input and the fill price.
 from __future__ import annotations
 
 # Panel input names whose values are only fully known at the session close.
+# R34 P0-018：``open`` 不在其中——开盘价在 opening auction / 第一个完成 bar 后
+# 即可知，session-end-known 分类会错误阻止 open-only 的 same-session factor。
 _SESSION_END_INPUTS = frozenset({"close", "high", "low", "volume", "amount",
-                                 "vwap", "open", "ret", "returns", "benchmark",
+                                 "vwap", "ret", "returns", "benchmark",
                                  "benchmark_ret", "market_ret"})
 
 # Panel inputs that can be known DURING the session (open auction / mid-day).
-_INTRADAY_KNOWN_INPUTS = frozenset({"open_price", "preopen", "auction"})
+# 标准 OHLC 的 ``open`` 与同义的 ``open_price`` 都在开盘即可知。
+_INTRADAY_KNOWN_INPUTS = frozenset({"open", "open_price", "preopen", "auction"})
 
 
 def default_available_at(input_names: tuple[str, ...], *, grain: str = "daily") -> str | None:
     """Infer a conservative ``available_at`` for a production operator.
 
     Daily-grain operators that consume session-end bars default to
-    ``session_close``; everything else stays ``None`` (declared by the operator).
+    ``session_close``; operators consuming only opening-known inputs (``open`` /
+    ``open_price`` / ``preopen`` / ``auction``) default to ``session_open``
+    (R34 P0-018); everything else stays ``None`` (declared by the operator).
     """
     if grain == "daily":
         if any(n in _SESSION_END_INPUTS for n in input_names):
             return "session_close"
+        if input_names and all(n in _INTRADAY_KNOWN_INPUTS for n in input_names):
+            return "session_open"
     return None
 
 
@@ -45,12 +52,17 @@ def default_same_session_usable(
 
     A daily close/high/low/volume-derived factor is NOT usable in the same
     session it is computed from (the close is only known at session end); the
-    earliest legal execution is the next session open.
+    earliest legal execution is the next session open.  An ``open``-only factor
+    IS same-session usable — the opening price is known at the open auction
+    (R34 P0-018).
     """
     if declared is not None:
         return declared
-    if grain == "daily" and any(n in _SESSION_END_INPUTS for n in input_names):
-        return False
+    if grain == "daily":
+        if any(n in _SESSION_END_INPUTS for n in input_names):
+            return False
+        if input_names and all(n in _INTRADAY_KNOWN_INPUTS for n in input_names):
+            return True
     return None
 
 

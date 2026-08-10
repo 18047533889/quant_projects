@@ -1711,6 +1711,14 @@ def execute_incremental_updates_from_event(
                 "visibility transaction，可能产生 mixed published state。显式设置 "
                 "DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1 才允许（实验性）。"
             )
+        # R34 P0-039：production 恒走原子两阶段（env escape hatch 已删除）。
+        # 但无 event_id 的事件没有 ledger 幂等键——重试可能 double-publish，
+        # 严格 production 仍 fail-closed 拒绝。
+        if not event.event_id:
+            raise ProductionEventAutoPublishDisabled(
+                "production DataEvent 需要 event_id（ledger 幂等键）才能原子两阶段"
+                f"发布（R34 P0-039）：事件 {event.updated_date!r} 缺 event_id，拒绝。"
+            )
     ledger = DataEventLedger(lake_root=lake_root)
     ledger_status, token = (
         ledger.begin(event) if event.event_id else ("ok", None)

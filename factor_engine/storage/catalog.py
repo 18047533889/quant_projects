@@ -665,8 +665,8 @@ class FactorCatalog:
                     ).encode("utf-8")
                 ).hexdigest()[:16]
                 self._conn.execute(
-                    "INSERT INTO catalog_schema_version (version, migrated_at, checksum) "
-                    "VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO catalog_schema_version "
+                    "(version, migrated_at, checksum) VALUES (?, ?, ?)",
                     (version, migrated_at, checksum),
                 )
                 self._conn.execute("COMMIT")

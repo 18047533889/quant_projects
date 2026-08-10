@@ -22,6 +22,7 @@ from planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROOT,
     TASK_SOURCE_SCAN,
+    source_scope_from_key,
 )
 
 _DEFAULT_WAVE_MEMORY_BUDGET = 4 * 1024**3  # 4GiB 默认 wave 内存预算
@@ -87,14 +88,19 @@ def _default_scan_bytes(columns: Iterable[str], rows_estimate: int = 500_000) ->
     return max(0, len(set(columns)) * max(0, rows_estimate) * 8)
 
 
-def _source_scope_key(
+def _scope_group_key(
     *,
     dataset: str,
     snapshot_id: str | None,
     source_scope: str,
     time_range: tuple[str, str] | None,
 ) -> str:
-    """wave 聚类的 source scope 身份（R27-063/160）。"""
+    """wave 聚类的 source scope 身份（R27-063/160）。
+
+    R33-P0-013：dataset 用 typed 字段（SourceScopeId.dataset），**不**从含
+    ``::`` 的 source_scope 反向 split；time_range 参与聚类（不同历史窗的 wave
+    不混扫）。
+    """
     return "::".join(
         [
             dataset,
@@ -106,7 +112,12 @@ def _source_scope_key(
 
 
 class ReadWavePlanner:
-    """按 source scope / 列共享聚波，内存有界（R27-063..065）。"""
+    """按 source scope / 列共享聚波，内存有界（R27-063..065）。
+
+    R33-P0-014/015：wave 内存按 **union projected columns** 记账（共享列只算
+    一份，不再按 request 内存求和）；贪心按 **marginal overlap**（新增共享最多、
+    边际字节最小者先入波）。
+    """
 
     def __init__(
         self,
@@ -131,6 +142,8 @@ class ReadWavePlanner:
         columns: Iterable[str],
         estimated_scan_bytes: int | None = None,
         estimated_memory_bytes: int | None = None,
+        instrument_scope: tuple[str, ...] | None = None,
+        universe_id: str | None = None,
     ) -> None:
         self._requests.append(
             _ReadRequest(
@@ -150,6 +163,8 @@ class ReadWavePlanner:
                     if estimated_memory_bytes is not None
                     else _default_scan_bytes(columns, self.rows_estimate)
                 ),
+                instrument_scope=tuple(instrument_scope or ()),
+                universe_id=universe_id or "",
             )
         )
 
@@ -157,16 +172,18 @@ class ReadWavePlanner:
         self._requests: list[_ReadRequest] = []
 
     def plan(self) -> ReadWavePlan:
-        """聚波：同 source scope 的请求按列共享贪心合并，内存有界。
+        """聚波：同 source scope 的请求按 marginal-overlap 贪心合并，内存有界。
 
-        - 同 scope 的请求合并成一个 wave；共享列越多 reuse_density 越高。
-        - 合并后驻留字节超预算就拆 wave（R27-128：locality 不能压过内存安全）。
+        R33-P0-014：每个 wave 的驻留字节 = union 物理列 × 行数 × 8B（共享列只算
+        一次），不是 request 内存求和——100 个因子共用 ``close`` 只驻留一份。
+        R33-P0-015：候选按「与当前 union 的新增共享列 / 边际新增字节」排序，
+        不再只按列数降序。
         """
         requests = list(self._requests)
         self._reset()
         by_scope: dict[str, list[_ReadRequest]] = {}
         for req in requests:
-            key = _source_scope_key(
+            key = _scope_group_key(
                 dataset=req.dataset,
                 snapshot_id=req.snapshot_id,
                 source_scope=req.source_scope,
@@ -177,35 +194,35 @@ class ReadWavePlanner:
         waves: list[ReadWave] = []
         wave_id = 0
         for key, reqs in sorted(by_scope.items()):
-            # 组内所有 request 的 dataset/snapshot/source_scope/time_range 相同
-            #（按 key 分组构造保证）；以第一个为组代表，避免从含 '::' 的
-            # source_scope 反向 split 出错。
             rep = reqs[0]
-            # 贪心：按共享列从高到低合并，内存有界。
-            candidates = sorted(
-                reqs,
-                key=lambda r: (-len(r.columns), r.task_id),
-            )
-            current: list[_ReadRequest] = []
-            current_cols: set[str] = set()
-            current_mem = 0
-            for req in candidates:
-                if current and current_mem + req.estimated_memory_bytes > self.wave_memory_budget:
-                    waves.append(self._build_wave(wave_id, rep.dataset, rep.snapshot_id or "",
-                                                  rep.source_scope, rep.time_range,
-                                                  current, current_cols))
+            remaining = list(reqs)
+            while remaining:
+                current: list[_ReadRequest] = []
+                current_cols: set[str] = set()
+                current_mem = 0
+                current_scan = 0
+                # marginal-overlap 贪心：每步挑「与当前 union 重叠最多 / 边际
+                # 字节最小」的下一个 request。
+                while remaining:
+                    current_cols = current_cols or set()
+                    best_idx = _best_marginal(remaining, current_cols, self.rows_estimate)
+                    cand = remaining.pop(best_idx)
+                    union_cols = current_cols | cand.columns
+                    new_mem = _default_scan_bytes(union_cols, self.rows_estimate)
+                    if current and new_mem > self.wave_memory_budget:
+                        # 超预算：该 request 留给下一个 wave。
+                        remaining.append(cand)
+                        break
+                    current.append(cand)
+                    current_cols = union_cols
+                    current_mem = new_mem
+                    current_scan += cand.estimated_scan_bytes
+                if current:
+                    waves.append(self._build_wave(
+                        wave_id, rep.dataset, rep.snapshot_id or "", rep.source_scope,
+                        rep.time_range, current, current_cols, current_mem, current_scan,
+                    ))
                     wave_id += 1
-                    current = []
-                    current_cols = set()
-                    current_mem = 0
-                current.append(req)
-                current_cols |= req.columns
-                current_mem += req.estimated_memory_bytes
-            if current:
-                waves.append(self._build_wave(wave_id, rep.dataset, rep.snapshot_id or "",
-                                              rep.source_scope, rep.time_range,
-                                              current, current_cols))
-                wave_id += 1
         return ReadWavePlan(waves=waves)
 
     def _build_wave(
@@ -217,12 +234,12 @@ class ReadWavePlanner:
         time_range: tuple[str, str] | None,
         reqs: list["_ReadRequest"],
         cols: set[str],
+        union_mem: int,
+        total_scan: int,
     ) -> ReadWave:
-        total_scan = sum(r.estimated_scan_bytes for r in reqs)
-        total_mem = sum(r.estimated_memory_bytes for r in reqs)
         # R27-065 reuse_density = shared_scan_bytes_saved / wave_memory_bytes
         shared_saved = total_scan - _default_scan_bytes(cols, self.rows_estimate)
-        reuse_density = shared_saved / max(1, total_mem)
+        reuse_density = shared_saved / max(1, union_mem)
         return ReadWave(
             wave_id=wave_id,
             source_scope=source_scope,
@@ -232,9 +249,32 @@ class ReadWavePlanner:
             time_range=time_range,
             task_ids=tuple(sorted(r.task_id for r in reqs)),
             estimated_scan_bytes=total_scan,
-            estimated_memory_bytes=total_mem,
+            estimated_memory_bytes=union_mem,
             reuse_density=round(reuse_density, 4),
         )
+
+
+def _best_marginal(
+    candidates: list["_ReadRequest"],
+    current_cols: set[str],
+    rows_estimate: int,
+) -> int:
+    """R33-P0-015：marginal-overlap 评分——共享新增多、边际字节小者优先。"""
+    best_idx = 0
+    best_score = -1.0
+    for idx, req in enumerate(candidates):
+        union_cols = current_cols | req.columns
+        marginal_bytes = _default_scan_bytes(union_cols, rows_estimate)
+        if current_cols:
+            shared_new = len(req.columns & current_cols)
+            score = shared_new / max(1.0, float(marginal_bytes))
+        else:
+            # 空波起点：直接按列数降序（最宽的先撑起复用面）。
+            score = len(req.columns) / max(1.0, float(marginal_bytes))
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+    return best_idx
 
 
 @dataclass
@@ -249,6 +289,8 @@ class _ReadRequest:
     columns: frozenset[str]
     estimated_scan_bytes: int
     estimated_memory_bytes: int
+    instrument_scope: tuple[str, ...] = ()
+    universe_id: str = ""
 
 
 def build_waves_from_dag(
@@ -261,11 +303,13 @@ def build_waves_from_dag(
 ) -> ReadWavePlan:
     """从 PhysicalFactorDAG 构建读波（source_scope / dataset / snapshot 聚合）。
 
-    ``scan_cost_map``：``task_id -> ScanCost``（R27-060/061：FE 在真正 read 前
-    从 DataAccess 拿 selected_bytes / estimated_rows / remote）。
-    ``scope_scan_cost_map``（R31-P0-026）：``source_scope -> ScanCost``——task_id
-    在 lower 前不可知，BatchDataRequest 按 source scope 一次 ScanCost，此处按
-    scope 回退。两者优先级：task_id > source_scope > 静态估算。
+    R33-P0-010/011：``columns`` 取 **SOURCE_SCAN task 的 ``required_columns``**
+    （真实物理列），不再用 ``task.op`` / ``task.inputs`` 推断；``time_range`` 取
+    task 的真实加载窗口（R33-P0-012）。SOURCE_SCAN 之外只登记 CSE_SHARED/ROOT
+    的 scope 身份（它们不贡献列，但共享同一 scope 的 wave 计数）。
+
+    ``scan_cost_map``：``task_id -> ScanCost``；``scope_scan_cost_map``：
+    ``source_scope -> ScanCost``。优先级 task_id > source_scope > 静态估算。
     """
     planner = ReadWavePlanner(
         wave_memory_budget=wave_memory_budget,
@@ -279,16 +323,41 @@ def build_waves_from_dag(
         cost = scan_cost_map.get(task.task_id)
         if cost is None:
             cost = scope_scan_cost_map.get(task.source_scope)
-        est_scan = cost.selected_bytes if cost is not None and cost.selected_bytes else None
-        est_mem = cost.projection_bytes if cost is not None and cost.projection_bytes else None
-        planner.register_scan_task(
-            task.task_id,
-            dataset=task.source_scope.split("::")[0] if "::" in task.source_scope else task.source_scope,
-            source_scope=task.source_scope,
-            snapshot_id=task.source_snapshot_id or None,
-            time_range=None,
-            columns=task.inputs if task.task_type == TASK_SOURCE_SCAN else (task.op,),
-            estimated_scan_bytes=est_scan,
-            estimated_memory_bytes=est_mem,
-        )
+        if task.task_type == TASK_SOURCE_SCAN:
+            spec = task.source_scan_spec
+            columns = tuple(spec.required_columns) if spec is not None else task.required_columns
+            dataset = spec.dataset if spec is not None else task.source_scope.split("::")[0]
+            time_range = spec.time_range if spec is not None else task.time_range
+            est_scan = cost.selected_bytes if cost is not None and cost.selected_bytes else None
+            est_mem = cost.projection_bytes if cost is not None and cost.projection_bytes else None
+            planner.register_scan_task(
+                task.task_id,
+                dataset=dataset,
+                source_scope=task.source_scope,
+                snapshot_id=task.source_snapshot_id or None,
+                time_range=time_range,
+                columns=columns,
+                estimated_scan_bytes=est_scan,
+                estimated_memory_bytes=est_mem,
+                instrument_scope=spec.instrument_scope if spec is not None else task.instrument_scope,
+                universe_id=spec.universe_id if spec is not None else None,
+            )
+        else:
+            # CSE/ROOT 共享同一 scope 的 wave 计数（不新增列）。
+            # R33-P0-013：dataset 用 typed SourceScopeId 字段，不 split("::")。
+            try:
+                _scope = source_scope_from_key(task.source_scope)
+                dataset = _scope.dataset or task.source_scope
+            except Exception:
+                dataset = task.source_scope
+            planner.register_scan_task(
+                task.task_id,
+                dataset=dataset,
+                source_scope=task.source_scope,
+                snapshot_id=task.source_snapshot_id or None,
+                time_range=task.time_range,
+                columns=(),
+                estimated_scan_bytes=0,
+                estimated_memory_bytes=0,
+            )
     return planner.plan()

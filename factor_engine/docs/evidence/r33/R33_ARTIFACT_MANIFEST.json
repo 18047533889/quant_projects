@@ -1,0 +1,25 @@
+{
+  "R33_HARD_BLOCKERS_ZERO": true,
+  "artifacts": [
+    "R33_100_FACTOR_COMPILE_BENCH.json",
+    "R33_ARTIFACT_MANIFEST.json",
+    "R33_BACKEND_POLICY.json",
+    "R33_CROSS_SECTION_BLOCK_PARITY.json",
+    "R33_FE_DA_BOUNDARY_AUDIT.json",
+    "R33_HARD_GATES.json",
+    "R33_HEAD.json",
+    "R33_READ_WAVE_RUNTIME_TRACE.json",
+    "R33_SMALL_BATCH_BENCH.json",
+    "R33_STREAM_SINK_FAILURE_INJECTION.json"
+  ],
+  "git_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+  "runtime_versions": {
+    "duckdb": "1.5.4",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "polars": "1.42.1",
+    "pyarrow": "25.0.0",
+    "python": "3.10.12",
+    "scipy": "1.15.3"
+  }
+}

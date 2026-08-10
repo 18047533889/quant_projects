@@ -644,6 +644,29 @@ def _maybe_prepare_batch_warmup(
     return engine_to_use, per_windows
 
 
+def choose_execution_mode(
+    factors: Sequence[Factor],
+    analyses: dict[str, AnalysisResult],
+    dag: Any,
+) -> str:
+    """R33 §39：Auto Execution Mode——小任务不并行，大任务不逐 root。
+
+    依据 factor count + IR node count + source count + native coverage 选择：
+        DIRECT_VECTOR：极少量简单因子 → serial fused（不建 future / 不占 lease）。
+        ADAPTIVE_DAG ：真正需要多 source / barrier / 资源约束的完整调度。
+    记录在 batch_out，供 hard gate R33_SMALL_BATCH_AUTO_OVERHEAD_GATE_PASS 消费。
+    """
+    n_factors = len(factors)
+    node_count = 0
+    for a in (analyses or {}).values():
+        node_count += max(1, int(getattr(a, "node_count", 0) or getattr(a, "ir_nodes", 0) or 1))
+    source_count = max(1, len(getattr(dag, "roots", ()) or ()))
+    # DIRECT_VECTOR：≤4 因子且总 IR 节点少（调度开销 > 计算节省）。
+    if n_factors <= 4 and node_count <= 400:
+        return "DIRECT_VECTOR"
+    return "ADAPTIVE_DAG"
+
+
 def _execute_run_many_scheduler(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -661,6 +684,9 @@ def _execute_run_many_scheduler(
     enable_cse: bool,
     max_concurrency: int | None = None,
     n_jobs: int | None = None,
+    input_dq_check: bool = False,
+    input_dq_strict: bool = True,
+    input_dq_thresholds=None,
 ) -> dict[str, Any]:
     """R31-P0-001：**默认生产执行链** = BatchCompiler → PhysicalPlanner →
     AdaptiveBatchScheduler → StreamingSink。
@@ -686,13 +712,18 @@ def _execute_run_many_scheduler(
     scheduler = AdaptiveBatchScheduler(
         max_concurrency=max_concurrency,
     )
-    # R31-P0-025/026：BatchDataRequest —— 整批 union source deps → 每 source
-    # scope 一次 ScanCost → 喂 read wave / IO token / admission。
+    # R33-P0-001..006：BatchDataRequest —— 从 analyses/plan 提取（multi-source）
+    # → 每 source scope 一次 ScanCost（真实 time_range + instruments）→ 喂 read
+    # wave / IO token / admission。估算失败记录 degraded planning（不静默）。
     from planner.batch_data_request import build_batch_data_request
 
     batch_request = build_batch_data_request(
         engine_to_use, analyses=analyses, dag=dag, ctx=ctx
     )
+    # R33-P0-017：scheduler 路径**不再** full-union prefetch（``_maybe_prepare_
+    # batch_data`` 是 layer-loop 专属）。read wave 是唯一 prefetch 路径，input DQ
+    # 按 wave 在 scan 后执行。
+    input_report = None
     plan = scheduler.plan(
         dag,
         analyses,
@@ -701,6 +732,25 @@ def _execute_run_many_scheduler(
         ctx=ctx,
     )
     batch_request_meta = batch_request.to_dict()
+    # R33-P0-061/§31：batch-global physical route（batch 级成本 = time-to-durable-
+    # commit，不是 operator 数）。记录进 runtime_stats（runtime evidence）。
+    try:
+        from backend.plan_cost_router import plan_batch_route, record_batch_route
+
+        root_plans = {
+            fp.factor_name: fp.root for fp in dag.roots
+        }
+        batch_route = plan_batch_route(
+            root_plans,
+            ctx,
+            scan_cost_map=batch_request.scan_cost_map,
+            shared_roots=len(dag.shared_nodes or {}),
+            factor_count=len(factors),
+        )
+        record_batch_route(ctx, batch_route)
+        batch_route_meta = batch_route.to_dict()
+    except Exception:
+        batch_route_meta = {}
     out: dict[str, Any] = {}
     backend_paths: dict[str, dict[str, Any]] = {}
     paths_lock = threading.Lock()
@@ -733,13 +783,33 @@ def _execute_run_many_scheduler(
         if ctx.shared_result_cache is not None:
             _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
-        run_stats = scheduler.run(
-            plan,
-            backend=engine_to_use.backend,
-            ctx=ctx,
-            execute_root=_execute_root,
-            result_handler=_handle,
-        )
+        # R33 §39：Auto Execution Mode——小批量走 serial fused（DIRECT_VECTOR），
+        # 不建 future / 不占 lease（scheduler overhead > compute savings）。
+        mode = choose_execution_mode(factors, analyses, dag)
+        if mode == "DIRECT_VECTOR":
+            run_stats = scheduler.run_serial_fused(
+                plan,
+                backend=engine_to_use.backend,
+                ctx=ctx,
+                execute_root=_execute_root,
+                result_handler=_handle,
+            )
+        else:
+            run_stats = scheduler.run(
+                plan,
+                backend=engine_to_use.backend,
+                ctx=ctx,
+                execute_root=_execute_root,
+                result_handler=_handle,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+            )
+        if isinstance(run_stats.get("scheduler_stats"), dict):
+            run_stats["scheduler_stats"]["auto_execution_mode"] = mode
+        else:
+            run_stats["scheduler_stats"] = {"auto_execution_mode": mode}
+        run_stats["auto_execution_mode"] = mode
     batch_out: dict[str, Any] = {
         "results": out,
         "dag": dag,
@@ -747,6 +817,7 @@ def _execute_run_many_scheduler(
         "executor": "adaptive_batch_scheduler",
         "scheduler_stats": run_stats,
         "batch_data_request": batch_request_meta,
+        "batch_physical_route": batch_route_meta,
     }
     _attach_batch_backend_paths(batch_out, backend_paths)
     # R31-104/103：backend transition + conversion 是第一等 telemetry。
@@ -940,6 +1011,9 @@ def execute_run_many(
             result_policy=result_policy,
             sink=sink,
             enable_cse=bool(enable_cse if enable_cse is not None else perf.enable_cse),
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
         )
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
@@ -1270,6 +1344,9 @@ def execute_run_many_parallel(
                 sink=sink,
                 enable_cse=bool(enable_cse if enable_cse is not None else perf.enable_cse),
                 max_concurrency=workers,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
                 n_jobs=workers,
             )
         finally:

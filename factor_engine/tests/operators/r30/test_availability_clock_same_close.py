@@ -40,12 +40,20 @@ def test_undeclared_session_end_factor_is_not_blocker():
 
 def test_default_available_at_for_session_end_inputs():
     assert default_available_at(("close", "volume")) == "session_close"
-    assert default_available_at(("open_price",)) is None
+    # R34 P0-018: open / open_price 在开盘即可知 —— session_open，不再是 None
+    # （旧行为错误阻止 open-only 的 same-session factor）。
+    assert default_available_at(("open_price",)) == "session_open"
+    assert default_available_at(("open",)) == "session_open"
+    # 混用 open + close 时取 max knowledge time = session_close
+    assert default_available_at(("open", "close")) == "session_close"
 
 
 def test_default_same_session_usable_for_session_end():
     assert default_same_session_usable(("close",)) is False
-    assert default_same_session_usable(("open_price",)) is None
+    # R34 P0-018: open-only factor 同 session 可用
+    assert default_same_session_usable(("open_price",)) is True
+    assert default_same_session_usable(("open",)) is True
+    assert default_same_session_usable(("open", "close")) is False
     assert default_same_session_usable(("close",), declared=True) is True
 
 

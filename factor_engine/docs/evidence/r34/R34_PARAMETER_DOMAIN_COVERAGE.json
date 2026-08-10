@@ -1,0 +1,472 @@
+{
+  "generated_by": "scripts/audit_r34_parameter_domains.py",
+  "independent_oracle": true,
+  "panel_shape": "300days x 50stocks",
+  "certified": {
+    "ts_std": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
+    "ts_var": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
+    "ts_max": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
+    "ts_min": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
+    "ts_zscore": [
+      1
+    ],
+    "cs_demean": [],
+    "c_demean": [],
+    "cs_pct_rank": []
+  },
+  "not_certified": {
+    "ts_mean": "no passed case",
+    "ts_sum": "no passed case",
+    "rank": "no passed case"
+  },
+  "detail": [
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_mean"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_std"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_var"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "canonical": "ts_sum"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_max"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_min"
+    },
+    {
+      "window": 1,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": true,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 2,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 5,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 20,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 60,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 120,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "window": 252,
+      "min_periods": 1,
+      "ddof": 1,
+      "pass": false,
+      "error": "",
+      "canonical": "ts_zscore"
+    },
+    {
+      "param": "default",
+      "pass": true,
+      "error": "",
+      "canonical": "cs_demean"
+    },
+    {
+      "param": "default",
+      "pass": true,
+      "error": "",
+      "canonical": "c_demean"
+    },
+    {
+      "param": "default",
+      "pass": false,
+      "error": "",
+      "canonical": "rank"
+    },
+    {
+      "param": "default",
+      "pass": true,
+      "error": "",
+      "canonical": "cs_pct_rank"
+    }
+  ]
+}

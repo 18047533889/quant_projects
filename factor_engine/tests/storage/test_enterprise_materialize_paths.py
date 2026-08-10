@@ -163,7 +163,9 @@ def test_incremental_plan_scales_intraday_source_to_calendar_days():
     assert plan.lookback_bars >= 20 * 78
     assert plan.source_bar_freq == "5m"
     assert plan.load_start is not None
-    assert plan.window_mode == "intraday_tick_precise"
+    # R32-P0-004：intraday 窗口改用 session bar clock（跳过午休、跨日跳周末），
+    # 不再「零点 + bar_duration×N」。
+    assert plan.window_mode == "intraday_session_clock"
     from cleaned_operators.operator_policy import bar_freq_to_timedelta, bars_per_day
 
     bpd = bars_per_day("5m")

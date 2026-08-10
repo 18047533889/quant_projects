@@ -256,27 +256,26 @@ def test_r14_production_optin_publish_failure_rejects_and_raises(tmp_path, monke
 
 
 def test_r14_production_disabled_by_default_rejects_no_publish(tmp_path, monkeypatch):
-    """production 事件**默认**（无 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH``）直接拒绝。
+    """R34 P0-039：production 事件**默认**走原子两阶段（不再默认拒绝）。
 
-    R14 复查 P0-1（方案 A）：逐 factor publish 不是 visibility transaction——生产
-    默认不自动发布，不 stage、不 publish → 读者看到 ZERO 新因子（destructive gate
-    #1/#2 的生产路径）。
+    旧 R14 语义：production 默认不自动发布（env bypass 不存在），事件直接拒绝。
+    R34 修正：escape hatch 已删除——production DataEvent 唯一路径就是原子两阶段
+    （全部 stage → 全部 publish），因此默认（无 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH``）
+    事件现在正常原子发布，不再 ``ProductionEventAutoPublishDisabled``。
     """
     _force_production(monkeypatch)
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
 
-    with pytest.raises(ProductionEventAutoPublishDisabled):
-        execute_incremental_updates_from_event(
-            None, _prod_event(), lake_root=lake, engine_factory=factory
-        )
-    assert control["staged"] == []  # 未 stage
-    assert store.staged == []
-    assert store.published == []  # 未 publish → published 湖零 mixed
-    # ledger 记录 rejected（audit trail）
+    out = execute_incremental_updates_from_event(
+        None, _prod_event(), lake_root=lake, engine_factory=factory
+    )
+    # 默认即原子两阶段：全部 stage → 全部 publish，ledger committed
+    assert out["ledger_status"] == "committed"
+    assert set(store.published) == {"f_a", "f_b"}  # 无 env 也原子发布
     raw = (lake / ".event_ledger.jsonl").read_text()
-    assert "ev_atomic" in raw and "rejected" in raw
+    assert "ev_atomic" in raw and "committed" in raw
 
 
 def test_r14_production_gate_applies_without_event_id(tmp_path, monkeypatch):

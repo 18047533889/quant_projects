@@ -26,9 +26,11 @@ contract instead of a growing manual list.
 
 review #252: edge evidence is backend-specific.  Evidence is keyed
 ``{"edge_evidence": {"pandas_numpy": {...}, "polars": {...}, "duckdb": {...}}}``
-and every gate accepts a ``backend`` parameter (default ``"duckdb"`` for
-backward compatibility with the legacy flat ``duckdb_nan_edge_verified`` /
-``duckdb_inf_edge_verified`` lists).
+and every gate accepts a ``backend`` parameter.  R34 P0-035: the DEFAULT is
+``None`` — the canonical semantic-layer edge gate unions over the operator's
+applicable backends and is NOT bound to duckdb.  Explicit ``backend="duckdb"``
+performs per-backend parity checks (legacy flat ``duckdb_nan_edge_verified`` /
+``duckdb_inf_edge_verified`` lists still route through it).
 """
 from __future__ import annotations
 
@@ -303,21 +305,59 @@ def missing_edge_dimensions(
     return frozenset(missing)
 
 
+def _all_backend_names() -> tuple[str, ...]:
+    """Backends with a verified-edge evidence namespace in primitive evidence."""
+    return ("pandas_numpy", "polars", "duckdb")
+
+
+def _applicable_backends(canonical: str) -> tuple[str, ...]:
+    """Backends the canonical actually registers, restricted to evidence namespaces.
+
+    ``backend=None`` 的语义层 union 只遍历算子真实可执行的后端——否则一个只跑
+    Pandas 的算子会被 duckdb 的证据误判 complete。
+    """
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        registered = OperatorRegistry.backends_for(canonical)
+    except Exception:
+        registered = set()
+    names = {b for b in _all_backend_names() if b in registered}
+    # 至少保留参考后端，避免空集导致恒 incomplete
+    if not names:
+        names = {"pandas_numpy"}
+    return tuple(sorted(names))
+
+
 def edge_evidence_status(
-    canonical: str, evidence: dict | None = None, backend: str = "duckdb"
+    canonical: str, evidence: dict | None = None, backend: str | None = None
 ) -> str:
     """Honest tri-state edge gate.
 
+    R34 P0-035：``backend=None``（默认）表示**跨算子注册的所有后端取并集**——
+    canonical 语义层的 edge gate 不绑任何单一 backend（尤其不默认 duckdb）。
+    每个 required 维度只要有任一适用 backend 验证过即算语义 complete；逐 backend
+    的 parity 由 backend certification 单独检查。
+
     * ``complete`` — the operator is declared (required set or EDGE_IMMUNE) and
-      every required dimension has verified edge evidence on ``backend``;
+      every required dimension has verified edge evidence on the requested
+      backend (or, when ``backend is None``, on at least one applicable backend);
     * ``incomplete`` — declared, but at least one required dimension lacks
-      evidence;
+      evidence everywhere;
     * ``undeclared`` — the operator has no declared edge contract; under
       production mode this is a fail-closed state, never a pass.
     """
     name = _resolve(canonical)
     if edge_contract(name) is None:
         return "undeclared"
+    if backend is None:
+        # Semantic layer: a required dimension is covered if ANY applicable
+        # backend (the ones the operator actually registers) verifies it.
+        # Per-backend compliance is a separate gate.
+        for candidate in _applicable_backends(name):
+            if not missing_edge_dimensions(name, evidence, candidate):
+                return "complete"
+        return "incomplete"
     missing = missing_edge_dimensions(name, evidence, backend)
     if missing:
         return "incomplete"
@@ -327,10 +367,13 @@ def edge_evidence_status(
 def production_edge_evidence_complete(
     canonical: str,
     evidence: dict | None = None,
-    backend: str = "duckdb",
+    backend: str | None = None,
     mode: EdgeGateMode = EdgeGateMode.PRODUCTION,
 ) -> bool:
     """Whether the operator's edge evidence is production-complete.
+
+    R34 P0-035：默认 ``backend=None``（语义层，跨适用后端取并集），不再默认
+    绑定 duckdb。显式传 ``backend="duckdb"`` 时才做逐 backend parity 判定。
 
     Defaults to :data:`EdgeGateMode.PRODUCTION` — an undeclared operator FAILS
     (no vacuous pass).  ``EdgeGateMode.RESEARCH`` demotes undeclared to a

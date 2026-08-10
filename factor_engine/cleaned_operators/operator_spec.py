@@ -211,6 +211,25 @@ def is_production_permanently_forbidden(canon: str) -> bool:
 
 
 @dataclass(frozen=True)
+class OutputShapeContract:
+    """R34 P0-037：显式的 grain 变换契约。
+
+    shape-changing（非 shape_preserving）的 production 算子必须声明此契约——
+    不允许 silent axis drop / silent reindex。合法变换如 ``minute -> daily``、
+    ``event table -> entity-date panel``、``snapshot -> daily``。
+    """
+
+    input_grain: str
+    output_grain: str
+    preserves_index: bool = False
+    preserves_columns: bool = False
+    aggregation_keys: tuple[str, ...] = ()
+
+    def is_valid(self) -> bool:
+        return bool(self.input_grain) and bool(self.output_grain)
+
+
+@dataclass(frozen=True)
 class OperatorSpec:
     """算子生产契约（metadata + policy + lifecycle 聚合视图）。
 
@@ -237,6 +256,8 @@ class OperatorSpec:
     shape_preserving: bool = True
     index_preserving: bool = True
     columns_preserving: bool = True
+    # R34 P0-037：shape-changing 算子的显式 grain 契约（None = 无声明）。
+    output_shape: OutputShapeContract | None = None
     numerical_stability: NumericalStability = "medium"
     description: str = ""
     execution_kind: str = "primitive"
@@ -663,7 +684,11 @@ def check_production_pit_declarations() -> list[str]:
 
 
 def check_production_shape_contracts() -> list[str]:
-    """校验 production 算子须保持 panel shape/index/columns。
+    """校验 production 算子的 shape/index/columns 契约。
+
+    R34 P0-037：shape-changing 算子若显式声明 ``output_shape``（input_grain /
+    output_grain 均非空）则合法（如 minute->daily、event->panel、snapshot->daily）；
+    无声明则仍 fail-closed。禁止 silent axis drop / silent reindex。
 
     返回:
         违规描述字符串列表。
@@ -673,7 +698,12 @@ def check_production_shape_contracts() -> list[str]:
         if not spec.allow_in_production:
             continue
         if not spec.shape_preserving:
-            errors.append(f"production 算子 {spec.canonical!r} shape_preserving=False")
+            shape = spec.output_shape
+            if shape is None or not shape.is_valid():
+                errors.append(
+                    f"production 算子 {spec.canonical!r} shape_preserving=False 且 "
+                    "无显式 OutputShapeContract（input_grain/output_grain）"
+                )
         if not spec.index_preserving:
             errors.append(f"production 算子 {spec.canonical!r} index_preserving=False")
         if not spec.columns_preserving:
@@ -863,7 +893,12 @@ _QOQ_FAMILY = {"fin_qoq", "fin_pct_change", "fin_log_change", "fin_diff"}
 _CUMULATIVE_PERIODS_PER_YEAR = 4
 
 
-def check_financial_grain_contract(formula: str) -> list[str]:
+def check_financial_grain_contract(
+    formula: str,
+    market_context=None,
+    data_snapshot=None,
+    periods_per_year: int | None = None,
+) -> list[str]:
     """Reject single-period growth operators on cumulative (``flow_ytd``) fields.
 
     ``fin_qoq`` always compares one report period back; a year-to-date cumulative
@@ -871,9 +906,13 @@ def check_financial_grain_contract(formula: str) -> list[str]:
     running sum, so QoQ on it computes a spurious current-YTD vs previous-YTD
     change.  ``fin_pct_change`` / ``fin_log_change`` / ``fin_diff`` are also
     single-period by default and inherit the same trap; a whole-year offset
-    (``periods`` a multiple of ``periods_per_year``, e.g. 4 for quarterly
-    statements) is valid on cumulative because the two points are the same
-    fiscal-quarter position in their respective YTD curves (review §5.1).
+    (``periods`` a multiple of ``periods_per_year``) is valid on cumulative
+    because the two points are the same fiscal-quarter position in their
+    respective YTD curves (review §5.1).
+
+    R34 P0-021/022: ``market_context``（默认 A 股，显式传入 US 亦受支持）来自
+    execution context；``periods_per_year`` 不再硬编码为 4，可从 fiscal 契约/
+    market context 解析（A 股季度财报 = 4）。US 年/半年报场景传入实际值。
 
     P0-33: the check uses the field's typed ``flow_semantics``
     (``cumulative_ytd_flow``) instead of AST-name guessing.  When the field has
@@ -885,11 +924,17 @@ def check_financial_grain_contract(formula: str) -> list[str]:
     import ast
     import logging
 
-    # R17-001/036: the QoQ-on-YTD validator resolves field flow semantics through
-    # the market-aware resolver with an EXPLICIT A-share context (the current
-    # single-market DSL formula grammar) instead of the implicit legacy fallback.
     from fields.resolver import resolve_market_field
-    from market.context import ASHARE_CONTEXT
+
+    if market_context is None:
+        from market.context import ASHARE_CONTEXT
+
+        market_context = ASHARE_CONTEXT
+    if periods_per_year is None:
+        # 从 market context 的 fiscal 声明解析；A 股季度财报 = 4。
+        periods_per_year = int(
+            getattr(market_context, "periods_per_year", None) or 4
+        )
 
     logger = logging.getLogger(__name__)
     errors: list[str] = []
@@ -917,7 +962,7 @@ def check_financial_grain_contract(formula: str) -> list[str]:
             continue
         field_name = node.args[0].id
         periods = _periods_of(node)
-        resolved = resolve_market_field(field_name, ASHARE_CONTEXT, strict=False)
+        resolved = resolve_market_field(field_name, market_context, strict=False)
         spec = resolved.spec if resolved is not None else None
         if spec is None:
             continue
@@ -927,12 +972,12 @@ def check_financial_grain_contract(formula: str) -> list[str]:
             # comparisons across years (同比) are meaningful.  A cross-quarter
             # offset subtracts a running total against a different position of
             # the fiscal year and is an accounting error.
-            if periods % _CUMULATIVE_PERIODS_PER_YEAR != 0:
+            if periods % periods_per_year != 0:
                 errors.append(
                     f"{node.func.id}({field_name}) 作用于累计字段 "
                     f"(flow_semantics=cumulative_ytd_flow): 跨季累计值相减无意义，"
                     f"仅同比（同一财年季度位置、periods 为 "
-                    f"{_CUMULATIVE_PERIODS_PER_YEAR} 的整数倍）有效；"
+                    f"{periods_per_year} 的整数倍）有效；"
                     f"单期变化前需先用 fin_quarter_from_cumulative 去累计"
                 )
         else:

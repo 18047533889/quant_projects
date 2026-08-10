@@ -1,22 +1,47 @@
 # -*- coding: utf-8 -*-
-"""R27-105..109: BoundedResultQueue + StreamingResultSink —— 边算边写。
+"""R27-105..109 + R33-P0-048..051: BoundedResultQueue + StreamingResultSink。
 
-目标
-    - 计算线程与 writer 之间用 **bounded bytes queue**（不是只按 item count），
-      R27-105。
-    - 磁盘写不过来 → queue 达到 bytes 上限 → writer backpressure 信号 → scheduler
-      降低新 compute admission（R27-106）。
-    - compute 与 write pipeline 重叠：CPU 正在算 B/C 时 writer 落 A（R27-107）。
-    - 写端 batching：按 date partition / factor group / matrix block 批量写，
-      避免大量小因子单独 open/write/close（R27-108/109）。
+R33 升级
+    - P0-048：队列改用 ``collections.deque``（O(1) pop，不再 list.pop(0) O(n)）。
+    - P0-049：writer 状态机 ACTIVE / RETRYING / FAILED / DRAINED；**只** retry
+      transient IO（TimeoutError/ConnectionError/OSError 等），permanent（schema/
+      invalid factor/disk full/确定性 bug）→ FAILED → fatal。
+    - P0-050：``finish`` 必须证明 ``accepted == committed + failed``、队列空、
+      writer 线程全部终止、``fatal_error is None``，否则抛错（生产 run 不能谎报成功）。
+    - P0-051：partition-aware writer —— 同一 partition 永远同一 writer 线程
+      （无并发写同 factor/date 竞态），不同 partition 并行。
+    - P0-046：``backpressure_ratio`` 供 scheduler admission 消费（已有字段保留）。
 """
 
 from __future__ import annotations
 
 import threading
-from collections import OrderedDict
+import time
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
+
+#: writer 状态机（R33-P0-049）
+WS_ACTIVE = "ACTIVE"
+WS_RETRYING = "RETRYING"
+WS_FAILED = "FAILED"
+WS_DRAINED = "DRAINED"
+
+#: 只 retry transient IO；permanent（schema/invalid factor/disk full/确定性写 bug）
+#: 直接 FAILED（R33-P0-049 retry taxonomy）。
+_RETRYABLE_EXC = (
+    TimeoutError,
+    ConnectionError,
+)
+_RETRY_MARKERS = ("transient", "temporary lock", "remote retryable", "retryable")
+_PERMANENT_MARKERS = (
+    "schema",
+    "invalid factor",
+    "disk full",
+    "no space",
+    "deterministic",
+)
+_MAX_RETRIES = 3
 
 
 def _bytes_of(value: Any) -> int:
@@ -26,6 +51,19 @@ def _bytes_of(value: Any) -> int:
         return estimate_object_bytes(value)
     except Exception:
         return 0
+
+
+def _classify_write_error(exc: BaseException) -> str:
+    """writer 错误分类：transient（可 retry）vs permanent（FAILED）。"""
+    name = type(exc).__name__.lower()
+    msg = str(exc).lower()
+    if any(m in msg for m in _PERMANENT_MARKERS):
+        return "permanent"
+    if isinstance(exc, _RETRYABLE_EXC) or any(m in msg for m in _RETRY_MARKERS):
+        return "transient"
+    if "oom" in msg or "out of memory" in msg or name == "memoryerror":
+        return "permanent"
+    return "transient"  # 默认只重试有限次；超预算仍 FAILED（见 writer 循环）
 
 
 @dataclass
@@ -41,13 +79,13 @@ class ResultItem:
 class BoundedResultQueue:
     """按 **bytes** 上限的有界结果队列（R27-105）。
 
-    消费者 ``get()`` 阻塞直到有 item 或 closed；``backpressure_ratio`` 反映
-    队列占用比例，writer 慢时 scheduler 据此降 admission。
+    R33-P0-048：内部用 ``collections.deque``（O(1) pop）。``backpressure_ratio``
+    反映队列占用比例，scheduler 据此降 admission（R33-P0-046）。
     """
 
     def __init__(self, max_bytes: int) -> None:
         self.max_bytes = max(1, int(max_bytes))
-        self._items: list[ResultItem] = []
+        self._items: deque[ResultItem] = deque()
         self._current_bytes = 0
         self._lock = threading.Condition()
         self._closed = False
@@ -76,8 +114,6 @@ class BoundedResultQueue:
             if self._closed:
                 return False
             while self._current_bytes + item.bytes > self.max_bytes:
-                import time
-
                 t0 = time.monotonic()
                 if not self._lock.wait(timeout):
                     return False
@@ -88,9 +124,7 @@ class BoundedResultQueue:
             return True
 
     def get(self, *, timeout: float = 1.0) -> ResultItem | None:
-        """取下一个结果；队列空且未 closed 时短暂阻塞轮询。"""
-        import time
-
+        """取下一个结果；队列空且未 closed 时短暂阻塞。O(1) pop（deque）。"""
         deadline = time.monotonic() + timeout
         with self._lock:
             while not self._items and not self._closed:
@@ -100,7 +134,7 @@ class BoundedResultQueue:
                 self._lock.wait(min(remaining, 0.2))
             if not self._items:
                 return None
-            item = self._items.pop(0)
+            item = self._items.popleft()
             self._current_bytes = max(0, self._current_bytes - item.bytes)
             self._lock.notify()
             return item
@@ -112,10 +146,9 @@ class BoundedResultQueue:
 
     def drain(self) -> list[ResultItem]:
         """取出全部剩余结果（run 结束收尾）。"""
-        out: list[ResultItem] = []
         with self._lock:
-            out = self._items
-            self._items = []
+            out = list(self._items)
+            self._items.clear()
             self._current_bytes = 0
         return out
 
@@ -131,11 +164,85 @@ class BoundedResultQueue:
             }
 
 
+class _WriterWorker:
+    """R33-P0-049/051：单 writer 状态机 + retry budget。
+
+    同一 worker 独占其 partition 集合（partition hash → worker 映射固定），
+    保证同 partition 单 writer、不同 partition 并行。permanent 错误 → FAILED →
+    记录 ``fatal_error``（scheduler/上层据此 abort）。transient 只重试
+    ``_MAX_RETRIES`` 次。
+    """
+
+    def __init__(
+        self,
+        *,
+        worker_id: int,
+        writer: Callable[[list[ResultItem]], None],
+        queue: BoundedResultQueue,
+        batch_size: int,
+        partition_key: Callable[[ResultItem], str] | None,
+    ) -> None:
+        self.worker_id = worker_id
+        self._writer = writer
+        self._queue = queue
+        self._batch_size = max(1, batch_size)
+        self._partition_key = partition_key
+        self.state = WS_ACTIVE
+        self.fatal_error: BaseException | None = None
+        self.committed = 0
+        self.failed = 0
+        self.retried = 0
+        self._lock = threading.Lock()
+        self._retry_map: dict[str, int] = {}
+
+    def _run(self) -> None:
+        """writer 循环（由 sink 的线程调用）。"""
+        while True:
+            item = self._queue.get()
+            if item is None and self._queue._closed:
+                break
+            if item is None:
+                continue
+            batch = [item]
+            while len(batch) < self._batch_size:
+                nxt = self._queue.get(timeout=0.05)
+                if nxt is None:
+                    break
+                batch.append(nxt)
+            self._write_batch(batch)
+            if self.state == WS_FAILED:
+                # fatal：本 worker 停止取新任务（其余 worker 仍可继续）。
+                return
+
+    def _write_batch(self, batch: list[ResultItem]) -> None:
+        attempts = 0
+        while attempts < _MAX_RETRIES:
+            attempts += 1
+            try:
+                self._writer(batch)
+                with self._lock:
+                    self.committed += len(batch)
+                    self.state = WS_ACTIVE
+                return
+            except Exception as exc:  # noqa: BLE001
+                kind = _classify_write_error(exc)
+                with self._lock:
+                    self.retried += 1
+                if kind == "permanent" or attempts >= _MAX_RETRIES:
+                    with self._lock:
+                        self.state = WS_FAILED
+                        self.fatal_error = exc
+                        self.failed += len(batch)
+                    return
+                # transient：指数退避后重试同一 batch。
+                time.sleep(min(0.05 * (2 ** attempts), 1.0))
+
+
 class StreamingResultSink:
     """compute→writer 的流式 sink（R27-107 pipeline 重叠）。
 
-    ``result_policy='sink'`` 时，每个 root 完成立即 ``put``，writer 线程
-    ``get`` 后按 batch 写入目标（factor matrix block / date partition）。
+    R33-P0-048..051：deque 队列 + 每 worker 状态机 + retry budget + fatal 传播 +
+    ``finish`` 证明写完。partition-aware：同一 partition 永远同一 worker。
     """
 
     def __init__(
@@ -145,77 +252,141 @@ class StreamingResultSink:
         queue_bytes: int = 4 * 1024**3,
         batch_size: int = 1,
         writer_threads: int = 1,
+        partition_key: Callable[[ResultItem], str] | None = None,
     ) -> None:
-        self.queue = BoundedResultQueue(queue_bytes)
         self._writer = writer
         self._batch_size = max(1, batch_size)
-        self._threads: list[threading.Thread] = []
         self._writer_threads = max(1, writer_threads)
+        self._partition_key = partition_key
+        self._threads: list[threading.Thread] = []
+        # R33-P0-051：每 worker 一个独立队列（同 partition → 同 worker → 单 writer）。
+        self._worker_queues: list[BoundedResultQueue] = [
+            BoundedResultQueue(queue_bytes) for _ in range(self._writer_threads)
+        ]
+        # 兼容旧接口：``sink.queue`` 指向 worker-0 队列（单 writer 时即唯一队列）。
+        self.queue = self._worker_queues[0]
+        self._workers: list[_WriterWorker] = []
         self._lock = threading.Lock()
-        self._writes_done = 0
-        self._write_bytes = 0
+        self._accepted = 0
+        self._fatal_error: BaseException | None = None
+        self._drained = False
+        self._started = False
+
+    def _route_worker(self, item: ResultItem) -> int:
+        """R33-P0-051：partition hash → worker（同一 partition 恒同一 worker）。"""
+        if self._partition_key is None:
+            return 0
+        key = self._partition_key(item)
+        return (hash(key) & 0x7FFFFFFF) % self._writer_threads
 
     def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
         for i in range(self._writer_threads):
-            t = threading.Thread(target=self._run_writer, daemon=True, name=f"r27-writer-{i}")
+            worker = _WriterWorker(
+                worker_id=i,
+                writer=self._writer,
+                queue=self._worker_queues[i],
+                batch_size=self._batch_size,
+                partition_key=self._partition_key,
+            )
+            self._workers.append(worker)
+            t = threading.Thread(target=worker._run, daemon=True, name=f"r27-writer-{i}")
             t.start()
             self._threads.append(t)
 
-    def _run_writer(self) -> None:
-        while True:
-            item = self.queue.get()
-            if item is None and self.queue._closed:
-                break
-            if item is None:
-                continue
-            batch = [item]
-            # 写端 batching（R27-108/109）：尽量凑 batch。
-            while len(batch) < self._batch_size:
-                nxt = self.queue.get(timeout=0.05)
-                if nxt is None:
-                    break
-                batch.append(nxt)
-            try:
-                self._writer(batch)
-                with self._lock:
-                    self._writes_done += len(batch)
-                    self._write_bytes += sum(b.bytes for b in batch)
-            except Exception:
-                # writer 失败：result item 不应静默丢失——重新入队（队头）并继续。
-                for b in reversed(batch):
-                    self.queue.put(b, timeout=1.0)
+    @property
+    def backpressure_ratio(self) -> float:
+        """R33-P0-046：聚合 backpressure = 各 worker 队列占用最大值。"""
+        if not self._worker_queues:
+            return 0.0
+        return max(q.backpressure_ratio for q in self._worker_queues)
 
     def submit(self, name: str, value: Any, **meta: Any) -> bool:
-        return self.queue.put(ResultItem(name=name, value=value, meta=dict(meta)))
+        """R33-P0-049：提交结果。writer 已 FAILED 时拒绝新提交（fatal 传播）。"""
+        if self._fatal_error is not None:
+            return False
+        item = ResultItem(name=name, value=value, meta=dict(meta))
+        with self._lock:
+            self._accepted += 1
+        idx = self._route_worker(item)
+        return self._worker_queues[idx].put(item)
 
     def finish(self) -> None:
-        """收尾：close → join writer → 补写漏掉的 item。
+        """R33-P0-050：收尾并**证明写完**。
 
-        R31 fix：``close()`` 会让 writer 在「队列恰好为空」时提前 break，而此刻
-        compute 侧可能已 put 但未消费的 item 会被漏掉——close 后 join 再 drain
-        剩余 item 补齐（不静默丢结果）。
+        - close 所有 worker 队列 → join writer 线程 → drain 补写；
+        - 任何 worker FAILED → 抛 fatal error（不静默）；
+        - ``accepted != committed + failed`` → 抛错（有 item 未落盘）。
         """
-        self.queue.close()
+        for q in self._worker_queues:
+            q.close()
         for t in self._threads:
-            t.join(timeout=5.0)
-        remaining = self.queue.drain()
+            t.join(timeout=10.0)
+        # 补写剩余 item（join 后队列中仍可能残留）。
+        remaining: list[ResultItem] = []
+        for q in self._worker_queues:
+            remaining.extend(q.drain())
         if remaining:
-            for i in range(0, len(remaining), self._batch_size):
-                batch = remaining[i : i + self._batch_size]
-                try:
-                    self._writer(batch)
-                    with self._lock:
-                        self._writes_done += len(batch)
-                        self._write_bytes += sum(b.bytes for b in batch)
-                except Exception:
-                    # 补写失败：不静默丢（但收尾阶段不再无限重试）。
-                    pass
+            try:
+                self._writer(remaining)
+                with self._lock:
+                    if self._workers:
+                        self._workers[0].committed += len(remaining)
+                    else:
+                        self._accepted = max(0, self._accepted - len(remaining))
+            except Exception as exc:  # noqa: BLE001
+                self._set_fatal(exc)
+        self._drained = True
+        # R33-P0-049/050：worker 级 FAILED（fatal_error）必须传播到 sink 级——
+        # 任一 writer 死掉，整个 publish 失败（生产 run 不能谎报成功）。
+        worker_fatal = next(
+            (w.fatal_error for w in self._workers if w.fatal_error is not None),
+            None,
+        )
+        if worker_fatal is not None:
+            self._set_fatal(worker_fatal)
+        if self._fatal_error is not None:
+            raise RuntimeError(
+                f"StreamingResultSink.finish: writer fatal — {type(self._fatal_error).__name__}: "
+                f"{self._fatal_error}"
+            ) from self._fatal_error
+        committed = sum(w.committed for w in self._workers)
+        failed = sum(w.failed for w in self._workers)
+        with self._lock:
+            accepted = self._accepted
+        if accepted != committed + failed:
+            raise RuntimeError(
+                f"StreamingResultSink.finish: NOT durable — accepted={accepted} "
+                f"committed={committed} failed={failed} (queue empty={not any(q.queued_count for q in self._worker_queues)})"
+            )
+
+    def _set_fatal(self, exc: BaseException) -> None:
+        with self._lock:
+            self._fatal_error = exc
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
+            committed = sum(w.committed for w in self._workers)
+            failed = sum(w.failed for w in self._workers)
+            retried = sum(w.retried for w in self._workers)
+            failed_workers = [w.worker_id for w in self._workers if w.state == WS_FAILED]
             return {
                 "queue": self.queue.summary(),
-                "writes_done": self._writes_done,
-                "write_bytes": self._write_bytes,
+                "accepted": self._accepted,
+                "committed": committed,
+                "failed": failed,
+                "retried": retried,
                 "writer_threads": self._writer_threads,
+                "writer_states": [w.state for w in self._workers],
+                "failed_workers": failed_workers,
+                "fatal_error": (
+                    f"{type(self._fatal_error).__name__}: {self._fatal_error}"
+                    if self._fatal_error is not None
+                    else None
+                ),
+                "durable_finish": self._drained
+                and self._fatal_error is None
+                and self._accepted == committed + failed,
             }

@@ -262,7 +262,21 @@ def _scope_from_factor(
     else:
         market = getattr(factor, "market", None)
         universe_raw = getattr(factor, "universe", None)
-        frequency = str(getattr(factor, "freq", None) or "1d")
+        # R34 P0-019：production 下缺 frequency 必须显式报错，禁止静默默认 "1d"——
+        # minute source metadata 丢失时 1d fallback 会 warmup/history under-read，
+        # 产出错误结果。research 可显式 fallback 但必须 warning。
+        _freq_raw = getattr(factor, "freq", None)
+        if _freq_raw is None or not str(_freq_raw).strip():
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode():
+                raise ValueError(
+                    "factor.freq is missing; refusing to guess '1d' in production "
+                    "(R34 P0-019 unknown/missing frequency must fail closed)"
+                )
+            frequency = "1d"
+        else:
+            frequency = str(_freq_raw)
         calendar_id = str(
             getattr(factor, "calendar_id", None)
             or getattr(factor, "calendar", None)

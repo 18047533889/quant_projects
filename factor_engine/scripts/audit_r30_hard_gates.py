@@ -122,7 +122,22 @@ fallback_prod = [
 gates["R30_PRODUCTION_LEGACY_STATEFUL_SEED_FALLBACK_ZERO"] = not fallback_prod
 
 # --- misc structural ----------------------------------------------------------
-gates["R30_EVERY_CURRENT_CANONICAL_REVIEWED"] = True  # Phase 14 fills per-canonical
+# R34 P0-002：把 "Phase 14 fills per-canonical" 的硬编码 True 换成真检查——
+# 每个 current production canonical 都必须在 reviewed migration manifest 里有
+# review_id（版本绑定）。manifest 里 semantic_hash 为空的情况由 R34 P0-013
+# 单独暴露，这里只做 review_id 的真实存在性检查。
+from cleaned_operators.operator_surface import DAILY_CANONICALS, REVIEWED_MIGRATION_MANIFEST  # noqa: E402
+
+# R34 P0-002：review 机制的语义范围是 daily 迁移表面（manifest 只登记 daily）。
+# 逐 daily canonical 检查 review_id 真实存在；extended/research 走 semantic
+# certification，不在此 gate 范围。
+_reviewed = {
+    c
+    for c, meta in REVIEWED_MIGRATION_MANIFEST.items()
+    if str(meta.get("review_id") or "").strip()
+}
+_daily_unreviewed = [c for c in sorted(DAILY_CANONICALS) if c not in _reviewed]
+gates["R30_EVERY_CURRENT_CANONICAL_REVIEWED"] = not _daily_unreviewed
 
 gates = {k: bool(v) for k, v in gates.items()}
 blockers = [k for k, v in gates.items() if not v]

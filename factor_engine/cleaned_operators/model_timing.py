@@ -205,54 +205,6 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     # --- Dynamic KNN / local models: as-of membership + historical scaler ---
     "cs_knn_local_linear_residual": ModelTimingContract("knn", fit_cutoff_offset=1, state_filtering="none"),
     "ts_dynamic_knn_state": ModelTimingContract("knn", fit_cutoff_offset=1, state_filtering="none"),
-    # --- Supervised panel models (fit_lag=1 + label_horizon maturity) ---
-    "panel_rolling_pcr_forecast": ModelTimingContract(
-        "pcr", fit_cutoff_offset=1, forecast_horizon=1, label_horizon=1,
-        scaler_fit_cutoff_offset=1, hyperparam_fit_cutoff_offset=1, state_filtering="none"),
-    "panel_rolling_pls_forecast": ModelTimingContract(
-        "pls", fit_cutoff_offset=1, forecast_horizon=1, label_horizon=1,
-        scaler_fit_cutoff_offset=1, hyperparam_fit_cutoff_offset=1, state_filtering="none"),
-    "panel_rolling_elastic_net_forecast": ModelTimingContract(
-        "enet", fit_cutoff_offset=1, forecast_horizon=1, label_horizon=1,
-        scaler_fit_cutoff_offset=1, hyperparam_fit_cutoff_offset=1, state_filtering="none"),
-    "panel_regime_conditioned_forecast": ModelTimingContract(
-        "regime", fit_cutoff_offset=1, forecast_horizon=1, label_horizon=1,
-        scaler_fit_cutoff_offset=1, hyperparam_fit_cutoff_offset=1, state_filtering="filter"),
-    "panel_mixture_of_experts_score": ModelTimingContract(
-        "mixture", fit_cutoff_offset=1, forecast_horizon=1, label_horizon=1,
-        scaler_fit_cutoff_offset=1, hyperparam_fit_cutoff_offset=1, state_filtering="none"),
-    # --- Kalman: causal one-pass filter; missing obs are predict-only ---
-    "ts_kalman_level": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    "ts_kalman_trend": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    "ts_kalman_beta": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    "ts_kalman_beta_change": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    "ts_kalman_beta_uncertainty": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    "ts_kalman_innovation_z": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
-    # --- GARCH: fit on seg[:-1]; current shock excluded from own denominator ---
-    "ts_garch_standardized_shock": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_garch_next_vol_forecast": ModelTimingContract("garch", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_garch_persistence": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_garch_vol_surprise": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_gjr_garch_vol_forecast": ModelTimingContract("garch", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    # --- HAR (volatility) ---
-    "ts_har_rv_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_har_rv_forecast_error_z": ModelTimingContract("har", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_har_rv_innovation_z": ModelTimingContract("har", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_har_rv_next_vol_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_har_rv_next_var_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_har_from_return_next_vol": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_har_from_return_forecast_error_z": ModelTimingContract("har", fit_cutoff_offset=1, state_filtering="none"),
-    # --- AR: prior forms are out-of-sample (fit t-1); fitted/legacy are in-sample ---
-    "ts_ar_prior_forecast": ModelTimingContract("ar", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_ar_prior_innovation": ModelTimingContract("ar", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_ar_prior_innovation_z": ModelTimingContract("ar", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_ar_prior_coeff": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_ar_coefficient": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_ar_coeff_stability": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_ar_fitted_value": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
-    "ts_ar_in_sample_resid": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
-    "ts_ar_forecast": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
-    "ts_ar_innovation": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
 }
 
 
@@ -296,8 +248,40 @@ def get_model_timing_contract(
     Explicit entries in ``MODEL_TIMING_CONTRACTS`` win; otherwise a deterministic
     family/name-based default is generated.  This guarantees the R28 gate
     ``R28_ALL_MODEL_CANONICALS_TIMING_CONTRACTED`` for every model-like canonical.
+
+    R34 P0-025: the generated default is a RESEARCH HINT only.  Production
+    admission must require an explicit reviewed contract (see
+    :func:`model_timing_production_errors`).
     """
     explicit = MODEL_TIMING_CONTRACTS.get(canonical)
     if explicit is not None:
         return explicit
     return _default_contract_for(canonical, category)
+
+
+def model_timing_contract_is_explicit(canonical: str) -> bool:
+    """Whether the canonical has a reviewed, explicit ``ModelTimingContract``.
+
+    A name/family-based generated contract (``_default_contract_for``) is not a
+    reviewed contract — it cannot admit production (R34 P0-025).
+    """
+    return canonical in MODEL_TIMING_CONTRACTS
+
+
+def model_timing_production_errors(canonicals) -> list[str]:
+    """Production gate: every model-like production canonical needs an explicit
+    reviewed ``ModelTimingContract``.
+
+    Auto-generated contracts are research hints only; a model-like canonical with
+    no explicit contract is NOT production-admissible (R34 P0-025).
+    """
+    errors: list[str] = []
+    for canonical in sorted(canonicals):
+        if not is_model_like_name(canonical):
+            continue
+        if not model_timing_contract_is_explicit(canonical):
+            errors.append(
+                f"{canonical}: model-like but no explicit reviewed ModelTimingContract "
+                "(auto-generated timing is a research hint only, R34 P0-025)"
+            )
+    return errors

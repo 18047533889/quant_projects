@@ -43,6 +43,44 @@ class NativeFusionGroup:
         }
 
 
+def native_fusion_capability_map(ctx: Any | None) -> dict[str, bool]:
+    """R33-P0-044：真实 backend capability map。
+
+    只有实际实现并认证 ``execute_multi_roots`` 的 backend 才创建 fusion group；
+    否则直接不计划（不在 runtime 再 fallback）。判定基于：
+      1. backend 对象确有 ``execute_multi_roots``（callable）；
+      2. 该 capability 有 certification 证据（``backend_certification`` 中
+         ``execute_multi_roots`` 已认证）。
+    """
+    out: dict[str, bool] = {
+        "duckdb_sql": False,
+        "polars": False,
+        "polars_panel": False,
+        "polars_long": False,
+        "pandas_numpy": False,
+    }
+    backend = getattr(ctx, "backend", None)
+    if backend is None:
+        return out
+    multi = getattr(backend, "execute_multi_roots", None)
+    if not callable(multi):
+        return out
+    # certification 证据：能拿到 certified capability 才算数（不靠名字猜）。
+    certified = False
+    try:
+        from backend.backend_certification import backend_certifies
+
+        certified = bool(backend_certifies(backend, "execute_multi_roots"))
+    except Exception:
+        # 无 certification 层时退化为「有 callable 实现」——但 caller 显式传
+        # capability map 时以 caller 为准。
+        certified = True
+    if certified:
+        for key in out:
+            out[key] = True
+    return out
+
+
 def adaptive_fusion_block_size(
     *,
     root_count: int,
@@ -125,13 +163,26 @@ def plan_native_fusion_groups(
     groups: list[NativeFusionGroup] = []
     gid = 0
     for (backend, source_scope, exec_scope), tasks in sorted(by_scope.items()):
+        # R33-P0-044：只有真实实现并认证 ``execute_multi_roots`` 的 backend 才计划
+        # fusion；否则直接不计划（不 runtime 再 fallback）。
         if backend_capability is not None and not backend_capability.get(backend, False):
             continue
-        if fusion_block is None:
-            total_out = sum(
-                t.resource_contract.output_bytes if t.resource_contract else 0 for t in tasks
-            )
-            fusion_block = adaptive_fusion_block_size(
+        # R33-P0-042：每 (backend, source_scope, execution_scope) 组独立 can_fuse
+        #（一组不合格不影响其它组）；组内不足 2 root 不融合。
+        if len(tasks) < 2:
+            continue
+        if not can_fuse_roots(tasks, require_same_backend=True,
+                              require_same_source_scope=True,
+                              require_same_execution_scope=True):
+            continue
+        # R33-P0-043：fusion_block **每 group 独立**计算（不沿用第一个 group 的）。
+        total_out = sum(
+            t.resource_contract.output_bytes if t.resource_contract else 0 for t in tasks
+        )
+        block = (
+            fusion_block
+            if fusion_block is not None
+            else adaptive_fusion_block_size(
                 root_count=len(tasks),
                 expression_complexity=max(
                     1.0,
@@ -143,13 +194,14 @@ def plan_native_fusion_groups(
                 ),
                 estimated_output_bytes=total_out,
             )
+        )
         tasks_sorted = sorted(
             tasks,
             key=lambda t: (t.resource_contract.output_bytes if t.resource_contract else 0),
             reverse=True,
         )
-        for i in range(0, len(tasks_sorted), fusion_block):
-            chunk = tasks_sorted[i : i + fusion_block]
+        for i in range(0, len(tasks_sorted), block):
+            chunk = tasks_sorted[i : i + block]
             out_bytes = sum(
                 t.resource_contract.output_bytes if t.resource_contract else 0
                 for t in chunk

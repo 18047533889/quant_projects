@@ -120,7 +120,9 @@ def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple
         return False, "; ".join(violations)
     from cleaned_operators.operator_spec import check_financial_grain_contract
 
-    grain_violations = check_financial_grain_contract(formula)
+    # R34 P0-021: 把 production Analyzer 解析出的 market context 透传给 financial
+    # validator——不再硬编码 ASHARE_CONTEXT（默认 A 股，US 显式传入 US_CONTEXT）。
+    grain_violations = check_financial_grain_contract(formula, market_context=market)
     if grain_violations:
         return False, "; ".join(grain_violations)
     return True, "OK"

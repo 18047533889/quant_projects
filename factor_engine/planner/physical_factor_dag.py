@@ -31,6 +31,147 @@ TASK_STATEFUL = "STATEFUL"
 TASK_ROOT = "ROOT"
 TASK_WRITE = "WRITE"
 
+#: 真正产生 IO/计算工作的 task 类型（其余为规划视图，见 ``executable``）。
+_EXECUTABLE_TASK_TYPES = frozenset({
+    TASK_SOURCE_SCAN,
+    TASK_CSE_SHARED,
+    TASK_ROOT,
+    TASK_WRITE,
+})
+
+#: 规划视图（barrier 分割产物）：真实计算发生在 ROOT 内部，这些 stage 只承载
+#: cost / backend / read-wave / explain 语义，**不**消耗真实 resource lease。
+_PLANNING_VIEW_TASK_TYPES = frozenset({
+    TASK_OPERATOR,
+    TASK_ROLLING_SHARED,
+    TASK_GROUP,
+    TASK_CROSS_SECTION,
+    TASK_STATEFUL,
+    TASK_SOURCE_JOIN,
+    TASK_SOURCE_AGG,
+})
+
+
+def task_is_executable(task_type: str) -> bool:
+    """R33-P0-008：SOURCE_SCAN / CSE_SHARED / ROOT / WRITE 是真实工作单元，
+    barrier 分割产生的 planning view（OPERATOR/ROLLING/GROUP/CS/STATEFUL/
+    JOIN/AGG）不占真实 resource lease。"""
+    return task_type in _EXECUTABLE_TASK_TYPES
+
+
+@dataclass(frozen=True)
+class SourceScopeId:
+    """R33-P0-005/006/013：typed source 身份——禁止字符串 ``split("::")``。
+
+    ``dataset`` / ``snapshot_id`` / ``market`` 是独立 typed 字段；``key()`` 是
+    唯一 canonical 字符串（内部排序/去重用），业务身份解析永远读字段本身。
+    """
+
+    dataset: str = ""
+    snapshot_id: str = ""
+    market: str = ""
+    params_digest: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dataset", str(self.dataset))
+        object.__setattr__(self, "snapshot_id", str(self.snapshot_id))
+        object.__setattr__(self, "market", str(self.market))
+        object.__setattr__(self, "params_digest", str(self.params_digest))
+
+    def key(self) -> str:
+        parts = [f"dataset:{self.dataset}"]
+        if self.snapshot_id:
+            parts.append(f"snapshot:{self.snapshot_id}")
+        if self.market:
+            parts.append(f"market:{self.market}")
+        if self.params_digest:
+            parts.append(f"params:{self.params_digest}")
+        return "::".join(parts)
+
+    def __str__(self) -> str:
+        return self.key()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dataset": self.dataset,
+            "snapshot_id": self.snapshot_id,
+            "market": self.market,
+            "params_digest": self.params_digest,
+            "key": self.key(),
+        }
+
+
+def source_scope_from_key(source_scope: str) -> SourceScopeId:
+    """从旧字符串 scope 恢复 typed 身份（向后兼容读入；新代码禁止用字符串构造）。
+
+    只解析已知 ``dataset:``/``snapshot:``/``market:`` 前缀，其余部分原样保留在
+    ``params_digest``，绝不把业务身份从中间拆出来当 dataset。
+    """
+    dataset = ""
+    snapshot_id = ""
+    market = ""
+    params: list[str] = []
+    for part in str(source_scope).split("::"):
+        if not part:
+            continue
+        if part.startswith("dataset:"):
+            dataset = part[len("dataset:"):]
+        elif part.startswith("snapshot:"):
+            snapshot_id = part[len("snapshot:"):]
+        elif part.startswith("market:"):
+            market = part[len("market:"):]
+        else:
+            params.append(part)
+    return SourceScopeId(
+        dataset=dataset,
+        snapshot_id=snapshot_id,
+        market=market,
+        params_digest="::".join(params),
+    )
+
+
+@dataclass(frozen=True)
+class SourceScanSpec:
+    """R33-P0-009：SOURCE_SCAN task 的真实 IO 需求（不再丢失）。
+
+    ``required_columns`` 是**物理列**（读 wave / ScanCost / admission 都消费它，
+    不是 ``(task.op,)`` 推断）。
+    ``time_range`` 是真实加载窗口（warmup 扩展后的 actual load 起点）。
+    """
+
+    dataset: str
+    required_columns: tuple[str, ...]
+    time_range: tuple[str, str] | None = None
+    instrument_scope: tuple[str, ...] | None = None
+    universe_id: str | None = None
+    filters_digest: str = ""
+    source_params_digest: str = ""
+    snapshot_id: str = ""
+    expected_rows: int = 0
+    expected_bytes: int = 0
+    projected_bytes: int = 0
+    remote: bool = False
+    ordering: str = ""  # "instrument,time:asc" 或 ""
+    output_representation: str = "pandas_column"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dataset": self.dataset,
+            "required_columns": list(self.required_columns),
+            "time_range": list(self.time_range) if self.time_range else None,
+            "instrument_scope": list(self.instrument_scope) if self.instrument_scope else None,
+            "universe_id": self.universe_id,
+            "filters_digest": self.filters_digest,
+            "source_params_digest": self.source_params_digest,
+            "snapshot_id": self.snapshot_id,
+            "expected_rows": self.expected_rows,
+            "expected_bytes": self.expected_bytes,
+            "projected_bytes": self.projected_bytes,
+            "remote": self.remote,
+            "ordering": self.ordering,
+            "output_representation": self.output_representation,
+        }
+
 ALL_TASK_TYPES = (
     TASK_SOURCE_SCAN,
     TASK_SOURCE_JOIN,
@@ -108,6 +249,12 @@ class PhysicalFactorTask:
     # 执行 metadata
     node_ref: Any = None  # 原始 PlanNode / FactorPlan（backend.execute 需要）
     factor_name: str = ""
+    # R33-P0-009/010/011：SOURCE_SCAN 的真实 IO 需求与执行性标记。
+    source_scan_spec: SourceScanSpec | None = None
+    required_columns: tuple[str, ...] = ()
+    time_range: tuple[str, str] | None = None
+    instrument_scope: tuple[str, ...] | None = None
+    executable: bool = True  # False = barrier 规划视图（不占真实 resource lease）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -127,6 +274,10 @@ class PhysicalFactorTask:
             "cacheable": self.cacheable,
             "deterministic": self.deterministic,
             "factor_name": self.factor_name,
+            "source_scan_spec": self.source_scan_spec.to_dict() if self.source_scan_spec else None,
+            "required_columns": list(self.required_columns),
+            "time_range": list(self.time_range) if self.time_range else None,
+            "executable": self.executable,
         }
 
 
@@ -149,6 +300,7 @@ class PhysicalFactorDAG:
         if task.task_id in self.tasks:
             raise ValueError(f"duplicate task_id={task.task_id!r}")
         self.tasks[task.task_id] = task
+
 
     def predecessors(self, task_id: str) -> list[PhysicalFactorTask]:
         t = self.tasks.get(task_id)
@@ -231,3 +383,10 @@ class PhysicalFactorDAG:
             "tasks": {tid: t.to_dict() for tid, t in self.tasks.items()},
             "meta": self.meta,
         }
+
+
+def rebase_task(task: PhysicalFactorTask, **overrides: Any) -> PhysicalFactorTask:
+    """重建一个 frozen :class:`PhysicalFactorTask`，保留全部既有字段 + 覆盖项。"""
+    from dataclasses import replace
+
+    return replace(task, **overrides)

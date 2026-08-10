@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from concurrent.futures import Future, wait
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
@@ -27,15 +27,23 @@ from planner.dag_cost_model import task_priority
 from planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROOT,
+    TASK_SOURCE_SCAN,
     PhysicalFactorDAG,
     PhysicalFactorTask,
+    rebase_task,
+    task_is_executable,
 )
 from planner.read_wave_planner import ReadWavePlan, build_waves_from_dag
+from runtime.buffer_ref import SourceWaveExecutor
 from runtime.hybrid_executor import HybridExecutor, classify_backend_execution
 from runtime.resource_broker import ReservationLease, ResourceBroker
 from runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
 _logger = logging.getLogger(__name__)
+
+#: R33-P0-040：``wait(FIRST_COMPLETED)`` 事件驱动，超时只作兜底上限（不再固定
+#: 50ms 轮询）。
+_EVENT_WAIT_TIMEOUT_S = 0.05
 
 
 @dataclass
@@ -229,6 +237,17 @@ class AdaptiveBatchScheduler:
         # R31-069/P1-040：CancellationToken——cancel() 后不再 admit 新 task，
         # 在跑 task 自然完成；无 future 时 run 提前结束（不阻塞、不泄漏租约）。
         self._cancelled = False
+        # R33-P0-016：read wave 执行器（跨循环持久，幂等）+ BufferRef 结果表。
+        self._wave_executor: Any | None = None
+        self._wave_refs: dict[int, Any] = {}
+        self._wave_summary: dict[str, Any] = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        # R33-P0-009：SOURCE_SCAN task 的 BufferRef 输出（独立命名空间，不污染
+        # 因子结果 ``self._results``）。
+        self._buffer_results: dict[str, Any] = {}
+        # R33-P0-008/§44：real vs virtual task 比（scheduler runtime evidence）。
+        self._scheduler_stats: dict[str, Any] = {
+            "real_task_done": 0, "virtual_task_done": 0, "virtual_task_ratio": 0.0,
+        }
 
     def cancel(self) -> None:
         """请求取消：后续 admission 一律拒绝；run 在无在跑任务时提前结束。"""
@@ -292,50 +311,18 @@ class AdaptiveBatchScheduler:
             rid = f"root:{fp.factor_name}"
             if rid in physical.tasks and consumed:
                 cur = physical.tasks[rid]
-                physical.tasks[rid] = PhysicalFactorTask(
-                    task_id=rid,
-                    op=cur.op,
-                    task_type=cur.task_type,
+                physical.tasks[rid] = rebase_task(
+                    cur,
                     inputs=tuple(sorted(set((*cur.inputs, *(f"cse:{s}" for s in consumed))))),
-                    consumers=cur.consumers,
-                    execution_scope=cur.execution_scope,
-                    source_scope=cur.source_scope,
-                    source_snapshot_id=cur.source_snapshot_id,
-                    backend_candidates=cur.backend_candidates,
-                    preferred_backend=cur.preferred_backend,
-                    estimated_cost=cur.estimated_cost,
-                    resource_contract=cur.resource_contract,
-                    shard_spec=cur.shard_spec,
-                    spillable=cur.spillable,
-                    cacheable=cur.cacheable,
-                    deterministic=cur.deterministic,
-                    node_ref=cur.node_ref,
-                    factor_name=cur.factor_name,
                 )
                 for sid in consumed:
                     cid = f"cse:{sid}"
                     if cid not in physical.tasks:
                         continue
                     prev_c = physical.tasks[cid].consumers
-                    physical.tasks[cid] = PhysicalFactorTask(
-                        task_id=cid,
-                        op=physical.tasks[cid].op,
-                        task_type=physical.tasks[cid].task_type,
-                        inputs=physical.tasks[cid].inputs,
+                    physical.tasks[cid] = rebase_task(
+                        physical.tasks[cid],
                         consumers=tuple(sorted((*prev_c, rid))),
-                        execution_scope=physical.tasks[cid].execution_scope,
-                        source_scope=physical.tasks[cid].source_scope,
-                        source_snapshot_id=physical.tasks[cid].source_snapshot_id,
-                        backend_candidates=physical.tasks[cid].backend_candidates,
-                        preferred_backend=physical.tasks[cid].preferred_backend,
-                        estimated_cost=physical.tasks[cid].estimated_cost,
-                        resource_contract=physical.tasks[cid].resource_contract,
-                        shard_spec=physical.tasks[cid].shard_spec,
-                        spillable=physical.tasks[cid].spillable,
-                        cacheable=physical.tasks[cid].cacheable,
-                        deterministic=physical.tasks[cid].deterministic,
-                        node_ref=physical.tasks[cid].node_ref,
-                        factor_name=physical.tasks[cid].factor_name,
                     )
 
         read_waves = build_waves_from_dag(
@@ -344,15 +331,18 @@ class AdaptiveBatchScheduler:
             scan_cost_map=scan_cost_map,
             scope_scan_cost_map=scope_scan_cost_map,
         )
-        # fusion groups（仅对 ROOT task，且 backend 支持才生成）
+        # fusion groups（仅对 ROOT task；R33-P0-042：不再 batch-global
+        # ``can_fuse_roots(all_roots)`` 一票否决——按 (backend, source_scope,
+        # execution_scope) 分组后每组独立 can_fuse/block）。
         root_tasks = [physical.tasks[t] for t in physical.roots if t in physical.tasks]
-        from planner.native_fusion import can_fuse_roots, plan_native_fusion_groups
+        from planner.native_fusion import native_fusion_capability_map, plan_native_fusion_groups
 
         fusion_groups = []
-        if enable_cse and (can_fuse_roots(root_tasks) if root_tasks else False):
+        if enable_cse and root_tasks:
+            capability = fusion_backend_capability or native_fusion_capability_map(ctx)
             fusion_groups = plan_native_fusion_groups(
                 root_tasks,
-                backend_capability=fusion_backend_capability,
+                backend_capability=capability,
             )
         return SchedulerPlan(
             physical_dag=physical,
@@ -419,6 +409,142 @@ class AdaptiveBatchScheduler:
         )
         return future, lease
 
+    def _dynamic_concurrency_limit(self, sink: StreamingResultSink | None) -> int:
+        """R33-P0-038：显式并发上限 = min(max_concurrency, broker CPU budget, sink)。
+
+        ResourceBroker 的 ``try_reserve`` 仍做精确 memory/CPU admission；本值是
+        阻止「大量廉价 task 同时 submit」的**额外**显式闸（R33-P0-038）。
+        """
+        limit = self.max_concurrency
+        if limit is None or limit <= 0:
+            limit = 2 ** 31
+        broker_limit = 1
+        try:
+            broker_limit = max(1, int(self.broker.cpu_budget()))
+        except Exception:
+            broker_limit = max(1, int(getattr(self.broker, "hard_cpu_slots", 1) or 1))
+        limit = min(limit, broker_limit)
+        if sink is not None:
+            try:
+                # R33-P0-046：sink backpressure 反馈进动态并发（越接近满越少并发）。
+                ratio = getattr(sink, "backpressure_ratio", None)
+                if ratio is None:
+                    ratio = sink.queue.backpressure_ratio
+                ratio = float(ratio)
+                if ratio >= 0.8:
+                    limit = max(1, limit // 2)
+                elif ratio >= 0.6:
+                    limit = max(1, int(limit * 0.75))
+            except Exception:
+                pass
+        return max(1, limit)
+
+    def _execute_read_waves(
+        self,
+        plan: SchedulerPlan,
+        dag: PhysicalFactorDAG,
+        committed: set[str],
+        remaining: set[str],
+        ctx: Any,
+        *,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
+    ) -> int:
+        """R33-P0-016：把 read wave 真正接进 scheduler 主路径。
+
+        对每个 wave：当它覆盖的 SOURCE_SCAN task 全部 ready（inputs committed）
+        时执行一次 scan（``SourceWaveExecutor.execute_wave`` → prefetch union 列
+        → 共享列缓存），并把 SOURCE_SCAN task 标记 committed（其 IO 已在 wave
+        中完成），BufferRef 写入结果表。executor / refs 为实例状态（幂等：同一
+        wave_id 只执行一次）。wave 失败仍记录 event + committed（root 执行会按需
+        load 并如实抛错）——不静默。返回本次提交的 SOURCE_SCAN task 数。
+        """
+        waves = list(getattr(plan, "read_waves", ReadWavePlan()).waves or [])
+        if not waves:
+            return 0
+        source = getattr(ctx, "data_source", None)
+        if source is None:
+            return 0
+        if self._wave_executor is None:
+            self._wave_executor = SourceWaveExecutor(source, ctx)
+        executor = self._wave_executor
+        refs = self._wave_refs
+        committed_count = 0
+        for wave in waves:
+            wid = wave.wave_id
+            if wid in refs:
+                continue
+            tids = [t for t in wave.task_ids if t in dag.tasks]
+            if not tids:
+                continue
+            if any(
+                not all(p in committed for p in dag.tasks[t].inputs)
+                for t in tids
+            ):
+                continue
+            ref = executor.execute_wave(wave, consumer_ids=tids)
+            refs[wid] = ref
+            # R33-P0-017：input DQ 按 wave 在 scan 后做（一次 scan 同时产生 data
+            # buffer + DQ stats，不另扫一遍）。
+            if input_dq_check and ref is not None and wave.columns:
+                try:
+                    from runtime.input_dq import assert_input_dq
+                    from runtime.input_dq import (
+                        adjust_input_dq_thresholds_from_stats,
+                        load_dataset_stats_for_source,
+                    )
+
+                    stats = load_dataset_stats_for_source(source)
+                    thresholds = adjust_input_dq_thresholds_from_stats(
+                        input_dq_thresholds, stats, list(wave.columns)
+                    )
+                    assert_input_dq(
+                        source,
+                        list(wave.columns),
+                        raise_on_fail=input_dq_strict,
+                        thresholds=thresholds,
+                    )
+                except Exception:
+                    if input_dq_strict:
+                        raise
+            for t in tids:
+                task = dag.tasks[t]
+                if task.task_type == TASK_SOURCE_SCAN:
+                    self._buffer_results[t] = ref
+                    committed.add(t)
+                    remaining.discard(t)
+                    self._done += 1
+                    self._record_timing(t, task)
+                    committed_count += 1
+        self._wave_summary = executor.summary()
+        return committed_count
+
+    def _admit_virtual(
+        self,
+        dag: PhysicalFactorDAG,
+        remaining: set[str],
+        committed: set[str],
+        futures: dict[str, Future],
+    ) -> int:
+        """R33-P0-008：barrier 规划视图（executable=False）自动提交——不占 lease、
+        不 submit future（控制面零开销，资源零预占）。"""
+        admitted = 0
+        for tid in list(remaining):
+            if tid in futures or tid in committed:
+                continue
+            task = dag.tasks[tid]
+            if not all(p in committed for p in task.inputs):
+                continue
+            if task.executable:
+                continue
+            committed.add(tid)
+            remaining.discard(tid)
+            self._done += 1
+            self._record_timing(tid, task)
+            admitted += 1
+        return admitted
+
     def run(
         self,
         plan: SchedulerPlan,
@@ -429,11 +555,19 @@ class AdaptiveBatchScheduler:
         materialize_shared: Callable[[str, Any], Any] | None = None,
         sink: StreamingResultSink | None = None,
         result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
     ) -> dict[str, Any]:
-        """执行 DAG：ready queue + admission + as_completed + 流式 sink。
+        """执行 DAG：read waves + ready queue + admission + FIRST_COMPLETED。
 
-        ``execute_root`` 缺省走 ``runtime.batch_service`` 的 root 执行（含
-        backend path / production fast-path 校验）。
+        R33 升级：
+            - P0-016 read wave 在 SOURCE_SCAN ready 时真实执行（prefetch union 列
+              一次 → BufferRef 进结果表 → consumers 复用共享缓存）。
+            - P0-008 barrier 规划视图自动提交（不占 resource lease）。
+            - P0-038 ``running < dynamic_concurrency_limit`` 显式并发闸。
+            - P0-039 ready set 按 priority 排序主导 admission。
+            - P0-040 ``wait(FIRST_COMPLETED)`` 事件驱动（不再固定 50ms 轮询）。
         """
         from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
@@ -471,16 +605,31 @@ class AdaptiveBatchScheduler:
             for _tid in _g.roots:
                 group_by_root[_tid] = _g
         remaining = set(pending)
+        # R33-P0-016：read wave 真实执行 trace。
+        self._wave_summary = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        self._scheduler_stats: dict[str, Any] = {}
+        virtual_done = 0
+        real_done = 0
+        wave_scan_done = 0
+        admitted_this_round = 0
         no_progress_rounds = 0
         while remaining or futures:
-            admitted_this_round = 0
             # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
             if self._cancelled and not futures:
                 self._explain(
                     f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
                 )
                 break
-            # 0) fusion group admission：组内全部 root 就绪 → 一次 native query。
+            # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
+            wave_scan_done += self._execute_read_waves(
+                plan, dag, committed, remaining, ctx,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+            )
+            # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
+            virtual_done += self._admit_virtual(dag, remaining, committed, futures)
+            # 1) fusion group admission：组内全部 root 就绪 → 一次 native query。
             for group in fusion_groups:
                 gkey = f"fusion:{group.group_id}"
                 if gkey in futures or gkey in fusion_done:
@@ -489,6 +638,11 @@ class AdaptiveBatchScheduler:
                 if not roots or any(t in futures or t in committed for t in roots):
                     continue
                 if not all(all(p in committed for p in dag.tasks[t].inputs) for t in roots):
+                    continue
+                if len(futures) >= self._dynamic_concurrency_limit(sink):
+                    self._explain(
+                        f"fusion group {group.group_id}: deferred (concurrency limit)"
+                    )
                     continue
                 leases: list[ReservationLease] = []
                 ok = True
@@ -520,15 +674,28 @@ class AdaptiveBatchScheduler:
                     f"fusion group {group.group_id}: admitted {len(roots)} roots "
                     f"(backend={group.backend})"
                 )
-            # 1) admission：所有 predecessor 已 committed 且未在跑的 task。
-            for tid in list(remaining):
-                if tid in futures or tid in committed:
+            # 2) admission：predecessor 全 committed 的 executable task，按 priority
+            #    排序主导（R33-P0-039）。显式并发上限（R33-P0-038）。
+            concurrency_limit = self._dynamic_concurrency_limit(sink)
+            ready: list[tuple[float, str]] = []
+            for tid in remaining:
+                if tid in futures or tid in committed or tid in group_by_root:
                     continue
-                if tid in group_by_root:
-                    continue  # 已由 fusion group 接管
                 task = dag.tasks[tid]
+                if not task.executable:
+                    continue
                 if not all(p in committed for p in task.inputs):
                     continue
+                priority = self._priority_score(dag, task)
+                ready.append((priority, tid))
+            ready.sort(reverse=True)
+            for _priority, tid in ready:
+                if tid in futures or tid in committed:
+                    continue
+                if len(futures) >= concurrency_limit:
+                    self._explain(f"task={tid}: deferred (concurrency_limit={concurrency_limit})")
+                    break
+                task = dag.tasks[tid]
                 future, lease = self._admit_and_run(
                     task,
                     backend=backend,
@@ -543,11 +710,12 @@ class AdaptiveBatchScheduler:
                         future_leases[future] = lease
                     remaining.discard(tid)
                     admitted_this_round += 1
-            # 2) as_completed：先处理完成项（R27-103/104 立即 sink/release）。
-            done = wait(list(futures.values()), timeout=0.05)[0]
+            # 3) FIRST_COMPLETED：有 future 时等第一个完成（R33-P0-040 事件驱动）。
+            done: set[Future] = set()
+            if futures:
+                done = wait(list(futures.values()), timeout=_EVENT_WAIT_TIMEOUT_S,
+                            return_when=FIRST_COMPLETED)[0]
             for future in done:
-                # R31-005：tid 由映射绑定，不再依赖 future.result() 返回值——
-                # result() 抛异常时也能确定是哪个 task。
                 key = future_to_task_id.pop(future, None)
                 if key is None:
                     continue
@@ -556,8 +724,6 @@ class AdaptiveBatchScheduler:
                 try:
                     _ret_key, result = future.result(timeout=1.0)
                 except Exception as exc:  # noqa: BLE001
-                    # 释放租约 exactly once（成功/失败/取消统一 finally 语义；
-                    # fusion group 的 lease 是 list）。
                     _release_lease(lease)
                     kind = classify_error(exc)
                     retries = self._retries_remaining.get(key, 1)
@@ -593,7 +759,7 @@ class AdaptiveBatchScheduler:
                     results_by_root = result if isinstance(result, dict) else {}
                     for _tid in group_roots:
                         committed.add(_tid)
-                        self._done += 1
+                        real_done += 1
                         self._record_timing(_tid, dag.tasks[_tid])
                         _res = results_by_root.get(_tid)
                         if dag.tasks[_tid].task_type == TASK_ROOT:
@@ -606,7 +772,7 @@ class AdaptiveBatchScheduler:
                         self._release_consumed(dag, _tid, ctx)
                     continue
                 committed.add(key)
-                self._done += 1
+                real_done += 1
                 self._record_timing(key, dag.tasks[key])
                 if dag.tasks[key].task_type == TASK_ROOT:
                     if sink is not None:
@@ -618,12 +784,11 @@ class AdaptiveBatchScheduler:
                 # 释放已消费的 CSE sid（引用计数归零立即释放）。
                 if dag.tasks[key].task_type == TASK_ROOT:
                     self._release_consumed(dag, key, ctx)
-            # 3) 动态并发（R27-204）：外部负载高 → 降 soft CPU budget。
-            # 用缓存的压力档而非强制 snapshot（force 会触发采样，热循环里慢）。
+            # 4) 动态并发（R27-204）：外部负载高 → 降 soft CPU budget。
             if self.broker.pressure_stage() in {"PRESSURE_1", "PRESSURE_2"} \
                     and self.executor._thread_task_count > 0:
                 self.broker.lower_soft_cpu_budget(factor=0.6)
-            # 4) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
+            # 5) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
             #    再试；连续多轮无进展则诊断（不空转）。
             if admitted_this_round == 0 and not futures and remaining:
                 no_progress_rounds += 1
@@ -641,6 +806,17 @@ class AdaptiveBatchScheduler:
                 no_progress_rounds = 0
         if sink is not None:
             sink.finish()
+        self._done = real_done + virtual_done + wave_scan_done
+        self._scheduler_stats = {
+            "real_task_done": real_done,
+            "virtual_task_done": virtual_done,
+            "wave_scan_done": wave_scan_done,
+            "virtual_task_ratio": round(
+                virtual_done / max(1, real_done + virtual_done), 4
+            ),
+            "concurrency_limit_final": self._dynamic_concurrency_limit(sink),
+            "read_waves": self._wave_summary,
+        }
         return {
             "results": self._results,
             "task_timing": self._task_timing,
@@ -648,10 +824,119 @@ class AdaptiveBatchScheduler:
             "done": self._done,
             "broker": self.broker.summary(),
             "executor": self.executor.summary(),
+            "scheduler_stats": self._scheduler_stats,
         }
 
+    def run_serial_fused(
+        self,
+        plan: SchedulerPlan,
+        *,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any] | None = None,
+        materialize_shared: Callable[[str, Any], Any] | None = None,
+        sink: StreamingResultSink | None = None,
+        result_handler: Callable[[str, Any], None] | None = None,
+    ) -> dict[str, Any]:
+        """R33 §22/§39：small-batch AUTO bypass——serial fused。
+
+        极少量简单因子时，scheduler 开销 > compute savings：不建 future、不占
+        resource lease、不走 priority queue。仍先执行 read waves（真实 scan 一次）
+        再串行物化 shared + 执行 roots（拓扑序）。结果与 ``run`` 完全一致。
+        """
+        from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+
+        def _default_execute_root(task: PhysicalFactorTask) -> Any:
+            node = getattr(task, "node_ref", None)
+            root = getattr(node, "root", node)
+            result, _path = _execute_root_with_path(
+                backend, root, ctx, run_mode=getattr(ctx, "run_mode", None),
+                factor_name=task.factor_name,
+            )
+            return result
+
+        execute_root = execute_root or _default_execute_root
+        materialize_shared = materialize_shared or (
+            lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
+        )
+        sink = sink or self.sink
+        dag = getattr(plan, "physical_dag", plan)
+        committed: set[str] = set()
+        remaining = set(dag.topological_order())
+        # 1) read waves（真实 scan 一次）。
+        self._execute_read_waves(plan, dag, committed, remaining, ctx)
+        # 2) 串行按拓扑序执行（shared 先物化，root 后执行）。
+        for tid in dag.topological_order():
+            if tid in committed:
+                continue
+            task = dag.tasks.get(tid)
+            if task is None:
+                continue
+            if task.task_type == TASK_SOURCE_SCAN:
+                committed.add(tid)
+                continue
+            if task.task_type == TASK_CSE_SHARED:
+                sid = task.task_id.split(":", 1)[1]
+                materialize_shared(sid, task.node_ref)
+                committed.add(tid)
+                self._record_timing(tid, task)
+                continue
+            if task.task_type == TASK_ROOT:
+                result = execute_root(task)
+                committed.add(tid)
+                self._record_timing(tid, task)
+                if sink is not None:
+                    sink.submit(task.factor_name, result)
+                if result_handler is not None:
+                    result_handler(task.factor_name, result)
+                else:
+                    self._results[task.factor_name] = result
+                self._release_consumed(dag, tid, ctx)
+                continue
+            # planning view：直接跳过（不占资源）。
+            committed.add(tid)
+            self._record_timing(tid, task)
+        if sink is not None:
+            sink.finish()
+        self._done = len(committed)
+        self._scheduler_stats = {
+            "mode": "DIRECT_VECTOR",
+            "serial_fused": True,
+            "real_task_done": len(committed),
+            "virtual_task_done": 0,
+            "read_waves": self._wave_summary,
+        }
+        return {
+            "results": self._results,
+            "task_timing": self._task_timing,
+            "explanations": self._explanations,
+            "done": self._done,
+            "broker": self.broker.summary(),
+            "executor": self.executor.summary(),
+            "scheduler_stats": self._scheduler_stats,
+        }
+
+    def _priority_score(self, dag: PhysicalFactorDAG, task: PhysicalFactorTask) -> float:
+        """R33-P0-039：ready queue 优先级 = critical path + reuse + fanout - memory。"""
+        try:
+            cost_ms = {
+                tid: float((t.resource_contract.predicted_elapsed_ms or 0.0) if t.resource_contract else 0.0)
+                for tid, t in dag.tasks.items()
+            }
+            critical = dag.critical_path_remaining_ms(task.task_id, cost_ms)
+        except Exception:
+            critical = 0.0
+        reuse = self._reuse_counts.get(task.task_id, len(task.consumers))
+        fanout = len(task.consumers)
+        memory = float(task.resource_contract.peak_memory_bytes if task.resource_contract else 0)
+        return critical * 1.0 + reuse * 1000.0 + fanout * 100.0 - memory / (1024**3)
+
     def _release_consumed(self, dag: PhysicalFactorDAG, tid: str, ctx: Any) -> None:
-        """root 完成后对其消费的 CSE sid 引用计数归零则释放（复用 batch_service）。"""
+        """root 完成后对其消费的 CSE sid 引用计数归零则释放（复用 batch_service）。
+
+        R33-P0-041：释放失败**不静默**——记录 ``CSE_RELEASE_FAILURE``（telemetry +
+        fail-safe cleanup），不再 ``except: pass`` 吞掉内存回收失败。
+        """
         try:
             from runtime.batch_service import _release_consumed_sids
 
@@ -659,8 +944,15 @@ class AdaptiveBatchScheduler:
             if task.node_ref is not None:
                 node = getattr(task.node_ref, "root", task.node_ref)
                 _release_consumed_sids(ctx, node)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            self._explain(f"CSE_RELEASE_FAILURE task={tid}: {type(exc).__name__}: {exc}")
+            try:
+                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                fails = runtime.get("cse_release_failures", 0)
+                runtime["cse_release_failures"] = int(fails) + 1
+                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
     def _record_timing(self, tid: str, task: PhysicalFactorTask) -> None:
         import time

@@ -674,7 +674,17 @@ def check_factor_production_hardening() -> list[str]:
         if not policy.pit_safe:
             errors.append(f"{canonical}: pit_safe=False after hardening")
         if not policy.shape_preserving:
-            errors.append(f"{canonical}: shape_preserving=False")
+            # R34 P0-037: shape-changing 合法当且仅当显式 OutputShapeContract
+            #（input_grain/output_grain 均声明）。统一 grain 变换门——不再按
+            # 算子来源/频率各自例外。
+            from cleaned_operators.operator_spec import build_operator_spec
+
+            _spec = build_operator_spec(canonical)
+            _shape = getattr(_spec, "output_shape", None)
+            if _shape is None or not _shape.is_valid():
+                errors.append(
+                    f"{canonical}: shape_preserving=False 且无显式 OutputShapeContract"
+                )
         if "pandas_numpy" not in OperatorRegistry.backends_for(canonical):
             errors.append(f"{canonical}: no Pandas/Numpy semantic-reference backend")
             continue

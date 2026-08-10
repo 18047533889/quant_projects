@@ -1,0 +1,7 @@
+{
+  "auto_execution_mode": "ADAPTIVE_DAG",
+  "factors_per_sec": 27.27,
+  "n_factors": 20,
+  "results_ok": true,
+  "wall_seconds": 0.7335
+}

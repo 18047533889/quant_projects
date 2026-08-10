@@ -183,14 +183,16 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     if len(rets) < max(window, 12):
         return np.nan
     seg = rets[-int(window):]
-    # P0-040 / P0 (this audit): the standardised shock / surprise of the current
-    # return must not be standardised by parameters fitted on that same return,
-    # and must not leak the current return into its own denominator through the
-    # *initial* variance either.  Fit on the window excluding the current
-    # observation (<= t-1) AND seed the variance recursion from the variance of
-    # that same fit segment.  Forecast / persistence stats may use the current
-    # return (they legitimately forecast the *next* period).
-    fit_seg = seg[:-1] if stat == "shock" else seg
+    # R35-P0-M01/M02/M03 (timing contract consistency): ALL GARCH/GJR statistics
+    # fit their parameters strictly on <= t-1 (``fit_seg = seg[:-1]``), matching
+    # ``ModelTimingContract.fit_cutoff_offset=1``.  The current return ``r_t`` is
+    # never part of its own parameter fit — it only enters the *one-step state
+    # update* (``h_next = w + a*r_t**2 + b*h_last`` for the forecast) or the
+    # standardised shock denominator.  This is the "Scheme B" definition: params
+    # strictly prior, current shock used only for one-step update.  The variance
+    # recursion is seeded from the variance of that same fit segment so no leak
+    # reaches the output through the initial value either.
+    fit_seg = seg[:-1]
     if len(fit_seg) < 12:
         return np.nan
     if asymmetric:

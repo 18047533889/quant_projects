@@ -107,6 +107,14 @@ def test_catalog_strict_dumps_top_level():
 
 def test_parse_json_corrupt_raises_in_strict(tmp_path):
     cat = FactorCatalog(tmp_path / "_catalog.sqlite")
+    # R32 foreign_keys=ON：run 必须先有 registered factor（FK 约束）。
+    cat.register(
+        "f1",
+        author="t",
+        frequency="1d",
+        ast_hash="h",
+        data_source_config={"ds": "ok"},
+    )
     # 直接往 factor_run.extra_json 写坏 JSON
     cat._conn.execute(
         "INSERT INTO factor_run "

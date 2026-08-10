@@ -3,8 +3,15 @@
 
 Rolling PCA residuals / loadings, PCR / PLS / ElasticNet forecasts, regime-
 conditioned and mixture-of-experts forecasts, and a linear (PCA) autoencoder
-reconstruction-error baseline.  Label panels must already be lagged /
-embargoed by the caller so no future information leaks.
+reconstruction-error baseline.
+
+R35-P0-M10 (doc drift fix): the caller does NOT need to pre-lag / pre-embargo a
+label panel.  ``_forecast_loop`` / ``_regime_forecast`` / ``_moe_forecast``
+enforce ``fit_lag>=1`` AND ``label_horizon`` maturity internally: a forward-H
+label anchored at row ``s`` is only usable at ``s + label_horizon``, so the
+last ``label_horizon`` training rows are always excluded.  The operator is the
+single authority for its own PIT boundary — re-lagging the label in the caller
+would double-shift it.
 """
 from __future__ import annotations
 
@@ -22,13 +29,23 @@ from cleaned_operators.base import (
 from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
 
 _EPS = 1e-12
-# R10-P0-007: a stock is ACTIVE for the PCA fit only when it has at least
+# R35-P0-M07: PCA min-history is an EXPLICIT public contract, not a hidden
+# hardcode.  A stock is ACTIVE for the PCA fit only when it has at least
 # ``min_obs`` finite observations inside the training window, where
-# ``min_obs = max(_ABSOLUTE_MIN_OBS, ceil(window * _MIN_COVERAGE_RATIO))``.
+# ``min_obs = max(PCA_MIN_HISTORY, ceil(window * PCA_MIN_COVERAGE))``.
 # A stock with 2 days of data in a 120-day window used to enter the fit with
-# 118 mean-imputed days and distort the covariance — far too loose.
-_ABSOLUTE_MIN_OBS = 2
-_MIN_COVERAGE_RATIO = 0.7
+# 118 mean-imputed days and distort the covariance — far too loose.  The values
+# are module-public so the R35 gate can assert them and the parameter-domain
+# matrix can explore around them (see ``tests/operators/r35/``).
+# Note: this is a per-stock coverage gate inside the fit window.  A separate
+# "no output before the window has enough rows" floor is enforced by the
+# rolling loops calling ``_rolling_pca`` (output starts only once
+# ``fit_end >= window - 1``, i.e. an explicit minimum history of ``window``
+# rows before the first scored row).
+PCA_MIN_HISTORY = 2
+PCA_MIN_COVERAGE = 0.7
+_ABSOLUTE_MIN_OBS = PCA_MIN_HISTORY
+_MIN_COVERAGE_RATIO = PCA_MIN_COVERAGE
 _CANONICALS: list[str] = []
 
 
@@ -217,7 +234,7 @@ def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1) -> pd.
     return _frame_like(ret, out)
 
 
-def _pca_loading(X: np.ndarray, cur: np.ndarray, component: int) -> np.ndarray:
+def _pca_loading(X: np.ndarray, cur: np.ndarray, component: int, column_ids: tuple[Any, ...] | None = None) -> np.ndarray:
     pca = _pca_svd(X, component + 1)
     if pca is None or component >= pca["k"]:
         return np.full(len(cur), np.nan)
@@ -230,27 +247,37 @@ def _pca_loading(X: np.ndarray, cur: np.ndarray, component: int) -> np.ndarray:
     # a hidden stateful operator — full-run, chunked-run and mid-series starts
     # could yield opposite signs for the same window.  Instead each window is
     # normalised deterministically on its own: the largest |loading| position
-    # is forced positive (ties broken by first index, i.e. the panel's
-    # instrument order, which is fixed).  No memory, so
-    # ``full == chunk == incremental`` exactly.
+    # is forced positive.  R35-P0-M08: when two active loadings tie in |value|,
+    # the winner is decided by STABLE INSTRUMENT IDENTITY (the panel's column
+    # label, lexicographically) instead of column position — a universe reorder
+    # must not flip the sign of the whole eigenvector.
     fin = np.flatnonzero(np.isfinite(loading))
     if fin.size == 0:
         return loading
-    k = fin[int(np.argmax(np.abs(loading[fin])))]
+    abs_vals = np.abs(loading[fin])
+    best = int(np.argmax(abs_vals))
+    max_abs = float(abs_vals[best])
+    tied = fin[abs_vals >= max_abs - 1e-12]
+    if tied.size > 1 and column_ids is not None:
+        ids = [column_ids[int(i)] for i in tied]
+        k = tied[int(min(range(len(ids)), key=lambda i: str(ids[i])))]
+    else:
+        k = fin[best]
     if loading[k] < 0:
         loading = -loading
     return loading
 
 
 def _pca_loading_series(ret: pd.DataFrame, window: int, component: int) -> pd.DataFrame:
+    ids = tuple(ret.columns)
     return _rolling_pca(
-        ret, int(window), lambda X, cur: _pca_loading(X, cur, int(component))
+        ret, int(window), lambda X, cur: _pca_loading(X, cur, int(component), ids)
     )
 
 
 _mk(
     "panel_rolling_pca_loading",
-    "过去窗口收益矩阵 PCA 的指定主成分载荷（跨窗 sign 对齐）。",
+    "过去窗口收益矩阵 PCA 的指定主成分载荷（逐窗确定性 sign：最大 |载荷| 位置强制为正，无跨窗记忆）。",
     ["ret", "window", "component"],
     lambda ret, window=120, component=0: _pca_loading_series(ret, int(window), int(component)),
     unit="loading",
@@ -327,6 +354,7 @@ _mk(
 def _industry_pca_loading(ret, group, window, component):
     rv = ret.to_numpy(dtype=float)
     gv = group.to_numpy()
+    col_ids = tuple(ret.columns)
     rows, cols = rv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for row in range(rows):
@@ -347,7 +375,8 @@ def _industry_pca_loading(ret, group, window, component):
             # R10-P0-004: the loading kernel is STATELESS (3 args) — the old
             # call omitted the fourth ``prev`` argument and crashed with a
             # TypeError as soon as any industry had >= 4 members.
-            loading = _pca_loading(X, rv[row][members], int(component))
+            member_ids = tuple(col_ids[int(i)] for i in members)
+            loading = _pca_loading(X, rv[row][members], int(component), member_ids)
             out[row, col] = loading[local] if np.isfinite(loading).any() else np.nan
     return _frame_like(ret, out)
 
@@ -550,6 +579,14 @@ def _mk_forecast(name: str, method: str, description: str, params: list[str]):
 def _forecast_generic(y, feats, window, method, n_components, alpha, l1_ratio, label_horizon=1):
     yv = y.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
+    # R35-P0-M05: a supervised panel forecast with zero feature panels is a
+    # contract violation, not a runnable model — fail closed at the call
+    # boundary instead of reaching ``np.column_stack([])`` in _forecast_loop.
+    if not collected:
+        raise ValueError(
+            f"panel_rolling_{method}_forecast: at least one feature panel "
+            "(x1..x4) is required (required_feature_count_min=1)"
+        )
     return _frame_like(y, _forecast_loop(collected, yv, window,
                                          lambda X, yy, xc: _model_predict(X, yy, xc, method, n_components, alpha, l1_ratio),
                                          label_horizon=int(label_horizon)))
@@ -561,6 +598,14 @@ _mk_forecast("panel_rolling_elastic_net_forecast", "enet", "滚动 ElasticNet �
 
 
 def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1):
+    # R35-P0-M06: market_state is a REQUIRED panel for regime-conditioned
+    # forecasts — the kernel dereferences it immediately, so a None default
+    # would crash with an AttributeError instead of a contract error.
+    if market_state is None:
+        raise ValueError(
+            "panel_regime_conditioned_forecast: market_state is a required "
+            "panel (required panel param, cannot be None)"
+        )
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
@@ -630,6 +675,12 @@ _mk(
 
 
 def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
+    # R35-P0-M06: market_state is a REQUIRED panel for mixture-of-experts.
+    if market_state is None:
+        raise ValueError(
+            "panel_mixture_of_experts_score: market_state is a required "
+            "panel (required panel param, cannot be None)"
+        )
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]

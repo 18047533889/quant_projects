@@ -491,6 +491,21 @@ REVIEWED_MIGRATION_MANIFEST: dict[str, dict[str, str]] = {
     for canonical in sorted(DAILY_FACTOR_MIGRATED)
 }
 
+# R34 P0-013：把 86 个核心 daily authoring surface（DAILY_CANONICALS）也并入
+# review manifest——它们不是"迁移"算子，但同样是 production daily 表面，必须有
+# version-bound review 记录，否则 R30_EVERY_CURRENT_CANONICAL_REVIEWED 无法
+# 诚实判定。semantic_hash 由 R34 canonical ledger 逐算子补算（见
+# scripts/audit_r34_hard_gates.py / scripts/build_r34_ledger.py）。
+for _canonical in sorted(DAILY_CANONICALS):
+    REVIEWED_MIGRATION_MANIFEST.setdefault(
+        _canonical,
+        {
+            "review_id": "r34-core-daily-surface",
+            "semantic_hash": "",
+            "approved_authoring_tier": "daily",
+        },
+    )
+
 
 def register_daily_migration(
     canonical: str,

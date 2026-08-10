@@ -43,6 +43,9 @@ from planner.physical_factor_dag import (
     PhysicalFactorDAG,
     PhysicalFactorTask,
     ShardSpec,
+    SourceScopeId,
+    SourceScanSpec,
+    rebase_task,
 )
 from runtime.task_resource_contract import TaskResourceContract
 
@@ -276,25 +279,25 @@ def _walk_source_columns(plan: Any) -> tuple[str, ...]:
     return tuple(cols)
 
 
-def source_identity_from_ctx(ctx: Any | None) -> tuple[str, str]:
-    """从 ctx 的数据源提取 ``(source_scope, source_snapshot_id)``（R31-P0-020）。
+def source_identity_from_ctx(ctx: Any | None) -> tuple[SourceScopeId, str]:
+    """从 ctx 的数据源提取 ``(SourceScopeId, source_snapshot_id)``（R31-P0-020）。
 
-    fusion / read wave 的 source 身份必须真实：不是空串。snapshot 用 manifest
-    token / data_snapshot_id 中的首个可用值（batch 执行前的 query-scoped token）。
+    R33-P0-005：返回 **typed** :class:`SourceScopeId`（dataset / snapshot /
+    market 字段），不再拼字符串。snapshot 用 manifest token / data_snapshot_id
+    中的首个可用值（batch 执行前的 query-scoped token）。
     """
     ds = getattr(ctx, "data_source", None)
-    source_scope = ""
+    market = str(getattr(ctx, "market", "") or "")
+    if ds is None:
+        return SourceScopeId(dataset="", market=market), ""
+    dataset = str(getattr(ds, "dataset", "") or "")
     snapshot_id = ""
-    if ds is not None:
-        dataset = getattr(ds, "dataset", None)
-        if dataset:
-            source_scope = f"dataset:{dataset}"
-        for key in ("_manifest_token", "_data_snapshot_id", "snapshot_id"):
-            value = getattr(ds, key, None)
-            if value:
-                snapshot_id = str(value)
-                break
-    return source_scope, snapshot_id
+    for key in ("_manifest_token", "_data_snapshot_id", "snapshot_id"):
+        value = getattr(ds, key, None)
+        if value:
+            snapshot_id = str(value)
+            break
+    return SourceScopeId(dataset=dataset, snapshot_id=snapshot_id, market=market), snapshot_id
 
 
 def _stage_key(stage_type: str, counter: list[int], factor: str) -> str:
@@ -313,11 +316,18 @@ def lower_root_plan(
     source_scope: str = "",
     source_snapshot_id: str = "",
     execution_scope: str = "",
+    scan_cost: Any | None = None,
 ) -> list[PhysicalFactorTask]:
-    """把一个 root 计划 lower 成 physical stage 链（R31 §3）。
+    """把一个 root 计划 lower 成 physical stage 链（R31 §3 / R33-P0-007..009）。
 
-    返回从 SOURCE_SCAN → 算子/barrier stages → ROOT 的 task 列表，每 stage 填
-    真实 backend context + calibrated 资源契约。
+    返回从 SOURCE_SCAN → 算子/barrier stages → ROOT 的 task 列表：
+        - SOURCE_SCAN 携带真实 :class:`SourceScanSpec`（required_columns /
+          time_range / instrument_scope），``executable=True``；
+        - barrier stage（ROLLING/GROUP/CS/STATEFUL）是**规划视图**，
+          ``executable=False``（不占真实 resource lease，R33-P0-008）；
+        - ROOT ``executable=True``（node_ref = 完整 root 计划）。
+    ``scan_cost``（来自 BatchDataRequest scope 的 DataAccess ScanCost）直接写进
+    SOURCE_SCAN 的 resource_contract（R33-P0-034）。
     """
     from backend.operator_cost import estimate_plan_cost
 
@@ -329,8 +339,24 @@ def lower_root_plan(
 
     # 1) SOURCE_SCAN stage：真实源列（驱动 read wave / ScanCost admission）。
     source_cols = _walk_source_columns(plan)
-    scan_contract = contract_for_plan(
-        plan, rows=rows, instruments=instruments, backend=bctx.preferred_backend
+    if scan_cost is not None:
+        # R33-P0-034：ScanCost 直接进 source task 资源契约（真实 IO 需求）。
+        scan_contract = _contract_from_scan_cost(scan_cost, plan_cost)
+    else:
+        scan_contract = contract_for_plan(
+            plan, rows=rows, instruments=instruments, backend=bctx.preferred_backend
+        )
+    _ds = getattr(ctx, "data_source", None)
+    spec = SourceScanSpec(
+        dataset=str(getattr(_ds, "dataset", "") or "") if _ds is not None else "",
+        required_columns=source_cols,
+        time_range=_source_time_range_from_ctx(ctx),
+        instrument_scope=_instrument_scope_from_ctx(ctx),
+        snapshot_id=source_snapshot_id,
+        expected_rows=int(getattr(scan_cost, "estimated_rows", 0) or 0),
+        expected_bytes=int(getattr(scan_cost, "selected_bytes", 0) or 0),
+        projected_bytes=int(getattr(scan_cost, "projection_bytes", 0) or 0),
+        remote=bool(getattr(scan_cost, "remote", False)),
     )
     source_task = PhysicalFactorTask(
         task_id=_stage_key(TASK_SOURCE_SCAN, counter, factor_name),
@@ -351,28 +377,12 @@ def lower_root_plan(
         deterministic=True,
         node_ref=None,
         factor_name=factor_name,
+        source_scan_spec=spec,
+        required_columns=source_cols,
+        time_range=spec.time_range,
+        instrument_scope=spec.instrument_scope,
+        executable=True,
     )
-    source_task = PhysicalFactorTask(
-        task_id=source_task.task_id,
-        op=source_task.op,
-        task_type=source_task.task_type,
-        inputs=source_task.inputs,
-        consumers=(),
-        execution_scope=source_task.execution_scope,
-        source_scope=source_task.source_scope,
-        source_snapshot_id=source_task.source_snapshot_id,
-        backend_candidates=source_task.backend_candidates,
-        preferred_backend=source_task.preferred_backend,
-        estimated_cost=source_task.estimated_cost,
-        resource_contract=source_task.resource_contract,
-        shard_spec=source_task.shard_spec,
-        spillable=source_task.spillable,
-        cacheable=source_task.cacheable,
-        deterministic=source_task.deterministic,
-        node_ref=None,
-        factor_name=factor_name,
-    )
-    # source_columns 挂在 meta 里（通过 node_ref 携带不可行——node_ref 必须可 pickle）。
     stages.append(source_task)
 
     # 2) barrier 分割：从叶到根，遇到 barrier 算子就新开一个独立 stage。
@@ -398,6 +408,7 @@ def lower_root_plan(
 
     # 3) 每个 barrier 一个 stage（真实 stage 身份：cost/contract/backend 真实）。
     #    前后向链接必须**双向**设置（topological_order 靠 ``consumers`` 释放后继）。
+    #    R33-P0-008：barrier stage 是规划视图，``executable=False``（不占真实 lease）。
     prev_stage_id = source_task.task_id
     for idx, (op, stype, _depth) in enumerate(barrier_orders):
         stage_contract = contract_for_plan(
@@ -422,6 +433,7 @@ def lower_root_plan(
             deterministic=True,
             node_ref=None,
             factor_name=factor_name,
+            executable=False,
         )
         # 前驱 stage 的 consumers += 本 stage。
         for j, s in enumerate(stages):
@@ -454,6 +466,7 @@ def lower_root_plan(
         deterministic=True,
         node_ref=plan,
         factor_name=factor_name,
+        executable=True,
     )
     stages.append(root_task)
     # 连接 barrier stages → ROOT。
@@ -466,27 +479,59 @@ def lower_root_plan(
     return stages
 
 
-def _with_consumers(task: PhysicalFactorTask, consumers: tuple[str, ...]) -> PhysicalFactorTask:
-    return PhysicalFactorTask(
-        task_id=task.task_id,
-        op=task.op,
-        task_type=task.task_type,
-        inputs=task.inputs,
-        consumers=consumers,
-        execution_scope=task.execution_scope,
-        source_scope=task.source_scope,
-        source_snapshot_id=task.source_snapshot_id,
-        backend_candidates=task.backend_candidates,
-        preferred_backend=task.preferred_backend,
-        estimated_cost=task.estimated_cost,
-        resource_contract=task.resource_contract,
-        shard_spec=task.shard_spec,
-        spillable=task.spillable,
-        cacheable=task.cacheable,
-        deterministic=task.deterministic,
-        node_ref=task.node_ref,
-        factor_name=task.factor_name,
+def _source_time_range_from_ctx(ctx: Any | None) -> tuple[str, str] | None:
+    ds = getattr(ctx, "data_source", None)
+    if ds is None:
+        return None
+    start = getattr(ds, "start_date", None)
+    end = getattr(ds, "end_date", None)
+    if start is None and end is None:
+        return None
+    return (str(start), str(end))
+
+
+def _instrument_scope_from_ctx(ctx: Any | None) -> tuple[str, ...] | None:
+    ds = getattr(ctx, "data_source", None)
+    if ds is None:
+        return None
+    filt = getattr(ds, "instrument_filter", None)
+    if not filt:
+        return None
+    try:
+        return tuple(str(x) for x in filt)
+    except TypeError:
+        return None
+
+
+def _contract_from_scan_cost(scan_cost: Any, plan_cost: dict[str, Any]) -> Any:
+    """R33-P0-034：DataAccess ScanCost 直接进 SOURCE_SCAN 资源契约。"""
+    rows = max(1, int(getattr(scan_cost, "estimated_rows", 0) or 0))
+    selected = int(getattr(scan_cost, "selected_bytes", 0) or 0)
+    projected = int(getattr(scan_cost, "projection_bytes", 0) or 0)
+    remote = bool(getattr(scan_cost, "remote", False))
+    return TaskResourceContract(
+        predicted_elapsed_ms=max(
+            1.0,
+            float(plan_cost.get("total_work", 0.0)),
+        ),
+        cpu_tokens=1,
+        io_tokens=1 if selected or remote else 0,
+        peak_memory_bytes=max(1, projected or (rows * 8)),
+        output_bytes=max(1, selected or (rows * 8)),
+        spill_bytes=0,
+        gil_bound=False,
+        releases_gil=True,
+        backend="duckdb_sql" if remote else "pandas_numpy",
+        backend_threads=1,
+        shardable=True,
+        shard_dimension="time",
+        uncertainty=1.10,
+        estimate_basis="scan-cost",
     )
+
+
+def _with_consumers(task: PhysicalFactorTask, consumers: tuple[str, ...]) -> PhysicalFactorTask:
+    return rebase_task(task, consumers=consumers)
 
 
 def lower_batch_dag(
@@ -503,14 +548,20 @@ def lower_batch_dag(
     - CSE shared nodes → CSE_SHARED task（真实 subplan，可直接执行）。
     - 每个 root → SOURCE_SCAN → (barrier stages) → ROOT 链。
     - ``roots``/``writers`` 注册。
+    - R33-P0-033：CSE shared backend 不再硬编码 pandas——经 ``backend_context_for``
+      按算子能力路由（polars/duckdb 可下推的 shared subplan 走 native）。
+    - R33-P0-034：``scan_cost_map``（task/source-scope -> ScanCost）写进各 root
+      SOURCE_SCAN 的资源契约。
     """
     from runtime.adaptive_batch_scheduler import _plan_cost_bytes
 
     source_scope, snapshot_id = source_identity_from_ctx(ctx)
+    source_scope_str = source_scope.key() if isinstance(source_scope, SourceScopeId) else str(source_scope)
     physical = PhysicalFactorDAG()
     # shared nodes
     for sid, sub in (dag.shared_nodes or {}).items():
         plan_cost = _plan_cost_bytes(sub)
+        bctx = backend_context_for(sub, ctx=ctx)
         shared = PhysicalFactorTask(
             task_id=f"cse:{sid}",
             op=str(getattr(sub, "op", "shared")),
@@ -518,35 +569,73 @@ def lower_batch_dag(
             inputs=(),
             consumers=(),
             execution_scope=str(getattr(dag, "scope_key", lambda: "")()),
-            source_scope=source_scope,
+            source_scope=source_scope_str,
             source_snapshot_id=snapshot_id,
-            backend_candidates=(),
-            preferred_backend="pandas_numpy",
+            backend_candidates=bctx.backend_candidates,
+            preferred_backend=bctx.preferred_backend,
             estimated_cost=plan_cost,
             resource_contract=contract_for_plan(
-                sub, rows=rows, instruments=instruments, backend="pandas_numpy"
+                sub, rows=rows, instruments=instruments, backend=bctx.preferred_backend
             ),
             spillable=True,
             cacheable=True,
             deterministic=True,
             node_ref=sub,
+            executable=True,
         )
         physical.add_task(shared)
+    # R33（嵌套 CSE）：CSE shared subplan 内部的 plan_ref（inner shared sid）必须
+    # 成为 cse task 的 input 边——否则 outer shared 可能在 inner 物化前执行 →
+    # plan_ref 查缓存 KeyError（调度顺序 race）。
+    from planner.cse import collect_consumed_sids as _collect_sids
+
+    for sid, sub in (dag.shared_nodes or {}).items():
+        cid = f"cse:{sid}"
+        inner = _collect_sids(sub)
+        if inner:
+            cur = physical.tasks[cid]
+            physical.tasks[cid] = rebase_task(
+                cur,
+                inputs=tuple(sorted(set((*cur.inputs, *(f"cse:{s}" for s in inner))))),
+            )
+            for s in inner:
+                icid = f"cse:{s}"
+                if icid not in physical.tasks:
+                    continue
+                prev_c = physical.tasks[icid].consumers
+                physical.tasks[icid] = rebase_task(
+                    physical.tasks[icid],
+                    consumers=tuple(sorted((*prev_c, cid))),
+                )
     # roots
     for fp in dag.roots:
         execution_scope = str(fp.execution_scope.scope_key()) if getattr(fp, "execution_scope", None) else ""
+        cost = _scan_cost_for_root(scan_cost_map, source_scope_str)
         stages = lower_root_plan(
             fp.root,
             factor_name=fp.factor_name,
             ctx=ctx,
             rows=rows,
             instruments=instruments,
-            source_scope=source_scope,
+            source_scope=source_scope_str,
             source_snapshot_id=snapshot_id,
             execution_scope=execution_scope,
+            scan_cost=cost,
         )
         for st in stages:
             if st.task_id not in physical.tasks:
                 physical.add_task(st)
     physical.roots = tuple(f"root:{fp.factor_name}" for fp in dag.roots)
     return physical
+
+
+def _scan_cost_for_root(
+    scan_cost_map: dict[str, Any] | None,
+    source_scope: str,
+) -> Any | None:
+    """从 scan_cost_map 取 source-scope 的 ScanCost（task-id 级未 lower 时按 scope 回退）。
+
+    R33-P0-034：ScanCost 直接写进 SOURCE_SCAN 的 resource_contract。
+    """
+    scan_cost_map = scan_cost_map or {}
+    return scan_cost_map.get(source_scope)

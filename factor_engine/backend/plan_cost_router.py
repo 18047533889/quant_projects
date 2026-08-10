@@ -251,6 +251,41 @@ def _canonical_ops(plan: PlanNode) -> tuple[str, ...]:
     return tuple(occ.canonical for occ in plan_occurrences(plan))
 
 
+def source_refs_lowerable(plan: PlanNode) -> bool:
+    """R33-P0-062/§11.3：SourceRef 是否已可 relational-lower 为 DA source relation。
+
+    当所有 SourceRef 列都能 decode 出 (dataset, field) 时，router 把它当**合法
+    解析的 source relation**（后端可 join/scan），而不是 opaque 字符串毒死
+    SQL/Polars candidate。返回 True = 可 lower（不阻断 native）。
+    """
+    try:
+        from api.source_ref import decode_source_ref, looks_like_source_ref
+    except Exception:
+        return False
+    seen = False
+
+    def walk(node: PlanNode) -> bool:
+        nonlocal seen
+        for child in getattr(node, "inputs", ()) or ():
+            if not walk(child):
+                return False
+        if node.op == "column":
+            name = str((node.attrs or {}).get("name") or "")
+            if name and looks_like_source_ref(name):
+                seen = True
+                try:
+                    ref = decode_source_ref(name)
+                except Exception:
+                    return False
+                if ref is None or not getattr(ref, "dataset", None):
+                    return False
+        return True
+
+    if not walk(plan):
+        return False
+    return seen
+
+
 def _contains_source_ref(plan: PlanNode) -> bool:
     found = False
 
@@ -544,7 +579,7 @@ def _dag_aware_mixed_cost(
             opts.append("pandas_numpy")
         if supports_polars(occ.canonical, mode=mode):
             opts.append("polars_panel")
-        if not source_ref and supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
+        if (not source_ref or source_lowered) and supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
             opts.append("sql")
         return opts
 
@@ -597,6 +632,8 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         occ_by_canon.setdefault(occ.canonical, []).append(occ)
     rows = estimate_plan_rows(ctx)
     source_ref = _contains_source_ref(plan)
+    # R33-P0-062/§11.3：SourceRef 已可 lower 为 DA source relation → 不毒死 native。
+    source_lowered = source_ref and source_refs_lowerable(plan)
     data_kind = _data_source_kind(ctx)
     candidates: dict[str, float] = {}
     mem_budget = _execution_memory_budget(ctx)
@@ -631,14 +668,14 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
 
     # Wide Polars is valid even when an operator is not Polars-long-native. The
     # plan remains on one wide representation, so conversion is paid once below.
-    polars_panel_ok = bool(ops) and not source_ref and all(
+    polars_panel_ok = bool(ops) and (not source_ref or source_lowered) and all(
         supports_polars(op, mode=mode) for op in ops
     )
     if polars_panel_ok and _within_budget("polars_panel", rows):
         cost = _plan_op_cost("polars_panel") + _one_conversion_penalty("polars_panel", rows)
         candidates["polars_panel"] = cost
 
-    polars_long_ok = bool(ops) and not source_ref and all(
+    polars_long_ok = bool(ops) and (not source_ref or source_lowered) and all(
         is_polars_long_native_production_safe(op) if production else supports_polars(op, mode=mode)
         for op in ops
     )
@@ -647,7 +684,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             _plan_op_cost("polars_long") + _one_conversion_penalty("polars_long", rows)
         )
 
-    sql_ok = bool(ops) and not source_ref and data_kind in {"duckdb", "clickhouse"} and all(
+    sql_ok = bool(ops) and (not source_ref or source_lowered) and data_kind in {"duckdb", "clickhouse"} and all(
         supports_sql(op, data_source_kind=data_kind, mode=mode) for op in ops
     )
     sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
@@ -663,7 +700,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             delegate_ops=delegate_ops,
             data_kind=data_kind,
             mode=mode,
-            source_ref=source_ref,
+            source_ref=source_ref and not source_lowered,
         )
         if mixed is not None and _within_budget("pandas_numpy", rows):
             candidates["hybrid"] = mixed
@@ -706,4 +743,183 @@ def record_plan_route(ctx: Any, route: PlanRoute) -> None:
         "ops": list(route.ops),
         "reason": route.reason,
     }
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+
+# =====================================================================
+# R33-P0-061..067 + §31：batch-global route + maximal native subgraph
+# =====================================================================
+
+#: R33-P0-064：conversion penalty 不再写死常数——按 edge 类型 + 字节建模。
+#: 仅作为无 measured baseline 时的 seed fallback（§31.5）。
+_CONVERSION_SEED_MS = {
+    "duckdb_to_arrow": 3.0,
+    "arrow_to_polars": 2.0,
+    "arrow_to_pandas": 2.0,
+    "polars_to_pandas": 2.0,
+    "wide_to_long": 2.0,
+    "sort": 1.5,
+}
+
+
+def edge_conversion_penalty_ms(edge: str, bytes_: int = 0) -> float:
+    """R33-P0-064：conversion 按 edge 类型 + 字节建模（measured fallback 种子）。
+
+    只读 edge 真实字节时 ``bytes_`` 参与；无字节信息用固定 overhead。真实
+    measured baseline 覆盖时（``_measured_baseline`` 兼容）用实测值。
+    """
+    base = _CONVERSION_SEED_MS.get(edge, 3.0)
+    if bytes_ > 0:
+        return base + max(0.0, bytes_ / 500_000_000.0) * 1.0
+    return base
+
+
+def plan_native_subgraph_fraction(
+    plan: PlanNode,
+    ctx: Any,
+    *,
+    backend: str = "duckdb_sql",
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """R33 §11.2/§75 Step 3：maximal native subgraph 覆盖评估。
+
+    返回 ``{native_ops, unsupported_ops, native_fraction, tail_fraction}``：
+       - ``native_fraction``：SQL-native occurrence 占比（可下推的部分）。
+       - ``unsupported_ops``：不支持该 backend 的 occurrence（= 需经一次
+         conversion boundary 交给 specialized kernel / pandas reference）。
+    用途：一个 unsupported op **不**再整 root 失去 native candidate
+    （R33_SINGLE_UNSUPPORTED_OP_FULL_PANDAS_FALLBACK_ZERO）。
+    """
+    from backend.operator_capability import supports_sql
+
+    mode = mode or str(getattr(ctx, "run_mode", "research") or "research").lower()
+    data_kind = _data_source_kind(ctx)
+    occs = plan_occurrences(plan)
+    native: list[str] = []
+    unsupported: list[str] = []
+    for occ in occs:
+        if supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
+            native.append(occ.canonical)
+        else:
+            unsupported.append(occ.canonical)
+    total = max(1, len(occs))
+    return {
+        "native_ops": list(dict.fromkeys(native)),
+        "unsupported_ops": list(dict.fromkeys(unsupported)),
+        "native_fraction": round(len(native) / total, 4),
+        "n_occurrences": len(occs),
+    }
+
+
+@dataclass(frozen=True)
+class BatchPhysicalRoute:
+    """R33-P0-061/§31：one BatchPhysicalRoute with multiple backend regions。
+
+    聚合整批因子的 backend 路由 + 共享收益 + 全链路成本（
+    source + operator + conversion + scheduler overhead + DQ + generation
+    commit），最终目标是 ``time_to_durable_commit``（§31.1）。
+    """
+
+    total_time_to_durable_commit_ms: float
+    per_root: tuple[tuple[str, str, float], ...]  # (factor_name, backend, cost_ms)
+    shared_benefit_ms: float = 0.0
+    native_fraction: float = 0.0
+    scan_bytes: int = 0
+    conversion_bytes: int = 0
+    scheduler_overhead_ms: float = 0.0
+    dq_ms: float = 0.0
+    write_ms: float = 0.0
+    generation_commit_ms: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_time_to_durable_commit_ms": round(self.total_time_to_durable_commit_ms, 3),
+            "shared_benefit_ms": round(self.shared_benefit_ms, 3),
+            "native_fraction": round(self.native_fraction, 4),
+            "scan_bytes": self.scan_bytes,
+            "conversion_bytes": self.conversion_bytes,
+            "scheduler_overhead_ms": round(self.scheduler_overhead_ms, 3),
+            "dq_ms": round(self.dq_ms, 3),
+            "write_ms": round(self.write_ms, 3),
+            "generation_commit_ms": round(self.generation_commit_ms, 3),
+            "per_root": [
+                {"factor": f, "backend": b, "cost_ms": round(c, 3)}
+                for f, b, c in self.per_root
+            ],
+        }
+
+
+def plan_batch_route(
+    plans: dict[str, PlanNode],
+    ctx: Any,
+    *,
+    scan_cost_map: dict[str, Any] | None = None,
+    shared_roots: int = 0,
+    factor_count: int | None = None,
+) -> BatchPhysicalRoute:
+    """R33-P0-061/§31：batch-global physical route。
+
+    每个 root 单独 ``choose_plan_route``；整批聚合：
+       - native_fraction：各 root native subgraph 覆盖加权平均（§75 Step 2/3）。
+       - shared_benefit：>1 root 共享同 source scope 时，scan/join 节省估入。
+       - scheduler_overhead：任务数 × 每任务控制面成本（§31.1）。
+       - DQ / write / generation commit：按 batch 规模估计（§31.1）。
+    最终成本单位是 **time-to-durable-commit 毫秒**（不是 operator 数）。
+    """
+    per_root: list[tuple[str, str, float]] = []
+    scan_bytes = 0
+    conv_bytes = 0
+    native_fracs: list[float] = []
+    total = 0.0
+    n_roots = len(plans)
+    factor_count = factor_count or n_roots
+    for name, plan in plans.items():
+        route = choose_plan_route(plan, ctx)
+        cost_ms = route.estimated_cost
+        per_root.append((name, route.backend, cost_ms))
+        total += cost_ms
+        sub = plan_native_subgraph_fraction(plan, ctx, backend=route.backend)
+        native_fracs.append(sub["native_fraction"])
+        if scan_cost_map is not None:
+            cost = scan_cost_map.get(name) or (
+                next(iter(scan_cost_map.values()), None)
+            )
+            scan_bytes += int(getattr(cost, "selected_bytes", 0) or 0)
+            conv_bytes += int(getattr(cost, "projection_bytes", 0) or 0)
+    native_fraction = (
+        sum(native_fracs) / len(native_fracs) if native_fracs else 0.0
+    )
+    # §31.2 Shared benefit：>1 root 共享同 source scope → 每多一个 consumer 省一次 scan。
+    shared_benefit = 0.0
+    if shared_roots > 0 and n_roots > 1:
+        shared_benefit = min(total * 0.10, shared_roots * 5.0)
+        total = max(0.0, total - shared_benefit)
+    # §31.1 scheduler overhead：real task × 控制面成本。
+    task_count = max(1, n_roots * 2 + shared_roots)
+    scheduler_overhead = task_count * 0.15
+    dq = n_roots * 0.5
+    write = max(1, n_roots) * 0.8
+    gen_commit = 2.0 + max(0.0, factor_count / 1000.0) * 5.0
+    total += scheduler_overhead + dq + write + gen_commit
+    return BatchPhysicalRoute(
+        total_time_to_durable_commit_ms=total,
+        per_root=tuple(per_root),
+        shared_benefit_ms=shared_benefit,
+        native_fraction=native_fraction,
+        scan_bytes=scan_bytes,
+        conversion_bytes=conv_bytes,
+        scheduler_overhead_ms=scheduler_overhead,
+        dq_ms=dq,
+        write_ms=write,
+        generation_commit_ms=gen_commit,
+    )
+
+
+def record_batch_route(ctx: Any, route: BatchPhysicalRoute) -> None:
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["batch_physical_route"] = route.to_dict()
+    runtime["backend_policy"] = (
+        "duckdb-first-but-cost-driven: stay-in-engine tie-break, "
+        "no static duckdb>polars>pandas rank"
+    )
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]

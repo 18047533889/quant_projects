@@ -539,6 +539,14 @@ class ResourceBroker:
     def snapshot(self) -> ResourceSnapshot:
         return self._refresh(force=True)
 
+    def cpu_budget(self) -> int:
+        """R33-P0-038：当前 soft CPU budget（调度器显式并发上限依据）。
+
+        ``lower_soft_cpu_budget`` 动态降预算时，scheduler 的
+        ``running_futures < dynamic_concurrency_limit`` 用本值限制新 admission。
+        """
+        return max(1, int(self._cpu.soft_budget))
+
     # -- 压力阶段（R27-041/131） --
 
     def pressure_stage(self) -> str:

@@ -663,3 +663,67 @@ for _spec in (
     ),
 ):
     StatefulCheckpointRegistry.register(_spec)
+
+
+# ---------------------------------------------------------------------------
+# R34 P0-029: stateful behavior detection（不依赖手工 canonical 列表）
+# ---------------------------------------------------------------------------
+
+def detect_stateful_behavior(
+    fn,
+    x,
+    *,
+    split: int | None = None,
+    equal_nan: bool = True,
+) -> bool:
+    """行为检测：``full(x)`` vs ``run(x[:s]) + run(x[s:])``（无 restore）。
+
+    无 restore 时两者不同 → stateful = True。这是对"新算子漏登记 stateful"
+    的自动化兜底——不再只靠手工 canonical 集合分类。
+
+    Args:
+        fn: 一元序列函数 ``fn(series) -> series``（生产算子的单序列执行）。
+        x: 输入序列（支持切片即可，numpy array 或 pandas Series）。
+        split: 分段点（默认 ``len(x)//2``）。
+        equal_nan: NaN 是否视为相等（``np.allclose`` 参数）。
+
+    Returns:
+        True 若 full 与 chunked 结果不同（stateful）；False 若一致（bounded）。
+    """
+    import numpy as np
+
+    n = len(x)
+    if split is None:
+        split = max(1, n // 2)
+    split = max(1, min(n - 1, int(split)))
+    full = fn(x)
+    head = fn(x[:split])
+    try:
+        tail = fn(x[split:])
+    except Exception:
+        # chunk 触发非法窗口等 → 保守判 stateful（fail-closed 分类）
+        return True
+    # chunked 拼接（无 restore 语义）：head 尾值 续 tail。
+    try:
+        combined = np.concatenate([head, tail]) if hasattr(head, "shape") else list(head) + list(tail)
+    except Exception:
+        return True
+    f = np.asarray(full, dtype=float)
+    c = np.asarray(combined, dtype=float)
+    if f.shape != c.shape:
+        return True
+    # 只比较尾部 1/4：chunk 边界处 bounded 算子因缺历史产生的差异是 artifact，
+    # 但 tail 区段已充分 warmup；真 stateful 会因丢状态而在尾部仍不同。
+    trail = max(1, n // 4)
+    f_t = f[-trail:]
+    c_t = c[-trail:]
+    mask = np.isfinite(f_t) & np.isfinite(c_t)
+    if mask.any():
+        if not np.allclose(f_t[mask], c_t[mask], rtol=1e-8, atol=1e-10, equal_nan=equal_nan):
+            return True
+    # 非有限区也要对齐（NaN/Inf 位置不同 = 语义不同）
+    if not np.array_equal(np.isnan(f_t), np.isnan(c_t)):
+        return True
+    if not np.array_equal(np.isinf(f_t), np.isinf(c_t)):
+        return True
+    return False
