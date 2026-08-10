@@ -105,8 +105,7 @@ _PRICE_LIMIT_FAMILY = frozenset(
         "ashare_limit_touch_count", "ashare_limit_up_streak",
         "ashare_limit_up_touch", "ashare_limit_up_volume_ratio",
         "ashare_one_price_limit_streak", "ashare_open_at_upper_limit",
-        "intra_limit_duration", "intra_limit_first_hit_time",
-        "intra_limit_reopen_count", "limit_down_close", "limit_up_close",
+        "limit_down_close", "limit_up_close",
     }
 )
 
@@ -198,12 +197,21 @@ _HOLDER_PLEDGE_FAMILY = frozenset(
 # to "both" before.  These need declared capabilities so US is not silently
 # granted capabilities it does not have (FULL_MINUTE_OHLCV / DAILY_TURNOVER /
 # FREE_FLOAT_SHARES are A-share-only in the current capability snapshot).
-_MINUTE_PREFIXES = ("intraday_", "intra_", "session_", "micro_")
+# R17-057: ``minute_`` was missing — the capability resolver itself classifies
+# ``minute_`` as a mechanism prefix, so the operator-market fallback must match it
+# too or minute_* ops silently fell to INPUT_DEPENDENT.
+_MINUTE_PREFIXES = ("intraday_", "intra_", "session_", "micro_", "minute_")
 
 # intra_lunch_gap_return depends on the A-share lunch-break mechanism itself.
 _LUNCH_GAP_ONLY = frozenset({"intra_lunch_gap_return"})
 # intraday_barrier_approach_acceleration needs minute bars AND daily price limits.
 _MINUTE_WITH_LIMITS = frozenset({"intraday_barrier_approach_acceleration"})
+# R17-058: minute-level limit behavior (duration / first-hit-time / reopen-count)
+# cannot be derived from daily HighLimit/LowLimit alone — it needs full minute
+# OHLCV on top of the daily price-limit mechanism.
+_MINUTE_LIMIT_FAMILY = frozenset(
+    {"intra_limit_duration", "intra_limit_first_hit_time", "intra_limit_reopen_count"}
+)
 
 _TURNOVER_FAMILY = frozenset(
     {
@@ -304,6 +312,22 @@ def _fallback_contract(canonical: str) -> OperatorMarketContract | None:
             required_grain="minute",
             notes="minute bars + daily price limits; US has neither as a daily mechanism",
         )
+    if name in _MINUTE_LIMIT_FAMILY:
+        # R17-058: intra_limit_* are MINUTE-level limit behavior — daily
+        # HighLimit/LowLimit alone cannot compute duration / first-hit-time /
+        # reopen-count.  FULL_MINUTE_OHLCV is a hard requirement.
+        return OperatorMarketContract(
+            canonical=name,
+            intrinsic_markets=("ashare",),
+            required_capabilities=(
+                _Cap.DAILY_PRICE_LIMITS.value,
+                _Cap.FULL_MINUTE_OHLCV.value,
+            ),
+            price_basis=PRICE_BASIS_RAW_OFFICIAL_LIMIT,
+            cross_market_comparable=False,
+            required_grain="minute",
+            notes="minute-level limit behavior needs daily limit prices AND full minute OHLCV (R17-058)",
+        )
     if name in _TURNOVER_FAMILY or name in _CHIP_FAMILY:
         return OperatorMarketContract(
             canonical=name,
@@ -344,6 +368,7 @@ def contract_set() -> frozenset[str]:
         set(OPERATOR_MARKET_CONTRACTS.canonicals())
         | set(_LUNCH_GAP_ONLY)
         | set(_MINUTE_WITH_LIMITS)
+        | set(_MINUTE_LIMIT_FAMILY)
         | set(_TURNOVER_FAMILY)
         | set(_CHIP_FAMILY)
         | set(_FREE_FLOAT_FAMILY)
