@@ -148,11 +148,29 @@ def _apply_overrides():
     audit._PANEL_SPECIAL[("tail_beta", "benchmark_ret")] = "market"
     audit._PANEL_SPECIAL[("tail_beta", "y")] = "returns"
     audit._PANEL_SPECIAL[("tail_beta", "x")] = "returns"
-    # per-canonical ``q`` disambiguation: the global ``q: 2`` (lo-mackinlay
-    # variance-ratio lag) is NOT a valid quantile for these ops.
+    # per-canonical ``q`` disambiguation — the generic fallback has no ``q``;
+    # each family declares the quantile/lag it means.
+    audit._SPECIAL_SCALARS[("ts_lo_mackinlay_vr", "q")] = 2  # variance-ratio lag
+    audit._SPECIAL_SCALARS[("ts_lo_mackinlay_z", "q")] = 2
     audit._SPECIAL_SCALARS[("ts_quantile", "q")] = 0.5
     audit._SPECIAL_SCALARS[("tail_beta", "q")] = 0.05  # tail quantile in (0, 1)
     audit._SPECIAL_SCALARS[("tail_beta", "window")] = 120  # enough tail observations
+    audit._SPECIAL_SCALARS[("ts_expected_shortfall", "q")] = 0.05
+    audit._SPECIAL_SCALARS[("ts_expected_shortfall_asymmetry", "q")] = 0.05
+    audit._SPECIAL_SCALARS[("ts_tail_mean", "q")] = 0.05
+    audit._SPECIAL_SCALARS[("ts_extremal_index", "q")] = 0.05
+    audit._SPECIAL_SCALARS[("ts_extreme_cluster_ratio", "q")] = 0.05
+    audit._SPECIAL_SCALARS[("ts_weighted_expected_shortfall", "q")] = 0.05
+    # expectile family: q in (0,1)
+    for _c in ("ts_expectile", "ts_expectile_beta", "ts_expectile_regression_coeff",
+               "ts_expectile_regression_coeff_prior", "ts_expectile_regression_forecast_error",
+               "ts_expectile_regression_resid"):
+        audit._SPECIAL_SCALARS[(_c, "q")] = 0.5
+    # directional-change family needs a real threshold
+    for _c in ("directional_change_extent", "directional_change_state",
+               "ts_dc_duration_asymmetry", "ts_dc_overshoot_asymmetry",
+               "ts_dc_overshoot_ratio", "ts_dc_overshoot_count"):
+        audit._SPECIAL_SCALARS[(_c, "threshold")] = 0.01
     # scalar params the shared audit fixture does not know yet
     audit._SCALAR_VALUES.update(
         {
