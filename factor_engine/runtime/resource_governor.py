@@ -489,6 +489,7 @@ class ExecutionResourcePlan:
             io_concurrency=io,
             spill_dir=spill_dir,
             spill_disk_bytes=spill_disk_available(spill_dir),
+            per_worker_peak_bytes=per_worker_peak,
         )
 
     @classmethod
@@ -527,6 +528,12 @@ class ExecutionResourcePlan:
 
         workers_cfg = int(concurrency.get("max_workers") or 0) or base.max_workers
         workers = max(1, min(workers_cfg, effective_cpu_slots()))
+        # R27-021/167：每 worker 峰值内存真正约束 worker 数（RAM 硬约束）。
+        per_worker_peak = int(
+            mem_cfg.get("per_worker_peak_bytes")
+            or _default_per_worker_peak_bytes()
+        )
+        workers = cls._memory_bounded_workers(workers, process, per_worker_peak)
         spill_dir = str(spill_cfg.get("directory") or tempfile_dir())
         spill_enabled = bool(spill_cfg.get("enabled", True))
         spill_budget = _cfg_bytes(spill_cfg.get("max_size"), int(limit_bytes * 0.15)) if spill_enabled else 0
