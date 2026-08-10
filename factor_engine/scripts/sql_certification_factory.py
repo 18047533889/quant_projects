@@ -338,7 +338,7 @@ def write_backend_target_matrix() -> dict[str, Any]:
                 "polars_long_native": "no",
                 "duckdb_emitter": r["duckdb_emitter"],
                 "duckdb_parity": r["duckdb_parity"],
-                "duckdb_prod": r["duckdb_prod_safe"],
+                "duckdb_prod": r["duckdb_prod"],
                 "clickhouse_parity": "not-certified",
                 "recommended_target": r["recommended_target"],
                 "priority": "tier-a",

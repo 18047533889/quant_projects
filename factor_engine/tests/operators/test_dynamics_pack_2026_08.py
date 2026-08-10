@@ -30,11 +30,11 @@ DAILY_OPS = {
     "cs_knn_peer_mean_ex_self", "cs_knn_neighbor_retention",
     "report_filing_delay_surprise", "ts_hill_tail_index",
 }
+# R26/R28 promotion moved the model/surrogate canonicals to the extended
+# surface (they are evidence-certified extended factors now).  Only
+# ts_quantile_regression_beta remains genuinely research.
 RESEARCH_OPS = {
-    "ts_active_information_storage", "ts_multiscale_permutation_entropy_slope",
-    "ts_quantile_regression_beta", "ts_copula_central_asymmetry",
-    "event_hawkes_branching_ratio_proxy", "ts_markov_entropy_production",
-    "ts_local_lyapunov_exponent", "report_revision_magnitude",
+    "ts_quantile_regression_beta",
 }
 POLARS_OPS = DAILY_OPS - {
     "group_feature_mode_share", "group_feature_effective_rank",
