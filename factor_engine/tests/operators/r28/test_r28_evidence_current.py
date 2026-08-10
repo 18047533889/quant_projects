@@ -41,13 +41,22 @@ def _head():
 
 
 def test_r28_evidence_current_head():
-    """The evidence manifest must be bound to the current git SHA."""
+    """The evidence manifest must be bound to the current code SHA.  The evidence
+    commit itself only touches docs/evidence/r28, so HEAD == manifest_sha or
+    HEAD is an evidence-only commit on top of manifest_sha."""
     manifest_path = _OUT / "R28_ARTIFACT_MANIFEST.json"
     if not manifest_path.exists():
         pytest.fail("R28_ARTIFACT_MANIFEST.json missing")
     manifest = json.loads(manifest_path.read_text())
-    assert manifest.get("git_sha") == _head(), (
-        f"evidence git_sha {manifest.get('git_sha')} != HEAD {_head()} (STALE — regenerate)"
+    head = _head()
+    manifest_sha = manifest.get("git_sha")
+    if manifest_sha == head:
+        return
+    parent = _git(["rev-parse", "HEAD~1"]).stdout.strip()
+    diff = _git(["diff", "--name-only", "HEAD~2", "HEAD"]).stdout.strip()
+    evidence_only = all("/docs/evidence/r28/" in line for line in diff.splitlines())
+    assert parent == manifest_sha and evidence_only, (
+        f"evidence git_sha {manifest_sha} not current (HEAD {head}) (STALE — regenerate)"
     )
 
 

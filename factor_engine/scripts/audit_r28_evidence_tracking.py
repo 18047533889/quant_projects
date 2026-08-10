@@ -41,6 +41,14 @@ def git(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(REPO), *cmd], capture_output=True, text=True)
 
 
+def _only_evidence_commits() -> bool:
+    """True when every commit in HEAD~2..HEAD touches only docs/evidence/r28."""
+    out = git(["diff", "--name-only", "HEAD~2", "HEAD"]).stdout.strip()
+    if not out:
+        return False
+    return all("/docs/evidence/r28/" in line for line in out.splitlines())
+
+
 def main() -> int:
     problems = []
     for name in EXPECTED:
@@ -60,8 +68,19 @@ def main() -> int:
     manifest_path = OUT / "R28_ARTIFACT_MANIFEST.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
-        if manifest.get("git_sha") != sha:
-            problems.append(f"evidence git_sha {manifest.get('git_sha')} != HEAD {sha} (STALE)")
+        manifest_sha = manifest.get("git_sha")
+        # The evidence is bound to the CODE sha that produced the tests.  The
+        # evidence commit itself only touches docs/evidence/r28; if HEAD is that
+        # evidence commit, its parent is the code sha and the evidence is current.
+        if manifest_sha == sha:
+            ok_sha = True
+        else:
+            parent = git(["rev-parse", "HEAD~1"]).stdout.strip()
+            ok_sha = parent == manifest_sha and _only_evidence_commits()
+        if not ok_sha:
+            problems.append(
+                f"evidence git_sha {manifest_sha} != HEAD {sha} (STALE)"
+            )
         digest = OUT / "R28_CANONICAL_SET_DIGEST.txt"
         if digest.exists():
             expected_digest = ""
