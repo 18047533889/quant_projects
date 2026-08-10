@@ -1,7 +1,7 @@
 {
  "schema_version": "factor_engine.r28.static_lookahead.v1",
- "generated_at": "2026-08-10T19:06:30+0800",
- "total_hazards": 40,
+ "generated_at": "2026-08-10T23:18:54+0800",
+ "total_hazards": 42,
  "unreviewed": 0,
  "hazards": [
   {
@@ -28,14 +28,14 @@
   },
   {
    "file": "cleaned_operators/advanced_information.py",
-   "line": 761,
+   "line": 773,
    "symbol": "_peak",
    "pattern": "random_call",
    "severity": "P0",
    "code": "rng = np . random . default_rng ( seed )",
    "canonicals": "",
    "review_status": "reviewed",
-   "resolution": "fixed-seed default_rng surrogate null for TE peak-excess significance; deterministic; extended/PENDING"
+   "resolution": "fixed-seed default_rng(seed) surrogate null for TE peak-excess significance; deterministic; extended/PENDING"
   },
   {
    "file": "cleaned_operators/advanced_structure.py",
@@ -138,7 +138,7 @@
   },
   {
    "file": "cleaned_operators/composition.py",
-   "line": 120,
+   "line": 118,
    "symbol": "_parts",
    "pattern": "bidirectional_smoother",
    "severity": "P1",
@@ -149,7 +149,18 @@
   },
   {
    "file": "cleaned_operators/composition.py",
-   "line": 184,
+   "line": 157,
+   "symbol": "_parts",
+   "pattern": "bidirectional_smoother",
+   "severity": "P1",
+   "code": "( set ( _COMPOSITION_SCHEMA_FIELDS . keys ( ) ) | set ( _MISCLASSIFIED_PARTS . keys ( ) ) )",
+   "canonicals": "",
+   "review_status": "reviewed",
+   "resolution": "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"
+  },
+  {
+   "file": "cleaned_operators/composition.py",
+   "line": 206,
    "symbol": "_same_composition",
    "pattern": "bidirectional_smoother",
    "severity": "P1",
@@ -259,7 +270,7 @@
   },
   {
    "file": "cleaned_operators/operator_spec.py",
-   "line": 186,
+   "line": 177,
    "symbol": "infer_production_policy",
    "pattern": "lead_next_call",
    "severity": "P0",
@@ -270,11 +281,22 @@
   },
   {
    "file": "cleaned_operators/operator_spec.py",
-   "line": 470,
+   "line": 485,
    "symbol": "build_operator_spec",
    "pattern": "lead_next_call",
    "severity": "P0",
    "code": "if in backends_map else next ( iter ( backends_map ) )",
+   "canonicals": "",
+   "review_status": "reviewed",
+   "resolution": "builtin next(iter) over backends map — benign"
+  },
+  {
+   "file": "cleaned_operators/param_role_contract.py",
+   "line": 96,
+   "symbol": "backfill_scalar_roles",
+   "pattern": "lead_next_call",
+   "severity": "P0",
+   "code": "or next ( iter ( backends_map . values ( ) ) )",
    "canonicals": "",
    "review_status": "reviewed",
    "resolution": "builtin next(iter) over backends map — benign"

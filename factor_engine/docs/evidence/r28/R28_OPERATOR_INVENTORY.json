@@ -1,8 +1,8 @@
 {
  "schema_version": "factor_engine.r28.inventory.v1",
- "git_sha": "37008c7ff4eff3823480443b6325577eae394250",
+ "git_sha": "435bce72e9754d6a58261a449cd036b55b258a58",
  "canonical_set_digest": "06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81",
- "generated_at": "2026-08-10T18:59:07+0800",
+ "generated_at": "2026-08-10T23:17:08+0800",
  "python_version": "3.10.12",
  "total_canonicals": 1436,
  "surface_counts": {
@@ -7707,12 +7707,12 @@
    "output_grain": "",
    "input_units": "",
    "output_unit": "",
-   "params": "component_1|component_2|component_3|component_4|component_5|component_6|component_7|component_8|component_directions|score_weights",
+   "params": "component_1|component_2|component_3|component_4|component_5|component_6|component_7|component_8|component_directions|score_weights|missing_policy",
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "fundamental|daily|pit_safe|causal|typed_v2|signature:component_1,component_2,component_3,component_4,component_5,component_6,component_7,component_8,component_directions,score_weights->series|domain:score|unit:score|cost:1|component_stack_axis|multi_panel_components",
-   "description": "按方向条件对多个 date×instrument 组件面板逐 cell 求和评分（如 Piotroski 类 F-score）。每个 component 是一个独立 date×instrument 面板；缺失组件该 cell 不计分，全缺失为 NaN。component_directions / score_weights 为可选标量参数。"
+   "tags": "fundamental|daily|pit_safe|causal|typed_v2|signature:component_1,component_2,component_3,component_4,component_5,component_6,component_7,component_8,component_directions,score_weights,missing_policy->series|domain:score|unit:score|cost:1|component_stack_axis|multi_panel_components",
+   "description": "按方向条件对多个 date×instrument 组件面板逐 cell 求和评分（如 Piotroski 类 F-score）。每个 component 是一个独立 date×instrument 面板；缺失组件该 cell 不计分，全缺失为 NaN。component_directions / score_weights / missing_policy 为可选标量参数。R30 §18: 条件满"
   },
   {
    "canonical": "fin_comprehensive_income_gap",
@@ -12209,7 +12209,7 @@
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "tail_systemic|pit_safe|causal|typed_v2|deterministic|signature:x,group_id,window,quantile,side,lag,min_periods,prior_threshold,min_conditioning_events->series|domain:price_volume|unit:probability|cost:7|extended",
+   "tags": "tail_systemic|pit_safe|causal|typed_v2|deterministic|signature:x,group_id,window,quantile,side,lag,min_periods,prior_threshold,min_conditioning_events->series|domain:price_volume|unit:signed_probability_difference|cost:7|extended",
    "description": "尾部领先分 P(E_peer,d+lag | E_i,d) - P(E_peer,d+lag)（共同队列+最小事件数）。"
   },
   {
@@ -19983,7 +19983,7 @@
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "tail_systemic|pit_safe|causal|typed_v2|deterministic|signature:x,group,alpha,steps->series|domain:price_volume|unit:same_as:target|cost:6|extended",
+   "tags": "tail_systemic|pit_safe|causal|typed_v2|deterministic|signature:x,group,alpha,steps->series|domain:price_volume|unit:same_as:x|cost:6|extended",
    "description": "组内均匀图扩散闭式解 mean + coeff·(x - mean)（无独立矩阵表达力）。"
   },
   {
@@ -24169,7 +24169,7 @@
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "quantile_dynamics|pit_safe|causal|typed_v2|deterministic|signature:target,source,window,target_q,source_q,lag,target_side,source_side,fixed_threshold->series|domain:price_volume|unit:probability|cost:5|extended",
+   "tags": "quantile_dynamics|pit_safe|causal|typed_v2|deterministic|signature:target,source,window,target_q,source_q,lag,target_side,source_side,fixed_threshold->series|domain:price_volume|unit:signed_probability_difference|cost:5|extended",
    "description": "跨序列极值溢出 P(E_target_t|E_source_{t-lag}) - P(E_target)。"
   },
   {
@@ -24529,11 +24529,11 @@
    "output_grain": "",
    "input_units": "x",
    "output_unit": "",
-   "params": "x|scale|threshold|window|threshold_mode",
+   "params": "x|scale|threshold|window|threshold_mode|scale_mode",
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
+   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode,scale_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
    "description": "上/下 DC 腿时长中位数不对称性（慢涨快跌等）。"
   },
   {
@@ -24555,11 +24555,11 @@
    "output_grain": "",
    "input_units": "x",
    "output_unit": "",
-   "params": "x|scale|threshold|window|threshold_mode",
+   "params": "x|scale|threshold|window|threshold_mode|scale_mode",
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode->series|domain:price_volume|unit:rate|cost:4|extended",
+   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode,scale_mode->series|domain:price_volume|unit:rate|cost:4|extended",
    "description": "DC 事件频率（每 bar 事件数，内在时间速度）。"
   },
   {
@@ -24581,11 +24581,11 @@
    "output_grain": "",
    "input_units": "x",
    "output_unit": "",
-   "params": "x|scale|threshold|window|threshold_mode",
+   "params": "x|scale|threshold|window|threshold_mode|scale_mode",
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
+   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode,scale_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
    "description": "上/下 DC 腿 overshoot 中位数不对称性（趋势延伸方向差异）。"
   },
   {
@@ -24607,11 +24607,11 @@
    "output_grain": "",
    "input_units": "x",
    "output_unit": "",
-   "params": "x|scale|threshold|window|threshold_mode",
+   "params": "x|scale|threshold|window|threshold_mode|scale_mode",
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
+   "tags": "directional_change|pit_safe|causal|typed_v2|deterministic|signature:x,scale,threshold,window,threshold_mode,scale_mode->series|domain:price_volume|unit:ratio|cost:5|extended",
    "description": "最后一个已完成 DC 事件的 overshoot/theta（趋势成熟度）。"
   },
   {
@@ -26067,7 +26067,7 @@
    "default_params": "{}",
    "backends": "pandas_numpy|polars",
    "window_semantics": "",
-   "tags": "quantile_dynamics|pit_safe|causal|typed_v2|deterministic|signature:x,window,quantile,lag,side,fixed_threshold->series|domain:price_volume|unit:probability|cost:4|extended",
+   "tags": "quantile_dynamics|pit_safe|causal|typed_v2|deterministic|signature:x,window,quantile,lag,side,fixed_threshold->series|domain:price_volume|unit:signed_probability_difference|cost:4|extended",
    "description": "极值 excess dependence P(E_{t+lag}|E_t) - P(E)。"
   },
   {

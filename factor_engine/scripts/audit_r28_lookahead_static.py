@@ -76,6 +76,9 @@ REVIEWS: dict[tuple[str, int, str], tuple[str, str]] = {
     ("backend/composite_evidence.py", 110, "lead_next_call"): ("reviewed", "builtin next(iter) over backends — benign"),
     ("backend/polars_expr_emitter.py", 1087, "lead_next_call"): ("reviewed", "builtin next(iter) over cols — benign"),
     ("backend/sql_pushdown/emitter.py", 7366, "lead_next_call"): ("reviewed", "builtin next(iter) over plans — benign"),
+    ("cleaned_operators/operator_spec.py", 177, "lead_next_call"): ("reviewed", "builtin next(iter) over backends map — benign"),
+    ("cleaned_operators/operator_spec.py", 485, "lead_next_call"): ("reviewed", "builtin next(iter) over backends map — benign"),
+    ("cleaned_operators/param_role_contract.py", 96, "lead_next_call"): ("reviewed", "builtin next(iter) over backends map — benign"),
     # --- random_call (19): all are FIXED-SEED ``np.random.default_rng(seed)``
     #     surrogates inside research/audit/diagnostic statistics (taskbook §九B).
     #     Deterministic, reproducible, independent of global RNG state; the
@@ -83,6 +86,7 @@ REVIEWS: dict[tuple[str, int, str], tuple[str, str]] = {
     #     is extended-surface and NOT production-certified (PENDING) -> not a
     #     production random factor terminal (R28_RANDOM_FACTOR_TERMINALS_ZERO holds).
     ("cleaned_operators/advanced_information.py", 761, "random_call"): ("reviewed", "fixed-seed default_rng surrogate null for TE peak-excess significance; deterministic; extended/PENDING"),
+    ("cleaned_operators/advanced_information.py", 773, "random_call"): ("reviewed", "fixed-seed default_rng(seed) surrogate null for TE peak-excess significance; deterministic; extended/PENDING"),
     ("cleaned_operators/advanced_structure.py", 385, "random_call"): ("reviewed", "fixed-seed default_rng(_SEED); deterministic internal fixture"),
     ("cleaned_operators/closure_audit.py", 492, "random_call"): ("reviewed", "fixed-seed default_rng(_stable_seed()); audit fixture"),
     ("cleaned_operators/closure_audit.py", 740, "random_call"): ("reviewed", "fixed-seed default_rng(_stable_seed()); audit fixture"),
@@ -102,8 +106,11 @@ REVIEWS: dict[tuple[str, int, str], tuple[str, str]] = {
     ("cleaned_operators/semantic_audit.py", 948, "random_call"): ("reviewed", "fixed-seed default_rng(31); PSD-geometry audit"),
     ("cleaned_operators/semantic_audit.py", 1016, "random_call"): ("reviewed", "fixed-seed default_rng(17); golden-hill audit"),
     # --- bidirectional_smoother (4)
+    ("cleaned_operators/composition.py", 118, "bidirectional_smoother"): ("reviewed", "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"),
     ("cleaned_operators/composition.py", 120, "bidirectional_smoother"): ("reviewed", "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"),
+    ("cleaned_operators/composition.py", 157, "bidirectional_smoother"): ("reviewed", "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"),
     ("cleaned_operators/composition.py", 184, "bidirectional_smoother"): ("reviewed", "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"),
+    ("cleaned_operators/composition.py", 206, "bidirectional_smoother"): ("reviewed", "false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'"),
     ("cleaned_operators/hvg_ext.py", 364, "bidirectional_smoother"): ("reviewed", "ts_hvg_forward_backward_asymmetry = trailing-window HVG graph-asymmetry statistic; 'forward/backward' refers to the graph measure, computed causally on window [t-w+1,t]; NOT a time smoother"),
     ("cleaned_operators/hvg_ext.py", 427, "bidirectional_smoother"): ("reviewed", "same trailing-window HVG asymmetry canonical registration; causal"),
 }
