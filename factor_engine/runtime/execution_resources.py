@@ -78,13 +78,42 @@ def _duckdb_base_threads() -> int:
     return max(2, min(physical_cores(), 8))
 
 
+def _per_worker_peak_bytes() -> int:
+    """每 worker 峰值内存估计（字节）。存在时用于 RAM 硬约束 worker 数。
+
+    R27-020/167 修复：旧 ``_per_worker_peak_mb`` 名说 MB、注释说 3GB、返回 3.0
+    —— 三处单位语义互相矛盾。改为显式字节单位，默认 3GiB/worker（与历史注释
+    意图一致），env 覆盖单位为字节。
+    """
+    env = os.environ.get("FACTOR_ENGINE_PER_WORKER_PEAK_BYTES", "").strip()
+    if env.isdigit() and int(env) > 0:
+        return int(env)
+    legacy = os.environ.get("FACTOR_ENGINE_PER_WORKER_PEAK_MB", "").strip()
+    if legacy.isdigit() and float(legacy) > 0:
+        return int(float(legacy) * 1024 * 1024)
+    return 3 * 1024**3
+
+
 def _per_worker_peak_mb() -> float:
-    """每 worker 峰值内存估计（MB）。存在时用于 RAM 约束 worker 数。"""
-    env = os.environ.get("FACTOR_ENGINE_PER_WORKER_PEAK_MB", "").strip()
-    if env.isdigit() and float(env) > 0:
-        return float(env)
-    # 默认乐观 3GB/worker；可由执行上下文覆盖（CSE/大分钟数据时调大）
-    return 3.0
+    """兼容别名（MB）；新代码请用 :func:`_per_worker_peak_bytes`。"""
+    return _per_worker_peak_bytes() / (1024 * 1024)
+
+
+def _memory_bounded_workers(
+    workers: int,
+    process_budget_bytes: int,
+    per_worker_peak_bytes: int | None,
+) -> int:
+    """RAM 硬约束：``n_jobs <= floor(process_budget / per_worker_peak)``（R27-021/167）。
+
+    旧 ``resource_plan()`` 声称消费 ``_per_worker_peak_mb`` 但从未真正约束
+    worker 数（假合同）。这里让每 worker 峰值内存**真正**限制并发：32 核 16GB
+    机器、每 worker 3GB → 最多 5 个 worker，而不是开 32 个各吃 3GB 直接 OOM。
+    """
+    if per_worker_peak_bytes is None or per_worker_peak_bytes <= 0:
+        return workers
+    by_memory = max(1, process_budget_bytes // per_worker_peak_bytes)
+    return max(1, min(workers, by_memory))
 
 
 def resource_plan(n_jobs: int | None = None) -> ResourcePlan:
@@ -92,7 +121,8 @@ def resource_plan(n_jobs: int | None = None) -> ResourcePlan:
 
     约束：
         - ``n_jobs × duckdb_threads <= cpu_slots``
-        - ``n_jobs <= floor(process_budget / per_worker_peak)``（RAM 硬约束）
+        - ``n_jobs <= floor(process_budget / per_worker_peak)``（RAM 硬约束，
+          R27-021/167：由 :func:`_memory_bounded_workers` 真正执行）
     """
     eps = ExecutionResourcePlan.auto(max_workers=n_jobs)
     return ResourcePlan(

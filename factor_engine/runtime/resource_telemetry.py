@@ -91,13 +91,21 @@ def resource_telemetry_summary(perf: Any | None = None) -> dict[str, Any]:
 
 
 def finalize_resource_telemetry(telemetry: dict[str, Any]) -> dict[str, Any]:
-    """运行结束时补 RSS 峰值与结束值。"""
+    """运行结束时补 current RSS 结束值 + lifetime peak（R27-144）。
+
+    明确拆开：``rss_current_end`` 是当下真实 RSS；``rss_peak_lifetime`` 是进程
+    历史峰值（ru_maxrss）；``rss_peak_run`` 取两者当前已知的最大值（本 run
+    真实峰值由 scheduler 的 run 级探针另外维护）。
+    """
     telemetry = dict(telemetry or {})
-    telemetry["rss_peak_bytes"] = _rss_bytes()
-    try:
-        telemetry["rss_end_bytes"] = _rss_bytes()
-    except Exception:
-        pass
+    current = _rss_bytes()
+    lifetime = _lifetime_peak_rss_bytes()
+    telemetry["rss_current_end"] = current
+    if lifetime is not None:
+        telemetry["rss_peak_lifetime"] = lifetime
+        known = [v for v in (telemetry.get("rss_current_start"), current, lifetime)
+                 if isinstance(v, int) and v > 0]
+        telemetry["rss_peak_run"] = max(known) if known else lifetime
     return telemetry
 
 
