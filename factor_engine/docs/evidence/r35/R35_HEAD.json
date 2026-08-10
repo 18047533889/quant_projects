@@ -1,0 +1,14 @@
+{
+ "git_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+ "generated_at": "2026-08-11T02:21:29+0800",
+ "runtime_versions": {
+  "python": "3.10.12",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "scipy": "1.15.3",
+  "polars": "1.42.1",
+  "duckdb": "1.5.4",
+  "numba": "0.66.0",
+  "threadpoolctl": "3.6.0"
+ }
+}

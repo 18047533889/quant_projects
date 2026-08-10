@@ -54,22 +54,35 @@ def test_pca_oracle_matches_engine_loadings():
 
 
 def test_pca_latent_factor_recovery():
-    """§145: plant a latent factor with a strong signal, PCA first component
-    must recover it (corr well above the noise floor)."""
+    """§145: plant a latent factor, PCA first component must recover it.
+
+    ``_pca_svd`` standardises each column (subtract column mean, divide by
+    column sd) before the SVD.  When every column loads on the same factor, each
+    standardised column becomes the SAME direction ``(f - mean(f))/sd_f`` up to
+    the sign of its loading — so PC1 recovers the SIGN pattern of the loadings
+    (a near-equal-weight direction), not their magnitudes.  The correct
+    recovery assertions are: (a) PC1 loading signs match ``sign(loads)``, and
+    (b) with moderate noise the sign pattern stays clean."""
     from cleaned_operators.cross_section.panel_model import _pca_svd
 
     rng = np.random.default_rng(2)
     f = rng.standard_normal(120)
-    # balanced loadings (no single dominant weight), so the first PC genuinely
-    # captures the shared factor direction rather than one outlier column
     loads = rng.standard_normal(10)
-    loads = loads / np.abs(loads).max() * 0.8
+    loads = loads / np.abs(loads).max() * 0.8  # balanced, no single dominant weight
     X = np.outer(f, loads) + 0.02 * rng.standard_normal((120, 10))
     eng = _pca_svd(X, 1)
     assert eng is not None
     v = eng["loadings"][0]
-    corr = abs(float(np.corrcoef(v, loads)[0, 1]))
-    assert corr > 0.95, f"PCA first-component loading corr {corr:.3f} < 0.95"
+    # sign recovery: PC1 must pick the same direction as the planted loadings
+    signed_v = v * np.sign(np.dot(v, loads))
+    assert np.sign(signed_v).tolist() == np.sign(loads).tolist(), (
+        f"PCA sign pattern not recovered: v={v.round(3)} loads={np.round(loads,3)}"
+    )
+    # magnitude: PC1 is a unit-norm SVD vector; with balanced loadings and
+    # column-standardisation it approximates the equal-weight direction, so the
+    # |loading| entries should be near-uniform (sd of the |loadings| ~ small).
+    abs_std = float(np.std(np.abs(v)))
+    assert abs_std < 0.02, f"PC1 |loading| spread {abs_std:.3f} — not near-equal-weight"
 
 
 # --------------------------------------------------------------------------
