@@ -48,9 +48,11 @@ def _table(
     timezone=None,
     session_calendar=None,
     cardinality="many_to_one",
-    strict_pit_allowed=True,
+    strict_pit_allowed=None,
     current_snapshot_only=False,
 ):
+    # R17-013: helper default UNKNOWN (None); every production-readable US table
+    # declares PIT eligibility explicitly.
     return TableSpec(
         name=name,
         dataset=dataset,
