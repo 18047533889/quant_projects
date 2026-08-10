@@ -1299,13 +1299,14 @@ class DataAccessSource(DataSource):
         for name, plan in plans.items():
             if plan is None:
                 continue
-            field_pit_allowed = bool(getattr(plan, "strict_pit_allowed", True))
+            # R17-005: tri-state at every layer.  ``field_pit_allowed`` is now
+            # None=UNKNOWN (plan default) instead of coercing to True, and the
+            # production gate treats UNKNOWN as reject — same as table/dataset.
+            field_pit_allowed = getattr(plan, "strict_pit_allowed", None)
             table_pit_allowed = self._table_pit_allowed(plan)
-            # #收官轮 P0：table/dataset 层引入三态（True/False/None=UNKNOWN）。
-            # UNKNOWN（无 COS 契约 / 无 TableSpec / 异常 / 已知无知识时钟的 cleaned
-            # 财务源）在 production 下**视为拒绝**——「我不知道」绝不是「我证明
-            # 安全了」；research 告警后降级为 True 继续。
             unknown_layers: list[str] = []
+            if field_pit_allowed is None:
+                unknown_layers.append("field_pit_allowed")
             if table_pit_allowed is None:
                 unknown_layers.append("table_pit_allowed")
             if dataset_pit_allowed is None:
@@ -1327,12 +1328,14 @@ class DataAccessSource(DataSource):
                 )
                 # research 降级：UNKNOWN → True（无法证明 ≠ 拒绝，告警已发出；
                 # 不降级的话 bool(None)=False 会让下方 conjunction 误判失败）。
+                if field_pit_allowed is None:
+                    field_pit_allowed = True
                 if table_pit_allowed is None:
                     table_pit_allowed = True
                 if dataset_pit_allowed is None:
                     dataset_pit_allowed = True
             combined, layers = four_layer_pit_allowed(
-                field_pit_allowed=field_pit_allowed,
+                field_pit_allowed=bool(field_pit_allowed),
                 table_pit_allowed=bool(table_pit_allowed),
                 dataset_pit_allowed=bool(dataset_pit_allowed),
                 operator_pit_allowed=bool(operator_pit_allowed),

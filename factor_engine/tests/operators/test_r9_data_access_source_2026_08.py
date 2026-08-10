@@ -172,7 +172,9 @@ def _source_with_gate_only(**kwargs):
     src = DataAccessSource(dataset="ashare_stock_daily", **kwargs)
     src._preflight_logical_columns = lambda names: None
     src._resolve_catalog_fields = lambda names: {}
-    src._field_spec = lambda name: None
+    # R17: _build_field_plans calls _field_spec(name, production=...) — the
+    # fixture lambda must accept the kwarg (was raising TypeError).
+    src._field_spec = lambda name, *, production=False: None
     src._semantic_catalog_version = lambda: "test-token"
     return src
 
