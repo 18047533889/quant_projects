@@ -42,36 +42,55 @@ class PreprocessingSpec:
 
 
 def fit_preprocessing(train_ds: PanelDataset, spec: PreprocessingSpec) -> FrozenPreprocessing:
-    """Fit the preprocessing pipeline on TRAIN ONLY (§13.2)."""
-    X = train_ds.as_matrix()[0]
+    """Fit each preprocessing step on the output of prior TRAIN-ONLY steps."""
+    X = np.asarray(train_ds.as_matrix()[0], dtype=np.float64)
+    q0, q1 = spec.winsor_quantiles
+    if not (0.0 <= q0 < q1 <= 1.0):
+        raise ValueError("winsor_quantiles must satisfy 0 <= low < high <= 1")
+    allowed = {"imputer", "winsor", "standardize"}
+    unknown = set(spec.steps) - allowed
+    if unknown:
+        raise ValueError(f"unknown preprocessing steps: {sorted(unknown)!r}")
+
+    current = X.copy()
     steps: list[dict[str, Any]] = []
-    if "imputer" in spec.steps:
-        means = np.nanmean(X, axis=0)
-        means = np.where(np.isnan(means), 0.0, means)
-        steps.append({"kind": "imputer", "means": means.tolist()})
-    if "winsor" in spec.steps:
-        q0, q1 = spec.winsor_quantiles
-        lows = np.nanquantile(X, q0, axis=0)
-        highs = np.nanquantile(X, q1, axis=0)
-        steps.append(
-            {
-                "kind": "winsor",
-                "lows": np.nan_to_num(lows).tolist(),
-                "highs": np.nan_to_num(highs).tolist(),
-            }
-        )
-    if "standardize" in spec.steps and spec.use_standardize:
-        mean = np.nanmean(X, axis=0)
-        std = np.nanstd(X, axis=0)
-        std[std == 0] = 1.0
-        steps.append(
-            {
-                "kind": "standardize",
-                "mean": np.nan_to_num(mean).tolist(),
-                "scale": std.tolist(),
-            }
-        )
+    for kind in spec.steps:
+        if kind == "imputer":
+            means = np.nanmean(current, axis=0)
+            means = np.where(np.isfinite(means), means, 0.0)
+            steps.append({"kind": kind, "means": means.tolist()})
+            current = np.where(np.isfinite(current), current, means)
+        elif kind == "winsor":
+            lows = np.nanquantile(current, q0, axis=0)
+            highs = np.nanquantile(current, q1, axis=0)
+            lows = np.where(np.isfinite(lows), lows, 0.0)
+            highs = np.where(np.isfinite(highs), highs, lows)
+            steps.append({"kind": kind, "lows": lows.tolist(), "highs": highs.tolist()})
+            current = np.clip(current, lows, highs)
+        elif kind == "standardize" and spec.use_standardize:
+            mean = np.nanmean(current, axis=0)
+            std = np.nanstd(current, axis=0)
+            mean = np.where(np.isfinite(mean), mean, 0.0)
+            std = np.where(np.isfinite(std) & (std > 0), std, 1.0)
+            steps.append({"kind": kind, "mean": mean.tolist(), "scale": std.tolist()})
+            current = (current - mean) / std
     return FrozenPreprocessing(steps)
+
+
+def _raise_if_cancelled(cancel_token: Any | None) -> None:
+    """Honor an explicit token or the active request-scoped token."""
+    token = cancel_token
+    if token is None:
+        try:
+            from runtime.exceptions import get_active_cancellation_token
+            token = get_active_cancellation_token()
+        except Exception:
+            token = None
+    if token is not None:
+        if hasattr(token, "raise_if_cancelled"):
+            token.raise_if_cancelled()
+        elif bool(getattr(token, "is_cancelled", False)) or bool(getattr(token, "cancelled", False)):
+            raise RuntimeError("training cancellation requested")
 
 
 @dataclass
@@ -167,16 +186,18 @@ def _per_date_icir(y_true: np.ndarray, y_pred: np.ndarray, dates: np.ndarray) ->
 def _evaluate_validation(
     learner: Any, frozen: Any, validation_ds: PanelDataset | None, preprocessing: FrozenPreprocessing
 ) -> dict[str, float]:
-    """Score a frozen candidate on the validation fold.
-
-    ``rank_ic`` prefers ``modeling.evaluation.cross_sectional_ic`` when that
-    module exists (built by a parallel agent); otherwise a rank-IC helper is
-    used so the trainer never hard-depends on the not-yet-written module.
-    """
+    """Score a frozen candidate on finite validation rows only."""
     if validation_ds is None or validation_ds.n_rows == 0:
-        return {"rank_ic": float("nan"), "icir": float("nan"), "mse": float("nan")}
+        raise ValueError("validation_ds is required and must be non-empty")
     Xv, yv, dv, _, _ = validation_ds.as_matrix()
-    pred = learner.predict(frozen, preprocessing.transform(Xv))
+    Xv = preprocessing.transform(Xv)
+    finite = np.isfinite(yv) & np.isfinite(Xv).all(axis=1)
+    if not np.any(finite):
+        return {"rank_ic": float("nan"), "icir": float("nan"), "mse": float("nan")}
+    Xv = Xv[finite]
+    yv = yv[finite]
+    dv = dv[finite]
+    pred = learner.predict(frozen, Xv)
     rank_ic = _rank_ic(yv, pred)
     icir = _per_date_icir(yv, pred, dv)
     mse = float(np.mean((yv - pred) ** 2)) if len(yv) else float("nan")
@@ -212,6 +233,7 @@ def _extract_matrices(
     """
     X_full, y_full, _, _, _ = ds.as_matrix()
     X_all = preprocessing.transform(X_full)
+    transformed_finite = np.isfinite(X_all).all(axis=1)
     aux_arr = None
     if aux_col is not None:
         if aux_col not in ds.frame.columns:
@@ -228,13 +250,16 @@ def _extract_matrices(
         else:
             weights = w_all
     if y_full is not None:
-        ok = np.isfinite(y_full)
+        ok = np.isfinite(y_full) & transformed_finite
         X_tr = X_all[ok]
         y_tr = y_full[ok]
         if aux_arr is not None:
             aux_arr = aux_arr[ok]
     else:
-        X_tr, y_tr = X_all, None
+        ok = transformed_finite
+        X_tr, y_tr = X_all[ok], None
+        if aux_arr is not None:
+            aux_arr = aux_arr[ok]
     aux = {"regime_state": aux_arr} if aux_arr is not None else None
     return X_tr, y_tr, aux, weights
 
@@ -259,46 +284,50 @@ def train_model(
     sample_contract: SampleAdequacyContract | None = None,
     evaluation_boundary: Any = None,
     decay_half_life_bars: int | None = None,
+    cancel_token: Any | None = None,
 ) -> TrainResult:
-    """The §19 one-fold loop.  Raises ``ValueError`` when every hyperparameter
-    candidate fails its sample-adequacy contract.
+    """Run one validation-backed training fold and fail closed on leakage."""
+    _raise_if_cancelled(cancel_token)
+    if validation_ds is not None and validation_ds.n_rows == 0:
+        validation_ds = None
+    if validation_ds is None and evaluation_boundary is None and len(hyperparam_grid) > 1:
+        raise ValueError("validation_ds is required for hyperparameter selection")
+    if train_ds.n_rows == 0:
+        raise ValueError("train_ds must be non-empty")
+    if not hyperparam_grid:
+        raise ValueError("hyperparam_grid must contain at least one candidate")
+    if retrain_policy not in {"train_only", "train_plus_validation"}:
+        raise ValueError(f"unknown retrain_policy {retrain_policy!r}")
+    if train_ds.label_col is None:
+        raise ValueError("training panel must be labelled")
+    if validation_ds is not None:
+        if validation_ds.label_col is None:
+            raise ValueError("validation panel must be labelled")
+        if list(train_ds.feature_cols) != list(validation_ds.feature_cols):
+            raise ValueError("training and validation feature schemas differ")
+        train_dates = train_ds.frame[train_ds.date_col]
+        validation_dates = validation_ds.frame[validation_ds.date_col]
+        if train_dates.max() >= validation_dates.min():
+            raise ValueError("training dates must be strictly before validation dates")
 
-    ``evaluation_boundary`` is the start of the held-out evaluation set when
-    ``validation_ds is None`` (train→test only).  The label interval of every
-    retained training row must stay strictly before it — otherwise a late
-    training label would be matured using test-period bars (§9 / §10).  The
-    boundary is ``validation_start`` when validation exists, else
-    ``evaluation_boundary``.
+    from modeling.walk_forward import purge_and_embargo, purge_before_boundary
 
-    ``decay_half_life_bars`` optionally applies §3.4 / §73 half-life decay
-    sample weights to the most recent training rows; weights are passed to
-    ``learner.fit`` and a learner that cannot consume them rejects fail-closed.
-    """
-    # 1. purge train vs the evaluation boundary (label-interval purge + embargo).
-    from modeling.walk_forward import (
-        apply_embargo,
-        purge_and_embargo,
-        purge_before_boundary,
-    )
-
-    # The bar calendar the final-fit cutoff is computed on must include the
-    # PRE-purge train dates (they are the ones label-maturity is measured on).
     _calendar_frames = [train_ds.frame[train_ds.date_col]]
     if validation_ds is not None:
         _calendar_frames.append(validation_ds.frame[validation_ds.date_col])
     _bar_calendar: np.ndarray = np.sort(
         pd.Index(pd.to_datetime(pd.concat(_calendar_frames))).unique().to_numpy()
     )
-
-    if validation_ds is not None:
-        train_ds = purge_and_embargo(train_ds, validation_ds, label_contract)
-    else:
-        # train→test only: purge against the TEST start so training labels can
-        # never be matured with test-period bars.
+    train_ds = purge_and_embargo(train_ds, validation_ds, label_contract)
+    if validation_ds is None and evaluation_boundary is not None:
         train_ds = purge_before_boundary(train_ds, evaluation_boundary, label_contract)
+    if train_ds.n_rows == 0:
+        raise ValueError("no training rows remain after purge/embargo")
+    _raise_if_cancelled(cancel_token)
 
     # 2. train-only preprocessing.
     preprocessing = fit_preprocessing(train_ds, preprocessing_spec)
+    _raise_if_cancelled(cancel_token)
 
     # 3. training matrices.
     X_tr, y_tr, aux, weights = _extract_matrices(
@@ -317,6 +346,7 @@ def train_model(
     telemetry = train_ds.telemetry()
     validation_scores: list[dict[str, Any]] = []
     for candidate in hyperparam_grid:
+        _raise_if_cancelled(cancel_token)
         spec = LearnerSpec(
             learner_name=learner_cls.name,
             family=learner_cls.family,
@@ -378,6 +408,7 @@ def train_model(
         validation_scores.append(entry)
 
     # 5. select the best candidate.
+    _raise_if_cancelled(cancel_token)
     from modeling.selection import select_best_validation
 
     best_hyperparams, selection_diag = select_best_validation(validation_scores, objective="rank_ic")
@@ -389,6 +420,7 @@ def train_model(
         )
 
     # 6. refit the best candidate on train (optionally train + validation).
+    _raise_if_cancelled(cancel_token)
     if retrain_policy == "train_plus_validation" and validation_ds is not None:
         refit_frame = pd.concat([train_ds.frame, validation_ds.frame], ignore_index=True)
         refit_ds = PanelDataset(
@@ -456,7 +488,7 @@ def train_model(
         train_end=train_end,
         validation_start=val_start,
         validation_end=val_end,
-        selection_train_end=train_end,
+        selection_train_end=str(train_ds.frame[train_ds.date_col].max()),
         final_fit_start=final_fit_start,
         final_fit_end=final_fit_end,
         refit_used_validation=refit_used_validation,

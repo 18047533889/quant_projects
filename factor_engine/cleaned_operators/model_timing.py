@@ -51,7 +51,9 @@ class TimingKind(Enum):
                                     t is the QUERY and is excluded from the
                                     reference (matrix profile, state density,
                                     mahalanobis, signature anomaly, kernel
-                                    granger OOS)
+                                    granger OOS, Markov transition edges,
+                                    joint-energy distribution break, SSA prior
+                                    anomaly)
     SAME_TIME_CROSS_SECTIONAL       as-of time-t cross-section, self-excluded,
                                     peers at time t (cs_ KNN local / peer ops)
     RECURSIVE_CAUSAL_FILTER         one-pass causal filter, current observation
@@ -83,7 +85,32 @@ _TIMING_KIND_OVERRIDES: dict[str, TimingKind] = {
     "ts_motif_recurrence_count": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
     "ts_signature_mahalanobis_anomaly": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
     "ts_state_density": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    # ts_kernel_granger_score is a BLOCKED train/test predictive diagnostic: the
+    # reference is a historical train block (<= t-1) and the current row is the
+    # held-out query.  There is no BLOCKED_HISTORICAL_EVALUATION TimingKind in
+    # this taxonomy; PRIOR_REFERENCE_CURRENT_QUERY is the closest honest fit
+    # (reference excludes the query row).  Kept as an explicit override so the
+    # generated prior-fit-description fallback can never mislabel it.
     "ts_kernel_granger_score": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    # Markov: transition matrix / state edges fit strictly on <= t-1 data; x_t
+    # only selects the current state (M-122).  Explicit for ALL 8 ts_markov_*
+    # canonicals so the ``first_passage`` family hint below can never hijack
+    # ts_markov_mean_first_passage_time (it is a Markov MFPT, not a
+    # matured-historical-outcome first-passage statistic).
+    "ts_markov_committor": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_entropy_production": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_mean_first_passage_time": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_persistence": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_spectral_gap": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_state_entropy": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_stationary_surprisal": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_markov_transition_surprisal": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    # distribution break: prior window AND recent window both end at t-1; the
+    # current row t never joins either reference window, it is the query.
+    "ts_joint_energy_shift": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    # SSA prior anomaly: prior low-rank subspace fit strictly on <= t-1, current
+    # segment scored as the query (NOT a generic prior-fit description).
+    "ts_ssa_prior_reconstruction_error": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
     # same-time cross-section: peers at time t, self excluded
     "cs_knn_local_linear_residual": TimingKind.SAME_TIME_CROSS_SECTIONAL,
     "cs_knn_distance": TimingKind.SAME_TIME_CROSS_SECTIONAL,
@@ -104,6 +131,12 @@ _TIMING_KIND_OVERRIDES: dict[str, TimingKind] = {
 _TIMING_KIND_FAMILY_HINTS: tuple[tuple[str, TimingKind], ...] = (
     ("kalman", TimingKind.RECURSIVE_CAUSAL_FILTER),
     ("matrix_profile", TimingKind.PRIOR_REFERENCE_CURRENT_QUERY),
+    # Markov kernels estimate transition matrix / state edges on <= t-1 data;
+    # x_t only selects the current state -> PRIOR_REFERENCE_CURRENT_QUERY
+    # (M-122), NOT SELF_FIT_DESCRIPTIVE.  Kept BEFORE ``first_passage`` so any
+    # future ts_markov_* canonical (incl. mean_first_passage_time) is not
+    # hijacked by the matured-outcome hint.
+    ("markov", TimingKind.PRIOR_REFERENCE_CURRENT_QUERY),
     ("first_passage", TimingKind.MATURED_HISTORICAL_OUTCOME),
     ("signature_mahalanobis", TimingKind.PRIOR_REFERENCE_CURRENT_QUERY),
 )

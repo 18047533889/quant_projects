@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.candle_state_space import _matrix_profile_series
 from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.registry import OperatorRegistry
@@ -28,6 +28,24 @@ _MP_PARAM_SPECS: dict[str, ParamSpec] = {
     "m": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
     "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
 }
+# M-11xx: matrix-profile relational feasibility for the sequence-anomaly family:
+# the subsequence must be strictly shorter than the history band, and the band
+# must clear the exclusion zone (``m + m//4``) so a non-empty historical search
+# band exists (otherwise the trailing row is guaranteed all-NaN).  Rejected at
+# binding, never run-then-NaN.
+_MP_RELATIONAL_SPECS: list[RelationalParamSpec] = [
+    RelationalParamSpec(
+        "m < history_window",
+        "ts_matrix_profile_discord_score / ts_motif_recurrence_count require m < "
+        "history_window (m={m}, history_window={history_window})",
+    ),
+    RelationalParamSpec(
+        "history_window >= m + m // 4",
+        "ts_matrix_profile_discord_score / ts_motif_recurrence_count require "
+        "history_window >= m + m//4 (exclusion-zone feasibility; history_window="
+        "{history_window}, m={m})",
+    ),
+]
 
 
 def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 9):
@@ -43,6 +61,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
     class _AnomalyOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=cost,
                             param_specs=_MP_PARAM_SPECS)
+        metadata.relational_specs = list(_MP_RELATIONAL_SPECS)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)

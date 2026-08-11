@@ -16,6 +16,10 @@ between empirical multivariate samples.
 
 Deterministic, prefix-causal: both windows end at ``t-1`` for the shift; the
 break score then compares the shift at ``t`` against strictly-past shifts.
+
+Timing classification: PRIOR_REFERENCE_CURRENT_QUERY / PRE_T_STATE.  The
+current row is a query point only; neither the prior nor recent reference
+window includes it.
 """
 from __future__ import annotations
 
@@ -187,11 +191,18 @@ class TsJointEnergyShift(SeriesOperator):
     and never enters either block.  The output is therefore an
     ``asof_previous_observation`` pre-t state: it is known at the START of
     period ``t`` and can be used in a same-day decision without look-ahead.
+
+    **真实 timing 归类 = PRIOR_REFERENCE_CURRENT_QUERY / PRE_T_STATE（M-6xx）**：
+    prior 窗口与 recent 窗口都结束于 t-1（current t 只是查询点，不参与任一
+    reference 窗口）。实现 ``_joint_shift_cell`` 对传入块 ``[.., t]`` 切片
+    ``recent = [t-r, t-1]``、``prior = [t-r-p, t-r-1]``——当前行 t 从不泄漏进
+    reference。
     """
 
     metadata = _metadata(
         "ts_joint_energy_shift",
-        "多变量 Energy distance 联合分布漂移（recent vs prior，固定 3-feature；asof t-1）。",
+        "多变量 Energy distance 联合分布漂移（recent vs prior，固定 3-feature；"
+        "asof t-1；timing=PRIOR_REFERENCE_CURRENT_QUERY/PRE_T_STATE）。",
         ["f1", "f2", "f3", "recent_window", "prior_window"],
         unit="distance",
         cost=6,
@@ -231,6 +242,11 @@ class TsEnergyBreakScore(SeriesOperator):
     uses only rows up to ``t-1``, so the break score at ``t`` is an
     ``asof_previous_observation`` pre-t state usable same-day without
     look-ahead.
+
+    **真实 timing 归类 = PRIOR_REFERENCE_CURRENT_QUERY / PRE_T_STATE（M-6xx）**：
+    每个周期的 joint energy shift 的 prior/recent 窗口都止于 t-1；当前 t 只是
+    查询点，不参与 reference。break score 是把该 pre-t shift 与更早的
+    shift 历史做稳健 z。
     """
 
     metadata = _metadata(

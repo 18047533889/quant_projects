@@ -29,6 +29,7 @@ from cleaned_operators.base import (
     SeriesOperator,
     register_operator,
 )
+from cleaned_operators.closure.strict_scalar import strict_float, strict_int
 from cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -68,6 +69,19 @@ _ORDINAL_KNOB_SPECS = {
         dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False
     ),
 }
+# M-10xx: estimator-resolution knobs (embedding_dim / max_scale / n_scales /
+# k_max / max_lag / tolerance_scale) are declared ESTIMATOR_RESOLUTION +
+# searchable=False; support floors (min_periods / min_valid_lags /
+# min_patterns) are SUPPORT_POLICY — never free search dimensions.
+_ESTIMATOR_INT_SPEC = ParamSpec(
+    dtype=int, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False
+)
+_SUPPORT_INT_SPEC = ParamSpec(
+    dtype=int, param_role=ParamRole.SUPPORT_POLICY, searchable=False
+)
+_ESTIMATOR_FLOAT_SPEC = ParamSpec(
+    dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False
+)
 
 
 def _trailing_finite_suffix(chunk: np.ndarray) -> np.ndarray:
@@ -178,19 +192,26 @@ class TsPermutationEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "normalize", "min_patterns"],
         unit="level",
         cost=5,
-        param_specs=_ORDINAL_KNOB_SPECS,
+        param_specs=dict(
+            _ORDINAL_KNOB_SPECS,
+            normalize=ParamSpec(
+                dtype=bool, choices=(True, False),
+                param_role=ParamRole.POLICY, searchable=False,
+            ),
+            min_patterns=ParamSpec(
+                dtype=int, min=2,
+                param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+                default=None,
+            ),
+        ),
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, normalize: bool = True, min_patterns: Any = None, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ord_ = int(order)
-        if not 2 <= ord_ <= 6:
-            raise ValueError("order must be in [2, 6]")
-        dl = int(delay)
-        if dl < 1:
-            raise ValueError("delay must be >= 1")
+        ord_ = strict_int(order, "order", lower=2, upper=6)
+        dl = strict_int(delay, "delay", lower=1)
         norm = bool(normalize)
-        min_p = 2 if min_patterns is None else max(2, int(min_patterns))
+        min_p = 2 if min_patterns is None else strict_int(min_patterns, "min_patterns", lower=2)
 
         def _fn(chunk: np.ndarray) -> float:
             coded, tie_frac = _permutation_codes(chunk, ord_, dl)
@@ -230,17 +251,23 @@ class TsWeightedPermutationEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "weight", "normalize"],
         unit="level",
         cost=5,
-        param_specs=_ORDINAL_KNOB_SPECS,
+        param_specs=dict(
+            _ORDINAL_KNOB_SPECS,
+            weight=ParamSpec(
+                dtype=str, choices=("variance", "range"),
+                param_role=ParamRole.POLICY, searchable=False,
+            ),
+            normalize=ParamSpec(
+                dtype=bool, choices=(True, False),
+                param_role=ParamRole.POLICY, searchable=False,
+            ),
+        ),
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, weight: str = "variance", normalize: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ord_ = int(order)
-        if not 2 <= ord_ <= 6:
-            raise ValueError("order must be in [2, 6]")
-        dl = int(delay)
-        if dl < 1:
-            raise ValueError("delay must be >= 1")
+        ord_ = strict_int(order, "order", lower=2, upper=6)
+        dl = strict_int(delay, "delay", lower=1)
         weight_kind = str(weight).lower()
         if weight_kind not in {"variance", "range"}:
             raise ValueError("weight must be 'variance' or 'range'")
@@ -304,17 +331,19 @@ class TsPermutationTransitionEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "normalize"],
         unit="level",
         cost=5,
-        param_specs=_ORDINAL_KNOB_SPECS,
+        param_specs=dict(
+            _ORDINAL_KNOB_SPECS,
+            normalize=ParamSpec(
+                dtype=bool, choices=(True, False),
+                param_role=ParamRole.POLICY, searchable=False,
+            ),
+        ),
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, normalize: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ord_ = int(order)
-        if not 2 <= ord_ <= 6:
-            raise ValueError("order must be in [2, 6]")
-        dl = int(delay)
-        if dl < 1:
-            raise ValueError("delay must be >= 1")
+        ord_ = strict_int(order, "order", lower=2, upper=6)
+        dl = strict_int(delay, "delay", lower=1)
         norm = bool(normalize)
 
         def _fn(chunk: np.ndarray) -> float:
@@ -403,19 +432,33 @@ class TsSampleEntropy(SeriesOperator):
         ["x", "window", "embedding_dim", "tolerance_scale", "min_periods"],
         unit="level",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, max=120),
+            "embedding_dim": ParamSpec(
+                dtype=int, min=1, max=4,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+            "tolerance_scale": ParamSpec(
+                dtype=float, min=0.0,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+            "min_periods": ParamSpec(
+                dtype=int, min=3,
+                param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+                default=None,
+            ),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 2, tolerance_scale: float = 0.2, min_periods: Any = None, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        if not 2 <= w <= 120:
-            raise ValueError("window must be in [2, 120]")
-        m = int(embedding_dim)
-        if not 1 <= m <= 4:
-            raise ValueError("embedding_dim must be in [1, 4]")
-        tol = float(tolerance_scale)
+        # M-10xx: strict integer/float validation — fractional window/embedding
+        # or a NaN/negative tolerance is rejected, never int()/float()-truncated.
+        w = strict_int(window, "window", lower=2, upper=120)
+        m = strict_int(embedding_dim, "embedding_dim", lower=1, upper=4)
+        tol = strict_float(tolerance_scale, "tolerance_scale", lower=0.0)
         if tol <= 0.0:
             raise ValueError("tolerance_scale must be > 0")
-        min_p = (m + 2) if min_periods is None else max(m + 2, int(min_periods))
+        min_p = (m + 2) if min_periods is None else max(m + 2, strict_int(min_periods, "min_periods", lower=3))
 
         def _fn(chunk: np.ndarray) -> float:
             run = _trailing_finite_suffix(chunk)
@@ -476,17 +519,32 @@ class TsHurstDfa(SeriesOperator):
         ["x", "window", "min_scale", "max_scale", "n_scales"],
         unit="level",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, max=512),
+            "min_scale": ParamSpec(
+                dtype=int, min=2,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+            "max_scale": ParamSpec(
+                dtype=int, min=2,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+                default=None,
+            ),
+            "n_scales": ParamSpec(
+                dtype=int, min=3,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, min_scale: int = 4, max_scale: Any = None, n_scales: int = 6, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        if not 2 <= w <= 512:
-            raise ValueError("window must be in [2, 512]")
-        min_s = max(2, int(min_scale))
-        max_s = w // 4 if max_scale is None else int(max_scale)
+        # M-10xx: strict integer validation (no silent max(2, int(...)) clamp).
+        w = strict_int(window, "window", lower=2, upper=512)
+        min_s = strict_int(min_scale, "min_scale", lower=2)
+        max_s = w // 4 if max_scale is None else strict_int(max_scale, "max_scale", lower=2)
         if max_s < min_s:
             max_s = min_s + 1
-        ns = max(3, int(n_scales))
+        ns = max(3, strict_int(n_scales, "n_scales", lower=3))
 
         def _fn(chunk: np.ndarray) -> float:
             run = _trailing_finite_suffix(chunk)
@@ -541,15 +599,19 @@ class TsHiguchiFractalDimension(SeriesOperator):
         ["x", "window", "k_max"],
         unit="level",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, max=512),
+            "k_max": ParamSpec(
+                dtype=int, min=1, max=32,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, k_max: int = 8, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        if not 2 <= w <= 512:
-            raise ValueError("window must be in [2, 512]")
-        km = int(k_max)
-        if not 1 <= km <= 32:
-            raise ValueError("k_max must be in [1, 32]")
+        # M-10xx: strict integer validation (no int() truncation).
+        w = strict_int(window, "window", lower=2, upper=512)
+        km = strict_int(k_max, "k_max", lower=1, upper=32)
 
         def _fn(chunk: np.ndarray) -> float:
             run = _trailing_finite_suffix(chunk)
@@ -595,14 +657,23 @@ class TsVariogramSlope(SeriesOperator):
         ["x", "window", "max_lag", "min_valid_lags"],
         unit="level",
         cost=3,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2),
+            "max_lag": ParamSpec(
+                dtype=int, min=1, max=30,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+            "min_valid_lags": ParamSpec(
+                dtype=int, min=2,
+                param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+            ),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, max_lag: int = 10, min_valid_lags: int = 4, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ml = int(max_lag)
-        if not 1 <= ml <= 30:
-            raise ValueError("max_lag must be in [1, 30]")
-        mvl = max(2, int(min_valid_lags))
+        ml = strict_int(max_lag, "max_lag", lower=1, upper=30)
+        mvl = strict_int(min_valid_lags, "min_valid_lags", lower=2)
 
         def _fn(chunk: np.ndarray) -> float:
             return _variogram_slope(chunk, ml, mvl)
@@ -657,14 +728,27 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
         ["x", "window", "max_lag", "use_abs", "min_periods"],
         unit="count",
         cost=2,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2),
+            "max_lag": ParamSpec(
+                dtype=int, min=1, max=30,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+            ),
+            "use_abs": ParamSpec(
+                dtype=bool, choices=(True, False),
+                param_role=ParamRole.POLICY, searchable=False,
+            ),
+            "min_periods": ParamSpec(
+                dtype=int, min=2,
+                param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+            ),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, max_lag: int = 10, use_abs: bool = False, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ml = int(max_lag)
-        if not 1 <= ml <= 30:
-            raise ValueError("max_lag must be in [1, 30]")
-        mp = max(2, int(min_periods))
+        ml = strict_int(max_lag, "max_lag", lower=1, upper=30)
+        mp = strict_int(min_periods, "min_periods", lower=2)
         abs_ = bool(use_abs)
 
         def _fn(chunk: np.ndarray) -> float:

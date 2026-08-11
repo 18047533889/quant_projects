@@ -29,10 +29,27 @@ be documented, not silently assumed:
   target is only known after the close — the factor cannot be backtested as a
   same-day VWAP signal; a pre-open variant needs a prior-label (``target_{t-1}``)
   recipe.
-* The as-of universe / tradable mask is NOT invented as a parameter here: the
-  operator operates on the given panel.  Production pipelines must apply the
-  universe/tradable membership BEFORE calling these operators and the semantic
-  identity of any derived factor must include universe membership (M-116).
+* The as-of universe / tradable mask is NOT re-computed here: the operator
+  operates on the given panel.  Production pipelines must apply the
+  universe/tradable membership (eligible stocks / ST / suspension / industry)
+  BEFORE calling these operators, and name that universe definition in the
+  ``universe`` governance parameter so the semantic identity of any derived
+  factor carries the peer-universe definition (different universe -> different
+  factor identity, M-116).
+
+DecisionClock (M-1xx, hard binding-time enforcement)
+----------------------------------------------------
+The kernel reads SAME-DAY peer features (``feature_available_at="same_day"``)
+and, for the target-reading operators, the SAME-DAY peer target
+(``target_available_at="close_of_t"``).  These availability declarations are
+enforced as governance ``ParamSpec`` choices at binding time — a caller who
+claims a different availability (e.g. ``feature_available_at="t_minus_1"`` or
+``target_available_at="pre_open"``, i.e. a pre-open / same-day-VWAP recipe) is
+REJECTED with a hard error instead of being documented-and-ignored.  The
+same-day target kernel therefore cannot be backtested as a same-day VWAP
+signal; a pre-open variant would need a prior-label (``target_{t-1}``) recipe,
+which this kernel does not implement and which the binding gate refuses to
+pretend exists.
 """
 from __future__ import annotations
 
@@ -46,6 +63,68 @@ from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
+
+# ---------------------------------------------------------------------------
+# DecisionClock governance (M-1xx, hard binding-time enforcement).
+#
+# The same-time KNN kernel reads SAME-DAY peer features and (for the
+# target-reading ops) the SAME-DAY peer target.  These two availability
+# declarations are POLICY parameters whose only legal value is the kernel's
+# real availability — any other claim (e.g. ``feature_available_at="t_minus_1"``
+# for a pre-open recipe, or ``target_available_at="pre_open"`` for a same-day
+# VWAP) is rejected at binding by the ``choices`` ParamSpec, so the "cannot be
+# a same-day VWAP signal" note is enforced by the compiler, not just documented.
+# ---------------------------------------------------------------------------
+_FEATURE_AVAILABILITY_SPEC = ParamSpec(
+    dtype=str,
+    choices=("same_day",),
+    default="same_day",
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
+_TARGET_AVAILABILITY_SPEC = ParamSpec(
+    dtype=str,
+    choices=("close_of_t",),
+    default="close_of_t",
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
+# M-116: the peer-universe definition (eligible stocks / tradable mask / ST /
+# suspension / industry) applied to the panel BEFORE the call.  It is part of
+# the operator signature, so two factors built on different universes have
+# different semantic identities.
+_UNIVERSE_SPEC = ParamSpec(
+    dtype=str,
+    default="full_panel",
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
+_DECISION_CLOCK_SPECS: dict[str, ParamSpec] = {
+    "feature_available_at": _FEATURE_AVAILABILITY_SPEC,
+    "target_available_at": _TARGET_AVAILABILITY_SPEC,
+    "universe": _UNIVERSE_SPEC,
+}
+
+
+def _check_decision_clock(*, feature_available_at: Any, target_available_at: Any | None = None) -> None:
+    """Explicit runtime re-check of the DecisionClock governance declarations.
+
+    The ``choices`` ParamSpec already rejects any non-declared availability at
+    binding; this keeps the rejection path in the kernel too so a direct
+    ``_calculate_series`` call (bypassing the binder) fails closed as well.
+    """
+    if feature_available_at != "same_day":
+        raise ValueError(
+            "cs_knn same-time kernels read SAME-DAY peer features; "
+            f"feature_available_at={feature_available_at!r} is incompatible "
+            "(a pre-open recipe would need prior-day features, not implemented)."
+        )
+    if target_available_at is not None and target_available_at != "close_of_t":
+        raise ValueError(
+            "cs_knn same-time target kernels read the SAME-DAY peer target; "
+            f"target_available_at={target_available_at!r} is incompatible "
+            "(a same-day VWAP / pre-open recipe would need a prior-label target)."
+        )
 
 
 def _metadata(
@@ -181,9 +260,19 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
 
     SameTimeCrossSection：同日截面（``as_of=0``）、排除自身（``self_excluded=True``）、
     同行特征与目标均取当日（``peer_feature_available=0``、``peer_target_available=0``）。
-    同一交易日 target 仅收盘后可知——本因子不可回测同日 VWAP；如需盘前可用需
-    prior-label 变体（``target_{t-1}``）。as-of universe/tradable mask 由调用方在面板
-    上应用（算子不引入 universe 参数）。
+
+    **DecisionClock（硬性绑定期强制，M-1xx）**：本算子读取当日同行
+    ``target_t`` 与当日同行特征——``target_available_at`` 声明必须为
+    ``"close_of_t"``、``feature_available_at`` 必须为 ``"same_day"``。任何其他
+    声明（如同日 VWAP / 盘前 ``pre_open`` 配方）在绑定期被 ``choices`` ParamSpec
+    硬性拒绝（raise），而不是只写进文档。同一交易日 target 仅收盘后可知——
+    本因子不可回测同日 VWAP；如需盘前可用需 prior-label 变体（``target_{t-1}``），
+    该变体本算子不实现、绑定期也拒绝假装存在。
+
+    **Universe identity（M-116）**：as-of universe / tradable mask（eligible / ST /
+    suspension / industry）由调用方在面板上应用，并通过 ``universe`` 治理参数
+    命名该 universe 定义；``universe`` 是算子签名的一部分，不同 universe 定义
+    得到不同语义身份。
 
     输出是 ``target`` 的无权均值，单位与 ``target`` 相同（``same_as:target``）——
     不是无量纲的 ratio；把它标成 ratio 会让 typed algebra 把同单位均值当作
@@ -195,10 +284,12 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
         "动态 k-NN 同行均值（风格相似股，排除自身；恰好 3 个特征 f1/f2/f3；"
         "SameTimeCrossSection：as_of=0 / self_excluded / peer_feature_available=0 / "
         "peer_target_available=0）。k 是"
-        "最小邻居数/kth-distance radius（tie-inclusive，边界平局全收，可>k）。同一"
-        "交易日 target 仅收盘后可知——不可回测同日 VWAP，盘前需 prior-label 变体。"
-        "输出单位 same_as:target（同行 target 的均值，非 ratio）。",
-        ["target", "f1", "f2", "f3", "k"],
+        "最小邻居数/kth-distance radius（tie-inclusive，边界平局全收，可>k）。"
+        "DecisionClock 硬性强制：feature_available_at=same_day、"
+        "target_available_at=close_of_t，其他声明绑定期拒绝——同一交易日 target "
+        "仅收盘后可知，不可回测同日 VWAP，盘前需 prior-label 变体。universe 治理"
+        "参数进入因子语义身份。输出单位 same_as:target（同行 target 的均值，非 ratio）。",
+        ["target", "f1", "f2", "f3", "k", "feature_available_at", "target_available_at", "universe"],
         unit="same_as:target",
         cost=7,
         param_specs={
@@ -207,15 +298,32 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
                 param_role=ParamRole.ESTIMATOR_RESOLUTION, default=5,
                 searchable=False,
             ),
+            **_DECISION_CLOCK_SPECS,
         },
     )
 
     def _calculate_series(
-        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, **_: Any
+        self,
+        target: pd.DataFrame,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        k: int = 5,
+        feature_available_at: str = "same_day",
+        target_available_at: str = "close_of_t",
+        universe: str = "full_panel",
+        **_: Any,
     ) -> pd.DataFrame:
         # M-113 / M-240: strict operator-boundary validation — never silently
         # clamp / truncate k (rejects <1, fractional, NaN, Inf, bool).
         kk = strict_int(k, "k", lower=1)
+        # M-1xx: DecisionClock hard enforcement — a same-time kernel that reads
+        # same-day features and same-day target must not be declared with any
+        # other availability.
+        _check_decision_clock(
+            feature_available_at=feature_available_at,
+            target_available_at=target_available_at,
+        )
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
         return frame_like(target, _peer_mean_series(target.to_numpy(dtype=float), feats, kk))
 
@@ -266,14 +374,21 @@ class CsKnnNeighborRetention(SeriesOperator):
     SameTimeCrossSection：每一天的集合都是在当天特征上内生重建的
     （``as_of=0``、``self_excluded=True``）；比较的是今天 vs ``lag`` 天前
     的同日截面集合。恰好 3 个特征（``f1``/``f2``/``f3``）。
+
+    **DecisionClock（硬性绑定期强制，M-1xx）**：内核读取当日同行特征——
+    ``feature_available_at`` 必须为 ``"same_day"``；其他声明（如盘前配方）在
+    绑定期被 ``choices`` ParamSpec 硬性拒绝。**Universe identity（M-116）**：
+    as-of universe / tradable mask 由调用方在面板上应用，``universe`` 治理参数
+    命名该 universe 定义并进入因子语义身份。
     """
 
     metadata = _metadata(
         "cs_knn_neighbor_retention",
         "KNN 同行集合保持率 Jaccard（今天 vs lag 天前；kth-radius tie-inclusive，"
         "k 是最小邻居数，边界平局全收）。SameTimeCrossSection：as_of=0 / "
-        "self_excluded。恰好 3 个特征 f1/f2/f3。",
-        ["f1", "f2", "f3", "k", "lag"],
+        "self_excluded。DecisionClock 硬性强制：feature_available_at=same_day；"
+        "universe 治理参数进入因子语义身份。恰好 3 个特征 f1/f2/f3。",
+        ["f1", "f2", "f3", "k", "lag", "feature_available_at", "universe"],
         unit="ratio",
         cost=7,
         param_specs={
@@ -287,11 +402,21 @@ class CsKnnNeighborRetention(SeriesOperator):
                 param_role=ParamRole.ESTIMATOR_RESOLUTION, default=20,
                 searchable=False,
             ),
+            "feature_available_at": _FEATURE_AVAILABILITY_SPEC,
+            "universe": _UNIVERSE_SPEC,
         },
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, lag: int = 20, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        k: int = 5,
+        lag: int = 20,
+        feature_available_at: str = "same_day",
+        universe: str = "full_panel",
+        **_: Any,
     ) -> pd.DataFrame:
         # M-113 / M-240: strict operator-boundary validation — ``lag`` must be a
         # genuine positive integer.  The old ``max(1, int(lag))`` silently
@@ -299,6 +424,8 @@ class CsKnnNeighborRetention(SeriesOperator):
         # a false search space; reject instead of clamp.
         kk = strict_int(k, "k", lower=1)
         lg = strict_int(lag, "lag", lower=1)
+        # M-1xx: DecisionClock hard enforcement (same-day feature read).
+        _check_decision_clock(feature_available_at=feature_available_at, target_available_at=None)
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
         return frame_like(f1, _retention_series(feats, kk, lg))
 
@@ -349,6 +476,13 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
     SameTimeCrossSection：同日截面（``as_of=0``）、排除自身（``self_excluded=True``）、
     同行特征与目标均取当日。恰好 3 个特征（``f1``/``f2``/``f3``）。
 
+    **DecisionClock（硬性绑定期强制，M-1xx）**：本算子读取当日同行
+    ``target_t`` 与当日同行特征——``target_available_at`` 必须为
+    ``"close_of_t"``、``feature_available_at`` 必须为 ``"same_day"``；其他声明
+    （如同日 VWAP / 盘前配方）在绑定期被 ``choices`` ParamSpec 硬性拒绝。
+    **Universe identity（M-116）**：``universe`` 治理参数命名调用方应用的
+    as-of universe / tradable mask 定义并进入因子语义身份。
+
     输出是 ``(target 差)²`` 的均值，维度为 ``unit(target)²``。tag 代数不直接
     表达上标平方，使用等价的乘积形式 ``unit(target)*unit(target)``（与 relation
     加权输出的 ``unit(value)*unit(weight)`` 同一套乘积语法）；这不是 ratio。
@@ -358,9 +492,11 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
         "cs_knn_graph_dirichlet_energy",
         "目标在风格 kNN 图上的 Dirichlet energy（低=平滑；SameTimeCrossSection："
         "as_of=0 / self_excluded；k 是最小邻居数/kth-distance radius，tie-inclusive）。"
+        "DecisionClock 硬性强制：feature_available_at=same_day、"
+        "target_available_at=close_of_t；universe 治理参数进入因子语义身份。"
         "恰好 3 个特征 f1/f2/f3。"
         "输出单位 unit(target)*unit(target)（即 unit(target)²，非 ratio）。",
-        ["target", "f1", "f2", "f3", "k"],
+        ["target", "f1", "f2", "f3", "k", "feature_available_at", "target_available_at", "universe"],
         unit="unit(target)*unit(target)",
         cost=7,
         param_specs={
@@ -369,14 +505,29 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
                 param_role=ParamRole.ESTIMATOR_RESOLUTION, default=5,
                 searchable=False,
             ),
+            **_DECISION_CLOCK_SPECS,
         },
     )
 
     def _calculate_series(
-        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, **_: Any
+        self,
+        target: pd.DataFrame,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        k: int = 5,
+        feature_available_at: str = "same_day",
+        target_available_at: str = "close_of_t",
+        universe: str = "full_panel",
+        **_: Any,
     ) -> pd.DataFrame:
         # M-113 / M-240: strict operator-boundary validation of ``k``.
         kk = strict_int(k, "k", lower=1)
+        # M-1xx: DecisionClock hard enforcement (same-day feature + target read).
+        _check_decision_clock(
+            feature_available_at=feature_available_at,
+            target_available_at=target_available_at,
+        )
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
         return frame_like(target, _dirichlet_energy_series(target.to_numpy(dtype=float), feats, kk))
 

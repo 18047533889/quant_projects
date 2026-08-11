@@ -28,7 +28,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
@@ -43,6 +49,7 @@ def _metadata(
     unit: str,
     cost: int,
     extra_tags: tuple[str, ...] = (),
+    param_specs: dict | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -56,6 +63,7 @@ def _metadata(
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
     )
 
 
@@ -255,8 +263,22 @@ def _effective_rank_chunk(c1, c2, c3, min_rows: int) -> float:
 
 _MIN_EIGENGAP = 0.02  # normalized ``(λ1-λ2)/sum(λ)`` below which the top direction is not identifiable
 
+# M-8xx: the dominant-direction identifiability gap is an explicit, versioned,
+# non-searchable ESTIMATOR knob (default 0.02).  It decides when the top two
+# eigenvalues are too degenerate for the dominant eigenvector to be stable; it
+# is surfaced on ``ts_feature_subspace_rotation``'s metadata (param_specs,
+# searchable=False) instead of being a hidden kernel constant.
+_EIGENGAP_SPEC = ParamSpec(
+    dtype=float,
+    min=0.0,
+    max=1.0,
+    default=_MIN_EIGENGAP,
+    searchable=False,
+    param_role=ParamRole.ESTIMATOR_RESOLUTION,
+)
 
-def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
+
+def _dominant_direction(z: np.ndarray, eigen_gap: float = _MIN_EIGENGAP) -> np.ndarray | None:
     # R11 P1: the dominant direction must come from the SAME projected matrix
     # whose eigenvalues feed mode_share / effective_rank.  A pairwise bicor
     # matrix is not guaranteed PSD, so the raw matrix's eigenvector could
@@ -269,12 +291,16 @@ def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
     if w.sum() <= _EPS:
         return None
     # Round-7 P0 (review §33): when the top two eigenvalues are nearly tied
-    # (``(λ1-λ2)/sum(λ) < _MIN_EIGENGAP``) the dominant eigenvector is not
-    # identifiable — small noise can flip the "rotation" to ~90° even though the
-    # covariance structure did not change.  Fail closed (None -> NaN) instead of
-    # emitting a spurious regime-rotation angle.
+    # (``(λ1-λ2)/sum(λ) < eigen_gap``, default ``_MIN_EIGENGAP``) the dominant
+    # eigenvector is not identifiable — small noise can flip the "rotation" to
+    # ~90° even though the covariance structure did not change.  Fail closed
+    # (None -> NaN) instead of emitting a spurious regime-rotation angle.
+    # M-8xx: ``eigen_gap`` is the explicit, versioned ESTIMATOR knob — a caller
+    # can relax it (e.g. 0.0) to admit near-degenerate directions, which changes
+    # the output and is reflected in the operator's param_specs / semantic
+    # identity.
     gap = float(w[-1] - (w[-2] if w.size >= 2 else 0.0))
-    if gap / float(w.sum()) < _MIN_EIGENGAP:
+    if gap / float(w.sum()) < eigen_gap:
         return None
     _, v = np.linalg.eigh(c)
     v1 = v[:, -1]
@@ -309,7 +335,7 @@ def geometry_audit_bundle(
     return raw, projected, eigvals, eigvecs
 
 
-def _subspace_rotation_chunk(c1, c2, c3, recent: int, prior: int, min_rows: int) -> float:
+def _subspace_rotation_chunk(c1, c2, c3, recent: int, prior: int, min_rows: int, eigen_gap: float = _MIN_EIGENGAP) -> float:
     n = c1.shape[0]
     if n < recent + prior or recent < min_rows or prior < min_rows:
         return np.nan
@@ -322,8 +348,8 @@ def _subspace_rotation_chunk(c1, c2, c3, recent: int, prior: int, min_rows: int)
     )
     if zr is None or zp is None:
         return np.nan
-    vr = _dominant_direction(zr)
-    vp = _dominant_direction(zp)
+    vr = _dominant_direction(zr, eigen_gap=eigen_gap)
+    vp = _dominant_direction(zp, eigen_gap=eigen_gap)
     if vr is None or vp is None:
         return np.nan
     ang = float(np.arccos(np.clip(abs(float(np.dot(vr, vp))), 0.0, 1.0)))
@@ -483,15 +509,25 @@ class TsFeatureSubspaceRotation(SeriesOperator):
     recent 与 prior 两个不重叠窗口各估计特征相关矩阵的主特征向量，输出夹角
     归一化到 [0,1]（1 = 正交，regime 彻底切换）。捕捉"字段间关系结构"的
     旋转，而非字段本身的水平。P1。
+
+    **M-8xx：主导方向可识别性门槛 ``eigen_gap``（默认 0.02）是显式、versioned、
+    searchable=False 的 ESTIMATOR 常数**——当前两特征值相对谱隙低于该值时，
+    主导特征向量不稳定，输出 NaN（fail-closed）。默认 0.02 已文档化；调低
+    （如 0.0）可承认近简并方向，会改变输出并进入语义身份。
     """
 
     metadata = _metadata(
         "ts_feature_subspace_rotation",
-        "recent vs prior 特征主导方向夹角（regime rotation）。",
-        ["f1", "f2", "f3", "recent_window", "prior_window"],
+        "recent vs prior 特征主导方向夹角（regime rotation；eigen_gap=0.02 可识别性门槛，"
+        "ESTIMATOR_RESOLUTION searchable=False）。",
+        ["f1", "f2", "f3", "recent_window", "prior_window", "eigen_gap"],
         domain="price_volume",
         unit="angle",
         cost=6,
+        param_specs={
+            "eigen_gap": _EIGENGAP_SPEC,
+        },
+        extra_tags=(f"eigen_gap:{_MIN_EIGENGAP}",),
     )
 
     def _calculate_series(
@@ -501,6 +537,7 @@ class TsFeatureSubspaceRotation(SeriesOperator):
         f3: pd.DataFrame,
         recent_window: int = 30,
         prior_window: int = 90,
+        eigen_gap: float = _MIN_EIGENGAP,
         **_: Any,
     ) -> pd.DataFrame:
         # P1-32: ``window`` was redundant — the kernel only ever uses the last
@@ -510,6 +547,8 @@ class TsFeatureSubspaceRotation(SeriesOperator):
         p = int(prior_window)
         if r < 5 or p < 5:
             raise ValueError("ts_feature_subspace_rotation requires recent/prior >= 5")
+        if not (0.0 <= float(eigen_gap) <= 1.0):
+            raise ValueError("ts_feature_subspace_rotation requires 0 <= eigen_gap <= 1")
         w = r + p
         return frame_like(
             f1,
@@ -518,7 +557,7 @@ class TsFeatureSubspaceRotation(SeriesOperator):
                 f2.to_numpy(dtype=float),
                 f3.to_numpy(dtype=float),
                 w,
-                lambda a, b, c: _subspace_rotation_chunk(a, b, c, r, p, 5),
+                lambda a, b, c: _subspace_rotation_chunk(a, b, c, r, p, 5, float(eigen_gap)),
             ),
         )
 

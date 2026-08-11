@@ -28,7 +28,7 @@ from modeling.split import (
     split_by_date_cutoff,
 )
 from modeling.timing import vwap_to_vwap_label
-from modeling.trainer import PreprocessingSpec, TrainResult, train_model
+from modeling.trainer import PreprocessingSpec, TrainResult, fit_preprocessing, train_model
 from modeling.walk_forward import (
     WalkForwardFold,
     WalkForwardSpec,
@@ -268,25 +268,58 @@ def test_train_model_end_to_end():
     assert isinstance(result.artifact, ModelArtifact)
 
 
-def test_train_model_train_only_mode():
-    """validation_ds=None (train→test only) still produces an artifact using an
-    in-sample selection proxy."""
+def test_train_model_train_only_mode_rejects_missing_validation():
+    """Hyperparameter selection must never fall back to in-sample scores."""
     ds = make_panel(n_dates=8, n_stocks=200, seed=5)
     dates = sorted(ds.frame["date"].unique())
     train_ds = ds.filter_dates(start=dates[0], end=dates[5])
     contract = vwap_to_vwap_label("ret_1", horizon_bars=1)
     clock = ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP)
-    result = train_model(
-        PCRLearner, train_ds, None,
-        preprocessing_spec=PreprocessingSpec(),
-        hyperparam_grid=[{"n_components": 2}, {"n_components": 3}],
-        label_contract=contract,
-        decision_clock=clock,
-        sample_contract=_lenient_contract(),
+    with pytest.raises(ValueError, match="validation_ds is required"):
+        train_model(
+            PCRLearner, train_ds, None,
+            preprocessing_spec=PreprocessingSpec(),
+            hyperparam_grid=[{"n_components": 2}, {"n_components": 3}],
+            label_contract=contract,
+            decision_clock=clock,
+            sample_contract=_lenient_contract(),
+        )
+
+
+def test_preprocessing_stages_fit_sequential_train_state():
+    frame = pd.DataFrame({
+        "date": [0, 1, 2, 3], "stock": ["A"] * 4,
+        "f0": [0.0, 1.0, 2.0, 100.0], "label": [0.0, 1.0, 2.0, 3.0],
+    })
+    ds = PanelDataset(frame, feature_cols=["f0"], label_col="label")
+    pre = fit_preprocessing(
+        ds, PreprocessingSpec(winsor_quantiles=(0.0, 0.5))
     )
-    assert result.artifact is not None
-    assert result.selected_hyperparams["n_components"] in (2, 3)
-    assert np.isfinite(result.artifact.predict(ds.as_matrix()[0][:10])).all()
+    winsor, standardize = pre.steps[1], pre.steps[2]
+    clipped = np.clip(frame[["f0"]].to_numpy(), winsor["lows"], winsor["highs"])
+    assert standardize["mean"] == pytest.approx(clipped.mean(axis=0))
+    assert standardize["scale"] == pytest.approx(clipped.std(axis=0))
+
+
+def test_train_model_honors_cancel_token_before_fit():
+    from runtime.exceptions import Cancellation, CancellationToken
+
+    ds = make_panel(n_dates=8, n_stocks=200, seed=5)
+    dates = sorted(ds.frame["date"].unique())
+    token = CancellationToken()
+    token.cancel()
+    with pytest.raises(Cancellation):
+        train_model(
+            PCRLearner,
+            ds.filter_dates(end=dates[4]),
+            ds.filter_dates(start=dates[5], end=dates[6]),
+            preprocessing_spec=PreprocessingSpec(),
+            hyperparam_grid=[{"n_components": 2}],
+            label_contract=vwap_to_vwap_label("ret_1", horizon_bars=1),
+            decision_clock=ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
+            sample_contract=_lenient_contract(),
+            cancel_token=token,
+        )
 
 
 def test_train_model_fails_closed_when_all_candidates_fail_adequacy():

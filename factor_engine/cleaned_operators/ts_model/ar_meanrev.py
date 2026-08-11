@@ -27,9 +27,24 @@ _CANONICALS: list[str] = []
 # for the AR model scalars.  ``window`` is the alpha horizon (HORIZON, searched);
 # ``order`` is the AR model order — an estimator-resolution knob, never a
 # full-resolution search dimension (M-115/M-162/M-170).
+#
+# P1 (window-semantics governance): ``window`` is a MAX LOOKBACK, NOT a strict
+# full-window requirement.  The kernel emits as soon as the minimum effective
+# observation count (``order + 2`` valid rows) is present inside the trailing
+# ``window`` — an EXPANDING warmup.  ``warmup_policy`` is a declared, catalog-
+# visible parameter (part of the operator's semantic identity); ``"full"`` opts
+# in to a strict full-history floor (the trailing window must be completely
+# observed before any output).  ``min_history`` and ``min_effective_obs`` are
+# both ``order + 2``.
+_AR_WINDOW_SEMANTICS = "max_lookback"
+_AR_WARMUP_POLICY = "expanding"            # default (legacy behaviour preserved)
+_AR_FULL_WARMUP = "full"                   # strict full-history floor option
+_AR_MIN_EFFECTIVE_OBS_EXPR = "order + 2"   # valid rows the OLS design must have
 _AR_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
     "order": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "warmup_policy": ParamSpec(dtype=str, choices=(_AR_WARMUP_POLICY, _AR_FULL_WARMUP),
+                               param_role=ParamRole.POLICY, searchable=False),
 }
 
 
@@ -55,7 +70,7 @@ def _ar_fit(seg: np.ndarray, order: int) -> tuple[np.ndarray | None, np.ndarray]
     return beta, design
 
 
-def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: int = 0, stability_k: int = 0) -> np.ndarray:
+def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: int = 0, stability_k: int = 0, warmup_policy: str = "expanding") -> np.ndarray:
     """Causal AR(order) rolling kernel.
 
     ``fit_lag=0`` (legacy) fits the AR model on the window *including* the
@@ -64,7 +79,16 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
     forecast / innovation at the current row.  ``stability_k>0`` (with
     ``stat='coeff'``) reports the standard deviation of the AR slope over the
     last ``stability_k`` consecutive fits.
+
+    Window semantics (P1): ``window`` is a MAX LOOKBACK, not a strict full
+    window.  With ``warmup_policy="expanding"`` (default) the kernel emits as
+    soon as the minimum effective observation count (``order + 2`` valid rows)
+    is available inside the trailing window.  With ``warmup_policy="full"`` the
+    trailing window must be completely observed (``fit_end >= window - 1``)
+    before any output; a short series then degrades to all-NaN.
     """
+    if warmup_policy not in ("expanding", "full"):
+        raise ValueError(f"warmup_policy must be 'expanding' or 'full', got {warmup_policy!r}")
     n = len(vals)
     out = np.full(n, np.nan, dtype=float)
     o = max(1, int(order))
@@ -74,6 +98,8 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
     for row in range(n):
         fit_end = row - lag
         if fit_end < 0:
+            continue
+        if warmup_policy == "full" and fit_end < w - 1:
             continue
         start = max(0, fit_end - w + 1)
         seg = vals[start : fit_end + 1]
@@ -119,6 +145,8 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
 
 
 def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 0, stability_k: int = 0, cost: int = 4, diagnostic_only: bool = False):
+    _desc = f"{description}（window=max lookback，非严格满窗；min_effective_obs=order+2；warmup_policy={_AR_WARMUP_POLICY} 渐进输出）"
+
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -129,16 +157,19 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
         status="experimental",
     )
     class _ArOp(SeriesOperator):
-        metadata = metadata(name, description, ["x", "window", "order"], unit=unit, cost=cost,
+        metadata = metadata(name, _desc, ["x", "window", "order", "warmup_policy"], unit=unit, cost=cost,
                             diagnostic_only=diagnostic_only, param_specs=_AR_PARAM_SPECS)
+        # P1: window = max lookback (documented, machine-readable contract).
+        metadata.window_semantics = _AR_WINDOW_SEMANTICS
 
-        def _calculate_series(self, x, window=60, order=1, **_):
+        def _calculate_series(self, x, window=60, order=1, warmup_policy="expanding", **_):
             xv = x.to_numpy(dtype=float)
             rows, cols = xv.shape
             out = np.full((rows, cols), np.nan, dtype=float)
             for col in range(cols):
                 out[:, col] = _ar_apply(xv[:, col], int(window), int(order), stat,
-                                        fit_lag=int(fit_lag), stability_k=int(stability_k))
+                                        fit_lag=int(fit_lag), stability_k=int(stability_k),
+                                        warmup_policy=str(warmup_policy))
             return frame_like(x, out)
 
     return _ArOp

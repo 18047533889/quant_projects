@@ -194,17 +194,32 @@ def test_m086_har_min_train_obs_constant():
 def test_m086_har_insufficient_train_rows_fails_closed():
     """A HAR window whose valid OLS training rows fall below _HAR_MIN_TRAIN_OBS
     must fail closed to NaN — and lowering the policy floor (a versioned knob,
-    NOT a user param) rescues it, proving the constant is the gate."""
+    NOT a user param) rescues it, proving the constant is the gate.
+
+    P1 (sample-coverage governance): the gate is now a DOUBLE constraint —
+    ``N_effective >= _HAR_MIN_TRAIN_OBS`` AND
+    ``N_effective >= _HAR_MIN_COVERAGE * window``.  Lowering ONLY the absolute
+    floor no longer rescues a window=40 / ~18-valid-row sample, because the
+    fractional-coverage floor (0.6*40=24) still binds; lowering BOTH versioned
+    knobs to exactly the valid-row count rescues.
+    """
     rng = np.random.default_rng(7)
     rv = np.abs(rng.standard_normal(40)) + 1.0  # monthly rolling leaves ~18 valid rows
     assert np.isnan(V._har_rv(rv, 40, "forecast"))
     assert np.isnan(V._har_rv(rv, 40, "innovation_z"))
-    old = V._HAR_MIN_TRAIN_OBS
-    V._HAR_MIN_TRAIN_OBS = 18  # exactly the valid-row count -> finite again
+    old_min = V._HAR_MIN_TRAIN_OBS
+    old_cov = V._HAR_MIN_COVERAGE
     try:
+        V._HAR_MIN_TRAIN_OBS = 18  # exactly the valid-row count
+        assert np.isnan(V._har_rv(rv, 40, "forecast")), (
+            "P1 double gate: the fractional-coverage floor (0.6*40=24) still "
+            "rejects 18 valid rows even after the absolute floor is met"
+        )
+        V._HAR_MIN_COVERAGE = 18 / 40.0  # relax coverage to exactly the valid rows
         assert np.isfinite(V._har_rv(rv, 40, "forecast"))
     finally:
-        V._HAR_MIN_TRAIN_OBS = old
+        V._HAR_MIN_TRAIN_OBS = old_min
+        V._HAR_MIN_COVERAGE = old_cov
 
 
 # ---------------------------------------------------------------------------

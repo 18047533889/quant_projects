@@ -290,14 +290,46 @@ def run_walk_forward_evidence(
     cat_pred = np.concatenate(all_pred) if all_pred else np.array([])
     cat_y = np.concatenate(all_y) if all_y else np.array([])
     cat_dates = np.concatenate(all_dates) if all_dates else np.array([])
+    cat_stocks = np.concatenate(all_stocks) if all_stocks else np.array([])
 
-    oos = evaluate_predictions(cat_pred, cat_y, cat_dates)
+    oos = evaluate_predictions(cat_pred, cat_y, cat_dates, cat_stocks)
     oos_evaluation = oos.to_dict()
+    fold_rank_ics = []
+    for fold in fold_results:
+        _, fold_ics = per_date_rank_ic(fold.test_pred, fold.test_y, fold.test_dates)
+        fold_rank_ics.append(float(np.mean(fold_ics)) if len(fold_ics) else float("nan"))
+    finite_fold_ics = [value for value in fold_rank_ics if np.isfinite(value)]
+    oos_evaluation["per_fold_rank_ic"] = fold_rank_ics
+    oos_evaluation["equal_weight_fold_rank_ic"] = (
+        float(np.mean(finite_fold_ics)) if finite_fold_ics else float("nan")
+    )
+    oos_evaluation["calendar_time_rank_ic"] = oos.mean_daily_rank_ic
+    degradation = [
+        fold.validation_best_rank_ic - test_ic
+        for fold, test_ic in zip(fold_results, fold_rank_ics)
+        if np.isfinite(fold.validation_best_rank_ic) and np.isfinite(test_ic)
+    ]
+    oos_evaluation["validation_to_test_degradation"] = {
+        "per_fold": degradation,
+        "mean": float(np.mean(degradation)) if degradation else float("nan"),
+    }
+    oos_evaluation["reproducibility_bundle"] = {
+        "artifact_lineage": [fold.artifact for fold in fold_results],
+        "dataset_certificate": dataset.telemetry(),
+        "fold_plan": [fold.to_dict() for fold in fold_results],
+        "metric_convention": oos.metric_convention,
+        "calendar": [str(date) for date in dates],
+        "universe": sorted(str(value) for value in dataset.frame[dataset.stock_col].unique()),
+        "code_build": fit_code_commit,
+        "random_seed": random_seed,
+        "label_horizon_bars": label_contract.horizon_bars,
+    }
 
     dataset_exposure = {
         "n_candidates_tested": len(hyperparam_grid) if hyperparam_grid else 0,
         "fold_count": len(folds),
         "exposed_sets": ["train", "validation", "test"],
+        "final_holdout_state": "EVALUATOR_ONLY",
     }
 
     leadger_rows: list[dict[str, Any]] = []
@@ -315,7 +347,7 @@ def run_walk_forward_evidence(
                 "number_of_search_attempts_before_selection": len(hyperparam_grid)
                 if hyperparam_grid
                 else 0,
-                "selection_metric": "validation_rank_ic",
+                "selection_metric": "validation_mean_daily_rank_ic",
             }
         )
 

@@ -91,8 +91,17 @@ def _mk(canonical: str, description: str, params: list[str], fn):
 # Local Markov dynamics (shared DiscreteStateDynamicsKernel).
 # ---------------------------------------------------------------------------
 
-def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_count: int, kind: str, target: str = "upper") -> np.ndarray:
-    res = _state_dynamics_series(series, int(window), int(bins), int(lag), int(min_count))
+def _markov_series(
+    series: np.ndarray, window: int, bins: int, lag: int, min_count: int, kind: str,
+    target: str = "upper", min_state_support: int = 3, min_history: int = 10,
+) -> np.ndarray:
+    # min_state_support / min_history mirror the pandas kernel's window-maturity
+    # contract (markov_dynamics module docstring): the shared kernel NaN's
+    # P/pi/D1/D2 for immature windows (fewer than min_history finite past
+    # observations), and per-state outputs require min_state_support visits.
+    res = _state_dynamics_series(
+        series, int(window), int(bins), int(lag), int(min_count), int(min_state_support), int(min_history)
+    )
     B = res["P"].shape[1]
     n = series.shape[0]
     out = np.full(n, np.nan)
@@ -108,7 +117,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             # distribution — persistence ~1 / entropy ~0 there are degenerate.
             if res["n_states_obs"][t] < 2:
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             if kind == "persistence":
                 # TASK 1 reverse: never-entered state -> no persistence to report.
@@ -144,7 +153,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
             if res["n_states_obs"][t] < 2:
                 continue
-            if res["counts"][t, i] < min_count:
+            if res["counts"][t, i] < min_state_support:
                 continue
             p = res["P"][t, i, k]
             if np.isfinite(p) and p > 0.0:
@@ -159,7 +168,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 or not np.isfinite(c[k - 1]) or not np.isfinite(c[k + 1])
             ):
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             denom = c[k + 1] - c[k - 1]
             if abs(denom) <= _EPS:
@@ -169,7 +178,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
             if res["n_states_obs"][t] < 2:
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             P = res["P"][t]
             if not np.all(np.isfinite(P)):
@@ -207,7 +216,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
             if res["n_states_obs"][t] < 2:
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             P = res["P"][t]
             if not np.all(np.isfinite(P)):
@@ -267,7 +276,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             # R11 round-2 P0 (TASK 2 + TASK 1 reverse, mirrors markov_dynamics).
             if res["n_states_obs"][t] < 2:
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             if res["N_obs"][t, :, k].sum() <= 0:
                 continue
@@ -276,7 +285,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 continue
             out[t] = float(-np.log(float(pi[k]) + _EPS))
         elif kind == "equilibrium":
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             d1 = res["D1"][t]
             c = res["centers"][t]
@@ -320,14 +329,14 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 or not np.isfinite(c[k - 1]) or not np.isfinite(c[k + 1])
             ):
                 continue
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             denom = c[k + 1] - c[k - 1]
             if abs(denom) <= _EPS:
                 continue
             out[t] = float((d2[k + 1] - d2[k - 1]) / denom)
         elif kind == "quasipotential":
-            if res["counts"][t, k] < min_count:
+            if res["counts"][t, k] < min_state_support:
                 continue
             d1 = res["D1"][t]
             d2 = res["D2"][t]
@@ -366,11 +375,13 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
     return out
 
 
-def _markov_family(frame, window, bins, lag, min_count, kind, target="upper"):
+def _markov_family(frame, window, bins, lag, min_count, kind, target="upper", min_state_support=3, min_history=10):
     cols = _cols(frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
-        out[c] = _markov_series(_col(frame, c), window, bins, lag, min_count, kind, target)
+        out[c] = _markov_series(
+            _col(frame, c), window, bins, lag, min_count, kind, target, min_state_support, min_history
+        )
     return _rebuild(frame, out)
 
 
@@ -381,13 +392,17 @@ for _name, _desc, _kind, _bins in (
     ("ts_kramers_moyal_local_stability", "当前状态局部稳定性 -D'(x_k)（Polars）。", "local_stability", 5),
 ):
     _cls = _mk(
-        _name, _desc, ["x", "window", "bins", "lag", "min_count"],
-        lambda frame, window=60, bins=_bins, lag=1, min_count=3, _kind=_kind: _markov_family(
-            frame, window, bins, lag, min_count, _kind
+        _name, _desc, ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
+        lambda frame, window=60, bins=_bins, lag=1, min_count=3, min_state_support=3,
+        min_history=10, _kind=_kind: _markov_family(
+            frame, window, bins, lag, min_count, _kind, "upper", min_state_support, min_history
         ),
     )
     # R11 round-2 P0 (TASK 3): binding-time relational feasibility mirror of the
-    # pandas metadata (min_count <= window - lag).
+    # pandas metadata (min_count <= window - lag).  The Polars UDF layer binds
+    # through a ``*args, **kwargs`` bridge (no introspectable defaults), so the
+    # maturity relational gates (min_state_support/min_history <= window) are
+    # enforced by the SHARED kernel at runtime instead of here.
     _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
 
 for _name, _desc, _kind, _bins in (
@@ -401,36 +416,42 @@ for _name, _desc, _kind, _bins in (
 ):
     if _kind == "mfpt":
         _cls = _mk(
-            _name, _desc, ["x", "window", "bins", "lag", "min_count", "target"],
-            lambda frame, window=60, bins=_bins, lag=1, min_count=3, target="upper": _markov_family(
-                frame, window, bins, lag, min_count, "mfpt", target
+            _name, _desc,
+            ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history", "target"],
+            lambda frame, window=60, bins=_bins, lag=1, min_count=3, min_state_support=3,
+            min_history=10, target="upper": _markov_family(
+                frame, window, bins, lag, min_count, "mfpt", target, min_state_support, min_history
             ),
         )
         _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
     elif _kind == "spectral_gap":
         # Pandas ts_markov_spectral_gap guards on min_periods (default 5), not
-        # min_count; keep the Polars parameter parity exact.
+        # min_count; keep the Polars parameter parity exact.  It has no
+        # per-state support gate, so only min_history is threaded.
         _cls = _mk(
-            _name, _desc, ["x", "window", "bins", "lag", "min_periods"],
-            lambda frame, window=120, bins=_bins, lag=1, min_periods=5: _markov_family(
-                frame, window, bins, lag, min_periods, "spectral_gap"
+            _name, _desc, ["x", "window", "bins", "lag", "min_periods", "min_history"],
+            lambda frame, window=120, bins=_bins, lag=1, min_periods=5,
+            min_history=10: _markov_family(
+                frame, window, bins, lag, min_periods, "spectral_gap", "upper", 3, min_history
             ),
         )
         _cls.metadata.relational_specs = list(_MIN_PERIODS_RELATIONAL)
     elif _kind == "quasipotential":
         # Pandas ts_km_quasipotential_depth defaults to window=120.
         _cls = _mk(
-            _name, _desc, ["x", "window", "bins", "lag", "min_count"],
-            lambda frame, window=120, bins=_bins, lag=1, min_count=3: _markov_family(
-                frame, window, bins, lag, min_count, "quasipotential"
+            _name, _desc, ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
+            lambda frame, window=120, bins=_bins, lag=1, min_count=3, min_state_support=3,
+            min_history=10: _markov_family(
+                frame, window, bins, lag, min_count, "quasipotential", "upper", min_state_support, min_history
             ),
         )
         _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
     else:
         _cls = _mk(
-            _name, _desc, ["x", "window", "bins", "lag", "min_count"],
-            lambda frame, window=60, bins=_bins, lag=1, min_count=3, _kind=_kind: _markov_family(
-                frame, window, bins, lag, min_count, _kind
+            _name, _desc, ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
+            lambda frame, window=60, bins=_bins, lag=1, min_count=3, min_state_support=3,
+            min_history=10, _kind=_kind: _markov_family(
+                frame, window, bins, lag, min_count, _kind, "upper", min_state_support, min_history
             ),
         )
         _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
@@ -470,12 +491,12 @@ _mk(
 # First-passage bias (x + scale pair).
 # ---------------------------------------------------------------------------
 
-def _first_passage_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors):
+def _first_passage_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors, scale_horizon=1):
     cols = _cols(x_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         out[c] = _first_passage_series(
-            _col(x_frame, c), _col(scale_frame, c), window, barrier, horizon, min_anchors
+            _col(x_frame, c), _col(scale_frame, c), window, barrier, horizon, min_anchors, scale_horizon
         )
     return _rebuild(x_frame, out)
 
@@ -483,9 +504,9 @@ def _first_passage_pair(x_frame, scale_frame, window, barrier, horizon, min_anch
 _mk(
     "ts_first_passage_bias",
     "首达偏向 mean(d_s*w_s)（Polars）。",
-    ["x", "scale", "window", "barrier", "horizon", "min_anchors"],
-    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3: _first_passage_pair(
-        x, scale, window, barrier, horizon, min_anchors
+    ["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon"],
+    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1: _first_passage_pair(
+        x, scale, window, barrier, horizon, min_anchors, scale_horizon
     ),
 )
 
@@ -603,12 +624,12 @@ _mk(
 # First-passage decomposition (hit probability / conditional time).
 # ---------------------------------------------------------------------------
 
-def _fp_stats_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors, which):
+def _fp_stats_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors, which, scale_horizon=1):
     cols = _cols(x_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         up, dn, up_ct, dn_ct = _fp_stats_series(
-            _col(x_frame, c), _col(scale_frame, c), window, barrier, horizon, min_anchors
+            _col(x_frame, c), _col(scale_frame, c), window, barrier, horizon, min_anchors, scale_horizon
         )
         out[c] = (up, dn, up_ct, dn_ct)[which]
     return _rebuild(x_frame, out)
@@ -617,17 +638,17 @@ def _fp_stats_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors, 
 _mk(
     "ts_first_passage_hit_probability",
     "历史首达命中概率（Polars）。",
-    ["x", "scale", "window", "barrier", "horizon", "min_anchors", "side"],
-    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, side="upper": _fp_stats_pair(
-        x, scale, window, barrier, horizon, min_anchors, 0 if str(side).lower() == "upper" else 1
+    ["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon", "side"],
+    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1, side="upper": _fp_stats_pair(
+        x, scale, window, barrier, horizon, min_anchors, 0 if str(side).lower() == "upper" else 1, scale_horizon
     ),
 )
 _mk(
     "ts_first_passage_conditional_time",
     "命中条件下的平均首达时间（Polars）。",
-    ["x", "scale", "window", "barrier", "horizon", "min_anchors", "side"],
-    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, side="upper": _fp_stats_pair(
-        x, scale, window, barrier, horizon, min_anchors, 2 if str(side).lower() == "upper" else 3
+    ["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon", "side"],
+    lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1, side="upper": _fp_stats_pair(
+        x, scale, window, barrier, horizon, min_anchors, 2 if str(side).lower() == "upper" else 3, scale_horizon
     ),
 )
 

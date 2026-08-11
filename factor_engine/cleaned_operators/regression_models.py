@@ -35,12 +35,31 @@ from cleaned_operators.ts_model._rolling_core import _HUBER_DELTA, pinball_quant
 # statistical-support floor; ``alpha`` is the ridge shrinkage (numerical
 # policy); ``lag`` in ``ts_ar_coefficient`` is the AR lag being estimated — the
 # economic mechanism, so it is searched (M-115/M-162/M-170).
+#
+# P1 (window-semantics governance): ``window`` is a MAX LOOKBACK, not a strict
+# full window; ``warmup_policy`` is catalog-visible (part of the semantic
+# identity), with ``"full"`` opting into a strict full-history floor.
+#
+# P1 (Huber / Ridge estimator-policy governance): Huber's ``delta`` is a FIXED,
+# versioned NUMERICAL policy (``ts_model._rolling_core._HUBER_DELTA``, M-055) —
+# it is NOT an operator parameter, never searchable, and any change must ship as
+# a new semantic version.  Ridge's ``alpha`` IS an exposed scalar: it is
+# declared NUMERICAL + searchable=False (never a continuous AlphaProbe/LLM
+# search dimension), and ``_RIDGE_ALPHA_CERTIFIED_PRESETS`` is the reviewed
+# preset domain a role-aware search / LLM may sample from — it is a documented
+# governance list, not a hard runtime rejection of arbitrary recipe values.
+_HUBER_DELTA_POLICY = _HUBER_DELTA
+_HUBER_DELTA_ROLE = ParamRole.NUMERICAL
+_RIDGE_ALPHA_CERTIFIED_PRESETS = (0.0, 0.1, 0.5, 1.0)
 _REGRESSION_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
     "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     "alpha": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
     "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC, searchable=True),
+    "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"),
+                               param_role=ParamRole.POLICY, searchable=False),
 }
+_AR_WINDOW_SEMANTICS = "max_lookback"
 
 
 def _metadata(
@@ -221,10 +240,11 @@ class TsHuberRegressionInSampleResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_huber_regression_in_sample_resid",
-        "Huber 稳健回归 in-sample 残差（拟合含当前样本；诊断用，自动挖掘请用 predictive 变体）。",
+        "Huber 稳健回归 in-sample 残差（拟合含当前样本；诊断用，自动挖掘请用 predictive 变体）。Huber delta 为固定 NUMERICAL 政策（_HUBER_DELTA=1.345，versioned，不可搜索）。",
         ["y", "x", "window", "min_periods"],
         domain="price_volume",
         unit="level",
+        param_specs=_REGRESSION_PARAM_SPECS,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -260,7 +280,7 @@ class TsHuberRegressionPredictiveResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_huber_regression_predictive_resid",
-        "Huber 稳健回归 predictive 残差（拟合不含当前样本；无前视，自动挖掘首选）。",
+        "Huber 稳健回归 predictive 残差（拟合不含当前样本；无前视，自动挖掘首选）。Huber delta 为固定 NUMERICAL 政策（_HUBER_DELTA=1.345，versioned，不可搜索）。",
         ["y", "x", "window", "min_periods"],
         domain="price_volume",
         unit="level",
@@ -302,10 +322,11 @@ class TsRidgeRegressionInSampleResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_ridge_regression_in_sample_resid",
-        "Ridge 回归 in-sample 残差（拟合含当前样本；诊断用，自动挖掘请用 predictive 变体）。",
+        "Ridge 回归 in-sample 残差（拟合含当前样本；诊断用，自动挖掘请用 predictive 变体）。alpha=NUMERICAL 政策（searchable=False，不可连续搜索；certified presets 见 _RIDGE_ALPHA_CERTIFIED_PRESETS）。",
         ["y", "x", "window", "alpha", "min_periods"],
         domain="price_volume",
         unit="level",
+        param_specs=_REGRESSION_PARAM_SPECS,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, alpha: float = 0.1, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -344,7 +365,7 @@ class TsRidgeRegressionPredictiveResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_ridge_regression_predictive_resid",
-        "Ridge 回归 predictive 残差（拟合不含当前样本；无前视，自动挖掘首选）。",
+        "Ridge 回归 predictive 残差（拟合不含当前样本；无前视，自动挖掘首选）。alpha=NUMERICAL 政策（searchable=False，不可连续搜索；certified presets 见 _RIDGE_ALPHA_CERTIFIED_PRESETS）。",
         ["y", "x", "window", "alpha", "min_periods"],
         domain="price_volume",
         unit="level",
@@ -444,14 +465,18 @@ class TsArCoefficient(SeriesOperator):
 
     metadata = _metadata(
         "ts_ar_coefficient",
-        "AR(lag) 回归系数（IN-SAMPLE：拟合窗口含当前样本，描述性状态，非预测；严格截至 t-1 版本用 ts_ar_prior_coeff）。",
-        ["x", "window", "lag", "min_periods"],
+        "AR(lag) 回归系数（IN-SAMPLE：拟合窗口含当前样本，描述性状态，非预测；严格截至 t-1 版本用 ts_ar_prior_coeff）。window=max lookback（非严格满窗），min_effective_obs=min_periods，warmup_policy=expanding 渐进输出。",
+        ["x", "window", "lag", "min_periods", "warmup_policy"],
         domain="price_volume",
         unit="ratio",
         param_specs=_REGRESSION_PARAM_SPECS,
     )
+    metadata.window_semantics = _AR_WINDOW_SEMANTICS
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, lag: int = 1, min_periods: int = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, lag: int = 1, min_periods: int = 5,
+                          warmup_policy: str = "expanding", **_: Any) -> pd.DataFrame:
+        if warmup_policy not in ("expanding", "full"):
+            raise ValueError(f"warmup_policy must be 'expanding' or 'full', got {warmup_policy!r}")
         w = int(window)
         lg = max(1, int(lag))
         mp = max(3, int(min_periods))
@@ -460,6 +485,9 @@ class TsArCoefficient(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
+                # P1: strict full-history floor when warmup_policy="full".
+                if warmup_policy == "full" and row < w - 1:
+                    continue
                 start = max(0, row - w + 1)
                 if row - lg < start:
                     continue

@@ -17,6 +17,24 @@ bit-identical and cost stays bounded for automatic search.
   empirical Fisher information matrices of two non-overlapping windows under a
   Student-t family, parameterised by ``(mu, log sigma, log(nu-2))``.
   P2/Research.
+
+Missing-value policy — HISTORICAL_STATE_ALLOWED (M-4xx)
+--------------------------------------------------------
+Every operator in this module is a trailing-window *state* read: the Takens /
+Rips / Fisher kernel consumes the finite history and a missing CURRENT row does
+NOT force NaN — the window is allowed to emit a value built from the finite
+past (this is the semantic opposite of ``topology_ext``'s
+``ts_persistence_entropy_*``, which are CURRENT_ROW_REQUIRED and emit NaN when
+the current observation is missing).  The two policies are explicitly
+distinguished across the topology family so a stale-history factor is never
+silently mis-classified.
+
+Deterministic sampling policy (M-3xx)
+-------------------------------------
+The Takens point cloud is deduplicated by STABLE unique preserving first
+occurrence (time order) and decimated by time-order skeleton sampling to at
+most ``_MAX_POINTS`` points (``_SAMPLING_POLICY``) — never by lexicographic
+``np.unique`` ordering.  Identical input -> bit-identical output.
 """
 from __future__ import annotations
 
@@ -26,15 +44,78 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
+from cleaned_operators.closure.strict_scalar import strict_int
 
 _EPS = 1e-12
 _MAX_POINTS = 12              # hard deterministic cap on the Rips point cloud.
 _DF_GRID = (2.1, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0)
 _DF_STEP = 0.05
+# M-3xx: versioned sampling policy for the Takens point cloud.
+#
+#   "stable_unique_first_occurrence + time_decimation"
+#
+# Duplicate embedding vectors are deduplicated by STABLE unique preserving the
+# FIRST occurrence (i.e. the earliest time row), never ``np.unique(axis=0)``
+# which sorts lexicographically and destroys the time/geometry ordering; the
+# decimation to ``_MAX_POINTS`` then samples evenly in that time/first-occurrence
+# order (a deterministic temporal skeleton), not in lexicographic state-space
+# order.  Same input -> bit-identical output on every run (no RNG, no
+# hash-order dependence).
+_SAMPLING_POLICY = "stable_unique_first_occurrence + time_decimation"
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
+def _stable_unique_first(pts: np.ndarray) -> np.ndarray:
+    """Deduplicate rows preserving FIRST-occurrence (time) order.
+
+    ``np.unique(pts, axis=0)`` returns the unique rows SORTED lexicographically,
+    so a later decimation step sampled from a state-space-sorted point cloud —
+    the sample was determined by lexicographic order, not by time or geometry.
+    ``np.unique(..., return_index=True)`` returns, for each unique row, the index
+    of its FIRST occurrence; sorting those indices restores the original
+    (chronological) row order, so the surviving point cloud keeps the temporal
+    structure of the embedding.
+    """
+    if pts.shape[0] == 0:
+        return pts
+    _, first_idx = np.unique(pts, axis=0, return_index=True)
+    return pts[np.sort(first_idx)]
+
+
+def _decimate_time_order(pts: np.ndarray, max_points: int) -> np.ndarray:
+    """Deterministic decimation to at most ``max_points`` in time order.
+
+    Sample ``max_points`` evenly spaced positions in the *first-occurrence
+    (time) order* of the point cloud.  This is a temporal skeleton — a
+    deterministic subsample of the time-indexed trajectory — NOT a
+    lexicographic-state-space sample.  ``np.unique`` on the chosen indices only
+    removes the duplicate boundary index (e.g. two indices rounding to the same
+    position); the remaining positions are still time-ordered.
+    """
+    if pts.shape[0] <= max_points:
+        return pts
+    keep = np.unique(
+        np.round(np.linspace(0, pts.shape[0] - 1, max_points)).astype(np.int64)
+    )
+    return pts[keep]
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    param_specs: dict | None = None,
+    relational_specs: list | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="topology",
@@ -43,10 +124,34 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
         return_type="series",
         tags=[
             "topology", "daily", "pit_safe", "causal", "typed_v2", "deterministic",
-            "research_only",
+            "research_only", "historical_state_allowed",
             f"signature:{','.join(params)}->series", f"unit:{unit}", "cost:9",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
+        relational_specs=list(relational_specs) if relational_specs else [],
     )
+
+
+# M-2xx: Takens embedding resolution (tau / embedding_dim) is an ESTIMATOR knob
+# (searchable=False); window is the HORIZON.  Relational feasibility: a window
+# must hold at least 3 delay embeddings for the point cloud to be non-empty.
+_TOPOLOGY_TAKENS_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=6, param_role=ParamRole.HORIZON, searchable=True),
+    "tau": ParamSpec(
+        dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=1
+    ),
+    "embedding_dim": ParamSpec(
+        dtype=int, min=2, max=6,
+        param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=3,
+    ),
+}
+_TOPOLOGY_TAKENS_RELATIONAL: list[RelationalParamSpec] = [
+    RelationalParamSpec(
+        "window - (embedding_dim - 1) * tau >= 3",
+        "requires window-(embedding_dim-1)*tau >= 3 delay embeddings "
+        "(window={window}, embedding_dim={embedding_dim}, tau={tau})",
+    ),
+]
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -135,14 +240,14 @@ def _takens_points(vals: np.ndarray, tau: int, dim: int) -> np.ndarray | None:
     if pts.shape[0] < 4:
         return None
     pts = np.round(pts, decimals=9)
-    pts = np.unique(pts, axis=0)
+    # M-3xx: stable unique preserving FIRST occurrence (time order) — the old
+    # ``np.unique(axis=0)`` sorted the cloud lexicographically, so the decimation
+    # below sampled from a state-space-sorted order.  First-occurrence unique +
+    # time-order decimation keeps the sample a deterministic temporal skeleton.
+    pts = _stable_unique_first(pts)
     if pts.shape[0] < 4:
         return None
-    if pts.shape[0] > _MAX_POINTS:
-        keep = np.unique(
-            np.round(np.linspace(0, pts.shape[0] - 1, _MAX_POINTS)).astype(np.int64)
-        )
-        pts = pts[keep]
+    pts = _decimate_time_order(pts, _MAX_POINTS)
     return pts
 
 
@@ -182,16 +287,23 @@ class TsBetti1MaxPersistence(SeriesOperator):
     """滚动 Takens 嵌入的 H1 最大持久性（Rips filtration）。
 
     窗口稳健归一化（median/MAD）后做 Takens 嵌入（tau、embedding_dim），去重并
-    确定性抽稀到 ≤12 点，纯 numpy 计算 Rips H1 持久对，输出
+    确定性抽稀到 ≤12 点（M-3xx：stable-unique 保留首次出现 + 时间顺序骨架抽样，
+    不是字典序状态空间抽样），纯 numpy 计算 Rips H1 持久对，输出
     ``max(death-birth)`` 再除以点云中位成对距离（无量纲）。无 H1 -> 0。
-    绝不使用 random jitter。P2 / Research。
+    绝不使用 random jitter。**Missing policy：HISTORICAL_STATE_ALLOWED**——
+    当前行缺失时窗口可用有限过去发射状态（与 topology_ext 的
+    CURRENT_ROW_REQUIRED 相反）。M-2xx：window/tau/embedding_dim 全部 ParamSpec，
+    ``window-(embedding_dim-1)*tau >= 3`` 关系可行在绑定期强制。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_betti_1_max_persistence",
-        "滚动 H1 最大持久性（Takens+Rips，中位距离归一化，无量纲）。",
+        "滚动 H1 最大持久性（Takens+Rips，中位距离归一化，无量纲；"
+        "HISTORICAL_STATE_ALLOWED）。",
         ["x", "window", "tau", "embedding_dim"],
         unit="ratio",
+        param_specs=_TOPOLOGY_TAKENS_SPECS,
+        relational_specs=_TOPOLOGY_TAKENS_RELATIONAL,
     )
 
     def _calculate_series(
@@ -202,11 +314,14 @@ class TsBetti1MaxPersistence(SeriesOperator):
         embedding_dim: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        t = int(tau)
-        m = int(embedding_dim)
-        if w < 6 or t < 1 or not (2 <= m <= 6):
-            raise ValueError("ts_betti_1_max_persistence requires window>=6, tau>=1, 2<=embedding_dim<=6")
+        w = strict_int(window, "window", lower=6)
+        t = strict_int(tau, "tau", lower=1)
+        m = strict_int(embedding_dim, "embedding_dim", lower=2, upper=6)
+        if w - (m - 1) * t < 3:
+            raise ValueError(
+                "ts_betti_1_max_persistence requires window-(embedding_dim-1)*tau >= 3 "
+                f"(window={w}, embedding_dim={m}, tau={t})"
+            )
         return _frame_like(x, _betti_series(x.to_numpy(dtype=float), w, t, m))
 
 
@@ -307,14 +422,19 @@ class TsPersistenceDiagramShift(SeriesOperator):
     两个窗口均 Takens 嵌入 + Rips H1；输出两个 ``(birth, death)`` diagram 的
     Wasserstein-1 距离，未匹配点按到对角线的 L-infinity 代价计入（Hungarian
     精确匹配）。这是 CROCKER 的低成本替代——回答"拓扑结构变了多少"，
-    而非逐层 Betti 曲线。P2 / Research。
+    而非逐层 Betti 曲线。**Missing policy：HISTORICAL_STATE_ALLOWED**（当前行
+    缺失时可用有限过去发射窗口状态）。M-2xx：window/tau/embedding_dim 全部
+    ParamSpec + 关系可行绑定期强制。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_persistence_diagram_shift",
-        "当前 vs 上一窗口 H1 persistence diagram 的 Wasserstein-1 距离。",
+        "当前 vs 上一窗口 H1 persistence diagram 的 Wasserstein-1 距离"
+        "（HISTORICAL_STATE_ALLOWED）。",
         ["x", "window", "tau", "embedding_dim"],
         unit="ratio",
+        param_specs=_TOPOLOGY_TAKENS_SPECS,
+        relational_specs=_TOPOLOGY_TAKENS_RELATIONAL,
     )
 
     def _calculate_series(
@@ -325,11 +445,14 @@ class TsPersistenceDiagramShift(SeriesOperator):
         embedding_dim: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        t = int(tau)
-        m = int(embedding_dim)
-        if w < 6 or t < 1 or not (2 <= m <= 6):
-            raise ValueError("ts_persistence_diagram_shift requires window>=6, tau>=1, 2<=embedding_dim<=6")
+        w = strict_int(window, "window", lower=6)
+        t = strict_int(tau, "tau", lower=1)
+        m = strict_int(embedding_dim, "embedding_dim", lower=2, upper=6)
+        if w - (m - 1) * t < 3:
+            raise ValueError(
+                "ts_persistence_diagram_shift requires window-(embedding_dim-1)*tau >= 3 "
+                f"(window={w}, embedding_dim={m}, tau={t})"
+            )
         return _frame_like(x, _persistence_shift_series(x.to_numpy(dtype=float), w, t, m))
 
 
@@ -441,14 +564,27 @@ class TsFisherInformationShift(SeriesOperator):
     ``I = mean(g g^T) + eps I``，输出 ``|log I_recent - log I_prior|_F``。
     注意：这是 Fisher *信息阵*的结构漂移，不是两个 Student-t 参数点之间的
     Fisher-Rao 测地距离。确定性（固定 df 网格 + 固定中心差分步长）。
-    P2 / Research。
+    **Missing policy：HISTORICAL_STATE_ALLOWED**（当前行缺失时可用有限过去的
+    两段窗口发射 Fisher 结构状态）。recent_window/prior_window 为
+    ESTIMATOR_RESOLUTION（searchable=False）。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_fisher_information_shift",
-        "Student-t 经验 Fisher 信息阵结构漂移（log 矩阵 Frobenius）。",
+        "Student-t 经验 Fisher 信息阵结构漂移（log 矩阵 Frobenius；"
+        "HISTORICAL_STATE_ALLOWED）。",
         ["x", "recent_window", "prior_window"],
         unit="distance",
+        param_specs={
+            "recent_window": ParamSpec(
+                dtype=int, min=8,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=60,
+            ),
+            "prior_window": ParamSpec(
+                dtype=int, min=8,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=120,
+            ),
+        },
     )
 
     def _calculate_series(
@@ -458,10 +594,8 @@ class TsFisherInformationShift(SeriesOperator):
         prior_window: int = 120,
         **_: Any,
     ) -> pd.DataFrame:
-        r = int(recent_window)
-        p = int(prior_window)
-        if r < 8 or p < 8:
-            raise ValueError("ts_fisher_information_shift requires recent_window, prior_window >= 8")
+        r = strict_int(recent_window, "recent_window", lower=8)
+        p = strict_int(prior_window, "prior_window", lower=8)
         return _frame_like(x, _fisher_shift_series(x.to_numpy(dtype=float), r, p))
 
 

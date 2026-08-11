@@ -21,6 +21,28 @@ value ``x_t`` only selects a state / observed transition, never enters the
 historical estimates.  Missing values fail closed (NaN) rather than being read
 as a state.  All kernels are deterministic and prefix-causal.
 
+WINDOW-MATURITY CONTRACT (model-audit P0/P1)
+---------------------------------------------
+``window`` is a **max lookback, not a strict full window**: the estimator uses
+whatever strictly-past observations ``[t-W, t-1]`` are available, and a window
+that is shorter than ``window`` because the series has not run long enough is
+NOT automatically immature.  Maturity is decided by three explicit gates, and
+any window that fails one of them emits **NaN, never an approximate/partial
+estimate**:
+
+* ``min_history`` (default 10) — minimum number of FINITE observations in the
+  strictly-past window before ANY transition-matrix / stationary / D1/D2
+  estimate is computed.  Below it, ``P``/``pi``/``D1``/``D2`` stay all-NaN and
+  every consumer fails closed.  This is what stops ``window=60`` with only five
+  points from producing a confident-looking transition matrix.
+* ``min_count`` (a.k.a. ``min_transition_count``, default 3) — minimum number of
+  observed LAGGED TRANSITIONS in the window before the transition matrix is
+  estimated (relational feasibility ``min_count <= window - lag``).
+* ``min_state_support`` (default 3) — minimum observed VISITS to a state before
+  any per-state estimate (persistence / entropy / surprisal / committor / MFPT /
+  stationary surprisal / D1-D2 / equilibrium / diffusion gradient / quasi
+  potential) is emitted for that state.
+
 R11 round-2 P0 degenerate-state contract (shared with the Polars twin):
 
 * Transition rows are estimated ONLY from ``>= min_count`` observed lagged
@@ -38,6 +60,17 @@ R11 round-2 P0 degenerate-state contract (shared with the Polars twin):
   distribution: persistence, state entropy, transition/stationary surprisal,
   committor, MFPT, spectral gap and entropy production all fail closed to NaN
   instead of reporting a degenerate ~1 / ~0 / trivial value.
+
+TIMING / PIT CONTRACT
+---------------------
+The true kernel is PRIOR_REFERENCE_CURRENT_QUERY: every estimate (quantile
+edges, state frequencies, transition matrix P, stationary measure pi, D1/D2) is
+built EXCLUSIVELY from the strictly-past window ``[t-W, t-1]``; ``x_t`` is used
+only to select the current state / observed transition and is never in the
+reference set.  Surprisal reads the lagged endpoint ``x_{t-lag}`` under the
+historical edges — still strictly past.  Lane/timing authority lives in
+``model_lane.py`` / ``model_timing.py`` (handled centrally elsewhere); this file
+only guarantees the kernel's internal no-leak property above.
 """
 from __future__ import annotations
 
@@ -54,18 +87,23 @@ _EPS = 1e-12
 _LN2 = float(np.log(2.0))
 
 # Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
-# ``window`` is the alpha horizon (HORIZON, searched).  ``bins`` (the quantile
+# ``window`` is the alpha horizon (HORIZON, searched) and is a MAX LOOKBACK (see
+# module docstring), not a strict full window.  ``bins`` (the quantile
 # state-grid resolution) and ``lag`` (the transition lag) are estimator grid
 # knobs — the kernel enforces ``bins ∈ {3,5,8}`` and ``lag ∈ {1,2,3}`` — so they
 # are never full-resolution search dimensions (M-115/M-162/M-170).  ``min_count``
-# / ``min_periods`` are statistical-support floors; ``target`` is a string policy
-# selector.  All four are non-searchable.
+# (a.k.a. ``min_transition_count``) / ``min_periods`` are transition-count
+# floors; ``min_state_support`` is the per-state visit floor; ``min_history`` is
+# the minimum finite-observation maturity gate; ``target`` is a string policy
+# selector.  All support/policy knobs are non-searchable.
 _MARKOV_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
     "bins": ParamSpec(dtype=int, choices=(3, 5, 8), param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
     "lag": ParamSpec(dtype=int, choices=(1, 2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
     "min_count": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "min_state_support": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "min_history": ParamSpec(dtype=int, min=2, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     "target": ParamSpec(dtype=str, choices=("upper", "lower", "extreme"), param_role=ParamRole.POLICY, searchable=False),
 }
 
@@ -88,6 +126,24 @@ _MIN_PERIODS_RELATIONAL = [
         "got min_periods={min_periods}, window={window}, lag={lag}",
     )
 ]
+# Window-maturity feasibility: a strictly-past window holds at most ``window``
+# finite observations, so a maturity gate above that is guaranteed-NaN and is
+# rejected at binding before the kernel rolls.
+_MIN_STATE_SUPPORT_RELATIONAL = [
+    RelationalParamSpec(
+        "min_state_support <= window",
+        "min_state_support must not exceed the window length; "
+        "got min_state_support={min_state_support}, window={window}",
+    )
+]
+_MIN_HISTORY_RELATIONAL = [
+    RelationalParamSpec(
+        "min_history <= window",
+        "min_history must not exceed the window length (a window [t-window, t-1] "
+        "holds at most window finite observations); got min_history={min_history}, "
+        "window={window}",
+    )
+]
 
 
 def _metadata(
@@ -99,6 +155,7 @@ def _metadata(
     cost: int,
     relational_specs: list[RelationalParamSpec] | None = None,
     param_specs: dict[str, ParamSpec] | None = None,
+    param_aliases: dict[str, str] | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -108,6 +165,7 @@ def _metadata(
         return_type="series",
         relational_specs=list(relational_specs) if relational_specs else [],
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+        param_aliases=dict(param_aliases or {}),
         tags=[
             "state_dynamics", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -250,13 +308,18 @@ def _state_dynamics_series(
     bins: int,
     lag: int,
     min_count: int,
+    min_state_support: int = 3,
+    min_history: int = 10,
 ) -> dict[str, Any]:
     """DiscreteStateDynamicsKernel over one column.
 
     Returns per-row arrays:
       state  — current state index (NaN when ``x_t`` is not finite)
       edges  — quantile edges used at each row
-      P      — (n, B, B) smoothed transition matrix from ``[t-W, t-1]``
+      P      — (n, B, B) smoothed transition matrix from ``[t-W, t-1]`` (NaN
+               when the window is immature — fewer than ``min_history`` finite
+               observations — or has fewer than ``min_count`` observed
+               transitions)
       counts — (n, B) empirical state frequencies in the window
       pi     — (n, B) stationary distribution of P (left eigenvector; NaN when
                P is unavailable) — satisfies ``πP = π``
@@ -265,17 +328,28 @@ def _state_dynamics_series(
       N_obs  — (n, B, B) observed lagged transition counts *before* pseudo-count
                (empirical-support matrix; used for reachability gates)
       D1/D2  — (n, B) per-state Kramers-Moyal coefficients (lagged *rates*:
-               D1 = mean(Δx)/lag, D2 = mean(Δx²)/(2·lag))
+               D1 = mean(Δx)/lag, D2 = mean(Δx²)/(2·lag)); NaN for immature
+               windows and for states with fewer than ``min_state_support``
+               observed visits
       centers— (n, B) bin centers (conditional empirical median per bin)
       total_trans — number of lagged transitions in the window
       n_states_obs — distinct states observed in the window (degenerate single-
                state window -> < 2, used to fail closed on no-estimate outputs)
+
+    Maturity contract (module docstring): ``window`` is a MAX LOOKBACK.  The
+    strictly-past window must contain at least ``min_history`` finite
+    observations before any estimate (P / pi / D1 / D2) is computed; raw support
+    fields (``counts`` / ``N_obs`` / ``total_trans`` / ``n_states_obs``) are
+    still recorded so the physical-support diagnostics stay honest.  All scalar
+    params are validated strictly — never silently ``int()``-truncated.
     """
     n = series.shape[0]
-    B = int(bins)
-    lg = int(lag)
-    mc = max(1, int(min_count))
-    w = int(window)
+    B = strict_int(bins, "bins", lower=2)
+    lg = strict_int(lag, "lag", lower=1)
+    mc = strict_int(min_count, "min_count", lower=1)
+    mss = strict_int(min_state_support, "min_state_support", lower=1)
+    mh = strict_int(min_history, "min_history", lower=2)
+    w = strict_int(window, "window", lower=2)
     # R11 round-2 P0 (TASK 3): ``min_count`` is a relational feasibility gate —
     # the window ``[t-W, t-1]`` holds at most ``window - lag`` lagged pairs, so a
     # minimum above that is guaranteed-NaN and rejected at binding even when this
@@ -285,6 +359,10 @@ def _state_dynamics_series(
             f"min_count must not exceed available transitions (window - lag = {w - lg}); "
             f"got min_count={mc}"
         )
+    # min_state_support / min_history above the window are NOT hard errors at the
+    # kernel level: they simply make every window immature (all-NaN estimates) —
+    # fail-closed, never an approximation.  The relational ParamSpec gates on the
+    # operator surface reject such combinations at binding time.
     state = np.full(n, np.nan)
     edges_out = np.full((n, B + 1), np.nan)
     P = np.full((n, B, B), np.nan)
@@ -310,8 +388,16 @@ def _state_dynamics_series(
         # simply contributes no transition (its -1 state sentinel is excluded by
         # ``trans_ok``), so a gap never re-pairs who is matched with whom and
         # never silently redefines the lag.
-        if int(np.count_nonzero(np.isfinite(past))) < 2:
+        n_finite = int(np.count_nonzero(np.isfinite(past)))
+        if n_finite < 2:
             continue
+        # WINDOW-MATURITY (model audit P0/P1): ``window`` is a MAX LOOKBACK, so a
+        # short early window is not automatically immature — maturity is decided
+        # by ``min_history`` finite observations in the strictly-past window.
+        # Immature windows get NO transition-matrix / stationary / D1/D2 estimate
+        # (all-NaN); the raw support fields below are still recorded.  Every
+        # consumer reads P/pi/D1/D2 and therefore fails closed to NaN.
+        mature = n_finite >= mh
         edges = _quantile_edges(past, B)
         edges_out[t] = edges
         states_past = _bin(past, edges)
@@ -348,23 +434,27 @@ def _state_dynamics_series(
                     base_bin[trans_ok] * B + nxt_bin[trans_ok],
                     minlength=B * B,
                 ).reshape(B, B)
-            for bbin in range(B):
-                sel = trans_ok & (base_bin == bbin)
-                if int(sel.sum()) < mc:
-                    continue
-                dx = inc[sel]
-                if dx.size == 0:
-                    continue
-                # audit P0: D1 is a drift *rate* — divide by the lag step.
-                d1_row[bbin] = float(np.mean(dx)) / lg
-                d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
+            # D1/D2 are ESTIMATES: require a mature window and at least
+            # ``min_state_support`` observed visits to the source state.
+            if mature:
+                for bbin in range(B):
+                    sel = trans_ok & (base_bin == bbin)
+                    if int(sel.sum()) < mss:
+                        continue
+                    dx = inc[sel]
+                    if dx.size == 0:
+                        continue
+                    # audit P0: D1 is a drift *rate* — divide by the lag step.
+                    d1_row[bbin] = float(np.mean(dx)) / lg
+                    d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
         N_obs[t] = N
         D1[t] = d1_row
         D2[t] = d2_row
         total_trans[t] = float(n_trans)
         # R11 round-2 P0 (TASK 1 + TASK 3): estimate the transition matrix ONLY
-        # from at least ``min_count`` observed transitions, and fail closed on
-        # prior-only rows:
+        # from a MATURE window (>= ``min_history`` finite observations) with at
+        # least ``min_count`` observed transitions, and fail closed on prior-only
+        # rows:
         #   * a source state that APPEARS in the window (count > 0) but has no
         #     observed outgoing transitions gets an all-NaN row — never a
         #     uniform Jeffreys row presented as a confident estimate.
@@ -377,7 +467,7 @@ def _state_dynamics_series(
         # bins that never appear (count 0) are never read by any consumer and
         # keep the prior row, which keeps P finite for the linear-solve /
         # spectral consumers (committor, MFPT, spectral gap, entropy production).
-        if n_trans >= mc:
+        if mature and n_trans >= mc:
             row_sum = N.sum(axis=1)
             P_smooth = (N + 0.5) / (row_sum[:, None] + 0.5 * B)
             P_smooth[(counts[t] > 0) & (row_sum == 0), :] = np.nan
@@ -409,12 +499,20 @@ _KM_LAG_GRID = (1, 2, 3)
 
 
 def _run_kernel(
-    x: pd.DataFrame, window: int, bins: int, lag: int, min_count: int
+    x: pd.DataFrame,
+    window: int,
+    bins: int,
+    lag: int,
+    min_count: int,
+    min_state_support: int = 3,
+    min_history: int = 10,
 ) -> dict[str, np.ndarray]:
-    w = max(2, int(window))
-    b = max(2, int(bins))
-    lg = max(1, int(lag))
-    mc = max(1, int(min_count))
+    w = strict_int(window, "window", lower=2)
+    b = strict_int(bins, "bins", lower=2)
+    lg = strict_int(lag, "lag", lower=1)
+    mc = strict_int(min_count, "min_count", lower=1)
+    mss = strict_int(min_state_support, "min_state_support", lower=1)
+    mh = strict_int(min_history, "min_history", lower=2)
     if w <= lg:
         raise ValueError("window must exceed lag")
     # R11 round-2 P0 (TASK 3): relational feasibility at binding — a window
@@ -424,6 +522,9 @@ def _run_kernel(
             f"min_count must not exceed available transitions (window - lag = {w - lg}); "
             f"got min_count={mc}"
         )
+    # min_state_support / min_history above the window are NOT hard errors here —
+    # they make every window immature (NaN estimates), and the relational
+    # ParamSpec gates reject such combinations at the operator binding boundary.
     # P1-011: the Markov/KM parameter grid is bounded (anti parameter-explosion in
     # the search grammar): bins ∈ {3,5,8}, lag ∈ {1,2,3}.
     if int(bins) not in _KM_BINS_GRID:
@@ -435,7 +536,7 @@ def _run_kernel(
     gathered: dict[str, list[np.ndarray]] = {k: [] for k in keys}
     xv = x.to_numpy(dtype=float)
     for c in range(cols):
-        res = _state_dynamics_series(xv[:, c], w, b, lg, mc)
+        res = _state_dynamics_series(xv[:, c], w, b, lg, mc, mss, mh)
         for k in keys:
             gathered[k].append(res[k])
     out: dict[str, np.ndarray] = {}
@@ -454,7 +555,7 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 # ts_markov_persistence
 # ---------------------------------------------------------------------------
 
-def _persistence_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _persistence_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     n = series.shape[0]
     out = np.full(n, np.nan)
     for t in range(n):
@@ -467,7 +568,9 @@ def _persistence_series(series: np.ndarray, res: dict[str, np.ndarray], col: int
         # not evidence of persistence.  Fail closed to NaN.
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, k] < min_count:
+        # Window-maturity: at least ``min_state_support`` observed visits to the
+        # current state before a per-state estimate is emitted.
+        if res["counts"][t, col, k] < min_state_support:
             continue
         # R11 round-2 P0 (TASK 1, reverse): a state that was never *entered*
         # (zero observed incoming transitions) has no persistence to report —
@@ -498,21 +601,23 @@ class TsMarkovPersistence(SeriesOperator):
     metadata = _metadata(
         "ts_markov_persistence",
         "当前状态的历史保持概率 P_kk（分位数状态 + 滞后转移）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="probability",
         cost=4,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_persistence_series(xv[:, c], res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_persistence_series(xv[:, c], res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -520,10 +625,10 @@ class TsMarkovPersistence(SeriesOperator):
 # ts_markov_state_entropy
 # ---------------------------------------------------------------------------
 
-def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, bins: int, min_count: int) -> np.ndarray:
+def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, bins: int, min_state_support: int) -> np.ndarray:
     n = series.shape[0]
     out = np.full(n, np.nan)
-    log_b = np.log(max(2, int(bins)))
+    log_b = np.log(strict_int(bins, "bins", lower=2))
     for t in range(n):
         k = res["state"][t, col]
         if not np.isfinite(k):
@@ -534,7 +639,9 @@ def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: i
         # confident value.  Fail closed to NaN.
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, k] < min_count:
+        # Window-maturity: at least ``min_state_support`` observed visits to the
+        # current state before a per-state estimate is emitted.
+        if res["counts"][t, col, k] < min_state_support:
             continue
         row = res["P"][t, col, k]
         # TASK 1 reverse: only destinations with observed incoming transitions
@@ -573,22 +680,24 @@ class TsMarkovStateEntropy(SeriesOperator):
     metadata = _metadata(
         "ts_markov_state_entropy",
         "当前状态转移行熵 H_k/log(B)（[0,1]，低=可预测）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="entropy",
         cost=4,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
-        b = max(2, int(bins))
-        mc = max(1, int(min_count))
-        out = np.column_stack([_state_entropy_series(xv[:, c], res, c, b, mc) for c in range(cols)])
+        b = strict_int(bins, "bins", lower=2)
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_state_entropy_series(xv[:, c], res, c, b, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -596,7 +705,7 @@ class TsMarkovStateEntropy(SeriesOperator):
 # ts_markov_transition_surprisal
 # ---------------------------------------------------------------------------
 
-def _surprisal_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, lag: int, min_count: int) -> np.ndarray:
+def _surprisal_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, lag: int, min_state_support: int) -> np.ndarray:
     n = series.shape[0]
     out = np.full(n, np.nan)
     for t in range(n):
@@ -619,7 +728,9 @@ def _surprisal_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, 
         # is trivially s->s, so -log P_ss is a degenerate ~0 — not a rare event.
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, i] < min_count:
+        # Window-maturity: at least ``min_state_support`` observed visits to the
+        # SOURCE state before the transition probability is read.
+        if res["counts"][t, col, i] < min_state_support:
             continue
         p = res["P"][t, col, i, j]
         if np.isfinite(p) and p > 0.0:
@@ -645,22 +756,24 @@ class TsMarkovTransitionSurprisal(SeriesOperator):
     metadata = _metadata(
         "ts_markov_transition_surprisal",
         "当前状态跳变的历史罕见度 -log P_ij（nats）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="nats",
         cost=4,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
-        lg = max(1, int(lag))
-        mc = max(1, int(min_count))
-        out = np.column_stack([_surprisal_series(xv[:, c], res, c, lg, mc) for c in range(cols)])
+        lg = strict_int(lag, "lag", lower=1)
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_surprisal_series(xv[:, c], res, c, lg, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -729,19 +842,20 @@ class TsMarkovEntropyProduction(SeriesOperator):
     metadata = _metadata(
         "ts_markov_entropy_production",
         "窗口 Markov 熵产生率 Σ_ij (π_i P_ij) log((π_i P_ij)/(π_j P_ji))（nats）。",
-        ["x", "window", "bins", "lag", "min_periods"],
+        ["x", "window", "bins", "lag", "min_periods", "min_history"],
         unit="nats",
         cost=5,
-        relational_specs=_MIN_PERIODS_RELATIONAL,
+        relational_specs=_MIN_PERIODS_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_periods: int = 5, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_periods: int = 5,
+        min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, 1)
+        res = _run_kernel(x, window, bins, lag, 1, 3, min_history)
         cols = x.shape[1]
-        mp = max(2, int(min_periods))
+        mp = strict_int(min_periods, "min_periods", lower=1)
         out = np.column_stack([_entropy_production_series(res, c, mp) for c in range(cols)])
         return _frame_like(x, out)
 
@@ -750,7 +864,7 @@ class TsMarkovEntropyProduction(SeriesOperator):
 # ts_kramers_moyal_local_stability
 # ---------------------------------------------------------------------------
 
-def _local_stability_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _local_stability_series(res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     n = res["P"].shape[0]
     out = np.full(n, np.nan)
     B = res["D1"].shape[2]
@@ -768,7 +882,7 @@ def _local_stability_series(res: dict[str, np.ndarray], col: int, min_count: int
             or not np.isfinite(c[k - 1]) or not np.isfinite(c[k + 1])
         ):
             continue
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         denom = c[k + 1] - c[k - 1]
         if abs(denom) <= _EPS:
@@ -796,20 +910,22 @@ class TsKramersMoyalLocalStability(SeriesOperator):
     metadata = _metadata(
         "ts_kramers_moyal_local_stability",
         "当前状态局部稳定性 -D'(x_k)（>0 吸引子 / <0 排斥）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="ratio",
         cost=5,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_local_stability_series(res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_local_stability_series(res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -817,18 +933,24 @@ class TsKramersMoyalLocalStability(SeriesOperator):
 # ts_active_information_storage (P2 research)
 # ---------------------------------------------------------------------------
 
-def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int) -> np.ndarray:
+def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int, min_history: int = 10) -> np.ndarray:
     n = series.shape[0]
     # Master Spec A-4/5: bins/history_length/window are user parameters — invalid
     # values raise (never silently clamped into a false search space).
     B = strict_int(bins, "bins", lower=2)
     k = strict_int(history_length, "history_length", lower=1)
     w = strict_int(window, "window", lower=2)
+    mh = strict_int(min_history, "min_history", lower=2)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w)
         past = series[lo:t]
         if not np.any(np.isfinite(past)):
+            continue
+        # Window-maturity: AIS is a histogram estimate; require at least
+        # ``min_history`` finite observations in the strictly-past window before
+        # estimating, so an immature window never emits a prior-dominated value.
+        if int(np.count_nonzero(np.isfinite(past))) < mh:
             continue
         edges = _quantile_edges(past, B)
         S = _bin(past, edges)
@@ -889,25 +1011,28 @@ class TsActiveInformationStorage(SeriesOperator):
     metadata = _metadata(
         "ts_active_information_storage",
         "活性信息存储 I(S_t; 过去 k 状态块)（nats）。",
-        ["x", "window", "bins", "history_length"],
+        ["x", "window", "bins", "history_length", "min_history"],
         unit="nats",
         cost=7,
+        relational_specs=_MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 120, bins: int = 3, history_length: int = 1, **_: Any
+        self, x: pd.DataFrame, window: int = 120, bins: int = 3, history_length: int = 1,
+        min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        w = max(2, int(window))
-        b = int(bins)
-        k = int(history_length)
+        w = strict_int(window, "window", lower=2)
+        b = strict_int(bins, "bins", lower=2)
+        k = strict_int(history_length, "history_length", lower=1)
+        mh = strict_int(min_history, "min_history", lower=2)
         if not 2 <= b <= 3:
             raise ValueError("ts_active_information_storage requires bins in [2, 3]")
         if not 1 <= k <= 2:
             raise ValueError("ts_active_information_storage requires history_length in [1, 2]")
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
-        out = np.column_stack([_ais_series(xv[:, c], w, b, k) for c in range(cols)])
+        out = np.column_stack([_ais_series(xv[:, c], w, b, k, mh) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -915,7 +1040,7 @@ class TsActiveInformationStorage(SeriesOperator):
 # ts_markov_committor (P1 deepening)
 # ---------------------------------------------------------------------------
 
-def _committor_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _committor_series(res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     """Committor q_k: probability that the process, started in state k, reaches
     the upper boundary state B-1 before the lower boundary state 0.
 
@@ -935,7 +1060,7 @@ def _committor_series(res: dict[str, np.ndarray], col: int, min_count: int) -> n
         # window — the committor would be trivially 0/1, not an estimate.
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         P = res["P"][t, col]
         if not np.all(np.isfinite(P)):
@@ -994,20 +1119,22 @@ class TsMarkovCommittor(SeriesOperator):
     metadata = _metadata(
         "ts_markov_committor",
         "当前状态先达上边界而非下边界的概率 q_k（[0,1]）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="probability",
         cost=5,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_committor_series(res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_committor_series(res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -1015,7 +1142,7 @@ class TsMarkovCommittor(SeriesOperator):
 # ts_markov_mean_first_passage_time (P1 deepening)
 # ---------------------------------------------------------------------------
 
-def _mfpt_series(res: dict[str, np.ndarray], col: int, min_count: int, target: str, lag: int) -> np.ndarray:
+def _mfpt_series(res: dict[str, np.ndarray], col: int, min_state_support: int, target: str, lag: int) -> np.ndarray:
     """Mean first passage time to a target state set A, for the current state.
 
     Solves ``(I - P_notA) m = 1`` on non-target states; m_i is the expected
@@ -1034,7 +1161,7 @@ def _mfpt_series(res: dict[str, np.ndarray], col: int, min_count: int, target: s
         # window — MFPT would be a degenerate 0/1, not an estimate.
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         P = res["P"][t, col]
         if not np.all(np.isfinite(P)):
@@ -1096,22 +1223,24 @@ class TsMarkovMeanFirstPassageTime(SeriesOperator):
     metadata = _metadata(
         "ts_markov_mean_first_passage_time",
         "当前状态到 target 状态集的平均首达时间（交易日）。",
-        ["x", "window", "bins", "lag", "min_count", "target"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history", "target"],
         unit="days",
         cost=5,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1,
-        min_count: int = 3, target: str = "upper", **_: Any
+        min_count: int = 3, min_state_support: int = 3, min_history: int = 10,
+        target: str = "upper", **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        lg = max(1, int(lag))
-        out = np.column_stack([_mfpt_series(res, c, mc, target, lg) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        lg = strict_int(lag, "lag", lower=1)
+        out = np.column_stack([_mfpt_series(res, c, mss, target, lg) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -1166,19 +1295,20 @@ class TsMarkovSpectralGap(SeriesOperator):
     metadata = _metadata(
         "ts_markov_spectral_gap",
         "转移矩阵谱隙 1-|λ2|（低=metastability，高=快速混合）。",
-        ["x", "window", "bins", "lag", "min_periods"],
+        ["x", "window", "bins", "lag", "min_periods", "min_history"],
         unit="ratio",
         cost=5,
-        relational_specs=_MIN_PERIODS_RELATIONAL,
+        relational_specs=_MIN_PERIODS_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 120, bins: int = 3, lag: int = 1, min_periods: int = 5, **_: Any
+        self, x: pd.DataFrame, window: int = 120, bins: int = 3, lag: int = 1, min_periods: int = 5,
+        min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_periods)
+        res = _run_kernel(x, window, bins, lag, min_periods, 3, min_history)
         cols = x.shape[1]
-        mp = max(2, int(min_periods))
+        mp = strict_int(min_periods, "min_periods", lower=1)
         out = np.column_stack([_spectral_gap_series(res, c, mp) for c in range(cols)])
         return _frame_like(x, out)
 
@@ -1187,7 +1317,7 @@ class TsMarkovSpectralGap(SeriesOperator):
 # ts_markov_stationary_surprisal (P1 deepening)
 # ---------------------------------------------------------------------------
 
-def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     n = res["pi"].shape[0]
     out = np.full(n, np.nan)
     for t in range(n):
@@ -1200,7 +1330,7 @@ def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_count
         # rarity".
         if res["n_states_obs"][t, col] < 2:
             continue
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         # TASK 1 reverse: a state that was never entered has no stationary
         # occupancy — -log π_k would be the Jeffreys prior, not a rare-state
@@ -1234,20 +1364,22 @@ class TsMarkovStationarySurprisal(SeriesOperator):
     metadata = _metadata(
         "ts_markov_stationary_surprisal",
         "当前状态在 P 的平稳分布下的长期稀有度 -log π_k（nats）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="nats",
         cost=4,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_stationary_surprisal_series(res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_stationary_surprisal_series(res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -1256,7 +1388,7 @@ class TsMarkovStationarySurprisal(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 def _equilibrium_distance_series(
-    series: np.ndarray, res: dict[str, np.ndarray], col: int, window: int, min_count: int
+    series: np.ndarray, res: dict[str, np.ndarray], col: int, window: int, min_state_support: int
 ) -> np.ndarray:
     """``(x_t - x*) / MAD`` where x* is the stable fixed point of the drift
     D1 (zero crossing with a downward slope, i.e. an attractor).  The center
@@ -1264,14 +1396,14 @@ def _equilibrium_distance_series(
     attractor* rather than the window mean.  MAD fallback to window span/1.0
     when the window is degenerate."""
     n = series.shape[0]
-    w = max(2, int(window))
+    w = strict_int(window, "window", lower=2)
     out = np.full(n, np.nan)
     for t in range(n):
         k = res["state"][t, col]
         if not np.isfinite(k):
             continue
         k = int(k)
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         d1 = res["D1"][t, col]
         c = res["centers"][t, col]
@@ -1328,22 +1460,24 @@ class TsKmEquilibriumDistance(SeriesOperator):
     metadata = _metadata(
         "ts_km_equilibrium_distance",
         "当前值相对 D1 吸引子 x* 的距离 (x_t-x*)/MAD。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="zscore",
         cost=5,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
-        w = max(2, int(window))
-        mc = max(1, int(min_count))
-        out = np.column_stack([_equilibrium_distance_series(xv[:, c], res, c, w, mc) for c in range(cols)])
+        w = strict_int(window, "window", lower=2)
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_equilibrium_distance_series(xv[:, c], res, c, w, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -1351,7 +1485,7 @@ class TsKmEquilibriumDistance(SeriesOperator):
 # ts_km_diffusion_gradient (P1/P2 deepening)
 # ---------------------------------------------------------------------------
 
-def _diffusion_gradient_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _diffusion_gradient_series(res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     """``dD2/dx`` at the current bin (central difference over bin centers).
     High positive = stochastic dispersion widens rapidly when the state moves
     up = state-dependent heteroskedasticity / multiplicative noise."""
@@ -1372,7 +1506,7 @@ def _diffusion_gradient_series(res: dict[str, np.ndarray], col: int, min_count: 
             or not np.isfinite(c[k - 1]) or not np.isfinite(c[k + 1])
         ):
             continue
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         denom = c[k + 1] - c[k - 1]
         if abs(denom) <= _EPS:
@@ -1399,20 +1533,22 @@ class TsKmDiffusionGradient(SeriesOperator):
     metadata = _metadata(
         "ts_km_diffusion_gradient",
         "当前状态扩散梯度 dD2/dx（状态依赖异方差）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="diffusion",
         cost=5,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_diffusion_gradient_series(res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_diffusion_gradient_series(res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 
@@ -1420,7 +1556,7 @@ class TsKmDiffusionGradient(SeriesOperator):
 # ts_km_quasipotential_depth (P2 deepening)
 # ---------------------------------------------------------------------------
 
-def _quasipotential_depth_series(res: dict[str, np.ndarray], col: int, min_count: int) -> np.ndarray:
+def _quasipotential_depth_series(res: dict[str, np.ndarray], col: int, min_state_support: int) -> np.ndarray:
     """Depth of the potential well containing the current state.
 
     Discrete quasi-potential ``U[k] = -Σ_{m<k} D1[m]/(D2[m]+ε) · Δc``; well =
@@ -1435,7 +1571,7 @@ def _quasipotential_depth_series(res: dict[str, np.ndarray], col: int, min_count
         if not np.isfinite(k):
             continue
         k = int(k)
-        if res["counts"][t, col, k] < min_count:
+        if res["counts"][t, col, k] < min_state_support:
             continue
         d1 = res["D1"][t, col]
         d2 = res["D2"][t, col]
@@ -1493,20 +1629,22 @@ class TsKmQuasipotentialDepth(SeriesOperator):
     metadata = _metadata(
         "ts_km_quasipotential_depth",
         "当前状态势阱深度（井底-鞍点差）。",
-        ["x", "window", "bins", "lag", "min_count"],
+        ["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
         unit="potential",
         cost=6,
-        relational_specs=_MIN_COUNT_RELATIONAL,
+        relational_specs=_MIN_COUNT_RELATIONAL + _MIN_STATE_SUPPORT_RELATIONAL + _MIN_HISTORY_RELATIONAL,
         param_specs=_MARKOV_PARAM_SPECS,
+        param_aliases={"min_transition_count": "min_count"},
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 120, bins: int = 5, lag: int = 1, min_count: int = 3, **_: Any
+        self, x: pd.DataFrame, window: int = 120, bins: int = 5, lag: int = 1, min_count: int = 3,
+        min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
         cols = x.shape[1]
-        mc = max(1, int(min_count))
-        out = np.column_stack([_quasipotential_depth_series(res, c, mc) for c in range(cols)])
+        mss = strict_int(min_state_support, "min_state_support", lower=1)
+        out = np.column_stack([_quasipotential_depth_series(res, c, mss) for c in range(cols)])
         return _frame_like(x, out)
 
 

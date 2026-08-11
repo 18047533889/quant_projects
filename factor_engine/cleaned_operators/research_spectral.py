@@ -20,6 +20,20 @@ stay out of the default production grammar:
 * ``ts_kernel_granger_score`` — kernel-ridge predictive improvement of ``x``
   for ``y`` under *blocked* out-of-sample evaluation: ``ln(MSE_restricted /
   MSE_full)``.  Fixed RBF kernel / ridge; no training-residual cheating.
+
+Timing honesty — BLOCKED_HISTORICAL_EVALUATION (M-9xx)
+-------------------------------------------------------
+``ts_kernel_granger_score`` is NOT a t-1 fit -> forecast t predictor.  It is a
+**trailing-window blocked train/test predictive diagnostic score**: the window
+is split into a contiguous train block and a later test block
+(``train_n = int(0.7 * n_available)``), and the scaler (per-block mean/std) and
+the RBF bandwidths (median pairwise distance) are fitted on the TRAINING block
+only — the test block never touches any fit statistic, so
+``ln(MSE_restricted/MSE_full)`` carries no in-sample / training-residual
+leakage.  The output describes "how much predictive information X adds within
+this trailing window", NOT a next-bar forecast.  The same blocked-cross-fit
+discipline applies to ``ts_residualized_hsic`` (contiguous train / purge gap /
+test blocks, both directions).
 * ``ts_residualized_hsic`` — HSIC between kernel-ridge residualisations of
   ``x`` and ``y`` on ``z`` (the honest approximation of conditional
   dependence; a true conditional-kernel statistic would require KCI, so the
@@ -308,6 +322,9 @@ def _ts_bicoherence_top_decile_excess(
 # kernel Granger (blocked OOS)
 # ---------------------------------------------------------------------------
 def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
+    """BLOCKED_HISTORICAL_EVALUATION: contiguous train/test blocks, scaler and
+    RBF bandwidths fitted on the TRAINING block only (never the test block), so
+    the output is a predictive-diagnostic score, not a next-bar forecast."""
     n = y.shape[0]
     lg = max(1, int(lag))
     n_avail = n - lg

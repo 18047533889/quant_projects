@@ -175,36 +175,39 @@ MODEL_OPERATOR_CONTRACTS: dict[str, ModelOperatorContract] = {
     "ts_kalman_level": ModelOperatorContract(
         "ts_kalman_level", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
     # M-070: all six Kalman canonicals are causal one-pass filters and therefore
-    # stateful + checkpointable (time-shard requires state handoff).  The kernel
-    # contract fields live in ts_model/state_space.py (KALMAN_STATEFUL_CANONICALS
-    # + kalman_stateful_contract()).
+    # STATEFUL (time-shard requires state handoff), but NOT checkpointable — the
+    # runtime has no Kalman checkpoint authority (StatefulCheckpointRegistry);
+    # the honest execution model is full-history replay
+    # (restore_strategy=full_replay).  checkpoint_supported=False matches the
+    # kernel contract in ts_model/state_space.py (KALMAN_STATEFUL_CANONICALS +
+    # kalman_stateful_contract()).
     "ts_kalman_trend": ModelOperatorContract(
         "ts_kalman_trend", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
     "ts_kalman_beta": ModelOperatorContract(
         "ts_kalman_beta", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
     "ts_kalman_beta_change": ModelOperatorContract(
         "ts_kalman_beta_change", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
     "ts_kalman_beta_uncertainty": ModelOperatorContract(
         "ts_kalman_beta_uncertainty", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
     "ts_kalman_innovation_z": ModelOperatorContract(
         "ts_kalman_innovation_z", "model_feature",
         feature_params=(), required_feature_count_min=0, required_feature_count_max=0,
-        stateful=True, checkpoint_supported=True, cost_class="low",
+        stateful=True, checkpoint_supported=False, cost_class="low",
     ),
 }
 

@@ -1,37 +1,44 @@
 # -*- coding: utf-8 -*-
-"""Factor-DSL as-of artifact bridge (Model Layer Major Redesign taskbook
-§49 / §50 / §51 / §22 / §13.12).
-
-Resolves a ``model_score("name")`` DSL expression to a **legal as-of**
-:class:`modeling.artifact.ModelArtifact`.  The bridge is additive and
-self-contained — it does not edit the DSL compiler or ``api/mining_integration``.
-
-* §50  — an artifact is legal at ``asof`` only when its ``training_cutoff <=
-  asof`` AND its ``available_at <= asof``; among legal artifacts the LATEST
-  (largest ``training_cutoff``) is selected.
-* §13.12 / §51 — a future-trained artifact is NEVER returned for history.
-* §22  — scoring goes through the frozen artifact path (``artifact.predict``);
-  ``fit`` is never invoked during scoring.
-"""
+"""Model-score DSL, typed IR, artifact resolution, and frozen scoring."""
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from enum import Enum
+from typing import Any, Mapping
 
 import numpy as np
 
 from modeling.artifact import ModelArtifact
 from modeling.learners.base import LearnerSpec, get_learner
+from modeling.model_catalog import (
+    ModelArtifactCatalog,
+    ModelArtifactCatalogRecord,
+    parse_catalog_timestamp,
+    validate_artifact_id,
+)
 
 __all__ = [
     "ArtifactStore",
     "ArtifactResolver",
+    "ModelArtifactResolutionContext",
+    "ModelScoreExpr",
+    "TypedModelScoreIR",
+    "ArtifactResolutionNode",
+    "ModelFeatureReadNode",
+    "FrozenScoreNode",
+    "ModelScoreBlock",
+    "ModelScoreResolutionStatus",
+    "NoLegalArtifactError",
+    "FrozenScorer",
+    "model_score",
+    "lower_model_score",
     "score_asof",
     "replay_historical_scores",
     "ModelScoreOperatorStub",
     "identity_of",
+    "configure_default_resolver",
 ]
 
 
@@ -45,32 +52,29 @@ def _json_default(o: Any) -> Any:
     return str(o)
 
 
-# --------------------------------------------------------------------------- #
-# Artifact store (§49) — persistence for ModelArtifact JSON.
-# --------------------------------------------------------------------------- #
 @dataclass
 class ArtifactStore:
-    """JSON artifact store.  ``put``/``get`` round-trip a
-    :class:`~modeling.artifact.ModelArtifact` through ``artifact.to_dict()``.
-    """
+    """JSON artifact storage.  Catalog metadata is managed separately."""
 
     base_dir: str | None = None
 
-    def put(self, artifact: ModelArtifact) -> str:
-        """Serialize ``artifact`` to ``base_dir/<artifact_id>.json``; return id."""
+    def path_for(self, artifact_id: str) -> str:
+        validate_artifact_id(artifact_id)
         if not self.base_dir:
-            raise ValueError("ArtifactStore.base_dir must be set before put()")
-        os.makedirs(self.base_dir, exist_ok=True)
-        path = os.path.join(self.base_dir, f"{artifact.artifact_id}.json")
+            raise ValueError("ArtifactStore.base_dir must be set")
+        return os.path.join(self.base_dir, f"{artifact_id}.json")
+
+    def put(self, artifact: ModelArtifact) -> str:
+        path = self.path_for(artifact.artifact_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(artifact.to_dict(), fh, indent=1, default=_json_default)
         return artifact.artifact_id
 
     def get(self, artifact_id: str) -> ModelArtifact | None:
-        """Load an artifact by id, rebuilding its learner from the registry."""
         if not self.base_dir:
             return None
-        path = os.path.join(self.base_dir, f"{artifact_id}.json")
+        path = self.path_for(artifact_id)
         if not os.path.exists(path):
             return None
         with open(path, "r", encoding="utf-8") as fh:
@@ -93,121 +97,185 @@ class ArtifactStore:
         )
 
 
-# --------------------------------------------------------------------------- #
-# As-of resolver (§50 / §13.12).
-# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class ModelArtifactResolutionContext:
+    tenant: str = "default"
+    project: str = "default"
+    market: str = "default"
+    namespace: str = "default"
+    access_policy: str = "internal"
+    asof: Any = None
+
+
+class ModelScoreResolutionStatus(str, Enum):
+    RESOLVED = "RESOLVED"
+    NO_LEGAL_ARTIFACT = "NO_LEGAL_ARTIFACT"
+
+
+class NoLegalArtifactError(LookupError):
+    """Production model scoring found no artifact legal at the requested as-of."""
+
+
+@dataclass(frozen=True)
+class ArtifactResolutionResult:
+    status: ModelScoreResolutionStatus
+    artifact: ModelArtifact | None = None
+    record: ModelArtifactCatalogRecord | None = None
+
+
 @dataclass
 class ArtifactResolver:
-    """Registry of artifacts per ``model_name`` + as-of resolution.
+    """Resolve the latest artifact legal for a request-scoped as-of context.
 
-    ``resolve`` picks the LATEST artifact whose ``training_cutoff <= asof`` AND
-    ``available_at <= asof``.  It NEVER returns a future-trained artifact for a
-    historical as-of (``training_cutoff > asof`` is rejected, §13.12 / §51).
+    A durable ``ModelArtifactCatalog`` is authoritative when configured.  The
+    in-memory registry remains as a compatibility path for existing tests and
+    local research callers.
     """
 
     store: ArtifactStore
+    catalog: ModelArtifactCatalog | None = None
     registry: dict[str, list[ModelArtifact]] = field(default_factory=dict)
 
-    def register(self, artifact: ModelArtifact) -> None:
-        self.registry.setdefault(artifact.model_name, []).append(artifact)
+    def register(
+        self,
+        artifact: ModelArtifact,
+        *,
+        context: ModelArtifactResolutionContext | None = None,
+    ) -> None:
+        if self.catalog is None:
+            self.registry.setdefault(artifact.model_name, []).append(artifact)
+            return
+        ctx = context or ModelArtifactResolutionContext()
+        if not self.store.base_dir:
+            raise ValueError("catalog-backed registration requires ArtifactStore.base_dir")
+        self.store.put(artifact)
+        self.catalog.register(
+            artifact,
+            self.store.path_for(artifact.artifact_id),
+            namespace=ctx.namespace,
+            tenant=ctx.tenant,
+            project=ctx.project,
+            market=ctx.market,
+            access_classification=ctx.access_policy,
+        )
+
+    def resolve_result(
+        self,
+        model_name: str,
+        asof: Any,
+        training_cutoff: Any = None,
+        *,
+        context: ModelArtifactResolutionContext | None = None,
+    ) -> ArtifactResolutionResult:
+        requested_asof = parse_catalog_timestamp(asof)
+        requested_cutoff = (
+            parse_catalog_timestamp(training_cutoff)
+            if training_cutoff is not None
+            else None
+        )
+        if self.catalog is not None:
+            ctx = context or ModelArtifactResolutionContext(asof=asof)
+            legal: list[ModelArtifactCatalogRecord] = []
+            for record in self.catalog.snapshot(
+                model_name=model_name,
+                namespace=ctx.namespace,
+                tenant=ctx.tenant,
+                project=ctx.project,
+                market=ctx.market,
+            ):
+                if record.training_cutoff_timestamp > requested_asof:
+                    continue
+                if record.available_at_timestamp > requested_asof:
+                    continue
+                if requested_cutoff is not None and record.training_cutoff_timestamp > requested_cutoff:
+                    continue
+                legal.append(record)
+            if not legal:
+                return ArtifactResolutionResult(ModelScoreResolutionStatus.NO_LEGAL_ARTIFACT)
+            record = max(
+                legal,
+                key=lambda r: (
+                    r.training_cutoff_timestamp,
+                    r.available_at_timestamp,
+                    r.semantic_version,
+                    r.artifact_id,
+                ),
+            )
+            artifact = self.store.get(record.artifact_id)
+            if artifact is None:
+                raise LookupError(
+                    f"cataloged artifact {record.artifact_id!r} is missing from storage"
+                )
+            return ArtifactResolutionResult(
+                ModelScoreResolutionStatus.RESOLVED, artifact, record
+            )
+
+        legal: list[ModelArtifact] = []
+        for artifact in self.registry.get(model_name, []):
+            m = artifact.manifest
+            cutoff = parse_catalog_timestamp(m.training_cutoff)
+            available = parse_catalog_timestamp(m.available_at)
+            if cutoff > requested_asof or available > requested_asof:
+                continue
+            if requested_cutoff is not None and cutoff > requested_cutoff:
+                continue
+            legal.append(artifact)
+        if not legal:
+            return ArtifactResolutionResult(ModelScoreResolutionStatus.NO_LEGAL_ARTIFACT)
+        artifact = max(
+            legal,
+            key=lambda a: (
+                parse_catalog_timestamp(a.manifest.training_cutoff),
+                parse_catalog_timestamp(a.manifest.available_at),
+                a.manifest.model_version,
+                a.artifact_id,
+            ),
+        )
+        return ArtifactResolutionResult(ModelScoreResolutionStatus.RESOLVED, artifact)
 
     def resolve(
         self,
         model_name: str,
         asof: Any,
         training_cutoff: Any = None,
+        *,
+        context: ModelArtifactResolutionContext | None = None,
     ) -> ModelArtifact | None:
-        legal: list[ModelArtifact] = []
-        for art in self.registry.get(model_name, []):
-            if not art.is_legal_asof(asof, training_cutoff):
-                continue
-            # §50 / §13.12: never a future-trained artifact.
-            if art.manifest.training_cutoff and asof is not None:
-                if asof < art.manifest.training_cutoff:
-                    continue
-            legal.append(art)
-        if not legal:
-            return None
-        legal.sort(
-            key=lambda a: (
-                a.manifest.training_cutoff,
-                a.manifest.available_at,
-                a.manifest.model_version,
-            )
-        )
-        return legal[-1]
+        return self.resolve_result(
+            model_name, asof, training_cutoff, context=context
+        ).artifact
 
 
-# --------------------------------------------------------------------------- #
-# Score entry points (§22 / §51).
-# --------------------------------------------------------------------------- #
+class FrozenScorer:
+    """Fit-free production scoring object.
+
+    This type deliberately exposes only ``score``.  Training objects and their
+    mutable ``fit`` surface never appear in the scoring API.
+    """
+
+    __slots__ = ("_artifact",)
+
+    def __init__(self, artifact: ModelArtifact) -> None:
+        self._artifact = artifact
+
+    @property
+    def artifact_id(self) -> str:
+        return self._artifact.artifact_id
+
+    def score(self, features: np.ndarray) -> np.ndarray:
+        return self._artifact.predict(np.asarray(features, dtype=np.float64))
+
+
 _default_resolver: ArtifactResolver | None = None
 
 
 def configure_default_resolver(resolver: ArtifactResolver | None) -> None:
-    """Install the process-wide default resolver used by :func:`score_asof`."""
+    """Legacy single-process compatibility hook; request-scoped resolver preferred."""
     global _default_resolver
     _default_resolver = resolver
 
 
-def score_asof(
-    model_name: str,
-    features: np.ndarray,
-    asof: Any,
-    *,
-    training_cutoff: Any = None,
-    resolver: ArtifactResolver | None = None,
-) -> np.ndarray:
-    """Score ``features`` with the artifact legal at ``asof``.
-
-    Resolves via §50 and predicts through the frozen artifact path (§22).
-    Raises ``LookupError`` when no legal artifact exists.
-    """
-    res = resolver if resolver is not None else _default_resolver
-    if res is None:
-        raise LookupError("no ArtifactResolver configured for score_asof")
-    artifact = res.resolve(model_name, asof, training_cutoff)
-    if artifact is None:
-        raise LookupError(
-            f"no legal as-of artifact for model {model_name!r} at {asof!r}"
-        )
-    return artifact.predict(np.asarray(features, dtype=np.float64))
-
-
-def replay_historical_scores(
-    model_name: str,
-    features_by_date: dict[Any, np.ndarray],
-    resolver: ArtifactResolver,
-) -> dict[Any, np.ndarray]:
-    """§51 — score each date with the artifact legal that date.
-
-    Asserts (fail closed) that the resolved artifact was not trained in the
-    future relative to the scored date.
-    """
-    out: dict[Any, np.ndarray] = {}
-    for date in sorted(features_by_date):
-        artifact = resolver.resolve(model_name, date)
-        if artifact is None:
-            raise LookupError(
-                f"no legal as-of artifact for model {model_name!r} at {date!r}"
-            )
-        tc = artifact.manifest.training_cutoff
-        if tc and date is not None and date < tc:
-            raise AssertionError(
-                f"replay leak: artifact trained at {tc!r} used for {date!r} "
-                "(future-trained artifact must never score history)"
-            )
-        out[date] = artifact.predict(
-            np.asarray(features_by_date[date], dtype=np.float64)
-        )
-    return out
-
-
-# --------------------------------------------------------------------------- #
-# DSL semantic identity (§49 / §22).
-# --------------------------------------------------------------------------- #
 def identity_of(artifact: ModelArtifact) -> dict[str, Any]:
-    """The lineage facts every ``model_score(...)`` node must carry (§22)."""
     m = artifact.manifest
     return {
         "model_name": m.model_name,
@@ -222,43 +290,182 @@ def identity_of(artifact: ModelArtifact) -> dict[str, Any]:
     }
 
 
-@dataclass
-class ModelScoreOperatorStub:
-    """Placeholder documenting the DSL ``model_score("name")`` node contract.
-
-    A ``model_score("name")`` expression resolves to :func:`score_asof`: the
-    DSL compiler emits a node whose ``semantic_identity`` carries every lineage
-    fact §22 requires (via :func:`identity_of`).  This stub is documentation of
-    that contract; the DSL-compiler integration is a separate task and does not
-    import or edit this module.
-    """
-
+@dataclass(frozen=True)
+class ModelScoreExpr:
     model_name: str
-    artifact: ModelArtifact | None = None
-    asof: Any = None
-    training_cutoff: Any = None
+    feature_names: tuple[str, ...] = ()
+    resolution_policy: str = "latest_legal_asof"
+    missing_artifact_policy: str = "fail_closed"
+
+    def __post_init__(self) -> None:
+        if not self.model_name or not isinstance(self.model_name, str):
+            raise ValueError("model_score requires a non-empty model name")
+        if self.resolution_policy != "latest_legal_asof":
+            raise ValueError(f"unsupported artifact resolution policy {self.resolution_policy!r}")
+        if self.missing_artifact_policy not in {"fail_closed", "nan"}:
+            raise ValueError(
+                "missing_artifact_policy must be 'fail_closed' or research-only 'nan'"
+            )
+
+
+@dataclass(frozen=True)
+class ModelFeatureReadNode:
+    feature_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ArtifactResolutionNode:
+    model_name: str
+    resolution_policy: str
+    missing_artifact_policy: str
+
+
+@dataclass(frozen=True)
+class FrozenScoreNode:
+    resolution: ArtifactResolutionNode
+    features: ModelFeatureReadNode
+
+
+@dataclass(frozen=True)
+class TypedModelScoreIR:
+    model_name: str
+    resolution: ArtifactResolutionNode
+    feature_read: ModelFeatureReadNode
+    frozen_score: FrozenScoreNode
+    output_semantic_kind: str = "ModelScoreBlock"
 
     @property
-    def semantic_identity(self) -> dict[str, Any]:
-        if self.artifact is not None:
-            return identity_of(self.artifact)
+    def semantic_identity(self) -> Mapping[str, Any]:
         return {
+            "op": "model_score",
             "model_name": self.model_name,
-            "version": "",
-            "artifact_id": "",
-            "decision_clock_id": "",
-            "label_contract_id": "",
-            "feature_schema_hash": "",
-            "data_source_hash": "",
-            "universe_hash": "",
-            "training_cutoff": self.training_cutoff,
+            "resolution_policy": self.resolution.resolution_policy,
+            "missing_artifact_policy": self.resolution.missing_artifact_policy,
+            "feature_names": self.feature_read.feature_names,
+            "output_semantic_kind": self.output_semantic_kind,
         }
 
-    def resolve(self, features: np.ndarray) -> np.ndarray:
-        """Score this node exactly as the DSL would: via :func:`score_asof`."""
-        return score_asof(
-            self.model_name,
-            features,
-            self.asof,
-            training_cutoff=self.training_cutoff,
+
+@dataclass(frozen=True)
+class ModelScoreBlock:
+    values: np.ndarray
+    artifact_id: str
+    model_name: str
+    asof: Any
+    cache_identity: tuple[Any, ...]
+
+
+def model_score(
+    model_name: str,
+    *feature_names: str,
+    missing_artifact_policy: str = "fail_closed",
+) -> ModelScoreExpr:
+    return ModelScoreExpr(
+        model_name=model_name,
+        feature_names=tuple(feature_names),
+        missing_artifact_policy=missing_artifact_policy,
+    )
+
+
+def lower_model_score(expr: ModelScoreExpr) -> TypedModelScoreIR:
+    resolution = ArtifactResolutionNode(
+        model_name=expr.model_name,
+        resolution_policy=expr.resolution_policy,
+        missing_artifact_policy=expr.missing_artifact_policy,
+    )
+    features = ModelFeatureReadNode(expr.feature_names)
+    return TypedModelScoreIR(
+        model_name=expr.model_name,
+        resolution=resolution,
+        feature_read=features,
+        frozen_score=FrozenScoreNode(resolution, features),
+    )
+
+
+def _score_block(
+    ir: TypedModelScoreIR,
+    features: np.ndarray,
+    asof: Any,
+    resolver: ArtifactResolver,
+    *,
+    training_cutoff: Any = None,
+    context: ModelArtifactResolutionContext | None = None,
+) -> ModelScoreBlock:
+    result = resolver.resolve_result(
+        ir.model_name,
+        asof,
+        training_cutoff,
+        context=context,
+    )
+    if result.status is ModelScoreResolutionStatus.NO_LEGAL_ARTIFACT:
+        if ir.resolution.missing_artifact_policy == "nan":
+            values = np.full(np.asarray(features).shape[0], np.nan, dtype=np.float64)
+            return ModelScoreBlock(
+                values, "", ir.model_name, asof,
+                (ir.model_name, str(asof), "NO_LEGAL_ARTIFACT"),
+            )
+        raise NoLegalArtifactError(
+            f"NO_LEGAL_ARTIFACT: model {ir.model_name!r} at {asof!r}"
         )
+    if result.artifact is None:
+        raise RuntimeError("resolved artifact result is missing its artifact payload")
+    artifact = result.artifact
+    values = FrozenScorer(artifact).score(features)
+    m = artifact.manifest
+    return ModelScoreBlock(
+        values=values,
+        artifact_id=artifact.artifact_id,
+        model_name=ir.model_name,
+        asof=asof,
+        cache_identity=(
+            ir.model_name,
+            str(asof),
+            artifact.artifact_id,
+            m.training_cutoff,
+            m.feature_schema_hash,
+            m.data_source_hash,
+            m.universe_hash,
+            m.decision_clock_id,
+        ),
+    )
+
+
+def score_asof(
+    model_name: str,
+    features: np.ndarray,
+    asof: Any,
+    *,
+    training_cutoff: Any = None,
+    resolver: ArtifactResolver | None = None,
+    context: ModelArtifactResolutionContext | None = None,
+) -> np.ndarray:
+    res = resolver if resolver is not None else _default_resolver
+    if res is None:
+        raise LookupError("no ArtifactResolver configured for score_asof")
+    ir = lower_model_score(model_score(model_name))
+    return _score_block(
+        ir,
+        features,
+        asof,
+        res,
+        training_cutoff=training_cutoff,
+        context=context,
+    ).values
+
+
+def replay_historical_scores(
+    model_name: str,
+    features_by_date: dict[Any, np.ndarray],
+    resolver: ArtifactResolver,
+) -> dict[Any, np.ndarray]:
+    ir = lower_model_score(model_score(model_name))
+    out: dict[Any, np.ndarray] = {}
+    for date in sorted(features_by_date):
+        out[date] = _score_block(
+            ir, features_by_date[date], date, resolver
+        ).values
+    return out
+
+
+# Compatibility alias for callers that imported the documented stub name.
+ModelScoreOperatorStub = ModelScoreExpr

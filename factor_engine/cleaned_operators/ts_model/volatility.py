@@ -52,9 +52,30 @@ _CANONICALS: list[str] = []
 # ``window`` (or the HAR ``window`` feature span) — which is the alpha horizon
 # (HORIZON, searched).  The GARCH alpha/beta/gamma and HAR design are estimated
 # inside the kernel, never user-searched (M-115/M-162/M-170).
+#
+# P1 (volatility parameter-domain governance): GARCH/GJR and HAR can never
+# produce a finite output below a minimum trailing window — the strict-prior
+# GARCH fit segment needs >= _GARCH_MIN_FIT_OBS rows and the HAR OLS design
+# needs >= _HAR_MIN_WINDOW rows.  ``window`` is split into per-family ParamSpecs
+# so a guaranteed-all-NaN window is rejected at the call boundary
+# (binding-time raise via ``ParamSpec.min`` in ``validate_operator_call``)
+# instead of silently returning all NaN.  ``window`` remains a MAX LOOKBACK
+# (expanding warmup: a trailing segment shorter than ``window`` still fits as
+# soon as the family's minimum sample is present).
 _VOL_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
 }
+_GARCH_MIN_WINDOW = 13   # fit_seg = window - 1 must be >= _GARCH_MIN_FIT_OBS
+_GARCH_MIN_FIT_OBS = 12  # _fit_garch/_fit_gjr both refuse below this
+_HAR_MIN_WINDOW = 30     # _har_rv needs n >= 30 for the OLS design
+_GARCH_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=_GARCH_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+}
+_HAR_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=_HAR_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+}
+# P1: window semantics contract — a max lookback, not a strict full window.
+_WINDOW_SEMANTICS = "max_lookback"
 
 try:
     from scipy.optimize import minimize as _minimize
@@ -83,6 +104,15 @@ _GARCH_MISSING_POLICY = "fail_closed_on_gap"
 # ``window`` (the feature span) — it is not derived from ``window`` and is
 # versioned independently.  It is intentionally NOT a user-facing parameter.
 _HAR_MIN_TRAIN_OBS = 25
+
+# P1 (HAR sample-coverage governance): a HAR model must retain a minimum
+# FRACTION of its rolling ``window`` in effective training rows, not just meet
+# the absolute ``_HAR_MIN_TRAIN_OBS`` floor — otherwise a window=120 model could
+# keep estimating on 25/120 = 1/5 of the history (the audit finding).  The
+# double gate is ``N_effective >= _HAR_MIN_TRAIN_OBS AND
+# N_effective >= _HAR_MIN_COVERAGE * window``.  Versioned; a change to this
+# constant is a semantic change to every ts_har_* output.
+_HAR_MIN_COVERAGE = 0.6
 
 # Model-audit M-083: shared MLE fit cache.  ``_fit_garch`` / ``_fit_gjr``
 # (variance-targeting Nelder-Mead) dominate the cost of every GARCH / GJR
@@ -146,7 +176,8 @@ def _reject_price_level(x: pd.DataFrame, canonical: str) -> None:
 def _register(name: str, description: str, params: list[str], unit: str, fn,
               *, input_units: dict[str, str] | None = None,
               output_unit: str | None = None,
-              reject_price_level: bool = False):
+              reject_price_level: bool = False,
+              param_specs: "dict[str, ParamSpec] | None" = None):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -159,7 +190,9 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
     class _VolOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=8,
                             input_units=input_units, output_unit=output_unit,
-                            param_specs=_VOL_PARAM_SPECS)
+                            param_specs=param_specs if param_specs is not None else _VOL_PARAM_SPECS)
+        # P1: window semantics contract — max lookback (not strict full window).
+        metadata.window_semantics = _WINDOW_SEMANTICS
 
         def _calculate_series(self, *args, **kwargs):
             if reject_price_level and args:
@@ -275,10 +308,23 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     ``h_next = w + a*r_t^2 + b*h_last`` is the one-step-ahead forecast for the
     next period.  The standardised shock divides ``r_t`` by ``sqrt(h_last)`` —
     the variance that actually governed it.
+
+    P1 (parameter domain): ``window`` below ``_GARCH_MIN_WINDOW`` is a
+    guaranteed-all-NaN combination (the strict-prior fit segment ``seg[:-1]``
+    cannot reach ``_GARCH_MIN_FIT_OBS`` rows), so it raises at binding time
+    instead of silently emitting NaN for every row.
     """
-    if len(rets) < max(window, 12):
+    w = int(window)
+    if w < _GARCH_MIN_WINDOW:
+        raise ValueError(
+            f"GARCH/GJR window={w} is below the minimum {_GARCH_MIN_WINDOW}: "
+            f"the strict-prior fit segment (window-1) needs at least "
+            f"{_GARCH_MIN_FIT_OBS} rows, so a smaller window is all-NaN by "
+            f"construction (excluded by the parameter-domain gate)."
+        )
+    if len(rets) < max(w, _GARCH_MIN_FIT_OBS + 1):
         return np.nan
-    seg = rets[-int(window):]
+    seg = rets[-w:]
     # R35-P0-M01/M02/M03 (timing contract consistency): ALL GARCH/GJR statistics
     # fit their parameters strictly on <= t-1 (``fit_seg = seg[:-1]``), matching
     # ``ModelTimingContract.fit_cutoff_offset=1``.  The current return ``r_t`` is
@@ -289,7 +335,7 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     # recursion is seeded from the variance of that same fit segment so no leak
     # reaches the output through the initial value either.
     fit_seg = seg[:-1]
-    if len(fit_seg) < 12:
+    if len(fit_seg) < _GARCH_MIN_FIT_OBS:
         return np.nan
     # Missing-gap policy (M-084): any NaN inside the fit window fails this row
     # to NaN below — the MLE returns None on a non-finite input and we never
@@ -384,18 +430,22 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
 
 
 _RETURN_INPUT = {"x": "return"}
-_register("ts_garch_next_vol_forecast", "GARCH(1,1) 下一期条件波动率（观测最后收益之后）。", ["x", "window"], "volatility",
+_register("ts_garch_next_vol_forecast", "GARCH(1,1) 下一期条件波动率（观测最后收益之后）。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)),
-           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
-_register("ts_garch_vol_surprise", "GARCH 波动率意外：最近收益平方 / 条件方差 - 1。", ["x", "window"], "level",
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
+_register("ts_garch_vol_surprise", "GARCH 波动率意外：最近收益平方 / 条件方差 - 1。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_vol_surprise(v, int(window))),
-           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
-_register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。", ["x", "window"], "level",
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
+_register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)),
-           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
-_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（参数于 t-1 及以前拟合）。", ["x", "window"], "level",
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
+_register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（参数于 t-1 及以前拟合）。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)),
-           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
 # Deprecated alias for the next-period forecast: a registry compatibility
 # alias, NOT a separate canonical — mining must not double-search the same
 # kernel under two independent research candidates.
@@ -406,12 +456,14 @@ OperatorRegistry.register_compat_alias(
     deprecated_since="2026-08",
     removal_version="1.0",
 )
-_register("ts_gjr_garch_vol_forecast", "GJR-GARCH 波动预测（杠杆效应）。", ["x", "window"], "volatility",
+_register("ts_gjr_garch_vol_forecast", "GJR-GARCH 波动预测（杠杆效应）。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", True, 0.0)),
-           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
-_register("ts_gjr_leverage", "GJR 负收益冲击系数。", ["x", "window"], "level",
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
+_register("ts_gjr_leverage", "GJR 负收益冲击系数。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _gjr_leverage(v, int(window))),
-           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
+           param_specs=_GARCH_PARAM_SPECS)
 
 
 def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
@@ -419,15 +471,24 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
 
     ``rv_t / h_t - 1`` where ``h_t`` is the GARCH variance that governed the
     last observed return (information strictly before it).
+
+    P1 (parameter domain): ``window`` below ``_GARCH_MIN_WINDOW`` is a
+    guaranteed-all-NaN combination and raises at binding time.
     """
-    if len(vals) < max(window, 12):
+    w = int(window)
+    if w < _GARCH_MIN_WINDOW:
+        raise ValueError(
+            f"GARCH window={w} is below the minimum {_GARCH_MIN_WINDOW}: "
+            f"a smaller window is all-NaN by construction (parameter-domain gate)."
+        )
+    if len(vals) < max(w, _GARCH_MIN_FIT_OBS + 1):
         return np.nan
-    seg = vals[-int(window):]
+    seg = vals[-w:]
     # P0-040 / P0 (this audit): params fit on <= t-1 (exclude the current
     # return) AND the variance recursion is seeded from that same fit segment,
     # so rv_t/h_t is a genuine out-of-sample surprise and the current return
     # cannot leak into its own denominator through the initial variance.
-    if len(seg) < 13:
+    if len(seg) < _GARCH_MIN_FIT_OBS + 1:
         return np.nan
     # Missing-gap policy (M-084): a NaN anywhere in the fit window yields NaN
     # here (fail-closed, never drop-and-rescale).  Shared-fit cache (M-083).
@@ -454,12 +515,21 @@ def _gjr_leverage(vals: np.ndarray, window: int) -> float:
     (b) re-evaluate the lane (currently EXPENSIVE_CERTIFIED_ALPHA ->
     DIAGNOSTIC_RESEARCH unless a strict-prior GJR-leverage variant is added).
     See the ``_IN_SAMPLE_FIT_THROUGH_T`` module telemetry.
+
+    P1 (parameter domain): ``window`` below ``_GARCH_MIN_WINDOW`` is a
+    guaranteed-all-NaN combination and raises at binding time.
     """
-    if len(vals) < max(window, 12):
+    w = int(window)
+    if w < _GARCH_MIN_WINDOW:
+        raise ValueError(
+            f"GJR window={w} is below the minimum {_GARCH_MIN_WINDOW}: "
+            f"a smaller window is all-NaN by construction (parameter-domain gate)."
+        )
+    if len(vals) < max(w, _GARCH_MIN_FIT_OBS + 1):
         return np.nan
     # Missing-gap policy (M-084): NaN anywhere in the fit window -> NaN below.
     # Shared-fit cache (M-083).
-    params = _fit_gjr_cached(vals[-int(window):])  # fit-through-t: r_t IS in the fit
+    params = _fit_gjr_cached(vals[-w:])  # fit-through-t: r_t IS in the fit
     return np.nan if params is None else float(params[2])
 
 
@@ -471,22 +541,42 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     components.  This is the ``ts_har_rv_*`` / ``ts_har_from_return_*`` family
     contract.  ``ts_har_from_return_*`` squares its return input before calling
     this kernel.
+
+    P1 (parameter domain / sample coverage): ``window`` below ``_HAR_MIN_WINDOW``
+    is a guaranteed-all-NaN combination (the OLS design cannot form) and raises at
+    binding time.  A finite output additionally requires the DOUBLE sample-
+    coverage gate — ``N_effective >= _HAR_MIN_TRAIN_OBS`` AND
+    ``N_effective >= _HAR_MIN_COVERAGE * window`` — so a window=120 model can no
+    longer keep estimating on 25/120 = 1/5 of the history.
     """
-    seg = rv[-int(window):]
+    w = int(window)
+    if w < _HAR_MIN_WINDOW:
+        raise ValueError(
+            f"HAR window={w} is below the minimum {_HAR_MIN_WINDOW}: the OLS "
+            f"design cannot form below this (all-NaN by construction, "
+            f"parameter-domain gate)."
+        )
+    seg = rv[-w:]
     n = len(seg)
-    if n < 30:
+    if n < _HAR_MIN_WINDOW:
         return np.nan
     daily = seg
     weekly = pd.Series(seg).rolling(5).mean().to_numpy()
     monthly = pd.Series(seg).rolling(22).mean().to_numpy()
     X = np.column_stack([np.ones(n), daily, weekly, monthly])
     valid = np.all(np.isfinite(X), axis=1) & np.isfinite(seg)
+
+    def _coverage_ok(n_eff: int) -> bool:
+        # P1 double gate: absolute floor AND fractional coverage of the window.
+        return n_eff >= _HAR_MIN_TRAIN_OBS and n_eff >= _HAR_MIN_COVERAGE * w
+
     if stat in ("forecast", "var_forecast"):
         # Next-period forecast RV_{t+1}: target = next RV, features today.
         target = np.concatenate([seg[1:], [np.nan]])
         valid_t = np.isfinite(target) & valid
-        # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``.
-        if valid_t.sum() < _HAR_MIN_TRAIN_OBS:
+        # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``;
+        # P1 adds the fractional-coverage floor alongside it.
+        if not _coverage_ok(int(valid_t.sum())):
             return np.nan
         Xs = X[valid_t]
         y = target[valid_t]
@@ -511,8 +601,9 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     fit_valid = valid[fit_rows]
     Xs = X[fit_rows][fit_valid]
     y = seg[fit_rows + 1][fit_valid]
-    # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``.
-    if Xs.shape[0] < _HAR_MIN_TRAIN_OBS or Xs.shape[0] <= Xs.shape[1]:
+    # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``;
+    # P1 adds the fractional-coverage floor alongside it.
+    if not _coverage_ok(int(Xs.shape[0])) or Xs.shape[0] <= Xs.shape[1]:
         return np.nan
     # ModelDesignGate: an ill-conditioned HAR design fails closed (NaN).
     beta = fit_linear_model_checked(Xs, y)
@@ -535,9 +626,10 @@ def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:
 # the kernel predicts the next-period realized VARIANCE; the sqrt output is a
 # volatility forecast and is named ``ts_har_rv_next_vol_forecast``, while the
 # raw-RV forecast is the distinct ``ts_har_rv_next_var_forecast`` canonical.
-_register("ts_har_rv_next_vol_forecast", "HAR-RV 下一期已实现波动率预测（对下一期 RV 预测取平方根，输入已实现方差）。", ["rv", "window"], "volatility",
+_register("ts_har_rv_next_vol_forecast", "HAR-RV 下一期已实现波动率预测（对下一期 RV 预测取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行需同时满足 N>=25 与 N/window>=0.6 双约束。", ["rv", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")),
-           input_units={"rv": "realized_variance"}, output_unit="volatility")
+           input_units={"rv": "realized_variance"}, output_unit="volatility",
+           param_specs=_HAR_PARAM_SPECS)
 OperatorRegistry.register_compat_alias(
     "ts_har_rv_next_forecast",
     "ts_har_rv_next_vol_forecast",
@@ -545,18 +637,22 @@ OperatorRegistry.register_compat_alias(
     deprecated_since="2026-08",
     removal_version="1.0",
 )
-_register("ts_har_rv_next_var_forecast", "HAR-RV 下一期已实现方差预测（不取平方根，输入已实现方差）。", ["rv", "window"], "variance",
+_register("ts_har_rv_next_var_forecast", "HAR-RV 下一期已实现方差预测（不取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["rv", "window"], "variance",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "var_forecast")),
-           input_units={"rv": "realized_variance"}, output_unit="variance")
-_register("ts_har_rv_forecast_error_z", "RV 相对 HAR 预测的标准化偏差（输入已实现方差）。", ["rv", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))
+           input_units={"rv": "realized_variance"}, output_unit="variance",
+           param_specs=_HAR_PARAM_SPECS)
+_register("ts_har_rv_forecast_error_z", "RV 相对 HAR 预测的标准化偏差（输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["rv", "window"], "level",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")),
+           param_specs=_HAR_PARAM_SPECS)
 # The from-return variants square the daily return panel internally.
-_register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动预测（内部平方为 RV）。", ["ret", "window"], "volatility",
+_register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动预测（内部平方为 RV）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["ret", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "forecast")),
-           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
-_register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。", ["ret", "window"], "level",
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True,
+           param_specs=_HAR_PARAM_SPECS)
+_register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["ret", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")),
-           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
+           param_specs=_HAR_PARAM_SPECS)
 # Model-audit M-088: ``ts_har_rv_forecast`` and ``ts_har_rv_innovation_z`` are
 # genuine registry compat aliases (NOT separate canonicals) — each is byte-for-
 # byte the same kernel/stat as its target canonical (``_har_rv`` ``forecast`` /

@@ -52,11 +52,13 @@ import pandas as pd
 
 from cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -322,12 +324,24 @@ def _ordinal_param_specs() -> dict[str, ParamSpec]:
     ``min_embeddings`` carries a floor of ``_MIN_EMBEDDINGS`` (review item #22):
     below that many embeddings the kernel is guaranteed to emit all-NaN, so the
     binding gate rejects the combination instead.
+    M-10xx: ``order`` / ``delay`` are ESTIMATOR_RESOLUTION (searchable=False) —
+    the ordinal-pattern embedding resolution is never a free economic search
+    dimension; ``min_embeddings`` is a SUPPORT_POLICY floor.
     """
     return {
         "window": ParamSpec(dtype=int, min=2),
-        "order": ParamSpec(dtype=int, min=2),
-        "delay": ParamSpec(dtype=int, min=1),
-        "min_embeddings": ParamSpec(dtype=int, min=_MIN_EMBEDDINGS),
+        "order": ParamSpec(
+            dtype=int, min=2,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+        ),
+        "delay": ParamSpec(
+            dtype=int, min=1,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+        ),
+        "min_embeddings": ParamSpec(
+            dtype=int, min=_MIN_EMBEDDINGS,
+            param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+        ),
     }
 
 
@@ -380,23 +394,19 @@ def _check_complexity_params(
     delay: int | None = None,
     min_embeddings: int | None = None,
 ) -> None:
-    w = int(window)
-    if w < 2:
-        raise ValueError("window must be >= 2")
-    if bins is not None and int(bins) < 2:
+    # M-10xx: strict validation — a fractional / NaN / bool / negative value is
+    # rejected outright, never ``int()``-truncated into a fake window/order.
+    w = strict_int(window, "window", lower=2)
+    if bins is not None and strict_int(bins, "bins", lower=2) < 2:
         raise ValueError("bins must be >= 2")
     if order is not None:
-        o = int(order)
-        if o < 2:
-            raise ValueError("order must be >= 2")
+        o = strict_int(order, "order", lower=2)
         if math.factorial(o) > 720:
             raise ValueError("order must satisfy factorial(order) <= 720")
-    if delay is not None and int(delay) < 1:
+    if delay is not None and strict_int(delay, "delay", lower=1) < 1:
         raise ValueError("delay must be >= 1")
     if min_embeddings is not None:
-        me = int(min_embeddings)
-        if me < _MIN_EMBEDDINGS:
-            raise ValueError(f"min_embeddings must be >= {_MIN_EMBEDDINGS}")
+        me = strict_int(min_embeddings, "min_embeddings", lower=_MIN_EMBEDDINGS)
         if order is not None and delay is not None:
             _check_ordinal_feasibility(window=w, order=order, delay=delay, min_embeddings=me)
 
@@ -436,9 +446,20 @@ class TsLempelZivComplexity(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
-        "min_contiguous_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
-        "min_effective_n": ParamSpec(dtype=int, min=2),
+        # M-10xx: ``bins`` is an ESTIMATOR knob (searchable=False); the support
+        # floors are SUPPORT_POLICY (never search dimensions).
+        "bins": ParamSpec(
+            dtype=int, min=2, max=8,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False,
+        ),
+        "min_contiguous_fraction": ParamSpec(
+            dtype=float, min=0.0, max=1.0,
+            param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+        ),
+        "min_effective_n": ParamSpec(
+            dtype=int, min=2,
+            param_role=ParamRole.SUPPORT_POLICY, searchable=False,
+        ),
     }
 
     def _calculate_series(

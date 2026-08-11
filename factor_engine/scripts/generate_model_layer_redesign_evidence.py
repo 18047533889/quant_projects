@@ -212,7 +212,7 @@ def main() -> int:
             min_raw_obs=400, min_effective_obs=200, min_unique_dates=8,
             min_unique_stocks=10, min_obs_per_parameter=10,
         )
-        all_pred, all_y, all_dates = [], [], []
+        all_pred, all_y, all_dates, all_stocks = [], [], [], []
         for fold in folds[:3]:
             wf_rows.append({
                 "fold_id": fold.fold_id,
@@ -244,11 +244,12 @@ def main() -> int:
             })
             Xt, yt, dt, st, fm = fold.test_ds.as_matrix()
             pr = predictor.predict(art, Xt)
-            all_pred.append(pr); all_y.append(yt); all_dates.append(dt)
+            all_pred.append(pr); all_y.append(yt); all_dates.append(dt); all_stocks.append(st)
         if all_pred:
             import numpy as np
             ev = evaluate_predictions(
-                np.concatenate(all_pred), np.concatenate(all_y), np.concatenate(all_dates)
+                np.concatenate(all_pred), np.concatenate(all_y),
+                np.concatenate(all_dates), np.concatenate(all_stocks)
             )
             oos_eval = ev.to_dict() if hasattr(ev, "to_dict") else dict(ev)
     except Exception as exc:  # honest: record what failed rather than hide

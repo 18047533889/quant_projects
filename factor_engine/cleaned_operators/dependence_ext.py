@@ -25,6 +25,11 @@ All operators are trailing-window, prefix-causal and deterministic.  Only
 same-position finite aligned triples/pairs are used; degenerate windows (too
 few points, constant marginals, zero kernel bandwidth) emit NaN (fail-closed).
 Invalid parameters raise ``ValueError``.
+
+Timing honesty: ``ts_hsic`` is a trailing-window descriptive dependence
+statistic, not PRIOR_FIT and not a BLOCKED_HISTORICAL_EVALUATION forecast.
+The blocked historical train/test diagnostic is ``ts_kernel_granger_score`` in
+``research_spectral.py``.
 """
 from __future__ import annotations
 
@@ -241,7 +246,12 @@ def _partial_dcor_proxy(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float
     # Partial-correlation combination (review R4-15): the denominator needs the
     # *squared* conditioning correlations, sqrt((1-r_xz²)(1-r_yz²)), not
     # sqrt((1-r_xz)(1-r_yz)).
-    denom = float(np.sqrt((1.0 - r_xz * r_xz) * (1.0 - r_yz * r_yz) + _EPS))
+    raw_denom2 = (1.0 - r_xz * r_xz) * (1.0 - r_yz * r_yz)
+    # Check the unregularized geometry before applying any numerical floor:
+    # singular controls are unidentified, not merely numerically unstable.
+    if not np.isfinite(raw_denom2) or raw_denom2 <= _EPS:
+        return np.nan
+    denom = float(np.sqrt(raw_denom2))
     if not np.isfinite(denom) or denom <= _EPS:
         return np.nan
     return float(num / denom)
@@ -308,11 +318,18 @@ class TsHsic(SeriesOperator):
     """归一化 HSIC:RBF 核（中位数距离带宽）+ 双中心化后的核对齐。
 
     捕捉任意非线性依赖,输出 [0,1]。P2。
+
+    **Timing honesty（M-9xx）**：``ts_hsic`` 是 trailing-window 的 *描述性*
+    依赖统计量——在同一窗口 ``[t-window, t]`` 内同时读 x 与 y 并计算核对齐，
+    **不是** t-1 fit→forecast t 的预测诊断分（与 ``ts_kernel_granger_score``
+    的 BLOCKED_HISTORICAL_EVALUATION 不同；本算子不做 train/test 划分）。它
+    描述"最近 window 内 x 与 y 的联合非线性依赖有多强"，不冒充 PRIOR_FIT。
     """
 
     metadata = _metadata(
         "ts_hsic",
-        "归一化 Hilbert-Schmidt 独立性准则（RBF 核,中位数带宽）。",
+        "归一化 Hilbert-Schmidt 独立性准则（RBF 核,中位数带宽；trailing-window 描述性依赖，"
+        "非预测分）。",
         ["x", "y", "window"],
         unit="ratio",
         cost=7,

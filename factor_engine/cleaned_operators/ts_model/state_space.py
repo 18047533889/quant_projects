@@ -21,28 +21,40 @@ Scale contract (audit round-3, item 32):
   observation establishes a real scale (a leading gap or an all-missing series
   stays NaN rather than fabricating a filtered value).
 
-Model-audit remediation (2026-08-11, M-070..M-074):
+Model-audit remediation (2026-08-11, M-070..M-074) + checkpoint/q-r/warmup audit
+(2026-08-11, P0/P1):
 * M-070 — every Kalman canonical is STATEFUL: a causal one-pass filter, so the
   row-t output depends on the entire finite prefix through t (chunking without a
-  restored checkpoint does NOT reproduce the full-history output).  Only
-  ``ts_kalman_level`` currently declares ``stateful=True`` in the shared
-  ``model_contract.py``; :data:`KALMAN_STATEFUL_CANONICALS` +
-  :func:`kalman_stateful_contract` expose the full contract here and flag the
-  other five for the reconciler to add to ``model_contract.py``.
-* M-071 — :func:`_scale_qr` implements a DIMENSIONLESS q/r mode
-  (``q_eff = cq * scale**2``, ``r_eff = cr * scale**2``, i.e. q/r read as ratios
-  against a caller-supplied ``scale``).  It is deliberately a helper +
-  documentation ONLY — NOT wired to a public ``scale_mode`` parameter, so the
-  default absolute-variance behaviour is unchanged and the typed surface
-  metadata is untouched (flagged for reconciler whether to expose the param).
+  restored checkpoint does NOT reproduce the full-history output).
+  :data:`KALMAN_STATEFUL_CANONICALS` + :func:`kalman_stateful_contract` expose
+  the full contract here.
+* M-070 checkpoint authority (P0, resolved as HONEST DEGRADATION): the Kalman
+  kernels are NOT registered in ``StatefulCheckpointRegistry`` and
+  ``stateful_runtime.execute_stateful_segment`` raises for them — there is no
+  checkpoint-restore authority for Kalman.  The contract therefore declares
+  ``checkpointable=False``, ``time_shard_safe=False`` and
+  ``restore_strategy="full_replay"`` (``chunking="required_full_history"``), so
+  metadata never claims a checkpoint capability the runtime does not provide
+  (the earlier ``checkpointable:true`` claim was false-green).  A real restore
+  (option A) is deferred until a segmented kernel with bit-parity proof exists.
+* M-071 — :func:`_scale_qr` + :func:`_apply_scale` implement a DIMENSIONLESS
+  q/r mode.  The public ``scale_mode`` parameter (default ``"absolute"`` keeps
+  the legacy absolute-variance behaviour byte-for-byte unchanged; opt-in
+  ``scale_mode="dimensionless"`` reads ``q``/``r`` as RATIOS and normalises
+  internally ``q_eff = q * var_x``, ``r_eff = r * var_x`` with ``var_x`` the
+  empirical variance of the finite observations of the input series).  The
+  filter is then invariant to a uniform re-scaling of the input (return vs
+  price*100 produce identical standardised innovations / identical level shape).
 * M-072 — ``ts_kalman_beta`` is THROUGH-ORIGIN: the observation model is
   ``y = b*x + eps`` with NO intercept.  ``ts_kalman_alpha_beta`` is deliberately
   NOT created (deferred); the constraint is documented here and tagged
   ``through_origin:true``.
-* M-074 — the beta warmup policy is FINITE-PAIR: the first ``_BETA_WARMUP``
-  finite ``(y, x)`` pairs are accumulated across gaps (non-contiguous).  The
-  alternative ``"contiguous"`` policy (restart warmup after every missing pair)
-  is NOT implemented — see :data:`_KALMAN_WARMUP_POLICY` /
+* M-074 — the beta warmup policy is FINITE-PAIR: the first ``min_warmup``
+  (default 20) finite ``(y, x)`` pairs are accumulated across gaps
+  (non-contiguous).  ``min_warmup`` is a real gate — fewer finite pairs yields
+  NaN (never a fabricated value) — and is a declared, non-searchable parameter.
+  The alternative ``"contiguous"`` policy (restart warmup after every missing
+  pair) is NOT implemented — see :data:`_KALMAN_WARMUP_POLICY` /
   :func:`kalman_warmup_policy`.
 """
 from __future__ import annotations
@@ -63,12 +75,41 @@ _CANONICALS: list[str] = []
 # level/trend/beta state IS the alpha mechanism, not the noise ratio that
 # controls the filter's update speed (M-115/M-162/M-170).  They are never
 # full-resolution search dimensions.
+#
+# ``scale_mode`` (P1, M-071): dimensionless q/r switch — ``"absolute"`` (default,
+# legacy variance semantics) or ``"dimensionless"`` (q/r read as RATIOS and
+# internally scaled by the input variance).  Governance knob: never searched.
+# ``min_warmup`` (P1, M-074): beta warm-up floor (finite y/x pairs required
+# before the filter initialises).  Statistical-support policy: never searched.
 _KALMAN_PARAM_SPECS: dict[str, ParamSpec] = {
     "q": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
     "r": ParamSpec(dtype=float, min=1e-12, param_role=ParamRole.NUMERICAL, searchable=False),
     "q_level": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
     "q_trend": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+    "scale_mode": ParamSpec(
+        dtype=str, choices=("absolute", "dimensionless"), searchable=False,
+        param_role=ParamRole.POLICY, default="absolute",
+    ),
+    "min_warmup": ParamSpec(
+        dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY,
+        default=20,
+    ),
 }
+
+
+#: M-074: default beta warm-up floor (finite ``(y, x)`` pairs required before the
+#: through-origin OLS seeds the filter).  Configurable per-call via the
+#: ``min_warmup`` parameter; the default is deliberately larger than the old 5 so
+#: a dynamic beta is not seeded on a handful of days (single-day anomalies no
+#: longer move it).  Keep in sync with the ``min_warmup`` ParamSpec default.
+_BETA_WARMUP = 20
+
+#: M-074: the beta warmup is FINITE-PAIR — the first ``min_warmup`` finite
+#: ``(y, x)`` pairs are accumulated across gaps (non-contiguous): a missing pair
+#: does NOT reset the warmup.  The alternative "contiguous" policy (restart the
+#: warmup after every missing pair) is NOT implemented.  Exposed via
+#: :func:`kalman_warmup_policy` so the contract is machine-readable.
+_KALMAN_WARMUP_POLICY = "finite_pair"
 
 
 #: M-070: every Kalman canonical is a causal one-pass recursive filter — the
@@ -93,16 +134,26 @@ def kalman_stateful_contract(canonical: str) -> dict[str, Any]:
 
     Returns the fields the reconciler / segmented-execution layer needs:
     ``stateful``, ``state_schema_version``, ``checkpointable``,
-    ``time_shard_safe``, ``reset_semantics``, ``missing_update_semantics`` and
-    ``revision_replay_semantics``.  ``time_shard_safe`` is False because the
-    filter state spans the whole finite prefix — a time shard mid-series can
-    only be resumed with a restored checkpoint, never re-derived locally.
+    ``time_shard_safe``, ``reset_semantics``, ``missing_update_semantics``,
+    ``revision_replay_semantics`` and ``restore_strategy``.
+
+    P0 (2026-08-11): ``checkpointable`` is **False** — honest degradation.  The
+    Kalman kernels are causal one-pass filters but are NOT registered in
+    ``StatefulCheckpointRegistry`` and ``stateful_runtime.execute_stateful_segment``
+    has no Kalman branch, so the runtime has no checkpoint-restore authority for
+    them.  Metadata must never claim a checkpoint capability the runtime does
+    not provide (the earlier ``checkpointable:true`` claim was false-green).
+    ``time_shard_safe`` is False because the filter state spans the whole finite
+    prefix — a time shard mid-series can only be resumed with a restored
+    checkpoint, never re-derived locally; with no checkpoint restore the safe
+    execution model is full-history replay (``restore_strategy="full_replay"``).
     """
     return {
         "stateful": True,
         "state_schema_version": f"{canonical}.v1",
-        "checkpointable": True,
+        "checkpointable": False,
         "time_shard_safe": False,          # filter state spans the whole prefix
+        "restore_strategy": "full_replay", # no checkpoint authority in the runtime
         "reset_semantics": "reset_on_first_finite_observation",
         "missing_update_semantics": "predict_only_covariance_growth",
         "revision_replay_semantics": "deterministic_replay",
@@ -120,8 +171,9 @@ def _stateful_contract_tags(canonical: str) -> list[str]:
     return [
         "stateful:true",
         f"state_schema_version:{contract['state_schema_version']}",
-        f"checkpointable:{contract['checkpointable']}",
-        f"time_shard_safe:{contract['time_shard_safe']}",
+        f"checkpointable:{str(contract['checkpointable']).lower()}",
+        f"time_shard_safe:{str(contract['time_shard_safe']).lower()}",
+        f"restore_strategy:{contract['restore_strategy']}",
         f"reset_semantics:{contract['reset_semantics']}",
         f"missing_update_semantics:{contract['missing_update_semantics']}",
         f"revision_replay_semantics:{contract['revision_replay_semantics']}",
@@ -137,38 +189,74 @@ def numba_dispatch_stats() -> dict[str, int]:
     return dict(_NUMBA_DISPATCH_COUNTER)
 
 
+def _finite_variance(vals: np.ndarray) -> float | None:
+    """Empirical variance of the finite observations of a 1-D series.
+
+    ``None`` when there are fewer than 2 finite observations (no meaningful
+    variance).  Used as the dimensionless-mode scale basis (``var_x``): the
+    filter is invariant to a uniform re-scaling of the input when both ``q`` and
+    ``r`` are scaled by the input variance.
+    """
+    finite = np.asarray(vals, dtype=float)[np.isfinite(np.asarray(vals, dtype=float))]
+    if finite.size < 2:
+        return None
+    return float(np.var(finite))
+
+
+def _apply_scale(
+    scale_mode: str | None,
+    var_x: float | None,
+    *values: float,
+) -> tuple[float, ...]:
+    """M-071: scale variance parameters to absolute units under ``scale_mode``.
+
+    ``"absolute"`` (or ``None``, legacy) returns the values unchanged.  Under
+    ``"dimensionless"`` every value is treated as a RATIO and multiplied by the
+    input variance ``var_x`` (``q_eff = cq * var_x``, ``r_eff = cr * var_x``), so
+    the same relative parameters transfer across input scales (return vs
+    price*100) and the normalised filter path is scale-invariant.  Fail closed on
+    an unknown mode; ``var_x`` must be positive and finite in dimensionless mode
+    (a caller that cannot produce a scale must emit NaN upstream, never call
+    here).
+    """
+    if scale_mode is None or scale_mode == "absolute":
+        return tuple(float(v) for v in values)
+    if scale_mode != "dimensionless":
+        raise ValueError(
+            f"scale_mode must be 'absolute' or 'dimensionless', got {scale_mode!r}"
+        )
+    if var_x is None or not (np.isfinite(var_x) and var_x > 0.0):
+        raise ValueError("dimensionless scale requires positive finite input variance")
+    return tuple(float(v) * float(var_x) for v in values)
+
+
 def _scale_qr(
     q: float,
     r: float,
     scale_mode: str | None = None,
     scale: float | None = None,
 ) -> tuple[float, float]:
-    """M-071: DIMENSIONLESS q/r mode helper (NOT wired to a public parameter).
+    """M-071: DIMENSIONLESS q/r mode helper.
 
-    The default ``scale_mode=None`` keeps the ABSOLUTE variance semantics
-    unchanged — ``q`` / ``r`` are used as-is (this is the legacy behaviour and
-    must never change).  With ``scale_mode="dimensionless"`` and a positive
-    ``scale``, ``q`` / ``r`` are read as RATIOS and scaled to absolute
-    variances::
+    ``scale_mode`` ``None`` or ``"absolute"`` keeps the ABSOLUTE variance
+    semantics unchanged — ``q`` / ``r`` are used as-is (the legacy behaviour must
+    never change).  With ``scale_mode="dimensionless"`` and a positive ``scale``,
+    ``q`` / ``r`` are read as RATIOS and scaled to absolute variances::
 
         q_eff = cq * scale**2
         r_eff = cr * scale**2
 
     so ``cq=0.01, cr=1.0, scale=0.02`` means process noise ``0.01*0.02**2`` and
-    observation noise ``1.0*0.02**2`` on a 2%-return scale.  Fail closed on
-    unknown ``scale_mode`` / non-finite / non-positive ``scale``.
-
-    The conservative route is intentional: exposing a ``scale_mode`` parameter
-    would change the typed surface metadata (``param_names`` / the
-    ``signature:...`` tag), so the helper is provided here with documentation
-    and the reconciler is asked whether the parameter should be exposed on the
-    public surface (M-071).
+    observation noise ``1.0*0.02**2`` on a 2%-return scale.  ``scale**2`` is the
+    variance — the public operators pass ``scale=sqrt(var_x)`` via
+    :func:`_apply_scale`.  Fail closed on unknown ``scale_mode`` / non-finite /
+    non-positive ``scale``.
     """
-    if scale_mode is None:
+    if scale_mode is None or scale_mode == "absolute":
         return float(q), float(r)
     if scale_mode != "dimensionless":
         raise ValueError(
-            f"scale_mode must be None or 'dimensionless', got {scale_mode!r}"
+            f"scale_mode must be None, 'absolute' or 'dimensionless', got {scale_mode!r}"
         )
     if scale is None or not (np.isfinite(scale) and scale > 0.0):
         raise ValueError("scale must be finite and > 0 in dimensionless mode")
@@ -244,7 +332,19 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
     return _StateOp
 
 
-def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
+def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str,
+                  scale_mode: str | None = "absolute") -> np.ndarray:
+    # P1 (M-071): dimensionless q/r — when requested, rescale q/r by the input
+    # variance FIRST so the normalised filter path is invariant to the input
+    # scale.  A series with no finite variance has no scale: emit NaN (fail
+    # closed, never fabricate) rather than running the filter on a garbage scale.
+    if scale_mode == "dimensionless":
+        var_x = _finite_variance(vals)
+        if var_x is None or var_x <= 0.0:
+            return np.full(len(vals), np.nan, dtype=float)
+    else:
+        var_x = None
+    q, r = _apply_scale(scale_mode, var_x, q, r)
     # P0-15 / audit round-3 (item 32): the noise parameters must be well-typed —
     # a negative process-noise would shrink uncertainty, a non-positive or
     # non-finite observation-noise breaks the Kalman update.  Fail fast instead
@@ -315,19 +415,27 @@ _BETA_INPUT_UNITS: dict[str, str] = {"y": "return", "x": "market_return"}
 _BETA_THROUGH_ORIGIN_TAG: tuple[str, ...] = ("through_origin:true",)
 
 
-_register("ts_kalman_level", "局部水平模型的过滤水平估计。", ["x", "q", "r"], "level",
-           lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "level")))
-_register("ts_kalman_innovation_z", "观测值相对 Kalman 预测的标准化创新。", ["x", "q", "r"], "level",
-           lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "innovation_z")))
+_register("ts_kalman_level", "局部水平模型的过滤水平估计。", ["x", "q", "r", "scale_mode"], "level",
+           lambda x, q=1e-4, r=1.0, scale_mode="absolute": _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "level", scale_mode=scale_mode)))
+_register("ts_kalman_innovation_z", "观测值相对 Kalman 预测的标准化创新。", ["x", "q", "r", "scale_mode"], "level",
+           lambda x, q=1e-4, r=1.0, scale_mode="absolute": _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "innovation_z", scale_mode=scale_mode)))
 _register("ts_kalman_beta_uncertainty",
-          "Beta 状态滤波协方差 P(标准误为 sqrt(P), 此处输出 P)。通过原点回归 y=b*x(无截距); 输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
-          ["y", "x", "q", "r"], "level",
-          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "uncertainty")),
+          "Beta 状态滤波协方差 P(标准误为 sqrt(P), 此处输出 P)。通过原点回归 y=b*x(无截距); warmup 为 finite-pair(跨缺口累积前 min_warmup 个有限 y/x 对, 默认 20)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r", "scale_mode", "min_warmup"], "level",
+          lambda y, x, q=1e-3, r=1.0, scale_mode="absolute", min_warmup=_BETA_WARMUP: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "uncertainty", scale_mode=scale_mode, min_warmup=min_warmup)),
           input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
 
 
-def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: float) -> np.ndarray:
+def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: float,
+                        scale_mode: str | None = "absolute") -> np.ndarray:
     """Local linear trend: level and slope states."""
+    if scale_mode == "dimensionless":
+        var_x = _finite_variance(vals)
+        if var_x is None or var_x <= 0.0:
+            return np.full(len(vals), np.nan, dtype=float)
+    else:
+        var_x = None
+    q_level, q_trend, r = _apply_scale(scale_mode, var_x, q_level, q_trend, r)
     if not (np.isfinite(q_level) and np.isfinite(q_trend) and np.isfinite(r)
             and q_level >= 0.0 and q_trend >= 0.0 and r > 0.0):
         raise ValueError("q_level/q_trend must be finite and >= 0; r must be finite and > 0")
@@ -374,18 +482,8 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
     return slope
 
 
-_register("ts_kalman_trend", "局部线性趋势模型的潜在斜率。", ["x", "q_level", "q_trend", "r"], "level",
-           lambda x, q_level=1e-5, q_trend=1e-5, r=1.0: _apply_col(x, lambda v: _kalman_trend_slope(v, float(q_level), float(q_trend), float(r))))
-
-
-_BETA_WARMUP = 5
-
-# M-074: the beta warmup is FINITE-PAIR — the first ``_BETA_WARMUP`` finite
-# ``(y, x)`` pairs are accumulated across gaps (non-contiguous): a missing pair
-# does NOT reset the warmup.  The alternative "contiguous" policy (restart the
-# warmup after every missing pair) is NOT implemented.  Exposed via
-# :func:`kalman_warmup_policy` so the contract is machine-readable.
-_KALMAN_WARMUP_POLICY = "finite_pair"
+_register("ts_kalman_trend", "局部线性趋势模型的潜在斜率。", ["x", "q_level", "q_trend", "r", "scale_mode"], "level",
+           lambda x, q_level=1e-5, q_trend=1e-5, r=1.0, scale_mode="absolute": _apply_col(x, lambda v: _kalman_trend_slope(v, float(q_level), float(q_trend), float(r), scale_mode=scale_mode)))
 
 
 def kalman_warmup_policy() -> str:
@@ -393,7 +491,30 @@ def kalman_warmup_policy() -> str:
     return _KALMAN_WARMUP_POLICY
 
 
-def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
+def kalman_warmup_default() -> int:
+    """M-074: default beta warm-up floor (finite y/x pairs before initialisation)."""
+    return _BETA_WARMUP
+
+
+def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str,
+                 scale_mode: str | None = "absolute",
+                 min_warmup: int | None = None) -> np.ndarray:
+    """Dynamic through-origin beta ``y = b*x + eps``.
+
+    ``min_warmup`` is the real warm-up gate (M-074): the filter stays NaN until
+    ``min_warmup`` finite ``(y, x)`` pairs have been observed (default
+    :data:`_BETA_WARMUP`).  ``scale_mode="dimensionless"`` (M-071) rescales q/r
+    by the variance of the market/regressor input ``x``.
+    """
+    if min_warmup is None:
+        min_warmup = _BETA_WARMUP
+    if scale_mode == "dimensionless":
+        var_x = _finite_variance(x)
+        if var_x is None or var_x <= 0.0:
+            return np.full(len(y), np.nan, dtype=float)
+    else:
+        var_x = None
+    q, r = _apply_scale(scale_mode, var_x, q, r)
     if not (np.isfinite(q) and np.isfinite(r) and q >= 0.0 and r > 0.0):
         raise ValueError("q must be finite and >= 0; r must be finite and > 0")
     n = len(y)
@@ -420,7 +541,7 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
             # the origin; fall back to a diffuse prior when it is degenerate.
             warmup_y.append(yv)
             warmup_x.append(xv)
-            if len(warmup_y) >= _BETA_WARMUP:
+            if len(warmup_y) >= min_warmup:
                 wy = np.asarray(warmup_y, dtype=float)
                 wx = np.asarray(warmup_x, dtype=float)
                 denom = float(np.dot(wx, wx))
@@ -455,14 +576,14 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
 
 
 _register("ts_kalman_beta",
-          "动态市场 Beta 状态。通过原点回归 y=b*x(无截距); warmup 为 finite-pair(跨缺口累积前 5 个有限 y/x 对)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
-          ["y", "x", "q", "r"], "level",
-          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta")),
+          "动态市场 Beta 状态。通过原点回归 y=b*x(无截距); warmup 为 finite-pair(跨缺口累积前 min_warmup 个有限 y/x 对, 默认 20)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r", "scale_mode", "min_warmup"], "level",
+          lambda y, x, q=1e-3, r=1.0, scale_mode="absolute", min_warmup=_BETA_WARMUP: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta", scale_mode=scale_mode, min_warmup=min_warmup)),
           input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
 _register("ts_kalman_beta_change",
-          "动态 Beta 变化。通过原点回归 y=b*x(无截距)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
-          ["y", "x", "q", "r"], "level",
-          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta_change")),
+          "动态 Beta 变化。通过原点回归 y=b*x(无截距); warmup 为 finite-pair(跨缺口累积前 min_warmup 个有限 y/x 对, 默认 20)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r", "scale_mode", "min_warmup"], "level",
+          lambda y, x, q=1e-3, r=1.0, scale_mode="absolute", min_warmup=_BETA_WARMUP: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta_change", scale_mode=scale_mode, min_warmup=min_warmup)),
           input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
 
 
@@ -489,11 +610,12 @@ def _apply_two(y: pd.DataFrame, x: pd.DataFrame, fn) -> pd.DataFrame:
 
 
 # M-008: Kalman is the single-authority stateful declaration.  Every Kalman
-# canonical is a causal one-pass filter — stateful, checkpointable, and legal to
-# time-shard ONLY with state handoff (see KALMAN_STATEFUL_CANONICALS +
-# kalman_stateful_contract()).  Declared here (its own module) per the
-# Round-11 #12 rule: never edit a central list.  The ModelOperatorContract
-# stateful flags in model_contract.py mirror this.
+# canonical is a causal one-pass filter — stateful, but NOT checkpointable in the
+# runtime (no StatefulCheckpointRegistry registration / no restore branch in
+# stateful_runtime), so segmented execution requires FULL-HISTORY replay (see
+# KALMAN_STATEFUL_CANONICALS + kalman_stateful_contract()).  Declared here (its
+# own module) per the Round-11 #12 rule: never edit a central list.  The
+# ModelOperatorContract stateful flags in model_contract.py mirror this.
 for _kalman_canonical in sorted(KALMAN_STATEFUL_CANONICALS):
     try:
         from runtime.execution_contract import declare_stateful
@@ -501,8 +623,8 @@ for _kalman_canonical in sorted(KALMAN_STATEFUL_CANONICALS):
         declare_stateful(
             _kalman_canonical,
             state_model="recursive",
-            chunking="checkpoint",
-            checkpoint_schema="kalman_v1",
+            chunking="required_full_history",
+            checkpoint_schema=None,
             minimum_history=1,
         )
     except Exception:  # pragma: no cover - import/registry ordering guard

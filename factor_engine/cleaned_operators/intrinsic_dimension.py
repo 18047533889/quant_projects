@@ -26,11 +26,28 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    param_specs: dict | None = None,
+    relational_specs: list | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="intrinsic_dimension",
@@ -43,7 +60,42 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:geometry",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
+        relational_specs=list(relational_specs) if relational_specs else [],
     )
+
+
+# M-2xx: the Takens embedding resolution is an ESTIMATOR-resolution knob set —
+# ``embedding_dim`` / ``k`` / ``delay`` / ``theiler_window`` are never freely
+# searched economic alphas (coarse certified grid only, searchable=False).
+_INTRINSIC_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "embedding_dim": ParamSpec(
+        dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=3
+    ),
+    "k": ParamSpec(
+        dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=5
+    ),
+    "delay": ParamSpec(
+        dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=1
+    ),
+    "theiler_window": ParamSpec(
+        dtype=int, min=0,
+        param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=None,
+    ),
+}
+# M-2xx: relational feasibility — the window must be able to produce at least
+# ``k + 1`` delay embeddings, i.e. ``window - (embedding_dim-1)*delay >= k+1``.
+# Below that the kernel is guaranteed to emit all-NaN, so the combination is
+# rejected at binding instead of running then failing.
+_INTRINSIC_RELATIONAL_SPECS: list[RelationalParamSpec] = [
+    RelationalParamSpec(
+        "window - (embedding_dim - 1) * delay >= k + 1",
+        "ts_delay_intrinsic_dimension requires window-(embedding_dim-1)*delay "
+        ">= k+1 embeddings (window={window}, embedding_dim={embedding_dim}, "
+        "delay={delay}, k={k})",
+    ),
+]
 
 
 def _delay_points(chunk: np.ndarray, dim: int, delay: int) -> tuple[np.ndarray, np.ndarray] | None:
@@ -175,33 +227,38 @@ class TsDelayIntrinsicDimension(SeriesOperator):
 
     metadata = _metadata(
         "ts_delay_intrinsic_dimension",
-        "Takens 延迟嵌入的 Levina-Bickel 局部维度中位数。",
+        "Takens 延迟嵌入的 Levina-Bickel 局部维度中位数。"
+        "参数全部 ParamSpec（embedding_dim/k/delay/theiler_window=ESTIMATOR_RESOLUTION"
+        "，searchable=False）；window-(embedding_dim-1)*delay >= k+1 的关系可行"
+        "性在绑定期强制（不满足 raise，不做 int() 截断）。",
         ["x", "window", "embedding_dim", "k", "delay", "theiler_window"],
         unit="dim",
         cost=8,
+        param_specs=_INTRINSIC_PARAM_SPECS,
+        relational_specs=_INTRINSIC_RELATIONAL_SPECS,
     )
 
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 120, embedding_dim: int = 3, k: int = 5, delay: int = 1, theiler_window: Any = None, **_: Any
     ) -> pd.DataFrame:
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
-        dim = int(embedding_dim)
-        if dim < 2:
-            raise ValueError("embedding_dim must be >= 2")
-        kk = int(k)
-        if kk < 2:
-            raise ValueError("k must be >= 2")
-        dl = int(delay)
-        if dl < 1:
-            raise ValueError("delay must be >= 1")
+        # M-2xx: strict operator-boundary validation — a fractional / NaN /
+        # bool / negative value is rejected outright, never ``int()``-truncated
+        # into a fake window.  (The ParamSpec / relational gate already runs at
+        # binding via validate_operator_call; these keep a direct
+        # ``_calculate_series`` call fail-closed too.)
+        w = strict_int(window, "window", lower=2)
+        dim = strict_int(embedding_dim, "embedding_dim", lower=2)
+        kk = strict_int(k, "k", lower=2)
+        dl = strict_int(delay, "delay", lower=1)
+        if w - (dim - 1) * dl < kk + 1:
+            raise ValueError(
+                "ts_delay_intrinsic_dimension requires window-(embedding_dim-1)*delay "
+                f">= k+1 embeddings (window={w}, embedding_dim={dim}, delay={dl}, k={kk})"
+            )
         # Theiler window (round-7 P0): default = embedding span ``dim * delay``;
         # a point's temporal neighbours within that span are excluded from its
         # state-space neighbour set so time-adjacency is not read as proximity.
-        tw = int(theiler_window) if theiler_window is not None else dim * dl
-        if tw < 0:
-            raise ValueError("theiler_window must be >= 0")
+        tw = strict_int(theiler_window, "theiler_window", lower=0) if theiler_window is not None else dim * dl
         return frame_like(x, _intrinsic_dim_series(x.to_numpy(dtype=float), w, dim, kk, dl, tw))
 
 

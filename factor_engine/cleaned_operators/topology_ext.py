@@ -25,6 +25,25 @@ Both operators are trailing-window, prefix-causal and deterministic.  A window
 that yields no persistence pairs emits NaN.  The CURRENT bar is always required
 (P0-7): a missing current observation emits NaN — the persistence diagram must
 never be built from the finite past alone and emit a stale-history factor.
+
+Missing-value policy — CURRENT_ROW_REQUIRED (M-4xx)
+----------------------------------------------------
+These two canonicals belong to the CURRENT_ROW_REQUIRED class of the topology
+family: the current observation must be finite or the output is NaN (enforced
+in ``_persistence_entropy_series``).  This is the semantic opposite of
+``cleaned_operators.advanced_topology`` (``ts_betti_1_max_persistence`` /
+``ts_persistence_diagram_shift`` / ``ts_fisher_information_shift``), which are
+HISTORICAL_STATE_ALLOWED and may emit a window state from the finite past.  The
+two classes are explicitly distinguished so a stale-history factor is never
+silently mis-classified.
+
+Parameter governance (M-2xx)
+----------------------------
+``window`` / ``tau`` / ``dim`` are fully ParamSpec'd (tau/dim are
+ESTIMATOR_RESOLUTION, searchable=False) with the relational feasibility
+``window - (dim-1)*tau >= 3`` enforced at binding — a combination that cannot
+form a non-empty delay embedding is rejected before running, never
+``int()``-truncated.
 """
 from __future__ import annotations
 
@@ -33,10 +52,39 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
+
+# M-2xx: Takens embedding resolution (tau / dim) is an ESTIMATOR knob
+# (searchable=False); window is the HORIZON.  ``window - (dim-1)*tau >= 3`` is
+# the feasibility floor for a non-empty delay embedding — rejected at binding.
+_PERSISTENCE_ENTROPY_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=6, param_role=ParamRole.HORIZON, searchable=True),
+    "tau": ParamSpec(
+        dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=1
+    ),
+    "dim": ParamSpec(
+        dtype=int, min=2, max=6,
+        param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=3,
+    ),
+}
+_PERSISTENCE_ENTROPY_RELATIONAL: list[RelationalParamSpec] = [
+    RelationalParamSpec(
+        "window - (dim - 1) * tau >= 3",
+        "ts_persistence_entropy requires window-(dim-1)*tau >= 3 delay embeddings "
+        "(window={window}, dim={dim}, tau={tau})",
+    ),
+]
 
 try:  # H1 Rips persistence kernel from the topology reference module.
     from cleaned_operators.advanced_topology import _rips_h1_pairs, _takens_points
@@ -48,7 +96,16 @@ except Exception:  # pragma: no cover - optional kernel, no silent fallback.
     _HAVE_H1 = False
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    param_specs: dict | None = None,
+    relational_specs: list | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="topology",
@@ -61,6 +118,8 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:topology",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
+        relational_specs=list(relational_specs) if relational_specs else [],
     )
 
 
@@ -207,20 +266,23 @@ def _register(name: str, description: str, *, h0: bool) -> SeriesOperator:
             ["x", "window", "tau", "dim"],
             unit="entropy",
             cost=8,
+            param_specs=_PERSISTENCE_ENTROPY_SPECS,
+            relational_specs=_PERSISTENCE_ENTROPY_RELATIONAL,
         )
 
         def _calculate_series(
             self, x: pd.DataFrame, window: int = 120, tau: int = 1, dim: int = 3, **_: Any
         ) -> pd.DataFrame:
-            w = int(window)
-            if w < 6:
-                raise ValueError("window must be >= 6")
-            t = int(tau)
-            if t < 1:
-                raise ValueError("tau must be >= 1")
-            d = int(dim)
-            if not (2 <= d <= 6):
-                raise ValueError("dim must be in [2, 6]")
+            # M-2xx: strict validation — fractional/NaN/bool rejected, never
+            # ``int()``-truncated; relational feasibility enforced at binding.
+            w = strict_int(window, "window", lower=6)
+            t = strict_int(tau, "tau", lower=1)
+            d = strict_int(dim, "dim", lower=2, upper=6)
+            if w - (d - 1) * t < 3:
+                raise ValueError(
+                    "ts_persistence_entropy requires window-(dim-1)*tau >= 3 "
+                    f"(window={w}, dim={d}, tau={t})"
+                )
             return frame_like(x, _persistence_entropy_series(x.to_numpy(dtype=float), w, t, d, h0))
 
     return _PersistenceEntropy

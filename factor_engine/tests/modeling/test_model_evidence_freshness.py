@@ -16,6 +16,10 @@ Covers:
 """
 from __future__ import annotations
 
+import csv
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 from modeling.contracts import LabelContract, ashare_decision_clock
@@ -114,6 +118,59 @@ def test_genuine_support_probes_run_real_fits():
     assert _probe_regime_support() is True
     assert _probe_moe_support() is True
     assert _probe_asof_resolution() is True
+
+
+def _load_model_gate_generator():
+    path = Path(__file__).resolve().parents[2] / "scripts" / "generate_model_hard_gates.py"
+    spec = importlib.util.spec_from_file_location("generate_model_hard_gates", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_ledger(path, rows):
+    fields = sorted({key for row in rows for key in row})
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_canonical_summary_treats_feature_inputs_as_declaration(tmp_path):
+    _write_ledger(tmp_path / "MODEL_CANONICAL_LEDGER.csv", [{
+        "canonical": "m", "lane": "MODEL_FEATURE_SCORE", "feature_inputs": "x,y",
+        "stateful": "False", "evidence_sha": "head",
+    }])
+    summary = _load_model_gate_generator()._canonical_gate_summary(tmp_path, "head")
+    typed = summary["MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS"]
+    assert typed["status"] == "PASS"
+    assert typed["canonical_executed"] == 1
+
+
+def test_stateful_applicability_is_not_state_contract_proof(tmp_path):
+    _write_ledger(tmp_path / "MODEL_CANONICAL_LEDGER.csv", [{
+        "canonical": "m", "lane": "STATE_CONDITION_EVENT", "feature_inputs": "x",
+        "stateful": "True", "evidence_sha": "head",
+    }])
+    summary = _load_model_gate_generator()._canonical_gate_summary(tmp_path, "head")
+    gate = summary["MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT"]
+    assert gate["status"] == "NOT_RUN"
+    assert gate["canonical_total"] == 1
+    assert gate["canonical_executed"] == 0
+
+
+def test_stale_rows_remain_visible_in_totals(tmp_path):
+    _write_ledger(tmp_path / "MODEL_CANONICAL_LEDGER.csv", [{
+        "canonical": "m", "lane": "MODEL_FEATURE_SCORE", "feature_inputs": "x",
+        "stateful": "False", "evidence_sha": "old",
+    }])
+    summary = _load_model_gate_generator()._canonical_gate_summary(tmp_path, "head")
+    gate = summary["MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS"]
+    assert gate["status"] == "NOT_RUN"
+    assert gate["ledger_canonical_total"] == 1
+    assert gate["fresh_canonical_total"] == 0
+    assert "ledger_total=1 fresh_total=0" in gate["detail"]
 
 
 # --------------------------------------------------------------------------- #

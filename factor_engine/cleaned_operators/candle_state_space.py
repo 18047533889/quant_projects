@@ -35,7 +35,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -50,6 +57,35 @@ _MATRIX_PROFILE_PARAM_SPECS: dict[str, ParamSpec] = {
     "subsequence_length": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
     "history": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
 }
+
+# M-11xx: matrix-profile relational feasibility — a combination that is
+# syntactically legal yet mathematically guaranteed to produce an empty search
+# band (all-NaN) is rejected at binding:
+#   * the history band must be able to hold at least one prior subsequence:
+#     ``subsequence_length <= history``;
+#   * ``window`` caps the band: ``history <= window``;
+#   * the exclusion zone (``subsequence_length // 4``) plus the current
+#     subsequence must still leave a non-empty historical band:
+#     ``history >= subsequence_length + subsequence_length // 4``.
+_MATRIX_PROFILE_RELATIONAL_SPECS: list[Any] = [
+    RelationalParamSpec(
+        "subsequence_length <= history",
+        "ts_matrix_profile_* requires subsequence_length <= history "
+        "(history must hold at least one prior subsequence; subsequence_length="
+        "{subsequence_length}, history={history})",
+    ),
+    RelationalParamSpec(
+        "history <= window",
+        "ts_matrix_profile_* requires history <= window "
+        "(window={window}, history={history})",
+    ),
+    RelationalParamSpec(
+        "history >= subsequence_length + subsequence_length // 4",
+        "ts_matrix_profile_* requires history >= subsequence_length + "
+        "subsequence_length//4 (the exclusion zone must leave a non-empty "
+        "historical band; history={history}, subsequence_length={subsequence_length})",
+    ),
+]
 
 #: M-142: Mahalanobis fit-quality telemetry.  Populated on every (col, row) fit
 #: attempt inside ``_mahalanobis_series``; the module-level
@@ -97,7 +133,8 @@ def _set_mahalanobis_telemetry(
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int,
-              param_specs: dict[str, ParamSpec] | None = None) -> OperatorMetadata:
+              param_specs: dict[str, ParamSpec] | None = None,
+              relational_specs: list[Any] | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="candle_state_space",
@@ -105,6 +142,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         param_names=params,
         return_type="series",
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+        relational_specs=list(relational_specs) if relational_specs else [],
         tags=[
             "candle_state_space", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -481,6 +519,7 @@ class TsMultivariateMatrixProfileNovelty(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
     )
 
     def _calculate_series(
@@ -516,6 +555,7 @@ class TsMatrixProfileMotifAge(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
     )
 
     def _calculate_series(
@@ -550,6 +590,7 @@ class TsMatrixProfileMotifFrequency(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
     )
 
     def _calculate_series(
@@ -583,6 +624,7 @@ class TsMatrixProfileNeighborDispersion(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
     )
 
     def _calculate_series(

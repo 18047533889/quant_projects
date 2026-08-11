@@ -58,7 +58,31 @@ _MULTI_PARAM_SPECS: dict[str, ParamSpec] = {
     "coefficient_index": ParamSpec(dtype=int, min=0, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
     "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     "add_intercept": ParamSpec(dtype=bool, param_role=ParamRole.POLICY, searchable=False),
+    # P1: window semantics governance — ``window`` is a MAX LOOKBACK, NOT a
+    # strict full window; ``warmup_policy`` is catalog-visible (part of the
+    # semantic identity), with ``"full"`` opting into a strict full-history floor.
+    "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"),
+                               param_role=ParamRole.POLICY, searchable=False),
 }
+# P1 window-semantics contract for the rolling multi regression family.
+_MULTI_WINDOW_SEMANTICS = "max_lookback"
+_MULTI_WARMUP_POLICY = "expanding"
+_MULTI_FULL_WARMUP = "full"
+_MULTI_MIN_EFFECTIVE_OBS_EXPR = "max(min_periods, n_coeffs + 1)"
+
+# P1 (no-intercept R² definition governance): the R² reported by every
+# ``ts_*_regression_r2*`` canonical uses the CENTERED total sum of squares
+# ``SS_tot = sum((y - mean(y))**2)`` REGARDLESS of ``add_intercept`` — a single,
+# versioned, well-defined convention.  No separate through-the-origin uncentered
+# R² (``1 - sum(e**2)/sum(y**2)``) is exposed; changing to it would silently
+# alter every no-intercept output, so any such change must ship as a new
+# semantic version.  The adjusted-R² degrees of freedom pair with the intercept
+# convention: ``df_total = n - 1`` (centered) and
+# ``df_error = n - p - (1 if add_intercept else 0)`` (``p`` = slope features,
+# intercept = 1 when fitted, else 0).
+_R2_DEFINITION = "centered_ss_tot"
+_R2_ADJ_TOTAL_DF_EXPR = "n - 1"
+_R2_ADJ_ERROR_DF_EXPR = "n - p - (1 if add_intercept else 0)"
 _QUANTILE_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
     "q": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
@@ -108,6 +132,7 @@ def _multi_regression(
     *,
     fit_lag: int = 0,
     stability_k: int = 0,
+    warmup_policy: str = "expanding",
 ) -> pd.DataFrame:
     """Rolling multi-variable regression over ``(row, col)`` panels.
 
@@ -119,9 +144,17 @@ def _multi_regression(
     additionally reports the standard deviation of the fitted coefficient over
     the last ``stability_k`` consecutive fits (each ending ``fit_lag`` rows
     before its row).
+
+    Window semantics (P1): ``window`` is a MAX LOOKBACK, not a strict full
+    window.  With ``warmup_policy="expanding"`` (default) the kernel emits as
+    soon as ``max(min_periods, n_coeffs + 1)`` valid rows are present inside the
+    trailing window.  With ``warmup_policy="full"`` the trailing window must be
+    completely observed (``fit_end >= window - 1``) before any output.
     """
     if not features:
         raise ValueError("at least one feature panel is required")
+    if warmup_policy not in ("expanding", "full"):
+        raise ValueError(f"warmup_policy must be 'expanding' or 'full', got {warmup_policy!r}")
     frames = [y] + features
     aligned_frames = aligned(*frames)
     y = aligned_frames[0]
@@ -146,6 +179,9 @@ def _multi_regression(
         for row in range(rows):
             fit_end = row - lag
             if fit_end < 0:
+                continue
+            # P1: strict full-history floor when warmup_policy="full".
+            if warmup_policy == "full" and fit_end < w - 1:
                 continue
             start = max(0, fit_end - w + 1)
             seg_y = ycol[start : fit_end + 1]
@@ -210,6 +246,11 @@ def _multi_regression(
                         out[row, col] = resid / sd
             elif stat in ("r2", "r2_adj"):
                 ss_res = float(np.sum(e * e))
+                # P1 (R² definition governance, versioned): ``_R2_DEFINITION ==
+                # "centered_ss_tot"`` — SS_tot is the CENTERED total sum of
+                # squares ``sum((y - mean(y))**2)`` REGARDLESS of add_intercept.
+                # No separate through-the-origin uncentered R²
+                # (``1 - sum(e**2)/sum(y**2)``) is exposed.
                 ss_tot = float(np.sum((vy - np.mean(vy)) ** 2))
                 if ss_tot > 0.0:
                     # P1-88: R² is only guaranteed non-negative when an intercept
@@ -226,9 +267,10 @@ def _multi_regression(
                         # ``design.shape[1]`` which included the intercept and
                         # penalised one extra degree of freedom).
                         p = len(feats)
-                        # With an intercept the degrees of freedom are
-                        # n - p - 1; without one (regression through the origin)
-                        # they are n - p.
+                        # P1 (df pair with the intercept convention, versioned):
+                        # with an intercept the error df are n - p - 1; without
+                        # one (regression through the origin) they are n - p.
+                        # The centered SS_tot fixes the total df at n - 1.
                         denom = n - p - (1 if add_intercept else 0)
                         out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0))
                     else:
@@ -258,6 +300,10 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
                     input_units: dict[str, str] | None = None,
                     output_unit: str | None = None,
                     diagnostic_only: bool = False):
+    _desc = f"{description}（window=max lookback，非严格满窗；min_effective_obs=max(min_periods, 特征数+1)；warmup_policy={_MULTI_WARMUP_POLICY} 渐进输出）"
+    if stat in ("r2", "r2_adj"):
+        _desc += f"（R² 定义 versioned：{_R2_DEFINITION}，加截距与不加截距统一 centered SS_tot）"
+
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -269,22 +315,26 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
     )
     class _MultiOp(SeriesOperator):
         metadata = metadata(
-            name, description,
-            ["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept"],
+            name, _desc,
+            ["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
             unit=unit, cost=cost,
             input_units=input_units if input_units is not None else _DEFAULT_INPUT_UNITS,
             output_unit=output_unit if output_unit is not None else _DEFAULT_OUTPUT_UNIT.get(stat),
             diagnostic_only=diagnostic_only,
             param_specs=_MULTI_PARAM_SPECS,
         )
+        # P1: window = max lookback (documented, machine-readable contract).
+        metadata.window_semantics = _MULTI_WINDOW_SEMANTICS
 
         def _calculate_series(self, y, x1=None, x2=None, x3=None, x4=None,
-                              window=60, coefficient_index=1, min_periods=10, add_intercept=True, **_):
+                              window=60, coefficient_index=1, min_periods=10, add_intercept=True,
+                              warmup_policy="expanding", **_):
             feats = _gather_features((x1, x2, x3, x4), 4)
             return _multi_regression(
                 y, feats, int(window), int(min_periods), bool(add_intercept),
                 fit_fn, extra, stat, int(coefficient_index),
                 fit_lag=int(fit_lag), stability_k=int(stability_k),
+                warmup_policy=str(warmup_policy),
             )
 
     return _MultiOp

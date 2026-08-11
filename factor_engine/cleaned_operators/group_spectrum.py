@@ -13,9 +13,13 @@ decomposition yields three regime / crowding signals broadcast to every member:
   top left singular vector across members): a leader-only mode is localized in
   a few names.
 
-The eigenspectrum of the within-group correlation structure switches with market
-regime (RMT literature on the A-share market); these make that switch a daily
+The eigenspectrum of the within-group correlation structure switches with
+market regime (RMT literature on the A-share market); these make that switch a daily
 cross-sectional state.  Deterministic (SVD, no randomness).
+
+The breadth stability gate is governed by explicit ``breadth_window`` (default
+60), a versioned estimator policy with ``history_requirement:breadth_window``.
+Chunked execution must carry this per-group breadth history across boundaries.
 """
 from __future__ import annotations
 
@@ -53,7 +57,26 @@ _REL_GAP_THRESHOLD = 0.10
 # structure; if today's count collapses to < 0.5 of the trailing median we fail
 # the spectrum output for that day (NaN).
 _BREADTH_STABILITY_WINDOW = 60
+_BREADTH_STABILITY_WINDOW_VERSION = "breadth_stability_v1"  # M-7xx versioned policy
 _BREADTH_RATIO_THRESHOLD = 0.5
+
+# M-7xx: the breadth-history window is an explicit, versioned, non-searchable
+# estimator-resolability knob (default stays 60 so behaviour is unchanged).  The
+# spectrum operators consume a per-group trailing state of the last
+# ``breadth_window`` valid-member counts, so a factor built on these operators
+# carries an ADDITIONAL history requirement: ``breadth_window`` bars of breadth
+# state per group (declared in the metadata tag / docstring).  A chunk that
+# starts mid-history has no prior breadth state and can emit different values
+# from the full-history run — batch-chunk parity therefore requires the breadth
+# state to be carried across chunk boundaries (or the chunk to warm up
+# ``breadth_window`` bars).
+_BREADTH_WINDOW_SPEC = ParamSpec(
+    dtype=int,
+    min=2,
+    default=_BREADTH_STABILITY_WINDOW,
+    searchable=False,
+    param_role=ParamRole.ESTIMATOR_RESOLUTION,
+)
 
 # P1-L #133: breadth-history keys must be (GroupSchemaVersion, GroupId), never a
 # bare label — "电子" under industry-taxonomy v2 is a DIFFERENT group from "电子"
@@ -213,12 +236,16 @@ def _group_spectrum_series(
     *,
     group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
     eigen_gap: float = _REL_GAP_THRESHOLD,
+    breadth_window: int = _BREADTH_STABILITY_WINDOW,
 ) -> np.ndarray:
     rows, cols, d = feats.shape
     min_members = _min_members(d)
     out = np.full((rows, cols), np.nan, dtype=float)
     # P1-L #134: reject exact-duplicate feature panels before any SVD work.
     _reject_duplicate_feature_panels(feats)
+    bw = int(breadth_window)
+    if bw < 2:
+        raise ValueError("breadth_window must be >= 2")
     # P1 (round 7): per-group trailing history of valid-member counts so extreme
     # membership swings (30 members today, 7 tomorrow) are treated as coverage
     # noise instead of economic change.
@@ -248,7 +275,7 @@ def _group_spectrum_series(
             # member count collapses below 0.5 of the trailing median, the
             # spectral change is coverage noise; fail closed to NaN.
             key = (str(group_schema_version), label)
-            hist = breadth_history.setdefault(key, deque(maxlen=_BREADTH_STABILITY_WINDOW))
+            hist = breadth_history.setdefault(key, deque(maxlen=bw))
             if len(hist) >= 3:
                 trailing_median = float(np.median(list(hist)))
                 if trailing_median > 0.0 and Zv.shape[0] < _BREADTH_RATIO_THRESHOLD * trailing_median:
@@ -393,16 +420,23 @@ class GroupFeatureModeShare(SeriesOperator):
 
     metadata = _metadata(
         "group_feature_mode_share",
-        "组内特征谱 top-mode 占比 σ1²/Σσ²（拥挤/同步化）。",
-        ["f1", "f2", "f3", "group", "group_schema_version"],
+        "组内特征谱 top-mode 占比 σ1²/Σσ²（拥挤/同步化）。"
+        "历史依赖：需要额外 breadth_window 日组内有效成员数状态"
+        "（history_requirement:breadth_window）。",
+        ["f1", "f2", "f3", "group", "group_schema_version", "breadth_window"],
         unit="ratio",
         cost=4,
         # P1-L #132: every member of a group gets the same value that day — a
         # GROUP state (regime/condition input), never a stock-level alpha
         # terminal (CS IC on a broadcast constant cross-section is meaningless).
+        # M-7xx: breadth_window is the versioned, non-searchable breadth-history
+        # window of the stability gate.
         role="group_state",
-        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
-        extra_tags=("group_state",),
+        param_specs={
+            "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
+            "breadth_window": _BREADTH_WINDOW_SPEC,
+        },
+        extra_tags=("group_state", "history_requirement:breadth_window"),
     )
 
     def _calculate_series(
@@ -412,6 +446,7 @@ class GroupFeatureModeShare(SeriesOperator):
         f3: pd.DataFrame,
         group: pd.DataFrame,
         group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        breadth_window: int = _BREADTH_STABILITY_WINDOW,
         **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
@@ -420,6 +455,7 @@ class GroupFeatureModeShare(SeriesOperator):
             _group_spectrum_series(
                 feats, group.to_numpy(), "mode_share",
                 group_schema_version=group_schema_version,
+                breadth_window=breadth_window,
             ),
         )
 
@@ -441,14 +477,19 @@ class GroupFeatureEffectiveRank(SeriesOperator):
 
     metadata = _metadata(
         "group_feature_effective_rank",
-        "组内特征谱有效秩 exp(-Σp log p)。",
-        ["f1", "f2", "f3", "group", "group_schema_version"],
+        "组内特征谱有效秩 exp(-Σp log p)。"
+        "历史依赖：需要额外 breadth_window 日组内有效成员数状态"
+        "（history_requirement:breadth_window）。",
+        ["f1", "f2", "f3", "group", "group_schema_version", "breadth_window"],
         unit="count",
         cost=4,
         # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
         role="group_state",
-        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
-        extra_tags=("group_state",),
+        param_specs={
+            "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
+            "breadth_window": _BREADTH_WINDOW_SPEC,
+        },
+        extra_tags=("group_state", "history_requirement:breadth_window"),
     )
 
     def _calculate_series(
@@ -458,6 +499,7 @@ class GroupFeatureEffectiveRank(SeriesOperator):
         f3: pd.DataFrame,
         group: pd.DataFrame,
         group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        breadth_window: int = _BREADTH_STABILITY_WINDOW,
         **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
@@ -466,6 +508,7 @@ class GroupFeatureEffectiveRank(SeriesOperator):
             _group_spectrum_series(
                 feats, group.to_numpy(), "effective_rank",
                 group_schema_version=group_schema_version,
+                breadth_window=breadth_window,
             ),
         )
 
@@ -488,8 +531,10 @@ class GroupFeatureModeLocalization(SeriesOperator):
 
     metadata = _metadata(
         "group_feature_mode_localization",
-        "组内 top-mode 局域化 (N·Σu1⁴-1)/(N-1)（[0,1]，谱隙门槛）。",
-        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap"],
+        "组内 top-mode 局域化 (N·Σu1⁴-1)/(N-1)（[0,1]，谱隙门槛）。"
+        "历史依赖：需要额外 breadth_window 日组内有效成员数状态"
+        "（history_requirement:breadth_window）。",
+        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap", "breadth_window"],
         unit="ratio",
         cost=4,
         # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
@@ -500,8 +545,9 @@ class GroupFeatureModeLocalization(SeriesOperator):
         param_specs={
             "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
             "eigen_gap": _EIGEN_GAP_SPEC,
+            "breadth_window": _BREADTH_WINDOW_SPEC,
         },
-        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}"),
+        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}", "history_requirement:breadth_window"),
     )
 
     def _calculate_series(
@@ -512,6 +558,7 @@ class GroupFeatureModeLocalization(SeriesOperator):
         group: pd.DataFrame,
         group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
         eigen_gap: float = _REL_GAP_THRESHOLD,
+        breadth_window: int = _BREADTH_STABILITY_WINDOW,
         **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
@@ -521,6 +568,7 @@ class GroupFeatureModeLocalization(SeriesOperator):
                 feats, group.to_numpy(), "localization",
                 group_schema_version=group_schema_version,
                 eigen_gap=eigen_gap,
+                breadth_window=breadth_window,
             ),
         )
 
@@ -542,14 +590,19 @@ class GroupFeatureSpectralGap(SeriesOperator):
 
     metadata = _metadata(
         "group_feature_spectral_gap",
-        "组内谱隙 (σ1²-σ2²)/Σσ²（单主题 vs 双主题竞争）。",
-        ["f1", "f2", "f3", "group", "group_schema_version"],
+        "组内谱隙 (σ1²-σ2²)/Σσ²（单主题 vs 双主题竞争）。"
+        "历史依赖：需要额外 breadth_window 日组内有效成员数状态"
+        "（history_requirement:breadth_window）。",
+        ["f1", "f2", "f3", "group", "group_schema_version", "breadth_window"],
         unit="ratio",
         cost=4,
         # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
         role="group_state",
-        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
-        extra_tags=("group_state",),
+        param_specs={
+            "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
+            "breadth_window": _BREADTH_WINDOW_SPEC,
+        },
+        extra_tags=("group_state", "history_requirement:breadth_window"),
     )
 
     def _calculate_series(
@@ -559,6 +612,7 @@ class GroupFeatureSpectralGap(SeriesOperator):
         f3: pd.DataFrame,
         group: pd.DataFrame,
         group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        breadth_window: int = _BREADTH_STABILITY_WINDOW,
         **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
@@ -567,6 +621,7 @@ class GroupFeatureSpectralGap(SeriesOperator):
             _group_spectrum_series(
                 feats, group.to_numpy(), "spectral_gap",
                 group_schema_version=group_schema_version,
+                breadth_window=breadth_window,
             ),
         )
 
@@ -588,8 +643,10 @@ class GroupFeatureSecondModeLocalization(SeriesOperator):
 
     metadata = _metadata(
         "group_feature_second_mode_localization",
-        "组内第二模式局域化 (N·Σu2⁴-1)/(N-1)。",
-        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap"],
+        "组内第二模式局域化 (N·Σu2⁴-1)/(N-1)。"
+        "历史依赖：需要额外 breadth_window 日组内有效成员数状态"
+        "（history_requirement:breadth_window）。",
+        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap", "breadth_window"],
         unit="ratio",
         cost=4,
         # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
@@ -598,8 +655,9 @@ class GroupFeatureSecondModeLocalization(SeriesOperator):
         param_specs={
             "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
             "eigen_gap": _EIGEN_GAP_SPEC,
+            "breadth_window": _BREADTH_WINDOW_SPEC,
         },
-        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}"),
+        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}", "history_requirement:breadth_window"),
     )
 
     def _calculate_series(
@@ -610,6 +668,7 @@ class GroupFeatureSecondModeLocalization(SeriesOperator):
         group: pd.DataFrame,
         group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
         eigen_gap: float = _REL_GAP_THRESHOLD,
+        breadth_window: int = _BREADTH_STABILITY_WINDOW,
         **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
@@ -619,6 +678,7 @@ class GroupFeatureSecondModeLocalization(SeriesOperator):
                 feats, group.to_numpy(), "second_mode_localization",
                 group_schema_version=group_schema_version,
                 eigen_gap=eigen_gap,
+                breadth_window=breadth_window,
             ),
         )
 

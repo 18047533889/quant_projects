@@ -24,13 +24,100 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 
+# M-5xx: event-response parameters are binding-time strict.  ``history_window``
+# / ``horizon`` / ``min_events`` / ``refractory`` / ``max_lag`` were previously
+# ``max(2, int(...))``-clamped — a fractional / negative / NaN value was
+# silently coerced into a valid window, manufacturing a false search space.  All
+# are now declared ParamSpecs (strict dtype/bounds) AND strict-validated in the
+# kernel; a ``history_window < horizon`` cohort is empty by construction and is
+# rejected by a RelationalParamSpec before running.
+def _event_history_specs() -> dict[str, ParamSpec]:
+    return {
+        "history_window": ParamSpec(dtype=int, min=2),
+        "horizon": ParamSpec(dtype=int, min=1),
+        "min_events": ParamSpec(dtype=int, min=1),
+        "refractory": ParamSpec(dtype=int, min=0),
+    }
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int, output_unit: str | None = None) -> OperatorMetadata:
+
+def _event_history_relational() -> list[RelationalParamSpec]:
+    return [
+        RelationalParamSpec(
+            "horizon <= history_window",
+            "event response requires horizon <= history_window (the event cohort "
+            "[t-history_window, t-horizon] is empty otherwise; history_window="
+            "{history_window}, horizon={horizon})",
+        ),
+    ]
+
+
+def _strict_history_window(v: Any) -> int:
+    return strict_int(v, "history_window", lower=2)
+
+
+def _strict_horizon(v: Any) -> int:
+    return strict_int(v, "horizon", lower=1)
+
+
+def _strict_min_events(v: Any) -> int:
+    return strict_int(v, "min_events", lower=1)
+
+
+def _strict_refractory(v: Any) -> int:
+    return strict_int(v, "refractory", lower=0)
+
+
+# Curve-family (peak_lag / decay / dispersion / reversal) share the same
+# history_window/horizon/min_events contract; ``dispersion`` additionally takes
+# ``refractory``.  Kept as factories so only the params actually on each
+# canonical enter param_specs (registry invariant: keys ⊆ param_names).
+def _curve_specs(*, with_refractory: bool = False) -> dict[str, ParamSpec]:
+    specs: dict[str, ParamSpec] = {
+        "history_window": ParamSpec(dtype=int, min=2),
+        "horizon": ParamSpec(dtype=int, min=1),
+        "min_events": ParamSpec(dtype=int, min=1),
+    }
+    if with_refractory:
+        specs["refractory"] = ParamSpec(dtype=int, min=0)
+    return specs
+
+
+def _diag_specs() -> dict[str, ParamSpec]:
+    """effective_events / overlap_ratio take event/history_window/horizon/refractory
+    (no ``min_events``); ``refractory`` default is ``None`` (episode width =
+    horizon)."""
+    return {
+        "history_window": ParamSpec(dtype=int, min=2),
+        "horizon": ParamSpec(dtype=int, min=1),
+        "refractory": ParamSpec(dtype=int, min=0, default=None),
+    }
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    output_unit: str | None = None,
+    param_specs: dict | None = None,
+    relational_specs: list | None = None,
+    extra_tags: tuple[str, ...] = (),
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="event_response",
@@ -39,11 +126,13 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         return_type="series",
         tags=[
             "event_response", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
+            "deterministic", *extra_tags,
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
         output_unit=output_unit,
+        param_specs=dict(param_specs) if param_specs else {},
+        relational_specs=list(relational_specs) if relational_specs else [],
     )
 
 
@@ -81,9 +170,9 @@ def _event_episode_metrics_series(
     is absorbed by episode collapse.  Both are 0/NaN when there are no events.
     """
     n = event.shape[0]
-    hw = max(2, int(history_window))
-    H = max(1, int(horizon))
-    refr = max(0, int(refractory))
+    hw = _strict_history_window(history_window)
+    H = _strict_horizon(horizon)
+    refr = _strict_refractory(refractory)
     eff = np.full(n, np.nan)
     ovr = np.full(n, np.nan)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
@@ -114,10 +203,10 @@ def _horizon_response(
     refractory: int = 0,
 ) -> np.ndarray:
     n = response.shape[0]
-    hw = max(2, int(history_window))
-    H = max(1, int(horizon))
-    me = max(1, int(min_events))
-    refr = max(0, int(refractory))
+    hw = _strict_history_window(history_window)
+    H = _strict_horizon(horizon)
+    me = _strict_min_events(min_events)
+    refr = _strict_refractory(refractory)
     out = np.full(n, np.nan)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
     for t in range(n):
@@ -177,15 +266,30 @@ class EventHistoricalResponseMean(SeriesOperator):
     ``peak_lag_normalized`` 这类才是 ratio。事件与响应都由外部输入定义（涨停/
     炸板/成交量冲击/财报 surprise 都可），算子本身只学"过去这种事件发生后通常
     发生什么"。PIT 安全、确定性。
+
+    **真实 timing = MATURED_HISTORICAL_OUTCOME（M-5xx）**：输出是"已成熟历史
+    事件的响应经验"，不是 t-1 fit→forecast t 的预测算子——只有 ``s+H ≤ t``
+    的完整历史路径才进入 cohort。``min_events`` 默认 5 偏弱（为保持 pandas/polars
+    双后端默认一致未提升）：
+    少于该数量成熟事件的日期输出 NaN。参数全部 binding-time 严格校验
+    （history_window/horizon/min_events/refractory ParamSpec；``horizon <=
+    history_window`` 关系可行绑定期强制，非法值 raise 而非 ``int()`` 截断）。
     """
 
     metadata = _metadata(
         "event_historical_response_mean",
-        "历史事件后的平均 horizon 响应（sum/mean 模式，full-horizon cohort，可按 episode 聚合）。",
+        "历史事件后的平均 horizon 响应（sum/mean 模式，full-horizon cohort，可按 episode 聚合；"
+        "MATURED_HISTORICAL_OUTCOME；min_events 默认 5 偏弱，建议 >=10）。",
         ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon", "refractory"],
         unit="same_as:response",
         output_unit="same_as:response",
         cost=4,
+        param_specs=dict(
+            _event_history_specs(),
+            mode=ParamSpec(dtype=str, choices=("sum", "mean"), searchable=True),
+        ),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -203,6 +307,12 @@ class EventHistoricalResponseMean(SeriesOperator):
         m = str(mode).lower()
         if m not in {"sum", "mean"}:
             raise ValueError("event_historical_response_mean requires mode in {'sum','mean'}")
+        # M-5xx: strict binding-time validation (rejects fractional/NaN/negative
+        # instead of the old max(1, int(...)) clamp).
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
+        _strict_refractory(refractory)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -229,14 +339,22 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
     mean 响应 +3% 但 sign balance 接近 0 = 平均被少数极端事件拉高；sign
     balance 接近 +0.9 = 绝大多数事件都涨。对自动搜索判断"响应是否稳健/广泛"
     很关键。共享 event-response kernel。PIT 安全、确定性。
+    真实 timing = MATURED_HISTORICAL_OUTCOME；``min_events`` 默认 5 偏弱
+    （保持 pandas/polars 双后端默认一致；少于该数量成熟事件的日期输出 NaN，
+    建议 >=10）；参数 binding-time 严格校验（``horizon <= history_window``
+    绑定期强制）。
     """
 
     metadata = _metadata(
         "event_historical_response_sign_balance",
-        "历史事件响应符号平衡 mean(sign(R_s))（[-1,1]，full-horizon cohort）。",
+        "历史事件响应符号平衡 mean(sign(R_s))（[-1,1]，full-horizon cohort；"
+        "MATURED_HISTORICAL_OUTCOME）。",
         ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon", "refractory"],
         unit="ratio",
         cost=4,
+        param_specs=_event_history_specs(),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -250,6 +368,10 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
         refractory: int = 0,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
+        _strict_refractory(refractory)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -269,9 +391,9 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
 
 def _hawkes_branching_ratio_series(event: np.ndarray, window: int, max_lag: int, min_events: int) -> np.ndarray:
     n = event.shape[0]
-    w = max(2, int(window))
-    L = max(1, int(max_lag))
-    me = max(2, int(min_events))
+    w = _strict_history_window(window)
+    L = strict_int(max_lag, "max_lag", lower=1)
+    me = strict_int(min_events, "min_events", lower=2)
     # beta chosen so the exponential kernel support is ~ max_lag bars.
     beta = 3.0 / max(L, 1)
     out = np.full(n, np.nan)
@@ -333,6 +455,9 @@ class EventHawkesBranchingRatio(SeriesOperator):
     proxy，**没有**拟合真正的 Hawkes ``λ(t)=μ+Σαe^{-β(t-t_i)}`` 也没有 MLE 求
     ``α/β``；命名用 ``_proxy`` 以免后续被误读为拟合的分支比。度量事件自激/聚集
     强度；regime shift 与模型误设会产生虚假高值，因此仅 P2 / Research。
+    ``window/max_lag/min_events`` 全部 ParamSpec（binding-time 严格校验；
+    ``max_lag < window`` 关系可行绑定期强制）；``min_events`` 默认 5 偏弱
+    （保持 pandas/polars 双后端默认一致，建议 >=10）。
     """
 
     metadata = _metadata(
@@ -341,11 +466,27 @@ class EventHawkesBranchingRatio(SeriesOperator):
         ["event", "window", "max_lag", "min_events"],
         unit="ratio",
         cost=6,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2),
+            "max_lag": ParamSpec(dtype=int, min=1),
+            "min_events": ParamSpec(dtype=int, min=2),
+        },
+        relational_specs=[
+            RelationalParamSpec(
+                "max_lag < window",
+                "event_hawkes_branching_ratio_proxy requires max_lag < window "
+                "(window={window}, max_lag={max_lag})",
+            ),
+        ],
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
         self, event: pd.DataFrame, window: int = 120, max_lag: int = 10, min_events: int = 5, **_: Any
     ) -> pd.DataFrame:
+        _strict_history_window(window)
+        strict_int(max_lag, "max_lag", lower=1)
+        strict_int(min_events, "min_events", lower=2)
         ev = event.to_numpy(dtype=float)
         rows, cols = ev.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -384,10 +525,10 @@ def _response_curve_stats_series(
     double counted when clustering dispersion / significance by episode.
     """
     n = response.shape[0]
-    hw = max(2, int(history_window))
-    H = max(1, int(horizon))
-    me = max(1, int(min_events))
-    refr = max(0, int(refractory))
+    hw = _strict_history_window(history_window)
+    H = _strict_horizon(horizon)
+    me = _strict_min_events(min_events)
+    refr = _strict_refractory(refractory)
     peak_lag = np.full(n, np.nan)
     decay = np.full(n, np.nan)
     dispersion = np.full(n, np.nan)
@@ -451,10 +592,13 @@ class EventResponsePeakLag(SeriesOperator):
 
     metadata = _metadata(
         "event_response_peak_lag",
-        "平均响应曲线峰值时滞 argmax|m(ℓ)|/H（[0,1]）。",
+        "平均响应曲线峰值时滞 argmax|m(ℓ)|/H（[0,1]；MATURED_HISTORICAL_OUTCOME）。",
         ["response", "event", "history_window", "horizon", "min_events"],
         unit="ratio",
         cost=5,
+        param_specs=_curve_specs(),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -466,6 +610,9 @@ class EventResponsePeakLag(SeriesOperator):
         min_events: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -493,10 +640,13 @@ class EventResponseDecayRate(SeriesOperator):
 
     metadata = _metadata(
         "event_response_decay_rate",
-        "平均响应曲线 log|m(ℓ)| 对 ℓ 的斜率（负=衰减）。",
+        "平均响应曲线 log|m(ℓ)| 对 ℓ 的斜率（负=衰减；MATURED_HISTORICAL_OUTCOME）。",
         ["response", "event", "history_window", "horizon", "min_events"],
         unit="ratio",
         cost=5,
+        param_specs=_curve_specs(),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -508,6 +658,9 @@ class EventResponseDecayRate(SeriesOperator):
         min_events: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -535,10 +688,14 @@ class EventResponseDispersion(SeriesOperator):
 
     metadata = _metadata(
         "event_response_dispersion",
-        "事件响应分布离散度 std(R)/mean|R|（>1 胖尾，可按 episode 聚合）。",
+        "事件响应分布离散度 std(R)/mean|R|（>1 胖尾，可按 episode 聚合；"
+        "MATURED_HISTORICAL_OUTCOME）。",
         ["response", "event", "history_window", "horizon", "min_events", "refractory"],
         unit="ratio",
         cost=5,
+        param_specs=_curve_specs(with_refractory=True),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -551,6 +708,10 @@ class EventResponseDispersion(SeriesOperator):
         refractory: int = 0,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
+        _strict_refractory(refractory)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -581,10 +742,14 @@ class EventResponseReversalStrength(SeriesOperator):
 
     metadata = _metadata(
         "event_response_reversal_strength",
-        "响应曲线首尾反转强度（V 型>0 / 冲高回落<0 / 无反转=0）。",
+        "响应曲线首尾反转强度（V 型>0 / 冲高回落<0 / 无反转=0；"
+        "MATURED_HISTORICAL_OUTCOME）。",
         ["response", "event", "history_window", "horizon", "min_events"],
         unit="ratio",
         cost=5,
+        param_specs=_curve_specs(),
+        relational_specs=_event_history_relational(),
+        extra_tags=("matured_historical_outcome",),
     )
 
     def _calculate_series(
@@ -596,6 +761,9 @@ class EventResponseReversalStrength(SeriesOperator):
         min_events: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
+        _strict_min_events(min_events)
         rv = response.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -628,6 +796,8 @@ class EventResponseEffectiveEvents(SeriesOperator):
         ["event", "history_window", "horizon", "refractory"],
         unit="count",
         cost=3,
+        param_specs=_diag_specs(),
+        relational_specs=_event_history_relational(),
     )
 
     def _calculate_series(
@@ -638,9 +808,11 @@ class EventResponseEffectiveEvents(SeriesOperator):
         refractory: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
         ev = event.to_numpy(dtype=float)
         rows, cols = ev.shape
-        refr = int(horizon) if refractory is None else int(refractory)
+        refr = int(horizon) if refractory is None else _strict_refractory(refractory)
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
             eff, _ = _event_episode_metrics_series(ev[:, c], history_window, horizon, refr)
@@ -670,6 +842,8 @@ class EventResponseOverlapRatio(SeriesOperator):
         ["event", "history_window", "horizon", "refractory"],
         unit="ratio",
         cost=3,
+        param_specs=_diag_specs(),
+        relational_specs=_event_history_relational(),
     )
 
     def _calculate_series(
@@ -680,9 +854,11 @@ class EventResponseOverlapRatio(SeriesOperator):
         refractory: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
+        _strict_history_window(history_window)
+        _strict_horizon(horizon)
         ev = event.to_numpy(dtype=float)
         rows, cols = ev.shape
-        refr = int(horizon) if refractory is None else int(refractory)
+        refr = int(horizon) if refractory is None else _strict_refractory(refractory)
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
             _, ovr = _event_episode_metrics_series(ev[:, c], history_window, horizon, refr)
