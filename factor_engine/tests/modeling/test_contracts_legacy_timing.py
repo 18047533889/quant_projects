@@ -3,6 +3,8 @@
 tests (taskbook §1 / §5 / §7 / §11 / §14 / §16 / §35)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import numpy as np
 import pytest
 
@@ -10,16 +12,24 @@ from modeling.contracts import (
     AFTER_CLOSE_TO_NEXT_VWAP,
     BEFORE_SAME_DAY_VWAP,
     DecisionClock,
+    FitFingerprint,
     LabelContract,
     ModelExecutionClass,
     ModelOperatorSpec,
     ParamRole,
     ParameterSearchPolicy,
+    PredictionBatch,
+    PredictionOutputContract,
+    RegimeMetadata,
     SampleAdequacyContract,
+    SessionPhase,
+    TradingTimestamp,
     TimingKind,
     ashare_decision_clock,
+    derive_overlap,
     sample_adequacy_met,
     validate_model_operator_spec,
+    validate_overlap,
 )
 from modeling.legacy import (
     LEGACY_LOCAL_PREDICTIVE_CANONICALS,
@@ -37,6 +47,51 @@ from modeling.presets import (
     PREDICTIVE_REGIME_DEFAULT,
     recommendation_map,
 )
+
+
+def test_contract_hashes_and_typed_trading_timestamp():
+    ts = TradingTimestamp(datetime(2026, 8, 12, 15, tzinfo=timezone.utc), phase=SessionPhase.CLOSE)
+    assert ts.to_dict()["phase"] == "close"
+    with pytest.raises(ValueError, match="timezone-aware"):
+        TradingTimestamp(datetime(2026, 8, 12, 15))
+
+    base = vwap_to_vwap_label("vwap_5", 5, overlapping=True, embargo_bars=2)
+    changed = vwap_to_vwap_label("vwap_6", 6, overlapping=True, embargo_bars=2)
+    assert base.semantic_hash != changed.semantic_hash
+    clock = ashare_decision_clock()
+    assert clock.semantic_hash != DecisionClock(execution_at="t+2 VWAP").semantic_hash
+
+
+def test_overlap_derivation_and_validation():
+    assert derive_overlap(5, stride_bars=1)
+    assert not derive_overlap(5, stride_bars=5)
+    validate_overlap(vwap_to_vwap_label("x", 5, overlapping=True), stride_bars=1)
+    with pytest.raises(ValueError, match="overlap flag"):
+        validate_overlap(vwap_to_vwap_label("x", 5, overlapping=False), stride_bars=1)
+
+
+def test_prediction_output_and_batch_contracts():
+    batch = PredictionBatch(values=np.array([1.0, 2.0]), row_ids=("a", "b"))
+    np.testing.assert_array_equal(batch.validate(), [1.0, 2.0])
+    with pytest.raises(ValueError, match="finite"):
+        PredictionOutputContract().validate([1.0, np.nan])
+    with pytest.raises(ValueError, match="aligned"):
+        PredictionBatch(values=np.array([1.0]), row_ids=("a", "b")).validate()
+    with pytest.raises(ValueError, match="sorted"):
+        PredictionBatch(values=np.array([1.0, 2.0]), row_ids=("b", "a")).validate()
+    with pytest.raises(ValueError, match="status"):
+        PredictionBatch(values=np.array([1.0]), row_ids=("a",), status="degraded").validate()
+
+
+def test_regime_metadata_and_fit_fingerprint():
+    assert RegimeMetadata(mode="soft", gating_transform="zscore", temperature=0.5).semantic_hash
+    with pytest.raises(ValueError, match="temperature"):
+        RegimeMetadata(temperature=0.0)
+    first = FitFingerprint.from_rows(["2026-01-01|A", "2026-01-01|B"], {"alpha": 1})
+    second = FitFingerprint.from_rows(["2026-01-01|B", "2026-01-01|A"], {"alpha": 1})
+    assert first.row_order_hash != second.row_order_hash
+    assert set(first.runtime_environment) == {"python", "platform", "numpy"}
+    assert first.semantic_hash != second.semantic_hash
 
 
 def test_execution_classes():

@@ -27,8 +27,15 @@ The A-share daily clock scenarios (§11.1) are exported as module constants.
 from __future__ import annotations
 
 import enum
+import hashlib
+import json
+import platform
+import sys
 from dataclasses import dataclass, field
-from typing import Any
+from datetime import date, datetime
+from typing import Any, Mapping, Sequence
+
+import numpy as np
 
 __all__ = [
     "ModelExecutionClass",
@@ -37,6 +44,12 @@ __all__ = [
     "SampleAdequacyContract",
     "LabelContract",
     "DecisionClock",
+    "TradingTimestamp",
+    "SessionPhase",
+    "PredictionOutputContract",
+    "PredictionBatch",
+    "RegimeMetadata",
+    "FitFingerprint",
     "ParamRole",
     "ParameterSearchPolicy",
     "ModelOperatorSpec",
@@ -46,7 +59,60 @@ __all__ = [
     "ashare_decision_clock",
     "sample_adequacy_met",
     "validate_model_operator_spec",
+    "derive_overlap",
+    "validate_overlap",
 ]
+
+
+class SessionPhase(str, enum.Enum):
+    PRE_OPEN = "pre_open"
+    OPEN = "open"
+    MID = "mid"
+    CLOSE = "close"
+    POST_CLOSE = "post_close"
+
+
+@dataclass(frozen=True, order=True)
+class TradingTimestamp:
+    """Timezone-aware trading instant with explicit market/session phase."""
+
+    value: datetime
+    market: str = "CN"
+    session: str = "regular"
+    phase: SessionPhase = SessionPhase.CLOSE
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, datetime) or self.value.tzinfo is None:
+            raise ValueError("TradingTimestamp.value must be timezone-aware datetime")
+        if not self.market or not self.session:
+            raise ValueError("market and session are required")
+
+    @classmethod
+    def parse(cls, value: str | datetime, **kwargs: Any) -> "TradingTimestamp":
+        return cls(datetime.fromisoformat(value) if isinstance(value, str) else value, **kwargs)
+
+    def to_dict(self) -> dict[str, str]:
+        return {"value": self.value.isoformat(), "market": self.market,
+                "session": self.session, "phase": self.phase.value}
+
+
+def _canonical(value: Any) -> Any:
+    if isinstance(value, enum.Enum):
+        return value.value
+    if isinstance(value, TradingTimestamp):
+        return value.to_dict()
+    if isinstance(value, Mapping):
+        return {str(k): _canonical(v) for k, v in sorted(value.items(), key=lambda x: str(x[0]))}
+    if isinstance(value, (list, tuple)):
+        return [_canonical(v) for v in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _semantic_hash(payload: Any) -> str:
+    encoded = json.dumps(_canonical(payload), sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -268,6 +334,24 @@ class LabelContract:
     purge_by_interval: bool = True
     embargo_bars: int = 0
 
+    def __post_init__(self) -> None:
+        if self.horizon_bars < 1 or self.embargo_bars < 0:
+            raise ValueError("horizon_bars must be >= 1 and embargo_bars >= 0")
+        if not self.label_name or not self.return_basis:
+            raise ValueError("label_name and return_basis are required")
+
+    @property
+    def semantic_hash(self) -> str:
+        return _semantic_hash({
+            "label_name": self.label_name,
+            "horizon_bars": self.horizon_bars,
+            "return_basis": self.return_basis,
+            "availability_time_rule": self.availability_time_rule,
+            "overlapping": self.overlapping,
+            "purge_by_interval": self.purge_by_interval,
+            "embargo_bars": self.embargo_bars,
+        })
+
     def label_interval(self, anchor_index: int) -> tuple[int, int]:
         """The ``[entry_time, exit_time]`` bar interval of a training sample
         anchored at ``anchor_index`` (§9).  Purge uses interval overlap."""
@@ -287,8 +371,125 @@ class DecisionClock:
     score_written_at: str = "t+1 open"
     execution_at: str = "t+1 VWAP"
 
+    @property
+    def semantic_hash(self) -> str:
+        return _semantic_hash({
+            "decision_timestamp": self.decision_at,
+            "feature_timestamps": self.feature_available_at,
+            "label_timestamp": self.label_available_at,
+            "score_timestamp": self.score_written_at,
+            "execution_timestamp": self.execution_at,
+        })
+
     def feature_available(self, feature: str) -> str:
         return self.feature_available_at.get(feature, self.decision_at)
+
+
+@dataclass(frozen=True)
+class PredictionOutputContract:
+    """Shape, alignment, finiteness, and status gate for model scores."""
+
+    status: str = "ok"
+    allow_nan: bool = False
+    ndim: int = 1
+    dtype_kinds: str = "fiu"
+
+    def validate(self, values: Any, *, expected_rows: int | None = None) -> np.ndarray:
+        out = np.asarray(values)
+        if out.ndim != self.ndim:
+            raise ValueError(f"prediction ndim {out.ndim} != {self.ndim}")
+        if expected_rows is not None and len(out) != expected_rows:
+            raise ValueError("prediction rows are not aligned with input rows")
+        if out.dtype.kind not in self.dtype_kinds:
+            raise ValueError(f"prediction dtype kind {out.dtype.kind!r} is not numeric")
+        if not self.allow_nan and not np.isfinite(out).all():
+            raise ValueError("prediction output must be finite")
+        if self.status != "ok":
+            raise ValueError(f"prediction status gate is {self.status!r}")
+        return out
+
+
+@dataclass(frozen=True)
+class PredictionBatch:
+    values: Any
+    row_ids: tuple[Any, ...]
+    timestamps: tuple[Any, ...] = ()
+    status: str = "ok"
+
+    def validate(self, contract: PredictionOutputContract | None = None) -> np.ndarray:
+        out = (contract or PredictionOutputContract()).validate(
+            self.values, expected_rows=len(self.row_ids)
+        )
+        if self.timestamps and len(self.timestamps) != len(self.row_ids):
+            raise ValueError("prediction timestamps are not row-aligned")
+        if tuple(sorted(self.row_ids, key=str)) != self.row_ids:
+            raise ValueError("prediction rows must be deterministic and sorted")
+        if self.status != "ok":
+            raise ValueError(f"prediction batch status is {self.status!r}")
+        return out
+
+
+@dataclass(frozen=True)
+class RegimeMetadata:
+    mode: str = "hard"
+    gating_transform: str = "identity"
+    temperature: float = 1.0
+    tie_policy: str = "lower"
+    n_regimes: int = 2
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"hard", "soft"}:
+            raise ValueError("unsupported regime mode")
+        if self.gating_transform not in {"identity", "zscore", "rank"}:
+            raise ValueError("unsupported gating transform")
+        if not np.isfinite(self.temperature) or self.temperature <= 0:
+            raise ValueError("temperature must be finite and > 0")
+        if self.tie_policy not in {"lower", "upper", "stable"} or self.n_regimes < 2:
+            raise ValueError("invalid regime tie policy or regime count")
+
+    @property
+    def semantic_hash(self) -> str:
+        return _semantic_hash(self.__dict__)
+
+
+@dataclass(frozen=True)
+class FitFingerprint:
+    row_order_hash: str
+    runtime_environment: Mapping[str, str]
+    model_config_hash: str
+    code_hash: str
+
+    @classmethod
+    def from_rows(
+        cls, row_ids: Sequence[Any], model_config: Mapping[str, Any], *, code_hash: str = ""
+    ) -> "FitFingerprint":
+        environment = {
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "numpy": np.__version__,
+        }
+        return cls(
+            row_order_hash=_semantic_hash([str(x) for x in row_ids]),
+            runtime_environment=environment,
+            model_config_hash=_semantic_hash(model_config),
+            code_hash=code_hash,
+        )
+
+    @property
+    def semantic_hash(self) -> str:
+        return _semantic_hash(self.__dict__)
+
+
+def derive_overlap(horizon_bars: int, *, stride_bars: int = 1) -> bool:
+    if horizon_bars < 1 or stride_bars < 1:
+        raise ValueError("horizon_bars and stride_bars must be >= 1")
+    return stride_bars < horizon_bars
+
+
+def validate_overlap(contract: LabelContract, *, stride_bars: int) -> None:
+    derived = derive_overlap(contract.horizon_bars, stride_bars=stride_bars)
+    if contract.overlapping != derived:
+        raise ValueError("label overlap flag does not match horizon/stride derivation")
 
 
 # A-share daily execution scenarios (§11.1).
