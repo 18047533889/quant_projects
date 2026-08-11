@@ -1,100 +1,158 @@
 {
-  "commit_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b",
+  "commit_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36",
   "gates": {
     "MODEL_ZERO_DEAD_EXPLICIT_CONTRACT_KEYS": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "lane_dead=[] timing_dead=[]",
       "detail": "lane_dead=[] timing_dead=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ZERO_UNCLASSIFIED_TRUE_MODELS": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "unclassified=[]",
       "detail": "unclassified=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING_KIND": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "no_kind=[]",
       "detail": "no_kind=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "missing=[]",
       "detail": "missing=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ZERO_INSAMPLE_DIAGNOSTIC_IN_PREDICTIVE_LANE": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "diag_in_alpha=[]",
       "detail": "diag_in_alpha=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ZERO_GENERATED_TIMING_USED_FOR_PRODUCTION": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "direct_use_with_generated_timing=[]",
       "detail": "direct_use_with_generated_timing=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ZERO_SILENT_PARAMETER_CLAMP": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
       "detail": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ZERO_DUPLICATE_MINING_CANONICAL_ALIASES": {
-      "PASS": true,
+      "value": true,
+      "status": "PASS",
+      "check": "duplicate_aliases=[]",
       "detail": "duplicate_aliases=[]",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
-    },
-    "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
-      "PASS": true,
-      "detail": "ledger_bound=c9c08ff5ca570b6422ae5048d495a456c220f40b current_head=c9c08ff5ca570b6422ae5048d495a456c220f40b",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "feature_inputs: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_PARAMETER_DOMAIN": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "FAIL",
+      "canonical_total": 88,
+      "canonical_executed": 88,
+      "canonical_pass": 0,
+      "detail": "parameter_domain_certified: 0/88 applicable canonical rows executed; FAIL",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_ORACLE": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "oracle_pass: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_CAUSALITY_EVIDENCE": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "causality_pass: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_MISSING_POLICY_EVIDENCE": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "missing_gap_pass: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_UNIT_EVIDENCE": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
-    },
-    "MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
-    },
-    "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "unit_contract_pass: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_ALL_OPTIMIZED_PATHS_REFERENCE_PARITY": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 88,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "optimized_reference_parity_pass: 0/88 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
+    },
+    "MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT": {
+      "value": true,
+      "status": "PASS",
+      "canonical_total": 6,
+      "canonical_executed": 6,
+      "canonical_pass": 6,
+      "detail": "stateful: 6/6 applicable canonical rows executed; PASS",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
+    },
+    "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN": {
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 6,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "batch_single_parity_pass: 0/6 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     },
     "MODEL_NEGATIVE_CONTROLS_ALL_FIRE": {
-      "NOT_RUN": true,
-      "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-      "evidence_sha": "c9c08ff5ca570b6422ae5048d495a456c220f40b"
+      "value": false,
+      "status": "NOT_RUN",
+      "canonical_total": 300,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "future_poison_pass: 0/300 applicable canonical rows executed; NOT_RUN",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
+    },
+    "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
+      "value": true,
+      "status": "PASS",
+      "check": "evidence_sha='c9c08ff5ca570b6422ae5048d495a456c220f40b' repository_HEAD='9bd5836f094474cd257f3fbac1ab5644af6e916d'",
+      "detail": "evidence_sha='6fd715953558da50d976951e9e7cc3c19f3dca36' repository_HEAD='6fd715953558da50d976951e9e7cc3c19f3dca36'",
+      "evidence_sha": "6fd715953558da50d976951e9e7cc3c19f3dca36"
     }
   }
 }
