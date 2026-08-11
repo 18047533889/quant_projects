@@ -17,6 +17,7 @@ from modeling.contracts import (
     ashare_decision_clock,
 )
 from modeling.dataset import PanelDataset
+from modeling.sample_policy import measure_train_telemetry
 from modeling.hyperparams import APPROVED_SEARCH_SPACES, param_search_policy
 from modeling.learners import PCRLearner
 from modeling.predictor import Predictor, batch_predict, predict_panel
@@ -30,6 +31,8 @@ from modeling.split import (
 from modeling.timing import vwap_to_vwap_label
 from modeling.trainer import PreprocessingSpec, TrainResult, fit_preprocessing, train_model
 from modeling.walk_forward import (
+    OOSPredictionWindow,
+    OOSStitchPolicy,
     WalkForwardFold,
     WalkForwardSpec,
     apply_embargo,
@@ -39,7 +42,9 @@ from modeling.walk_forward import (
     nested_splits,
     purge_and_embargo,
     purge_overlap,
+    stitch_oos_windows,
 )
+from market.exchange_session_calendar import ExchangeSessionCalendar
 
 
 # --------------------------------------------------------------------------- #
@@ -138,9 +143,95 @@ def test_check_fold_order_reports_violations():
     assert any("train/test date overlap" in v for v in violations2)
 
 
+def _weekday_calendar(*, holidays=()) -> ExchangeSessionCalendar:
+    return ExchangeSessionCalendar(
+        market="ashare",
+        exchange="SSE",
+        timezone="Asia/Shanghai",
+        holidays=frozenset(holidays),
+    )
+
+
+def test_oos_stitch_has_unique_latest_legal_artifact_per_date():
+    old = pd.DataFrame({"date": pd.date_range("2024-01-02", periods=5, freq="D"), "score": 1.0})
+    new = pd.DataFrame({"date": pd.date_range("2024-01-04", periods=4, freq="D"), "score": 2.0})
+    stitched = stitch_oos_windows(
+        [
+            OOSPredictionWindow("a0", pd.Timestamp("2024-01-02"), old),
+            OOSPredictionWindow("a1", pd.Timestamp("2024-01-04"), new),
+        ],
+        OOSStitchPolicy.ACTIVE_UNTIL_NEXT_RETRAIN,
+    )
+    assert stitched["date"].is_unique
+    assert stitched.loc[stitched["date"] >= pd.Timestamp("2024-01-04"), "artifact_id"].eq("a1").all()
+
+
+def test_walk_forward_validation_and_test_adequacy_skip_bad_fold():
+    ds = make_panel(n_dates=8, n_stocks=10)
+    ds.frame.loc[ds.frame["date"] == ds.frame["date"].max(), "label"] = np.nan
+    spec = WalkForwardSpec(
+        train_lookback_bars=3,
+        validation_bars=2,
+        test_bars=2,
+        step_bars=1,
+        min_train_dates=3,
+        min_train_stocks=3,
+        min_train_obs=20,
+        min_validation_dates=2,
+        min_validation_label_coverage=1.0,
+        min_test_dates=2,
+        min_test_label_coverage=1.0,
+    )
+    folds = make_walk_forward_splits(ds, spec)
+    assert len(folds) == 1
+
+
 # --------------------------------------------------------------------------- #
 # purge / embargo
 # --------------------------------------------------------------------------- #
+def test_calendar_authority_preserves_missing_session_purge_distance():
+    dates = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-05", "2024-01-08"])
+    frame = pd.DataFrame({
+        "date": dates,
+        "stock": ["S"] * 4,
+        "f0": [1.0] * 4,
+        "label": [1.0] * 4,
+    })
+    ds = PanelDataset(frame, feature_cols=["f0"], label_col="label")
+    val = ds.filter_dates(start=pd.Timestamp("2024-01-08"))
+    contract = vwap_to_vwap_label("ret_1", horizon_bars=1)
+    purged = purge_overlap(ds, val, contract, calendar=_weekday_calendar())
+    assert purged.frame["date"].tolist() == [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]
+
+
+def test_sample_telemetry_masks_narrow_and_use_expected_sessions():
+    dates = pd.to_datetime(["2024-01-02", "2024-01-04", "2024-01-05"])
+    frame = pd.DataFrame({
+        "date": dates,
+        "stock": ["S"] * 3,
+        "f0": [np.nan, 1.0, 1.0],
+        "label": [1.0, 1.0, 1.0],
+    })
+    ds = PanelDataset(frame, feature_cols=["f0"], label_col="label")
+    telemetry = measure_train_telemetry(
+        ds,
+        label_contract=vwap_to_vwap_label("ret_1", horizon_bars=1),
+        training_cutoff=pd.Timestamp("2024-01-05"),
+        calendar=_weekday_calendar(),
+    )
+    counts = [
+        telemetry.raw_obs,
+        telemetry.finite_obs,
+        telemetry.mature_label_obs,
+        telemetry.post_purge_obs,
+        telemetry.post_regime_obs,
+        telemetry.effective_obs,
+    ]
+    assert counts == sorted(counts, reverse=True)
+    assert telemetry.mature_label_obs == 1
+    assert telemetry.date_coverage == pytest.approx(0.75)
+
+
 def test_purge_overlap_exact_row_counts():
     # integer dates 0..6, 2 stocks, horizon 2, validation starts at 4.
     rows = []

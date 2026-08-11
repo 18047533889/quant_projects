@@ -156,6 +156,41 @@ class ExchangeSessionCalendar:
             return False
         return day.normalize() not in self.holidays
 
+    def expected_sessions(self, start: Any, end: Any) -> pd.DatetimeIndex:
+        """Return authoritative exchange sessions in the inclusive range."""
+        start_ts = pd.Timestamp(start).normalize()
+        end_ts = pd.Timestamp(end).normalize()
+        if end_ts < start_ts:
+            return pd.DatetimeIndex([])
+        days = pd.date_range(start_ts, end_ts, freq="D")
+        return pd.DatetimeIndex([day for day in days if self.is_trading_day(day)])
+
+    def shift_session(self, session: Any, bars: int) -> pd.Timestamp:
+        """Shift a session by exchange-session bars, independent of data gaps."""
+        anchor = pd.Timestamp(session).normalize()
+        if not self.is_trading_day(anchor):
+            raise ValueError(f"{anchor.date()} is not an exchange session")
+        remaining = abs(int(bars))
+        direction = 1 if bars >= 0 else -1
+        current = anchor
+        while remaining:
+            current += pd.Timedelta(days=direction)
+            if self.is_trading_day(current):
+                remaining -= 1
+        return current
+
+    def session_distance(self, start: Any, end: Any) -> int:
+        """Number of exchange-session steps from ``start`` to ``end``."""
+        start_ts = pd.Timestamp(start).normalize()
+        end_ts = pd.Timestamp(end).normalize()
+        if not self.is_trading_day(start_ts) or not self.is_trading_day(end_ts):
+            raise ValueError("session_distance endpoints must be exchange sessions")
+        if start_ts == end_ts:
+            return 0
+        if end_ts > start_ts:
+            return len(self.expected_sessions(start_ts, end_ts)) - 1
+        return -(len(self.expected_sessions(end_ts, start_ts)) - 1)
+
     def session_local(self, timestamps: Any) -> pd.DatetimeIndex:
         """把 timestamps 统一到 session-local timezone（naive 视为本地）。"""
         ts = pd.DatetimeIndex(pd.to_datetime(timestamps))

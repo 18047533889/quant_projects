@@ -23,7 +23,8 @@ import numpy as np
 import pandas as pd
 
 from modeling.contracts import LabelContract, SampleAdequacyContract, sample_adequacy_met
-from modeling.dataset import PanelDataset, panel_telemetry
+from modeling.dataset import PanelDataset
+from market.exchange_session_calendar import ExchangeSessionCalendar
 
 __all__ = [
     "SampleTelemetry",
@@ -76,28 +77,26 @@ def _is_datetime_like(dates: pd.Series) -> bool:
     return isinstance(sample, (pd.Timestamp, _dt.datetime, _dt.date, _dt.time))
 
 
-def _date_coverage(ds: PanelDataset, date_col: str) -> float:
-    """Fraction of the train calendar span covered by unique trade dates.
-
-    Only meaningful when ``date_col`` is datetime-like; otherwise 1.0 (no
-    calendar notion in the data).
-    """
+def _date_coverage(
+    ds: PanelDataset,
+    date_col: str,
+    calendar: ExchangeSessionCalendar | None,
+) -> float:
+    """Observed expected sessions divided by authoritative expected sessions."""
     if ds.n_rows == 0:
         return 0.0
     dates = ds.frame[date_col]
     n_unique = int(dates.nunique())
     if n_unique == 0:
         return 0.0
-    if not _is_datetime_like(dates):
+    if not _is_datetime_like(dates) or calendar is None:
         return 1.0
-    try:
-        dts = pd.to_datetime(dates)
-        span_days = (dts.max() - dts.min()).days + 1
-    except Exception:
-        return 1.0
-    if span_days <= 0:
-        return 1.0
-    return float(n_unique) / float(span_days)
+    dts = pd.to_datetime(dates).dt.normalize()
+    expected = calendar.expected_sessions(dts.min(), dts.max())
+    if len(expected) == 0:
+        return 0.0
+    observed = pd.DatetimeIndex(dts.unique()).normalize()
+    return float(len(observed.intersection(expected))) / float(len(expected))
 
 
 def _purged_obs(
@@ -136,6 +135,29 @@ def _purged_obs(
     return int(keep.sum())
 
 
+def _calendar_condition(
+    dates: pd.Series,
+    cutoff: Any,
+    horizon: int,
+    calendar: ExchangeSessionCalendar | None,
+) -> np.ndarray:
+    if cutoff is None:
+        return np.ones(len(dates), dtype=bool)
+    if calendar is None or not _is_datetime_like(dates):
+        unique = np.sort(dates.unique())
+        positions = pd.Index(unique).searchsorted(dates.to_numpy(), side="left")
+        cutoff_pos = int(pd.Index(unique).searchsorted(cutoff, side="right") - 1)
+        return positions + horizon <= cutoff_pos
+    cutoff_ts = pd.Timestamp(cutoff).normalize()
+    result = np.zeros(len(dates), dtype=bool)
+    for idx, anchor in enumerate(pd.to_datetime(dates).dt.normalize()):
+        try:
+            result[idx] = calendar.shift_session(anchor, horizon) <= cutoff_ts
+        except ValueError:
+            result[idx] = False
+    return result
+
+
 def measure_train_telemetry(
     train_ds: PanelDataset,
     validation_ds: PanelDataset | None = None,
@@ -143,6 +165,10 @@ def measure_train_telemetry(
     free_parameter_count: int = 1,
     *,
     date_col: str = "date",
+    calendar: ExchangeSessionCalendar | None = None,
+    training_cutoff: Any = None,
+    support_mask: np.ndarray | None = None,
+    final_fit_mask: np.ndarray | None = None,
 ) -> SampleTelemetry:
     """Compute the §5.1 chain for a training panel.
 
@@ -157,17 +183,58 @@ def measure_train_telemetry(
       regime telemetry is wired in;
     * ``effective_obs`` = ``post_purge_obs``.
     """
-    tele = panel_telemetry(train_ds)
-    raw = int(tele.get("raw_obs", 0))
-    finite = int(tele.get("finite_obs", 0))
+    raw = train_ds.n_rows
+    raw_mask = np.ones(raw, dtype=bool)
+    X, y, _, _, _ = train_ds.as_matrix()
+    finite_input_mask = raw_mask & np.isfinite(X).all(axis=1)
+    if y is not None:
+        finite_input_mask &= np.isfinite(y)
+    finite = int(finite_input_mask.sum())
 
-    mature = finite
-    if label_contract is not None and train_ds.label_col is not None:
-        mature = int(train_ds.frame[train_ds.label_col].notna().sum())
+    horizon = int(label_contract.horizon_bars) if label_contract is not None else 0
+    mature_condition = np.ones(raw, dtype=bool)
+    if y is not None:
+        mature_condition &= np.isfinite(y)
+    if label_contract is not None:
+        cutoff = training_cutoff
+        if cutoff is None:
+            cutoff = train_ds.frame[train_ds.date_col].max()
+        mature_condition &= _calendar_condition(
+            train_ds.frame[train_ds.date_col], cutoff, horizon, calendar
+        )
+    mature_mask = finite_input_mask & mature_condition
 
-    post_purge = _purged_obs(train_ds, validation_ds, label_contract, finite)
-    post_regime = post_purge
-    effective = post_purge
+    purge_condition = np.ones(raw, dtype=bool)
+    if validation_ds is not None and validation_ds.n_rows:
+        boundary = validation_ds.frame[validation_ds.date_col].min()
+        if calendar is not None and _is_datetime_like(train_ds.frame[train_ds.date_col]):
+            boundary = calendar.shift_session(boundary, -1)
+        purge_condition = _calendar_condition(
+            train_ds.frame[train_ds.date_col], boundary, horizon, calendar
+        )
+    purge_mask = mature_mask & purge_condition
+
+    if support_mask is None:
+        support_condition = np.ones(raw, dtype=bool)
+    else:
+        support_condition = np.asarray(support_mask, dtype=bool)
+        if support_condition.shape != (raw,):
+            raise ValueError("support_mask must have one value per training row")
+    narrowed_support_mask = purge_mask & support_condition
+    if final_fit_mask is None:
+        fit_condition = np.ones(raw, dtype=bool)
+    else:
+        fit_condition = np.asarray(final_fit_mask, dtype=bool)
+        if fit_condition.shape != (raw,):
+            raise ValueError("final_fit_mask must have one value per training row")
+    narrowed_final_mask = narrowed_support_mask & fit_condition
+
+    mature = int(mature_mask.sum())
+    post_purge = int(purge_mask.sum())
+    post_regime = int(narrowed_support_mask.sum())
+    effective = int(narrowed_final_mask.sum())
+    unique_dates = int(train_ds.frame.loc[narrowed_final_mask, train_ds.date_col].nunique())
+    unique_stocks = int(train_ds.frame.loc[narrowed_final_mask, train_ds.stock_col].nunique())
 
     free = max(1, int(free_parameter_count))
     obs_per_param = effective / free if effective else 0.0
@@ -182,9 +249,9 @@ def measure_train_telemetry(
         effective_obs=effective,
         free_parameter_count=int(free_parameter_count),
         obs_per_parameter=obs_per_param,
-        unique_dates=int(tele.get("n_unique_dates", 0)),
-        unique_stocks=int(tele.get("n_unique_stocks", 0)),
-        date_coverage=_date_coverage(train_ds, date_col),
+        unique_dates=unique_dates,
+        unique_stocks=unique_stocks,
+        date_coverage=_date_coverage(train_ds, date_col, calendar),
         missing_fraction=missing,
     )
 

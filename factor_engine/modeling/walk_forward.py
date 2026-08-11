@@ -10,17 +10,22 @@ to exactly one split.  Purge (§9) drops training rows whose label interval
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from enum import Enum
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
 
 from modeling.contracts import LabelContract
 from modeling.dataset import PanelDataset
+from market.exchange_session_calendar import ExchangeSessionCalendar
 
 __all__ = [
     "WalkForwardSpec",
     "WalkForwardFold",
+    "OOSStitchPolicy",
+    "OOSPredictionWindow",
+    "stitch_oos_windows",
     "make_walk_forward_splits",
     "check_fold_order",
     "purge_overlap",
@@ -47,7 +52,77 @@ class WalkForwardSpec:
     min_train_dates: int = 252
     min_train_stocks: int = 30
     min_train_obs: int = 10000
+    min_validation_dates: int = 0
+    min_validation_effective_dates: int = 0
+    min_validation_median_stocks: float = 0.0
+    min_validation_label_coverage: float = 0.0
+    min_test_dates: int = 0
+    min_test_effective_dates: int = 0
+    min_test_median_stocks: float = 0.0
+    min_test_label_coverage: float = 0.0
+    min_valid_daily_ic_dates: int = 0
     decay_half_life_bars: int | None = None
+
+
+class OOSStitchPolicy(str, Enum):
+    """How overlapping fold test windows become one simulated-live history."""
+
+    ACTIVE_UNTIL_NEXT_RETRAIN = "active_until_next_retrain"
+    LATEST_LEGAL_ARTIFACT = "latest_legal_artifact"
+
+
+@dataclass(frozen=True)
+class OOSPredictionWindow:
+    artifact_id: str
+    activation: Any
+    predictions: pd.DataFrame
+    date_col: str = "date"
+
+
+def stitch_oos_windows(
+    windows: Iterable[OOSPredictionWindow],
+    policy: OOSStitchPolicy = OOSStitchPolicy.ACTIVE_UNTIL_NEXT_RETRAIN,
+) -> pd.DataFrame:
+    """Stitch overlapping test predictions to exactly one legal artifact/date.
+
+    Both policies choose the most recently activated legal artifact.  The
+    explicit enum preserves the deployment intent while ensuring that an old
+    artifact stops contributing as soon as its successor becomes active.
+    """
+    ordered = sorted(list(windows), key=lambda item: pd.Timestamp(item.activation))
+    policy = OOSStitchPolicy(policy)
+    activation_owners: dict[pd.Timestamp, str] = {}
+    for item in ordered:
+        activation = pd.Timestamp(item.activation)
+        owner = activation_owners.setdefault(activation, item.artifact_id)
+        if owner != item.artifact_id:
+            raise ValueError(
+                f"activation {activation} maps to multiple artifacts: "
+                f"{owner!r}, {item.artifact_id!r}"
+            )
+    pieces: list[pd.DataFrame] = []
+    for index, item in enumerate(ordered):
+        frame = item.predictions.copy()
+        if item.date_col not in frame:
+            raise ValueError(f"prediction window missing {item.date_col!r}")
+        frame["artifact_id"] = item.artifact_id
+        frame["artifact_activation"] = pd.Timestamp(item.activation)
+        legal = pd.to_datetime(frame[item.date_col]) >= pd.Timestamp(item.activation)
+        if policy is OOSStitchPolicy.ACTIVE_UNTIL_NEXT_RETRAIN and index + 1 < len(ordered):
+            legal &= pd.to_datetime(frame[item.date_col]) < pd.Timestamp(ordered[index + 1].activation)
+        pieces.append(frame.loc[legal])
+    if not pieces:
+        return pd.DataFrame(columns=["artifact_id", "artifact_activation"])
+    candidates = pd.concat(pieces, ignore_index=True)
+    date_col = ordered[0].date_col
+    if any(item.date_col != date_col for item in ordered):
+        raise ValueError("all OOS windows must use the same date column")
+    selected = candidates.groupby(date_col, observed=True)["artifact_activation"].transform("max")
+    stitched = candidates.loc[candidates["artifact_activation"].eq(selected)].copy()
+    mapping_width = stitched.groupby(date_col, observed=True)["artifact_id"].nunique()
+    if mapping_width.gt(1).any():
+        raise AssertionError("OOS history does not have unique date/artifact mapping")
+    return stitched.sort_values([date_col, "artifact_id"]).reset_index(drop=True)
 
 
 @dataclass
@@ -95,6 +170,23 @@ def _empty_like(ds: PanelDataset) -> PanelDataset:
         stock_col=ds.stock_col,
         feature_cols=list(ds.feature_cols),
         label_col=ds.label_col,
+    )
+
+
+def _fold_sample_adequate(ds: PanelDataset | None, spec: WalkForwardSpec, prefix: str) -> bool:
+    if ds is None or ds.n_rows == 0:
+        return not any(
+            getattr(spec, f"min_{prefix}_{suffix}") > 0
+            for suffix in ("dates", "effective_dates", "median_stocks", "label_coverage")
+        )
+    telemetry = ds.telemetry()
+    finite = ds.as_matrix()[4]
+    effective_dates = int(ds.frame.loc[finite, ds.date_col].nunique())
+    return (
+        telemetry["n_unique_dates"] >= getattr(spec, f"min_{prefix}_dates")
+        and effective_dates >= getattr(spec, f"min_{prefix}_effective_dates")
+        and telemetry["median_stocks_per_date"] >= getattr(spec, f"min_{prefix}_median_stocks")
+        and telemetry["label_coverage"] >= getattr(spec, f"min_{prefix}_label_coverage")
     )
 
 
@@ -165,6 +257,12 @@ def make_walk_forward_splits(
 
         val_ds = _slice(val_start_pos, val_end_pos) if val_start_pos is not None else None
         test_ds = _slice(test_start_pos, test_end_pos)
+        if not _fold_sample_adequate(val_ds, spec, "validation"):
+            pos += spec.step_bars
+            continue
+        if not _fold_sample_adequate(test_ds, spec, "test"):
+            pos += spec.step_bars
+            continue
         folds.append(
             WalkForwardFold(
                 fold_id=fold_id,
@@ -217,6 +315,7 @@ def purge_overlap(
     label_contract: LabelContract,
     *,
     date_col: str = "date",
+    calendar: ExchangeSessionCalendar | None = None,
 ) -> PanelDataset:
     """§9 label-interval purge.
 
@@ -230,9 +329,12 @@ def purge_overlap(
     col = _date_col_of(train_ds, date_col)
     vcol = _date_col_of(validation_ds, date_col)
     val_start = validation_ds.frame[vcol].min()
+    horizon = int(getattr(label_contract, "horizon_bars", 0))
+    if calendar is not None:
+        cutoff = calendar.shift_session(val_start, -(horizon + 1))
+        return _filter_by_dates(train_ds, None, cutoff, col)
     dates = np.sort(train_ds.frame[col].unique())
     p = int(pd.Index(dates).searchsorted(val_start, side="left"))
-    horizon = int(getattr(label_contract, "horizon_bars", 0))
     cutoff_pos = p - horizon - 1
     if cutoff_pos < 0:
         return _empty_like(train_ds)
@@ -240,13 +342,20 @@ def purge_overlap(
 
 
 def apply_embargo(
-    train_ds: PanelDataset, embargo_bars: int, *, date_col: str = "date"
+    train_ds: PanelDataset,
+    embargo_bars: int,
+    *,
+    date_col: str = "date",
+    calendar: ExchangeSessionCalendar | None = None,
 ) -> PanelDataset:
     """§10 — drop the last ``embargo_bars`` dates of training."""
     if embargo_bars <= 0 or train_ds.n_rows == 0:
         return train_ds
     col = _date_col_of(train_ds, date_col)
     dates = np.sort(train_ds.frame[col].unique())
+    if calendar is not None:
+        cutoff = calendar.shift_session(pd.Timestamp(dates[-1]), -embargo_bars)
+        return _filter_by_dates(train_ds, None, cutoff, col)
     if embargo_bars >= len(dates):
         return _empty_like(train_ds)
     return _filter_by_dates(train_ds, None, dates[-embargo_bars - 1], col)
@@ -287,9 +396,12 @@ def purge_and_embargo(
     spec: WalkForwardSpec | None = None,
     *,
     date_col: str = "date",
+    calendar: ExchangeSessionCalendar | None = None,
 ) -> PanelDataset:
-    """Combine §9 purge and §10 embargo.  ``spec`` supplies the embargo and the
-    purge policy; when absent, ``label_contract.embargo_bars`` is used.
+    """Combine §9 purge and §10 embargo using the optional calendar authority.
+
+    ``spec`` supplies the embargo and purge policy; when absent,
+    ``label_contract.embargo_bars`` is used.
 
     ``purge_policy="label_interval"`` (default) purges training rows whose label
     interval ``[t, t+H]`` overlaps the validation window.  ``purge_policy="purge_bars"``
@@ -304,8 +416,19 @@ def purge_and_embargo(
         embargo = int(getattr(label_contract, "embargo_bars", 0))
     else:
         embargo = 0
-    purged = purge_overlap(train_ds, validation_ds, label_contract, date_col=date_col)
-    return apply_embargo(purged, embargo, date_col=date_col)
+    purged = purge_overlap(
+        train_ds,
+        validation_ds,
+        label_contract,
+        date_col=date_col,
+        calendar=calendar,
+    )
+    return apply_embargo(
+        purged,
+        embargo,
+        date_col=date_col,
+        calendar=calendar,
+    )
 
 
 def nested_splits(
