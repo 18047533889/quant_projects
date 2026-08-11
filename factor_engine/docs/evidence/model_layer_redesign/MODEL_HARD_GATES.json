@@ -1,0 +1,78 @@
+{
+ "git_sha": "96939012325c5fd07171056d2e20f73088025a6f",
+ "generated_at": "2026-08-11T20:42:38+0800",
+ "gates": {
+  "MODEL_ZERO_PREDICTIVE_LEARNER_FITTED_INSIDE_SCORE_PATH": {
+   "value": true,
+   "check": "artifact.predict applies frozen preprocessing + FrozenModel.predict; TrainOnlyFitGuard proves fit is never called during scoring"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_HAVE_WALK_FORWARD_SPEC": {
+   "value": true,
+   "check": "5 predictive learner(s) bound to WalkForwardSpec in ModelRegistry"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_HAVE_VALIDATION": {
+   "value": true,
+   "check": "5 predictive learner(s) bound to WalkForwardSpec in ModelRegistry"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_PURGE_LABEL_OVERLAP": {
+   "value": true,
+   "check": "fold slicing shifts train_end back by horizon+embargo bars so label intervals never overlap the validation window"
+  },
+  "MODEL_ZERO_RANDOM_TIME_SPLIT": {
+   "value": true,
+   "check": "walk-forward uses date-authoritative ordered splits; no random split"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_SCALER": {
+   "value": true,
+   "check": "preprocessing (FrozenPreprocessing) is fit on train only; identity in the fallback path, never recomputed on the full sample"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_PCA_PREPROCESS": {
+   "value": true,
+   "check": "PCR fits its PCA inside learner.fit on train rows only; predict only projects the frozen components"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_FEATURE_SELECTION": {
+   "value": true,
+   "check": "no feature-selection step in this package fits on the full sample"
+  },
+  "MODEL_ZERO_TEST_DRIVEN_HYPERPARAM_SELECTION": {
+   "value": true,
+   "check": "hyperparameter selection uses only the train/validation windows (validation rank IC); test rows never drive selection"
+  },
+  "MODEL_ALL_ARTIFACTS_ASOF_RESOLVED": {
+   "value": true,
+   "check": "ArtifactResolver/ArtifactStore implement \u00a750 as-of resolution (training_cutoff <= asof, available_at <= asof)"
+  },
+  "MODEL_ALL_MODELS_HAVE_SAMPLE_ADEQUACY_CONTRACT": {
+   "value": true,
+   "check": "SampleAdequacyContract per family (linear/regime/moe) in modeling.learners.base"
+  },
+  "MODEL_ALL_SEARCHABLE_PARAMS_HAVE_SEARCH_POLICY": {
+   "value": true,
+   "check": "every \u00a769 recommended param has a ParameterSearchPolicy"
+  },
+  "MODEL_ZERO_NUMERICAL_POLICY_SEARCHABLE": {
+   "value": true,
+   "check": "ParameterSearchPolicy rejects searchable NUMERICAL_POLICY params at construction"
+  },
+  "MODEL_ZERO_DATA_POLICY_SEARCHABLE_BY_FACTOR_MINER": {
+   "value": true,
+   "check": "ParameterSearchPolicy rejects searchable DATA_POLICY params at construction"
+  },
+  "MODEL_REGIME_ALL_COMPONENTS_HAVE_SUPPORT": {
+   "value": true,
+   "check": "RegimeLearner implements train-only boundaries + \u00a76.1 fail-closed support"
+  },
+  "MODEL_MOE_ALL_ACTIVE_EXPERTS_HAVE_SUPPORT": {
+   "value": true,
+   "check": "MixtureOfExpertsLearner implements \u00a76.2/\u00a76.3 fail-closed expert support"
+  },
+  "MODEL_FINAL_HOLDOUT_NOT_EXPOSED_TO_SEARCH": {
+   "value": true,
+   "check": "the final test fold is never used for hyperparameter selection; selection is strictly train/validation"
+  },
+  "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
+   "value": true,
+   "check": "evidence generated at HEAD 96939012325c5fd07171056d2e20f73088025a6f"
+  }
+ }
+}

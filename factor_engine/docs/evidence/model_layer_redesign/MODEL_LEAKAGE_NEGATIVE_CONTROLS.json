@@ -1,0 +1,30 @@
+{
+ "future_poison": {
+  "future_poison": true,
+  "detail": "n_rows_le_t=180; poisoned row idx=9; max|dpred|=0.000e+00"
+ },
+ "label_poison": {
+  "label_poison": true,
+  "detail": "horizon=1; n_poisoned_label_rows=20; params_unchanged=True; pred_unchanged=True"
+ },
+ "scaler_poison": {
+  "scaler_poison": true,
+  "detail": "train_cutoff_ord=8; n_mutated_future_rows=3; state_hash_unchanged=True"
+ },
+ "hyperparam_poison": {
+  "hyperparam_poison": true,
+  "detail": "best_orig={'n_components': 3}; best_after_future_poison={'n_components': 3}; n_future_poisoned_rows=3"
+ },
+ "universe_poison": {
+  "universe_poison": true,
+  "detail": "added stock=SNEW999; n_orig_rows=240; max|dpred|=0.000e+00"
+ },
+ "revision_poison": {
+  "revision_poison": true,
+  "detail": "cache_key(src-v1)=test_pcr|1.0|||test|vwap...; cache_key(src-v2)=test_pcr|1.0|||test|vwap...; distinct=True"
+ },
+ "execution_clock_poison": {
+  "execution_clock_poison": true,
+  "detail": "scenario=BEFORE_SAME_DAY_VWAP; rejected_bad_features=True (problems=3); accepted_good_features=True; clock_compliant_illegal_features=False"
+ }
+}
