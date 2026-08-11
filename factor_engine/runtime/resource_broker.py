@@ -482,6 +482,12 @@ class ResourceBroker:
         self._lock = threading.RLock()
         self._cached: ResourceSnapshot | None = None
         self._last_sample_ms = 0.0
+        # P0-016：job/sink 的 live signals（由 scheduler 在 resource_decision() 时
+        # 上报；autopilot 后台线程每 tick 聚合，不再硬编码 None/0.0）。
+        self._live_signals: dict[str, Any] = {
+            "sink_backpressure": 0.0,
+            "job_memory_lease_bytes": None,
+        }
         self._cpu = _CpuTokenAllocator(self.hard_cpu_slots)
         self._io = _IoTokenAllocator(max(1, self.hard_cpu_slots))
         self._running: dict[str, TaskResourceContract] = {}
@@ -882,17 +888,31 @@ class ResourceBroker:
         cooldown 由 loop 次数决定，多个 scheduler 高频 tick 会失控）。snapshot 太旧
         → conservative fallback（§P0-012）。服务未激活（研究/standalone）才做
         one-off tick。
+
+        P0-016：调用方提供的 ``sink_backpressure`` / ``job_memory_lease_bytes``
+        先写入 live signals——autopilot 后台线程每 tick 聚合（不再被硬编码
+        None/0.0 覆盖）。snapshot 过期时**直接** conservative fallback，不再把
+        同一个 stale last decision 当 fresh 返回。
         """
+        self._record_live_signals(
+            sink_backpressure=sink_backpressure,
+            job_memory_lease_bytes=job_memory_lease_bytes,
+        )
         try:
             from runtime.resource_autopilot_service import get_resource_autopilot
 
-            autopilot = get_resource_autopilot()
+            # 优先 broker 自己绑定的 autopilot service（R39：测试/部署常用本地
+            # service 而非全局单例；若只查全局单例，未注册时每次调用都 fall
+            # through 到 controller.tick —— scheduler 热循环会放大控制循环）。
+            autopilot = getattr(self, "_autopilot_service", None)
+            if autopilot is None or not autopilot.started:
+                autopilot = get_resource_autopilot()
             if autopilot is not None and autopilot.started and autopilot.last_decision() is not None:
                 snap = autopilot.last_decision()
                 if not snap.is_stale:
                     return snap.decision
-                # 太旧 → conservative fallback（不自行 tick）。
-                return self._resource_controller().last_decision() or self._conservative_decision()
+                # 太旧 → **直接** conservative（旧 last_decision 同样过期，不能当 fresh）。
+                return self._conservative_decision()
         except Exception:
             pass
         snap = self._refresh(force=True)
@@ -902,6 +922,22 @@ class ResourceBroker:
             job_memory_lease_bytes=job_memory_lease_bytes,
             sink_backpressure=sink_backpressure,
         )
+
+    def _record_live_signals(
+        self,
+        *,
+        sink_backpressure: float = 0.0,
+        job_memory_lease_bytes: int | None = None,
+    ) -> None:
+        """记录调用方上报的 live signals（P0-016，供 autopilot 后台聚合）。"""
+        with self._lock:
+            self._live_signals["sink_backpressure"] = float(sink_backpressure or 0.0)
+            self._live_signals["job_memory_lease_bytes"] = job_memory_lease_bytes
+
+    def live_signals(self) -> dict[str, Any]:
+        """当前最新 live signals（autopilot ``_tick`` 消费，P0-016）。"""
+        with self._lock:
+            return dict(self._live_signals)
 
     def _conservative_decision(self) -> Any:
         """decision 过期时的保守回退（§P0-012：不自行创建第二套 decision）。"""

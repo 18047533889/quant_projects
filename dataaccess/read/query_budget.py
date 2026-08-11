@@ -309,13 +309,14 @@ def merge_dataset_policies(
 
 
 def _production_mode() -> bool:
-    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if fe == "production":
-        return True
-    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+    """R39 P0 #51：兼容旧调用方；现在派生自 RuntimeModeIdentity 单一权威。"""
+    from data_access.runtime.mode_identity import is_production_authority
+
+    return is_production_authority()
 
 
 def _strict_read_mode() -> bool:
+    """独立全局 strict 开关（DATA_ACCESS_STRICT_READ）。"""
     return os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
 
 
@@ -330,15 +331,14 @@ def is_strict_semantics() -> bool:
     在 PIT / calendar / semantic ambiguity / required filters / units / source
     snapshot / authorization 上**必须接近 production strict**——机器不看 warning，
     宽松语义会静默污染搜索空间。预算可以更宽，语义不允许放宽。
-    """
-    if _production_mode() or _strict_read_mode():
-        return True
-    try:
-        from data_access.security.run_mode import resolve_run_mode
 
-        return resolve_run_mode().strict_semantics
-    except Exception:
-        return False
+    R39 P0 #51：统一路由到 ``RuntimeModeIdentity``（request-scoped ContextVar）——
+    一层写入（DataReadSession / prepare_read），所有层只读一个权威，不再各自
+    重读 env。
+    """
+    from data_access.runtime.mode_identity import is_strict_semantics_authority
+
+    return is_strict_semantics_authority()
 
 
 # 生产/严格读模式的**最低保障线**（#P0-14）：显式传入的宽松 QueryBudget 永远不能
@@ -392,8 +392,12 @@ def resolve_query_budget(budget: QueryBudget | None = None) -> QueryBudget:
     ``QueryBudget(max_rows=None, require_columns=False)`` 会把生产默认 50m /
     require_columns 直接取消——现在显式 budget 先与 production floor 合并取更严。
     只有非生产/非 strict 模式下才原样信任显式 budget。
+
+    R39 P0 #51：strict 判定用 **同一个权威**（``is_strict_semantics()``，路由到
+    RuntimeModeIdentity），不再自己拼 ``_production_mode() or _strict_read_mode()``
+    与 ``is_strict_semantics`` 两套逻辑漂移。
     """
-    strict = _production_mode() or _strict_read_mode()
+    strict = is_strict_semantics()
     if budget is not None:
         return merge_production_floor(budget) if strict else budget
     if strict:
@@ -551,17 +555,109 @@ def enforce_arrow_budget(
         )
 
 
+def enforce_memory_budget(
+    budget: QueryBudget,
+    *,
+    estimated_memory: int,
+    context: str = "查询",
+) -> None:
+    """R39 P0 #35：入场前**预估内存**硬限制（fail-closed）。
+
+    ``QueryBudget.max_estimated_memory`` 是 admission 用 P99 预估门——超限必须
+    在**执行前**拒绝，不能跑完才知道（与 scan bytes 同语义，R25 §26）。
+    """
+    if budget.max_estimated_memory is None:
+        return
+    if estimated_memory > budget.max_estimated_memory:
+        raise ValidationError(
+            f"{context}预估内存 {estimated_memory} bytes 超过预算上限 "
+            f"{budget.max_estimated_memory} bytes（R39 P0 #35：max_estimated_memory "
+            "P99 admission，执行前拒绝）。请缩小扫描范围 / 指定更少列 / 提高 "
+            "max_estimated_memory。"
+        )
+
+
+def _deadline_check(deadline_at: float | None, *, context: str = "查询") -> None:
+    """R39 P0 #37：在 collect/流式执行期间检查绝对 deadline，超时立即抛。
+
+    不是 post-hoc 的 elapsed 报告——deadline 在**执行中**（每 chunk 之间）
+    检查，1 秒预算不会真跑 5 分钟才被报告。
+    """
+    if deadline_at is None:
+        return
+    import time as _tm
+
+    if _tm.monotonic() >= deadline_at:
+        from data_access.core.exceptions import DeadlineExceeded
+
+        raise DeadlineExceeded(
+            f"{context}已超过执行期 absolute deadline（R39 P0 #37：引擎级 deadline，"
+            "执行中强制终止，不是查完才报告）。"
+        )
+
+
 def collect_polars_with_budget(
     lf: Any,
     *,
     query_budget: QueryBudget | None = None,
+    deadline_at: float | None = None,
+    estimated_memory: int | None = None,
 ) -> pa.Table:
-    """Polars LazyFrame collect 后强制读后预算。"""
+    """Polars LazyFrame collect，强制**执行前内存 + 执行中 deadline + 逐 chunk 预算**。
+
+    R39 P0 #36/#37 修复旧行为「先 ``lf.collect().to_arrow()`` 全量物化、再查
+    预算」——预算只对**已物化**结果做 post-hoc 检查，1 秒预算可跑 5 分钟，
+    内存超限要物化完才报。
+
+    实现（记录采用的实践选项）：
+        - **执行前**：``estimated_memory`` 传入时先过 ``enforce_memory_budget``
+          （fail-closed，不物化）；
+        - **执行中**：用 ``collect_batches(chunk_size=...)`` **分块流式 collect**，
+          每 chunk 之间检查绝对 deadline（``deadline_at`` 或从
+          ``current_deadline()`` 取）并累计 rows/bytes 走 ``enforce_stream_budget``
+          ——超限/超时**立即**中断，不物化到超限才报。
+    """
     import time
 
+    import pyarrow as pa
+
     budget = resolve_query_budget(query_budget)
+    if estimated_memory is not None:
+        enforce_memory_budget(budget, estimated_memory=estimated_memory)
+    if deadline_at is None:
+        from data_access.runtime.prepared_read import current_deadline
+
+        deadline_at = current_deadline().deadline_at if current_deadline() is not None else None
+    # 自己的 fallback deadline（调用方没建 DeadlineContext 时从 budget 派生）。
+    own_deadline = None
+    if deadline_at is None and getattr(budget, "max_elapsed_ms", None):
+        ms = float(budget.max_elapsed_ms)
+        if ms > 0:
+            own_deadline = time.monotonic() + ms / 1000.0
+            deadline_at = own_deadline
     start = time.perf_counter()
-    table = lf.collect().to_arrow()
+    total_rows = 0
+    total_bytes = 0
+    arrow_batches: list[Any] = []
+    for batch in lf.collect_batches(chunk_size=100_000):
+        # R39 P0 #37：每个 chunk 之间检查绝对 deadline——不是物化完才报告超时。
+        _deadline_check(deadline_at, context="Polars collect")
+        total_rows += batch.height
+        total_bytes += batch.estimated_size()
+        # R39 P0 #36：逐 chunk 累计走 stream budget（rows/bytes/elapsed），超限
+        # 立即中断，不物化到超限才发现。
+        enforce_stream_budget(
+            budget,
+            total_rows=total_rows,
+            total_bytes=total_bytes,
+            elapsed_ms=(time.perf_counter() - start) * 1000,
+        )
+        arrow_batches.append(batch.to_arrow())
+    _deadline_check(deadline_at, context="Polars collect")
+    if arrow_batches:
+        table = pa.concat_tables(arrow_batches)
+    else:
+        table = pa.table({})
     enforce_arrow_budget(
         budget,
         table,

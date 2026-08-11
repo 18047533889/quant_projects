@@ -1,11 +1,11 @@
 {
   "generated_by": "scripts/audit_r37_hard_gates.py",
-  "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
-  "passed": 14,
+  "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
+  "passed": 13,
   "not_run": 0,
-  "failed": 0,
+  "failed": 1,
   "total": 14,
-  "production_ready": true,
+  "production_ready": false,
   "gates": {
     "R37_CURRENT_HEAD_BOUND": {
       "gate_id": "R37_CURRENT_HEAD_BOUND",
@@ -16,7 +16,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -33,7 +33,7 @@
         "docs/evidence/r37/R37_EVIDENCE_TRUTH_GATES.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -45,21 +45,21 @@
     "R37_PARAMETER_DOMAIN_CERTIFIED": {
       "gate_id": "R37_PARAMETER_DOMAIN_CERTIFIED",
       "status": "PASS",
-      "executed_cases": 84,
+      "executed_cases": 92,
       "failed_cases": 0,
-      "passed_cases": 84,
+      "passed_cases": 92,
       "case_ids": [],
       "evidence_files": [
         "docs/evidence/r37/R37_PARAMETER_DOMAIN_STORE.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
       "details": {
-        "certified_point_count": 84,
-        "operators": 15
+        "certified_point_count": 92,
+        "operators": 17
       }
     },
     "R37_INVALID_PARAM_REJECTION_ZERO": {
@@ -71,7 +71,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -91,7 +91,7 @@
         "docs/evidence/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -108,13 +108,13 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
       "details": {
-        "production_targets": 1391,
-        "in_ledger": 1391,
+        "production_targets": 1388,
+        "in_ledger": 1388,
         "missing": []
       }
     },
@@ -129,7 +129,7 @@
         "backend/cleaned_bridge.py"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -144,7 +144,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -167,7 +167,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -182,7 +182,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -197,7 +197,7 @@
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -205,19 +205,19 @@
     },
     "R37_CURRENT_HEAD_SHA_CONSISTENT": {
       "gate_id": "R37_CURRENT_HEAD_SHA_CONSISTENT",
-      "status": "PASS",
+      "status": "FAIL",
       "executed_cases": 1,
-      "failed_cases": 0,
-      "passed_cases": 1,
+      "failed_cases": 1,
+      "passed_cases": 0,
       "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
       "details": {
-        "code_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+        "code_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
         "evidence_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23"
       }
     },
@@ -232,7 +232,7 @@
         "runtime/batch_service.py"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",
@@ -249,7 +249,7 @@
         "cache/session.py"
       ],
       "evidence_hashes": [],
-      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "commit_sha": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc",
       "component_hashes": {},
       "fixture_hashes": {},
       "generated_at": "",

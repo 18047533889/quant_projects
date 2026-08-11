@@ -187,7 +187,15 @@ def signature_for(canon: str) -> OperatorProductionSignature | None:
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
-    return PRODUCTION_SIGNATURES.get(name) or _COMPATIBILITY_SIGNATURES.get(name)
+    sig = PRODUCTION_SIGNATURES.get(name) or _COMPATIBILITY_SIGNATURES.get(name)
+    if sig is not None:
+        return sig
+    # R38 typed-signature coverage: 第三层 fallback —— 为缺签名的 production
+    # canonical 保守自动生成（见 backend.typed_signature_generator）。惰性加载，
+    # 只有静态表查不到时才触发；不影响 _daily_signatures / _COMPATIBILITY_SIGNATURES。
+    from backend.typed_signature_generator import generated_signature_for
+
+    return generated_signature_for(name)
 
 
 def has_production_signature(canon: str) -> bool:

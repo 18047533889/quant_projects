@@ -1603,14 +1603,41 @@ class Pow(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: float = 2, **kwargs) -> pd.DataFrame:
         # R19-096: real-domain policy —— 负数底数 & 非整数指数 → NaN；y 为整数 → 实数。
         # 与 polars/duckdb 一致（见 backend.numeric_semantics.power_real_domain_policy）。
+        #
+        # R38-blocker fix (power DSL 契约错位)：``power`` 是元素级算子 —— DSL 允许
+        # ``F("power")(close, volume)`` 把第二个输入当元素级指数。pandas kernel 之前
+        # 只接受标量 ``y: float``，元素级调用抛 ``float(DataFrame)`` 错。修复：y 可以是
+        # 标量或与 x 同形的元素级指数；语义精确对齐 polars ``_safe_pow_expr``——
+        #   base null OR exp null             -> NaN
+        #   base < 0 AND exp 非整数           -> NaN
+        #   base == 0 AND exp < 0            -> NaN（0 的负次幂）
+        #   otherwise                        -> base ** exp
         base = x.astype(float)
-        exp = float(y)
-        is_integer_exp = float(exp).is_integer()
+        if isinstance(y, pd.DataFrame):
+            exp_df = y.astype(float)
+            exp = exp_df
+            is_elementwise = True
+        else:
+            exp = float(y)
+            is_elementwise = False
         with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
             result = np.power(base, exp)
-        if not is_integer_exp:
-            # 负数底数 & 非整数指数：实数域无定义 → NaN（numpy 已给 NaN，这里显式声明）。
-            result = result.where(base >= 0, np.nan)
+        # real-domain 策略（元素级或标量统一处理）。
+        if is_elementwise:
+            bad_domain = (
+                base.isna() | exp_df.isna()
+                | ((base < 0) & (exp_df != np.floor(exp_df)))
+                | ((base == 0) & (exp_df < 0))
+            )
+            result = result.where(~bad_domain, np.nan)
+        else:
+            is_integer_exp = float(exp).is_integer()
+            if not is_integer_exp:
+                # 负数底数 & 非整数指数：实数域无定义 → NaN。
+                result = result.where(base >= 0, np.nan)
+            if exp < 0:
+                # 0 的负次幂 → NaN（与 polars ``base==0 AND exp<0 -> NULL`` 一致）。
+                result = result.where((base != 0) | (np.isnan(base)), np.nan)
         return result.replace([np.inf, -np.inf], np.nan)
 
 # aliases: POWER

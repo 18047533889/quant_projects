@@ -30,6 +30,9 @@ class PlanRoute:
     reason: str = ""
     # R31-013/014: 每 occurrence 的 bound 参数摘要（window/feature_dim 等）。
     occurrence_count: int = 0
+    # R39-P1-PERF-082: compile-time ProductionExecutionCertificate（可空，additive）。
+    # 绑定 structural_hash + bound_ops + backend_eligibility，运行时 O(1) 校验。
+    certificate: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -618,6 +621,183 @@ def _dag_aware_mixed_cost(
     return total
 
 
+def _output_shape_hash(rows: int, occurrence_count: int, ops: tuple[str, ...]) -> str:
+    """Compile-time output-shape digest for the execution certificate.
+
+    ``row_count_estimate`` + occurrence count + op-set cardinality is a stable,
+    cheap proxy for the plan's output shape without materializing it.
+    """
+    import hashlib
+    import json as _json
+
+    payload = {
+        "row_count_estimate": int(rows),
+        "occurrence_count": int(occurrence_count),
+        "n_ops": len(ops),
+    }
+    raw = _json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _build_execution_certificate(
+    plan: PlanNode,
+    ops: tuple[str, ...],
+    candidates: dict[str, float],
+    chosen_backend: str,
+    rows: int,
+    occurrence_count: int,
+) -> Any:
+    """R39-P1-PERF-082: build the compile-time ProductionExecutionCertificate.
+
+    Additive: any failure returns ``None`` (no certificate → runtime skips the
+    O(1) validation); routing behavior is unchanged.  Uses the plan's
+    ``structural_key`` plus the bound-ops / backend-eligibility the router has
+    already computed — no extra work beyond the existing compile-time walk.
+    """
+    try:
+        from runtime.production_execution_certificate import (
+            ProductionExecutionCertificate,
+            normalize_backend,
+        )
+        from planner.plan_hash import structural_key
+
+        structural_hash = structural_key(plan)
+        bound_ops = frozenset(ops)
+        eligible = {normalize_backend(b) for b in candidates} | {
+            normalize_backend(chosen_backend)
+        }
+        return ProductionExecutionCertificate.build(
+            structural_hash=structural_hash,
+            bound_ops=bound_ops,
+            backend_eligibility=eligible,
+            output_shape_hash=_output_shape_hash(rows, occurrence_count, ops),
+        )
+    except Exception:
+        # Fail-open additive: routing must never break because certificate
+        # construction failed (e.g. bootstrap before registry load).
+        return None
+
+
+# =====================================================================
+# R39-PERF-076：shape-aware TTDC predictor（DuckDB vs Polars vs PyArrow）
+# =====================================================================
+
+#: 本地 / 远程 parquet 扫描吞吐（MB/s）——TTDC 预测的线性模型系数。
+_LOCAL_SCAN_MBPS = 800.0
+_REMOTE_SCAN_MBPS = 60.0
+_CONVERT_MBPS = 200.0  # 表示转换（arrow/pandas/polars）吞吐
+#: 下游是 DuckDB fused factor 时，禁止「为了 size 选 Polars lazy」——给 polars
+#: 候选加一个明确惩罚，保证 duckdb 候选存在时被选中。
+_DUCKDB_FUSED_POLARS_PENALTY_MS = 10_000.0
+
+
+@dataclass(frozen=True)
+class TtdcEstimate:
+    """shape-aware 单 backend 的 TTDC 估计（时间到 durable commit 的四个分量）。"""
+
+    backend: str
+    scan_ms: float = 0.0
+    conversion_ms: float = 0.0
+    execute_ms: float = 0.0
+    materialize_ms: float = 0.0
+
+    @property
+    def total_ms(self) -> float:
+        return self.scan_ms + self.conversion_ms + self.execute_ms + self.materialize_ms
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "backend": self.backend,
+            "scan_ms": round(self.scan_ms, 3),
+            "conversion_ms": round(self.conversion_ms, 3),
+            "execute_ms": round(self.execute_ms, 3),
+            "materialize_ms": round(self.materialize_ms, 3),
+            "total_ms": round(self.total_ms, 3),
+        }
+
+
+def _shape_scan_bytes(shape: Any) -> int:
+    for attr in ("selected_bytes", "total_bytes"):
+        v = getattr(shape, attr, None)
+        if v:
+            try:
+                return max(0, int(v))
+            except (TypeError, ValueError):
+                pass
+    rows = int(getattr(shape, "estimated_rows", 0) or 0)
+    cols = int(
+        getattr(shape, "projected_columns", 0) or getattr(shape, "total_columns", 0) or 1
+    )
+    if rows > 0:
+        return rows * cols * 8
+    return 0
+
+
+def _shape_remote(shape: Any) -> bool:
+    try:
+        return bool(getattr(shape, "remote", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _execute_ms_for_backend(backend: str, rows: int) -> float:
+    if rows <= 0:
+        return 0.0
+    rate = {
+        "duckdb_sql": 5_000_000,
+        "polars": 3_000_000,
+        "polars_panel": 3_000_000,
+        "polars_long": 3_000_000,
+        "pyarrow": 8_000_000,
+        "pandas_numpy": 1_000_000,
+    }.get(backend, 2_000_000)
+    return max(0.0, rows / rate * 1000.0)
+
+
+def predict_ttdc(shape: Any, backend: str) -> TtdcEstimate:
+    """shape-aware TTDC predictor（R39-PERF-076）。
+
+    ``shape`` 是 ``data_access.read.scan_cost.ScanCost`` 或等价 duck-typed 对象
+    （需 selected_bytes/total_bytes/estimated_rows/projected_columns/total_columns/
+    remote）。返回 scan + conversion + execute + materialize 四个分量：
+      - DuckDB：native parquet scan，无 scan→backend 转换；仅在最终物化回
+        pandas/arrow 时计一次 materialize。
+      - Polars：scan 后需 arrow→polars 转换，materialize 到最终表示另计。
+      - PyArrow：native arrow scan，materialize 到 pandas/panel 另计。
+    """
+    scan_bytes = _shape_scan_bytes(shape)
+    rows = int(getattr(shape, "estimated_rows", 0) or 0)
+    remote = _shape_remote(shape)
+    mbps = _REMOTE_SCAN_MBPS if remote else _LOCAL_SCAN_MBPS
+    scan_ms = 0.0
+    if scan_bytes > 0:
+        scan_ms = (scan_bytes / 1024.0 / 1024.0) / mbps * 1000.0
+    elif rows > 0:
+        scan_ms = rows / 500_000.0 * 20.0  # 无字节信息时的粗粒度 fallback
+    conversion_ms = 0.0
+    materialize_ms = 0.0
+    if backend == "duckdb_sql":
+        conversion_ms = 0.0
+        if scan_bytes > 0:
+            materialize_ms = (scan_bytes / 1024.0 / 1024.0) / _CONVERT_MBPS * 1000.0
+    elif backend in ("polars", "polars_panel", "polars_long"):
+        if scan_bytes > 0:
+            conversion_ms = (scan_bytes / 1024.0 / 1024.0) / _CONVERT_MBPS * 1000.0
+            materialize_ms = conversion_ms * 0.5
+    elif backend == "pyarrow":
+        conversion_ms = 0.0
+        if scan_bytes > 0:
+            materialize_ms = (scan_bytes / 1024.0 / 1024.0) / _CONVERT_MBPS * 1000.0
+    execute_ms = _execute_ms_for_backend(backend, rows)
+    return TtdcEstimate(
+        backend=backend,
+        scan_ms=scan_ms,
+        conversion_ms=conversion_ms,
+        execute_ms=execute_ms,
+        materialize_ms=materialize_ms,
+    )
+
+
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     from backend.operator_capability import supports_pandas, supports_polars, supports_sql
     from backend.polars_long_production import is_polars_long_native_production_safe
@@ -711,11 +891,37 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             "no eligible physical plan for canonicals: " + ", ".join(ops)
         )
 
+    # R39-PERF-076：shape-aware TTDC 调整。只有 shape 数据可用（ctx.scan_shape /
+    # ctx.scan_cost）才生效；否则完全走既有 cost model。
+    shape = getattr(ctx, "scan_shape", None) or getattr(ctx, "scan_cost", None)
+    downstream_duckdb_fused = bool(getattr(ctx, "downstream_duckdb_fused", False))
+    if shape is not None:
+        for backend in list(candidates):
+            est = predict_ttdc(shape, backend)
+            candidates[backend] = float(candidates[backend]) + est.total_ms
+        # 规则：下游是 DuckDB fused factor 时，不为「size」选 Polars lazy——
+        # duckdb 候选存在时给 polars 候选加明确惩罚。
+        if downstream_duckdb_fused and "duckdb_sql" in candidates:
+            for backend in ("polars_panel", "polars_long", "pyarrow"):
+                if backend in candidates:
+                    candidates[backend] = (
+                        float(candidates[backend]) + _DUCKDB_FUSED_POLARS_PENALTY_MS
+                    )
+
     chosen = min(candidates.items(), key=lambda item: (item[1], item[0]))
     basis = (
         "measured"
         if chosen[0] != "hybrid" and _candidate_is_measured(ops, chosen[0])
         else "estimated"
+    )
+    # R39-P1-PERF-082: compile-time execution certificate (O(1) runtime check).
+    certificate = _build_execution_certificate(
+        plan,
+        ops,
+        candidates,
+        chosen_backend=chosen[0],
+        rows=rows,
+        occurrence_count=len(occurrences),
     )
     return PlanRoute(
         backend=chosen[0],
@@ -729,6 +935,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             "offline measured baseline" if basis == "measured"
             else "certified capability + workload estimate; no compatible measured baseline"
         ),
+        certificate=certificate,
     )
 
 
@@ -743,6 +950,16 @@ def record_plan_route(ctx: Any, route: PlanRoute) -> None:
         "ops": list(route.ops),
         "reason": route.reason,
     }
+    # R39-P1-PERF-082: record the certificate hash for the O(1) runtime check.
+    if getattr(route, "certificate", None) is not None:
+        cert = route.certificate
+        runtime["production_execution_certificate"] = {
+            "certificate_hash": cert.certificate_hash,
+            "structural_hash": cert.structural_hash,
+            "output_shape_hash": cert.output_shape_hash,
+            "backend_eligibility": sorted(cert.backend_eligibility),
+            "bound_ops": sorted(cert.bound_ops),
+        }
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
 

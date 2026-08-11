@@ -3003,10 +3003,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
         corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
+        # R38-blocker fix (R19-030 current-row policy): 不能因当前行任一侧 NULL 就
+        # 强制输出 NULL —— pandas ``rolling(min_periods=2).corr`` 在"当前行缺失但
+        # 窗口有效对 >= min_periods"时仍输出有限值。窗口聚合自身跳过 NULL 对，
+        # 与 pandas current-row policy 一致；去掉 CASE 强制。
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
-            f"ELSE {corr_fn}(l._v, r._v) OVER ({over}) END AS _v "
+            f"{corr_fn}(l._v, r._v) OVER ({over}) AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -6200,10 +6203,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         w = _window_int(node)
         over = _rolling_ols_partition(w, prefix="l")
         cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
+        # R38-blocker fix (R19-030 current-row policy): 与 ts_corr 相同——去掉
+        # current-row 强制 NULL；窗口聚合跳过 NULL 对，与 pandas rolling.cov 一致。
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
-            f"ELSE {cov_fn}(l._v, r._v) OVER ({over}) END AS _v "
+            f"{cov_fn}(l._v, r._v) OVER ({over}) AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )

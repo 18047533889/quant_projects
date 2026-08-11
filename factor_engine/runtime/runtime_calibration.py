@@ -227,3 +227,56 @@ def calibration_summary() -> dict[str, Any]:
             "server_fingerprint": _server_fingerprint(),
             "persisted_path": str(_calib_path()),
         }
+
+
+# ---------------------------------------------------------------------------
+# R39-PERF-075：shape-aware ScanCost 校准（ScanShapeKey + P50/P95）
+#
+# 原有 EMA 路径（record_task_actual / calibrated_factors）保留，作为 shape 信息
+# 缺失时的 fallback。shape 信息可用时走 ScanShapeCalibrator（有界样本窗口 +
+# P50/P95）。
+# ---------------------------------------------------------------------------
+
+from runtime.scan_shape import (  # noqa: E402
+    ScanShapeCalibrator,
+    ScanShapeKey,
+    reconstruct_scan_shape_key,
+)
+
+_scan_shape_calibrator: ScanShapeCalibrator | None = None
+
+
+def scan_shape_calibrator() -> ScanShapeCalibrator:
+    """进程级 shape-aware ScanCost 校准器（懒构造单例）。"""
+    global _scan_shape_calibrator
+    if _scan_shape_calibrator is None:
+        _scan_shape_calibrator = ScanShapeCalibrator()
+    return _scan_shape_calibrator
+
+
+def reset_scan_shape_calibration() -> None:
+    """清空 shape-aware 校准样本（测试用）。"""
+    global _scan_shape_calibrator
+    if _scan_shape_calibrator is not None:
+        _scan_shape_calibrator.reset()
+        _scan_shape_calibrator = None
+
+
+def record_scan_shape_actual(
+    *,
+    shape: ScanShapeKey,
+    open_ms: float = 0.0,
+    scan_ms: float = 0.0,
+    decode_ms: float = 0.0,
+    rows: int = 0,
+    bytes_: int = 0,
+) -> None:
+    """记录一次 shape-aware ScanCost 实际观测（open/scan/decode/rows/bytes）。"""
+    scan_shape_calibrator().record(
+        shape, open_ms=open_ms, scan_ms=scan_ms, decode_ms=decode_ms, rows=rows, bytes_=bytes_
+    )
+
+
+def scan_shape_summary(shape: ScanShapeKey) -> dict[str, Any]:
+    """某 shape 的 P50/P95 校准汇总（无样本返回 {}）。"""
+    return scan_shape_calibrator().summary(shape)

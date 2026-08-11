@@ -138,18 +138,21 @@ def test_handle_oom_replans_to_different_signature():
     )
     sched = AdaptiveBatchScheduler(broker=ResourceBroker())
     sched._replace_with_shard_plan(dag, "root:f", plan)
-    failed_sig = sched._shard_shape_of[plan.merge_task_id]
+    # shape 身份统一按 original_task_id 存（P0-009，不再 merge_id/orig_tid 混用）。
+    failed_sig = sched._shard_shape_of["root:f"]
 
     remaining = set()
     # 模拟 merge 任务 OOM → _handle_oom 必须 replan 到更小 shape。
     handled = sched._handle_oom(plan.merge_task_id, MemoryError("oom"), dag, remaining)
     assert handled is True
-    # 新 merge 的 shape 签名 != 失败签名。
-    new_merge_id = f"root:f:merge"
+    # 新 merge 带 attempt 段（P0-010 attempt 隔离），shape 签名 != 失败签名。
+    new_merge_id = f"root:f:attempt:2:merge"
     assert new_merge_id in dag.tasks
-    new_sig = sched._shard_shape_of.get(new_merge_id)
+    new_sig = sched._shard_shape_of.get("root:f")
     assert new_sig is not None and new_sig != failed_sig
     assert "root:f" not in dag.tasks
+    # 旧 attempt 的 task id 已被替换，不会残留。
+    assert all(not t.startswith("root:f:attempt:1:") for t in dag.tasks)
     # 新 shard 任务被重新加入 remaining。
     assert len(remaining) >= 2
 
@@ -169,13 +172,11 @@ def test_same_shape_oom_retry_refused():
     )
     sched = AdaptiveBatchScheduler(broker=ResourceBroker())
     sched._replace_with_shard_plan(dag, "root:f", plan)
-    failed_sig = sched._shard_shape_of[plan.merge_task_id]
+    failed_sig = sched._shard_shape_of["root:f"]
+    # 预置该 shape 已经失败 → 再次 OOM 必须拒绝 replan（不陷入无限重试）。
+    sched._failed_shapes.add(failed_sig)
     remaining = set()
-    assert sched._handle_oom(plan.merge_task_id, MemoryError("oom"), dag, remaining) is True
-    # 同 shape 再次 OOM（签名已失败）→ 拒绝 replan（不陷入无限重试）。
-    dag2 = dag
-    remaining2 = set()
-    assert sched._handle_oom("root:f:merge", MemoryError("oom"), dag2, remaining2) is False
+    assert sched._handle_oom("root:f:shard:0", MemoryError("oom"), dag, remaining) is False
 
 
 def test_shape_signature_invariant_direct():

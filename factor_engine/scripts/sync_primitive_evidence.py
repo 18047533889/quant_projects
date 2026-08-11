@@ -45,11 +45,21 @@ def _collect_cases() -> dict:
                 normalized.setdefault(canonical, builder)
         return sorted(normalized.items())
 
-    polars_reference = daily_canonical_cases(merge_case_lists(MEMORY_CASES, POLARS_BULK_CASES, STRICT_PERIOD_CASES))
+    # R38 evidence-regen blocker: strict-period primitives are DECLARED only in
+    # fields that have real executed tests.  ``test_production_convergence.py``
+    # runs ``test_strict_period_polars_*`` for 6 canonicals (no
+    # quarter_from_cumulative/ttm_from_cumulative polars parity case) and
+    # ``test_strict_period_duckdb_*`` for all 7.  There is NO strict-period edge
+    # or no-pandas-fallback test, so declaring them in those fields would be an
+    # over-declaration that makes the six-way intersection forever unattainable
+    # (edge/no_fallback have no executed cases to certify them).
+    from tests.operators.test_production_convergence import STRICT_PERIOD_CASES as _SPC
+    _SP_POLARS = {(name, fn) for name, fn in _SPC if name != "quarter_from_cumulative" and name != "ttm_from_cumulative"}
+    polars_reference = daily_canonical_cases(merge_case_lists(MEMORY_CASES, POLARS_BULK_CASES, _SP_POLARS))
     duckdb_reference = daily_canonical_cases(merge_case_lists(DUCKDB_CASES, DUCKDB_BULK_CASES, STRICT_PERIOD_CASES))
-    polars_edge = daily_canonical_cases(merge_case_lists(EDGE_CASES, STRICT_PERIOD_CASES))
-    duckdb_edge = daily_canonical_cases(merge_case_lists(DUCKDB_EDGE_CASES, STRICT_PERIOD_CASES))
-    no_fallback = daily_canonical_cases(merge_case_lists(NO_PANDAS_CASES, STRICT_PERIOD_CASES))
+    polars_edge = daily_canonical_cases(merge_case_lists(EDGE_CASES))
+    duckdb_edge = daily_canonical_cases(merge_case_lists(DUCKDB_EDGE_CASES))
+    no_fallback = daily_canonical_cases(merge_case_lists(NO_PANDAS_CASES))
 
     return build_case_registry_payload(
         polars_reference=polars_reference,

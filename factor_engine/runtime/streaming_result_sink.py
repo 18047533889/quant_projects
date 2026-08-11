@@ -15,6 +15,7 @@ R33 升级
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections import deque
@@ -64,6 +65,29 @@ def _classify_write_error(exc: BaseException) -> str:
     if "oom" in msg or "out of memory" in msg or name == "memoryerror":
         return "permanent"
     return "transient"  # 默认只重试有限次；超预算仍 FAILED（见 writer 循环）
+
+
+def _should_flush(
+    batch_count: int,
+    batch_bytes: int,
+    oldest_age_s: float,
+    *,
+    batch_size: int,
+    target_batch_bytes: int | None,
+    max_batch_age_s: float | None,
+) -> bool:
+    """R39-PERF-040 flush 谓词：bytes + factor_count + latency budget 任一触发。
+
+    ``target_batch_bytes``/``max_batch_age_s`` 为 ``None`` 时对应维度不参与判断
+    （保持旧 count-only 行为）。纯函数，便于单测。
+    """
+    if batch_count >= batch_size:
+        return True
+    if target_batch_bytes is not None and batch_bytes >= target_batch_bytes:
+        return True
+    if max_batch_age_s is not None and oldest_age_s >= max_batch_age_s:
+        return True
+    return False
 
 
 @dataclass
@@ -191,12 +215,25 @@ class _WriterWorker:
         queue: BoundedResultQueue,
         batch_size: int,
         partition_key: Callable[[ResultItem], str] | None,
+        on_fatal: Callable[[BaseException], None] | None = None,
+        target_batch_bytes: int | None = None,
+        max_batch_age_s: float | None = None,
     ) -> None:
         self.worker_id = worker_id
         self._writer = writer
         self._queue = queue
         self._batch_size = max(1, batch_size)
+        self._target_batch_bytes = (
+            max(1, int(target_batch_bytes)) if target_batch_bytes is not None else None
+        )
+        self._max_batch_age_s = (
+            float(max_batch_age_s) if max_batch_age_s is not None else None
+        )
         self._partition_key = partition_key
+        # P0-023：worker fatal 时立即回调 sink（atomic set fatal + close queues），
+        # 不等 finish()——否则 compute 还往死掉的 writer 队列塞结果，最后阻塞到
+        # queue 满甚至等 600 秒。
+        self._on_fatal = on_fatal
         self.state = WS_ACTIVE
         self.fatal_error: BaseException | None = None
         self.committed = 0
@@ -206,7 +243,11 @@ class _WriterWorker:
         self._retry_map: dict[str, int] = {}
 
     def _run(self) -> None:
-        """writer 循环（由 sink 的线程调用）。"""
+        """writer 循环（由 sink 的线程调用）。
+
+        R39-PERF-040：flush 条件 = factor_count **或** 累积 bytes **或**
+        latency budget（batch 内最老 item 等待时长）任一触发，不再只看数量。
+        """
         while True:
             item = self._queue.get()
             if item is None and self._queue._closed:
@@ -214,11 +255,21 @@ class _WriterWorker:
             if item is None:
                 continue
             batch = [item]
-            while len(batch) < self._batch_size:
+            batch_bytes = max(0, item.bytes)
+            batch_started = time.monotonic()
+            while not _should_flush(
+                len(batch),
+                batch_bytes,
+                time.monotonic() - batch_started,
+                batch_size=self._batch_size,
+                target_batch_bytes=self._target_batch_bytes,
+                max_batch_age_s=self._max_batch_age_s,
+            ):
                 nxt = self._queue.get(timeout=0.05)
                 if nxt is None:
                     break
                 batch.append(nxt)
+                batch_bytes += max(0, nxt.bytes)
             self._write_batch(batch)
             if self.state == WS_FAILED:
                 # fatal：本 worker 停止取新任务（其余 worker 仍可继续）。
@@ -243,6 +294,13 @@ class _WriterWorker:
                         self.state = WS_FAILED
                         self.fatal_error = exc
                         self.failed += len(batch)
+                    # P0-023：**立即**传播到 sink（atomic set fatal + close 全部
+                    # queues + 通知），scheduler 下一次 submit 立刻被拒、停止 admission。
+                    if self._on_fatal is not None:
+                        try:
+                            self._on_fatal(exc)
+                        except Exception:
+                            pass
                     return
                 # transient：指数退避后重试同一 batch。
                 time.sleep(min(0.05 * (2 ** attempts), 1.0))
@@ -261,13 +319,29 @@ class StreamingResultSink:
         writer: Callable[[list[ResultItem]], None],
         queue_bytes: int = 4 * 1024**3,
         batch_size: int = 1,
-        writer_threads: int = 1,
+        writer_threads: int | None = None,
         partition_key: Callable[[ResultItem], str] | None = None,
+        target_batch_bytes: int | None = None,
+        max_batch_age_s: float | None = None,
     ) -> None:
         self._writer = writer
         self._batch_size = max(1, batch_size)
-        self._writer_threads = max(1, writer_threads)
+        self._target_batch_bytes = (
+            max(1, int(target_batch_bytes)) if target_batch_bytes is not None else None
+        )
+        self._max_batch_age_s = (
+            float(max_batch_age_s) if max_batch_age_s is not None else None
+        )
         self._partition_key = partition_key
+        # R39-PERF-041：writer_threads 自动选择。同 partition（无 partition_key 时
+        # 视为单 partition 域）→ 单 writer；partition-aware → ``min(2, cpu)``，
+        # 显式 ``writer_threads`` 覆盖自动选择（保持旧接口向后兼容：显式传 1 仍 1）。
+        if writer_threads is None:
+            if partition_key is None:
+                writer_threads = 1
+            else:
+                writer_threads = min(2, os.cpu_count() or 1)
+        self._writer_threads = max(1, int(writer_threads))
         self._threads: list[threading.Thread] = []
         # R33-P0-051：每 worker 一个独立队列（同 partition → 同 worker → 单 writer）。
         self._worker_queues: list[BoundedResultQueue] = [
@@ -281,13 +355,34 @@ class StreamingResultSink:
         self._fatal_error: BaseException | None = None
         self._drained = False
         self._started = False
+        # R39-PERF-042：动态 least-loaded ownership。partition key 首次出现时
+        # 交给当前负载最低的 worker，之后 pin（同一 partition 永不并发写）。
+        self._partition_owners: dict[str, int] = {}
+        self._route_lock = threading.Lock()
+
+    def _least_loaded_writer(self) -> int:
+        """当前队列字节占用最低的 worker（tie → 最小 id，确定性强）。"""
+        return min(
+            range(self._writer_threads),
+            key=lambda i: (self._worker_queues[i].current_bytes, i),
+        )
 
     def _route_worker(self, item: ResultItem) -> int:
-        """R33-P0-051：partition hash → worker（同一 partition 恒同一 worker）。"""
+        """R39-PERF-042：动态 least-loaded ownership（替代静态 hash）。
+
+        同一 partition 首次出现 → 分配给 least-loaded worker 并 pin；此后该
+        partition 恒同一 worker。partition epoch 结束（sink 收尾 drain）后随
+        sink 释放，保证 ``same partition never concurrent write``。
+        """
         if self._partition_key is None:
             return 0
         key = self._partition_key(item)
-        return (hash(key) & 0x7FFFFFFF) % self._writer_threads
+        with self._route_lock:
+            owner = self._partition_owners.get(key)
+            if owner is None:
+                owner = self._least_loaded_writer()
+                self._partition_owners[key] = owner
+            return owner
 
     def start(self) -> None:
         if self._started:
@@ -300,6 +395,9 @@ class StreamingResultSink:
                 queue=self._worker_queues[i],
                 batch_size=self._batch_size,
                 partition_key=self._partition_key,
+                on_fatal=self._set_fatal,
+                target_batch_bytes=self._target_batch_bytes,
+                max_batch_age_s=self._max_batch_age_s,
             )
             self._workers.append(worker)
             t = threading.Thread(target=worker._run, daemon=True, name=f"r27-writer-{i}")
@@ -312,6 +410,12 @@ class StreamingResultSink:
         if not self._worker_queues:
             return 0.0
         return max(q.backpressure_ratio for q in self._worker_queues)
+
+    @property
+    def fatal_error(self) -> BaseException | None:
+        """P0-023：writer 已 fatal 的异常（scheduler 据此停止 admission）。"""
+        with self._lock:
+            return self._fatal_error
 
     def set_target_bytes(self, total: int) -> None:
         """R38 P0-043/044（§17）：弹性调整 sink 总字节目标。
@@ -400,8 +504,21 @@ class StreamingResultSink:
             )
 
     def _set_fatal(self, exc: BaseException) -> None:
+        """P0-023：atomic set fatal + **立即 close 全部 worker 队列** + 通知。
+
+        close 后 ``submit()`` 的 ``put`` 直接返回 False（queue closed），producer
+        立即停止往死掉的 writer 塞结果；同时唤醒阻塞在 ``put``/``get`` 的线程，
+        不等到 finish() 才暴露 writer 已死。
+        """
         with self._lock:
+            if self._fatal_error is not None:
+                return
             self._fatal_error = exc
+        for q in self._worker_queues:
+            try:
+                q.close()
+            except Exception:
+                pass
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
@@ -416,6 +533,10 @@ class StreamingResultSink:
                 "failed": failed,
                 "retried": retried,
                 "writer_threads": self._writer_threads,
+                "batch_size": self._batch_size,
+                "target_batch_bytes": self._target_batch_bytes,
+                "max_batch_age_s": self._max_batch_age_s,
+                "partition_owner_count": len(self._partition_owners),
                 "writer_states": [w.state for w in self._workers],
                 "failed_workers": failed_workers,
                 "fatal_error": (

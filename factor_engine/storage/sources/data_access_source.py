@@ -2080,7 +2080,11 @@ class DataAccessSource(DataSource):
                 mode=self.read_mode,
                 filters=self.semantic_filters or None,
                 normalize_units=True,
-                **self.params,
+                # R39 P0 #50：FE 的 run_mode（research/production）是唯一权威，经
+                # ``store.read(run_mode=...)`` → ``prepare_read`` 设置 request-scoped
+                # RuntimeModeIdentity——DA 各层不再各读 ``DATA_ACCESS_RUN_MODE`` env。
+                run_mode=self.run_mode,
+                **{k: v for k, v in self.params.items() if k != "run_mode"},
             )
             self._record_read_snapshot(getattr(handle.snapshot, "snapshot_id", None))
             # R26-P0-023：production 读必须带可证明 snapshot（provenance envelope）——

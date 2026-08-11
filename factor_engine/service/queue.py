@@ -325,6 +325,10 @@ class BoundedJobQueue:
             self.jobs_lease_rejected_total += 1
             self._mark_resource_rejected(job)
             return
+        # P0-018：job 执行期间把 JobLease 设为当前 context 的活跃 job lease——
+        # FE scheduler / DA scan / writer 的 child lease 从同一棵 lease 树申请。
+        if job_lease is not None and self.coordinator is not None:
+            self.coordinator.set_active_job_lease(job_lease)
         try:
             run_fn(job)
         except BaseException:  # noqa: BLE001
@@ -334,6 +338,11 @@ class BoundedJobQueue:
             # 会拒绝覆盖，保持 terminal 状态权威。
             self._mark_unexpected_failure(job)
         finally:
+            if self.coordinator is not None:
+                try:
+                    self.coordinator.set_active_job_lease(None)
+                except Exception:
+                    pass
             _service_broker_ctx_var.reset(token)
             if job_lease is not None:
                 try:

@@ -26,16 +26,22 @@
       ""
     ],
     "ts_delay": [
-      "window=1",
-      "window=10",
-      "window=2",
-      "window=5"
+      "n=1",
+      "n=10",
+      "n=2",
+      "n=5"
     ],
     "ts_delta": [
-      "window=1",
-      "window=10",
-      "window=2",
-      "window=5"
+      "n=1",
+      "n=10",
+      "n=2",
+      "n=5"
+    ],
+    "ts_log_return": [
+      "d=1",
+      "d=10",
+      "d=2",
+      "d=5"
     ],
     "ts_max": [
       "window=1",
@@ -77,15 +83,21 @@
       "window=500",
       "window=60"
     ],
+    "ts_pct": [
+      "d=1",
+      "d=10",
+      "d=2",
+      "d=5"
+    ],
     "ts_rank": [
-      "window=1",
-      "window=120",
-      "window=2",
-      "window=20",
-      "window=252",
-      "window=5",
-      "window=500",
-      "window=60"
+      "min_periods=1,window=1",
+      "min_periods=1,window=120",
+      "min_periods=1,window=2",
+      "min_periods=1,window=20",
+      "min_periods=1,window=252",
+      "min_periods=1,window=5",
+      "min_periods=1,window=500",
+      "min_periods=1,window=60"
     ],
     "ts_std": [
       "window=1",
@@ -129,7 +141,7 @@
     ]
   },
   "operators_tested": 17,
-  "certified_point_count": 84,
+  "certified_point_count": 92,
   "invalid_rejection_passed": 57,
   "invalid_rejection_failed": 0,
   "invalid_rejection_failures": [],
@@ -140,10 +152,12 @@
     "rank": true,
     "ts_delay": true,
     "ts_delta": true,
+    "ts_log_return": true,
     "ts_max": true,
     "ts_mean": true,
     "ts_median": true,
     "ts_min": true,
+    "ts_pct": true,
     "ts_rank": true,
     "ts_std": true,
     "ts_sum": true,

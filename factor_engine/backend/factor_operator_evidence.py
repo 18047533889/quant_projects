@@ -227,31 +227,72 @@ def _git_blob_sha(relative_path: str) -> str:
     return hashlib.sha1(f"blob {len(data)}\0".encode("ascii") + data).hexdigest()
 
 
+def _git_available() -> bool:
+    """R39 #75：当前部署是否还有 live .git（wheel/container 没有）。"""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return out.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     certified = str(payload.get("certified_commit_sha") or "")
     if not certified:
         return ["certified_commit_sha missing"]
 
-    ancestor = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", certified, "HEAD"],
-        cwd=str(REPO_ROOT),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if ancestor.returncode != 0:
-        errors.append(
-            "certified commit is unavailable or is not an ancestor of the checkout"
-        )
-        return errors
+    if not _git_available():
+        # R39 #75：无 .git（wheel/container 部署）→ 读构建期 SCMManifest，取代
+        # ``git merge-base`` / ``git diff``。manifest 缺失 → fail-closed（明确报错，
+        # 绝不假装通过）。
+        from evidence.scm_manifest import SCMManifest
 
-    raw_changed = _run_git(
-        "diff", "--name-only", f"{certified}..HEAD", "--", "factor_engine"
-    )
-    if raw_changed is None:
-        return errors + ["cannot enumerate post-certification FactorEngine changes"]
-    changed = {line.strip() for line in raw_changed.splitlines() if line.strip()}
+        manifest = SCMManifest.load()
+        if manifest is None:
+            return errors + [
+                "SCMManifest missing and .git unavailable: cannot verify inherited "
+                "evidence in this deployment (run scripts/generate_scm_manifest.py "
+                "at build time)"
+            ]
+        if manifest.build_commit_sha and manifest.build_commit_sha != certified:
+            # 部署树来自与被审提交不同的提交 → 必须有构建期记录的祖先证明 + 变更清单。
+            if not manifest.certified_is_ancestor:
+                errors.append(
+                    "certified commit is not an ancestor of the build commit "
+                    "(per SCMManifest)"
+                )
+                return errors
+            changed = set(manifest.changed_since_certified)
+        else:
+            # build commit == certified → 无 post-certification 变更。
+            changed = set()
+    else:
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", certified, "HEAD"],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if ancestor.returncode != 0:
+            errors.append(
+                "certified commit is unavailable or is not an ancestor of the checkout"
+            )
+            return errors
+
+        raw_changed = _run_git(
+            "diff", "--name-only", f"{certified}..HEAD", "--", "factor_engine"
+        )
+        if raw_changed is None:
+            return errors + ["cannot enumerate post-certification FactorEngine changes"]
+        changed = {line.strip() for line in raw_changed.splitlines() if line.strip()}
 
     blob_shas = {
         str(path): str(value)

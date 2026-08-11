@@ -76,6 +76,13 @@ class ResourceAutopilotService:
         self._broker = broker
         self._interval = max(0.1, float(interval_s))
         self._controller = broker._resource_controller()
+        # R39：把 service 挂到 broker 上——scheduler 调 ``resource_decision()``
+        # 时优先用它做**只读** snapshot（即使本 service 不是全局单例），绝不
+        # fall through 到每调用一次 controller.tick（多 scheduler 热循环放大）。
+        try:
+            broker._autopilot_service = self
+        except Exception:
+            pass
         self._lock = threading.RLock()
         self._snapshot: ResourceDecisionSnapshot | None = None
         self._thread: threading.Thread | None = None
@@ -130,14 +137,19 @@ class ResourceAutopilotService:
                 pass
 
     def _tick(self) -> None:
-        """一个固定 cadence 的 control tick：采样一次 → controller.tick() → 发布。"""
+        """一个固定 cadence 的 control tick：采样一次 → controller.tick() → 发布。
+
+        P0-016：消费 scheduler 上报的 live signals（sink backpressure / job lease
+        字节）——不再硬编码 ``None/0.0`` 让 controller 永远看不到真实 backpressure。
+        """
         now = time.monotonic()
         snap = self._broker._refresh(force=True)
+        live = self._broker.live_signals()
         decision = self._controller.tick(
             self._broker._signals_from_snapshot(snap),
             self._broker._envelope_from_snapshot(snap),
-            job_memory_lease_bytes=None,
-            sink_backpressure=0.0,
+            job_memory_lease_bytes=live.get("job_memory_lease_bytes"),
+            sink_backpressure=float(live.get("sink_backpressure", 0.0) or 0.0),
         )
         snapshot = ResourceDecisionSnapshot(
             decision_id=uuid.uuid4().hex[:12],
@@ -153,6 +165,26 @@ class ResourceAutopilotService:
             if len(self._ticks) > 1000:
                 self._ticks = self._ticks[-500:]
             self._last_decision_sec = now
+        # R39 #72：把 cache_budget_bytes 应用到已注册的 cache 消费者（DA
+        # QueryResultCache）。失败只记不炸——控制循环必须存活。
+        self._apply_cache_consumers(decision)
+
+    def _apply_cache_consumers(self, decision: Any) -> None:
+        """把 decision.cache_budget_bytes 推给已注册的 cache 消费者。
+
+        DA QueryResultCache 通过 ``apply_resource_cache_budget`` 注册（懒加载）。
+        消费者异常 → 只记日志，不影响 control tick。
+        """
+        budget = getattr(decision, "cache_budget_bytes", None)
+        if not budget:
+            return
+        try:
+            from data_access.read.query_cache import apply_resource_cache_budget
+
+            apply_resource_cache_budget(int(budget))
+        except Exception:
+            # DA 不可用（standalone FE）或 DA 缓存模块缺失 → 跳过，非致命。
+            pass
 
     # -- read-only consumer API --
 
@@ -166,7 +198,7 @@ class ResourceAutopilotService:
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
-            return {
+            out = {
                 "started": self._started,
                 "interval_s": self._interval,
                 "tick_count": self._tick_count,
@@ -174,6 +206,14 @@ class ResourceAutopilotService:
                 "last_snapshot": self._snapshot.to_dict() if self._snapshot else None,
                 "controller": self._controller.to_dict(),
             }
+        # R39 #74：统一 cache inventory 总可回收字节（DA QueryResultCache 等）。
+        try:
+            from data_access.runtime.cache_inventory import inventory_summary
+
+            out["cache_inventory"] = inventory_summary()
+        except Exception:
+            pass
+        return out
 
 
 #: 进程级单例（一个进程一个 autopilot；绑定 host coordinator 的 broker）。

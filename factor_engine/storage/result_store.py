@@ -278,9 +278,14 @@ class PandasResultStore:
         matrix_root: str | Path | None = None,
         start: str | None = None,
         end: str | None = None,
+        instrument_filter: list[str] | None = None,
     ) -> pd.DataFrame:
         """读取 factor_matrix 宽表（``FactorMatrixMaterializer`` 布局）。
-        
+
+        R39 PERF-065（pushdown）：``start``/``end`` 作为 ``time_range`` 下推给
+        ``load_matrix``（hive year/month 分区裁剪 + ``columns=`` pushdown）；
+        ``instrument_filter`` 作 row 过滤。调用方仍可依赖同样的返回契约。
+
         参数:
             factor_ids: 因子 ID 列表
             universe: 标的池标识（可选）
@@ -288,7 +293,8 @@ class PandasResultStore:
             matrix_root: factor_matrix 根目录（可选）
             start: 起始时间（含）（可选）
             end: 结束时间（含）（可选）
-        
+            instrument_filter: 标的过滤集合（可选）
+
         返回:
             pd.DataFrame
         """
@@ -299,11 +305,14 @@ class PandasResultStore:
             root = os.environ.get("FACTOR_MATRIX_ROOT")
         if root is None:
             root = self.lake_root.parent / "factor_matrix"
+        time_range = (start, end) if (start is not None or end is not None) else None
         frame = FactorMatrixMaterializer.load_matrix(
             root,
             universe=universe,
             frequency=frequency,
             factor_ids=factor_ids,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
         )
         if "datetime" in frame.columns:
             frame["datetime"] = pd.to_datetime(frame["datetime"])

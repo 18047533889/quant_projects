@@ -17,10 +17,12 @@ R25 目标「一个 immutable executable plan」必须成为事实：所有 publ
 """
 from __future__ import annotations
 
+import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from data_access.core.exceptions import ValidationError
+from data_access.core.exceptions import DeadlineExceeded, ValidationError
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,121 @@ class TemporalPlan:
     pit_floor: str | None = None      # same_day / next_session_open / ...
     request_availability: str | None = None
     pit_fidelity: str | None = None
+
+
+@dataclass(frozen=True)
+class AvailabilityContract:
+    """R39 P0 #30：dataset 级 availability 声明（由 RuntimeDatasetContract 派生）。
+
+    从 ``RuntimeDatasetContract`` 提取：
+        - ``knowledge``   knowledge/availability 时间列（``PITContract.availability_column``
+                          或 temporal_axes["knowledge"].column）
+        - ``availability`` availability 策略串（``same_day`` / ``next_trading_day`` / ...，
+                          由 ``pit_policy`` 经 ``_PIT_FLOOR_OF`` 映射）
+    之后作为 ``compile_available_from_result(knowledge, availability, ...)`` 的两个
+    位置参数传入——修复旧代码把 ``dataset``（str）当 knowledge、availability 缺失的
+    TypeError 并被 ``except Exception`` 吞掉的问题。
+    """
+
+    knowledge: str | None
+    availability: str = "same_day"
+
+
+class EmptyPhysicalScope(list):
+    """R39 P0 #44：**合法空**物理读取范围（数据集存在但没有匹配文件）。
+
+    与 ``SourceResolutionError``（解析失败）严格区分：``[]`` 只表示「合法空」，
+    绝不静默同时代表「解析失败」。作为 list 子类，``list(EmptyPhysicalScope(...))``
+    与下游 ``for p in source_paths`` 全部兼容，同时带类型标记。
+    """
+
+    def __init__(self, *, dataset: str, reason: str = "no matching partitions") -> None:
+        super().__init__()
+        self.dataset = dataset
+        self.reason = reason
+
+
+_deadline_ctx_var: ContextVar["DeadlineContext | None"] = ContextVar(
+    "data_access_request_deadline", default=None
+)
+
+
+@dataclass
+class DeadlineContext:
+    """R39 P0 #32/#33/#37：request-scoped **单一**绝对 deadline。
+
+    prepare_read / 组合读在最外层入口建立，贯穿 resolution → snapshot → schema
+    epoch → contract compile → admission → execute 全部子阶段——早期阶段也计入
+    同一请求预算（旧实现 deadline 在 prep 之后才建，HEAD/LIST/schema 的耗时
+    完全不在预算内）。``deadline_at`` 为 None 表示无 deadline（不限制）。
+    """
+
+    deadline_at: float | None
+    source: str = "unknown"
+
+    @classmethod
+    def start(
+        cls,
+        budget: Any = None,
+        *,
+        max_elapsed_ms: float | None = None,
+        source: str = "request",
+    ) -> "DeadlineContext":
+        ms = None
+        if budget is not None:
+            ms = getattr(budget, "max_elapsed_ms", None)
+        if ms is None:
+            ms = max_elapsed_ms
+        deadline_at = None
+        if ms is not None and float(ms) > 0:
+            deadline_at = time.monotonic() + float(ms) / 1000.0
+        return cls(deadline_at=deadline_at, source=source)
+
+    def check(self, context: str = "请求") -> None:
+        """检查当前是否已过 deadline；已过 → DeadlineExceeded（fail-fast）。"""
+        if self.deadline_at is not None and time.monotonic() >= self.deadline_at:
+            raise DeadlineExceeded(
+                f"{context}已超过请求绝对 deadline（R39 P0 #32/#33：早期阶段计入同一预算）。"
+            )
+
+    def remaining_ms(self) -> float | None:
+        """剩余毫秒；已过 → DeadlineExceeded。None = 无 deadline。"""
+        if self.deadline_at is None:
+            return None
+        remaining = self.deadline_at - time.monotonic()
+        if remaining <= 0:
+            raise DeadlineExceeded(
+                "请求已超过绝对 deadline（R39 P0 #32/#33：prepare 阶段已计入）。"
+            )
+        return remaining * 1000.0
+
+    def remaining_secs(self) -> float | None:
+        """剩余秒；已过 → DeadlineExceeded。None = 无 deadline。"""
+        if self.deadline_at is None:
+            return None
+        remaining = self.deadline_at - time.monotonic()
+        if remaining <= 0:
+            raise DeadlineExceeded(
+                "请求已超过绝对 deadline（R39 P0 #32/#33）。"
+            )
+        return remaining
+
+    def enter(self) -> Any:
+        """把本 deadline 设为当前 request 的权威 deadline（ContextVar），返回 token。"""
+        return _deadline_ctx_var.set(self)
+
+
+def set_deadline_context(ctx: "DeadlineContext | None") -> Any:
+    return _deadline_ctx_var.set(ctx)
+
+
+def reset_deadline_context(token: Any) -> None:
+    _deadline_ctx_var.reset(token)
+
+
+def current_deadline() -> "DeadlineContext | None":
+    """当前 request 的权威绝对 deadline（无则 None）。"""
+    return _deadline_ctx_var.get()
 
 
 @dataclass(frozen=True)
@@ -128,6 +245,9 @@ class PreparedRead:
     # ``monotonic() + max_elapsed_ms``，execute 只拿剩余时间（prepare 阶段
     # HEAD/LIST/schema 的耗时也计入请求预算，不再给 execute 一个全新完整 deadline）。
     deadline_at: float | None = None
+    # R39 P0 #32/#33：携带的 DeadlineContext（单一 authority；execute 只从它
+    # 取剩余时间，prepare 全部子阶段共用同一预算）。
+    deadline_context: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {

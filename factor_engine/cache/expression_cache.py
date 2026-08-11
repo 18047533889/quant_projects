@@ -35,7 +35,13 @@ class ExpressionCache:
         stats: CacheHitStats | None = None,
         budget_bytes: int | None = None,
         layer_name: str = "l0_cse",
+        governed_store: Any | None = None,
     ) -> None:
+        # R38 P0-038（P0-014）：L0 **唯一 owner 是 GovernedBufferStore**。
+        # ``governed_store`` 传入时本对象是纯 adapter：get/set/release/evict 全部
+        # 委托给 store，自己不再维护第二套 ``_bytes`` / governor accounting
+        # （旧实现双套记账 → governor 高压逐出对 store 写入的值完全失效，split-brain）。
+        self._governed_store = governed_store
         self._store: OrderedDict[str, Any] = (
             store if isinstance(store, OrderedDict) else OrderedDict(store or {})
         )
@@ -44,13 +50,16 @@ class ExpressionCache:
         self.layer_name = layer_name
         self._bytes = 0
         self._lock = threading.RLock()
-        for value in self._store.values():
-            size = _estimate(value)
-            self._bytes += size
-            _governor().reserve_accounting(self.layer_name, size)
+        if governed_store is None:
+            for value in self._store.values():
+                size = _estimate(value)
+                self._bytes += size
+                _governor().reserve_accounting(self.layer_name, size)
 
     @property
     def store(self) -> dict[str, Any]:
+        if self._governed_store is not None:
+            return self._governed_store._backing
         return self._store
 
     @property
@@ -70,6 +79,14 @@ class ExpressionCache:
 
     def get(self, sid: str) -> Any | None:
         """按 CSE 子树 id 取共享结果；命中/未命中更新 stats，命中时 bump LRU。"""
+        if self._governed_store is not None:
+            value = self._governed_store.get(sid)
+            if self._stats is not None:
+                if value is not None:
+                    self._stats.record_hit(CacheLayer.L0_CSE)
+                else:
+                    self._stats.record_miss(CacheLayer.L0_CSE)
+            return value
         with self._lock:
             if sid in self._store:
                 if self._stats is not None:
@@ -83,6 +100,10 @@ class ExpressionCache:
 
     def set(self, sid: str, value: Any) -> None:
         """写入 CSE 共享子树结果（Series 或 LazyFrame）；受字节预算约束。"""
+        if self._governed_store is not None:
+            # 委托给唯一 owner（P0-029：返回值含 MEMORY/SPILLED/RECOMPUTE/REFUSED）。
+            self._governed_store.put(sid, value)
+            return
         size = _estimate(value)
         if size > self.budget_bytes:
             # 单对象就超预算：宁可让调用方按需重算，也不要它撑爆内存
@@ -106,6 +127,9 @@ class ExpressionCache:
 
     def release(self, sid: str) -> None:
         """显式释放某 sid（CSE 引用计数归零时立即回收，P0-5）。"""
+        if self._governed_store is not None:
+            self._governed_store.release(sid)
+            return
         # 锁顺序恒为 governor → cache（与 set / evict hook 一致，避免锁反转死锁）。
         gov = _governor()
         with gov.lock:
@@ -122,6 +146,8 @@ class ExpressionCache:
         审计 #332：``target > 0`` 用 ``target``，否则逐出到自身 ``budget_bytes``。
         记账由 ``MemoryGovernor._evict_for`` 统一扣减，这里不重复 release。
         """
+        if self._governed_store is not None:
+            return self._governed_store.evict_if_over_budget(target)
         gov = _governor()
         with gov.lock:
             with self._lock:

@@ -455,7 +455,7 @@ def _edge_expr(name: str, cf):
     if name == "ts_cov":
         return F("ts_cov")(C["close"], C["exp"], 2)
     if name == "ts_beta":
-        return F("ts_beta")(C["close"], C["exp"], 2)
+        return F("ts_beta")(C["close"], C["exp"], 2, min_periods=2)
     if name == "maximum":
         return F("maximum")(C["close"], cf("neg"))
     if name == "minimum":
@@ -532,6 +532,12 @@ def test_inf_edge_required_primitive_not_zero_coerced(
     # Inf must not be silently dropped to 0: either the output differs from the
     # zero-imputed run, or the Inf input invalidates the statistic and the row
     # is NaN (never a finite constant ignoring Inf).
+    if name == "cs_sum":
+        # cs_sum 是合法例外（同 NaN 测试，注释见 _NAN_EDGE_PRIMITIVES 上方）：
+        # 0 是 sum 的恒等元，finite-mask 排除 ±Inf 与 0-impute 的结果按构造相同。
+        # 这里只断言 Inf 不毒化整行（输出保持有限），而不是断言与 0-impute 不同。
+        assert out_inf.notna().all(), f"{name}: Inf poisoned the row"
+        return
     assert not (out_inf.fillna(_NA_SENTINEL) == out_infz.fillna(_NA_SENTINEL)).all() or (
         out_inf.isna().any()
     ), f"{name}: Inf silently coerced to 0"

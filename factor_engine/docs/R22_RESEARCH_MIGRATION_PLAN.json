@@ -978,10 +978,10 @@
   {
     "canonical": "ts_ar_fitted_value",
     "current_surface": "extended",
-    "direct_use_status": "direct_alpha",
-    "disposition": "direct_visible",
-    "reason_not_mineable": "",
-    "recommended_factor_replacement": ""
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "in-sample AR fitted value (current row participates in its own fit) — diagnostic; use ts_ar_prior_forecast for the causal one-step form",
+    "recommended_factor_replacement": "ts_ar_prior_forecast"
   },
   {
     "canonical": "ts_ar_forecast",
@@ -994,10 +994,10 @@
   {
     "canonical": "ts_ar_in_sample_resid",
     "current_surface": "extended",
-    "direct_use_status": "direct_alpha",
-    "disposition": "direct_visible",
-    "reason_not_mineable": "",
-    "recommended_factor_replacement": ""
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "in-sample AR residual — diagnostic; use ts_ar_prior_innovation for the causal out-of-sample form",
+    "recommended_factor_replacement": "ts_ar_prior_innovation"
   },
   {
     "canonical": "ts_ar_innovation",

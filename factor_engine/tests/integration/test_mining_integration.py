@@ -67,10 +67,14 @@ def test_default_us_pv_valuation_composite():
 
     cfg = default_us_pv_valuation_data_source_config()
     assert cfg["type"] == "composite"
-    assert cfg["joins"]["valuation"] == "asof_backward"
+    # US valuation/indicator 是 X0 稀疏当前快照（snapshot_only），不能 asof 回填进
+    # 历史日线（asof_backward 会发明历史）——current_only 是正确设计
+    # （api.mining_integration.default_us_pv_valuation_data_source_config）。
+    assert cfg["joins"]["valuation"] == "current_only"
     assert cfg["sources"]["valuation"]["dataset"] == "us_stock_valuation_daily"
     assert cfg["sources"]["pv"]["dataset"] == "us_stock_daily"
-    assert cfg["aliases"]["pe"] == "valuation.pe"
+    # X0 快照真实列名是 price_to_earnings（P0-013 修复：旧 A 股字段名 PeRatio 是 bug）。
+    assert cfg["aliases"]["pe"] == "valuation.price_to_earnings"
 
 
 def test_default_us_stocks_sip_day_aggs_uses_data_access():

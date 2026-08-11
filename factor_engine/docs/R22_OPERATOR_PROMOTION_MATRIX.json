@@ -1597,9 +1597,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low"
+      "close": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -1715,7 +1713,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "low": "continuous_low"
+      "lower_limit": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -1802,8 +1800,7 @@
     "current_mining_role": "event",
     "current_surface": "daily",
     "default_recipe": {
-      "close": "continuous_close",
-      "high": "continuous_high"
+      "close": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -1832,9 +1829,7 @@
     "current_mining_role": "event",
     "current_surface": "daily",
     "default_recipe": {
-      "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low"
+      "close": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -1892,7 +1887,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "low": "continuous_low"
+      "upper_limit": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -1950,8 +1945,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "high": "continuous_high",
-      "low": "continuous_low"
+      "high_limit": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -2009,7 +2003,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "high": "continuous_high"
+      "upper_limit": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -2067,9 +2061,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low"
+      "close": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -3399,8 +3391,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3551,8 +3541,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3617,8 +3605,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3683,8 +3669,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3716,8 +3700,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3749,8 +3731,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3782,8 +3762,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3815,8 +3793,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3848,8 +3824,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -3980,8 +3954,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -4046,8 +4018,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -4145,8 +4115,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -4178,8 +4146,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -4211,8 +4177,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -4244,8 +4208,6 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low",
       "open": "continuous_open"
     },
     "delete_reason": "",
@@ -26431,7 +26393,7 @@
   {
     "canonical": "ts_ar_fitted_value",
     "cost_budget": 9,
-    "current_direct_status": "direct_alpha",
+    "current_direct_status": "research_tool",
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
@@ -26443,20 +26405,17 @@
       "ashare",
       "us"
     ],
-    "mining_lane": "alpha_direct",
+    "mining_lane": "supporting",
     "output_domain": "continuous_signed",
     "production_certified": false,
-    "replacement": "",
+    "replacement": "ts_ar_prior_forecast",
     "search_prior": 1.0,
     "source_recipes": [
       "daily_bar"
     ],
-    "target_ast_positions": [
-      "intermediate",
-      "terminal"
-    ],
-    "target_disposition": "direct_visible",
-    "target_terminal": true
+    "target_ast_positions": [],
+    "target_disposition": "moved_research_tool",
+    "target_terminal": false
   },
   {
     "canonical": "ts_ar_forecast",
@@ -26488,7 +26447,7 @@
   {
     "canonical": "ts_ar_in_sample_resid",
     "cost_budget": 9,
-    "current_direct_status": "direct_alpha",
+    "current_direct_status": "research_tool",
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
@@ -26500,20 +26459,17 @@
       "ashare",
       "us"
     ],
-    "mining_lane": "alpha_direct",
+    "mining_lane": "supporting",
     "output_domain": "continuous_signed",
     "production_certified": false,
-    "replacement": "",
+    "replacement": "ts_ar_prior_innovation",
     "search_prior": 1.0,
     "source_recipes": [
       "daily_bar"
     ],
-    "target_ast_positions": [
-      "intermediate",
-      "terminal"
-    ],
-    "target_disposition": "direct_visible",
-    "target_terminal": true
+    "target_ast_positions": [],
+    "target_disposition": "moved_research_tool",
+    "target_terminal": false
   },
   {
     "canonical": "ts_ar_innovation",
@@ -29215,7 +29171,7 @@
     "canonical": "ts_dmd_dominant_frequency",
     "cost_budget": 9,
     "current_direct_status": "move_internal",
-    "current_mining_role": "research",
+    "current_mining_role": "internal",
     "current_surface": "research",
     "default_recipe": {
       "x": "continuous_close"
@@ -29242,7 +29198,7 @@
     "canonical": "ts_dmd_dominant_growth_rate",
     "cost_budget": 9,
     "current_direct_status": "move_internal",
-    "current_mining_role": "research",
+    "current_mining_role": "internal",
     "current_surface": "research",
     "default_recipe": {
       "x": "continuous_close"
@@ -29359,7 +29315,7 @@
     "canonical": "ts_dmd_mode_concentration",
     "cost_budget": 9,
     "current_direct_status": "move_internal",
-    "current_mining_role": "research",
+    "current_mining_role": "internal",
     "current_surface": "research",
     "default_recipe": {
       "x": "continuous_close"
@@ -32311,9 +32267,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "close": "continuous_close",
-      "high": "continuous_high",
-      "low": "continuous_low"
+      "close": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -32405,8 +32359,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "high": "continuous_high",
-      "low": "continuous_low",
       "x": "continuous_close"
     },
     "delete_reason": "",

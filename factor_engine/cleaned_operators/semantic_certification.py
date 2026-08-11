@@ -238,6 +238,25 @@ _RANK_SLOT_COMPATIBILITY_ONLY = frozenset({
     "holder_concentration_change",
     "holder_count_change_rate",
 })
+# Untyped DMD compat aliases (R22-034..039 decision): the generic
+# ``ts_dmd_dominant_*`` / ``ts_dmd_mode_concentration`` forms run the same DMD
+# kernel as the level/return typed variants but carry no level-vs-return input
+# contract.  They stay registered (DSL compatibility) but are excluded from the
+# production-hardening audit target list, which audits the typed forms only.
+# Without this stamp, ``factor_production_targets`` includes them, and the
+# factor certifier's ``OperatorRegistry.get(canonical, "pandas_numpy")``
+# (production mode) returns None because their DirectUse verdict is
+# ``MOVE_INTERNAL`` -> research surface (R38 evidence-regen blocker #156).
+_DMD_UNTYPED_ALIAS = frozenset({
+    "ts_dmd_dominant_growth_rate",
+    "ts_dmd_dominant_frequency",
+    "ts_dmd_mode_concentration",
+})
+_DMD_UNTYPED_REPLACEMENTS = {
+    "ts_dmd_dominant_growth_rate": "ts_dmd_level_dominant_growth_rate",
+    "ts_dmd_dominant_frequency": "ts_dmd_level_dominant_frequency",
+    "ts_dmd_mode_concentration": "ts_dmd_level_mode_concentration",
+}
 
 
 def stamp_compatibility_metadata() -> None:
@@ -301,6 +320,22 @@ def stamp_compatibility_metadata() -> None:
         entry.setdefault(
             "semantic_note",
             "名次槽位/行数口径（无股东 ID 输入）；需专用 ID 匹配算子或 relation 快照指标",
+        )
+    for canon in _DMD_UNTYPED_ALIAS:
+        entry = OperatorRegistry._catalog.get(canon)
+        if entry is None:
+            continue
+        # R38 evidence-regen blocker #156: untyped DMD is a compat alias for the
+        # typed level/return variants.  compatibility_only excludes it from the
+        # production-hardening audit target list (its production-mode registry
+        # lookup returns None), while keeping the DSL name registered.
+        entry["compatibility_only"] = True
+        replacement = _DMD_UNTYPED_REPLACEMENTS.get(canon)
+        if replacement is not None:
+            entry["preferred_replacements"] = [replacement]
+        entry.setdefault(
+            "semantic_note",
+            "未标注 level/return 的 DMD 兼容别名；规范名见 preferred_replacements（typed 变体）",
         )
 
 

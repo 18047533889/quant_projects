@@ -1258,12 +1258,17 @@ def _try_ts_pair_from_base_columns(
     ddof = pspec.ddof
     if op == "ts_corr":
         raw = pl.rolling_corr(lcol, rcol, window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        expr = polars_pairwise_output_guard(lcol, rcol, raw)
+        # R38-blocker fix (R19-030 current-row policy): 去掉 ``pairwise_output_guard``
+        # —— 它强制"当前行任一侧无效 -> NULL"，但 pandas 参考 ``rolling(min_periods).corr``
+        # 在"当前行缺失但窗口有效对 >= min_periods"时仍输出有限值。rolling_corr 自身
+        # 跳过 NULL 对，与 pandas current-row policy 一致（验证：当前行 r=null 仍出值）。
+        expr = raw
     elif op == "ts_cov":
         raw = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=mp, ddof=ddof).over(
             _INST, order_by=_TS
         )
-        expr = polars_pairwise_output_guard(lcol, rcol, raw)
+        # R38-blocker fix (R19-030 current-row policy)：与 ts_corr 相同——去掉 guard。
+        expr = raw
     elif op == "ts_beta":
         expr = polars_ts_beta_expr(
             lcol, rcol, window=w, min_periods=mp, ddof=ddof
@@ -1802,7 +1807,10 @@ def _compile_polars_impl(
             window_size=pspec.size,
             min_samples=pspec.min_periods,
         ).over(_INST, order_by=_TS)
-        out = polars_pairwise_output_guard(pl.col(_VAL), pl.col("_y"), corr)
+        # R38-blocker fix (R19-030 current-row policy)：与 fusion 上层一致——去掉
+        # ``polars_pairwise_output_guard``（当前行任一侧缺失也允许出值，只要窗口
+        # 有效对 >= min_periods；rolling_corr 自身跳过 NULL 对）。
+        out = corr
         return joined.with_columns(out.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "ts_cov":
@@ -1827,7 +1835,8 @@ def _compile_polars_impl(
             min_samples=pspec.min_periods,
             ddof=pspec.ddof,
         ).over(_INST, order_by=_TS)
-        out = polars_pairwise_output_guard(pl.col(_VAL), pl.col("_y"), cov)
+        # R38-blocker fix (R19-030 current-row policy)：去掉 guard（见 ts_corr）。
+        out = cov
         return joined.with_columns(out.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "ts_beta":

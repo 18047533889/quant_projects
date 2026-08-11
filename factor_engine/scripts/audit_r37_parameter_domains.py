@@ -327,13 +327,78 @@ def _run_operator(canonical: str, panel: pd.DataFrame, kwargs: dict):
         return None
 
 
+#: lag 类算子的 canonical 标量参数名（``_REF_BY_CANON == "window_lag"``）。
+_LAG_PARAM_NAME: dict[str, str] = {
+    "ts_delay": "n", "ts_delta": "n", "ts_pct": "d", "ts_log_return": "d",
+}
+
+
+def _canonical_scalar_kw(canonical: str, operator: Any, value: Any) -> dict:
+    """R39 #27/#28：用**canonical** 参数名调用（``ts_delay``->``n``、``ts_pct``->
+    ``d``、``ts_mean``/``ts_rank``->``window``），不再传 alias ``window``——旧实现
+    传 ``window`` 导致 ts_pct/ts_log_return 被 kernel 拒绝、从未被认证；且对
+    ``ts_rank`` 不能取 ``names[-1]``（会错取 ``min_periods`` 当 window）。"""
+    kind = _REF_BY_CANON.get(canonical)
+    if kind == "window":
+        return {"window": value}
+    if kind == "window_lag":
+        return {_LAG_PARAM_NAME.get(canonical, "n"): value}
+    return {}
+
+
+def _full_bound_point(canonical: str, operator: Any, panel: pd.DataFrame,
+                      kwargs: dict) -> dict:
+    """R39 #27：显式参数 + kernel 默认参数 → 完整 canonical BoundParameterPoint
+    （alias 解析 + 默认合并 + 类型归一），与 runtime ``_bound_scalar_parameters``
+    完全一致，确保 production 查询能命中认证点。"""
+    from cleaned_operators.base import bind_operator_call, _kernel_param_defaults
+
+    meta = getattr(operator, "metadata", None)
+    names = list(getattr(meta, "param_names", None) or [])
+    try:
+        defaults = _kernel_param_defaults(operator)
+        call = bind_operator_call(operator, (panel,), dict(kwargs), defaults=defaults)
+        nv = call.bound.normalized_values
+        # 排除 panel 参数（x/面板值），只留 scalar 参数点。
+        return {
+            name: nv[name]
+            for name in names
+            if name in nv and not isinstance(nv[name], (pd.Series, pd.DataFrame))
+        }
+    except Exception:
+        return {k: v for k, v in kwargs.items()
+                if not isinstance(v, (pd.Series, pd.DataFrame))}
+
+
+def _certify_dimensions(canonical: str) -> dict:
+    """R39 #28：认证 key 全维度（与 runtime cleaned_bridge 一致）。
+
+    - semantic_version：``versioned_name``（算子语义版本）；
+    - backend：pandas_numpy（本 audit 的独立 oracle 参考内核）；
+    - execution_variant：reference；
+    - source_context：memory（oracle 内存面板）；
+    - dtype/grain：float64/daily（测试面板）。
+    """
+    from backend.operator_semantic_version import versioned_name
+
+    return {
+        "semantic_version": versioned_name(canonical),
+        "backend": "pandas_numpy",
+        "execution_variant": "reference",
+        "source_context": "memory",
+        "dtype": "float64",
+        "grain": "daily",
+    }
+
+
 def _certify_window_like(canonical: str, store: ParameterDomainCertificationStore) -> list[dict]:
     panel = _panel()
     df = pd.DataFrame(panel, columns=[f"s{i}" for i in range(N_STK)])
     ref_fn = _WINDOW_REFS.get(canonical)
+    op = OperatorRegistry.get(canonical, "pandas_numpy")
     rows: list[dict] = []
     for w, valid in _WINDOW_VALUES:
-        kwargs = {"window": w}
+        kwargs = _canonical_scalar_kw(canonical, op, w)
         got = _run_operator(canonical, df, kwargs)
         if valid:
             # 合法值：必须返回且与独立 oracle 一致
@@ -346,8 +411,12 @@ def _certify_window_like(canonical: str, store: ParameterDomainCertificationStor
             rows.append({"canonical": canonical, "param": f"window={w}", "valid": True,
                          "pass": ok, "reason": "" if ok else "oracle mismatch"})
             if ok:
+                # R39 #27/#28：认证**完整 bound 点**（显式+默认）且带全维度 identity。
                 store.certify_point(
-                    CertificationKey.from_kwargs(canonical, kwargs),
+                    CertificationKey.from_kwargs(
+                        canonical, _full_bound_point(canonical, op, df, kwargs),
+                        **{k: v for k, v in _certify_dimensions(canonical).items() if v is not None},
+                    ),
                     True, source="independent_numpy_oracle",
                     details={"window": w},
                 )
@@ -363,22 +432,28 @@ def _certify_lag_like(canonical: str, store: ParameterDomainCertificationStore) 
     panel = _panel()
     df = pd.DataFrame(panel, columns=[f"s{i}" for i in range(N_STK)])
     ref_fn = _LAG_REFS[canonical]
+    op = OperatorRegistry.get(canonical, "pandas_numpy")
     rows: list[dict] = []
     for lag, valid in _LAG_VALUES:
-        kwargs = {"window": lag}
+        kwargs = _canonical_scalar_kw(canonical, op, lag)
         got = _run_operator(canonical, df, kwargs)
         if valid:
             if got is None:
                 rows.append({"canonical": canonical, "param": f"lag={lag}", "valid": True,
                              "pass": False, "reason": "no impl/error"})
                 continue
-            expected = np.column_stack([ref_fn(panel[:, j], lag, 1, 1) for j in range(N_STK)])
+            # 5 个位置参数：把 lag 真正传给 ref（旧实现漏传，lag>1 的 oracle 一直
+            # 按 lag=1 算，导致 lag=2/5/10 从未被正确认证）。
+            expected = np.column_stack([ref_fn(panel[:, j], lag, 1, 1, lag) for j in range(N_STK)])
             ok = _eq(expected, got.to_numpy(dtype=float))
             rows.append({"canonical": canonical, "param": f"lag={lag}", "valid": True,
                          "pass": ok, "reason": "" if ok else "oracle mismatch"})
             if ok:
                 store.certify_point(
-                    CertificationKey.from_kwargs(canonical, kwargs),
+                    CertificationKey.from_kwargs(
+                        canonical, _full_bound_point(canonical, op, df, kwargs),
+                        **{k: v for k, v in _certify_dimensions(canonical).items() if v is not None},
+                    ),
                     True, source="independent_numpy_oracle",
                     details={"lag": lag},
                 )
@@ -393,6 +468,7 @@ def _certify_panel(canonical: str, store: ParameterDomainCertificationStore) -> 
     panel = _panel()
     df = pd.DataFrame(panel, columns=[f"s{i}" for i in range(N_STK)])
     ref_fn = _PANEL_REFS[canonical]
+    op = OperatorRegistry.get(canonical, "pandas_numpy")
     got = _run_operator(canonical, df, {})
     if got is None:
         return [{"canonical": canonical, "param": "default", "valid": True,
@@ -400,7 +476,10 @@ def _certify_panel(canonical: str, store: ParameterDomainCertificationStore) -> 
     ok = _eq(ref_fn(panel), got.to_numpy(dtype=float))
     if ok:
         store.certify_point(
-            CertificationKey.from_kwargs(canonical, {}),
+            CertificationKey.from_kwargs(
+                canonical, _full_bound_point(canonical, op, df, {}),
+                **{k: v for k, v in _certify_dimensions(canonical).items() if v is not None},
+            ),
             True, source="independent_numpy_oracle", details={"default": True},
         )
     return [{"canonical": canonical, "param": "default", "valid": True,

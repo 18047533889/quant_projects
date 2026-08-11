@@ -234,48 +234,125 @@ class PanelIdentity:
 
     @classmethod
     def from_frame(cls, frame: Any) -> "PanelIdentity":
-        """Compute a PanelIdentity from a pandas wide panel or polars wide frame."""
-        if isinstance(frame, pd.DataFrame):
-            if isinstance(frame.index, pd.MultiIndex):
-                # R10 #5: a (timestamp, instrument) long panel must still be
-                # time-verified.  Previously MultiIndex -> time_hash=None, so
-                # two panels with DIFFERENT date axes but the same instrument
-                # columns were indistinguishable on the time axis.  Detect a
-                # datetime level (by name first, then by type) and hash it.
-                time_hash = _multiindex_time_hash(frame.index)
-                row_order_hash = _multiindex_row_order_hash(frame.index)
-            else:
-                time_hash = _hash_time_values(frame.index)
-                row_order_hash = None
-            columns = tuple(str(c) for c in frame.columns)
-            value_cols = tuple(c for c in columns if c not in SKIP)
-            grain, frequency = _pandas_grain_frequency(frame)
-            return cls(
-                time_index_hash=time_hash,
-                instrument_axis_hash=_multiindex_instrument_hash(
-                    frame.index, value_cols
-                )
-                if isinstance(frame.index, pd.MultiIndex)
-                else _stable_axis_hash(("wide_value_cols", value_cols)),
-                grain=grain,
-                frequency=frequency,
-                row_order_hash=row_order_hash,
+        """Compute a PanelIdentity from a pandas wide panel or polars wide frame.
+
+        R39 PERF-029: the axis components are extracted by the single shared
+        ``_frame_axis_components`` helper so the certificate cache
+        (``cleaned_operators.axis_identity_certificate``) sees EXACTLY the same
+        numbers.  ``from_frame`` itself stays pure — it always recomputes, so
+        existing identity-contract tests (r7/r9/r11) are bit-for-bit unchanged.
+        """
+        comps = _frame_axis_components(frame)
+        time_hash, instrument_hash, row_order_hash, grain, frequency = (
+            comps[0],
+            comps[1],
+            comps[2],
+            comps[3],
+            comps[4],
+        )
+        return cls(
+            time_index_hash=time_hash,
+            instrument_axis_hash=instrument_hash,
+            grain=grain,
+            frequency=frequency,
+            row_order_hash=row_order_hash,
+        )
+
+
+def _frame_sortedness(frame: Any, time_col: str | None = None) -> bool | None:
+    """Sortedness of the time axis (None when there is no comparable axis).
+
+    O(1)-ish C-level check used only for the R39 certificate; never part of the
+    identity hashes.  MultiIndex panels fall back to lex-sortedness.
+    """
+    if isinstance(frame, pd.DataFrame):
+        index = frame.index
+        try:
+            if isinstance(index, pd.MultiIndex):
+                if hasattr(index, "is_lexsorted"):
+                    return bool(index.is_lexsorted())
+                return bool(index._is_lexsorted())
+            return bool(index.is_monotonic_increasing)
+        except Exception:  # pragma: no cover - defensive
+            return None
+    if pl is not None and isinstance(frame, pl.DataFrame):
+        if time_col is None:
+            return None
+        try:
+            return bool(frame[time_col].is_sorted())
+        except Exception:  # pragma: no cover - defensive
+            return None
+    return None
+
+
+def _frame_axis_components(frame: Any) -> tuple:
+    """Single source of truth for a panel's identity axis components.
+
+    Returns ``(time_index_hash, instrument_axis_hash, row_order_hash, grain,
+    frequency, datetime_count, instrument_count, sortedness)``.
+
+    The first five are EXACTLY what :meth:`PanelIdentity.from_frame` builds its
+    identity from; the last three are cheap observables used by the R39
+    ``AxisIdentityCertificate`` cache (row count, instrument column count,
+    time-axis sortedness).
+    """
+    if isinstance(frame, pd.DataFrame):
+        if isinstance(frame.index, pd.MultiIndex):
+            # R10 #5: a (timestamp, instrument) long panel must still be
+            # time-verified.  Previously MultiIndex -> time_hash=None, so
+            # two panels with DIFFERENT date axes but the same instrument
+            # columns were indistinguishable on the time axis.  Detect a
+            # datetime level (by name first, then by type) and hash it.
+            time_hash = _multiindex_time_hash(frame.index)
+            row_order_hash = _multiindex_row_order_hash(frame.index)
+        else:
+            time_hash = _hash_time_values(frame.index)
+            row_order_hash = None
+        columns = tuple(str(c) for c in frame.columns)
+        value_cols = tuple(c for c in columns if c not in SKIP)
+        grain, frequency = _pandas_grain_frequency(frame)
+        if isinstance(frame.index, pd.MultiIndex):
+            instrument_hash = _multiindex_instrument_hash(frame.index, value_cols)
+            # instrument axis = non-time index levels + value columns
+            instrument_count = len(value_cols) + sum(
+                1
+                for i, level in enumerate(frame.index.levels)
+                if str(frame.index.names[i] if i < len(frame.index.names) else i)
+                not in _TIME_AXIS_COLUMNS
+                and not isinstance(level, pd.DatetimeIndex)
             )
-        if pl is not None and isinstance(frame, pl.DataFrame):
-            columns = tuple(str(c) for c in frame.columns)
-            time_col = next((c for c in _TIME_AXIS_COLUMNS if c in columns), None)
-            if time_col is not None:
-                time_hash = _hash_time_values(frame[time_col].to_list())
-            else:
-                time_hash = None
-            value_cols = tuple(c for c in columns if c not in SKIP)
-            return cls(
-                time_index_hash=time_hash,
-                instrument_axis_hash=_stable_axis_hash(("wide_value_cols", value_cols)),
-                grain="unknown",
-                frequency="unknown",
-            )
-        raise TypeError(f"cannot compute PanelIdentity from {type(frame)!r}")
+        else:
+            instrument_hash = _stable_axis_hash(("wide_value_cols", value_cols))
+            instrument_count = len(value_cols)
+        return (
+            time_hash,
+            instrument_hash,
+            row_order_hash,
+            grain,
+            frequency,
+            len(frame),
+            instrument_count,
+            _frame_sortedness(frame),
+        )
+    if pl is not None and isinstance(frame, pl.DataFrame):
+        columns = tuple(str(c) for c in frame.columns)
+        time_col = next((c for c in _TIME_AXIS_COLUMNS if c in columns), None)
+        if time_col is not None:
+            time_hash = _hash_time_values(frame[time_col].to_list())
+        else:
+            time_hash = None
+        value_cols = tuple(c for c in columns if c not in SKIP)
+        return (
+            time_hash,
+            _stable_axis_hash(("wide_value_cols", value_cols)),
+            None,
+            "unknown",
+            "unknown",
+            frame.height,
+            len(value_cols),
+            _frame_sortedness(frame, time_col),
+        )
+    raise TypeError(f"cannot compute PanelIdentity from {type(frame)!r}")
 
 
 def _pandas_grain_frequency(frame: pd.DataFrame) -> tuple[str, str]:
@@ -345,6 +422,27 @@ def verify_frames_share_identity(
     frames = [a for a in args if _is_panel_like(a)]
     if len(frames) < 2:
         return
+    # R39 PERF-029 fast path: if every panel already carries a consistent
+    # AxisIdentityCertificate and all certificates MATCH, we can conclude all
+    # panels share the same identity without re-hashing.  The certificate's
+    # axis_hash folds the exact same components PanelIdentity is built from, so
+    # a matching set of certificates can never contradict the slow path.  Any
+    # absence/mismatch falls through to the authoritative comparison below.
+    from cleaned_operators.axis_identity_certificate import (
+        certificate_for_frame,
+        certificates_match,
+    )
+
+    first_cert = certificate_for_frame(frames[0])
+    if first_cert is not None:
+        fast = True
+        for frame in frames[1:]:
+            other_cert = certificate_for_frame(frame)
+            if other_cert is None or not certificates_match(first_cert, other_cert):
+                fast = False
+                break
+        if fast:
+            return
     base = PanelIdentity.from_frame(frames[0])
     for i, frame in enumerate(frames[1:], start=1):
         other = PanelIdentity.from_frame(frame)

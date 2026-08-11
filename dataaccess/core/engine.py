@@ -368,7 +368,12 @@ class DuckDBEngine:
         回退临时 parquet。
         """
         if not self._pool_db_path:
-            raise RuntimeError(
+            # R39 P0 #43：能力**明确缺失** → typed CapabilityUnavailableError（调用方
+            # 可以精确回退临时 parquet）；数据库损坏/schema 错误/pool 状态错误仍走
+            # 底层异常原样传播，禁止 ``except Exception`` 一把抓当能力缺失回退。
+            from data_access.core.exceptions import CapabilityUnavailableError
+
+            raise CapabilityUnavailableError(
                 "DuckDB 共享 pool 数据库不可用，无法注册组合锚点关系"
                 "（调用方应回退临时 parquet）"
             )

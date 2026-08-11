@@ -911,6 +911,8 @@ _CAUSAL_REPLACEMENT_MAP: dict[str, str] = {
     "ts_ar_forecast": "ts_ar_prior_forecast",
     "ts_ar_innovation": "ts_ar_prior_innovation",
     "ts_ar_innovation_z": "ts_ar_prior_innovation_z",
+    "ts_ar_fitted_value": "ts_ar_prior_forecast",
+    "ts_ar_in_sample_resid": "ts_ar_prior_innovation",
     "ts_expectile_regression_coeff": "ts_expectile_regression_coeff_prior",
     "ts_expectile_regression_resid": "ts_expectile_regression_forecast_error",
     "ts_quantile_regression_beta": "ts_quantile_regression_coeff_prior",

@@ -70,6 +70,45 @@ logger = get_logger("storage.materializer")
 
 from storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
 
+from storage.partition_stats import (
+    PartitionCommitStats,
+    WritePassDQStats,
+    compute_partition_commit_stats,
+    compute_write_pass_dq,
+    count_parquet_rows_from_footer,
+)
+from storage.write_amplification import WriteAmplificationTracker
+
+# ---------------------------------------------------------------------------
+# R39 §28 hard-gate counters (read by scripts/r39_hard_gates_audit.py).
+# ---------------------------------------------------------------------------
+
+#: Gate-05: incremented only when a genuine full-history value-cell re-scan is
+#: required (stats + footer are unavailable).  == 0 on the normal write path.
+full_factor_rescan_count = 0
+
+#: Gate-04: accumulated historical-rewrite bytes.  == 0 for ordinary incremental
+#: writes in delta mode.
+historical_rewrite_bytes = 0
+
+#: R39 PERF-051: incremented only when the write path genuinely must re-read the
+#: committed watermark (watermark_deferred / external-modification scenarios).
+#: == 0 on the normal write path, which now returns the pending watermark the
+#: transaction just wrote instead of issuing a post-write ``get_watermark`` query.
+post_write_watermark_readback_count = 0
+
+
+def get_post_write_watermark_readback_count() -> int:
+    """Return the module-level post-write watermark read-back counter (PERF-051)."""
+    return post_write_watermark_readback_count
+
+
+def reset_post_write_watermark_readback_count() -> None:
+    """Reset the module-level post-write watermark read-back counter (PERF-051)."""
+    global post_write_watermark_readback_count
+
+    post_write_watermark_readback_count = 0
+
 
 @dataclass(frozen=True)
 class MaterializeMetadata:
@@ -215,14 +254,17 @@ class ParquetMaterializer:
         catalog: FactorCatalog | None = None,
         *,
         staging_dataset: str = "factor_lake_staging",
+        delta_mode: bool | None = None,
     ) -> None:
         """初始化实例。
-        
+
         参数:
             lake_root: 因子湖根目录（可选）
             catalog: FactorCatalog 实例（可选）
             staging_dataset: 见函数签名（可选）
-        
+            delta_mode: 显式 delta 存储开关；None 时读环境变量
+                ``FACTOR_ENGINE_DELTA_STORAGE``（R39 PERF-052，DEFAULT OFF）。
+
         返回:
             无
         """
@@ -235,6 +277,25 @@ class ParquetMaterializer:
             catalog = FactorCatalog(self._lake_root / "_catalog.sqlite")
         self._catalog = catalog
         self._staging_dataset = str(staging_dataset or "factor_lake_staging")
+        # R39 PERF-052/054/044/05: delta-mode opt-in (DEFAULT OFF), write
+        # amplification tracker + full-factor-rescan counter + lock reuse.
+        self._delta_mode = delta_mode if delta_mode is not None else self._delta_mode_from_env()
+        self.write_amplification = WriteAmplificationTracker(delta_mode=self._delta_mode)
+        self.full_factor_rescan_count = 0
+        self.post_write_watermark_readback_count = 0
+        self._lock_manager = None  # created lazily in delta mode
+
+    @staticmethod
+    def _delta_mode_from_env() -> bool:
+        """Resolve delta-mode activation from ``FACTOR_ENGINE_DELTA_STORAGE``."""
+        raw = os.getenv("FACTOR_ENGINE_DELTA_STORAGE", "0").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    def _resolve_delta_mode(self, explicit: bool | None) -> bool:
+        """Explicit flag > constructor flag > environment (DEFAULT OFF)."""
+        if explicit is not None:
+            return bool(explicit)
+        return self._delta_mode
 
     # ------------------------------------------------------------------
     # 属性
@@ -302,6 +363,7 @@ class ParquetMaterializer:
         semantic_identity: FactorSemanticIdentity | None = None,
         write_mode: str = "upsert",
         replace_window: tuple[str, str] | None = None,
+        delta_mode: bool | None = None,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
         
@@ -333,18 +395,292 @@ class ParquetMaterializer:
         返回:
             dict
         """
+        prep = self._materialize_prepare(
+            factor_id=factor_id,
+            author=author,
+            frequency=frequency,
+            ast_hash=ast_hash,
+            ir_node=ir_node,
+            description=description,
+            expression=expression,
+            run_lineage=run_lineage,
+            write_metadata=write_metadata,
+            data_snapshot_id=data_snapshot_id,
+            data_source_config=data_source_config,
+            production=production,
+            run_generation=run_generation,
+            semantic_identity=semantic_identity,
+            write_target=write_target,
+            value_dtype=value_dtype,
+            write_mode=write_mode,
+            replace_window=replace_window,
+        )
+        factor_id = prep["factor_id"]
+        author = prep["author"]
+        write_mode = prep["write_mode"]
+        ast_hash = prep["ast_hash"]
+        production = prep["production"]
+        run_lineage = prep["run_lineage"]
+        effective_value_dtype = prep["effective_value_dtype"]
+        precision_policy = prep["precision_policy"]
+        identity_digest = prep["identity_digest"]
+        lineage_extra = prep["lineage_extra"]
+        source_snapshot = prep["source_snapshot"]
+        source_dep_hash = prep["source_dep_hash"]
+        generation = prep["generation"]
+
+
+        # --- 0. 可选 DQ 门禁（在清洗前检查原始 result）---
+        dq_report = None
+        if dq_check:
+            from runtime.dq_gates import assert_factor_dq
+
+            dq_report = assert_factor_dq(
+                result,
+                thresholds=dq_thresholds,
+                raise_on_fail=dq_strict,
+                preserve_invalid_rows=preserve_invalid_rows,
+            )
+
+        # --- 1. 转长表 + 强制 Schema ---
+        meta = None
+        if write_metadata:
+            # R11 #6: 落盘行 factor_version = 语义身份 digest 前缀（缺省 ast_hash
+            # 前缀）——不再只用 ast_hash，否则「公式一样但 data_source/执行语义变
+            # 了」的因子仍被 catalog 当作同一版本。
+            # R20-207..212: row-level metadata 写 RESOLVED source_snapshot（统一
+            # 用 data_snapshot_id 兜底 lineage_extra 的 combined snapshot），不再
+            # 只写调用方原始 data_snapshot_id。
+            meta = MaterializeMetadata(
+                calc_time=datetime.now(timezone.utc).isoformat(),
+                factor_version=(identity_digest or ast_hash)[:16],
+                data_snapshot_id=data_snapshot_id,
+                resolved_snapshot_id=source_snapshot,
+                storage_precision_policy=precision_policy,
+            )
+        df = self._normalize_to_long_table(result, metadata=meta, value_dtype=effective_value_dtype)
+
+        return self._materialize_long_df(
+            factor_id=factor_id,
+            df=df,
+            meta=meta,
+            dq_report=dq_report,
+            author=author,
+            frequency=frequency,
+            ast_hash=ast_hash,
+            description=description,
+            expression=expression,
+            run_lineage=run_lineage,
+            write_metadata=write_metadata,
+            data_snapshot_id=data_snapshot_id,
+            data_source_config=data_source_config,
+            isolate_partition_failures=isolate_partition_failures,
+            resume=resume,
+            preserve_invalid_rows=preserve_invalid_rows,
+            write_target=write_target,
+            defer_watermark=defer_watermark,
+            partition_columns=partition_columns,
+            storage_format=storage_format,
+            null_overwrite=null_overwrite,
+            deleted_keys=deleted_keys,
+            production=production,
+            run_generation=run_generation,
+            force_tombstones=force_tombstones,
+            write_mode=write_mode,
+            replace_window=replace_window,
+            delta_mode=delta_mode,
+            effective_value_dtype=effective_value_dtype,
+            precision_policy=precision_policy,
+            identity_digest=identity_digest,
+            lineage_extra=lineage_extra,
+            source_snapshot=source_snapshot,
+            source_dep_hash=source_dep_hash,
+            generation=generation,
+        )
+
+    # ------------------------------------------------------------------
+    # R39 PERF-046/047: Arrow block fast-path materialization
+    # ------------------------------------------------------------------
+
+    def materialize_block(
+        self,
+        factor_id: str,
+        block: Any,
+        *,
+        author: str | None = None,
+        frequency: str = "1d",
+        ast_hash: str | None = None,
+        ir_node: Any | None = None,
+        description: str | None = None,
+        expression: str | None = None,
+        dq_check: bool = False,
+        dq_strict: bool = True,
+        dq_thresholds=None,
+        run_lineage: dict | None = None,
+        write_metadata: bool = True,
+        data_snapshot_id: str | None = None,
+        data_source_config: dict | None = None,
+        isolate_partition_failures: bool = True,
+        resume: bool = False,
+        preserve_invalid_rows: bool = False,
+        value_dtype: str | None = None,
+        write_target: str = "local",
+        defer_watermark: bool = False,
+        partition_columns: list[str] | None = None,
+        storage_format: str = "long",
+        null_overwrite: bool = False,
+        deleted_keys: list[tuple] | None = None,
+        production: bool | None = None,
+        run_generation: str | None = None,
+        force_tombstones: bool | None = None,
+        semantic_identity: FactorSemanticIdentity | None = None,
+        write_mode: str = "upsert",
+        replace_window: tuple[str, str] | None = None,
+        delta_mode: bool | None = None,
+    ) -> dict:
+        """Arrow fast-path materialization (R39 PERF-046/047).
+
+        ``block`` is a ``pa.Table`` or ``pyarrow.ipc.RecordBatchReader`` with
+        ``datetime``/``asset``/``value`` columns (metadata columns optional).
+        Tombstone/finite masks are generated directly with Arrow ops
+        (``is_finite``/``if_else``/``cast``/``dictionary_encode``) rather than
+        per-row Python string construction.  Output is byte-identical to
+        :meth:`materialize` on the same data (test asserts values/index/watermark
+        equality).  The existing ``evaluate_factor_dq`` gate still runs when
+        ``dq_check`` is enabled.
+        """
+        prep = self._materialize_prepare(
+            factor_id=factor_id,
+            author=author,
+            frequency=frequency,
+            ast_hash=ast_hash,
+            ir_node=ir_node,
+            description=description,
+            expression=expression,
+            run_lineage=run_lineage,
+            write_metadata=write_metadata,
+            data_snapshot_id=data_snapshot_id,
+            data_source_config=data_source_config,
+            production=production,
+            run_generation=run_generation,
+            semantic_identity=semantic_identity,
+            write_target=write_target,
+            value_dtype=value_dtype,
+            write_mode=write_mode,
+            replace_window=replace_window,
+        )
+        factor_id = prep["factor_id"]
+        author = prep["author"]
+        write_mode = prep["write_mode"]
+        ast_hash = prep["ast_hash"]
+        production = prep["production"]
+        run_lineage = prep["run_lineage"]
+        effective_value_dtype = prep["effective_value_dtype"]
+        precision_policy = prep["precision_policy"]
+        identity_digest = prep["identity_digest"]
+        lineage_extra = prep["lineage_extra"]
+        source_snapshot = prep["source_snapshot"]
+        source_dep_hash = prep["source_dep_hash"]
+        generation = prep["generation"]
+
+        # --- 0. 可选 DQ 门禁（在清洗前检查原始 block 值；evaluate_factor_dq 仍运行）---
+        dq_report = None
+        if dq_check:
+            from runtime.dq_gates import assert_factor_dq
+
+            raw_series = self._block_to_raw_series(block)
+            dq_report = assert_factor_dq(
+                raw_series,
+                thresholds=dq_thresholds,
+                raise_on_fail=dq_strict,
+                preserve_invalid_rows=preserve_invalid_rows,
+            )
+
+        # --- 1. 长表 + 强制 Schema（Arrow 路径：直接生成 tombstone/finite mask）---
+        meta = None
+        if write_metadata:
+            meta = MaterializeMetadata(
+                calc_time=datetime.now(timezone.utc).isoformat(),
+                factor_version=(identity_digest or ast_hash)[:16],
+                data_snapshot_id=data_snapshot_id,
+                resolved_snapshot_id=source_snapshot,
+                storage_precision_policy=precision_policy,
+            )
+        df = self._arrow_block_to_long_df(
+            block, metadata=meta, value_dtype=effective_value_dtype
+        )
+
+        return self._materialize_long_df(
+            factor_id=factor_id,
+            df=df,
+            meta=meta,
+            dq_report=dq_report,
+            author=author,
+            frequency=frequency,
+            ast_hash=ast_hash,
+            description=description,
+            expression=expression,
+            run_lineage=run_lineage,
+            write_metadata=write_metadata,
+            data_snapshot_id=data_snapshot_id,
+            data_source_config=data_source_config,
+            isolate_partition_failures=isolate_partition_failures,
+            resume=resume,
+            preserve_invalid_rows=preserve_invalid_rows,
+            write_target=write_target,
+            defer_watermark=defer_watermark,
+            partition_columns=partition_columns,
+            storage_format=storage_format,
+            null_overwrite=null_overwrite,
+            deleted_keys=deleted_keys,
+            production=production,
+            run_generation=run_generation,
+            force_tombstones=force_tombstones,
+            write_mode=write_mode,
+            replace_window=replace_window,
+            delta_mode=delta_mode,
+            effective_value_dtype=effective_value_dtype,
+            precision_policy=precision_policy,
+            identity_digest=identity_digest,
+            lineage_extra=lineage_extra,
+            source_snapshot=source_snapshot,
+            source_dep_hash=source_dep_hash,
+            generation=generation,
+        )
+
+    def _materialize_prepare(
+        self,
+        *,
+        factor_id: str,
+        author: str | None,
+        frequency: str,
+        ast_hash: str | None,
+        ir_node: Any | None,
+        description: str | None,
+        expression: str | None,
+        run_lineage: dict | None,
+        write_metadata: bool,
+        data_snapshot_id: str | None,
+        data_source_config: dict | None,
+        production: bool | None,
+        run_generation: str | None,
+        semantic_identity: FactorSemanticIdentity | None,
+        write_target: str,
+        value_dtype: str | None,
+        write_mode: str,
+        replace_window: tuple[str, str] | None,
+    ) -> dict:
+        """Shared identity / precision / write-target preparation used by both
+        :meth:`materialize` and :meth:`materialize_block` (R39 PERF-046)."""
         if author is None:
             author = _get_default_author()
 
-        # R32-P0-036/043: factor_id 统一 domain gate（长度超限 reject、禁路径
-        # 穿越/控制字符、Unicode NFC、保留名）。HTTP 之外直接 Python API /
-        # materializer / catalog / delete 走同一个 validator。
+        # R32-P0-036/043: factor_id 统一 domain gate。
         from security.factor_id import validate_factor_id
 
         factor_id = validate_factor_id(factor_id)
 
-        # R32-P0-027: write_mode 严格枚举门 —— 拼错字符串必须拒绝，绝不静默
-        # 回落为 keep-last upsert。replace_window 必须在写盘路径前校验窗口。
+        # R32-P0-027: write_mode 严格枚举门。
         write_mode = validate_write_mode(write_mode)
         if write_mode == "replace_window":
             if replace_window is None or len(replace_window) != 2:
@@ -360,8 +696,7 @@ class ParquetMaterializer:
             else:
                 ast_hash = NO_FACTOR_IDENTITY
 
-        # R10 #17: production 物化必须提供真实因子身份（AST Hash / IR）。
-        # 缺省从运行模式推断；显式传入覆盖推断。
+        # R10 #17: production 物化必须提供真实因子身份。
         production = self._resolve_production(production)
         if production and ast_hash == NO_FACTOR_IDENTITY:
             raise FactorIdentityMismatch(
@@ -370,22 +705,10 @@ class ParquetMaterializer:
                 f"Pass ast_hash or ir_node."
             )
 
-        # #收官轮 P0（Integration）：write_target 在任何 side effect（注册因子 /
-        # 写文件 / 更新水位线 / 返回 rows_written>0）之前严格枚举。``"locla"``
-        # 这类拼写错误必须直接拒绝，不能再静默变成 write_local=False ∧
-        # write_staging=False 却照样提交（metadata 说已提交、物理数据不存在）。
+        # #收官轮 P0（Integration）：write_target 在任何 side effect 之前严格枚举。
         from storage.write_targets import normalize_write_target
 
-        try:
-            target_flags = normalize_write_target(write_target)
-        except ValueError:
-            raise
-        write_target_flags = target_flags
-        # #收官轮 P0（Integration，incomplete-fix bypass）：production 禁止
-        # direct-local 因子湖直写——之前 guard 只放在 LocalParquetWriteTarget，
-        # materialize() 主路径直接 ``_upsert_partition`` 绕过它。这里把 guard
-        # 提到统一 orchestrator（materialize 本体）：production 下任何含 local
-        # 落盘的目标都拒绝，必须走 staging→publish。
+        write_target_flags = normalize_write_target(write_target)
         if production and write_target_flags["local"]:
             raise ValueError(
                 f"factor_id={factor_id!r}: production 禁止 direct-local factor-lake "
@@ -393,18 +716,11 @@ class ParquetMaterializer:
                 "manifest）。请用 write_target='staging' + publish_factor_lake。"
             )
 
-        # R10 #47: 断点续写必须绑定身份 —— 在分区循环前算好身份级指纹组件，
-        # 分区级输入指纹在循环内逐分区计算。
-        # R20-210: 身份计算失败必须区分「合法不可得」（IdentityUnavailable：
-        # 无 IR 也无有效 ast_hash -> checkpoint_identity=None，production 重算）
-        # 与「代码抛异常」（IdentityComputationFailed：production hard fail，
-        # 绝不降级为无指纹，否则两个失败的 computation 都退化成 None 并误判
-        # resume 可跳过）。
+        # R10 #47 / R20-210: 断点续写身份。
         checkpoint_identity = semantic_identity
         if checkpoint_identity is None:
             has_any_identity = ir_node is not None and ast_hash != NO_FACTOR_IDENTITY
             if not has_any_identity and ast_hash in (None, NO_FACTOR_IDENTITY):
-                # 合法不可得：没有可用的身份输入。
                 checkpoint_identity = None
             else:
                 try:
@@ -441,52 +757,363 @@ class ParquetMaterializer:
             source_dep_hash = checkpoint_identity.source_dependency_hash
         generation = str(run_generation or "0")
 
-        # R20-201..206: storage precision policy —— value_dtype 显式单位化进入
-        # lineage / row metadata / checkpoint 指纹，production 默认 float64。
+        # R20-201..206: storage precision policy。
         effective_value_dtype, precision_policy = storage_precision_policy_for(
             value_dtype,
             production=production,
             lineage_extra=lineage_extra,
         )
         if write_metadata:
-            # 把解析后的 precision policy 写回 lineage extra，下游 (catalog /
-            # 事件增量 rebuild / dual-write) 消费同一份存储精度契约。
             lineage_extra = dict(lineage_extra)
             lineage_extra["storage_precision_policy"] = precision_policy
             lineage_extra["storage_value_dtype"] = effective_value_dtype
             if run_lineage is not None:
                 run_lineage = dict(run_lineage)
                 run_lineage["extra"] = lineage_extra
+        return {
+            "factor_id": factor_id,
+            "author": author,
+            "write_mode": write_mode,
+            "ast_hash": ast_hash,
+            "production": production,
+            "run_lineage": run_lineage,
+            "effective_value_dtype": effective_value_dtype,
+            "precision_policy": precision_policy,
+            "identity_digest": identity_digest,
+            "lineage_extra": lineage_extra,
+            "source_snapshot": source_snapshot,
+            "source_dep_hash": source_dep_hash,
+            "generation": generation,
+        }
 
-        # --- 0. 可选 DQ 门禁（在清洗前检查原始 result）---
-        dq_report = None
-        if dq_check:
-            from runtime.dq_gates import assert_factor_dq
+    @staticmethod
+    def _coerce_block(block: Any):
+        """Coerce ``pa.Table`` / ``RecordBatchReader`` to a ``pa.Table``."""
+        import pyarrow as pa
 
-            dq_report = assert_factor_dq(
-                result,
-                thresholds=dq_thresholds,
-                raise_on_fail=dq_strict,
-                preserve_invalid_rows=preserve_invalid_rows,
+        if isinstance(block, pa.Table):
+            return block
+        if hasattr(block, "read_all"):
+            try:
+                return block.read_all()
+            finally:
+                # Consume/close the stream so pyarrow's C++ objects are torn
+                # down deterministically (avoids GC-time teardown aborts).
+                close = getattr(block, "close", None)
+                if close is not None:
+                    try:
+                        close()
+                    except Exception:
+                        pass
+        raise ValueError(
+            "materialize_block expects pyarrow.Table or pyarrow.ipc.RecordBatchReader, "
+            f"got {type(block).__name__}"
+        )
+
+    def _block_to_raw_series(self, block: Any) -> pd.Series:
+        """Rebuild the raw (uncleaned) MultiIndex Series for the DQ gate."""
+        table = self._coerce_block(block)
+        dt = pd.to_datetime(table["datetime"].to_pandas())
+        asset = table["asset"].to_pandas().astype(str)
+        vals = np.asarray(table["value"].to_numpy(), dtype=float)
+        idx = pd.MultiIndex.from_arrays([dt, asset], names=["timestamp", "instrument"])
+        return pd.Series(vals, index=idx, name="value")
+
+    @staticmethod
+    def _arrow_block_to_long_df(
+        block: Any,
+        *,
+        metadata: "MaterializeMetadata | None" = None,
+        value_dtype: str = "float32",
+    ) -> pd.DataFrame:
+        """Arrow block → normalized long DataFrame (R39 PERF-046/047).
+
+        Tombstone/finite masks are generated directly with Arrow compute ops
+        (``is_finite``/``if_else``/``cast``/``dictionary_encode``); constant
+        metadata columns use Arrow dictionary encoding rather than per-row
+        Python string construction.  The returned frame matches what
+        ``_normalize_to_long_table`` + ``_clean`` produce for the same data.
+        """
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        table = ParquetMaterializer._coerce_block(block)
+        cols = set(table.column_names)
+        if not {"datetime", "asset", "value"}.issubset(cols):
+            raise ValueError(
+                "materialize_block table must have datetime/asset/value columns, "
+                f"got {table.column_names}"
             )
 
-        # --- 1. 转长表 + 强制 Schema ---
-        meta = None
-        if write_metadata:
-            # R11 #6: 落盘行 factor_version = 语义身份 digest 前缀（缺省 ast_hash
-            # 前缀）——不再只用 ast_hash，否则「公式一样但 data_source/执行语义变
-            # 了」的因子仍被 catalog 当作同一版本。
-            # R20-207..212: row-level metadata 写 RESOLVED source_snapshot（统一
-            # 用 data_snapshot_id 兜底 lineage_extra 的 combined snapshot），不再
-            # 只写调用方原始 data_snapshot_id。
-            meta = MaterializeMetadata(
-                calc_time=datetime.now(timezone.utc).isoformat(),
-                factor_version=(identity_digest or ast_hash)[:16],
-                data_snapshot_id=data_snapshot_id,
-                resolved_snapshot_id=source_snapshot,
-                storage_precision_policy=precision_policy,
-            )
-        df = self._normalize_to_long_table(result, metadata=meta, value_dtype=effective_value_dtype)
+        dt_arr = table["datetime"]
+        if not pa.types.is_timestamp(dt_arr.type):
+            dt_arr = pc.cast(dt_arr, pa.timestamp("ns"))
+        dt_series = pd.Series(dt_arr.to_pandas(), name="datetime")
+
+        asset_arr = table["asset"]
+        if not (pa.types.is_string(asset_arr.type) or pa.types.is_large_string(asset_arr.type)):
+            asset_arr = pc.cast(asset_arr, pa.string())
+        asset_series = pd.Series(asset_arr.to_pandas(), name="asset").astype("string")
+
+        value_arr = table["value"]
+        _f32 = value_dtype in ("float32", "float", "f4", "float16", "f2")
+        target_type = pa.float32() if _f32 else pa.float64()
+        if not pa.types.is_floating(value_arr.type):
+            value_arr = pc.cast(value_arr, target_type)
+        # Tombstone/finite mask directly with Arrow ops (PERF-047).
+        if pa.types.is_floating(value_arr.type):
+            finite = pc.is_finite(value_arr)
+        else:
+            finite = pc.is_valid(value_arr)
+        value_clean = pc.if_else(
+            finite, value_arr, pa.scalar(float("nan"), value_arr.type)
+        )
+        is_valid = pc.if_else(
+            finite, pa.scalar(1, pa.int8()), pa.scalar(0, pa.int8())
+        )
+        invalid_reason = pc.if_else(
+            finite, pa.scalar("", pa.string()), pa.scalar("inf_or_nan", pa.string())
+        )
+        value_series = pd.Series(value_clean.to_pandas(), name="value").astype(
+            str(value_dtype or "float32")
+        )
+
+        n = table.num_rows
+        now_iso = (
+            metadata.calc_time
+            if metadata is not None
+            else datetime.now(timezone.utc).isoformat()
+        )
+        fv = metadata.factor_version if metadata is not None else ""
+        dsid = (metadata.data_snapshot_id or "") if metadata is not None else ""
+        rsnap = (metadata.resolved_snapshot_id or "") if metadata is not None else ""
+        spol = (metadata.storage_precision_policy or "") if metadata is not None else ""
+
+        def _const(v: str) -> pd.Series:
+            arr = pa.array([v] * n, type=pa.string())
+            return pd.Series(pc.dictionary_encode(arr).to_pandas(), dtype=object)
+
+        df = pd.DataFrame(
+            {
+                "datetime": dt_series,
+                "asset": asset_series,
+                "value": value_series,
+                "calc_time": _const(now_iso),
+                "factor_version": _const(fv),
+                "data_snapshot_id": _const(dsid),
+                "resolved_snapshot_id": _const(rsnap),
+                "storage_precision_policy": _const(spol),
+                "is_valid": pd.Series(is_valid.to_pandas(), dtype="int64"),
+                "invalid_reason": pd.Series(invalid_reason.to_pandas(), dtype=object),
+            }
+        )
+        return df
+
+    # ------------------------------------------------------------------
+    # R39 PERF-048/049: watermark metrics without a full-history rescan
+    # ------------------------------------------------------------------
+
+    def _compute_watermark_metrics(
+        self,
+        factor_id: str,
+        factor_dir: Path,
+        stats_by_partition: dict[str, PartitionCommitStats],
+        active_df: pd.DataFrame,
+    ) -> tuple[dict, int, bool, dict]:
+        """Aggregate partition metrics from in-memory commit stats + catalog
+        stored stats (PERF-048/049).  Legacy on-disk partitions lacking stats
+        are reconciled via Parquet footer metadata (never value-cell loads).
+
+        Returns ``(partition_metrics, total_rows, rescanned, wm_range)`` where
+        ``rescanned`` is True only if a genuine full-history value-cell re-scan
+        was required (which increments ``full_factor_rescan_count``), and
+        ``wm_range`` is ``{start_date, end_date, has_legacy}`` describing the
+        post-write full-history date range derived from merged partition stats
+        (R39 PERF-051).  ``has_legacy`` is True when at least one on-disk
+        partition predates incremental stats (no date info) — callers must then
+        fall back to the committed watermark to preserve the range.
+        """
+        stored = self._catalog.get_partition_stats_all(factor_id)
+        merged: dict[str, dict] = {}
+        for k, row in stored.items():
+            merged[k] = {
+                "rows": int(row["rows"]),
+                "valid_rows": int(row["valid_rows"]),
+                "min_date": row.get("min_date"),
+                "max_date": row.get("max_date"),
+                "file_bytes": int(row.get("file_bytes") or 0),
+            }
+        for k, s in stats_by_partition.items():
+            merged[k] = {
+                "rows": s.rows_after,
+                "valid_rows": s.valid_after,
+                "min_date": s.min_date,
+                "max_date": s.max_date,
+                "file_bytes": s.file_bytes,
+            }
+        # Reconcile on-disk partitions that predate incremental stats.
+        if factor_dir.exists():
+            for pq_file in factor_dir.rglob("*.parquet"):
+                if pq_file.name.startswith("."):
+                    continue
+                try:
+                    rel_dir = pq_file.parent.relative_to(factor_dir)
+                except ValueError:
+                    continue
+                segs = [seg for seg in rel_dir.parts if "=" in seg]
+                if not segs:
+                    continue
+                pkey = "|".join(sorted(segs))
+                if pkey in merged:
+                    continue
+                rows = count_parquet_rows_from_footer(pq_file)
+                merged[pkey] = {
+                    "rows": rows,
+                    "valid_rows": rows,
+                    "min_date": None,
+                    "max_date": None,
+                    "file_bytes": int(pq_file.stat().st_size),
+                }
+        if not merged:
+            # Truly no stats anywhere: one-time full value-cell scan (counted).
+            self._bump_full_rescan()
+            metrics = self._count_partition_metrics(factor_dir)
+            wm_range = {"start_date": None, "end_date": None, "has_legacy": True}
+            return metrics, metrics["physical_row_count"], True, wm_range
+        total_rows = sum(int(r["rows"]) for r in merged.values())
+        valid_rows = sum(int(r["valid_rows"]) for r in merged.values())
+        file_bytes = sum(int(r.get("file_bytes") or 0) for r in merged.values())
+        if len(active_df):
+            date_count = int(active_df["datetime"].nunique())
+            asset_count = int(active_df["asset"].nunique())
+            non_null = int(active_df["value"].notna().sum())
+        else:
+            date_count = 0
+            asset_count = 0
+            non_null = valid_rows
+        partition_metrics = {
+            "physical_row_count": total_rows,
+            "date_count": date_count,
+            "asset_count": asset_count,
+            "cell_count": total_rows,
+            "non_null_cell_count": non_null,
+            "valid_rows": valid_rows,
+            "file_bytes": file_bytes,
+        }
+        # R39 PERF-051: full-history date range from merged partition stats —
+        # the normal path needs no get_watermark round-trip to compute it.
+        starts = [r["min_date"] for r in merged.values() if r.get("min_date")]
+        ends = [r["max_date"] for r in merged.values() if r.get("max_date")]
+        has_legacy = any(
+            not r.get("min_date") or not r.get("max_date") for r in merged.values()
+        )
+        wm_range = {
+            "start_date": min(starts) if starts else None,
+            "end_date": max(ends) if ends else None,
+            "has_legacy": has_legacy,
+        }
+        return partition_metrics, total_rows, False, wm_range
+
+    def _bump_full_rescan(self) -> None:
+        """Increment the full-history-rescan hard-gate counter (Gate-05)."""
+        global full_factor_rescan_count
+
+        self.full_factor_rescan_count += 1
+        full_factor_rescan_count += 1
+        try:
+            from runtime.perf_counters import get_global_counters
+
+            get_global_counters().incr("full_factor_rescan_count")
+        except Exception:
+            pass
+
+    def _bump_post_write_readback(self) -> None:
+        """Increment the post-write watermark read-back counter (R39 PERF-051).
+
+        Only genuine read-backs count: the write path must re-read the committed
+        watermark when it cannot know the new value (watermark_deferred /
+        external-modification scenarios).  The normal path returns the pending
+        watermark the transaction just committed and never bumps this.
+        """
+        global post_write_watermark_readback_count
+
+        self.post_write_watermark_readback_count += 1
+        post_write_watermark_readback_count += 1
+
+    @staticmethod
+    def _watermark_result_from_pending(factor_id: str, pending: dict) -> dict:
+        """Build a ``get_watermark``-shaped result dict from a pending watermark
+        this transaction just committed (R39 PERF-051).
+
+        The numerical/date semantics are identical to a read-back.  ``last_updated``
+        is the wall-clock captured at commit time — tests compare it separately
+        (it is a wall-clock, not watermark semantics).
+        """
+        return {
+            "factor_id": factor_id,
+            "start_date": pending["start_date"],
+            "end_date": pending["end_date"],
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "row_count": pending.get("row_count"),
+        }
+
+    def _materialize_long_df(
+        self,
+        factor_id: str,
+        df: pd.DataFrame,
+        *,
+        meta: "MaterializeMetadata | None",
+        dq_report=None,
+        author: str,
+        frequency: str,
+        ast_hash: str,
+        description: str | None = None,
+        expression: str | None = None,
+        run_lineage: dict | None = None,
+        write_metadata: bool = True,
+        data_snapshot_id: str | None = None,
+        data_source_config: dict | None = None,
+        isolate_partition_failures: bool = True,
+        resume: bool = False,
+        preserve_invalid_rows: bool = False,
+        write_target: str = "local",
+        defer_watermark: bool = False,
+        partition_columns: list[str] | None = None,
+        storage_format: str = "long",
+        null_overwrite: bool = False,
+        deleted_keys: list[tuple] | None = None,
+        production: bool | None = None,
+        run_generation: str | None = None,
+        force_tombstones: bool | None = None,
+        write_mode: str = "upsert",
+        replace_window: tuple[str, str] | None = None,
+        delta_mode: bool | None = None,
+        effective_value_dtype: str,
+        precision_policy: str,
+        identity_digest: str | None,
+        lineage_extra: dict,
+        source_snapshot: str | None,
+        source_dep_hash: str | None,
+        generation: str,
+    ) -> dict:
+        """Shared post-normalization materialize core (used by both the Series
+        ``materialize`` path and the Arrow ``materialize_block`` path).
+
+        The body is the historical tail of ``materialize`` (kept byte-identical
+        in behavior) plus R39 PERF-048/049/059/044 wiring: each partition commit
+        returns :class:`PartitionCommitStats`, aggregate stats are recorded
+        incrementally in the catalog, the watermark row count is derived from
+        those stats (never a full-history value-cell re-scan), and write
+        amplification is tracked.
+        """
+        from storage.write_targets import normalize_write_target
+
+        # R39: resolve delta-mode activation once for this factor write.
+        delta_mode_eff = self._resolve_delta_mode(delta_mode)
+        if delta_mode_eff and self._lock_manager is None:
+            from storage.delta_store import PartitionLockManager
+
+            self._lock_manager = PartitionLockManager()
 
         # Review-8 #444/#446: 声明 tombstones 的调用方把历史 key 标记为已删除
         # （value=NaN 覆盖旧值）。deleted_keys 行必须在 _clean 前注入，与普通 NaN
@@ -514,15 +1141,10 @@ class ParquetMaterializer:
         #     (is_valid=0) so stale finite values in the partition are CLEARED,
         #     without requiring the caller to pass null_overwrite=True;
         #   * "deleted" -> explicit deleted_keys (already flips null_overwrite).
-        # Research / plain materialize keeps the historical "all-NaN -> skip"
-        # short-circuit for backward compatibility.
         has_valid_value = bool(df["value"].notna().any())
         force_tombstones = self._resolve_force_tombstones(
             force_tombstones, production, run_lineage
         )
-        # R20-230: recompute_window 的 all-NaN 结果必须覆盖旧 finite —— 绝不因
-        # 「无有效值」而跳过写盘（跳过会让旧有限值残留）。recompute_window 下
-        # 只要 frame 非空（哪怕全 NaN），强制写 tombstone。
         if write_mode == "recompute_window" and not df.empty and not has_valid_value:
             force_tombstones = True
             null_overwrite = True
@@ -541,6 +1163,11 @@ class ParquetMaterializer:
                 "run_generation": generation,
             }
 
+        try:
+            target_flags = normalize_write_target(write_target)
+        except ValueError:
+            raise
+        write_target_flags = target_flags
         target = str(write_target or "local").lower()
         write_local = bool(write_target_flags["local"])
         write_staging = bool(write_target_flags["staging"])
@@ -548,14 +1175,7 @@ class ParquetMaterializer:
         if write_target_flags.get("staging_dataset"):
             self._staging_dataset = str(write_target_flags["staging_dataset"])
 
-        # R9-P0-025/026: watermark_deferred must be defined before the partition
-        # loop — the failure-adjudication block below reads it, and it must never
-        # advance the watermark on a failed run.
         watermark_deferred = bool(defer_watermark)
-        # #收官轮 P0（Integration）：staging-only（不写本地 lake 也不写 CH）不能
-        # 推进**权威水位线**——否则增量调度器误以为「正式 factor lake 已提交到
-        # 这里」而 skip。staging-only 强制 defer，只有 publish 成功后 commit 才
-        # 推进（权威水位线 = CALCULATED → STAGED → PUBLISHED 语义）。
         if write_staging and not write_local and not write_clickhouse:
             watermark_deferred = True
             if production:
@@ -585,7 +1205,6 @@ class ParquetMaterializer:
             storage_format=storage_format,
         )
         if write_staging:
-            # staging 优先：失败则不写本地分区、不更新水位线
             staging_result = self._upsert_to_data_access_staging(
                 factor_id, df, policy=policy
             )
@@ -610,9 +1229,12 @@ class ParquetMaterializer:
         factor_dir = factor_dir_for(self._lake_root, factor_id)
         work_df = attach_partition_columns(df, policy)
 
+        # R39 PERF-049: per-partition commit stats collected during the loop so
+        # the watermark path needs no full-factor value-cell re-scan.
+        stats_by_partition: dict[str, PartitionCommitStats] = {}
+
         if write_local:
             # Phase 5 R17：直接迭代 generator，禁止 ``list(iter_partition_groups(...))``
-            # ——那会把所有分区组同时引用在内存里，10 年因子等于多一份全量 DataFrame。
             progress = ProgressLogger(
                 logger,
                 desc=f"落盘因子 {factor_id}",
@@ -622,7 +1244,6 @@ class ParquetMaterializer:
             for part_values, partition_df in iter_partition_groups(work_df, policy):
                 pkey = partition_key(part_values)
                 ck_year = checkpoint_year(part_values)
-                # R10 #47: 分区级身份指纹 —— 在 resume 判定与成功写入后都要用。
                 partition_dir = factor_dir / partition_path_segments(
                     part_values, column_order=policy.columns
                 )
@@ -635,9 +1256,6 @@ class ParquetMaterializer:
                     ),
                     run_generation=generation,
                 )
-                # R20-201..206: storage precision policy 进入指纹 sidecar（
-                # checkpoint_fingerprint_matches 比较已知 key，precision 变化会
-                # 通过 identity_digest / 这里补充的 key 同时失效 resume）。
                 fp["storage_precision_policy"] = precision_policy
                 fp["storage_value_dtype"] = effective_value_dtype
                 if resume:
@@ -660,17 +1278,28 @@ class ParquetMaterializer:
                         continue
 
                 try:
-                    self._upsert_partition(
+                    commit_stats = self._upsert_partition(
                         factor_dir,
                         part_values,
                         partition_df,
                         policy=policy,
                         write_mode=write_mode,
                         replace_window=replace_window,
+                        delta_mode=delta_mode_eff,
                     )
-                    # R32-P0-032: checkpoint success 必须在身份 sidecar durable 之后
-                    # 提交。production 下 sidecar 写失败抛错 → 走 failed 分支，
-                    # 分区不会被标成 success（数据已写但身份缺失 → 下次 resume 重算）。
+                    if commit_stats is not None:
+                        stats_by_partition[pkey] = commit_stats
+                        # R39 PERF-044: write-amplification KPI per commit.
+                        logical = int(partition_df.memory_usage(deep=True).sum())
+                        self.write_amplification.record_partition_write(
+                            logical_changed_bytes=logical,
+                            physical_new_write_bytes=commit_stats.file_bytes,
+                            historical_rewrite_bytes=(
+                                0 if delta_mode_eff else commit_stats.file_bytes
+                            ),
+                            delta_file_count=1 if delta_mode_eff else 0,
+                        )
+                        _sync_module_wa_counters(self)
                     self._write_checkpoint_fingerprint_file(
                         partition_dir, fp, production=production, run_id=checkpoint_run_id
                     )
@@ -705,10 +1334,7 @@ class ParquetMaterializer:
                     if not isolate_partition_failures:
                         raise
 
-            # Review-8 #440/#441: failure adjudication comes FIRST.  Any
-            # required partition failure must never advance the committed
-            # watermark, and an all-partitions-failed run must raise instead of
-            # returning a ``rows_written=0`` success summary.
+            # Review-8 #440/#441: failure adjudication FIRST.
             if partitions_failed:
                 if run_lineage is not None and not watermark_deferred:
                     lineage_payload = dict(run_lineage)
@@ -736,26 +1362,31 @@ class ParquetMaterializer:
                     "storage_format": policy.storage_format,
                 }
 
+        # R39 PERF-049: record per-partition aggregate stats incrementally in one
+        # batch catalog commit (no full-history re-scan needed downstream).
+        if write_local and stats_by_partition:
+            with self._catalog.batch_transaction(generation) as tx:
+                tx.update_partition_stats_many(
+                    [
+                        {
+                            "factor_id": factor_id,
+                            "partition_key": k,
+                            "rows": s.rows_after,
+                            "valid_rows": s.valid_after,
+                            "min_date": s.min_date,
+                            "max_date": s.max_date,
+                            "file_bytes": s.file_bytes,
+                        }
+                        for k, s in stats_by_partition.items()
+                    ]
+                )
+
         # --- 5. 更新水位线（R9-P0-026: commit watermark LAST）---
-        # Success-path ordering: (1) all required partitions succeeded (checked
-        # above), (2) dependency writes (staging) succeeded (before the loop),
-        # (3) lineage recorded + checkpoints cleared, (4) then and only then
-        # advance the committed watermark.  If any earlier step fails, the
-        # watermark must remain untouched so the next incremental run cannot
-        # skip data.
         value_columns = [c for c in work_df.columns if c not in policy.columns]
         if write_local and (partitions_written or partitions_skipped):
             active_keys = set(partition_keys_written) | set(partition_keys_skipped)
 
             def _row_partition_key(row: pd.Series) -> str:
-                """_row_partition_key。
-
-                参数:
-                    row: 见函数签名
-
-                返回:
-                    str
-                """
                 return partition_key({col: row[col] for col in policy.columns})
 
             active_df = work_df.loc[
@@ -767,18 +1398,37 @@ class ParquetMaterializer:
 
         start_date = active_df["datetime"].min().isoformat()
         end_date = active_df["datetime"].max().isoformat()
-        existing_wm = self._catalog.get_watermark(factor_id)
-        if existing_wm is not None:
-            if existing_wm["start_date"] < start_date:
-                start_date = existing_wm["start_date"]
-            if existing_wm["end_date"] > end_date:
-                end_date = existing_wm["end_date"]
 
         if write_local:
-            total_rows = self._count_total_rows(factor_dir)
-            # R32-P0-029: 统一记录 long/wide 各语义的行数分解（watermark 的
-            # row_count 保持历史兼容语义，分解指标进 summary）。
-            partition_metrics = self._count_partition_metrics(factor_dir)
+            # R39 PERF-048/049: derive total_rows + partition metrics from the
+            # in-memory commit stats (never a full-history value-cell re-scan).
+            partition_metrics, total_rows, _rescanned, wm_range = (
+                self._compute_watermark_metrics(
+                    factor_id, factor_dir, stats_by_partition, active_df
+                )
+            )
+            # R39 PERF-051: when the post-write full-history range is derivable
+            # from partition stats (normal path — no legacy partitions), merge it
+            # with the in-flight range WITHOUT a get_watermark round-trip.
+            if (
+                wm_range.get("start_date") is not None
+                and wm_range.get("end_date") is not None
+                and not wm_range.get("has_legacy")
+            ):
+                if wm_range["start_date"] < start_date:
+                    start_date = wm_range["start_date"]
+                if wm_range["end_date"] > end_date:
+                    end_date = wm_range["end_date"]
+            else:
+                # Legacy on-disk partitions predate incremental stats (no date
+                # info), or no stats anywhere: preserve the committed range via
+                # a read of the existing watermark (pre-write, not a read-back).
+                existing_wm = self._catalog.get_watermark(factor_id)
+                if existing_wm is not None:
+                    if existing_wm["start_date"] < start_date:
+                        start_date = existing_wm["start_date"]
+                    if existing_wm["end_date"] > end_date:
+                        end_date = existing_wm["end_date"]
         else:
             total_rows = len(active_df)
             partition_metrics = {
@@ -788,6 +1438,14 @@ class ParquetMaterializer:
                 "cell_count": total_rows,
                 "non_null_cell_count": int(active_df["value"].notna().sum()),
             }
+            # No local partition stats to derive the range from (staging-only
+            # writes): merge with the committed watermark via a pre-write read.
+            existing_wm = self._catalog.get_watermark(factor_id)
+            if existing_wm is not None:
+                if existing_wm["start_date"] < start_date:
+                    start_date = existing_wm["start_date"]
+                if existing_wm["end_date"] > end_date:
+                    end_date = existing_wm["end_date"]
 
         pending_watermark = {
             "start_date": start_date,
@@ -797,8 +1455,9 @@ class ParquetMaterializer:
         pending_lineage = None
 
         if watermark_deferred:
-            # 双写模式：本地分区已落盘，水位线留到 commit_deferred_materialization
-            # 确认 staging/clickhouse 依赖成功后再统一提交。
+            # The transaction did NOT commit the watermark (deferred to
+            # publish); the committed value is unknown to us → genuine read-back.
+            self._bump_post_write_readback()
             watermark = self._catalog.get_watermark(factor_id)
             if run_lineage is not None:
                 pending_lineage = dict(run_lineage)
@@ -806,28 +1465,26 @@ class ParquetMaterializer:
                     pending_lineage["dq_passed"] = dq_report.passed
         else:
             # (3) lineage + checkpoint cleanup first ...
-            if run_lineage is not None:
-                lineage_payload = dict(run_lineage)
-                if dq_report is not None:
-                    lineage_payload["dq_passed"] = dq_report.passed
-                self._catalog.record_run(lineage_payload)
-                if write_local:
-                    self._catalog.clear_partition_checkpoints(factor_id)
-            # (4) commit watermark LAST — only after every required step succeeded.
-            self._catalog.update_watermark(
-                factor_id=factor_id,
-                start_date=start_date,
-                end_date=end_date,
-                row_count=total_rows,
+            with self._catalog.batch_transaction(generation) as tx:
+                if run_lineage is not None:
+                    lineage_payload = dict(run_lineage)
+                    if dq_report is not None:
+                        lineage_payload["dq_passed"] = dq_report.passed
+                    tx.record_runs_many([lineage_payload])
+                    if write_local:
+                        tx.execute_many(
+                            "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?",
+                            [(factor_id,)],
+                        )
+                # (4) commit watermark LAST — after every required step succeeded.
+                tx.update_watermarks_many([(factor_id, start_date, end_date, total_rows)])
+            # R39 PERF-051: this transaction knows exactly what it just wrote —
+            # return the pending watermark directly instead of a redundant
+            # post-write get_watermark query.
+            watermark = self._watermark_result_from_pending(
+                factor_id, pending_watermark
             )
-            watermark = self._catalog.get_watermark(factor_id)
 
-        # R9-P0-027: NaN rows are now retained as tombstones, so the physical
-        # rows in each partition include is_valid=0 tombstones.  `rows_written`
-        # keeps the historical meaning: valid rows for the default path (matching
-        # the old dropna behavior), total rows when the caller asked to keep
-        # invalid rows explicitly, or when a production-incremental all-NaN run
-        # wrote tombstones (R10 #48).
         rows_written = (
             len(df)
             if (preserve_invalid_rows or null_overwrite or force_tombstones)
@@ -869,6 +1526,8 @@ class ParquetMaterializer:
             "identity_digest": identity_digest,
             "run_generation": generation,
             "partition_metrics": partition_metrics,
+            "delta_mode": delta_mode_eff,
+            "write_amplification": self.write_amplification.snapshot().to_dict(),
         }
         if pending_watermark is not None and watermark_deferred:
             summary["pending_watermark"] = pending_watermark
@@ -907,7 +1566,11 @@ class ParquetMaterializer:
             row_count=pending.get("row_count"),
         )
         merged = dict(summary)
-        merged["watermark"] = self._catalog.get_watermark(factor_id)
+        # R39 PERF-051: this method just committed the pending watermark — return
+        # it directly instead of a redundant post-write get_watermark query.
+        merged["watermark"] = self._watermark_result_from_pending(
+            factor_id, pending
+        )
         merged["watermark_deferred"] = False
         merged.pop("pending_watermark", None)
         merged.pop("pending_lineage", None)
@@ -1379,7 +2042,8 @@ class ParquetMaterializer:
         policy: PartitionPolicy,
         write_mode: str = "upsert",
         replace_window: tuple[str, str] | None = None,
-    ) -> None:
+        delta_mode: bool | None = None,
+    ) -> PartitionCommitStats | None:
         """对指定 hive 分区做幂等 Upsert（long 或 wide）。
 
         ``write_mode``（R20-230）：
@@ -1389,6 +2053,10 @@ class ParquetMaterializer:
           - ``recompute_window``：与 upsert 相同（all-NaN 覆盖旧 finite 由上层
             强制 tombstone 保证）。
 
+        R39 delta-mode（``delta_mode`` 开启）：调用
+        :meth:`_upsert_partition_delta` 写 immutable delta fragment（PERF-043/
+        052/083），不重写历史分区。
+
         参数:
             factor_dir: 见函数签名
             part_values: 见函数签名
@@ -1396,23 +2064,35 @@ class ParquetMaterializer:
             policy: 分区策略（可选）
             write_mode: 写入模式（upsert/append/replace_window/recompute_window）
             replace_window: 替换窗口 (start, end)（ISO 字符串）
+            delta_mode: 是否启用 delta 存储（可选，缺省从构造/环境解析）
 
         返回:
-            无
+            PartitionCommitStats | None —— 每次 commit 返回提交统计
+            （R39 PERF-049），供上层增量聚合，无需重扫全因子历史。
         """
         if policy.is_wide:
-            self._upsert_partition_wide(
+            return self._upsert_partition_wide(
                 factor_dir, part_values, new_df, policy=policy,
                 write_mode=write_mode, replace_window=replace_window,
             )
-            return
 
         partition_dir = factor_dir / partition_path_segments(
             part_values, column_order=policy.columns
         )
         partition_dir.mkdir(parents=True, exist_ok=True)
+
+        if self._resolve_delta_mode(delta_mode):
+            return self._upsert_partition_delta(
+                partition_dir,
+                part_values,
+                new_df,
+                policy=policy,
+                write_mode=write_mode,
+            )
+
         parquet_path = partition_dir / policy.data_filename
         existing_rows = 0
+        existing_orig: pd.DataFrame | None = None
 
         with self._partition_lock(partition_dir):
             # Review-8 #442: reconcile 本分区的孤儿 .tmp 文件。必须在锁内执行 —
@@ -1443,6 +2123,7 @@ class ParquetMaterializer:
                         else:
                             existing_df[col] = None
                 existing_rows = len(existing_df)
+                existing_orig = existing_df
                 if write_mode == "replace_window" and replace_window is not None:
                     # 删除窗口 [start, end] 内的旧行，再与 new 拼接。
                     w_start = pd.Timestamp(replace_window[0])
@@ -1486,6 +2167,173 @@ class ParquetMaterializer:
             len(combined),
         )
 
+        # R39 PERF-059/049: single-pass DQ stats + commit stats from in-memory
+        # frames (never a full-history disk re-read for accounting).
+        if len(new_df):
+            dq_stats = compute_write_pass_dq(
+                new_df["value"].to_numpy(),
+                index=pd.MultiIndex.from_arrays(
+                    [new_df["datetime"], new_df["asset"]]
+                ),
+            )
+        else:
+            dq_stats = None
+        file_bytes = int(parquet_path.stat().st_size)
+        return compute_partition_commit_stats(
+            partition_key(part_values),
+            existing_df=existing_orig,
+            new_df=new_df,
+            combined_df=combined,
+            file_bytes=file_bytes,
+            dq_stats=dq_stats,
+        )
+
+    def _upsert_partition_delta(
+        self,
+        partition_dir: Path,
+        part_values: dict[str, Any],
+        new_df: pd.DataFrame,
+        *,
+        policy: PartitionPolicy,
+        write_mode: str = "upsert",
+        run_generation: str = "0",
+    ) -> PartitionCommitStats:
+        """R39 PERF-043/052/053/083: append-only delta upsert.
+
+        The changed rows are written as a sorted immutable ``delta/gen_<seq>``
+        fragment (never a full-history read→concat→dedup→sort→rewrite).  The
+        generation manifest flips once per batch for durability.  Legacy
+        monolithic partitions (no manifest) are migrated on first delta write by
+        keeping ``data.parquet`` as the base file.
+        """
+        from storage.delta_store import (
+            DeltaManifest,
+            read_delta_partition,
+            write_delta_fragment,
+        )
+
+        writer_id = getattr(self, "_delta_writer_id", "w0")
+        run_gen = str(run_generation or "0")
+        lock_mgr = self._lock_manager
+        lock_ctx = (
+            lock_mgr.partition_lock(partition_dir)
+            if lock_mgr is not None
+            else self._partition_lock(partition_dir)
+        )
+        with lock_ctx:
+            manifest = DeltaManifest.load(partition_dir)
+            if manifest is None:
+                # Legacy monolithic → keep data.parquet as base (both layouts
+                # remain readable), then append deltas on top.
+                manifest = DeltaManifest(layout="delta", seq=0, base="data.parquet")
+                legacy = partition_dir / "data.parquet"
+                if legacy.exists():
+                    base = pd.read_parquet(legacy)
+                    manifest.base_rows = int(len(base))
+                    manifest.merged_rows = int(len(base))
+                    manifest.merged_valid_rows = int(
+                        (base["is_valid"] == 1).sum()
+                        if "is_valid" in base.columns
+                        else len(base)
+                    )
+                manifest.save_atomic(partition_dir)
+
+            rows_before = manifest.merged_rows
+            valid_before = manifest.merged_valid_rows
+
+            # Only changed rows are sorted + written (PERF-083).
+            delta_entry = write_delta_fragment(
+                partition_dir,
+                new_df,
+                manifest=manifest,
+                run_generation=run_gen,
+                writer_id=writer_id,
+            )
+            # PERF-084: record compaction debt = delta bytes awaiting compaction.
+            self.write_amplification.record_compaction_debt(
+                debt_bytes=manifest.delta_bytes()
+            )
+
+        file_bytes = int(delta_entry["bytes"])
+        rows_added = int(delta_entry["rows"])
+        # In delta mode we never read the whole history per write; running
+        # unique-row counts are reconciled exactly at compaction.
+        rows_after = rows_before + rows_added
+        valid_after = valid_before + int(delta_entry["valid_rows"])
+        min_date = max_date = None
+        if len(new_df):
+            dt = pd.to_datetime(new_df["datetime"])
+            min_date = str(dt.min().isoformat())
+            max_date = str(dt.max().isoformat())
+        dq_stats = compute_write_pass_dq(
+            new_df["value"].to_numpy(),
+            index=pd.MultiIndex.from_arrays([new_df["datetime"], new_df["asset"]]),
+        ) if len(new_df) else None
+        return PartitionCommitStats(
+            partition_key=partition_key(part_values),
+            rows_before=rows_before,
+            rows_after=rows_after,
+            rows_added=rows_added,
+            rows_replaced=0,
+            valid_before=valid_before,
+            valid_after=valid_after,
+            min_date=min_date,
+            max_date=max_date,
+            file_bytes=file_bytes,
+            dq_stats=dq_stats,
+        )
+
+    def recover_orphan_delta_tmp_files(self, factor_id: str | None = None) -> int:
+        """R39 PERF-053: generation-recovery sweep of orphan ``.tmp`` delta/base
+        fragments, run at startup / recovery instead of per-partition-write.
+
+        Sweeps the whole lake (or a single factor) for ``delta/`` and ``base/``
+        ``.tmp`` leftovers.  Returns the number of files removed.  In delta mode
+        the per-partition-write path does NOT call the monolithic
+        ``_cleanup_orphan_tmp_files`` — this is the single startup scan.
+        """
+        from storage.delta_store import recover_orphan_delta_tmp_files
+
+        if factor_id is not None:
+            from security.factor_id import factor_dir_for
+
+            roots = [factor_dir_for(self._lake_root, factor_id)]
+        else:
+            factors_root = self._lake_root / "factors"
+            roots = (
+                [factors_root]
+                if factors_root.is_dir()
+                else [self._lake_root]
+            )
+        removed = 0
+        for root in roots:
+            for partition_dir in root.rglob("year=*"):
+                if partition_dir.is_dir():
+                    removed += recover_orphan_delta_tmp_files(partition_dir)
+            if root.is_dir():
+                removed += recover_orphan_delta_tmp_files(root)
+        return removed
+
+    def compact_partition(self, partition_dir: Path, **kwargs) -> dict:
+        """R39 PERF-084: explicit compaction of a delta partition (resource
+        controlled — caller decides when; not run on the production hot path).
+
+        Produces a single sorted new base equal to the merged base+deltas.
+        """
+        from storage.delta_store import compact_partition as _compact
+
+        result = _compact(partition_dir, **kwargs)
+        # After compaction the manifest holds no deltas → debt drops to 0.
+        from storage.delta_store import DeltaManifest
+
+        man = DeltaManifest.load(partition_dir)
+        try:
+            debt = man.delta_bytes() if man is not None else 0
+        except Exception:
+            debt = 0
+        self.write_amplification.record_compaction_debt(debt_bytes=debt)
+        return result
+
     def _upsert_partition_wide(
         self,
         factor_dir: Path,
@@ -1495,7 +2343,7 @@ class ParquetMaterializer:
         policy: PartitionPolicy,
         write_mode: str = "upsert",
         replace_window: tuple[str, str] | None = None,
-    ) -> None:
+    ) -> PartitionCommitStats | None:
         """宽表 panel 分区 upsert（经 long 去重后再 pivot）。
 
         R32-P0-028: wide 路径与 long 语义对齐 —— 支持 append / replace_window /
@@ -1511,7 +2359,7 @@ class ParquetMaterializer:
             replace_window: 替换窗口 (start, end)（ISO 字符串）
 
         返回:
-            无
+            PartitionCommitStats | None（R39 PERF-049）
         """
         from storage.factor_format import pivot_long_to_wide, unpivot_wide_to_long
 
@@ -1523,6 +2371,7 @@ class ParquetMaterializer:
 
         value_cols = ["datetime", "asset", "value"]
         new_long = new_df[value_cols].copy()
+        existing_orig: pd.DataFrame | None = None
 
         with self._partition_lock(partition_dir):
             self._cleanup_orphan_tmp_files(partition_dir)
@@ -1531,6 +2380,7 @@ class ParquetMaterializer:
                 if "datetime" in existing_panel.columns:
                     existing_panel = existing_panel.set_index("datetime")
                 existing_long = unpivot_wide_to_long(existing_panel)
+                existing_orig = existing_long
                 # R32-P0-024: 宽表 unpivot 保留原精度，不与 new 拼接前降为 float32。
                 if existing_long["value"].dtype != new_long["value"].dtype:
                     promoted = np.promote_types(
@@ -1571,6 +2421,17 @@ class ParquetMaterializer:
             partition_key(part_values),
             write_mode,
             panel.shape,
+        )
+
+        # R39 PERF-049: wide commit stats from the long merge frames in memory.
+        file_bytes = int(parquet_path.stat().st_size)
+        return compute_partition_commit_stats(
+            partition_key(part_values),
+            existing_df=existing_orig,
+            new_df=new_long,
+            combined_df=combined_long,
+            file_bytes=file_bytes,
+            dq_stats=None,
         )
 
     @staticmethod
@@ -1676,6 +2537,28 @@ class ParquetMaterializer:
             list[dict]
         """
         return self._catalog.list_factors()
+
+    def close(self) -> None:
+        """Release per-generation lock handles held by the delta-mode
+        :class:`PartitionLockManager` (R39 PERF-054).  Does not close the
+        catalog connection (caller-managed)."""
+        lm = self._lock_manager
+        if lm is not None:
+            lm.close()
+            self._lock_manager = None
+
+
+def _sync_module_wa_counters(mat: "ParquetMaterializer") -> None:
+    """Mirror the materializer's write-amplification snapshot into the module
+    level Gate-04 counter (``historical_rewrite_bytes``) read by
+    ``scripts/r39_hard_gates_audit.py``."""
+    global historical_rewrite_bytes
+
+    try:
+        snap = mat.write_amplification.snapshot()
+    except Exception:
+        return
+    historical_rewrite_bytes = int(snap.historical_rewrite_bytes)
 
 
 def compare_live_vs_materialized(

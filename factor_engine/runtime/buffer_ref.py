@@ -131,19 +131,28 @@ class SourceWaveExecutor:
                 prefetch(list(columns))
             elif columns and callable(load):
                 load(list(columns))
+            # R39-P0-PERF-011：read wave 输出不再固定 pandas-column cache——
+            # 按 wave.preferred_representation 直接产出对应 BufferRef。
+            representation = self._representation_for_wave(wave)
+            location = (
+                "source.column_cache"
+                if representation in ("pandas_columns", "pandas_column")
+                else "source.native"
+            )
             ref = SourceBufferRef(
-                representation="pandas_column",
+                representation=representation,
                 schema=tuple(columns),
                 grain="panel",
                 bytes=int(getattr(wave, "estimated_memory_bytes", 0) or 0),
                 source_snapshot=str(getattr(source, "snapshot_token", "") or ""),
                 ordering="",
-                location="source.column_cache",
+                location=location,
                 ownership="shared",
                 refcount=len(set(consumer_ids)),
                 column_cache_keys=tuple(columns),
                 wave_id=wave_id,
-                scan_bytes=int(getattr(wave, "estimated_scan_bytes", 0) or 0),
+                scan_bytes=int(getattr(wave, "physical_union_scan_bytes", 0)
+                               or getattr(wave, "estimated_scan_bytes", 0) or 0),
             )
             event["ok"] = True
             with self._lock:
@@ -156,6 +165,14 @@ class SourceWaveExecutor:
                 self._events.append(event)
             self._record_runtime_event(event)
         return ref
+
+    @staticmethod
+    def _representation_for_wave(wave: Any) -> str:
+        """PERF-011：取 wave.preferred_representation（枚举或字符串），缺省 pandas。"""
+        rep = getattr(wave, "preferred_representation", "pandas_columns") or "pandas_columns"
+        if hasattr(rep, "value"):  # SourceRepresentation enum
+            rep = rep.value
+        return str(rep)
 
     def _record_runtime_event(self, event: dict[str, Any]) -> None:
         """写进 ctx.runtime_stats（read wave 真实执行 runtime evidence）。"""

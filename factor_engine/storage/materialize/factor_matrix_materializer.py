@@ -44,7 +44,33 @@ import numpy as np
 import pandas as pd
 
 from logging_utils import get_logger
-from storage.factor_format import series_to_long_table
+from storage.matrix_block_layout import (
+    block_columns,
+    block_file_name,
+    block_mode_enabled,
+    build_matrix_block,
+    checksum_proof_enabled,
+    compare_checksums,
+    compute_matrix_checksums,
+    matrix_join_count,
+    matrix_rewrite_amplification,
+    overlay_block,
+    parse_block_id,
+    partition_overlaps_time_range,
+    read_parquet_checksums,
+    record_rewrite_amplification,
+    resolve_factor_blocks,
+    wide_to_merged,
+)
+from storage.partition_object_ref import (
+    PartitionObjectRef,
+    build_partition_inventory,
+    inventory_from_dicts,
+    inventory_parquet_paths,
+    inventory_to_dicts,
+    materialize_generation_from_inventory,
+    ref_from_frame,
+)
 from storage.partition_policy import (
     PartitionPolicy,
     attach_partition_columns,
@@ -356,8 +382,32 @@ class FactorMatrixMaterializer:
     ) -> pd.DataFrame:
         """P1-14: 读回校验 staging（行数 / 列数 / 无全 NaN 列 / 值一致性）。
 
+        R39 PERF-064：``FACTOR_ENGINE_MATRIX_CHECKSUM_PROOF=1`` 时改用 checksum
+        proof —— writer 先计算 ``key_order_checksum`` / per-column
+        ``finite_mask_checksum`` / ``numeric_checksum`` / ``row_count`` /
+        ``schema_hash``，read-back 用 Arrow 列式读取后比对 checksum（不做两个
+        巨大矩阵的 pandas 全量 sort + 逐列 ``np.allclose``）。否则保持原
+        value-compare 作为 reference 兜底路径。
+
         校验失败抛 ``FactorMatrixReadError``，staging 不会进入正式位置。
         """
+        if checksum_proof_enabled():
+            try:
+                expected_checks = compute_matrix_checksums(expected)
+                actual_checks = read_parquet_checksums(
+                    staging_path, expected.columns
+                )
+                errors = compare_checksums(expected_checks, actual_checks)
+            except Exception as exc:
+                raise FactorMatrixReadError(
+                    f"staging checksum 校验失败 {staging_path}（读取/解析异常）: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            if errors:
+                raise FactorMatrixReadError(
+                    f"staging checksum 校验失败 {staging_path}: " + "; ".join(errors)
+                )
+            return pd.read_parquet(staging_path)
         rb = pd.read_parquet(staging_path)
         if len(rb) != len(expected):
             raise FactorMatrixReadError(
@@ -406,11 +456,25 @@ class FactorMatrixMaterializer:
         factor_versions: dict[str, str] | None,
         expected_manifest_version: int | None,
         generation: str | None = None,
+        factor_blocks: dict[str, dict[str, Any]] | None = None,
+        certificates: dict[str, Any] | None = None,
+        factor_block_refs: list[dict[str, Any]] | None = None,
+        partition_inventory: list[PartitionObjectRef] | None = None,
     ) -> dict[str, Any]:
         """P0-23 + P1-15: 写 manifest（semantic_digest 校验 + CAS 版本比对）。
 
         ``factor_versions``（factor_id → semantic_digest/version）缺省为 None 时
         只推进 ``updated_at``/``manifest_version``，不做 digest 绑定。
+
+        R39 PERF-061/067：``factor_blocks``（factor_id → {block_id, column}）在
+        column-factor block layout 下把 ``factor_id → block_id`` 记入 manifest，
+        ``load_matrix`` 据此只扫需要的 block；``certificates``（R39 PERF-067
+        MaterializationIdentityCertificate）把 compile-time 构建的身份字段直接
+        落入 manifest，writer 不再为每 factor 重建 metadata。
+
+        R39 PERF-030：``factor_block_refs``（可序列化 ``FactorBlockRef`` 元数据，
+        见 ``runtime.factor_block_ref.block_ref_meta``）随 manifest 记录——多个因子
+        共享一份 axis 的证据（axis_key / row_count / factor_count / block_id）。
 
         R14 #1：``generation`` 是本次已完整 validate 的新 generation id。写入后
         manifest 的 ``os.replace`` 就是全矩阵的**唯一原子切换点**——reader 从
@@ -477,6 +541,37 @@ class FactorMatrixMaterializer:
                     "source_snapshot",
                 ):
                     entry.setdefault(field, None)
+            # R39 PERF-061: factor_id -> {block_id, column} for column-factor blocks.
+            if factor_blocks:
+                manifest["layout"] = "block"
+                for fid, fb in factor_blocks.items():
+                    entry = factors.setdefault(fid, {})
+                    entry["block_id"] = str(fb["block_id"])
+                    entry["column"] = str(fb.get("column", fid))
+            # R39 PERF-067: consume compile-time MaterializationIdentityCertificate.
+            if certificates:
+                for fid, cert in certificates.items():
+                    entry = factors.setdefault(str(fid), {})
+                    if cert.semantic_digest:
+                        entry["semantic_digest"] = cert.semantic_digest
+                        entry["version"] = cert.semantic_digest
+                    for fld, val in (
+                        ("source_snapshot", cert.source_snapshot),
+                        ("calendar", cert.calendar),
+                        ("universe", cert.universe),
+                        ("frequency", cert.frequency),
+                        ("storage_precision", cert.storage_precision),
+                        ("operator_manifest_hash", cert.operator_manifest_hash),
+                    ):
+                        if val is not None:
+                            entry[fld] = val
+            # R39 PERF-030: 多因子共享 axis 的 FactorBlockRef 元数据（可序列化）。
+            if factor_block_refs:
+                manifest["factor_block_refs"] = factor_block_refs
+            # R39 PERF-063: generation 的完整 partition inventory（COW 精确 materialize，
+            # 不再每次 rglob 全目录发现）。
+            if partition_inventory is not None:
+                manifest["partition_inventory"] = inventory_to_dicts(partition_inventory)
             manifest["updated_at"] = _now_iso()
             manifest["manifest_version"] = current_version + 1
             if generation:
@@ -496,6 +591,8 @@ class FactorMatrixMaterializer:
         recovery: bool = False,
         factor_versions: dict[str, str] | None = None,
         expected_manifest_version: int | None = None,
+        certificates: dict[str, Any] | None = None,
+        layout: str | None = None,
     ) -> dict[str, Any]:
         """``factor_id -> Series`` 合并为宽表并按 hive 分区落盘。
 
@@ -514,9 +611,20 @@ class FactorMatrixMaterializer:
                 P0-23）；缺省时 manifest 只记录本次时间，不做 digest 校验。
             expected_manifest_version: manifest CAS 期望版本（可选，P1-15）；
                 缺省为物化开始时读到的当前值。
+            certificates: R39 PERF-067 —— ``fid -> MaterializationIdentityCertificate``
+                编译期缓存，writer 直接消费（可选）。
+            layout: R39 PERF-061 —— ``"legacy"``（默认单宽文件）或 ``"block"``
+                （column-factor block）；缺省 ``"auto"`` 从环境变量
+                ``FACTOR_ENGINE_MATRIX_BLOCK_LAYOUT=1`` 解析为 block，否则 legacy。
 
         返回:
             dict[str, Any]
+
+        R39 PERF-060：
+        宽表装配不再按 factor 逐个 pandas outer merge。所有结果 axis 相同时
+        直接 column-stack（``build_matrix_block`` 的零 join 路径，
+        ``matrix_join_count == 0``）；axis 不同时只做**一次** canonical row-key
+        index + 逐因子 vectorized reindex（``matrix_join_count == 1``）。
 
         R14 #1（crash-atomic publish）：
         整个 ``(universe, frequency)`` 是一个 generation。publish 顺序是
@@ -538,45 +646,29 @@ class FactorMatrixMaterializer:
                 "matrix_root": str(self._matrix_root),
             }
 
-        factor_ids = sorted(results.keys())
-        # Phase 5 P1-12：按因子列分块 merge，限制中间 merge 工作集
-        # （5000×2500×2000 列的训练矩阵不可能一次成形）。
-        try:
-            block = max(
-                16, int(os.environ.get("FACTOR_ENGINE_MATRIX_COLUMNS_PER_BLOCK", "256"))
+        effective_layout = str(layout or "auto").lower()
+        if effective_layout == "auto":
+            effective_layout = "block" if block_mode_enabled() else "legacy"
+        if effective_layout == "block":
+            return self._materialize_block(
+                results,
+                universe=universe,
+                frequency=frequency,
+                partition_columns=partition_columns,
+                value_dtype=value_dtype,
+                production=effective_production,
+                factor_versions=factor_versions,
+                expected_manifest_version=expected_manifest_version,
+                certificates=certificates,
             )
-        except ValueError:
-            block = 256
-        merged: pd.DataFrame | None = None
-        block_ids: list[str] = []
-        block_frame: pd.DataFrame | None = None
 
-        def _flush_block() -> None:
-            nonlocal block_frame, merged
-            if block_frame is None:
-                return
-            if merged is None:
-                merged = block_frame
-            else:
-                merged = merged.merge(block_frame, on=["datetime", "asset"], how="outer")
-            block_frame = None
-
-        for fid in factor_ids:
-            series = results[fid]
-            long_df = series_to_long_table(series)
-            long_df = long_df.rename(columns={"value": fid})
-            block_ids.append(fid)
-            if block_frame is None:
-                block_frame = long_df
-            else:
-                block_frame = block_frame.merge(
-                    long_df, on=["datetime", "asset"], how="outer"
-                )
-            long_df = None  # 释放该因子长表引用
-            if len(block_ids) >= block:
-                _flush_block()
-                block_ids = []
-        _flush_block()
+        factor_ids = sorted(results.keys())
+        # R39 PERF-060: replace the per-factor pairwise outer merge with a zero-join
+        # column stack (equal axis) or a single canonical-reindex (different axis).
+        _axis, wide, _joins = build_matrix_block(
+            {fid: results[fid] for fid in factor_ids}
+        )
+        merged = wide_to_merged(wide, factor_ids, value_dtype=value_dtype)
 
         if merged is None or merged.empty:
             return {
@@ -587,9 +679,6 @@ class FactorMatrixMaterializer:
                 "factor_ids": factor_ids,
                 "matrix_root": str(self._matrix_root),
             }
-
-        for fid in factor_ids:
-            merged[fid] = merged[fid].astype(str(value_dtype or "float32"))
 
         layout = FactorMatrixLayout(
             universe=universe,
@@ -627,12 +716,24 @@ class FactorMatrixMaterializer:
                     f"或清除 manifest 后全量重建。"
                 )
 
+            # R39 PERF-063: 旧 generation 的 partition inventory。manifest 已带
+            # inventory 时直接复用（精确 materialize，不 rglob）；缺 inventory
+            # （pre-R39 legacy 代首次遇到）才做一次性 rglob 构建（计数 +1）。
+            old_inventory: list[PartitionObjectRef] = []
+            if old_gen_dir is not None:
+                manifest_inv = (manifest or {}).get("partition_inventory")
+                if manifest_inv is not None:
+                    old_inventory = inventory_from_dicts(manifest_inv)
+                else:
+                    old_inventory = build_partition_inventory(old_gen_dir)
+
             new_gid = uuid.uuid4().hex
             new_gen_dir = base / "generation" / new_gid
             new_gen_dir.mkdir(parents=True, exist_ok=True)
 
             partitions_written: list[str] = []
-            written_rel: list[Path] = []
+            written_rel: set[str] = set()
+            written_refs: list[PartitionObjectRef] = []
             try:
                 # 1) 本次触达的分区：read-merge-write 进新 generation（production
                 #    写后再读回 validate，validate 全部通过才允许切指针）。
@@ -662,7 +763,8 @@ class FactorMatrixMaterializer:
                     self._write_parquet_atomic(new_path, merged_out)
                     if effective_production:
                         self._validate_staging(new_path, merged_out)
-                    written_rel.append(rel)
+                    written_rel.add(rel.as_posix())
+                    written_refs.append(ref_from_frame(rel.as_posix(), merged_out))
                     pkey = "|".join(
                         f"{k}={part_values[k]}" for k in sorted(part_values)
                     )
@@ -677,22 +779,26 @@ class FactorMatrixMaterializer:
                         new_gid,
                     )
 
-                # 2) 未触达的分区：hardlink/copy 旧 generation 的不可变文件到新
-                #    generation——partial 更新不用把整个矩阵重写一遍，IO 有界。
-                if old_gen_dir is not None:
-                    for old_part in old_gen_dir.rglob("data.parquet"):
-                        if (
-                            ".quarantine" in old_part.parts
-                            or ".staging" in old_part.parts
-                        ):
-                            continue
-                        rel = old_part.relative_to(old_gen_dir)
-                        if rel in written_rel:
-                            continue
-                        _link_or_copy(old_part, new_gen_dir / rel)
+                # 2) 未触达的分区：按 inventory 精确 materialize（exact rel_path，
+                #    不再 rglob 全目录发现）。partial 更新不用把整个矩阵重写一遍。
+                if old_gen_dir is not None and old_inventory:
+                    materialize_generation_from_inventory(
+                        old_gen_dir,
+                        old_inventory,
+                        new_gen_dir,
+                        skip_rel=written_rel,
+                    )
 
-                # 3) manifest：digest 校验 + CAS + generation 指针，一次 os.replace
-                #    原子切换——这是 reader 唯一能感知新数据的边界。
+                # 2.5) 新 generation 的完整 partition inventory = 本次写入的 refs
+                #     + 未触达（inventory 精确 COW）的旧 refs，随 manifest 落盘，
+                #     供下一次 generation 切换精确 materialize。
+                new_inventory = list(written_refs)
+                for ref in old_inventory:
+                    if ref.rel_path not in written_rel:
+                        new_inventory.append(ref)
+
+                # 3) manifest：digest 校验 + CAS + generation 指针 + inventory，
+                #    一次 os.replace 原子切换——这是 reader 唯一能感知新数据的边界。
                 manifest = self._update_manifest(
                     base,
                     universe,
@@ -701,6 +807,8 @@ class FactorMatrixMaterializer:
                     factor_versions,
                     expected,
                     generation=new_gid,
+                    certificates=certificates,
+                    partition_inventory=new_inventory,
                 )
 
                 # 4) GC：只保留当前与上一代。在途 reader 可能仍按旧 manifest 读
@@ -731,6 +839,331 @@ class FactorMatrixMaterializer:
             "columns": ["datetime", "asset", *factor_ids],
             "manifest_version": manifest.get("manifest_version"),
             "generation": new_gid,
+            "layout": "legacy",
+            "matrix_join_count": matrix_join_count,
+        }
+
+    def materialize_from_iterable(
+        self,
+        results_iter: Iterable[tuple[str, pd.Series]],
+        *,
+        universe: str,
+        frequency: str = "1d",
+        partition_columns: Iterable[str] | None = None,
+        value_dtype: str = "float32",
+        production: bool | None = None,
+        recovery: bool = False,
+        factor_versions: dict[str, str] | None = None,
+        expected_manifest_version: int | None = None,
+        certificates: dict[str, Any] | None = None,
+        layout: str | None = "block",
+    ) -> dict[str, Any]:
+        """R39 PERF-066: consume ``(fid, series)`` incrementally (streaming adapter).
+
+        The engine boundary is documented: ``engine.run_many`` returns a full
+        results dict, so this buffers *references* (no data copy) and delegates to
+        ``materialize``.  In the column-factor block layout the writer never builds
+        one monolithic wide frame — each block is assembled and written before the
+        next, bounding writer memory to one block of factors at a time.
+        """
+        buffered = dict(results_iter)
+        return self.materialize(
+            buffered,
+            universe=universe,
+            frequency=frequency,
+            partition_columns=partition_columns,
+            value_dtype=value_dtype,
+            production=production,
+            recovery=recovery,
+            factor_versions=factor_versions,
+            expected_manifest_version=expected_manifest_version,
+            certificates=certificates,
+            layout=layout,
+        )
+
+    # ------------------------------------------------------------------
+    # R39 PERF-061/062: column-factor block layout (opt-in)
+    # ------------------------------------------------------------------
+    def _assign_blocks(
+        self,
+        existing_blocks: dict[str, str],
+        factor_ids: list[str],
+        manifest_block_ids: set[str] | None = None,
+    ) -> dict[str, str]:
+        """Assign ``fid -> block_id``.
+
+        Factors already present in the manifest keep their existing block; new
+        factors are grouped into *fresh* blocks of up to ``block_columns()`` factors
+        so adding new factors never rewrites existing column blocks.
+
+        ``manifest_block_ids`` is the full block inventory from the manifest (all
+        factors, not just this run's), so a fresh block never collides with an
+        existing block even when the run touches only a subset of factors.
+        """
+        assignment: dict[str, str] = {}
+        for fid in factor_ids:
+            bid = existing_blocks.get(fid)
+            if bid is not None:
+                assignment[fid] = bid
+        known = manifest_block_ids or set(existing_blocks.values())
+        known_ints = [int(b) for b in known if str(b).isdigit()]
+        next_block = max(known_ints) + 1 if known_ints else 0
+        new_fids = [fid for fid in factor_ids if fid not in assignment]
+        cap = block_columns()
+        for i in range(0, len(new_fids), cap):
+            chunk = new_fids[i : i + cap]
+            bid = f"{next_block:04d}"
+            next_block += 1
+            for fid in chunk:
+                assignment[fid] = bid
+        return assignment
+
+    def _materialize_block(
+        self,
+        results: dict[str, pd.Series],
+        *,
+        universe: str,
+        frequency: str,
+        partition_columns: Iterable[str] | None,
+        value_dtype: str,
+        production: bool,
+        factor_versions: dict[str, str] | None,
+        expected_manifest_version: int | None,
+        certificates: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """R39 PERF-061/062: column-factor block materialization.
+
+        Layout: ``year=YYYY/month=MM/block=NNNN.parquet``; manifest records
+        ``factor_id -> {block_id, column}``.
+
+        Incremental semantics (PERF-062): only *touched* blocks are read-merge-
+        written (via ``overlay_block``, never the whole-month wide table);
+        untouched blocks are copy-on-write hardlinked; brand-new factors get fresh
+        block files so existing column blocks are never rewritten.  The
+        ``matrix_rewrite_amplification`` metric accumulates historical-rewrite-bytes
+        vs changed-logical-bytes.
+        """
+        factor_ids = sorted(results.keys())
+        # 与 legacy 路径一致：空结果（全空 axis）不发布 generation。
+        if not any(len(series) for series in results.values()):
+            return {
+                "universe": universe,
+                "frequency": frequency,
+                "rows_written": 0,
+                "partitions": [],
+                "factor_ids": factor_ids,
+                "matrix_root": str(self._matrix_root),
+                "layout": "block",
+                "matrix_rewrite_amplification": matrix_rewrite_amplification,
+                "factor_block_refs": [],
+            }
+        layout = FactorMatrixLayout(
+            universe=universe,
+            frequency=frequency,
+            partition_columns=tuple(partition_columns or ("year", "month")),
+        )
+        policy = PartitionPolicy.from_config(
+            partition_columns=layout.partition_columns,
+            storage_format="long",
+        )
+        base = layout.base_dir(self._matrix_root)
+        base.mkdir(parents=True, exist_ok=True)
+
+        with _manifest_write_lock(base):
+            snapshot_version = self._current_manifest_version(base)
+            expected = (
+                expected_manifest_version
+                if expected_manifest_version is not None
+                else snapshot_version
+            )
+            manifest = _read_manifest(base)
+            old_gid = (manifest or {}).get("generation")
+            old_gen_dir = base / "generation" / old_gid if old_gid else None
+            if old_gid and (old_gen_dir is None or not old_gen_dir.is_dir()):
+                raise FactorMatrixCorruptionError(
+                    f"manifest.generation={old_gid!r} 指向的目录缺失（{old_gen_dir}），"
+                    f"当前发布代损坏。拒绝增量 publish（会静默丢历史），请人工恢复该代"
+                    f"或清除 manifest 后全量重建。"
+                )
+
+            # R39 PERF-063: 旧 generation 的 partition inventory（manifest 优先，
+            # 缺 inventory 才一次性 rglob 构建，计数 +1）。
+            old_inventory: list[PartitionObjectRef] = []
+            if old_gen_dir is not None:
+                manifest_inv = (manifest or {}).get("partition_inventory")
+                if manifest_inv is not None:
+                    old_inventory = inventory_from_dicts(manifest_inv)
+                else:
+                    old_inventory = build_partition_inventory(old_gen_dir)
+
+            existing_blocks = resolve_factor_blocks(manifest, factor_ids)
+            manifest_block_ids: set[str] = set()
+            for _entry in ((manifest or {}).get("factors", {}) or {}).values():
+                _bid = _entry.get("block_id") if isinstance(_entry, dict) else None
+                if _bid is not None:
+                    manifest_block_ids.add(str(_bid))
+            assignment = self._assign_blocks(
+                existing_blocks, factor_ids, manifest_block_ids
+            )
+            from collections import defaultdict
+
+            groups: dict[str, list[str]] = defaultdict(list)
+            for fid in factor_ids:
+                groups[assignment[fid]].append(fid)
+
+            new_gid = uuid.uuid4().hex
+            new_gen_dir = base / "generation" / new_gid
+            new_gen_dir.mkdir(parents=True, exist_ok=True)
+
+            partitions_written: list[str] = []
+            written_rel: set[str] = set()
+            written_refs: list[PartitionObjectRef] = []
+            rows_written = 0
+            block_refs_meta: list[dict[str, Any]] = []
+            try:
+                for block_id in sorted(groups):
+                    bfids = sorted(groups[block_id])
+                    _axis, wide, _j = build_matrix_block(
+                        {fid: results[fid] for fid in bfids}
+                    )
+                    # R39-PERF-030: 同 axis 因子（column-stack 完成、零 join）构造
+                    # FactorBlockRef——多因子共享一份 axis 的观测/载体。记录计数与
+                    # 可序列化元数据（随 manifest/summary），不改变写入文件。
+                    if len(bfids) >= 2 and _j == 0:
+                        from runtime.factor_block_ref import (
+                            block_ref_meta,
+                            build_factor_block,
+                            record_block_ref_used,
+                        )
+
+                        fbr = build_factor_block(
+                            bfids,
+                            wide.to_numpy(dtype=value_dtype),
+                            index=_axis,
+                            dtype=value_dtype,
+                        )
+                        record_block_ref_used(fbr)
+                        block_refs_meta.append(
+                            block_ref_meta(fbr, block_id=block_id)
+                        )
+                    block_merged = wide_to_merged(wide, bfids, value_dtype=value_dtype)
+                    work = attach_partition_columns(block_merged, policy)
+                    for part_values, partition_df in iter_partition_groups(work, policy):
+                        drop_cols = [
+                            c for c in policy.columns if c in partition_df.columns
+                        ]
+                        out_df = partition_df.drop(columns=drop_cols).reset_index(drop=True)
+                        rel = (
+                            partition_path_segments(
+                                part_values, column_order=policy.columns
+                            )
+                            / block_file_name(block_id)
+                        )
+                        new_path = new_gen_dir / rel
+                        new_path.parent.mkdir(parents=True, exist_ok=True)
+                        old_path = old_gen_dir / rel if old_gen_dir is not None else None
+                        rewritten_bytes = 0
+                        if old_path is not None and old_path.exists():
+                            existing = self._read_existing_or_quarantine(
+                                old_path, immutable=True
+                            )
+                            merged_out = overlay_block(
+                                existing, out_df, value_dtype=value_dtype
+                            )
+                            rewritten_bytes = old_path.stat().st_size
+                        else:
+                            merged_out = out_df
+                        self._write_parquet_atomic(new_path, merged_out)
+                        if production:
+                            self._validate_staging(new_path, merged_out)
+                        changed_logical = int(
+                            len(out_df) * len(out_df.columns) * 4
+                        )
+                        record_rewrite_amplification(rewritten_bytes, changed_logical)
+                        rows_written += len(merged_out)
+                        written_rel.add(rel.as_posix())
+                        written_refs.append(ref_from_frame(rel.as_posix(), merged_out))
+                        pkey = "|".join(
+                            f"{k}={part_values[k]}" for k in sorted(part_values)
+                        )
+                        partitions_written.append(pkey)
+                        logger.info(
+                            "factor_matrix block upsert universe=%s partition=%s "
+                            "block=%s rows=%d cols=%d generation=%s",
+                            universe,
+                            pkey,
+                            block_id,
+                            len(merged_out),
+                            len(merged_out.columns),
+                            new_gid,
+                        )
+
+                # 2) 未触达的 block：按 inventory 精确 COW materialize（新增因子
+                #    绝不重写既有 block；不再 rglob 全目录发现）。
+                if old_gen_dir is not None and old_inventory:
+                    materialize_generation_from_inventory(
+                        old_gen_dir,
+                        old_inventory,
+                        new_gen_dir,
+                        skip_rel=written_rel,
+                    )
+
+                # 2.5) 新 generation 的完整 partition inventory（本次写入 + 未触达
+                #     COW 的旧 refs），随 manifest 落盘供下次精确 materialize。
+                new_inventory = list(written_refs)
+                for ref in old_inventory:
+                    if ref.rel_path not in written_rel:
+                        new_inventory.append(ref)
+
+                # 3) manifest：factor_id -> block_id/column + digest + CAS + pointer
+                #    + partition inventory。
+                factor_blocks = {
+                    fid: {"block_id": assignment[fid], "column": fid}
+                    for fid in factor_ids
+                }
+                manifest = self._update_manifest(
+                    base,
+                    universe,
+                    frequency,
+                    factor_ids,
+                    factor_versions,
+                    expected,
+                    generation=new_gid,
+                    factor_blocks=factor_blocks,
+                    certificates=certificates,
+                    factor_block_refs=block_refs_meta,
+                    partition_inventory=new_inventory,
+                )
+
+                # 4) GC：只保留当前与上一代。
+                for gdir in (base / "generation").glob("*"):
+                    if gdir.is_dir() and gdir.name not in {new_gid, old_gid or ""}:
+                        shutil.rmtree(gdir, ignore_errors=True)
+            except Exception:
+                shutil.rmtree(new_gen_dir, ignore_errors=True)
+                raise
+
+        logger.info(
+            "factor_matrix block manifest updated universe=%s version=%s factors=%d "
+            "generation=%s",
+            universe,
+            manifest.get("manifest_version"),
+            len(manifest.get("factors", {})),
+            new_gid,
+        )
+        return {
+            "universe": universe,
+            "frequency": frequency,
+            "rows_written": rows_written,
+            "partitions": partitions_written,
+            "factor_ids": factor_ids,
+            "matrix_root": str(self._matrix_root),
+            "columns": ["datetime", "asset", *factor_ids],
+            "manifest_version": manifest.get("manifest_version"),
+            "generation": new_gid,
+            "layout": "block",
+            "matrix_rewrite_amplification": matrix_rewrite_amplification,
+            "factor_block_refs": block_refs_meta,
         }
 
     @staticmethod
@@ -746,12 +1179,191 @@ class FactorMatrixMaterializer:
             return False
 
     @staticmethod
+    def _parquet_available_columns(path: Path) -> list[str]:
+        """Column names present in a parquet file (footer-only, cheap metadata read)."""
+        import pyarrow.parquet as pq
+
+        return list(pq.ParquetFile(str(path)).schema_arrow.names)
+
+    @staticmethod
+    def _frames_from_legacy(
+        dir_path: Path,
+        manifest: dict[str, Any] | None,
+        *,
+        factor_ids: Iterable[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Iterable[str] | None,
+    ) -> list[pd.DataFrame]:
+        """R39 PERF-065: legacy data.parquet read with pushdown.
+
+        * ``columns=`` pushdown to the parquet reader for the requested factors;
+        * partition pruning by ``time_range`` (year/month hive dirs);
+        * ``instrument_filter`` applied as a row filter after column pushdown;
+        * R39 PERF-063: manifest 已有 ``partition_inventory`` 时优先用其精确
+          ``rel_path`` 集合枚举文件（不 ``rglob`` 全目录发现），无 inventory 才
+          回退 rglob。
+        """
+        frames: list[pd.DataFrame] = []
+        need_cols: list[str] | None = None
+        if factor_ids is not None:
+            need_cols = ["datetime", "asset", *sorted(set(str(f) for f in factor_ids))]
+        inventory = (manifest or {}).get("partition_inventory")
+        if inventory is not None:
+            parquet_paths = inventory_parquet_paths(
+                dir_path, inventory_from_dicts(inventory), suffix="data.parquet"
+            )
+        else:
+            parquet_paths = [
+                p
+                for p in sorted(dir_path.rglob("data.parquet"))
+                if ".staging" not in p.parts
+                and ".quarantine" not in p.parts
+                and not p.name.startswith(".")
+            ]
+        for pq_path in parquet_paths:
+            if not partition_overlaps_time_range(pq_path.parent, time_range):
+                continue
+            read_cols: list[str] | None = None
+            if need_cols is not None:
+                try:
+                    avail = FactorMatrixMaterializer._parquet_available_columns(pq_path)
+                    read_cols = [c for c in need_cols if c in avail]
+                except Exception:
+                    read_cols = None  # footer read failure -> full read, fail loud below
+            try:
+                if read_cols is not None:
+                    frame = pd.read_parquet(pq_path, columns=read_cols)
+                else:
+                    frame = pd.read_parquet(pq_path)
+            except Exception as exc:
+                # R14 #2：当前 generation 内文件损坏 = 发布代损坏，fail loud（
+                # 绝不当作空分区静默跳过——那会把一整月历史在读取侧无声丢掉）。
+                raise FactorMatrixReadError(
+                    f"factor_matrix 分区读取失败 {pq_path}（当前 generation 损坏，"
+                    f"拒绝继续）: {type(exc).__name__}: {exc}"
+                ) from exc
+            if instrument_filter is not None:
+                frame = frame[frame["asset"].isin(set(str(x) for x in instrument_filter))]
+            frames.append(frame)
+        return frames
+
+    @staticmethod
+    def _frames_from_block(
+        dir_path: Path,
+        manifest: dict[str, Any] | None,
+        *,
+        factor_ids: Iterable[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Iterable[str] | None,
+    ) -> list[pd.DataFrame]:
+        """R39 PERF-061/065: column-factor block read with pushdown.
+
+        Uses the manifest ``factor_id -> block_id`` mapping to scan only the needed
+        ``block=NNNN.parquet`` files, passes ``columns=`` to the reader, prunes
+        partitions by ``time_range``, and outer-joins the blocks of each partition
+        back into a wide frame (only when multiple blocks are involved).
+        """
+        from collections import defaultdict
+
+        need_fids: list[str] | None = None
+        if factor_ids is not None:
+            need_fids = [str(f) for f in factor_ids]
+        else:
+            need_fids = list((manifest or {}).get("factors", {}).keys()) or None
+
+        factor_block_map = resolve_factor_blocks(manifest, need_fids or [])
+        needed_blocks: set[str] = set()
+        if need_fids is not None:
+            for fid in need_fids:
+                bid = factor_block_map.get(fid)
+                if bid is not None:
+                    needed_blocks.add(bid)
+        else:
+            for bid in factor_block_map.values():
+                needed_blocks.add(bid)
+
+        # Group needed block files by partition directory.
+        # R39 PERF-063: manifest 已有 inventory 时优先用精确 rel_path 集合枚举
+        # block 文件（不再 rglob 全目录发现）。
+        partitions: dict[Path, list[tuple[str, Path]]] = defaultdict(list)
+        inventory = (manifest or {}).get("partition_inventory")
+        if inventory is not None:
+            block_paths = inventory_parquet_paths(
+                dir_path, inventory_from_dicts(inventory), suffix=".parquet"
+            )
+            block_paths = [
+                p for p in block_paths if parse_block_id(p.name) is not None
+            ]
+        else:
+            block_paths = [
+                p
+                for p in sorted(dir_path.rglob("block=*.parquet"))
+                if ".staging" not in p.parts
+                and ".quarantine" not in p.parts
+                and not p.name.startswith(".")
+            ]
+        for pq_path in block_paths:
+            bid = parse_block_id(pq_path.name)
+            if bid is None:
+                continue
+            if needed_blocks and bid not in needed_blocks:
+                continue
+            if not partition_overlaps_time_range(pq_path.parent, time_range):
+                continue
+            partitions[pq_path.parent].append((bid, pq_path))
+
+        frames: list[pd.DataFrame] = []
+        for part_path in sorted(partitions):
+            part_frames: list[pd.DataFrame] = []
+            for bid, pq_path in sorted(partitions[part_path]):
+                read_cols: list[str] | None = None
+                if need_fids is not None:
+                    try:
+                        avail = FactorMatrixMaterializer._parquet_available_columns(pq_path)
+                        read_cols = ["datetime", "asset"] + [
+                            c for c in need_fids if c in avail
+                        ]
+                    except Exception:
+                        read_cols = None
+                try:
+                    if read_cols is not None:
+                        frame = pd.read_parquet(pq_path, columns=read_cols)
+                    else:
+                        frame = pd.read_parquet(pq_path)
+                except Exception as exc:
+                    raise FactorMatrixReadError(
+                        f"factor_matrix block 读取失败 {pq_path}（当前 generation "
+                        f"损坏，拒绝继续）: {type(exc).__name__}: {exc}"
+                    ) from exc
+                if instrument_filter is not None:
+                    frame = frame[
+                        frame["asset"].isin(set(str(x) for x in instrument_filter))
+                    ]
+                part_frames.append(frame)
+            if not part_frames:
+                continue
+            if len(part_frames) == 1:
+                frames.append(part_frames[0])
+            else:
+                # Outer-join the column blocks of one partition back into a wide
+                # frame (read-side only; the write side never N-way merges).
+                merged_part = part_frames[0]
+                for extra in part_frames[1:]:
+                    merged_part = merged_part.merge(
+                        extra, on=["datetime", "asset"], how="outer"
+                    )
+                frames.append(merged_part)
+        return frames
+
+    @staticmethod
     def load_matrix(
         matrix_root: str | Path,
         *,
         universe: str,
         frequency: str = "1d",
         factor_ids: Iterable[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Iterable[str] | None = None,
     ) -> pd.DataFrame:
         """读取 universe 下全部或指定因子列宽表。
 
@@ -759,11 +1371,19 @@ class FactorMatrixMaterializer:
         指针隔离发布中的 half-published 状态）。无 ``generation`` 字段的旧布局
         按 legacy 全局 glob 兜底。
 
+        R39 PERF-065（pushdown）：支持 ``time_range``（``(start, end)``，含端点）
+        按 year/month hive 分区裁剪，``factor_ids`` 通过 ``columns=`` 下推到
+        parquet reader（不先读全表再选列）；column-factor block layout 下只扫
+        ``factor_id -> block_id`` 命中的 block 文件。``instrument_filter`` 作为
+        row 过滤在列下推后应用。
+
         参数:
             matrix_root: factor_matrix 根目录
             universe: 标的池标识（可选）
             frequency: 因子频率（可选）
             factor_ids: 因子 ID 列表（可选）
+            time_range: (start, end) 时间窗口（可选，含端点）
+            instrument_filter: 标的过滤集合（可选）
 
         返回:
             pd.DataFrame
@@ -776,24 +1396,6 @@ class FactorMatrixMaterializer:
         if not base.exists():
             raise FileNotFoundError(f"factor_matrix 不存在: {base}")
 
-        def _frames_from(dir_path: Path) -> list[pd.DataFrame]:
-            frames: list[pd.DataFrame] = []
-            for pq in sorted(dir_path.rglob("data.parquet")):
-                if ".staging" in pq.parts or ".quarantine" in pq.parts:
-                    continue
-                if pq.name.startswith("."):
-                    continue
-                try:
-                    frames.append(pd.read_parquet(pq))
-                except Exception as exc:
-                    # R14 #2：当前 generation 内文件损坏 = 发布代损坏，fail loud（
-                    # 绝不当作空分区静默跳过——那会把一整月历史在读取侧无声丢掉）。
-                    raise FactorMatrixReadError(
-                        f"factor_matrix 分区读取失败 {pq}（当前 generation 损坏，"
-                        f"拒绝继续）: {type(exc).__name__}: {exc}"
-                    ) from exc
-            return frames
-
         manifest = _read_manifest(base)
         gen_id = (manifest or {}).get("generation")
         gen_dir = base / "generation" / gen_id if gen_id else None
@@ -805,11 +1407,25 @@ class FactorMatrixMaterializer:
                 f"manifest.generation={gen_id!r} 指向的目录缺失（{gen_dir}），当前"
                 f"发布代损坏。拒绝读取——修复该代或清除 manifest 后全量重建。"
             )
-        if gen_dir is not None and gen_dir.is_dir():
-            frames = _frames_from(gen_dir)
+
+        is_block = (manifest or {}).get("layout") == "block"
+        scan_dir = gen_dir if (gen_dir is not None and gen_dir.is_dir()) else base
+        if is_block:
+            frames = FactorMatrixMaterializer._frames_from_block(
+                scan_dir,
+                manifest,
+                factor_ids=factor_ids,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+            )
         else:
-            # 兼容旧布局（manifest 无 generation / 无 manifest）：直接 glob base。
-            frames = _frames_from(base)
+            frames = FactorMatrixMaterializer._frames_from_legacy(
+                scan_dir,
+                manifest,
+                factor_ids=factor_ids,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+            )
         if not frames:
             raise FileNotFoundError(f"factor_matrix 无 parquet: {base}")
 

@@ -26,12 +26,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sys
 import threading
 import time
 from collections import OrderedDict
 from typing import Any, Callable, Mapping, Sequence
+
+logger = logging.getLogger("data_access.query_cache")
+
+# R39 #71：fail-closed 默认字节上限（env 未设置 / FE coordinator 不存在时）。
+# 256 MiB 是保守 safe default——有上限永远好过 None≈无限。
+_DEFAULT_CACHE_BYTES = 256 * 1024 * 1024
 
 
 def _estimate_bytes(value: Any) -> int:
@@ -125,6 +132,16 @@ class QueryResultCache:
             self._store.popitem(last=False)
         if self._max_bytes is not None:
             while self._store and self._total_bytes() > self._max_bytes:
+                self._store.popitem(last=False)
+
+    def shrink_to(self, target_bytes: int) -> None:
+        """R39 #72：动态收缩 hook——逐出 LRU 最旧条目直到总字节 <= target。
+
+        ResourceAutopilot 在内存压力下把 cache budget 收缩到 target 时调用。
+        """
+        target = max(0, int(target_bytes))
+        with self._lock:
+            while self._store and self._total_bytes() > target:
                 self._store.popitem(last=False)
 
     def invalidate_prefix(self, prefix: str) -> None:
@@ -351,6 +368,69 @@ def set_result_cache_enabled(enabled: bool) -> None:
     _cache_enabled = bool(enabled)
 
 
+def _fe_cache_budget_bytes() -> int | None:
+    """从 FE ResourceAutopilotService / HostResourceCoordinator 读取 cache budget。
+
+    FE 是 flat package（``runtime.*``）；DA/FE 同进程时懒加载。都不可用 →
+    返回 None（调用方回退保守默认）。绝不抛异常。
+    """
+    # 优先读 autopilot 最新 decision（无副作用；stale → 不看）。
+    try:
+        from runtime.resource_autopilot_service import get_resource_autopilot
+
+        autopilot = get_resource_autopilot()
+        if autopilot is not None:
+            snap = autopilot.last_decision()
+            if snap is not None and not getattr(snap, "is_stale", True):
+                budget = getattr(snap.decision, "cache_budget_bytes", None)
+                if budget:
+                    return max(1, int(budget))
+    except Exception:
+        pass
+    try:
+        from runtime.host_resource_coordinator import get_host_coordinator
+
+        decision = get_host_coordinator().decision()
+        budget = getattr(decision, "cache_budget_bytes", None)
+        if budget:
+            return max(1, int(budget))
+    except Exception:
+        pass
+    return None
+
+
+def _ensure_query_cache_byte_cap() -> None:
+    """R39 #71：字节上限 fail-closed 默认。
+
+    进程级缓存初始化时若 env 未给 ``DATA_ACCESS_QUERY_CACHE_BYTES``，max_bytes
+    为 None（≈无限）是内存安全漏洞。首次访问时：优先取 FE coordinator 的
+    cache_budget_bytes，否则保守默认 256 MiB。
+    """
+    cache = _QUERY_CACHE
+    if cache.max_bytes is not None:
+        return
+    cap = _fe_cache_budget_bytes() or _DEFAULT_CACHE_BYTES
+    with cache._lock:
+        if cache._max_bytes is None:
+            cache._max_bytes = max(1, int(cap))
+            cache._evict_locked()
+
+
+def _sync_cache_inventory() -> None:
+    """R39 #74：把 DA QueryResultCache 注册进统一 cache inventory（幂等）。"""
+    try:
+        from data_access.runtime.cache_inventory import register_cache_owner
+
+        register_cache_owner(
+            "da_query_result_cache",
+            current_bytes=_QUERY_CACHE.total_bytes,
+            shrink_to=_QUERY_CACHE.shrink_to,
+            max_bytes=lambda: _QUERY_CACHE.max_bytes,
+        )
+    except Exception:  # pragma: no cover
+        pass
+
+
 def configure_query_cache(
     *,
     max_bytes: int | None = None,
@@ -360,25 +440,59 @@ def configure_query_cache(
     """运行时调整进程级查询缓存的联合约束（#4）。None 表示保持现值。"""
     global _QUERY_CACHE
     cache = _QUERY_CACHE
+    if max_bytes is not None:
+        # 显式配置永远优先于 fail-closed 默认。
+        cache._max_bytes = max(1, int(max_bytes))
+    else:
+        _ensure_query_cache_byte_cap()
     with cache._lock:
-        if max_bytes is not None:
-            cache._max_bytes = max(1, int(max_bytes))
         if max_entries is not None:
             cache._max_entries = max(1, int(max_entries))
         if ttl_seconds is not None:
             cache._ttl = float(ttl_seconds)
         cache._evict_locked()
+    _sync_cache_inventory()
 
 
-# 进程级单例
+def apply_resource_cache_budget(max_bytes: int) -> None:
+    """R39 #72：FE ResourceAutopilotService 的 cache 消费者入口。
+
+    autopilot 每个 control tick 把 ``cache_budget_bytes`` 应用到 DA 缓存：
+    设新上限 + 超限立即 shrink（LRU）。这是动态 grow/shrink 的真实接线。
+    """
+    cache = get_query_cache()
+    budget = max(1, int(max_bytes))
+    with cache._lock:
+        cache._max_bytes = budget
+        cache._evict_locked()
+        while cache._store and cache._total_bytes() > budget:
+            cache._store.popitem(last=False)
+    _sync_cache_inventory()
+
+
+def _resolve_env_cache_bytes() -> int | None:
+    """env DATA_ACCESS_QUERY_CACHE_BYTES 显式上限；未设置/0 → None（惰性默认）。"""
+    raw = os.environ.get("DATA_ACCESS_QUERY_CACHE_BYTES", "").strip()
+    if raw and raw != "0":
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "DATA_ACCESS_QUERY_CACHE_BYTES=%r 非整数，忽略（使用惰性默认）", raw
+            )
+    return None
+
+
+# 进程级单例（R39 #71：字节上限惰性解析 fail-closed 默认，见 _ensure_query_cache_byte_cap）。
 _QUERY_CACHE = QueryResultCache(
     max_entries=128,
-    max_bytes=int(os.environ.get("DATA_ACCESS_QUERY_CACHE_BYTES", "0") or "0")
-    or None,
+    max_bytes=_resolve_env_cache_bytes(),
 )
 
 
 def get_query_cache() -> QueryResultCache:
+    _ensure_query_cache_byte_cap()
+    _sync_cache_inventory()
     return _QUERY_CACHE
 
 
@@ -395,5 +509,6 @@ __all__ = [
     "result_cache_enabled",
     "set_result_cache_enabled",
     "configure_query_cache",
+    "apply_resource_cache_budget",
     "reset_query_cache",
 ]

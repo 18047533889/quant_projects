@@ -268,6 +268,20 @@ _LOAD_MODULES = (
     "cleaned_operators.multifractal_asym",
     "cleaned_operators.dmd",
     "cleaned_operators.research_spectral",
+    # R47 新增算子开发总规范 (2026-08-11): state / event / slice / profile /
+    # limit-EOD intraday primitives, daily technical indicators (HMA/QQE/RSX/
+    # ALMA/CoppockCurve/ElderRay/FisherTransform), turnover chip surfaces, and
+    # cross-sectional predictability / async-beta panel ops.  The explicit
+    # policy pack is merged into ``_EXPLICIT_POLICIES`` in place (additive; it
+    # does not touch the concurrent-session edits in ``operator_policy.py``).
+    "cleaned_operators.intraday.state_ops",
+    "cleaned_operators.intraday.event_response",
+    "cleaned_operators.intraday.slice_profile",
+    "cleaned_operators.intraday.limit_eod",
+    "cleaned_operators.technical.new_indicators",
+    "cleaned_operators.technical.chip_ops",
+    "cleaned_operators.cross_section.panel_gap",
+    "cleaned_operators.r47_policy_pack",
 )
 
 # R30 §7: explicit production / research / internal loader split.  The full

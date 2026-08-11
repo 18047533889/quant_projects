@@ -2,10 +2,10 @@
   "certified_points": [
     {
       "canonical": "c_demean",
-      "semantic_version": "",
+      "semantic_version": "c_demean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [],
       "dtype": "float64",
       "grain": "daily",
@@ -18,10 +18,10 @@
     },
     {
       "canonical": "cs_demean",
-      "semantic_version": "",
+      "semantic_version": "cs_demean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [],
       "dtype": "float64",
       "grain": "daily",
@@ -34,10 +34,10 @@
     },
     {
       "canonical": "cs_pct_rank",
-      "semantic_version": "",
+      "semantic_version": "cs_pct_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [],
       "dtype": "float64",
       "grain": "daily",
@@ -50,10 +50,10 @@
     },
     {
       "canonical": "rank",
-      "semantic_version": "",
+      "semantic_version": "rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [],
       "dtype": "float64",
       "grain": "daily",
@@ -66,13 +66,13 @@
     },
     {
       "canonical": "ts_delay",
-      "semantic_version": "",
+      "semantic_version": "ts_delay@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           1
         ]
       ],
@@ -87,13 +87,13 @@
     },
     {
       "canonical": "ts_delay",
-      "semantic_version": "",
+      "semantic_version": "ts_delay@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           2
         ]
       ],
@@ -108,13 +108,13 @@
     },
     {
       "canonical": "ts_delay",
-      "semantic_version": "",
+      "semantic_version": "ts_delay@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           5
         ]
       ],
@@ -129,13 +129,13 @@
     },
     {
       "canonical": "ts_delay",
-      "semantic_version": "",
+      "semantic_version": "ts_delay@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           10
         ]
       ],
@@ -150,13 +150,13 @@
     },
     {
       "canonical": "ts_delta",
-      "semantic_version": "",
+      "semantic_version": "ts_delta@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           1
         ]
       ],
@@ -171,13 +171,13 @@
     },
     {
       "canonical": "ts_delta",
-      "semantic_version": "",
+      "semantic_version": "ts_delta@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           2
         ]
       ],
@@ -192,13 +192,13 @@
     },
     {
       "canonical": "ts_delta",
-      "semantic_version": "",
+      "semantic_version": "ts_delta@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
           5
         ]
       ],
@@ -213,13 +213,97 @@
     },
     {
       "canonical": "ts_delta",
-      "semantic_version": "",
+      "semantic_version": "ts_delta@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
-          "window",
+          "n",
+          10
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 10
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "semantic_version": "ts_log_return@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          1
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 1
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "semantic_version": "ts_log_return@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          2
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 2
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "semantic_version": "ts_log_return@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          5
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 5
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "semantic_version": "ts_log_return@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
           10
         ]
       ],
@@ -234,10 +318,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -255,10 +339,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -276,10 +360,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -297,10 +381,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -318,10 +402,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -339,10 +423,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -360,10 +444,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -381,10 +465,10 @@
     },
     {
       "canonical": "ts_max",
-      "semantic_version": "",
+      "semantic_version": "ts_max@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -402,10 +486,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -423,10 +507,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -444,10 +528,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -465,10 +549,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -486,10 +570,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -507,10 +591,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -528,10 +612,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -549,10 +633,10 @@
     },
     {
       "canonical": "ts_mean",
-      "semantic_version": "",
+      "semantic_version": "ts_mean@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -570,10 +654,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -591,10 +675,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -612,10 +696,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -633,10 +717,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -654,10 +738,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -675,10 +759,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -696,10 +780,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -717,10 +801,10 @@
     },
     {
       "canonical": "ts_median",
-      "semantic_version": "",
+      "semantic_version": "ts_median@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -738,10 +822,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -759,10 +843,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -780,10 +864,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -801,10 +885,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -822,10 +906,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -843,10 +927,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -864,10 +948,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -885,10 +969,10 @@
     },
     {
       "canonical": "ts_min",
-      "semantic_version": "",
+      "semantic_version": "ts_min@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -905,12 +989,100 @@
       }
     },
     {
-      "canonical": "ts_rank",
-      "semantic_version": "",
+      "canonical": "ts_pct",
+      "semantic_version": "ts_pct@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "d",
+          1
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 1
+      }
+    },
+    {
+      "canonical": "ts_pct",
+      "semantic_version": "ts_pct@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          2
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 2
+      }
+    },
+    {
+      "canonical": "ts_pct",
+      "semantic_version": "ts_pct@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          5
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 5
+      }
+    },
+    {
+      "canonical": "ts_pct",
+      "semantic_version": "ts_pct@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "d",
+          10
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "lag": 10
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "ts_rank@v1",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "memory",
+      "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           1
@@ -927,11 +1099,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           2
@@ -948,11 +1124,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           5
@@ -969,11 +1149,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           20
@@ -990,11 +1174,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           60
@@ -1011,11 +1199,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           120
@@ -1032,11 +1224,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           252
@@ -1053,11 +1249,15 @@
     },
     {
       "canonical": "ts_rank",
-      "semantic_version": "",
+      "semantic_version": "ts_rank@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
+        [
+          "min_periods",
+          1
+        ],
         [
           "window",
           500
@@ -1074,10 +1274,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1095,10 +1295,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1116,10 +1316,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1137,10 +1337,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1158,10 +1358,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1179,10 +1379,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1200,10 +1400,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1221,10 +1421,10 @@
     },
     {
       "canonical": "ts_std",
-      "semantic_version": "",
+      "semantic_version": "ts_std@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1242,10 +1442,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1263,10 +1463,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1284,10 +1484,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1305,10 +1505,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1326,10 +1526,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1347,10 +1547,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1368,10 +1568,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1389,10 +1589,10 @@
     },
     {
       "canonical": "ts_sum",
-      "semantic_version": "",
+      "semantic_version": "ts_sum@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1410,10 +1610,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1431,10 +1631,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1452,10 +1652,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1473,10 +1673,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1494,10 +1694,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1515,10 +1715,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1536,10 +1736,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1557,10 +1757,10 @@
     },
     {
       "canonical": "ts_var",
-      "semantic_version": "",
+      "semantic_version": "ts_var@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1578,10 +1778,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1599,10 +1799,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1620,10 +1820,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1641,10 +1841,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1662,10 +1862,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1683,10 +1883,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1704,10 +1904,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1725,10 +1925,10 @@
     },
     {
       "canonical": "ts_zscore",
-      "semantic_version": "",
+      "semantic_version": "ts_zscore@v1",
       "backend": "pandas_numpy",
       "execution_variant": "reference",
-      "source_context": "",
+      "source_context": "memory",
       "parameter_point": [
         [
           "window",
@@ -1744,5 +1944,9 @@
         "window": 500
       }
     }
-  ]
+  ],
+  "_meta": {
+    "evidence_hash": "2f76b81cdad494070032ee2232613b5f4153b4e882b557f62b8c5b4a34762d9a",
+    "generated_commit": "a2dc3a1a7c3696f4196a125d7d5da1a6b6930ebc"
+  }
 }

@@ -16,6 +16,8 @@ SLURM > RLIMIT > host RAM），绝不能只信 ``psutil.virtual_memory().total``
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 import os
@@ -631,6 +633,28 @@ class ExecutionResourcePlan:
             "per_worker_peak_bytes": self.per_worker_peak_bytes,
         }
 
+    def duckdb_threads_for(
+        self,
+        *,
+        query_shape: Any = None,
+        scan_bytes: int = 0,
+        current_concurrency: int = 0,
+    ) -> int:
+        """R39-PERF-074：query-class cohort 选择 DuckDB threads。
+
+        默认 OFF（env ``FACTOR_ENGINE_COHORT_PROFILES=1`` 开启）。开启且 query
+        shape 可用时按 {1,2,4,8} 固定 profile 池选择；shape 未知（scan_bytes<=0）
+        或 cohort 关闭时回退静态 ``self.duckdb_threads``（legacy 公式）。
+        """
+        from runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
+
+        if not cohort_profiles_enabled():
+            return int(self.duckdb_threads)
+        selected = QueryClassCohort().select_cohort(
+            query_shape, scan_bytes, current_concurrency
+        )
+        return int(self.duckdb_threads) if selected is None else int(selected)
+
 
 def _cfg_bytes(value: Any, default: int) -> int:
     """解析配置字节值：``"8GB"`` / ``"512MB"`` / 整数（字节） / ``"auto"``。"""
@@ -1012,6 +1036,47 @@ _ENV_LOCK = threading.RLock()
 _ACTIVE_SCOPE_THREADS: set[int] = set()
 _ACTIVE_SCOPE_LOCK = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# R39-PERF-071：connection 级 applied_config_fingerprint
+#
+# ``ExecutionResourceScope`` 进入时对共享 DuckDB 连接应用 ``PRAGMA threads`` 等。
+# idle connection 每次 acquire 不应重复应用全部 PRAGMA——connection 保存
+# ``applied_config_fingerprint``（config 元组的 hash：threads + memory settings +
+# pragma set），只有配置变化才重新应用；动态项（threads）单独更新。
+# ---------------------------------------------------------------------------
+
+#: id(conn) -> applied_config_fingerprint。由 ``_ENV_LOCK`` 串行化读写
+#: （``__enter__``/``__exit__`` 都在锁内），无需独立锁。
+_CONN_CONFIG_FINGERPRINTS: dict[int, str] = {}
+
+#: 静态 PRAGMA 应用器（name -> value getter）。当前 FactorEngine 只对连接应用
+#: 动态 ``threads``；memory/temp 设置走 env（只影响新连接）。未来要静态应用到
+#: 连接时在这里登记——fingerprint 不变时这些静态项被跳过，只有动态项重新评估。
+_STATIC_PRAGMA_APPLIERS: dict[str, Callable[[Any], Any]] = {}
+
+
+def _config_fingerprint(threads: int, plan: "ExecutionResourcePlan") -> str:
+    """config 元组 fingerprint：threads + memory settings + 静态 pragma set。"""
+    payload = {
+        "threads": int(threads),
+        "duckdb_budget_bytes": int(getattr(plan, "duckdb_budget_bytes", 0)),
+        "spill_dir": str(getattr(plan, "spill_dir", "")),
+        "spill_budget_bytes": int(getattr(plan, "spill_budget_bytes", 0)),
+        "pragma_set": tuple(sorted(_STATIC_PRAGMA_APPLIERS.keys())),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def reset_conn_fingerprints() -> None:
+    """清空 connection 级 fingerprint 注册表（测试用）。"""
+    _CONN_CONFIG_FINGERPRINTS.clear()
+
+
+def conn_fingerprint(conn: Any) -> str | None:
+    """当前 conn 已应用 config 的 fingerprint（测试/诊断用）。"""
+    return _CONN_CONFIG_FINGERPRINTS.get(id(conn))
+
 
 class ExecutionResourceScope:
     """context manager：进入时应用 ExecutionResourcePlan，退出时恢复环境。
@@ -1054,6 +1119,15 @@ class ExecutionResourceScope:
         self.requested_threads: int | None = None
         self.effective_threads: int | None = None
         self.polars_live_effective: bool = False
+        # R39-PERF-071：connection 级 applied_config_fingerprint + pragma 计数器。
+        self._applied_config_fingerprint: str | None = None
+        self.pragma_apply_count: int = 0
+        self.pragma_skip_count: int = 0
+
+    @property
+    def applied_config_fingerprint(self) -> str | None:
+        """本次 scope 应用（或确认已应用）的 config fingerprint（R39-PERF-071）。"""
+        return self._applied_config_fingerprint
 
     def __enter__(self) -> "ExecutionResourceScope":
         with _ENV_LOCK:
@@ -1108,17 +1182,43 @@ class ExecutionResourceScope:
 
         审计 #348/#349：成功则记录 ``_prev_pragma``；失败不再静默——production
         下抛 ``ResourceContractApplyError``（fail-closed），非 production 记 warning。
+
+        R39-PERF-071：connection 保存 ``applied_config_fingerprint``。相同 config
+        再次进入时跳过**静态** PRAGMA 的无操作重放（``pragma_skip_count += 1``），
+        只有 config 首次应用/变化才真正执行（``pragma_apply_count += 1``）。
+        退出恢复时会把 fingerprint 更新为恢复后的 config（见 ``__exit__``）。
         """
+        threads = max(1, int(threads))
         try:
             from data_access import get_store
 
             engine = get_store()._engine
-            if hasattr(engine, "_write_lock"):
+            conn = getattr(engine, "_conn", None)
+            new_fp = _config_fingerprint(threads, self.plan)
+            if conn is not None and hasattr(engine, "_write_lock"):
+                prev_fp = _CONN_CONFIG_FINGERPRINTS.get(id(conn))
+                if prev_fp == new_fp:
+                    # 相同 config 已应用：跳过无操作静态 pragma 重放。
+                    self.pragma_skip_count += 1
+                    self._applied_config_fingerprint = prev_fp
+                    return
                 with engine._write_lock:
                     self._prev_pragma = int(
-                        engine._conn.execute("SELECT current_setting('threads')").fetchone()[0]
+                        conn.execute("SELECT current_setting('threads')").fetchone()[0]
                     )
-                    engine._conn.execute(f"PRAGMA threads={int(threads)}")
+                    # 静态 pragma 仅在 config 变化时重放（当前为空集，留扩展点）。
+                    for name, getter in _STATIC_PRAGMA_APPLIERS.items():
+                        try:
+                            value = getter(self.plan)
+                            if value is not None:
+                                conn.execute(f"PRAGMA {name}={value}")
+                        except Exception:  # noqa: BLE001
+                            pass
+                    # 动态项：threads 是唯一真正要更新的。
+                    conn.execute(f"PRAGMA threads={int(threads)}")
+                    _CONN_CONFIG_FINGERPRINTS[id(conn)] = new_fp
+                self.pragma_apply_count += 1
+                self._applied_config_fingerprint = new_fp
         except Exception as exc:  # noqa: BLE001
             self._prev_pragma = None
             if self.strict:
@@ -1147,7 +1247,14 @@ class ExecutionResourceScope:
                     engine = get_store()._engine
                     if hasattr(engine, "_write_lock"):
                         with engine._write_lock:
-                            engine._conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
+                            conn = engine._conn
+                            conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
+                            # R39-PERF-071：恢复后把 connection 的 fingerprint 更新为
+                            # 恢复后的 config——否则下次同 config 进入会误判「已应用」而
+                            # 跳过 threads 更新（连接实际已恢复到旧值）。
+                            _CONN_CONFIG_FINGERPRINTS[id(conn)] = _config_fingerprint(
+                                int(self._prev_pragma), self.plan
+                            )
                 except Exception as exc2:  # noqa: BLE001
                     # 审计 #349：恢复失败只在非 production 下吞掉；production 不吞。
                     if self.strict:

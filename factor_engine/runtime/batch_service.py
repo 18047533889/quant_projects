@@ -19,11 +19,33 @@ from runtime.production_policy import (
     assert_production_run_flags,
     summarize_pandas_fallbacks,
 )
+from runtime.readonly_overlay_map import ReadOnlyOverlayMap
 
 logger = get_logger("runtime.batch_service")
 
 if TYPE_CHECKING:
     from runtime.engine import FactorEngine
+
+#: R39 Gate-01：adaptive-scheduler 主路径不允许发生 legacy full-union batch
+#: prefetch（``engine._prepare_batch_data``）。该计数由 ``_maybe_prepare_batch_data``
+#: 每次真正执行 union prefetch 时 +1；scheduler 路径根本不调用它，因此必须为 0。
+_legacy_union_prefetch_count = 0
+
+
+def _bump_legacy_union_prefetch_count(n: int = 1) -> None:
+    global _legacy_union_prefetch_count
+    _legacy_union_prefetch_count += n
+
+
+def legacy_union_prefetch_count() -> int:
+    """进程级 legacy full-union prefetch 计数（R39 Gate-01 探针）。"""
+    return _legacy_union_prefetch_count
+
+
+def reset_legacy_union_prefetch_count() -> None:
+    """测试用：清零进程级计数。"""
+    global _legacy_union_prefetch_count
+    _legacy_union_prefetch_count = 0
 
 
 def materialize_shared_nodes_parallel(
@@ -99,7 +121,18 @@ def _materialize_shared_subplan(
         store = getattr(ctx, "shared_buffers", None)
         if store is not None:
             # R38 P0-029（§12）：put 不再返回裸 bool——必须处理 REFUSED/RECOMPUTE。
-            res = store.put(sid, value)
+            # P0-033（§14）：主链真实传入 recompute_cost（算子 cost 代理），LRU
+            # 逐出时才能做 spill-vs-recompute 成本决策（高成本 spill / 低成本 drop）。
+            recompute_ms = 0.0
+            try:
+                from backend.operator_cost import estimate_plan_cost
+
+                recompute_ms = float(
+                    estimate_plan_cost(sub).get("total_work", 0.0) or 0.0
+                )
+            except Exception:
+                recompute_ms = 0.0
+            res = store.put(sid, value, recompute_cost_ms=recompute_ms)
             if res.status in ("MEMORY", "SPILLED"):
                 return
             # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref
@@ -328,6 +361,47 @@ def _assert_no_native_certified_fallback(
             )
 
 
+def _make_root_local_overlays(ctx: Any) -> tuple[dict[str, Any], int]:
+    """R39-P0-PERF-013：为 root 创建独立 overlay 写层，不复制共享 base。
+
+    老路径用 ``dict(ctx.shared_result_cache)`` 等 4 个全量拷贝给每个 root 隔离
+    可变视图。这里用 :class:`ReadOnlyOverlayMap`：base 只读、每 root 独立 local
+    写层、读 miss 才查 base —— 把 O(shared_keys) 的 hash 拷贝降为 O(1) 的
+    overlay 创建（R39 Gate-09）。
+
+    返回 ``(overlays, entry_copy_count)``。``entry_copy_count`` 恒为 0（没有任何
+    共享条目被拷贝进 root 上下文），就是 Gate-09 的进程级证明量之一。panel_cache
+    保持每 root 独立空 dict（这是真正 per-root 的缓存，语义不变）。
+    """
+    shared = (
+        ReadOnlyOverlayMap(ctx.shared_result_cache, {})
+        if ctx.shared_result_cache is not None
+        else None
+    )
+    shared_long = (
+        ReadOnlyOverlayMap(ctx.shared_long_lazy_cache, {})
+        if ctx.shared_long_lazy_cache is not None
+        else None
+    )
+    mat_long = (
+        ReadOnlyOverlayMap(ctx.materialized_long_lazy, {})
+        if ctx.materialized_long_lazy is not None
+        else None
+    )
+    mat_series = (
+        ReadOnlyOverlayMap(ctx.materialized_series, {})
+        if ctx.materialized_series is not None
+        else None
+    )
+    return {
+        "shared_result_cache": shared,
+        "shared_long_lazy_cache": shared_long,
+        "materialized_long_lazy": mat_long,
+        "materialized_series": mat_series,
+        "panel_cache": {},
+    }, 0
+
+
 def _execute_root_with_path(
     backend: Any,
     plan: Any,
@@ -370,25 +444,14 @@ def _execute_root_with_path(
     ):
         if key in parent_runtime:
             local_runtime[key] = parent_runtime[key]
+    overlays, entry_copy_count = _make_root_local_overlays(ctx)
+    # R39-P0-PERF-013：per-root overlay 不拷贝共享 base；``dict_entry_copy_count``
+    # 为 0 表示本轮 root 上下文创建没有做任何共享条目拷贝（Gate-09 telemetry）。
+    local_runtime["dict_entry_copy_count"] = entry_copy_count
     local_ctx = replace(
         ctx,
         runtime_stats=local_runtime,
-        # Shared subplans are fully materialized before workers start. Give
-        # each root an independent mutable view so backend execution cannot
-        # race on panel/materialization dictionaries.
-        shared_result_cache=dict(ctx.shared_result_cache or {})
-        if ctx.shared_result_cache is not None
-        else None,
-        shared_long_lazy_cache=dict(ctx.shared_long_lazy_cache or {})
-        if ctx.shared_long_lazy_cache is not None
-        else None,
-        materialized_long_lazy=dict(ctx.materialized_long_lazy or {})
-        if ctx.materialized_long_lazy is not None
-        else None,
-        materialized_series=dict(ctx.materialized_series or {})
-        if ctx.materialized_series is not None
-        else None,
-        panel_cache={},
+        **overlays,
     )
     result = backend.execute(plan, local_ctx)
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
@@ -404,68 +467,50 @@ def _cluster_factors_by_cost(
     engine: "FactorEngine",
     factors: Sequence[Factor],
     analyses: dict[str, AnalysisResult],
+    *,
+    plan: Any | None = None,
 ) -> list[list[Factor]]:
-    """Phase 5 P1-4：按成本把因子聚成 waves。
+    """Phase 5 P1-4：按扫描成本把因子聚成 waves（R39-P0-PERF-015）。
 
-    - ``full_history``：需要全历史（lookback 覆盖全窗）
-    - ``long``：lookback 覆盖 2/3 窗
-    - ``medium``：lookback 覆盖 1/3 窗
-    - ``short``：其余
+    老实现用固定 lookback 比例桶（short/medium/long/full_history）。R39 改为
+    :class:`runtime.batch_warmup_plan.BatchWarmupPlan` 的扫描成本感知分组：
+    合并两组的额外 superset scan bytes < 分开扫描的重复 scan/decode 成本时才
+    合并（min scan bytes + open/decode + duplicated compute），而非 lookback ratio。
 
-    避免一个 full-history 因子把整批 union 窗口拉成全历史（拖累 999 个短因子）。
+    ``full_history`` 保持独立组（special-case，避免 full-history 因子把整批
+    union 窗口拉成全历史）。未进 plan 的因子（无 analysis / 无 warmup 窗口）
+    落到末尾兜底组，等价老 short 桶。
     """
-    from runtime.run_window import extract_source_date_bounds
-    from runtime.warmup_service import prepare_run_warmup
+    if plan is None:
+        from runtime.batch_warmup_plan import compute_batch_warmup_plan
 
-    clusters: list[list[Factor]] = []
-    buckets: dict[str, list[Factor]] = {"full_history": [], "long": [], "medium": [], "short": []}
-    total = 252
-    try:
-        start, end = extract_source_date_bounds(engine.data_source)
-        if start and end:
-            import pandas as pd
-
-            total = max(1, len(pd.bdate_range(start, end)))
-    except Exception:
-        pass
+        plan = compute_batch_warmup_plan(
+            analyses,
+            None,
+            engine,
+            factors=factors,
+            auto_warmup=True,
+            trim_warmup=True,
+            market=None,
+            strict=True,
+        )
+    name_to_factor: dict[str, Factor] = {}
     for factor in factors:
-        analysis = analyses.get(factor.name)
-        rw = None
-        if analysis is not None:
-            try:
-                wctx = prepare_run_warmup(
-                    engine,
-                    factor,
-                    analysis,
-                    auto_warmup=True,
-                    trim_warmup=True,
-                    market=None,
-                )
-                rw = wctx.run_window
-            except Exception:
-                # R20-234..240: warmup/history resolver 异常在 production 下不能
-                # 默认为 short/no-warmup——unresolved history requirement 会静默
-                # 让全历史因子退化成短窗，改变其 semantic history anchor。production
-                # fail closed（抛错），research 保留 fallback 聚类行为。
-                from runtime.production_policy import is_production_mode
-
-                if is_production_mode(engine.run_mode):
-                    raise
-                rw = None
-        if rw is not None and rw.full_history_required:
-            buckets["full_history"].append(factor)
-            continue
-        lookback = int(getattr(analysis, "lookback", None) or 0) if analysis else 0
-        ratio = lookback / total if total > 0 else 0.0
-        if ratio >= 0.9:
-            buckets["long"].append(factor)
-        elif ratio >= 0.5:
-            buckets["medium"].append(factor)
-        else:
-            buckets["short"].append(factor)
-    for name in ("short", "medium", "long", "full_history"):
-        if buckets[name]:
-            clusters.append(buckets[name])
+        name = getattr(factor, "name", None)
+        if name:
+            name_to_factor[name] = factor
+    clusters: list[list[Factor]] = []
+    covered: set[str] = set()
+    for group in plan.groups:
+        members = [
+            name_to_factor[n] for n in group.factor_names if n in name_to_factor
+        ]
+        if members:
+            clusters.append(members)
+            covered.update(m.name for m in members)
+    uncovered = [f for f in factors if f.name not in covered]
+    if uncovered:
+        clusters.append(uncovered)
     return clusters
 
 
@@ -542,7 +587,12 @@ def _maybe_prepare_batch_data(
     input_dq_strict: bool,
     input_dq_thresholds,
 ) -> Any | None:
-    """合并全量依赖列后批量 prefetch 与 input_dq（run_many 快路径）。
+    """合并全量依赖列后批量 prefetch 与 input_dq（layer-loop 专属）。
+
+    R39-P0-PERF-001：本函数是 **legacy full-union prefetch**。adaptive-scheduler
+    主路径（``resolve_batch_execution_control_plane`` 返回 ``adaptive_scheduler``）
+    不得调用它 —— read wave 是唯一读取控制面。仅在 layer-loop 兼容路径调用；
+    每次真正执行 union prefetch 时累计 ``legacy_union_prefetch_count``（Gate-01）。
 
     若计划可走 fully_sql / native_scan 则跳过 prefetch。
     """
@@ -557,6 +607,7 @@ def _maybe_prepare_batch_data(
         input_dq_check=input_dq_check,
         backend=engine.backend,
     ):
+        _bump_legacy_union_prefetch_count(1)
         return engine._prepare_batch_data(
             engine.data_source,
             all_cols,
@@ -565,6 +616,31 @@ def _maybe_prepare_batch_data(
             input_dq_thresholds=input_dq_thresholds,
         )
     return None
+
+
+def resolve_batch_execution_control_plane(
+    factors: Sequence[Factor] | None = None,
+    analyses: dict[str, AnalysisResult] | None = None,
+    dag: Any = None,
+    *,
+    engine: "FactorEngine" | None = None,
+    input_dq_check: bool = False,
+) -> str:
+    """R39-P0-PERF-001：决定本批的执行 control plane。
+
+    返回：
+        - ``"adaptive_scheduler"``：默认生产执行链（BatchCompiler →
+          PhysicalPlanner → AdaptiveBatchScheduler → StreamingSink）。此时
+          **不允许** legacy full-union prefetch（``_maybe_prepare_batch_data``），
+          read wave 是唯一读取控制面。
+        - ``"legacy"``：``FACTOR_ENGINE_LAYER_LOOP=1`` 时的 layer-loop 兼容/
+          reference/debug 路径，保留 full-union prefetch。
+
+    未来可在这里扩展其它 control plane（microbatch 等），因此单独成函数。
+    """
+    if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") == "1":
+        return "legacy"
+    return "adaptive_scheduler"
 
 
 def _batch_source_bars_per_day(engine: Any) -> int:
@@ -578,11 +654,31 @@ def _batch_source_bars_per_day(engine: Any) -> int:
 
 
 def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> Any:
-    """按因子请求区间裁剪批跑输出（与 ``run`` 的 warmup trim 对齐）。"""
+    """按因子请求区间裁剪批跑输出（与 ``run`` 的 warmup trim 对齐）。
+
+    R39-P0-PERF-017：native backend 若已在终端结果上挂 ``_output_slice``（位置
+    切片视图），这里**不再二次切片**（writer 直接消费 ``(BufferRef, slice)``）。
+    否则优先用位置 ``.iloc`` 视图（连续 block 零拷贝，``np.shares_memory`` 可验
+    证）替代 boolean-mask copy；无法定位位置时回退旧
+    :func:`storage.time_window.slice_series_time_window` 语义。
+    """
     if result is None or run_window is None:
         return result
     if not (run_window.trim_output and run_window.requested_start):
         return result
+    from planner.output_slice import (
+        apply_output_slice,
+        carried_output_slice,
+        compute_output_slice,
+    )
+
+    # Backend 已切好视图 —— 不再重切（PERF-017）。
+    carried = carried_output_slice(result)
+    if carried is not None:
+        return result
+    out_slice = compute_output_slice(result, run_window, bars_per_day=bars_per_day)
+    if out_slice is not None:
+        return apply_output_slice(result, out_slice)
     import pandas as pd
 
     from storage.time_window import slice_series_time_window
@@ -607,6 +703,7 @@ def _maybe_prepare_batch_warmup(
     auto_warmup: bool,
     trim_warmup: bool,
     market: str | None,
+    plan: Any | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """跨因子合并共享 warmup 加载窗口，一次性 narrow 数据源。
 
@@ -616,35 +713,37 @@ def _maybe_prepare_batch_warmup(
         - ``per_factor_run_windows``：``factor.name -> RunWindow``，供执行后按各自
           请求区间裁剪输出（batch warmup = 一次读数，各因子独立 trim）。
 
+    R39-P0-PERF-014：``plan``（:class:`runtime.batch_warmup_plan.BatchWarmupPlan`）
+    由调用方一次性计算，本函数只消费 ``plan.per_factor``，不再逐因子调用
+    ``prepare_run_warmup``。未传 plan 时回退自行计算（保持兼容）。
+
     这样 ``auto_warmup=True`` 不再让 ``run_many`` / ``run_many_parallel``
     退化为逐因子 ``run()``；PIT 审计由编译期 ``assert_pit_safe`` 负责，也与执行解耦。
     """
     if not auto_warmup:
         return engine, {}
+    if plan is None:
+        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+
+        plan = compute_batch_warmup_plan(
+            analyses,
+            None,
+            engine,
+            factors=factors,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            strict=True,
+        )
     from cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
     from runtime.run_window import RunWindow, extract_source_date_bounds
-    from runtime.warmup_service import _switch_engine_to_window, prepare_run_warmup
+    from runtime.warmup_service import _switch_engine_to_window
 
-    per_windows: dict[str, Any] = {}
+    per_windows: dict[str, Any] = dict(plan.per_factor)
     union_start: str | None = None
     union_end: str | None = None
     any_full_history = False
-    for factor in factors:
-        analysis = analyses.get(factor.name)
-        if analysis is None:
-            continue
-        wctx = prepare_run_warmup(
-            engine,
-            factor,
-            analysis,
-            auto_warmup=True,
-            trim_warmup=trim_warmup,
-            market=market,
-        )
-        rw = wctx.run_window
-        if rw is None:
-            continue
-        per_windows[factor.name] = rw
+    for rw in per_windows.values():
         any_full_history = any_full_history or bool(rw.full_history_required)
         if rw.actual_load_start is not None and (
             union_start is None or rw.actual_load_start < union_start
@@ -1003,17 +1102,38 @@ def execute_run_many(
     )
     assert_production_factors(factors, mode=engine.run_mode, context="run_many")
 
-    # Phase 5 P1-4：warmup 按成本聚类——先编译拿 analyses，按 lookback 分 waves，
-    # 每个 wave 单独 union 窗口，避免一个 full-history 因子拖累整批。
-    if warmup_clusters and auto_warmup and len(factors) > 1:
-        _dag, analyses = engine._dag_from_factors(
-            factors,
-            enable_cse=enable_cse,
-            perf=perf,
-            pit_enforce=pit_enforce,
-            pit_forbid_forward_fill=pit_forbid_forward_fill,
+    # 编译一次（CSE DAG + analyses），聚类与主执行共享同一份编译结果；同时消除
+    # 老代码在 warmup_clusters 分支里的重复 ``_dag_from_factors`` 二次编译。
+    dag, analyses = engine._dag_from_factors(
+        factors,
+        enable_cse=enable_cse,
+        perf=perf,
+        pit_enforce=pit_enforce,
+        pit_forbid_forward_fill=pit_forbid_forward_fill,
+    )
+    perf = perf or PerfConfig.from_env()
+    # R39-P0-PERF-014：warmup 规划（analysis → RunWindow → 扫描成本分组）全 batch
+    # 只算一次，成本聚类与 batch warmup 共享同一份结果（替代每因子多次
+    # ``prepare_run_warmup``）。
+    warmup_plan = None
+    if auto_warmup:
+        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+
+        warmup_plan = compute_batch_warmup_plan(
+            analyses,
+            dag,
+            engine,
+            factors=factors,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            strict=True,
         )
-        waves = _cluster_factors_by_cost(engine, factors, analyses)
+
+    # Phase 5 P1-4：warmup 按扫描成本聚类（R39-P0-PERF-015），避免一个
+    # full-history 因子把整批 union 窗口拉成全历史（拖累其余短因子）。
+    if warmup_clusters and auto_warmup and len(factors) > 1:
+        waves = _cluster_factors_by_cost(engine, factors, analyses, plan=warmup_plan)
         if len(waves) > 1:
             merged: dict[str, Any] = {"results": {}, "analyses": analyses}
             for wave in waves:
@@ -1045,14 +1165,6 @@ def execute_run_many(
 
     # PIT 审计在编译期做（assert_pit_safe 是纯审计、不改计划），与执行解耦，
     # 因此 production 的 pit_enforce 不再让 run_many 退化为逐因子 run()。
-    dag, analyses = engine._dag_from_factors(
-        factors,
-        enable_cse=enable_cse,
-        perf=perf,
-        pit_enforce=pit_enforce,
-        pit_forbid_forward_fill=pit_forbid_forward_fill,
-    )
-    perf = perf or PerfConfig.from_env()
     # batch warmup：跨因子合并共享加载窗口，一次读数，各因子独立 trim。
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
@@ -1061,22 +1173,35 @@ def execute_run_many(
         auto_warmup=auto_warmup,
         trim_warmup=trim_warmup,
         market=market,
+        plan=warmup_plan,
     )
     run_mode = engine_to_use.run_mode
-    input_report = _maybe_prepare_batch_data(
-        engine_to_use,
-        dag,
-        analyses,
-        input_dq_check=input_dq_check,
-        input_dq_strict=input_dq_strict,
-        input_dq_thresholds=input_dq_thresholds,
+    # R39-P0-PERF-001：先决定 control plane。adaptive-scheduler 路径**禁止**
+    # legacy full-union prefetch（``_maybe_prepare_batch_data``）—— read wave 是
+    # 唯一读取控制面（Gate-01：``legacy_union_prefetch_count == 0``）；只有
+    # layer-loop 兼容路径保留 union prefetch。
+    control_plane = resolve_batch_execution_control_plane(
+        factors, analyses, dag, engine=engine, input_dq_check=input_dq_check
     )
+    if control_plane == "adaptive_scheduler":
+        input_report = None
+        legacy_union_prefetch = 0
+    else:
+        input_report = _maybe_prepare_batch_data(
+            engine_to_use,
+            dag,
+            analyses,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
+        legacy_union_prefetch = 1 if input_report is not None else 0
     source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
     # R31-P0-001：默认主执行链 = AdaptiveBatchScheduler（BatchCompiler →
     # PhysicalPlanner → Scheduler → StreamingSink）。旧 layer-loop 仅保留为
     # compatibility / reference / debug mode（``FACTOR_ENGINE_LAYER_LOOP=1``）。
-    if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") != "1":
-        return _execute_run_many_scheduler(
+    if control_plane == "adaptive_scheduler":
+        batch_out = _execute_run_many_scheduler(
             engine,
             factors,
             dag,
@@ -1094,6 +1219,9 @@ def execute_run_many(
             input_dq_strict=input_dq_strict,
             input_dq_thresholds=input_dq_thresholds,
         )
+        batch_out["legacy_union_prefetch_count"] = legacy_union_prefetch
+        batch_out["control_plane"] = control_plane
+        return batch_out
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     from runtime.resource_telemetry import record_resource_telemetry
@@ -1143,6 +1271,8 @@ def execute_run_many(
         "results": out,
         "dag": dag,
         "analyses": analyses,
+        "control_plane": control_plane,
+        "legacy_union_prefetch_count": legacy_union_prefetch,
     }
     _attach_batch_backend_paths(batch_out, backend_paths)
     if input_report is not None:
@@ -1228,6 +1358,21 @@ def execute_run_many_iter(
             pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
     perf = perf or PerfConfig.from_env()
+    # R39-P0-PERF-014：warmup 规划只算一次，供 batch warmup 消费。
+    warmup_plan = None
+    if auto_warmup:
+        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+
+        warmup_plan = compute_batch_warmup_plan(
+            analyses,
+            dag,
+            engine,
+            factors=factors,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            strict=True,
+        )
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -1235,8 +1380,11 @@ def execute_run_many_iter(
         auto_warmup=auto_warmup,
         trim_warmup=trim_warmup,
         market=market,
+        plan=warmup_plan,
     )
     run_mode = engine_to_use.run_mode
+    # iter 是 layer-loop 生成器（无 adaptive scheduler 路径），保留 legacy
+    # full-union prefetch（PERF-001 只 gate scheduler 路径）。
     input_report = _maybe_prepare_batch_data(
         engine_to_use,
         dag,
@@ -1379,6 +1527,21 @@ def execute_run_many_parallel(
             "unconstrained (research only)",
             exc_info=True,
         )
+    # R39-P0-PERF-014：warmup 规划（analysis → RunWindow → 扫描成本分组）只算一次。
+    warmup_plan = None
+    if auto_warmup:
+        from runtime.batch_warmup_plan import compute_batch_warmup_plan
+
+        warmup_plan = compute_batch_warmup_plan(
+            analyses,
+            dag,
+            engine,
+            factors=factors,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            strict=True,
+        )
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -1386,20 +1549,32 @@ def execute_run_many_parallel(
         auto_warmup=auto_warmup,
         trim_warmup=trim_warmup,
         market=market,
+        plan=warmup_plan,
     )
     run_mode = engine_to_use.run_mode
-    input_report = _maybe_prepare_batch_data(
-        engine_to_use,
-        dag,
-        analyses,
-        input_dq_check=input_dq_check,
-        input_dq_strict=input_dq_strict,
-        input_dq_thresholds=input_dq_thresholds,
+    # R39-P0-PERF-001：先决定 control plane。adaptive-scheduler 路径**禁止**
+    # legacy full-union prefetch（``_maybe_prepare_batch_data``）—— read wave 是
+    # 唯一读取控制面（Gate-01：``legacy_union_prefetch_count == 0``）。
+    control_plane = resolve_batch_execution_control_plane(
+        factors, analyses, dag, engine=engine, input_dq_check=input_dq_check
     )
+    if control_plane == "adaptive_scheduler":
+        input_report = None
+        legacy_union_prefetch = 0
+    else:
+        input_report = _maybe_prepare_batch_data(
+            engine_to_use,
+            dag,
+            analyses,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
+        legacy_union_prefetch = 1 if input_report is not None else 0
     source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
     # R31-P0-001：production parallel 默认 = AdaptiveBatchScheduler（资源 scope
     # 仍包裹以统一线程/内存设置）。旧 layer-loop 仅 compat/debug（env 显式）。
-    if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") != "1":
+    if control_plane == "adaptive_scheduler":
         _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
         _exit_scope = (
             (lambda: resource_scope.__exit__(None, None, None))
@@ -1408,7 +1583,7 @@ def execute_run_many_parallel(
         )
         _enter_scope()
         try:
-            return _execute_run_many_scheduler(
+            batch_out = _execute_run_many_scheduler(
                 engine,
                 factors,
                 dag,
@@ -1428,6 +1603,9 @@ def execute_run_many_parallel(
                 input_dq_thresholds=input_dq_thresholds,
                 n_jobs=workers,
             )
+            batch_out["legacy_union_prefetch_count"] = legacy_union_prefetch
+            batch_out["control_plane"] = control_plane
+            return batch_out
         finally:
             _exit_scope()
 
@@ -1516,6 +1694,8 @@ def execute_run_many_parallel(
         "results": results,
         "dag": dag,
         "analyses": analyses,
+        "control_plane": control_plane,
+        "legacy_union_prefetch_count": legacy_union_prefetch,
     }
     _attach_batch_backend_paths(parallel_out, backend_paths)
     if input_report is not None:

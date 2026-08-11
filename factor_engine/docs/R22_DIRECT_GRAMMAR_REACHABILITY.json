@@ -223,14 +223,15 @@
     "canonical": "KAMA",
     "composition_usable": true,
     "data_inputs": [
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "er_window",
       "fast_window",
       "slow_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:KAMA::close=continuous_close",
     "terminal_usable": false
   },
@@ -243,14 +244,15 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "ema_window",
       "atr_window",
       "multiplier"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:KeltnerLower::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -261,12 +263,13 @@
     "canonical": "KeltnerMid",
     "composition_usable": true,
     "data_inputs": [
-      "close",
-      "ema_window"
+      "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "ema_window"
+    ],
     "smoke_recipe": "smoke:KeltnerMid::close=continuous_close",
     "terminal_usable": false
   },
@@ -280,14 +283,15 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "ema_window",
       "atr_window",
       "multiplier"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:KeltnerPosition::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -300,14 +304,15 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "ema_window",
       "atr_window",
       "multiplier"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:KeltnerUpper::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -418,13 +423,14 @@
     "canonical": "PPO",
     "composition_usable": true,
     "data_inputs": [
-      "close",
-      "fast_window",
-      "slow_window"
+      "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "fast_window",
+      "slow_window"
+    ],
     "smoke_recipe": "smoke:PPO::close=continuous_close",
     "terminal_usable": true
   },
@@ -436,14 +442,15 @@
     "canonical": "PPO_hist",
     "composition_usable": true,
     "data_inputs": [
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "fast_window",
       "slow_window",
       "signal_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:PPO_hist::close=continuous_close",
     "terminal_usable": true
   },
@@ -455,14 +462,15 @@
     "canonical": "PPO_signal",
     "composition_usable": true,
     "data_inputs": [
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "fast_window",
       "slow_window",
       "signal_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:PPO_signal::close=continuous_close",
     "terminal_usable": true
   },
@@ -474,13 +482,14 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
-      "acceleration",
-      "maximum"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "acceleration",
+      "maximum"
+    ],
     "smoke_recipe": "smoke:PSAR::high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -492,13 +501,14 @@
     "canonical": "PVO",
     "composition_usable": true,
     "data_inputs": [
-      "volume",
-      "fast_window",
-      "slow_window"
+      "volume"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "fast_window",
+      "slow_window"
+    ],
     "smoke_recipe": "smoke:PVO::volume=raw_volume_shares",
     "terminal_usable": true
   },
@@ -510,14 +520,15 @@
     "canonical": "PVO_hist",
     "composition_usable": true,
     "data_inputs": [
-      "volume",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "fast_window",
       "slow_window",
       "signal_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:PVO_hist::volume=raw_volume_shares",
     "terminal_usable": true
   },
@@ -529,14 +540,15 @@
     "canonical": "PVO_signal",
     "composition_usable": true,
     "data_inputs": [
-      "volume",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "fast_window",
       "slow_window",
       "signal_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:PVO_signal::volume=raw_volume_shares",
     "terminal_usable": true
   },
@@ -567,13 +579,14 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
-      "atr_window",
-      "multiplier"
+      "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "atr_window",
+      "multiplier"
+    ],
     "smoke_recipe": "smoke:Supertrend::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -587,13 +600,14 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
-      "atr_window",
-      "multiplier"
+      "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "atr_window",
+      "multiplier"
+    ],
     "smoke_recipe": "smoke:SupertrendDirection::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -622,13 +636,14 @@
     "canonical": "TSI",
     "composition_usable": true,
     "data_inputs": [
-      "close",
-      "long_window",
-      "short_window"
+      "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "long_window",
+      "short_window"
+    ],
     "smoke_recipe": "smoke:TSI::close=continuous_close",
     "terminal_usable": true
   },
@@ -640,14 +655,15 @@
     "canonical": "TSI_signal",
     "composition_usable": true,
     "data_inputs": [
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "long_window",
       "short_window",
       "signal_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:TSI_signal::close=continuous_close",
     "terminal_usable": true
   },
@@ -662,16 +678,17 @@
       "high",
       "low",
       "close",
-      "short_window",
-      "medium_window",
-      "long_window",
       "short_weight",
       "medium_weight",
       "long_weight"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "short_window",
+      "medium_window",
+      "long_window"
+    ],
     "smoke_recipe": "smoke:UltimateOscillator::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -958,8 +975,6 @@
     "canonical": "ashare_failed_limit_count",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "low",
       "close",
       "high_limit",
       "low_limit"
@@ -967,11 +982,13 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
+      "low",
       "window",
       "side",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_failed_limit_count::close=continuous_close,high=continuous_high,low=continuous_low",
+    "smoke_recipe": "smoke:ashare_failed_limit_count::close=continuous_close",
     "terminal_usable": true
   },
   {
@@ -1038,15 +1055,15 @@
     "canonical": "ashare_limit_down_touch",
     "composition_usable": true,
     "data_inputs": [
-      "low",
       "lower_limit"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "low",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_down_touch::low=continuous_low",
+    "smoke_recipe": "smoke:ashare_limit_down_touch::lower_limit=continuous_close",
     "terminal_usable": true
   },
   {
@@ -1095,16 +1112,16 @@
     "canonical": "ashare_limit_failed",
     "composition_usable": true,
     "data_inputs": [
-      "high",
       "close",
       "upper_limit"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_failed::close=continuous_close,high=continuous_high",
+    "smoke_recipe": "smoke:ashare_limit_failed::close=continuous_close",
     "terminal_usable": false
   },
   {
@@ -1115,8 +1132,6 @@
     "canonical": "ashare_limit_one_price",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "low",
       "close",
       "upper_limit",
       "lower_limit"
@@ -1125,10 +1140,12 @@
     "reachable": true,
     "scalar_parameters": [
       "open",
+      "high",
+      "low",
       "side",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_one_price::close=continuous_close,high=continuous_high,low=continuous_low",
+    "smoke_recipe": "smoke:ashare_limit_one_price::close=continuous_close",
     "terminal_usable": false
   },
   {
@@ -1159,16 +1176,16 @@
     "canonical": "ashare_limit_open_failed",
     "composition_usable": true,
     "data_inputs": [
-      "low",
       "upper_limit"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "open",
+      "low",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_open_failed::low=continuous_low",
+    "smoke_recipe": "smoke:ashare_limit_open_failed::upper_limit=continuous_close",
     "terminal_usable": false
   },
   {
@@ -1199,19 +1216,19 @@
     "canonical": "ashare_limit_touch_count",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "low",
       "high_limit",
       "low_limit"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
+      "low",
       "window",
       "side",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_touch_count::high=continuous_high,low=continuous_low",
+    "smoke_recipe": "smoke:ashare_limit_touch_count::high_limit=continuous_close",
     "terminal_usable": false
   },
   {
@@ -1242,15 +1259,15 @@
     "canonical": "ashare_limit_up_touch",
     "composition_usable": true,
     "data_inputs": [
-      "high",
       "upper_limit"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_limit_up_touch::high=continuous_high",
+    "smoke_recipe": "smoke:ashare_limit_up_touch::upper_limit=continuous_close",
     "terminal_usable": true
   },
   {
@@ -1280,8 +1297,6 @@
     "canonical": "ashare_one_price_limit_streak",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "low",
       "close",
       "high_limit",
       "low_limit",
@@ -1291,10 +1306,12 @@
     "reachable": true,
     "scalar_parameters": [
       "open",
+      "high",
+      "low",
       "side",
       "tick_tolerance"
     ],
-    "smoke_recipe": "smoke:ashare_one_price_limit_streak::close=continuous_close,high=continuous_high,low=continuous_low",
+    "smoke_recipe": "smoke:ashare_one_price_limit_streak::close=continuous_close",
     "terminal_usable": true
   },
   {
@@ -2041,19 +2058,19 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close",
       "pattern"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
+      "low",
       "body_window",
       "shadow_window",
       "penetration"
     ],
-    "smoke_recipe": "smoke:candlestick_pattern::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "smoke_recipe": "smoke:candlestick_pattern::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2130,14 +2147,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_dark_cloud_cover::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_dark_cloud_cover::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2168,14 +2186,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_dragonfly_doji::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_dragonfly_doji::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2206,14 +2225,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_evening_star::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_evening_star::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2225,14 +2245,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_gravestone_doji::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_gravestone_doji::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2244,14 +2265,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_hammer::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_hammer::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2263,14 +2285,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_hanging_man::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_hanging_man::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2282,14 +2305,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_harami::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_harami::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2301,14 +2325,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_harami_cross::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_harami_cross::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2377,14 +2402,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_morning_star::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_morning_star::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2415,14 +2441,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_piercing::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_piercing::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2472,14 +2499,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_three_black_crows::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_three_black_crows::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2491,14 +2519,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_three_white_soldiers::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_three_white_soldiers::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2510,14 +2539,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_tweezer_bottom::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_tweezer_bottom::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -2529,14 +2559,15 @@
     "composition_usable": true,
     "data_inputs": [
       "open",
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:cdl_tweezer_top::close=continuous_close,high=continuous_high,low=continuous_low,open=continuous_open",
+    "scalar_parameters": [
+      "high",
+      "low"
+    ],
+    "smoke_recipe": "smoke:cdl_tweezer_top::close=continuous_close,open=continuous_open",
     "terminal_usable": false
   },
   {
@@ -3031,12 +3062,13 @@
     "canonical": "cs_hartigan_dip",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_cross"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "min_cross"
+    ],
     "smoke_recipe": "smoke:cs_hartigan_dip::x=continuous_close",
     "terminal_usable": false
   },
@@ -3066,12 +3098,13 @@
     "canonical": "cs_impute_mean",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_finite"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "min_finite"
+    ],
     "smoke_recipe": "smoke:cs_impute_mean::x=continuous_close",
     "terminal_usable": false
   },
@@ -3082,12 +3115,13 @@
     "canonical": "cs_impute_median",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_finite"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "min_finite"
+    ],
     "smoke_recipe": "smoke:cs_impute_median::x=continuous_close",
     "terminal_usable": false
   },
@@ -3491,12 +3525,13 @@
       "y",
       "x1",
       "x2",
-      "x3",
-      "add_intercept"
+      "x3"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "add_intercept"
+    ],
     "smoke_recipe": "smoke:cs_multi_ridge_resid::y=return_decimal",
     "terminal_usable": true
   },
@@ -5390,7 +5425,8 @@
       "component_7",
       "component_8",
       "component_directions",
-      "score_weights"
+      "score_weights",
+      "missing_policy"
     ],
     "mining_visible": true,
     "reachable": true,
@@ -8812,13 +8848,13 @@
     "composition_usable": true,
     "data_inputs": [
       "x",
-      "group",
-      "min_group_size"
+      "group"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "min_group_size"
     ],
     "smoke_recipe": "smoke:group_wasserstein_barycenter_distance::x=continuous_close",
     "terminal_usable": true
@@ -10039,14 +10075,15 @@
     "data_inputs": [
       "high",
       "low",
-      "close",
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "tenkan_window",
       "kijun_window",
       "senkou_b_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:ichimoku_cloud_position::close=continuous_close,high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -10059,14 +10096,15 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
+      "low"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
       "tenkan_window",
       "kijun_window",
       "senkou_b_window"
     ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [],
     "smoke_recipe": "smoke:ichimoku_cloud_width::high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -10078,12 +10116,13 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
-      "kijun_window"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "kijun_window"
+    ],
     "smoke_recipe": "smoke:ichimoku_kijun::high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -10095,13 +10134,14 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
-      "tenkan_window",
-      "kijun_window"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "tenkan_window",
+      "kijun_window"
+    ],
     "smoke_recipe": "smoke:ichimoku_senkou_a::high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -10113,12 +10153,13 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
-      "senkou_b_window"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "senkou_b_window"
+    ],
     "smoke_recipe": "smoke:ichimoku_senkou_b::high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -10130,12 +10171,13 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low",
-      "tenkan_window"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "tenkan_window"
+    ],
     "smoke_recipe": "smoke:ichimoku_tenkan::high=continuous_high,low=continuous_low",
     "terminal_usable": false
   },
@@ -10327,13 +10369,13 @@
     "composition_usable": true,
     "data_inputs": [
       "ret",
-      "group",
-      "component"
+      "group"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "component"
     ],
     "smoke_recipe": "smoke:industry_rolling_pca_loading::ret=return_decimal",
     "terminal_usable": false
@@ -13134,13 +13176,12 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "low"
+      "low",
+      "smooth_window"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [
-      "smooth_window"
-    ],
+    "scalar_parameters": [],
     "smoke_recipe": "smoke:ohlc_corwin_schultz_spread::high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -13249,14 +13290,14 @@
       "x2",
       "x3",
       "x4",
-      "market_state",
-      "n_experts",
-      "label_horizon"
+      "market_state"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_experts",
+      "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_mixture_of_experts_score::y=return_decimal",
     "terminal_usable": true
@@ -13274,14 +13315,14 @@
       "x2",
       "x3",
       "x4",
-      "market_state",
-      "n_regimes",
-      "label_horizon"
+      "market_state"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_regimes",
+      "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_regime_conditioned_forecast::y=return_decimal",
     "terminal_usable": true
@@ -13298,15 +13339,15 @@
       "x1",
       "x2",
       "x3",
-      "x4",
-      "l1_ratio",
-      "label_horizon"
+      "x4"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
-      "alpha"
+      "alpha",
+      "l1_ratio",
+      "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_rolling_elastic_net_forecast::y=return_decimal",
     "terminal_usable": true
@@ -13319,13 +13360,13 @@
     "canonical": "panel_rolling_pca_explained_ratio",
     "composition_usable": true,
     "data_inputs": [
-      "ret",
-      "n_components"
+      "ret"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components"
     ],
     "smoke_recipe": "smoke:panel_rolling_pca_explained_ratio::ret=return_decimal",
     "terminal_usable": true
@@ -13337,13 +13378,13 @@
     "canonical": "panel_rolling_pca_loading",
     "composition_usable": true,
     "data_inputs": [
-      "ret",
-      "component"
+      "ret"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "component"
     ],
     "smoke_recipe": "smoke:panel_rolling_pca_loading::ret=return_decimal",
     "terminal_usable": false
@@ -13356,13 +13397,13 @@
     "canonical": "panel_rolling_pca_resid",
     "composition_usable": true,
     "data_inputs": [
-      "ret",
-      "n_components"
+      "ret"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components"
     ],
     "smoke_recipe": "smoke:panel_rolling_pca_resid::ret=return_decimal",
     "terminal_usable": true
@@ -13375,13 +13416,13 @@
     "canonical": "panel_rolling_pca_resid_momentum",
     "composition_usable": true,
     "data_inputs": [
-      "ret",
-      "n_components"
+      "ret"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components"
     ],
     "smoke_recipe": "smoke:panel_rolling_pca_resid_momentum::ret=return_decimal",
     "terminal_usable": true
@@ -13394,13 +13435,13 @@
     "canonical": "panel_rolling_pca_resid_vol",
     "composition_usable": true,
     "data_inputs": [
-      "ret",
-      "n_components"
+      "ret"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components"
     ],
     "smoke_recipe": "smoke:panel_rolling_pca_resid_vol::ret=return_decimal",
     "terminal_usable": true
@@ -13417,14 +13458,14 @@
       "x1",
       "x2",
       "x3",
-      "x4",
-      "n_components",
-      "label_horizon"
+      "x4"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components",
+      "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_rolling_pcr_forecast::y=return_decimal",
     "terminal_usable": true
@@ -13441,14 +13482,14 @@
       "x1",
       "x2",
       "x3",
-      "x4",
-      "n_components",
-      "label_horizon"
+      "x4"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components",
+      "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_rolling_pls_forecast::y=return_decimal",
     "terminal_usable": true
@@ -16306,12 +16347,12 @@
     "data_inputs": [
       "activity",
       "budget",
-      "scale_window",
       "max_lookback"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "scale_window",
       "include_current"
     ],
     "smoke_recipe": "smoke:ts_activity_clock_age::activity=continuous_close",
@@ -16328,12 +16369,12 @@
       "x",
       "activity",
       "budget",
-      "scale_window",
       "max_lookback"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "scale_window",
       "include_current"
     ],
     "smoke_recipe": "smoke:ts_activity_clock_lagged_value::x=continuous_close",
@@ -16350,12 +16391,13 @@
       "x",
       "activity",
       "budget",
-      "scale_window",
       "max_lookback"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "scale_window"
+    ],
     "smoke_recipe": "smoke:ts_activity_clock_lagged_value_prior::x=continuous_close",
     "terminal_usable": true
   },
@@ -16396,44 +16438,6 @@
       "min_periods"
     ],
     "smoke_recipe": "smoke:ts_ar_coefficient::x=continuous_close",
-    "terminal_usable": true
-  },
-  {
-    "ast_positions": [
-      "intermediate",
-      "terminal"
-    ],
-    "canonical": "ts_ar_fitted_value",
-    "composition_usable": true,
-    "data_inputs": [
-      "x"
-    ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [
-      "window",
-      "order"
-    ],
-    "smoke_recipe": "smoke:ts_ar_fitted_value::x=continuous_close",
-    "terminal_usable": true
-  },
-  {
-    "ast_positions": [
-      "intermediate",
-      "terminal"
-    ],
-    "canonical": "ts_ar_in_sample_resid",
-    "composition_usable": true,
-    "data_inputs": [
-      "x"
-    ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [
-      "window",
-      "order"
-    ],
-    "smoke_recipe": "smoke:ts_ar_in_sample_resid::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -17276,13 +17280,14 @@
     "canonical": "ts_confirmed_pivot_high",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "left_window",
-      "right_window"
+      "high"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_confirmed_pivot_high::high=continuous_high",
     "terminal_usable": true
   },
@@ -17294,13 +17299,14 @@
     "canonical": "ts_confirmed_pivot_low",
     "composition_usable": true,
     "data_inputs": [
-      "low",
-      "left_window",
-      "right_window"
+      "low"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_confirmed_pivot_low::low=continuous_low",
     "terminal_usable": true
   },
@@ -18117,14 +18123,15 @@
     "data_inputs": [
       "close",
       "high",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_distance_to_resistance::close=continuous_close,high=continuous_high",
     "terminal_usable": true
   },
@@ -18138,14 +18145,15 @@
     "data_inputs": [
       "close",
       "low",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_distance_to_support::close=continuous_close,low=continuous_low",
     "terminal_usable": true
   },
@@ -18547,13 +18555,13 @@
     "canonical": "ts_evt_threshold_stability",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "k_min"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
+      "k_min",
       "k_max",
       "side"
     ],
@@ -18964,13 +18972,13 @@
       "f1",
       "f2",
       "f3",
-      "f4",
-      "n_components"
+      "f4"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "n_components"
     ],
     "smoke_recipe": "smoke:ts_feature_pca_reconstruction_error::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
@@ -19413,13 +19421,13 @@
     "canonical": "ts_glr_mean_shift_score",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_segment"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "min_segment"
     ],
     "smoke_recipe": "smoke:ts_glr_mean_shift_score::x=continuous_close",
     "terminal_usable": true
@@ -19432,13 +19440,13 @@
     "canonical": "ts_glr_variance_shift_score",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_segment"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "min_segment"
     ],
     "smoke_recipe": "smoke:ts_glr_variance_shift_score::x=continuous_close",
     "terminal_usable": true
@@ -20073,16 +20081,16 @@
     "canonical": "ts_interval_exploration_efficiency",
     "composition_usable": true,
     "data_inputs": [
-      "high",
-      "low",
       "close"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "high",
+      "low",
       "window"
     ],
-    "smoke_recipe": "smoke:ts_interval_exploration_efficiency::close=continuous_close,high=continuous_high,low=continuous_low",
+    "smoke_recipe": "smoke:ts_interval_exploration_efficiency::close=continuous_close",
     "terminal_usable": true
   },
   {
@@ -20094,13 +20102,12 @@
     "composition_usable": true,
     "data_inputs": [
       "low",
-      "high"
+      "high",
+      "mode"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [
-      "mode"
-    ],
+    "scalar_parameters": [],
     "smoke_recipe": "smoke:ts_interval_nesting_depth::high=continuous_high,low=continuous_low",
     "terminal_usable": true
   },
@@ -20132,17 +20139,17 @@
     "canonical": "ts_interval_occupancy_mode_distance",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "low",
-      "high"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
+      "low",
+      "high",
       "window",
       "bins"
     ],
-    "smoke_recipe": "smoke:ts_interval_occupancy_mode_distance::high=continuous_high,low=continuous_low,x=continuous_close",
+    "smoke_recipe": "smoke:ts_interval_occupancy_mode_distance::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -20635,13 +20642,14 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "left_window",
-      "right_window",
       "history_window"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_last_pivot_high::high=continuous_high",
     "terminal_usable": false
   },
@@ -20653,13 +20661,14 @@
     "composition_usable": true,
     "data_inputs": [
       "low",
-      "left_window",
-      "right_window",
       "history_window"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_last_pivot_low::low=continuous_low",
     "terminal_usable": false
   },
@@ -22520,13 +22529,13 @@
     "canonical": "ts_pettitt_change_score",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_segment"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "window"
+      "window",
+      "min_segment"
     ],
     "smoke_recipe": "smoke:ts_pettitt_change_score::x=continuous_close",
     "terminal_usable": true
@@ -22560,13 +22569,14 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "left_window",
-      "right_window",
       "history_window"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_pivot_high_age::high=continuous_high",
     "terminal_usable": true
   },
@@ -22617,13 +22627,14 @@
     "composition_usable": true,
     "data_inputs": [
       "low",
-      "left_window",
-      "right_window",
       "history_window"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_pivot_low_age::low=continuous_low",
     "terminal_usable": true
   },
@@ -23200,18 +23211,18 @@
     "canonical": "ts_recurrence_determinism",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "dim",
-      "delay",
-      "eps_fraction",
-      "min_line",
-      "theiler"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
-      "min_periods"
+      "dim",
+      "delay",
+      "eps_fraction",
+      "min_line",
+      "min_periods",
+      "theiler"
     ],
     "smoke_recipe": "smoke:ts_recurrence_determinism::x=continuous_close",
     "terminal_usable": true
@@ -23268,18 +23279,18 @@
     "canonical": "ts_recurrence_laminarity",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "dim",
-      "delay",
-      "eps_fraction",
-      "min_line",
-      "theiler"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
-      "min_periods"
+      "dim",
+      "delay",
+      "eps_fraction",
+      "min_line",
+      "min_periods",
+      "theiler"
     ],
     "smoke_recipe": "smoke:ts_recurrence_laminarity::x=continuous_close",
     "terminal_usable": true
@@ -23292,18 +23303,18 @@
     "canonical": "ts_recurrence_longest_vertical_length",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "dim",
-      "delay",
-      "eps_fraction",
-      "min_line",
-      "theiler"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
-      "min_periods"
+      "dim",
+      "delay",
+      "eps_fraction",
+      "min_line",
+      "min_periods",
+      "theiler"
     ],
     "smoke_recipe": "smoke:ts_recurrence_longest_vertical_length::x=continuous_close",
     "terminal_usable": true
@@ -23316,18 +23327,18 @@
     "canonical": "ts_recurrence_mean_diagonal_length",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "dim",
-      "delay",
-      "eps_fraction",
-      "min_line",
-      "theiler"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
       "window",
-      "min_periods"
+      "dim",
+      "delay",
+      "eps_fraction",
+      "min_line",
+      "min_periods",
+      "theiler"
     ],
     "smoke_recipe": "smoke:ts_recurrence_mean_diagonal_length::x=continuous_close",
     "terminal_usable": true
@@ -23637,14 +23648,15 @@
     "data_inputs": [
       "close",
       "high",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_resistance_break::close=continuous_close,high=continuous_high",
     "terminal_usable": false
   },
@@ -23676,14 +23688,15 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_resistance_level::high=continuous_high",
     "terminal_usable": false
   },
@@ -23716,14 +23729,15 @@
     "composition_usable": true,
     "data_inputs": [
       "high",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_resistance_slope::high=continuous_high",
     "terminal_usable": true
   },
@@ -23971,8 +23985,7 @@
     "canonical": "ts_rqa_determinism_fixed_rr",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_line"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
@@ -23981,6 +23994,7 @@
       "dim",
       "delay",
       "target_rr",
+      "min_line",
       "min_periods",
       "theiler"
     ],
@@ -23995,8 +24009,7 @@
     "canonical": "ts_rqa_laminarity_fixed_rr",
     "composition_usable": true,
     "data_inputs": [
-      "x",
-      "min_line"
+      "x"
     ],
     "mining_visible": true,
     "reachable": true,
@@ -24005,6 +24018,7 @@
       "dim",
       "delay",
       "target_rr",
+      "min_line",
       "min_periods",
       "theiler"
     ],
@@ -24712,14 +24726,15 @@
     "data_inputs": [
       "close",
       "low",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_support_break::close=continuous_close,low=continuous_low",
     "terminal_usable": false
   },
@@ -24751,14 +24766,15 @@
     "composition_usable": true,
     "data_inputs": [
       "low",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_support_level::low=continuous_low",
     "terminal_usable": false
   },
@@ -24791,14 +24807,15 @@
     "composition_usable": true,
     "data_inputs": [
       "low",
-      "left_window",
-      "right_window",
       "history_window",
       "points"
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "left_window",
+      "right_window"
+    ],
     "smoke_recipe": "smoke:ts_support_slope::low=continuous_low",
     "terminal_usable": true
   },

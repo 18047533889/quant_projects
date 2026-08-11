@@ -1525,54 +1525,30 @@ class FactorEngine:
             "pit_forbid_forward_fill": mat.pop("pit_forbid_forward_fill", False),
         }
         if run_many_batch and len(sel_factors) > 1:
-            run_out = engine.run_many(sel_factors, **run_kw)
-            from runtime.materialize_service import execute_materialize
-
-            for factor, fid in zip(sel_factors, sel_ids):
-                output = {
-                    "factor": factor,
-                    "analysis": run_out["analyses"][factor.name],
-                    "result": run_out["results"][factor.name],
-                }
-                out = execute_materialize(
-                    engine,
-                    factor,
-                    output,
-                    target=str(mat.get("write_target", "local")),
-                    lake_root=mat.get("lake_root"),
-                    staging_dataset=mat.get("staging_dataset", "factor_lake_staging"),
-                    factor_id=fid,
-                    author=mat.get("author"),
-                    frequency=mat.get("frequency"),
-                    description=mat.get("description"),
-                    expression=mat.get("expression"),
-                    dq_check=mat.get("dq_check", False),
-                    dq_strict=mat.get("dq_strict", True),
-                    dq_thresholds=mat.get("dq_thresholds"),
-                    write_metadata=mat.get("write_metadata", True),
-                    data_source_config=mat.get("data_source_config"),
-                    resume_materialize=mat.get("resume_materialize", False),
-                    isolate_partition_failures=mat.get(
-                        "isolate_partition_failures", True
-                    ),
-                    preserve_invalid_rows=mat.get("preserve_invalid_rows", False),
-                    value_dtype=str(mat.get("value_dtype", "float32")),
-                    clickhouse_table=mat.get("clickhouse_table"),
-                    ch_ensure_table=mat.get("ch_ensure_table", True),
-                    ch_host=mat.get("ch_host"),
-                    ch_port=mat.get("ch_port"),
-                    ch_database=mat.get("ch_database"),
-                    ch_username=mat.get("ch_username"),
-                    ch_password=mat.get("ch_password"),
-                    ch_secure=mat.get("ch_secure"),
-                    storage_format=str(mat.get("storage_format", "long")),
-                    partition_columns=mat.get("partition_columns"),
-                )
-                out["batched_run"] = True
-                out["shard_index"] = shard_index
-                out["shard_count"] = shard_count
-                out["shard_by"] = shard_by
-                outputs[factor.name] = out.get("materialization", out)
+            # R39-PERF-068: 不走 ``run_many`` 收全量 results dict 再逐因子写；
+            # 直接走 ``materialize_many_fast`` 的流式 sink（计算完成即落盘），
+            # 并通过 ``shard_scope`` 传播分片元数据。结果不再在 Python dict 驻留整批。
+            fast = engine.materialize_many_fast(
+                sel_factors,
+                factor_ids=sel_ids,
+                storage_format=str(mat.get("storage_format", "long")),
+                pit_enforce=bool(run_kw.get("pit_enforce", False)),
+                pit_forbid_forward_fill=bool(
+                    run_kw.get("pit_forbid_forward_fill", False)
+                ),
+                materialize_kwargs={**run_kw, **mat},
+                writer_threads=mat.get("writer_threads"),
+                target_batch_bytes=mat.get("target_batch_bytes"),
+                max_batch_age_s=mat.get("max_batch_age_s"),
+                shard_scope=(shard_index, shard_count),
+            )
+            for name, m in fast.get("materializations", {}).items():
+                if isinstance(m, dict):
+                    m["batched_run"] = True
+                    m["shard_index"] = shard_index
+                    m["shard_count"] = shard_count
+                    m["shard_by"] = shard_by
+                outputs[name] = m
         else:
             for factor, fid in zip(sel_factors, sel_ids):
                 mk = {**run_kw, **mat, "factor_id": fid}
@@ -1722,6 +1698,10 @@ class FactorEngine:
         wave_memory_budget: int = 4 * 1024**3,
         write_results: bool = True,
         materialize_kwargs: dict[str, Any] | None = None,
+        writer_threads: int | None = None,
+        target_batch_bytes: int | None = None,
+        max_batch_age_s: float | None = None,
+        shard_scope: tuple[int, int] | None = None,
     ) -> dict[str, Any]:
         """R27-205/140: ``engine.materialize_many_fast(factors, ...)`` 极速批量落值。
 
@@ -1729,8 +1709,21 @@ class FactorEngine:
         每个 root 结果完成即交给 writer（factor matrix block / 单因子落盘），
         不驻留整批。数值 / PIT / 安全边界不变（R27-154/159/160：仍走同一
         compile → backend.execute → materialize 链路）。
+
+        R39-PERF-038/039/068:
+            - writer 热循环因子/ID 查找 O(1)（预建 dict，无 ``list.index`` /
+              ``next(...)``）；
+            - 同 generation 的 batch 走 ``execute_materialize_batch``（共享工作
+              hoist + 依赖 manifest 单事务）；
+            - ``shard_scope=(shard_index, shard_count)`` 供 ``materialize_sharded``
+              流式落值（计算完成即 sink，不攒全量 results dict）。
         """
         from runtime.batch_service import _maybe_prepare_batch_warmup
+        from runtime.materialize_batch import (
+            GenerationTransaction,
+            MaterializeItem,
+            execute_materialize_batch,
+        )
         from runtime.materialize_service import execute_materialize
         from runtime.production_policy import is_production_mode
         from runtime.resource_broker import ResourceBroker
@@ -1739,6 +1732,12 @@ class FactorEngine:
         ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
         if len(ids) != len(factors):
             raise ValueError("factor_ids 长度必须与 factors 一致")
+        # R39-PERF-038: 预建 O(1) 查找表（自定义 factor_id != factor.name 时携带
+        # 真实 factor_id）。
+        factor_by_name: dict[str, Factor] = {f.name: f for f in factors}
+        factor_id_by_name: dict[str, str] = {
+            f.name: fid for f, fid in zip(factors, ids)
+        }
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         if enable_cse is None:
             perf = PerfConfig.from_env()
@@ -1798,12 +1797,20 @@ class FactorEngine:
         }
         materializations: dict[str, Any] = {}
         writer_errors: list[str] = []
+        # R39-PERF-039: 同一 run 的所有 item 共享一个 generation → 批量物理提交。
+        batch_write_transaction_count = 0
+        # R39-PERF-068: shard 元数据传播（materialize_sharded 流式落值用）。
+        shard_index, shard_count = shard_scope if shard_scope is not None else (0, 1)
+        from runtime.lineage import new_run_id
+
+        batch_generation = GenerationTransaction(generation_id=f"batch-{new_run_id()}")
 
         def _writer(batch: list[ResultItem]) -> None:
+            nonlocal batch_write_transaction_count
+            items_to_write: list[MaterializeItem] = []
             for item in batch:
-                idx = list(ids).index(item.name) if item.name in ids else -1
-                fid = ids[idx] if idx >= 0 else item.name
-                factor = next((f for f in factors if f.name == item.name), None)
+                # R39-PERF-038: O(1) 查找（无 list.index / next 线性扫描）。
+                factor = factor_by_name.get(item.name)
                 if factor is None:
                     materializations[item.name] = {"error": "factor not found"}
                     continue
@@ -1811,30 +1818,68 @@ class FactorEngine:
                     # 计算-only 模式（benchmark/dry-run）：不落盘，只收集结果。
                     materializations[item.name] = {"result": item.value}
                     continue
-                output = {
-                    "factor": factor,
-                    "analysis": analyses.get(item.name),
-                    "result": item.value,
-                }
-                try:
-                    out = execute_materialize(
-                        engine_to_use,
-                        factor,
-                        output,
-                        factor_id=fid,
-                        **mm_args,
+                items_to_write.append(
+                    MaterializeItem(
+                        factor=factor,
+                        output={
+                            "factor": factor,
+                            "analysis": analyses.get(item.name),
+                            "result": item.value,
+                        },
+                        factor_id=factor_id_by_name.get(item.name, item.name),
+                        options=dict(mm_args),
                     )
-                    materializations[item.name] = out.get("materialization", out)
-                except Exception as exc:  # noqa: BLE001
-                    # R27-205：写失败必须如实上报，不能静默吞掉（writer 重试循环
-                    # 会把失败项无限重试）。
-                    writer_errors.append(f"{item.name}: {type(exc).__name__}: {exc}")
-                    materializations[item.name] = {"error": str(exc)}
+                )
+            if not items_to_write:
+                return
+            try:
+                batch_out = execute_materialize_batch(
+                    engine_to_use,
+                    items_to_write,
+                    generation=batch_generation,
+                    shared_options=mm_args,
+                )
+                batch_write_transaction_count += batch_out["counters"][
+                    "batch_write_transaction_count"
+                ]
+                for name, summary in batch_out["materializations"].items():
+                    materializations[name] = summary
+                    if "error" in summary:
+                        writer_errors.append(f"{name}: {summary['error']}")
+            except Exception as exc:  # noqa: BLE001
+                # R27-205：写失败必须如实上报，不能静默吞掉（writer 重试循环会把
+                # 失败项无限重试）。batch 级失败 → 退回逐因子 execute_materialize
+                # 保留 per-item 错误隔离（isolate_partition_failures 语义）。
+                writer_errors.append(
+                    f"batch: {type(exc).__name__}: {exc}"
+                )
+                for mi in items_to_write:
+                    name = mi.factor.name
+                    try:
+                        out = execute_materialize(
+                            engine_to_use,
+                            mi.factor,
+                            mi.output,
+                            factor_id=mi.factor_id,
+                            **mm_args,
+                        )
+                        materializations[name] = out.get("materialization", out)
+                    except Exception as exc2:  # noqa: BLE001
+                        writer_errors.append(
+                            f"{name}: {type(exc2).__name__}: {exc2}"
+                        )
+                        materializations[name] = {"error": str(exc2)}
 
         sink = StreamingResultSink(
             writer=_writer,
             queue_bytes=writer_queue_bytes,
-            batch_size=mk.get("writer_batch_size", 1),
+            # R39-PERF-039/040：默认 count batch 64 —— 使 sink 真正攒批，writer 走
+            # execute_materialize_batch 批量提交（batch_write_transaction_count <<
+            # factor_count）。显式 ``writer_batch_size`` 仍可覆盖。
+            batch_size=mk.get("writer_batch_size", 64),
+            writer_threads=writer_threads,
+            target_batch_bytes=target_batch_bytes,
+            max_batch_age_s=max_batch_age_s,
         )
         sink.start()
         with routing_execution_scope(PerfConfig.from_env()):
@@ -1853,6 +1898,11 @@ class FactorEngine:
         out["scheduler"] = "adaptive"
         out["parallel"] = parallel
         out["resource_profile"] = resource_profile
+        out["batch_write_transaction_count"] = batch_write_transaction_count
+        out["shard_index"] = shard_index
+        out["shard_count"] = shard_count
+        out["shard_scope"] = shard_scope
+        out["generation"] = batch_generation.generation_id
         return out
 
     def materialize_matrix(
@@ -2333,6 +2383,13 @@ class FactorEngine:
         )
 
         assert_production_factors([factor], mode=self.run_mode, context="run")
+        # R39 #29：production 执行前参数域 store 必须已装载（非空）且非旧 SHA
+        # 证据 —— 禁止空 store / 旧 SHA store 悄悄存在（fail closed）。clean
+        # 执行路径（``cleaned_bridge``）在算子级再次强制，这里是 run() 级 fail-fast。
+        if is_production_mode(self.run_mode):
+            from runtime.parameter_domain_store import assert_parameter_domain_ready
+
+            assert_parameter_domain_ready()
         if plan is None or analysis is None:
             plan, analysis = self.compile(
                 factor,

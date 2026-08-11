@@ -17,6 +17,7 @@ R36 的 AutoShard 只把 ``resource_contract.peak_memory_bytes`` 改小（伪 sh
 """
 from __future__ import annotations
 
+import enum
 import hashlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,6 +27,25 @@ from typing import Any
 SHARD_ASSET = "asset"
 SHARD_TIME = "time"
 SHARD_SESSION = "session"
+
+
+class ShardMergeMode(enum.Enum):
+    """R39-PERF-026：shard 合并/落盘模式。
+
+    - ``DIRECT_DURABLE_APPEND``：shard 可直接落盘（time/asset shard 的 final storage
+      分区兼容）——merge task 只提交 manifest（碎片列表），**不**重建大内存结果。
+    - ``CONCAT_ONLY``：merge 契约 + 运行时证明已证明「每片已排序 + 范围不重叠 +
+      merge_order 正确」→ 单次 ``pd.concat(all, copy=False)``，无需逐片 sort。
+    - ``ORDERED_MERGE``：默认正确性模式——逐片 load + concat + sort（有 overlap /
+      未排序时保证结果与旧 K-concat+sort 完全一致）。
+    - ``REDUCE_STATE``：stateful/overlap 场景按状态归约合并（当前 fallback 到
+      ordered merge 保证正确性）。
+    """
+
+    DIRECT_DURABLE_APPEND = "direct_durable_append"
+    CONCAT_ONLY = "concat_only"
+    ORDERED_MERGE = "ordered_merge"
+    REDUCE_STATE = "reduce_state"
 
 
 @dataclass(frozen=True)
@@ -70,6 +90,9 @@ class ShardMergeContract:
     column_order: str = "preserve_first"      # preserve_first | sorted
     missing_cells: str = "nan"                # nan | error
     state_checkpoint_continuity: str = "required_if_time_shard_stateful"
+    #: R39-PERF-026 请求的合并模式（默认 ORDERED_MERGE 保证正确性；运行时证明
+    #: 可将其升级为 CONCAT_ONLY，或对 stateful/overlap 保持 ordered fallback）。
+    merge_mode: str = "ordered_merge"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +105,7 @@ class ShardMergeContract:
             "column_order": self.column_order,
             "missing_cells": self.missing_cells,
             "state_checkpoint_continuity": self.state_checkpoint_continuity,
+            "merge_mode": self.merge_mode,
         }
 
 
@@ -136,6 +160,31 @@ def shape_signature(
     """分片形状签名：同 shape 重试禁止（§R38-P0-005 hard invariant）。"""
     payload = f"{task_id}|{dimension}|{shard_count}|{per_shard_peak_bytes}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def merge_resource_model(
+    *,
+    original_peak_bytes: int,
+    per_shard_peak_bytes: int,
+    output_bytes: int,
+    shard_count: int,
+) -> int:
+    """Merge 任务的**独立**内存模型（P0-003：merge 不能按 original peak 计）。
+
+    原 ROOT 的 ``peak_memory_bytes`` 是「输入 + 中间工作区 + 输出」同时常驻的
+    峰值——正是不满足 SafeEnvelope 才被拆的原因；merge 只做逐片 load + concat +
+    sort（大 shard 结果已 spool，merge 逐片 reload），峰值 ≈ 一片输入 + 累计输出：
+
+        merge_peak = min(original_peak, per_shard_peak + output_bytes)
+
+    避免 merge 因峰值退回 original peak 而永远无法 admission、AutoShard 把自己
+    卡死（auto-shard 不会继续拆 MERGE）。结果本身过大时应走 streaming
+    materializer / spool 落盘，不重新拼成一份完整 DataFrame。
+    """
+    original = max(1, int(original_peak_bytes))
+    per_shard = max(1, int(per_shard_peak_bytes))
+    out = max(1, int(output_bytes))
+    return min(original, per_shard + out)
 
 
 def _serialize_slice(slice_: Any) -> Any:

@@ -228,10 +228,15 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     """
     import os
     import tempfile
+    import uuid
 
     import pyarrow.parquet as pq
 
-    from data_access.core.exceptions import ValidationError
+    from data_access.core.exceptions import (
+        CapabilityUnavailableError,
+        SourceResolutionError,
+        ValidationError,
+    )
     from data_access.read.aggregation import AggregationItem, aggregate_minute_bundle
     from data_access.read.read_contract import (
         ReadStats,
@@ -239,8 +244,19 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         merge_sql_data_snapshots,
     )
     from data_access.read.read_handle import ReadHandle
+    from data_access.runtime.prepared_read import (
+        DeadlineContext,
+        EmptyPhysicalScope,
+        reset_deadline_context,
+    )
 
     anchor = plan.anchor
+    # R39 P0 #33：组合读 deadline 从**最外层入口**开始——minute aggregation / path
+    # resolution / snapshot / join SQL compile 全部计入同一请求预算（旧代码
+    # ``_composed_deadline_at`` 在这些 prep 之后才建，早期阶段完全不在预算内）。
+    budget = store._resolve_sql_budget(list(plan.datasets), None)
+    deadline_ctx = DeadlineContext.start(budget, source="composed_read")
+    _deadline_token = deadline_ctx.enter()
     items: list[AggregationItem] = []
     for raw in req.aggregations:
         if isinstance(raw, AggregationItem):
@@ -300,7 +316,10 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     try:
         anchor_view = f"da_composed_anchor_{uuid.uuid4().hex[:8]}"
         store._engine.register_anchor_relation(anchor_view, agg_table)
-    except Exception:
+    except CapabilityUnavailableError:
+        # R39 P0 #43：只有**能力缺失**（共享 pool 数据库不可用）才回退临时 parquet；
+        # 数据库损坏 / schema 错误 / pool 状态错误必须原样传播，禁止 ``except Exception``
+        # 一把抓当能力缺失回退。
         anchor_view = None
         _anchor_fd, anchor_path = tempfile.mkstemp(
             suffix=".parquet", prefix="da_plan_agg_"
@@ -337,16 +356,29 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     }
 
     anchor_dsobj = store._registry.get(anchor)
-    source_paths = []
+    source_paths: list[str] = []
     try:
-        source_paths = store._prepare_dataset_read(
+        _src = store._prepare_dataset_read(
             anchor_dsobj,
             time_range=plan.time_range,
             params=ds_params,
             instrument_filter=insts,
         )
-    except Exception:
-        source_paths = []
+    except Exception as exc:
+        # R39 P0 #44：解析失败 ≠ 空数据集——抛 typed SourceResolutionError，绝不
+        # 用 ``source_paths=[]`` 静默冒充「合法空」。
+        raise SourceResolutionError(
+            f"组合读锚点 '{anchor}' 物理读取范围解析失败（R39 P0 #44）："
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+    if not _src:
+        # R39 P0 #44：legitimately empty dataset → typed EmptyPhysicalScope（list
+        # 子类，下游 list()/迭代兼容，但语义明确是「空」而非「失败」）。
+        source_paths = EmptyPhysicalScope(
+            dataset=anchor, reason="no matching partitions for composed read"
+        )
+    else:
+        source_paths = list(_src)
 
     sql, sql_params, datasets, per_ds_paths = store._read_joined_sql(
         anchor,
@@ -405,15 +437,11 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     # #P1-final closure 4 预算 parity：与 read_joined 一致，合并**全部参与数据集**
     # 的 query_policy 取最严——旧代码只取 anchor 的 policy（``_resolve_read_budget
     # (anchor_dsobj, None)``），非 anchor 表 max_rows/max_scan_files 全被绕过。
-    budget = store._resolve_sql_budget(list(plan.datasets), None)
-    # R29-P0 #201：组合读全请求 absolute deadline（resolve/snapshot 已耗时，执行
-    # 只拿剩余）。
-    _composed_deadline_at = None
-    if getattr(budget, "max_elapsed_ms", None):
-        if float(budget.max_elapsed_ms) > 0:
-            import time as _tm
-
-            _composed_deadline_at = _tm.monotonic() + float(budget.max_elapsed_ms) / 1000.0
+    # R39 P0 #33：budget 已在最外层入口解析；deadline 由 DeadlineContext 持有，
+    # resolve/snapshot/join SQL compile 全部计入同一请求预算。
+    if deadline_ctx is not None:
+        deadline_ctx.check(context="composed_read(snapshot/join-sql)")
+    _composed_deadline_at = deadline_ctx.deadline_at if deadline_ctx is not None else None
 
     # #P1-final closure 4 max_scan_files：组合读同样对每张参与表的实际匹配文件数
     # 做硬限制（read_joined 在 snapshot 阶段 enforce，这里逐 dataset 补上）。
@@ -440,8 +468,6 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     # execute(duckdb_slot + counters.execute) → verify_after → release。旧代码
     # 直接 ``engine.execute_*`` 绕过 governor reservation / snapshot verify，
     # 组合读是 PreparedRead 之外的第二条旁路（与 read_joined / read_factors 对齐）。
-    import uuid
-
     from data_access.security.execution_context import current_principal
 
     join_snapshot = None
@@ -455,12 +481,26 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         store._pipeline.enforce_budget(budget, snapshot=join_snapshot)
     ctx_principal = current_principal() or store._principal
     pid = getattr(ctx_principal, "principal_id", "unknown")
+    # R39 P0 #35：组合读同样形成真实内存 P99 admission——先
+    # QueryBudget.max_estimated_memory 硬门（执行前拒绝），再请求 governor lease。
+    _estimated_memory = 0
+    try:
+        _est_bytes = (
+            join_snapshot.total_bytes if join_snapshot is not None else 0
+        )
+        _estimated_memory = max(int(_est_bytes * 1.5), int(agg_table.nbytes or 0))
+    except Exception:
+        _estimated_memory = 0
+    from data_access.read.query_budget import enforce_memory_budget
+
+    enforce_memory_budget(budget, estimated_memory=_estimated_memory)
     res = store._pipeline.admit(
         request_identity=f"composed:{anchor}:{uuid.uuid4().hex[:12]}",
         principal_id=pid,
         estimated_scan_bytes=(
             join_snapshot.total_bytes if join_snapshot is not None else 0
         ),
+        estimated_memory=_estimated_memory,
         remote_requests=(
             sum(
                 1
@@ -485,11 +525,17 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         # governor 同一信号量）→ verify_after。
         store._pipeline.verify_before(join_snapshot)
         store._pipeline.counters.execute += 1
+        # R29-P0 #204（沿用物化分支）：anchor 视图活在**共享 pool 数据库**里——
+        # 无显式 budget deadline 时也必须给默认 deadline 强制走 pool 连接
+        # （execute_reader 无 deadline 落到 self._conn `:memory:`，看不到视图）。
+        _reader_deadline_ms = _remaining_ms(budget, _composed_deadline_at)
+        if _reader_deadline_ms is None and anchor_view is not None:
+            _reader_deadline_ms = 30_000.0  # 默认 30s 请求预算（强制 pool 路由）
         reader = store._engine.execute_reader(
             sql,
             sql_params,
             batch_size=100_000,
-            deadline_ms=_remaining_ms(budget, _composed_deadline_at),
+            deadline_ms=_reader_deadline_ms,
         )
         acc_rows = 0
         acc_bytes = 0
@@ -499,6 +545,9 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
             nonlocal acc_rows, acc_bytes
             try:
                 for batch in reader:
+                    # R39 P0 #37：流式逐 batch 检查绝对 deadline（执行中强制终止）。
+                    if deadline_ctx is not None:
+                        deadline_ctx.check(context="composed_stream")
                     acc_rows += batch.num_rows
                     acc_bytes += int(getattr(batch, "nbytes", 0) or 0)
                     enforce_stream_budget(
@@ -516,18 +565,32 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
                         close()
                 except Exception:
                     pass
-                _cleanup_anchor(store, anchor_view, anchor_path)
-                store._pipeline.release_reservation(res)
+                # R39 P0 #38：reservation 释放 + anchor 清理挂到 ReadHandle cleanup
+                # 回调（create-then-close 从不迭代也释放）；生成器只负责 reader 关闭
+                # 与 verify_after。reservation release 幂等，两条路径双保险。
+
+        def _composed_cleanup() -> None:
+            _cleanup_anchor(store, anchor_view, anchor_path)
+            store._pipeline.release_reservation(res)
 
         stats = ReadStats(rows=0, bytes=0, elapsed_ms=0.0)
-        return ReadHandle(
-            stream=_gen(), snapshot=snapshot, stats=stats, lineage=lineage
+        handle = ReadHandle(
+            stream=_gen(),
+            snapshot=snapshot,
+            stats=stats,
+            lineage=lineage,
+            _cleanup_callbacks=[_composed_cleanup],
+            _deadline=deadline_ctx,
         )
+        reset_deadline_context(_deadline_token)
+        return handle
 
     start_clock = _perf_counter()
     try:
         # R29-P0 #197/#201：组合物化同样 verify_before → execute（engine 内部持
         # governor 同一信号量）→ verify_after。
+        if deadline_ctx is not None:
+            deadline_ctx.check(context="composed_read(execute)")
         store._pipeline.verify_before(join_snapshot)
         store._pipeline.counters.execute += 1
         # R29-P0 #204：anchor 视图活在**共享 pool 数据库**里（跨连接可见）——
@@ -556,6 +619,7 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
 
     enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
+    reset_deadline_context(_deadline_token)
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 
 

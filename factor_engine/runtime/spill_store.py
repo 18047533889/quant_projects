@@ -77,6 +77,48 @@ class SpillStore:
         os.makedirs(self._root, exist_ok=True)
         self._refs: dict[str, SpillRef] = {}
         self._events: list[str] = []
+        # P0-013：启动时 scavenge 未被追踪的孤儿 spill 文件（进程崩溃 / release
+        # 漏删兜底）。TTL 从 env 读，默认 1h——不误删刚写入的并发文件。
+        try:
+            ttl = float(os.environ.get("FACTOR_ENGINE_SPILL_ORPHAN_TTL", "3600"))
+        except (TypeError, ValueError):
+            ttl = 3600.0
+        self.cleanup_orphans(ttl_seconds=ttl)
+
+    def cleanup_orphans(self, *, ttl_seconds: float = 3600.0) -> int:
+        """清理未被 ``_refs`` 追踪的孤儿 spill 文件（mtime 超过 TTL 才删）。
+
+        P0-013：``release``/``cleanup_execution`` 之外的最后兜底——长时间 service
+        运行后磁盘上不再积累 orphan parquet。
+        """
+        import time as _time
+
+        removed = 0
+        try:
+            with self._lock:
+                tracked = set(self._refs.keys())
+            now = _time.time()
+            for name in os.listdir(self._root):
+                if not name.endswith(".parquet"):
+                    continue
+                path = os.path.join(self._root, name)
+                if path in tracked:
+                    continue
+                try:
+                    age = now - os.path.getmtime(path)
+                except OSError:
+                    continue
+                if age >= ttl_seconds:
+                    try:
+                        os.remove(path)
+                        removed += 1
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        if removed:
+            self._events.append(f"orphan_cleanup:{removed}")
+        return removed
 
     @property
     def root_dir(self) -> str:

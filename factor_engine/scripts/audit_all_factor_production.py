@@ -50,6 +50,9 @@ _PANEL_PARAMETERS = frozenset({
     # Operator expansion (2026-08) panel inputs.
     "pre_close", "subgroup", "member", "index_weight", "date1", "date2",
     "period_end_date", "pub_date", "state", "event", "entity_id",
+    # R47 panel-model family: predictability mosaic consumes a base signal, the
+    # realized return and a discrete state feature (all daily panels).
+    "base_signal", "realized_return", "state_feature",
     "snapshot_id", "snapshot_date", "previous_snapshot_date",
     "high_limit", "low_limit", "stock_return",
     "benchmark_return", "category", "day_vwap", "current_snapshot",
@@ -155,6 +158,13 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
 
 _SCALAR_VALUES: dict[str, Any] = {
     "window": 20,
+    # R47 new-operator families: `target`/`target_a`/`target_b` are required
+    # (no declared default) in the intraday state ops, so they need an explicit
+    # audit value; the remaining R47 scalars all carry declared defaults and
+    # resolve through ``_declared_default``.
+    "target": 1,
+    "target_a": 1,
+    "target_b": 1,
     "d": 20,
     "n": 3,
     "m": 2,
@@ -881,6 +891,14 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
     "y": "minute_ret",
     # 2026-08 V2/V3 session-recovery: minute shock-indicator event panel.
     "event": "minute_shock",
+    # R47 state / event-window / slice-mask intraday families: discrete-state
+    # and boolean-mask panels are minute-frequency (the fixture's deterministic
+    # shock indicator is a valid categorical proxy).
+    "state": "minute_shock",
+    "state_a": "minute_shock",
+    "state_b": "minute_shock",
+    "event_mask": "minute_shock",
+    "mask_field": "minute_ret",
 }
 
 # Minute-source operators also consume a few daily panels that are broadcast
@@ -888,7 +906,8 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
 # weights, limit prices).
 _MINUTE_DAILY_PARAMS: frozenset[str] = frozenset(
     {"free_market_cap", "high_limit", "low_limit",
-     "benchmark_ret", "market_ret", "market", "benchmark"}
+     "benchmark_ret", "market_ret", "market", "benchmark",
+     "pre_close"}
 )
 
 

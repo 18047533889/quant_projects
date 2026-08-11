@@ -79,12 +79,19 @@ def _gate_parameter_domain_certified() -> GateResult:
     if n == 0:
         return GateResult.not_run("R37_PARAMETER_DOMAIN_CERTIFIED",
                                   "no certified points loaded", head)
-    # exact-call 口径：每个 certified 点必须能被查询到
+    # exact-call 口径：每个 certified 点必须能被查询到（R39 #28：查询带**全维度**
+    # identity——semantic_version/backend/variant/source_context/dtype/grain 不再
+    # 落默认值，否则不同维度空间会互相错查）。
     cases = []
     for cp in store.all_passed_certified_points():
         kw = dict(cp.key.parameter_point)
         cases.append(store.exact_call_is_certified(
-            cp.key.canonical, kw, backend=cp.key.backend))
+            cp.key.canonical, kw,
+            semantic_version=cp.key.semantic_version, backend=cp.key.backend,
+            execution_variant=cp.key.execution_variant,
+            source_context=cp.key.source_context,
+            dtype=cp.key.dtype, grain=cp.key.grain,
+        ))
     return GateResult.from_cases(
         "R37_PARAMETER_DOMAIN_CERTIFIED", cases, commit_sha=head,
         evidence_files=("docs/evidence/r37/R37_PARAMETER_DOMAIN_STORE.json",),

@@ -344,6 +344,25 @@ def _build_verified_payload(
     # certified.
     passed = _executed_passed_sets(executed_records)
 
+    # R38 evidence-regen blocker: route the ``strict_period_*`` stage's executed
+    # records into the six evidence fields by test-function granularity.  The
+    # stage runs ``tests/operators/test_production_convergence.py``:
+    #   - ``test_strict_period_polars_*``   -> polars_reference_parity (pandas<->polars parity)
+    #   - ``test_strict_period_duckdb_*``   -> duckdb_real_sql_verified (real SQL execution)
+    # Without this, the 7 strict-period primitives are dropped from every field
+    # (they have no dedicated case-registry key) even though their parity tests
+    # pass — the certification pipeline never attributes them.
+    strict_stage = "strict_period_triple_parity_and_no_fallback"
+    for rec in executed_records:
+        if rec.get("stage") != strict_stage or rec.get("status") != "passed":
+            continue
+        case_id = str(rec.get("case_id") or "")
+        canon = str(rec["canonical"])
+        if "test_strict_period_polars" in case_id:
+            passed.setdefault("polars_reference_parity", set()).add(canon)
+        elif "test_strict_period_duckdb" in case_id:
+            passed.setdefault("duckdb_real_sql_verified", set()).add(canon)
+
     def stage(key: str) -> frozenset[str]:
         static = frozenset(registry.get(key) or [])
         return static & frozenset(passed.get(key) or [])
@@ -491,6 +510,20 @@ def main() -> int:
                 print(detail, file=sys.stderr)
                 return 1
             candidates = frozenset(registry.get(stage_name) or [])
+            if not candidates:
+                # R38 evidence-regen blocker: the ``strict_period_triple_parity_and_no_fallback``
+                # stage has no dedicated case-registry key (its cases are declared under the
+                # six evidence fields), so ``_extract_canonical`` could never match and the
+                # 7 strict-period primitives were silently dropped from every certified set.
+                # Feed it the union of the six declared evidence fields as candidates so the
+                # executed+passed JUnit cases can be attributed to their canonicals.
+                candidates = frozenset().union(
+                    *(frozenset(registry.get(k) or []) for k in (
+                        "polars_reference_parity", "polars_edge_verified",
+                        "duckdb_reference_parity", "duckdb_real_sql_verified",
+                        "duckdb_edge_verified", "no_fallback_verified",
+                    ))
+                )
             stage_ok, skipped_files, records = _parse_junit_records(
                 junit_path, files, candidates, stage_name
             )

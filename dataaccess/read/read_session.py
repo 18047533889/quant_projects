@@ -63,6 +63,7 @@ class DataReadSession:
         )
         self._resolution_cache: dict[tuple[Any, ...], Any] = {}
         self._token: Any = None
+        self._mode_token: Any = None
         self._prev_cache: Any = None
         self._closed = False
 
@@ -71,6 +72,19 @@ class DataReadSession:
             raise RuntimeError("DataReadSession 已关闭，无法再次进入")
         # 1) 绑定请求级执行上下文（整个 job）。
         self._token = _execution_ctx_var.set(self._ctx)
+        # 1b) R39 P0 #50：job 级 RuntimeModeIdentity 单一权威——整个 session 内
+        #     QueryBudget / is_strict_semantics / PIT / calendar 都读它，不再各层
+        #     重读 env。退出时恢复。
+        from data_access.runtime.mode_identity import (
+            reset_runtime_mode_identity,
+            set_runtime_mode_identity,
+        )
+
+        rm = getattr(self._ctx, "run_mode", None)
+        if rm is not None:
+            self._mode_token = set_runtime_mode_identity(
+                rm, source="DataReadSession"
+            )
         # 2) R38 P0-050：resolution 缓存放 **ContextVar**（request-scoped），不再
         #    修改 Store 全局属性——并发 session A/B overlap 时 A exit 不会清掉
         #    B 的 cache。Store ``_resolution_cache`` 仅作向后兼容显示。
@@ -100,6 +114,14 @@ class DataReadSession:
             if getattr(self, "_cache_token", None) is not None:
                 reset_resolution_cache(self._cache_token)
                 self._cache_token = None
+        except Exception:
+            pass
+        try:
+            from data_access.runtime.mode_identity import reset_runtime_mode_identity
+
+            if getattr(self, "_mode_token", None) is not None:
+                reset_runtime_mode_identity(self._mode_token)
+                self._mode_token = None
         except Exception:
             pass
         self._closed = True

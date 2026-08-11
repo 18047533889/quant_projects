@@ -1,0 +1,16 @@
+{
+  "factor_count": 1000,
+  "unique_concepts": 11,
+  "source_group_count": 7,
+  "physical_scan_count": 7,
+  "scan_amplification": 0.007,
+  "coalescer": {
+    "input_requests": 1850,
+    "merged_requests": 7,
+    "saved_scans": 1843,
+    "field_union_total": 32
+  },
+  "acceptance": {
+    "source_group_count_lt_factor_count": true
+  }
+}

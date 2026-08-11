@@ -116,6 +116,30 @@ class HybridExecutor:
         self._process_task_count = 0
         # R31-007.4: 连续熔断计数（供调度器/运维观测 backend 健康）。
         self._process_breaker_hits = 0
+        # R39-P1-PERF-082: 最近一次 runtime backend event（submit 时记录）。
+        self._last_runtime_backend_event: dict[str, Any] | None = None
+
+    def cohort_worker_threads(
+        self,
+        *,
+        query_shape: Any = None,
+        scan_bytes: int = 0,
+        current_concurrency: int = 0,
+    ) -> int:
+        """R39-PERF-074：query-class cohort 选择内层 worker threads。
+
+        默认 OFF（env ``FACTOR_ENGINE_COHORT_PROFILES=1`` 开启）。开启且 query
+        shape 可用时按 {1,2,4,8} 固定 profile 池选择；shape 未知或 cohort 关闭时
+        回退 ``self.worker_threads``（legacy 公式）。
+        """
+        from runtime.query_class_cohort import cohort_profiles_enabled, QueryClassCohort
+
+        if not cohort_profiles_enabled():
+            return int(self.worker_threads)
+        selected = QueryClassCohort().select_cohort(
+            query_shape, scan_bytes, current_concurrency
+        )
+        return int(self.worker_threads) if selected is None else int(selected)
 
     def _ensure_pools(self) -> None:
         with self._lock:
@@ -135,6 +159,51 @@ class HybridExecutor:
                 except Exception:
                     self._process_pool = None
 
+    def record_runtime_backend_event(
+        self,
+        backend: str,
+        kind: str,
+        *,
+        no_fallback: bool = True,
+    ) -> dict[str, Any]:
+        """R39-P1-PERF-082: 记录 runtime backend event（供 O(1) 校验消费）。"""
+        event = {
+            "backend": str(backend or "pandas_numpy"),
+            "execution_kind": str(kind or "thread"),
+            "no_fallback": bool(no_fallback),
+        }
+        self._last_runtime_backend_event = event
+        return event
+
+    def _validate_certificate_event(
+        self,
+        certificate: Any,
+        event: dict[str, Any] | None,
+        allowed_fallbacks: Any = (),
+    ) -> bool:
+        """O(1) 校验（不 import plan / 不 walk 树）；失败只计数 + 告警，不阻断执行。"""
+        from runtime.perf_counters import get_global_counters
+        from runtime.production_execution_certificate import validate
+
+        ok = validate(certificate, event, allowed_fallbacks)
+        if not ok:
+            get_global_counters().incr("certificate_validation_failure_count")
+            _logger.warning(
+                "production execution certificate validation failed: event=%s",
+                event,
+            )
+        return ok
+
+    def validate_certificate(
+        self,
+        certificate: Any,
+        allowed_fallbacks: Any = (),
+    ) -> bool:
+        """R39-P1-PERF-082: O(1) 校验最近一次 runtime backend event 与证书一致。"""
+        return self._validate_certificate_event(
+            certificate, self._last_runtime_backend_event, allowed_fallbacks
+        )
+
     def submit(
         self,
         backend: str,
@@ -142,12 +211,17 @@ class HybridExecutor:
         *args: Any,
         cpu_tokens: int = 1,
         prefer: str | None = None,
+        certificate: Any | None = None,
     ) -> Future:
         """按 backend GIL 分类提交；``prefer`` ∈ {thread, process} 强制。
 
         R31-008：``cpu_tokens`` 仅保留签名兼容，**不作为第二套资源治理**——唯一
         admission authority 是 ``ResourceBroker``（调度器在 submit 前已按 token
         预留）。此处忽略该参数，避免「Executor 自己也控制并发」的误导。
+
+        R39-P1-PERF-082（additive）：每次 submit 记录 runtime backend event；
+        若传入 ``certificate``，立即对本次 event 做 O(1) 校验。校验失败只计数
+        + 告警，**绝不阻断执行**（默认行为不变）。
         """
         _ = cpu_tokens  # R31-008: admission 由 broker 统一，Executor 只执行
         self._ensure_pools()
@@ -157,6 +231,9 @@ class HybridExecutor:
         if kind == "process" and self._process_pool is not None:
             try:
                 self._process_task_count += 1
+                event = self.record_runtime_backend_event(backend, "process", no_fallback=True)
+                if certificate is not None:
+                    self._validate_certificate_event(certificate, event)
                 return self._process_pool.submit(fn, *args)
             except Exception:
                 # R31-007.4 (BROKEN_WORKER_RECOVERY_PASS)：worker 崩溃后进程池不可用。
@@ -165,11 +242,17 @@ class HybridExecutor:
                 self._recover_process_pool()
                 self._process_breaker_hits += 1
                 self._thread_task_count += 1
+                event = self.record_runtime_backend_event(backend, "thread", no_fallback=False)
+                if certificate is not None:
+                    self._validate_certificate_event(certificate, event)
                 return self._thread_pool.submit(fn, *args)
         if self._thread_pool is None:
             self._ensure_pools()
         assert self._thread_pool is not None
         self._thread_task_count += 1
+        event = self.record_runtime_backend_event(backend, "thread", no_fallback=True)
+        if certificate is not None:
+            self._validate_certificate_event(certificate, event)
         return self._thread_pool.submit(fn, *args)
 
     def _recover_process_pool(self) -> None:
@@ -209,4 +292,5 @@ class HybridExecutor:
             "max_thread_workers": self.max_thread_workers,
             "max_process_workers": self.max_process_workers,
             "worker_threads": self.worker_threads,
+            "last_runtime_backend_event": self._last_runtime_backend_event,
         }

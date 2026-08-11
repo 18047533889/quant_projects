@@ -33,11 +33,17 @@ def test_da_standalone_safe_cap(monkeypatch):
     assert gov._max_memory is not None, "standalone production 不能 None（无限）"
     assert gov._max_memory > 0
     assert gov._max_scan is not None
-    # 默认关闭时保持 None（上层 coordinator 注入）。
+    # P0-025 fail-closed：**默认开启**——未设置 env 也必须有 safe cap（不无限）。
     monkeypatch.delenv("DATA_ACCESS_AUTO_BOUND_MEMORY", raising=False)
     reset_global_governor()
     gov2 = GlobalResourceGovernor()
-    assert gov2._max_memory is None
+    assert gov2._max_memory is not None, "默认（未设置）也必须有 safe cap（fail-closed）"
+    assert gov2._max_memory > 0
+    # 显式关闭才允许无上限（测试 / 无上限部署显式选择）。
+    monkeypatch.setenv("DATA_ACCESS_AUTO_BOUND_MEMORY", "0")
+    reset_global_governor()
+    gov3 = GlobalResourceGovernor()
+    assert gov3._max_memory is None
 
 
 # ---------------------------------------------------------------------------

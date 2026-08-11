@@ -567,20 +567,25 @@ def test_startup_gate_missing_calendar_reports_problem(tmp_path):
 # ===========================================================================
 
 def test_datarequest_unconsumed_params_rejected(tmp_path):
-    """R29-14：transforms / field_params / frequency（无 aggregations）被静默忽略
-    → execute 明确 reject（「真正执行或立即 reject」，不许 only-explain）。"""
+    """R29-14 → R39 #68：transforms/field_params/frequency 从「拒绝静默忽略」升级为
+    **真实执行**。不支持的 transform / 无法解释的 field_params → typed
+    ``UnsupportedFeatureError``；standalone frequency 对返回帧 resample（不再拒绝）。"""
+    from data_access.core.exceptions import UnsupportedFeatureError
     from data_access.read.data_request import DataRequest
 
     store, root = _static_store(tmp_path)
-    with pytest.raises(ValidationError, match="transforms"):
+    # 不支持的 transform → typed UnsupportedFeatureError（ValidationError 子类）。
+    with pytest.raises(UnsupportedFeatureError, match="没有执行链"):
         store.plan(DataRequest(fields=["ts", "sym", "val"],
                                transforms={"val": "pct"})).execute()
-    with pytest.raises(ValidationError, match="field_params"):
+    # 无对应 transform/aggregation 的 field_params → typed UnsupportedFeatureError。
+    with pytest.raises(UnsupportedFeatureError, match="field_params"):
         store.plan(DataRequest(fields=["ts", "sym", "val"],
                                field_params={"val": {"lag": 2}})).execute()
-    with pytest.raises(ValidationError, match="frequency"):
-        store.plan(DataRequest(fields=["ts", "sym", "val"],
-                               frequency="daily")).execute()
+    # standalone frequency 现在真正执行（resample 返回帧），不再 reject。
+    plan = store.plan(DataRequest(fields=["ts", "sym", "val"], frequency="daily"))
+    out = plan.execute().to_arrow()
+    assert out.num_rows >= 0
 
 
 # ===========================================================================

@@ -53,17 +53,6 @@ class ExecutionCacheSession:
         # 同一 execution_id 重复注册时后者覆盖（可接受）。
         self._l0_layer = f"{self.execution_id}:l0_cse"
         self._l1_layer = f"{self.execution_id}:l1_panel"
-        self._expression_cache = ExpressionCache(
-            self.shared_result_cache,
-            stats=self.stats,
-            budget_bytes=self.cse_budget_bytes,
-            layer_name=self._l0_layer,
-        )
-        self._panel_cache = PanelCache(
-            self.panel_cache,
-            budget_bytes=self.panel_budget_bytes,
-            layer_name=self._l1_layer,
-        )
         # R36 P0-021（§104/105）：CSE 共享缓冲的 governed 写入通道——取代 raw
         # ``shared_result_cache[sid]=value`` 作为唯一权威写入路径。
         # R38 P0-032（§13）：挂真实 SpillStore，spill() 是真 spill 不是 drop。
@@ -74,6 +63,21 @@ class ExecutionCacheSession:
             self.shared_result_cache,
             budget_bytes=self.cse_budget_bytes,
             spill_store=SpillStore(),
+            execution_id=self.execution_id,
+        )
+        # R38 P0-038（P0-014）：L0 **唯一 owner 是 GovernedBufferStore**。
+        # ExpressionCache 只作 adapter（governed_store 模式）——不再双套 accounting。
+        self._expression_cache = ExpressionCache(
+            self.shared_result_cache,
+            stats=self.stats,
+            budget_bytes=self.cse_budget_bytes,
+            layer_name=self._l0_layer,
+            governed_store=self._buffer_store,
+        )
+        self._panel_cache = PanelCache(
+            self.panel_cache,
+            budget_bytes=self.panel_budget_bytes,
+            layer_name=self._l1_layer,
         )
         # Phase 5 R6：把 CSE / panel 两层注册到全局 MemoryGovernor 的 evict hooks，
         # RSS 高压档时由 governor 主动逐出。
@@ -83,7 +87,10 @@ class ExecutionCacheSession:
             from runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
-            gov.register_layer(self._l0_layer, self._expression_cache.evict_if_over_budget)
+            # R38 P0-038：L0 高压逐出直接指向 GovernedBufferStore（唯一 owner，
+            # 含 pinned/refcount/spill 语义），不再绑到 ExpressionCache 自己的
+            # 一套 accounting（split-brain 修复）。
+            gov.register_layer(self._l0_layer, self._buffer_store.evict_if_over_budget)
             gov.register_layer(self._l1_layer, self._panel_cache.evict_if_over_budget)
         except Exception as exc:  # noqa: BLE001
             if self.strict:

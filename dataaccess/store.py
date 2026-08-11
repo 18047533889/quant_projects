@@ -62,6 +62,7 @@ from data_access.read.query_budget import (
     QueryBudget,
     collect_polars_with_budget,
     enforce_arrow_budget,
+    enforce_memory_budget,
     enforce_scan_file_budget,
     enforce_stream_budget,
     merge_dataset_policies,
@@ -1471,6 +1472,7 @@ class DataAccessStore:
         params: Mapping[str, Any] | None = None,
         request_identity: str | None = None,
         principal_id: str | None = None,
+        run_mode: str | None = None,
     ) -> PreparedRead:
         """R26-P0-003/004：构建 immutable executable plan。
 
@@ -1478,15 +1480,13 @@ class DataAccessStore:
         budget → schema → governor admission，产出 ``PreparedRead``。
         之后必须 ``execute_prepared_read(prepared)``，禁止 backend 重新解释
         contract / snapshot / budget。
+
+        R39 P0 #32/#50：deadline 从**最外层入口**开始；``run_mode`` 显式传入时
+        设置 request-scoped RuntimeModeIdentity（单一权威，各层不再各读 env）。
         """
         from data_access.runtime.prepared_read import (
-            PreparedRead,
-            PredicateConstraint,
-            TemporalPlan,
-        )
-        from data_access.security.execution_context import (
-            current_execution_context,
-            current_principal,
+            DeadlineContext,
+            reset_deadline_context,
         )
 
         if ds is None:
@@ -1496,16 +1496,88 @@ class DataAccessStore:
             ensure_sequence_arg(instrument_filter, name="instrument_filter")
         if columns is not None:
             ensure_sequence_arg(columns, name="columns")
-        # ---- auth ----
+        # ---- R39 P0 #50：run_mode → request-scoped RuntimeModeIdentity ----
+        # 显式 kwarg 优先；否则从 ``params`` 提取（``store.read(run_mode=...)``
+        # 的调用方——如 FE ``DataAccessSource``——把 FE 的 run_mode 经 ``**params``
+        # 传入）。**禁止**在无 identity 时各层各读 env：只要调用方给了 run_mode，
+        # 它就是唯一权威。pop 防止 run_mode 残留在数据集参数里被误当字段参数。
+        if run_mode is None and isinstance(params, dict):
+            run_mode = params.pop("run_mode", None)
+        _mode_token = None
+        if run_mode is not None:
+            from data_access.runtime.mode_identity import set_runtime_mode_identity
+
+            _mode_token = set_runtime_mode_identity(run_mode, source="prepare_read")
+        # ---- R39 P0 #32：请求 deadline 从最外层入口开始（budget 先解析）----
+        budget = self._resolve_read_budget(ds, query_budget)
+        deadline_ctx = DeadlineContext.start(budget, source="prepare_read")
+        _deadline_token = deadline_ctx.enter()
+        try:
+            return self._prepare_read_core(
+                dataset=dataset,
+                ds=ds,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                query_budget=query_budget,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
+                physical_scope=physical_scope,
+                params=params,
+                request_identity=request_identity,
+                principal_id=principal_id,
+                budget=budget,
+                deadline_ctx=deadline_ctx,
+            )
+        finally:
+            reset_deadline_context(_deadline_token)
+            if _mode_token is not None:
+                from data_access.runtime.mode_identity import reset_runtime_mode_identity
+
+                reset_runtime_mode_identity(_mode_token)
+
+    def _prepare_read_core(
+        self,
+        *,
+        dataset: str,
+        ds: Dataset,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        query_budget: QueryBudget | None,
+        mode: str,
+        allow_sparse: bool,
+        allow_effective_time: bool,
+        physical_scope: Any,
+        params: Mapping[str, Any] | None,
+        request_identity: str | None,
+        principal_id: str | None,
+        budget: QueryBudget,
+        deadline_ctx: Any,
+    ) -> PreparedRead:
+        """R26-P0-003/004 的实体（R39 P0 #32：共享最外层 DeadlineContext）。
+
+        ``prepare_read`` 负责入口（run-mode identity + deadline 建立 + 清理），
+        这里是全部子阶段：auth → contract → paths → snapshot → schema → budget →
+        governor admission。所有耗时子阶段都用 ``deadline_ctx.check()`` 检查同一
+        绝对 deadline。
+        """
+        from data_access.runtime.prepared_read import VerifiedPhysicalScope
+        from data_access.security.execution_context import (
+            current_execution_context,
+            current_principal,
+        )
+
+        # ---- auth（deadline 已从入口开始计）----
         self._pipeline.counters.auth += 1
         self.authorize_dataset(dataset)
-        # R29-P0 #191：factor 数据集 generic read 同样强制 factor-level 授权
-        # （防「只有 dataset:read 却直接 factor_id=xxx 读受限因子」）。
         self._authorize_factor_params(dataset, params)
-        # R27-I：首次读即冻结 calendar 世界——之后 PIT availability 必须与本次
-        # 观察一致，不允许运行中 set_calendar 改变语义。
         self._calendars_locked = True
-        # ---- contract gate ----
         self._pipeline.counters.contract += 1
         self._prepare_read_request(
             dataset,
@@ -1518,12 +1590,10 @@ class DataAccessStore:
             params=params,
         )
         _assert_instrument_filter_supported(ds, instrument_filter)
-        budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
         # ---- physical scope（exact objects）----
-        from data_access.runtime.prepared_read import VerifiedPhysicalScope
 
         # R29-P0 #205：job 级 resolution 缓存（只对默认解析生效；physical_scope
         # 精确对象集不缓存）。提前初始化避免 Verified 分支引用未定义局部变量。
@@ -1606,12 +1676,16 @@ class DataAccessStore:
         if not (_cache is not None and _hit is not None):
             # VerifiedPhysicalScope / 无缓存路径：files 由 paths 构建（幂等）。
             files = build_file_manifest(paths)
+        if deadline_ctx is not None:
+            deadline_ctx.check(context="prepare_read(physical scope)")
         self._enforce_scan_files(budget, paths, files=files)
         # ---- source snapshot resolve + budget enforce（P0-004/010/017）----
         src_snapshot = self._pipeline.resolve_snapshot(
             dataset, files=files, paths=paths
         )
         self._pipeline.enforce_budget(budget, snapshot=src_snapshot, paths=paths)
+        if deadline_ctx is not None:
+            deadline_ctx.check(context="prepare_read(snapshot/schema)")
         self._ensure_schema(ds, paths, dict(params or {}), files=files)
         # R26-P0-022：跨 epoch schema evolution gate（真实 parquet footer）。
         if len(paths) > 1:
@@ -1639,26 +1713,29 @@ class DataAccessStore:
         temporal_plan = self._build_temporal_plan(dataset, mode=mode)
         rid = request_identity or f"{dataset}:{uuid.uuid4().hex[:12]}"
         pid = principal_id or getattr(current_principal() or self._principal, "principal_id", "unknown")
-        # R29-P0 #201：全请求 absolute deadline——prepare 开始即建立；prepare 阶段
-        # HEAD/LIST/schema 的耗时计入请求预算，execute 只拿剩余时间。
-        deadline_at = None
-        if budget is not None and getattr(budget, "max_elapsed_ms", None):
-            _ms = float(budget.max_elapsed_ms)
-            if _ms > 0:
-                deadline_at = time.monotonic() + _ms / 1000.0
-                if time.monotonic() >= deadline_at:
-                    from data_access.core.exceptions import DeadlineExceeded
-
-                    raise DeadlineExceeded(
-                        f"请求在 prepare 阶段即超过 deadline={_ms:.0f}ms"
-                        "（R29-P0 #201：HEAD/LIST/schema 也计入请求预算）。"
-                    )
+        # R39 P0 #32/#37：全请求 absolute deadline 由最外层 DeadlineContext 持有；
+        # prepare 阶段 HEAD/LIST/schema/contract 已计入同一预算，admission 前再查一次。
+        if deadline_ctx is not None:
+            deadline_ctx.check(context="prepare_read(admission)")
+        deadline_at = deadline_ctx.deadline_at if deadline_ctx is not None else None
+        # ---- R39 P0 #34/#35：真实内存 P99 预估 + 预算优先拒绝，再请求 lease ----
+        estimated_memory = self._estimate_read_memory(
+            ds,
+            columns=columns,
+            src_snapshot=src_snapshot,
+            paths=paths,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+        )
+        # #35：先 QueryBudget.max_estimated_memory 硬门（执行前拒绝），
+        # 再向 Host/DA governor 请求 lease（admit）。
+        enforce_memory_budget(budget, estimated_memory=estimated_memory)
         # ---- governor admission（P0-017：execute 前拦截）----
         res = self._pipeline.admit(
             request_identity=rid,
             principal_id=pid,
             estimated_scan_bytes=src_snapshot.total_bytes,
-            estimated_memory=0,
+            estimated_memory=estimated_memory,
             remote_requests=sum(
                 1 for o in src_snapshot.objects if str(o.uri).startswith(("s3://", "cos://"))
             ),
@@ -1678,6 +1755,7 @@ class DataAccessStore:
             security_digest=self._effective_security_digest(),
             credential_scope_id=self._effective_credential_scope(),
             deadline_at=deadline_at,
+            deadline_context=deadline_ctx,
             backend_plan={
                 "ds": ds,
                 "columns": list(columns) if columns else None,
@@ -1692,6 +1770,55 @@ class DataAccessStore:
                 "snapshot": snapshot,
             },
         )
+
+    def _estimate_read_memory(
+        self,
+        ds: Dataset,
+        *,
+        columns: Sequence[str] | None,
+        src_snapshot: Any,
+        paths: Sequence[str],
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+    ) -> int:
+        """R39 P0 #34/#35：真实内存 P99 预估（rows × 选定列平均行宽）。
+
+        优先级：
+            1. ``ScanCost.projection_bytes``（manifest 裁剪后的 estimated_rows ×
+               投影列平均行宽）——最贴近「结果占多少内存」；
+            2. fallback ``src_snapshot.total_bytes × 1.5``（磁盘压缩 → 内存未压缩
+               的保守放大）；
+            3. 兜底：选定列平均行宽 × 1000 行（无法估算时给一个非零值，避免
+               ``estimated_memory=0`` 静默绕过 governor 内存门）。
+        """
+        try:
+            from data_access.read.scan_cost import estimate_scan_cost
+
+            cost = estimate_scan_cost(
+                self,
+                ds.name,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+            )
+            if cost.projection_bytes:
+                return max(int(cost.projection_bytes), 1)
+        except Exception:
+            pass
+        scan_bytes = getattr(src_snapshot, "total_bytes", None) or 0
+        if scan_bytes and scan_bytes > 0:
+            return max(int(scan_bytes * 1.5), 1)
+        schema = getattr(ds, "schema", None) or {}
+        cols = columns or list(schema.keys())
+        widths = {
+            "double": 8, "float": 4, "int": 8, "int64": 8, "int32": 4,
+            "date": 4, "timestamp": 8, "bool": 1, "string": 16, "varchar": 16,
+        }
+        avg = 8.0
+        if cols:
+            total = sum(widths.get(str(schema.get(c, "")).lower(), 8) for c in cols)
+            avg = total / len(cols)
+        return max(int(avg * 1000), 1)
 
     def execute_prepared_read(
         self,
@@ -1870,23 +1997,100 @@ class DataAccessStore:
         return tuple(constraints)
 
     def _build_temporal_plan(self, dataset: str, *, mode: str = "auto"):
-        """R26-P0-014：从 RuntimeDatasetContract 构建 temporal plan（含 PIT floor）。"""
-        from data_access.runtime.prepared_read import TemporalPlan
+        """R26-P0-014：从 RuntimeDatasetContract 构建 temporal plan（含 PIT floor）。
+
+        R39 P0 #30/#31：
+            - #30 修复 availability 接线 bug：旧代码 ``compile_available_from_result
+              (dataset)`` 只传一个位置参数 → TypeError 被 ``except Exception`` 吞掉，
+              ``TemporalPlan.availability`` 永远是 None。现在从 RuntimeDatasetContract
+              构造真实 ``AvailabilityContract(knowledge, availability)``，两个位置参数
+              都传。
+            - #31 移除 fail-open 吞错：temporal-contract 失败在 production 抛 typed
+              ``TemporalContractError``（fail-closed）；research 返回
+              ``AvailabilityResult(authoritative=False, degradation_reason=...)``。
+              绝不裸 None 冒充 authoritative。
+        """
+        from data_access.contract.temporal_axis import AvailabilityResult
+        from data_access.core.exceptions import TemporalContractError
+        from data_access.runtime.prepared_read import (
+            AvailabilityContract,
+            TemporalPlan,
+        )
+        from data_access.read.session_calendar import (
+            compile_available_from_result,
+            get_market_calendar,
+        )
 
         rc = self._compile_contract_strict(dataset)
         if rc is None or rc.physical_partition is None:
             return TemporalPlan(predicate_clock=None, partition_clock=None)
         spec = rc.physical_partition
-        availability = None
-        try:
-            from data_access.read.session_calendar import compile_available_from_result
+        strict = is_strict_semantics()
 
-            availability = compile_available_from_result(dataset)
-        except Exception:
-            availability = None
-        pit_floor = getattr(rc.pit, "availability", None)
-        if pit_floor is None:
-            pit_floor = _PIT_FLOOR_OF.get(getattr(rc.pit, "pit_policy", None))
+        # ---- R39 P0 #30：构造 AvailabilityContract ----
+        knowledge = None
+        if rc.pit is not None:
+            knowledge = getattr(rc.pit, "availability_column", None) or None
+            if not knowledge:
+                ax = (rc.temporal_axes or {}).get("knowledge")
+                if ax is not None:
+                    knowledge = getattr(ax, "column", None) or None
+        avail_str = _PIT_FLOOR_OF.get(getattr(rc.pit, "pit_policy", None), None)
+        if not avail_str:
+            avail_str = "same_day"
+        contract = AvailabilityContract(knowledge=knowledge, availability=avail_str)
+
+        # ---- calendar-required availability 需要真实日历 ----
+        cal = None
+        if avail_str not in {"same_day", "same_instant", "effective_date_only"}:
+            if rc.market:
+                try:
+                    cal = get_market_calendar(rc.market, store=self)
+                except Exception as exc:
+                    # R39 P0 #31：日历**真正不可用**（registry 无日历数据集 / 读不到）
+                    # 且 availability 要求日历 → production fail-closed。
+                    if strict:
+                        raise TemporalContractError(
+                            f"dataset {dataset!r}: availability={avail_str!r} 需要真实交易日历，"
+                            f"但日历不可用（{type(exc).__name__}: {exc}）。"
+                            "R39 P0 #31 temporal-contract fail-closed（禁止 same_day fallback）。"
+                        ) from exc
+                    cal = None
+
+        try:
+            availability = compile_available_from_result(
+                contract.knowledge,
+                contract.availability,
+                calendar=cal,
+                strict=False,
+                calendar_snapshot_id=(
+                    getattr(cal, "snapshot_id", None) if cal is not None else None
+                ),
+            )
+        except Exception as exc:
+            if strict:
+                raise TemporalContractError(
+                    f"dataset {dataset!r} temporal availability 编译失败（R39 P0 #31 "
+                    f"fail-closed）：{type(exc).__name__}: {exc}"
+                ) from exc
+            availability = AvailabilityResult(
+                available_from=None,
+                authoritative=False,
+                degradation_reason=(
+                    f"availability compile failed: {type(exc).__name__}: {exc}"
+                ),
+            )
+        if availability is not None and not availability.authoritative:
+            reason = availability.degradation_reason or ""
+            # 只有「日历不可用」是真正 temporal-contract failure（production 必须拦）；
+            # 日历**存在**但 dataset 级没有具体 knowledge 记录（列名而非时刻）导致
+            # 编译降级 = 声明性限制，query-time per-record 编译才是权威，不在此 raise。
+            if strict and "calendar unavailable" in reason:
+                raise TemporalContractError(
+                    f"dataset {dataset!r}: temporal availability 无法证明（{reason}）。"
+                    "R39 P0 #31 fail-closed。"
+                )
+        pit_floor = _PIT_FLOOR_OF.get(getattr(rc.pit, "pit_policy", None))
         return TemporalPlan(
             predicate_clock=spec.query_clock,
             partition_clock=spec.partition_clock,
@@ -2174,13 +2378,21 @@ class DataAccessStore:
             filters=filters,
             limit=limit,
         )
+        # R39 P0 #32/#37：reader deadline 用 prepare 入口建立的**请求绝对 deadline**
+        # 的剩余时间（prepare 阶段 HEAD/LIST/schema 已计入），不再是全新完整
+        # budget.max_elapsed_ms。
+        _dc = getattr(prepared, "deadline_context", None)
+        if _dc is not None and _dc.deadline_at is not None:
+            _reader_deadline_ms = _dc.remaining_ms()
+        else:
+            _reader_deadline_ms = budget.max_elapsed_ms
         reader = self._engine.execute_reader(
             sql,
             sql_params,
             batch_size=batch_size,
             # #P0-20 deadline 作用在第一批之前：engine 侧 watchdog interrupt
             # cursor，避免「第一批就卡死 5 分钟，根本没机会检查 elapsed」。
-            deadline_ms=budget.max_elapsed_ms,
+            deadline_ms=_reader_deadline_ms,
         )
         start = time.perf_counter()
         total_rows = 0
@@ -3457,19 +3669,20 @@ class DataAccessStore:
                     f"请先在 config/semantic_fields.yaml 登记逻辑字段。"
                 )
             if len(found) > 1:
-                # #33 fail ambiguous：不能「取 registry 第一个」——Close/Symbol/
-                # TradeDate 几十张表都有，YAML 顺序决定语义是隐患。
+                # #33 fail ambiguous + R39 #69：机器面（FactorMiner/AlphaProbe）消费
+                # resolve_fields，**research 与 production 一律禁止**「取 registry
+                # 第一个」——Close/Symbol/TradeDate 几十张表都有，YAML/注册顺序决定
+                # 语义是隐患。重复字段名 → 直接抛 typed ``AmbiguousFieldError``，
+                # 不再告警后静默取第一个。
                 datasets_with_col = sorted({dsn for dsn, _ in found})
                 from data_access.core.exceptions import AmbiguousFieldError
 
-                msg = (
+                raise AmbiguousFieldError(
                     f"字段 '{name}' 在多个数据集都有物理列 "
                     f"({datasets_with_col})。请用 'dataset.column' 限定名或传 "
-                    f"dataset= 消歧；禁止取 registry 第一个。"
+                    f"dataset= 消歧；禁止取 registry 第一个（R39 #69：research 也"
+                    f"不例外）。"
                 )
-                if is_strict_semantics():
-                    raise AmbiguousFieldError(msg)
-                logger.warning("%s（research 放行，取第一个）", msg)
             out.append(
                 SemanticField(
                     logical_name=name, dataset=found[0][0], physical_name=name, dtype=found[0][1]
@@ -3500,30 +3713,53 @@ class DataAccessStore:
         if not isinstance(request, DataRequest):
             raise ValidationError("plan 需要 DataRequest 实例或等价 dict")
 
+        # R39 #67：derived 字段（derived_expression）现在有真实执行链
+        # （data_access.read.derived_fields.DerivedFieldCompiler）。plan() 把
+        # derived 字段单独收集，并把它的 derived_from 依赖展开进扫描字段集；
+        # execute 阶段对结果表追加计算列。
         fields: list[SemanticField] = []
+        derived_fields: list[SemanticField] = []
         for raw in request.fields:
             if isinstance(raw, str) and "." in raw:
                 ds, col = raw.split(".", 1)
-                fields.append(
-                    SemanticField(logical_name=col, dataset=ds, physical_name=col)
-                )
+                f = SemanticField(logical_name=col, dataset=ds, physical_name=col)
+                if getattr(f, "derived_expression", None):
+                    derived_fields.append(f)
+                else:
+                    fields.append(f)
             else:
-                fields.extend(self.resolve_fields([raw], dataset=request.anchor))
-        # #P1-final closure 7：derived 字段（derived_expression）没有实现执行链
-        # （DerivedFieldCompiler 未落地），Planner 遇到直接给清晰 ValidationError，
-        # 绝不走到 registry.get(None) / 缺 dataset 的迷惑错误——catalog 已拒绝
-        # mining_allowed=true，这里再兜一道运行时防线。
-        derived_hit = [
-            f.logical_name
-            for f in fields
-            if getattr(f, "derived_expression", None)
-        ]
-        if derived_hit:
-            raise ValidationError(
-                f"字段 {derived_hit} 是 derived 语义字段（derived_expression），"
-                "DerivedFieldCompiler 尚未实现执行链，暂不可在 DataRequest 中"
-                "直接读取/挖掘。请改用其物理字段，或先实现 derived 执行链。"
-            )
+                resolved = self.resolve_fields([raw], dataset=request.anchor)
+                f = resolved[0]
+                if getattr(f, "derived_expression", None):
+                    derived_fields.append(f)
+                else:
+                    fields.append(f)
+        # derived_from 依赖 → 扫描字段集（plan 期就 fail-fast：表达式不可编译 /
+        # 依赖无法解析 → 立即抛 typed 错误）。
+        from data_access.read.derived_fields import DerivedFieldCompiler
+        from data_access.read.semantic_catalog import get_semantic_catalog
+
+        _catalog = get_semantic_catalog()
+        for df in derived_fields:
+            DerivedFieldCompiler(df)  # plan 期编译（fail-fast）
+            for dep in (df.derived_from or ()):
+                if "." not in dep:
+                    raise ValidationError(
+                        f"derived 字段 '{df.logical_name}' 的 derived_from 依赖 "
+                        f"{dep!r} 不是 'dataset.column' 形式"
+                    )
+                dds, dcol = dep.split(".", 1)
+                dep_f = _catalog.resolve_one(dcol, dataset=dds)
+                if dep_f is None:
+                    dep_f = SemanticField(
+                        logical_name=dcol, dataset=dds, physical_name=dcol
+                    )
+                if not any(
+                    e.dataset == dep_f.dataset
+                    and e.physical_name == dep_f.physical_name
+                    for e in fields
+                ):
+                    fields.append(dep_f)
 
         anchor = request.anchor
         if anchor is None:
@@ -3675,6 +3911,7 @@ class DataAccessStore:
             snapshot_policy=snapshot_policy,
             plan_snapshot_tokens=plan_snapshot_tokens,
             plan_pinned_files=plan_pinned_files,
+            derived_fields=tuple(derived_fields),
             _store=self,
         )
 
@@ -4168,6 +4405,12 @@ class DataAccessStore:
             }, False
         value, meta = cache.get_entry(key)
         if value is not None:
+            # R39 #73：cache hit 不豁免当前 dataset/query 结果预算——命中返回前
+            # 用同一把 ``enforce_arrow_budget`` 核对缓存的 num_rows/nbytes。budget
+            # 已在进 cache 前 resolve（本方法顶部），elapsed_ms=0（无 IO）。
+            from data_access.read.query_budget import enforce_arrow_budget
+
+            enforce_arrow_budget(budget, value, elapsed_ms=0.0)
             # R27-C：cache hit 必须审计（旧代码 hit 直接 return，用户实际读到
             # 敏感数据但 audit 无记录），并恢复 provenance。
             self._audit_cache_hit(
@@ -5273,11 +5516,13 @@ class DataAccessStore:
                 )
                 actuals = set(vals.get("factor_version", ())) - {"<null>"}
                 if not actuals:
-                    if strict:
-                        raise DataError(
-                            f"factor {fid}: 无法确认 factor_version（窗口内无数据或"
-                            " probe 失败）。require_same 无法证明 → 禁止混入训练矩阵。"
-                        )
+                    # R39 #70：用户显式传了 versions → 「无法证明 == 不相同」在
+                    # **所有模式**（research 也）拒绝，不再只在 strict 下拒绝。
+                    raise DataError(
+                        f"factor {fid}: 无法确认 factor_version（窗口内无数据或"
+                        " probe 失败）。用户显式指定 versions，无法证明 → "
+                        "research/production 一律禁止混入训练矩阵。"
+                    )
                 elif len(actuals) > 1:
                     raise ValidationError(
                         f"factor {fid}: 窗口内出现多个 factor_version："
@@ -5300,18 +5545,20 @@ class DataAccessStore:
                     fid, cols, time_range=time_range, params=params
                 )
                 if not vals:
-                    if strict:
-                        raise DataError(
-                            f"factor {fid}: probe 失败，无法证明 data_snapshot/"
-                            "universe 一致 → 禁止混入训练矩阵。"
-                        )
-                    continue
+                    # R39 #70：用户显式 require_same_* → 「无法证明 == 不相同」在
+                    # **所有模式**（research 也）拒绝。
+                    raise DataError(
+                        f"factor {fid}: probe 失败，无法证明 data_snapshot/"
+                        "universe 一致 → 用户显式要求一致性，research/production "
+                        "一律禁止混入训练矩阵。"
+                    )
                 if require_same_data_snapshot:
                     snaps = set(vals.get("data_snapshot_id", ())) - {"<null>"}
-                    if not snaps and strict:
+                    if not snaps:
                         raise DataError(
                             f"factor {fid}: data_snapshot_id 为空，无法证明一致"
-                            " → 禁止混入训练矩阵。"
+                            " → 用户显式要求同一数据快照，research/production "
+                            "一律禁止混入训练矩阵。"
                         )
                     seen_snapshots.update(snaps)
                 if require_same_universe:
@@ -5599,12 +5846,21 @@ class DataAccessStore:
                 stream_normalize = lambda tbl: self._maybe_normalize_units(  # noqa: E731
                     tbl, dataset=dataset, columns=columns
                 )
+            # R39 P0 #38：ReadHandle create-then-close（从不迭代）也要释放 governor
+            # reservation——只挂在生成器 finally 里，从不迭代就永不释放。
+            _stream_res = getattr(_stream_prepared, "resource_reservation", None)
+
+            def _stream_cleanup() -> None:
+                self._pipeline.release_reservation(_stream_res)
+
             return ReadHandle(
                 stream=stream,
                 snapshot=stream_snapshot,
                 lineage=stream_lineage,
                 batch_size=batch_size,
                 normalize=stream_normalize,
+                _cleanup_callbacks=[_stream_cleanup],
+                _deadline=getattr(_stream_prepared, "deadline_context", None),
             )
 
         # duckdb：走标准 read 路径（含 budget/audit/snapshot）

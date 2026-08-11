@@ -34,6 +34,8 @@
   reason: "publish 流程要直读 parquet 做行数校验，不能递归自己调 read_arrow"
 - path: data_access/read/stats.py
   reason: "dataset footer 行数估算需 pq.read_metadata，与 publish 同类只读 footer"
+- path: data_access/r30/lineage.py
+  reason: "R30-P1-019 LineageStore：可查询 lineage 的 DuckDB 索引本体（R30 明示允许 DuckDB/SQLite/Parquet index），与 store.py 同类不自循环"
 - path: data_access/write/upsert.py
   reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
 - path: data_access/write/generation.py
@@ -146,6 +148,8 @@
   reason: "质量 CLI 直接读取待检查 parquet 文件"
 - path: dataaccess/read/stats.py
   reason: "dataset footer 行数估算需要 pq.read_table"
+- path: dataaccess/r30/lineage.py
+  reason: "R30-P1-019 LineageStore 可查询 lineage 的 DuckDB 索引本体（R30 明示允许 DuckDB/SQLite/Parquet index），不自循环"
 - path: dataaccess/service/app.py
   reason: "HTTP 服务序列化 Arrow/Parquet 响应"
 - path: dataaccess/service/client.py

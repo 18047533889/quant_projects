@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
 
 from api.factor import Factor
 
 if TYPE_CHECKING:
     from runtime.engine import FactorEngine
+    from runtime.materialization_identity_certificate import (
+        MaterializationIdentityCertificate,
+    )
 
 
 def _matrix_factor_digest(
@@ -96,6 +99,214 @@ def _validate_matrix_scope(
     return scopes
 
 
+def _operator_manifest_hash() -> str | None:
+    """Best-effort operator manifest hash (computed once per batch)."""
+    try:
+        from cleaned_operators.operator_policy import compute_operator_catalog_hash
+
+        return compute_operator_catalog_hash()
+    except Exception:  # pragma: no cover - 失败按 None 记录，digest 仍权威
+        return None
+
+
+def build_certificates(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    ids: list[str],
+    *,
+    analyses: dict[str, Any],
+    results: dict[str, Any],
+    scopes: list[Any],
+    effective_config: dict | None,
+    pit_enforce: bool | None,
+    universe: str,
+    frequency: str,
+    value_dtype: str = "float32",
+) -> dict[str, "MaterializationIdentityCertificate"]:
+    """R39 PERF-067: build compile-time identity certificates for a whole batch.
+
+    Computed once (not per-factor inside the writer) and handed to the matrix
+    writer so it never reconstructs large metadata dicts per factor.  The
+    ``semantic_digest`` reuses ``_matrix_factor_digest`` (same lineage/source
+    contract mechanism as ``execute_materialize``); other fields are extracted
+    cheaply from the execution scope + engine.
+    """
+    from runtime.materialization_identity_certificate import (
+        MaterializationIdentityCertificate,
+        extract_scope_fields,
+    )
+
+    op_hash = _operator_manifest_hash()
+    certs: dict[str, MaterializationIdentityCertificate] = {}
+    for (factor, fid), scope in zip(zip(factors, ids), scopes):
+        analysis = analyses.get(factor.name)
+        series = results.get(fid)
+        digest = None
+        if analysis is not None and series is not None:
+            digest = _matrix_factor_digest(
+                engine,
+                factor,
+                fid,
+                analysis,
+                series,
+                effective_config,
+                scope,
+                pit_enforce,
+            )
+        fields = extract_scope_fields(scope, engine, value_dtype)
+        certs[fid] = MaterializationIdentityCertificate(
+            factor_id=fid,
+            semantic_digest=digest,
+            source_snapshot=fields["source_snapshot"],
+            calendar=fields["calendar"],
+            universe=fields["universe"],
+            frequency=fields["frequency"] or getattr(scope, "frequency", None),
+            storage_precision=fields["storage_precision"],
+            operator_manifest_hash=op_hash,
+        )
+    return certs
+
+
+def _iter_matrix_results(
+    run_out: dict[str, Any],
+    factors: Sequence[Factor],
+    ids: list[str],
+) -> Iterator[tuple[str, Any]]:
+    """R39 PERF-066: lazy per-factor results adapter for the matrix writer.
+
+    Real streaming boundary: ``engine.run_many`` materialises the full result
+    dict in memory (engine API limitation; ``runtime/engine.py`` is out of R39
+    scope).  The adapter yields ``(fid, series)`` without copying, so the writer
+    can consume factors one block at a time instead of building a second full
+    structure.  A true scheduler/sink -> FactorBlock stream requires the engine
+    to emit results incrementally.
+    """
+    results = run_out.get("results", {})
+    for factor, fid in zip(factors, ids):
+        yield fid, results[factor.name]
+
+
+def materialize_matrix_streaming(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    *,
+    factor_ids: Sequence[str] | None = None,
+    universe: str,
+    frequency: str = "1d",
+    matrix_root: str | Path | None = None,
+    partition_columns: list[str] | None = None,
+    value_dtype: str = "float32",
+    recovery: bool = False,
+    factor_versions: dict[str, str] | None = None,
+    expected_manifest_version: int | None = None,
+    layout: str = "block",
+    **run_kwargs: Any,
+) -> dict[str, Any]:
+    """R39 PERF-066: streaming matrix materialisation.
+
+    ``scheduler/sink -> FactorBlock -> matrix block writer``.  Because the engine
+    ``run_many`` only returns a dict, this path uses a lazy generator adapter
+    (``_iter_matrix_results``) that feeds the writer per factor/block and never
+    builds an additional full-results structure; the writer's block path bounds
+    assembly memory to one column-block of factors at a time.  Real streaming
+    (results emitted from the scheduler as they complete) requires the engine to
+    expose a sink API and is out of R39 scope (``runtime/engine.py`` untouched).
+
+    Defaults to the column-factor block layout; pass ``layout="legacy"`` for the
+    monolithic single-wide-file writer.
+    """
+    from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
+
+    ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
+    if len(ids) != len(factors):
+        raise ValueError("factor_ids 长度必须与 factors 一致")
+
+    from runtime.production_policy import is_production_mode
+    from runtime.materialize_service import _effective_data_source_config
+
+    production = is_production_mode(engine.run_mode)
+    effective_config = _effective_data_source_config(None, engine.data_source)
+    pit_enforce = getattr(engine.data_source, "pit_enforce", None)
+
+    scopes = _validate_matrix_scope(
+        engine, factors, ids, universe=universe, frequency=frequency
+    )
+
+    run_out = engine.run_many(factors, **run_kwargs)
+    results = {
+        fid: run_out["results"][factor.name] for factor, fid in zip(factors, ids)
+    }
+    analyses = run_out.get("analyses", {})
+
+    certificates = build_certificates(
+        engine,
+        factors,
+        ids,
+        analyses=analyses,
+        results=results,
+        scopes=scopes,
+        effective_config=effective_config,
+        pit_enforce=pit_enforce,
+        universe=universe,
+        frequency=frequency,
+        value_dtype=value_dtype,
+    )
+
+    auto_versions = {
+        fid: cert.semantic_digest
+        for fid, cert in certificates.items()
+        if cert.semantic_digest
+    }
+    bound_versions = dict(factor_versions or {})
+    if production:
+        missing = [fid for fid in ids if fid not in auto_versions]
+        if missing:
+            raise RuntimeError(
+                f"production factor_matrix: 无法为因子 {missing} 计算 semantic "
+                f"digest（缺 analysis / identity）——拒绝无版本发布，请检查 "
+                f"factor scope + analysis + source contract"
+            )
+        for fid, digest in auto_versions.items():
+            prev = bound_versions.get(fid)
+            if prev is not None and prev != digest:
+                raise ValueError(
+                    f"matrix factor {fid}: 调用方手工传入的 version {prev} 与 "
+                    f"本次真实执行 scope/analysis/source contract 自动算出的 "
+                    f"{digest} 不一致——以真实执行语义为准，拒绝沿用错误版本"
+                )
+            bound_versions[fid] = digest
+    else:
+        for fid, digest in auto_versions.items():
+            bound_versions.setdefault(fid, digest)
+
+    materializer = FactorMatrixMaterializer(matrix_root=matrix_root)
+    summary = materializer.materialize_from_iterable(
+        _iter_matrix_results(run_out, factors, ids),
+        universe=universe,
+        frequency=frequency,
+        partition_columns=partition_columns,
+        value_dtype=value_dtype,
+        production=is_production_mode(engine.run_mode),
+        recovery=recovery,
+        factor_versions=bound_versions,
+        expected_manifest_version=expected_manifest_version,
+        certificates=certificates,
+        layout=layout,
+    )
+    summary["run_many"] = {
+        "factor_names": [f.name for f in factors],
+        "shared_nodes": len(run_out.get("dag").shared_nodes)
+        if run_out.get("dag")
+        else 0,
+        "streaming": True,
+        "boundary": "engine.run_many returns a full dict; writer consumes "
+        "via lazy generator adapter (block-by-block assembly).",
+    }
+    if "rolling_cache" in run_out:
+        summary["rolling_cache"] = run_out["rolling_cache"]
+    return summary
+
+
 def execute_materialize_matrix(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -144,24 +355,26 @@ def execute_materialize_matrix(
     }
     analyses = run_out.get("analyses", {})
 
-    # R14 #2: 自动绑定 semantic digest（与 execute_materialize 同源机制）。
-    auto_versions: dict[str, str] = {}
-    for (factor, fid), scope in zip(zip(factors, ids), scopes):
-        analysis = analyses.get(factor.name)
-        if analysis is None:
-            continue
-        digest = _matrix_factor_digest(
-            engine,
-            factor,
-            fid,
-            analysis,
-            results[fid],
-            effective_config,
-            scope,
-            pit_enforce,
-        )
-        if digest:
-            auto_versions[fid] = digest
+    # R39 PERF-067: 编译期一次性构建 identity certificates（writer 直接消费，
+    # 不为每 factor 重建）。semantic_digest 仍与 execute_materialize 同源。
+    certificates = build_certificates(
+        engine,
+        factors,
+        ids,
+        analyses=analyses,
+        results=results,
+        scopes=scopes,
+        effective_config=effective_config,
+        pit_enforce=pit_enforce,
+        universe=universe,
+        frequency=frequency,
+        value_dtype=value_dtype,
+    )
+    auto_versions: dict[str, str] = {
+        fid: cert.semantic_digest
+        for fid, cert in certificates.items()
+        if cert.semantic_digest
+    }
 
     bound_versions = dict(factor_versions or {})
     if production:
@@ -202,6 +415,7 @@ def execute_materialize_matrix(
         recovery=recovery,
         factor_versions=bound_versions,
         expected_manifest_version=expected_manifest_version,
+        certificates=certificates,
     )
     summary["run_many"] = {
         "factor_names": [f.name for f in factors],

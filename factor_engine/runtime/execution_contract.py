@@ -434,6 +434,29 @@ class HistoryTransform:
     fixed: int | None = None
     fn: Any = None
 
+    _KINDS = frozenset({"identity", "window", "lag", "compound"})
+
+    def __post_init__(self) -> None:
+        """R39-P0-049: invariant validation — an unknown ``kind`` must never
+        silently mean "needs no history" (``_apply_transform`` would return 0).
+
+        A typo like ``"windows"`` vs ``"window"`` is a hard construction error
+        (fail loud), never a silent 0-lookback interpretation.  ``params`` is
+        coerced to a tuple so an accidentally-passed list still hashes.
+        """
+        if self.kind not in self._KINDS:
+            raise ValueError(
+                f"HistoryTransform kind must be one of "
+                f"{sorted(self._KINDS)!r}, got {self.kind!r} — an unknown kind "
+                f"must NOT be interpreted as 0 lookback (R39-P0-049)"
+            )
+        if not isinstance(self.params, tuple):
+            object.__setattr__(self, "params", tuple(self.params))
+        if self.kind == "compound" and self.fn is None:
+            raise ValueError(
+                f"HistoryTransform kind='compound' requires fn for {self!r}"
+            )
+
 
 def _resolve(canonical: str, *, strict: bool = False) -> str:
     """Resolve DSL alias -> canonical (lazy; safe before the registry is built).
@@ -1164,7 +1187,15 @@ def _apply_transform(
         return best
     if transform.kind == "compound":
         return transform.fn(canonical, params)
-    return 0
+    # R39-P0-049: an unknown kind must NEVER return 0 lookback.  ``__post_init__``
+    # rejects unknown kinds at construction; this is the defensive path for a
+    # bypass-constructed / deserialized transform — fail closed to UNKNOWN
+    # (full-history semantics) instead of a silent "needs no history".
+    raise ExecutionContractResolutionError(
+        f"unknown HistoryTransform kind {transform.kind!r} for {canonical!r} "
+        f"— must fail closed to full history, never a silent 0 lookback "
+        f"(R39-P0-049)"
+    )
 
 
 def _default_window_extension(canonical: str, params: Mapping[str, Any]) -> int | object:

@@ -111,6 +111,86 @@ def _data_source_kind(ctx: ExecutionContext) -> str:
     return "memory"
 
 
+def _bound_scalar_parameters(operator: Any, call_args: list[Any], kw: dict[str, Any]) -> dict[str, Any]:
+    """R39 #27：bound signature normalization。
+
+    显式参数 + kernel 默认参数合成为**完整 canonical BoundParameterPoint**
+    （alias 解析到 canonical 名、类型归一），供参数域认证查询。这样
+    ``ts_mean(x)``（window 走默认值、attrs 为空）不再跳过认证——它和
+    ``ts_mean(x, window=20)`` 一样，用完整 ``{window: 20}`` 参数点查询。
+    """
+    from cleaned_operators.base import bind_operator_call, _kernel_param_defaults
+
+    meta = getattr(operator, "metadata", None)
+    names = list(getattr(meta, "param_names", None) or [])
+    try:
+        defaults = _kernel_param_defaults(operator)
+        call = bind_operator_call(operator, tuple(call_args), dict(kw), defaults=defaults)
+        nv = call.bound.normalized_values
+        return {
+            name: nv[name]
+            for name in names
+            if name in nv and not isinstance(nv[name], (pd.Series, pd.DataFrame))
+        }
+    except Exception:
+        # bind 失败（非法参数等）退化为显式 scalar kwargs；非法参数随后仍会被
+        # ``validate_operator_call`` 拒绝，不影响 fail-closed 语义。
+        return {
+            k: v for k, v in kw.items()
+            if not isinstance(v, (pd.Series, pd.DataFrame))
+        }
+
+
+def _operator_semantic_version(canonical: str) -> str:
+    """R39 #28：认证 key 的 semantic_version 维度——每个 canonical 的语义版本。
+
+    ``versioned_name`` 反映算子语义版本（例如 ``ts_corr@v2``：样本集切换后语义
+    变化），不同语义版本查询不同认证空间。
+    """
+    try:
+        from backend.operator_semantic_version import versioned_name
+
+        return versioned_name(canonical)
+    except Exception:
+        return ""
+
+
+def _execution_variant(ctx: ExecutionContext, backend: str) -> str:
+    """R39 #28：认证 key 的 execution_variant 维度。
+
+    R37 独立 oracle 认证的是 reference 变体（pandas_numpy 参考内核）。若执行路径
+    选择了 fast/Numba 等变体，应在此返回不同值查询各自空间——当前主链以 reference
+    为准，显式返回，不再依赖默认值。
+    """
+    return "reference"
+
+
+def _input_dtype(evaluated: list[Any]) -> str:
+    """R39 #28：认证 key 的 dtype 维度——主输入面板的实际 dtype（float64/int64…）。
+
+    不同 dtype 走不同内核 dispatch，不能共用同一认证空间。
+    """
+    from .panel_polars import is_polars_frame
+
+    for val in evaluated:
+        if isinstance(val, pd.Series):
+            return str(val.dtype)
+        if isinstance(val, pd.DataFrame):
+            for col in val.columns:
+                dt = val[col].dtype
+                if str(dt) not in ("object", "category"):
+                    return str(dt)
+        elif is_polars_frame(val):
+            try:
+                for col in val.columns:
+                    dt = val.schema[col]
+                    if str(dt) not in ("object",):
+                        return str(dt)
+            except Exception:
+                pass
+    return "float64"
+
+
 def _estimate_row_count(evaluated: list[Any]) -> int | None:
     """Estimate scalar operator workload after child evaluation.
 
@@ -400,29 +480,53 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         # separately; ``dtype`` is the one inference key that leaked into attrs.
         kw.pop("dtype", None)
 
-        # R37-P0-009：production 执行前参数域 membership 门。production +
-        # uncertified 参数点 => fail closed（ParameterDomainError）；research =>
-        # allow + telemetry。只对已进入参数域认证的算子做 membership——未覆盖算子
-        # 不阻塞（R37 §4 诚实覆盖：认证多少断言多少）。
+        # R37-P0-009 + R39 #26/#27/#28/#29：production 执行前参数域 membership 门。
+        #   #26 run_mode 作为认证调用身份传入（认证层不再从 env 重猜）；
+        #   #27 bound normalization——显式参数 + kernel 默认参数合成完整参数点，
+        #       默认参数调用（attrs 为空）不再跳过认证；
+        #   #28 认证 key 全维度（semantic_version/backend/variant/source_context/
+        #       dtype/grain）真正用全；
+        #   #29 production 强制装载证据（ensure_loaded），空 store / 旧 SHA store
+        #       fail closed，不悄悄放行。
+        # 只对已进入参数域认证的算子做 membership——该 backend 下无认证区域的算子
+        # 不阻塞（R37 §4 诚实覆盖：认证多少断言多少），记 telemetry。
         try:
             from runtime.parameter_domain_store import (
                 assert_parameter_point_certified,
                 get_parameter_domain_store,
             )
 
-            _params = {k: v for k, v in kw.items() if not isinstance(
-                v, (pd.Series, pd.DataFrame))}
-            if _params:
-                store = get_parameter_domain_store()
+            _run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+            _point = _bound_scalar_parameters(operator, call_args, kw)
+            store = get_parameter_domain_store(ensure_loaded=(_run_mode == "production"))
+            if store.operator_has_any_certified_region_by_backend(canonical, backend):
                 assert_parameter_point_certified(
-                    canonical, _params, backend=backend, store=store,
+                    canonical, _point, backend=backend,
+                    run_mode=_run_mode,
+                    semantic_version=_operator_semantic_version(canonical),
+                    execution_variant=_execution_variant(ctx, backend),
+                    source_context=_data_source_kind(ctx),
+                    dtype=_input_dtype(evaluated),
+                    grain=str(getattr(ctx, "grain", "daily") or "daily"),
+                    store=store,
                 )
+            else:
+                try:
+                    from runtime.resource_telemetry import record_resource_telemetry
+
+                    record_resource_telemetry({
+                        "param_domain_coverage_skip": canonical,
+                        "backend": backend,
+                        "reason": "no certified region for backend",
+                    })
+                except Exception:
+                    pass
         except Exception as exc:
             from runtime.exceptions import ParameterDomainError
 
             if isinstance(exc, ParameterDomainError):
                 raise
-            # store 未加载 / 未覆盖 => research 降级（不阻塞），但记录 telemetry
+            # store 未加载 / bind 异常 => research 降级（不阻塞），但记录 telemetry
             try:
                 from runtime.resource_telemetry import record_resource_telemetry
 

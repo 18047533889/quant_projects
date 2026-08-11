@@ -78,6 +78,7 @@ class GovernedBufferStore:
         budget_bytes: int | None = None,
         spill_store: SpillStore | None = None,
         spool_threshold_bytes: int | None = None,
+        execution_id: str = "batch",
     ) -> None:
         self._backing: dict[str, Any] = backing if backing is not None else {}
         self._entries: dict[str, _Entry] = {}
@@ -93,6 +94,8 @@ class GovernedBufferStore:
         self._spool_threshold = spool_threshold_bytes or 512 * 1024**2
         # R38 P0-031：sid -> SpillRef（SPILLED 条目的 reload 依据）。
         self._spill_refs: dict[str, SpillRef] = {}
+        # P0-013：execution 级 spill 生命周期（release/清理按 execution 收敛）。
+        self._execution_id = str(execution_id or "batch")
 
     @property
     def budget_bytes(self) -> int | None:
@@ -129,7 +132,8 @@ class GovernedBufferStore:
                         if spool and self._spill_store is not None:
                             try:
                                 ref = self._spill_store.spill(
-                                    value, key=key, source_identity="cse-shared"
+                                    value, key=key, source_identity="cse-shared",
+                                    execution_id=self._execution_id,
                                 )
                                 self._spilled += 1
                                 self._spill_refs[key] = ref
@@ -165,7 +169,12 @@ class GovernedBufferStore:
             return entry.value
 
     def get_ref(self, key: str) -> Any:
-        """读取并返回可 reload 的值（SPILLED 时从 spill store reload 磁盘）。"""
+        """读取并返回可 reload 的值（SPILLED 时从 spill store reload 磁盘）。
+
+        P0-012：reload 后放回 backing 前**必须能进预算**——放不下先 LRU 逐出腾位，
+        仍放不下就保持 disk-backed（本次返回不缓存），绝不无账本把大对象塞回内存
+        （4GB spill 在只剩 1GB headroom 时不允许完整读回）。
+        """
         with self._lock:
             if key in self._backing:
                 entry = self._entries.get(key)
@@ -177,13 +186,26 @@ class GovernedBufferStore:
         if ref is not None and self._spill_store is not None:
             try:
                 value = self._spill_store.reload(ref)
-                # reload 后放回 backing（后续访问不再落盘）。
-                with self._lock:
-                    self._backing[key] = value
-                    self._entries[key] = _Entry(value=value, bytes=ref.bytes, last_access=time.monotonic())
-                return value
             except Exception:
                 return None
+            with self._lock:
+                if self._budget is None:
+                    self._backing[key] = value
+                    self._entries[key] = _Entry(
+                        value=value, bytes=ref.bytes, last_access=time.monotonic()
+                    )
+                    return value
+                used = self._total_accounted()
+                if used + ref.bytes > self._budget:
+                    self._evict_lru(used + ref.bytes - self._budget)
+                    used = self._total_accounted()
+                if used + ref.bytes <= self._budget:
+                    self._backing[key] = value
+                    self._entries[key] = _Entry(
+                        value=value, bytes=ref.bytes, last_access=time.monotonic()
+                    )
+            # 预算放不下 → 保持 disk-backed（不缓存），本次调用仍返回。
+            return value
         return None
 
     def pin(self, key: str) -> bool:
@@ -194,15 +216,45 @@ class GovernedBufferStore:
             return True
 
     def release(self, key: str) -> None:
-        """§108/109：backing ref 与 accounting 同时释放（不留 ghost 账面）。"""
+        """§108/109：backing ref 与 accounting 同时释放（不留 ghost 账面）。
+
+        P0-013：同时删除 spill 文件（execution 级生命周期——release/失败/cancel
+        都收敛，不再积累 orphan parquet）。
+        """
         with self._lock:
             existed = key in self._backing or key in self._entries
+            ref = self._spill_refs.pop(key, None)
+            if ref is not None and self._spill_store is not None:
+                try:
+                    self._spill_store.delete(ref)
+                except Exception:
+                    pass
             self._backing.pop(key, None)
             self._entries.pop(key, None)
             self._pinned.discard(key)
-            self._spill_refs.pop(key, None)
             if existed:
                 self._releases += 1
+
+    def evict_if_over_budget(self, target: int = 0) -> int:
+        """MemoryGovernor L0 evict hook（R38 P0-038：L0 唯一 owner 的逐出入口）。
+
+        governor 高压时从真实 store 逐出（pinned 不逐；P0-033 成本决策 spill/drop），
+        返回释放的**内存**字节数。旧实现把 hook 绑到 ExpressionCache（自己另记
+        一套 accounting），对 GovernedBufferStore 写入的值完全失效——split-brain。
+        """
+        with self._lock:
+            return self._evict_lru(max(0, target))
+
+    def cleanup_execution(self) -> int:
+        """清理本 execution 的全部 spill 文件（P0-013：execution-scoped 收敛）。"""
+        if self._spill_store is None:
+            return 0
+        with self._lock:
+            ids = [self._execution_id]
+        removed = 0
+        for eid in ids:
+            removed += self._spill_store.cleanup_execution(eid)
+        return removed
 
     def spill(self, key: str) -> BufferPutResult:
         """R38 P0-032：真实 spill（写入 SpillStore），不是 drop。"""
@@ -218,7 +270,10 @@ class GovernedBufferStore:
                 self._spill_refs.pop(key, None)
                 return BufferPutResult(STATUS_RECOMPUTE, key, reason="no_spill_store_recompute")
             try:
-                ref = self._spill_store.spill(entry.value, key=key, source_identity="cse-shared")
+                ref = self._spill_store.spill(
+                    entry.value, key=key, source_identity="cse-shared",
+                    execution_id=self._execution_id,
+                )
                 self._backing.pop(key, None)
                 self._entries.pop(key, None)
                 self._pinned.discard(key)
@@ -231,21 +286,57 @@ class GovernedBufferStore:
                 )
 
     def _evict_lru(self, needed: int) -> int:
-        """R38 P1-036：LRU 淘汰（last_access 最久未访问优先；pinned 不淘汰）。"""
+        """R38 P1-036 + P0-033：LRU 淘汰（last_access 最久未访问优先；pinned 不淘汰）。
+
+        每个候选先做 **spill-vs-recompute 成本决策**（``SpillStore.should_spill``）：
+            - 高 recompute 成本（PCA / GARCH / 大 source block）→ 真实 spill（写盘，
+              保留 reload 依据），不 drop；
+            - 低成本 elementwise（recompute 便宜）→ drop（并清掉旧 spill ref，
+              防止 reload 复活过期数据）。
+        返回释放的**内存**字节数（spill 与 drop 都释放内存）。
+        """
         candidates = sorted(
-            (e for k, e in self._entries.items() if k not in self._pinned),
-            key=lambda e: e.last_access,
+            (k for k, e in self._entries.items() if k not in self._pinned),
+            key=lambda k: self._entries[k].last_access,
         )
         freed = 0
-        for entry in candidates:
+        for key in candidates:
             if freed >= needed:
                 break
-            key = next(
-                (k for k, e in self._entries.items() if e is entry),
-                None,
-            )
-            if key is None:
-                continue
+            entry = self._entries[key]
+            # P0-033：成本决策（spill 优于 drop 当 recompute 显著比 reload 贵）。
+            decision = None
+            if self._spill_store is not None:
+                try:
+                    decision = self._spill_store.should_spill(
+                        recompute_cost_ms=float(entry.recompute_cost_ms),
+                        reload_cost_ms=2.0,  # 单次 parquet reload 基线（快）
+                        reuse_count=max(1, entry.reuse_count),
+                    )
+                except Exception:
+                    decision = None
+            if decision is not None and decision.should_spill:
+                try:
+                    ref = self._spill_store.spill(
+                        entry.value, key=key, source_identity="cse-shared",
+                        execution_id=self._execution_id,
+                    )
+                except Exception:
+                    ref = None
+                if ref is not None:
+                    self._spill_refs[key] = ref
+                    self._spilled += 1
+                    self._backing.pop(key, None)
+                    self._entries.pop(key, None)
+                    freed += entry.bytes
+                    continue
+            # drop（recompute 便宜 / spill 不可用）：清掉旧 spill ref 防止复活。
+            old_ref = self._spill_refs.pop(key, None)
+            if old_ref is not None and self._spill_store is not None:
+                try:
+                    self._spill_store.delete(old_ref)
+                except Exception:
+                    pass
             self._backing.pop(key, None)
             self._entries.pop(key, None)
             freed += entry.bytes

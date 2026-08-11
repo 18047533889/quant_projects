@@ -387,6 +387,21 @@ CREATE TABLE IF NOT EXISTS factor_retired (
     ast_hash        TEXT,
     retired_generation TEXT
 );
+
+-- R39 PERF-049: per-partition aggregate stats so the normal write path can
+-- compute watermark row counts / partition metrics WITHOUT a full-history
+-- value-cell re-scan.  Updated incrementally from PartitionCommitStats.
+CREATE TABLE IF NOT EXISTS factor_partition_stats (
+    factor_id     TEXT NOT NULL,
+    partition_key TEXT NOT NULL,
+    rows          INTEGER NOT NULL,
+    valid_rows    INTEGER NOT NULL,
+    min_date      TEXT,
+    max_date      TEXT,
+    file_bytes    INTEGER,
+    updated_at    TEXT NOT NULL,
+    PRIMARY KEY (factor_id, partition_key)
+);
 """
 
 
@@ -407,6 +422,10 @@ class _ThreadSafeConnection:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
         self._lock = threading.RLock()
+        #: R39 PERF-050: durable COMMIT counter.  A ``CatalogBatchTransaction``
+        #: performs N updates with exactly one ``commit()``, so the counter delta
+        #: proves single-commit batching (test asserts delta == 1).
+        self.commit_count = 0
 
     def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         with self._lock:
@@ -422,7 +441,8 @@ class _ThreadSafeConnection:
 
     def commit(self) -> None:
         with self._lock:
-            return self._conn.commit()
+            self._conn.commit()
+            self.commit_count += 1
 
     def rollback(self) -> None:
         with self._lock:
@@ -431,6 +451,28 @@ class _ThreadSafeConnection:
     def close(self) -> None:
         with self._lock:
             return self._conn.close()
+
+    def commit_batch(self, batches: list[tuple[str, list[tuple]]]) -> None:
+        """Run ``[(sql, params_list), ...]`` inside one BEGIN IMMEDIATE … COMMIT
+        critical section, holding the RLock for the whole batch (R32-P0-011
+        interleave guard).  ``params_list`` empty → the statement is skipped.
+
+        Exactly one ``commit()`` → ``commit_count`` increments by one.
+        """
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                for sql, params_list in batches:
+                    if params_list:
+                        self._conn.executemany(sql, params_list)
+            except Exception:
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.OperationalError:
+                    pass
+                raise
+            self._conn.commit()
+            self.commit_count += 1
 
     @contextlib.contextmanager
     def transaction(self) -> "Iterator[None]":
@@ -519,6 +561,28 @@ class FactorCatalog:
             try:
                 self._conn.execute(sql, params)
                 self._conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_error = exc
+                time.sleep(0.05 * (attempt + 1))
+        raise last_error  # type: ignore[misc]
+
+    def _exec_commit_many(self, batches: list[tuple[str, list[tuple]]]) -> None:
+        """Execute ``[(sql, params_list), ...]`` as ONE durable commit
+        (R39 PERF-050).  ``params_list`` may be empty (statement skipped).
+
+        ``commit_batch`` holds the RLock across the whole BEGIN→COMMIT, so no
+        other thread can interleave a statement that gets swept into this
+        commit.  Bounded ``SQLITE_BUSY`` retry mirrors ``_exec_commit``.
+        """
+        import time
+
+        last_error: Exception | None = None
+        for attempt in range(6):
+            try:
+                self._conn.commit_batch(batches)
                 return
             except sqlite3.OperationalError as exc:
                 if "locked" not in str(exc).lower():
@@ -772,14 +836,129 @@ class FactorCatalog:
 
     def close(self) -> None:
         """显式关闭数据库连接。
-        
+
         参数:
             无
-        
+
         返回:
             无
         """
         self._conn.close()
+
+    # ------------------------------------------------------------------
+    # R39 PERF-050: CatalogBatchTransaction (single durable commit for N ops)
+    # ------------------------------------------------------------------
+
+    @contextlib.contextmanager
+    def batch_transaction(self, generation_id: str) -> "Iterator[CatalogBatchTransaction]":
+        """Batch catalog writes for a generation in ONE durable commit.
+
+        Usage::
+
+            with catalog.batch_transaction(generation_id) as tx:
+                tx.register_many([...])
+                tx.record_runs_many([...])
+                tx.update_watermarks_many([...])
+                tx.update_partition_stats_many([...])
+
+        ``__exit__`` commits once (durable) unless an exception occurred, in
+        which case it rolls back.  This satisfies the
+        ``data-durable → batch catalog transaction → generation visible``
+        ordering (R39 §14/§15): the caller writes data, then commits the batch,
+        then publishes the generation.
+        """
+        tx = CatalogBatchTransaction(self, str(generation_id))
+        try:
+            yield tx
+        except Exception:
+            tx.rollback()
+            raise
+        else:
+            tx.commit()
+
+    # ------------------------------------------------------------------
+    # R39 PERF-049: per-partition aggregate stats (incremental, no rescan)
+    # ------------------------------------------------------------------
+
+    def update_partition_stats(
+        self,
+        factor_id: str,
+        partition_key: str,
+        *,
+        rows: int,
+        valid_rows: int,
+        min_date: str | None = None,
+        max_date: str | None = None,
+        file_bytes: int = 0,
+    ) -> None:
+        """Insert/update one partition's aggregate stats (UPSERT)."""
+        now = datetime.now(timezone.utc).isoformat()
+        self._exec_commit(
+            "INSERT INTO factor_partition_stats "
+            "(factor_id, partition_key, rows, valid_rows, min_date, max_date, file_bytes, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id, partition_key) DO UPDATE SET "
+            "rows=excluded.rows, valid_rows=excluded.valid_rows, "
+            "min_date=excluded.min_date, max_date=excluded.max_date, "
+            "file_bytes=excluded.file_bytes, updated_at=excluded.updated_at",
+            (factor_id, partition_key, int(rows), int(valid_rows), min_date, max_date, int(file_bytes), now),
+        )
+
+    def update_partition_stats_many(self, rows: Iterable[dict]) -> None:
+        """Batch UPSERT of partition stats (one commit when used inside
+        ``batch_transaction``).  ``rows`` is an iterable of dicts with keys
+        ``factor_id``, ``partition_key``, ``rows``, ``valid_rows``,
+        ``min_date``, ``max_date``, ``file_bytes``.
+        """
+        self._exec_commit_many(
+            [
+                (
+                    "INSERT INTO factor_partition_stats "
+                    "(factor_id, partition_key, rows, valid_rows, min_date, max_date, file_bytes, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(factor_id, partition_key) DO UPDATE SET "
+                    "rows=excluded.rows, valid_rows=excluded.valid_rows, "
+                    "min_date=excluded.min_date, max_date=excluded.max_date, "
+                    "file_bytes=excluded.file_bytes, updated_at=excluded.updated_at",
+                    [
+                        (
+                            str(r["factor_id"]),
+                            str(r["partition_key"]),
+                            int(r["rows"]),
+                            int(r["valid_rows"]),
+                            r.get("min_date"),
+                            r.get("max_date"),
+                            int(r.get("file_bytes", 0) or 0),
+                            datetime.now(timezone.utc).isoformat(),
+                        )
+                        for r in rows
+                    ],
+                )
+            ]
+        )
+
+    def get_partition_stats(self, factor_id: str, partition_key: str) -> dict | None:
+        """Return one partition's stored aggregate stats, or ``None``."""
+        row = self._conn.execute(
+            "SELECT * FROM factor_partition_stats WHERE factor_id = ? AND partition_key = ?",
+            (factor_id, partition_key),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_partition_stats_all(self, factor_id: str) -> dict[str, dict]:
+        """Return ``{partition_key: stats_row}`` for a factor."""
+        rows = self._conn.execute(
+            "SELECT * FROM factor_partition_stats WHERE factor_id = ?",
+            (factor_id,),
+        ).fetchall()
+        return {str(r["partition_key"]): dict(r) for r in rows}
+
+    def clear_partition_stats(self, factor_id: str) -> None:
+        """Delete all stored partition stats for a factor (used by delete_factor)."""
+        self._exec_commit(
+            "DELETE FROM factor_partition_stats WHERE factor_id = ?",
+            (factor_id,),
+        )
 
     # ------------------------------------------------------------------
     # 注册
@@ -1080,6 +1259,9 @@ class FactorCatalog:
             )
             self._conn.execute(
                 "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_partition_stats WHERE factor_id = ?", (factor_id,)
             )
             # R11 #8: 新增的依赖 edge / full definition 表也要同步删除，否则 factor_id
             # 删除再复用时会残留旧 edge / full-spec（DependencyCatalog 查询按 factor_id
@@ -1457,10 +1639,10 @@ class FactorCatalog:
 
     def list_dependency_columns(self) -> list[str]:
         """list_dependency_columns。
-        
+
         参数:
             无
-        
+
         返回:
             list[str]
         """
@@ -1468,3 +1650,185 @@ class FactorCatalog:
             "SELECT DISTINCT column_name FROM factor_column_dep ORDER BY column_name"
         ).fetchall()
         return [str(r[0]) for r in rows]
+
+
+class CatalogBatchTransaction:
+    """R39 PERF-050: batch catalog writes for one generation.
+
+    Accumulates ``executemany`` parameter lists and performs a single durable
+    COMMIT at exit (``__exit__`` / :meth:`commit`).  On exception the batch is
+    rolled back.  All single-op catalog methods keep working; the batch methods
+    here are the high-throughput path for N-factor writes.
+    """
+
+    def __init__(self, catalog: FactorCatalog, generation_id: str) -> None:
+        self._catalog = catalog
+        self.generation_id = str(generation_id)
+        self._batches: list[tuple[str, list[tuple]]] = []
+        self._closed = False
+
+    # ------------------------------------------------------------------
+    # batch registration
+    # ------------------------------------------------------------------
+    def _append(self, sql: str, params_list: list[tuple]) -> None:
+        if self._closed:
+            raise RuntimeError("CatalogBatchTransaction already closed")
+        self._batches.append((sql, params_list))
+
+    def register_many(self, rows: Iterable[dict]) -> None:
+        """Batch ``INSERT OR IGNORE`` into ``factor_registry``.
+
+        ``rows`` is an iterable of dicts with keys ``factor_id``, ``author``,
+        ``frequency``, ``ast_hash`` and optional ``description``, ``expression``,
+        ``data_source_json``, ``factor_version``, ``created_at``.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        params: list[tuple] = []
+        for r in rows:
+            params.append(
+                (
+                    str(r["factor_id"]),
+                    str(r.get("author", "")),
+                    str(r.get("frequency", "1d")),
+                    r.get("description"),
+                    str(r.get("ast_hash", "")),
+                    r.get("expression"),
+                    r.get("data_source_json"),
+                    str(r.get("factor_version") or r.get("ast_hash") or ""),
+                    r.get("created_at") or now,
+                )
+            )
+        self._append(
+            "INSERT OR IGNORE INTO factor_registry "
+            "(factor_id, author, frequency, description, ast_hash, expression, "
+            "data_source_json, factor_version, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params,
+        )
+
+    def record_runs_many(self, rows: Iterable[dict]) -> None:
+        """Batch append to ``factor_run`` (same dict shape as ``record_run``)."""
+        now = datetime.now(timezone.utc).isoformat()
+        params: list[tuple] = []
+        for lineage in rows:
+            created = lineage.get("created_at") or now
+            params.append(
+                (
+                    lineage["run_id"],
+                    lineage["factor_id"],
+                    lineage.get("factor_name"),
+                    lineage["ast_hash"],
+                    lineage.get("operator_catalog_hash"),
+                    lineage.get("field_catalog_hash"),
+                    lineage.get("expression"),
+                    lineage.get("lookback"),
+                    json.dumps(lineage.get("referenced_columns", []), ensure_ascii=False),
+                    int(lineage["dq_passed"]) if lineage.get("dq_passed") is not None else None,
+                    lineage.get("row_count"),
+                    lineage.get("non_null_count"),
+                    created,
+                    json.dumps(lineage.get("extra", {}), ensure_ascii=False, default=str),
+                )
+            )
+        self._append(
+            "INSERT INTO factor_run "
+            "(run_id, factor_id, factor_name, ast_hash, operator_catalog_hash, field_catalog_hash, expression, "
+            "lookback, referenced_columns_json, dq_passed, row_count, non_null_count, "
+            "created_at, extra_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params,
+        )
+
+    def update_watermarks_many(self, rows: Iterable[tuple | dict]) -> None:
+        """Batch UPSERT into ``factor_watermark``.
+
+        ``rows`` may be tuples ``(factor_id, start_date, end_date[, row_count])``
+        or dicts ``{factor_id, start_date, end_date, row_count}``.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        params: list[tuple] = []
+        for r in rows:
+            if isinstance(r, dict):
+                fid = str(r["factor_id"])
+                start = str(r["start_date"])
+                end = str(r["end_date"])
+                rc = r.get("row_count")
+            else:
+                fid, start, end = str(r[0]), str(r[1]), str(r[2])
+                rc = r[3] if len(r) > 3 else None
+            params.append((fid, start, end, now, rc))
+        self._append(
+            "INSERT INTO factor_watermark (factor_id, start_date, end_date, last_updated, row_count) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id) DO UPDATE SET "
+            "start_date=excluded.start_date, end_date=excluded.end_date, "
+            "last_updated=excluded.last_updated, row_count=excluded.row_count",
+            params,
+        )
+
+    def update_partition_stats_many(self, rows: Iterable[dict]) -> None:
+        """Batch UPSERT into ``factor_partition_stats`` (PERF-049).
+
+        ``rows`` is an iterable of dicts with keys ``factor_id``,
+        ``partition_key``, ``rows``, ``valid_rows``, ``min_date``, ``max_date``,
+        ``file_bytes``.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        params: list[tuple] = []
+        for r in rows:
+            params.append(
+                (
+                    str(r["factor_id"]),
+                    str(r["partition_key"]),
+                    int(r["rows"]),
+                    int(r["valid_rows"]),
+                    r.get("min_date"),
+                    r.get("max_date"),
+                    int(r.get("file_bytes", 0) or 0),
+                    now,
+                )
+            )
+        self._append(
+            "INSERT INTO factor_partition_stats "
+            "(factor_id, partition_key, rows, valid_rows, min_date, max_date, file_bytes, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(factor_id, partition_key) DO UPDATE SET "
+            "rows=excluded.rows, valid_rows=excluded.valid_rows, "
+            "min_date=excluded.min_date, max_date=excluded.max_date, "
+            "file_bytes=excluded.file_bytes, updated_at=excluded.updated_at",
+            params,
+        )
+
+    def execute_many(self, sql: str, params_list: Iterable[tuple]) -> None:
+        """Queue a raw executemany statement into the batch (advanced use)."""
+        self._append(sql, list(params_list))
+
+    # ------------------------------------------------------------------
+    # commit / rollback
+    # ------------------------------------------------------------------
+    def commit(self) -> None:
+        """Durable single commit for the whole batch (no-op if already closed)."""
+        if self._closed:
+            return
+        self._closed = True
+        self._catalog._exec_commit_many(self._batches)
+
+    def rollback(self) -> None:
+        """Roll back the batch (idempotent)."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._catalog._conn.rollback()
+        except sqlite3.OperationalError:
+            pass
+
+    def __enter__(self) -> "CatalogBatchTransaction":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if exc_type is None:
+            self.commit()
+        else:
+            self.rollback()
+        return False

@@ -34,6 +34,14 @@ __all__ = [
 
 #: condition-number gate：cond(G) > 阈值 → fallback lstsq（P1-055）。
 _CONDITION_NUMBER_GATE = 1e12
+#: P0-024：滑动 Gram 周期性精确重算间隔（行）。长序列 ``G += outer(new);
+#: G -= outer(old)`` 会积累浮点误差（高共线、10 万+ 行）——每 N 行从当前窗口
+#: 重算一次 exact Gram。
+_REBASE_INTERVAL = 512
+#: 触发 rebase 的 symmetry drift 阈值（绝对）。
+_SYMMETRY_DRIFT_TOL = 1e-6
+#: 触发 rebase 的相对 drift 阈值（相对当前 Gram 范数）。
+_REL_DRIFT_TOL = 1e-9
 
 
 @dataclass
@@ -47,6 +55,31 @@ class FastLinearWindowResult:
 
 def _row_valid(X: np.ndarray, y: np.ndarray, t: int) -> bool:
     return bool(np.isfinite(X[t]).all() and np.isfinite(y[t]))
+
+
+def _window_grams(
+    X: np.ndarray, y: np.ndarray, t: int, window: int
+) -> tuple[np.ndarray, np.ndarray, float, int]:
+    """精确重算当前窗口 ``[t-window+1, t]`` 的有效行 Gram（P0-024 rebase）。
+
+    只对 joint-finite 有效行累加，返回 ``(G, g, yy, nv)``——与 sliding 累加语义
+    完全一致，但重扫窗口消除长序列浮点误差。rebase 间隔 `_REBASE_INTERVAL`，摊销
+    O(window*p² / interval)，廉价。
+    """
+    p = X.shape[1]
+    lo = max(0, t - window + 1)
+    G = np.zeros((p, p))
+    g = np.zeros(p)
+    yy = 0.0
+    nv = 0
+    for i in range(lo, t + 1):
+        if _row_valid(X, y, i):
+            x = X[i]
+            G += np.outer(x, x)
+            g += x * y[i]
+            yy += y[i] * y[i]
+            nv += 1
+    return G, g, yy, nv
 
 
 def _reference_grams(
@@ -114,6 +147,14 @@ def _sliding_ols(
             g -= xo * y[old]
             yy -= y[old] * y[old]
             nv -= 1
+        # P0-024：周期性精确 rebase——每 N 行从当前窗口重算 exact Gram；或
+        # 检测到 symmetry / relative drift 超阈值立即 rebase（浮点误差不积累）。
+        if t > 0 and t % _REBASE_INTERVAL == 0:
+            G2, g2, yy2, nv2 = _window_grams(X, y, t, window)
+            rel = float(np.abs(G - G2).max()) / max(1.0, float(np.abs(G2).max()))
+            sym = float(np.abs(G - G.T).max())
+            if rel > _REL_DRIFT_TOL or sym > _SYMMETRY_DRIFT_TOL:
+                G, g, yy, nv = G2, g2, yy2, nv2
         if nv < p:
             continue
         if lam is not None:

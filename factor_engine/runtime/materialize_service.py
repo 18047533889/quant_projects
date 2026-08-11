@@ -566,3 +566,13 @@ def can_batch_materialize_compute(opts: Any) -> bool:
     """
     return not opts.resume_materialize and opts.since is None
 
+
+# R39-PERF-039：批量物化 API（实现位于 runtime.materialize_batch，避免本模块
+# 头部与 materialize_batch 相互 import 的环）。``execute_materialize_batch``
+# 把共享工作 hoist 出 per-item 循环 + 依赖 manifest 单事务目录提交。
+def execute_materialize_batch(engine, items, generation=None, **kwargs):
+    """R39-PERF-039: 批量物化（见 ``runtime.materialize_batch``）。"""
+    from runtime.materialize_batch import execute_materialize_batch as _impl
+
+    return _impl(engine, items, generation=generation, **kwargs)
+

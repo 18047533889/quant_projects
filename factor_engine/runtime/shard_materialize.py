@@ -10,6 +10,19 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
+def shard_merge_mode_for(contract: Any, chunks: list[Any]) -> Any:
+    """R39-PERF-026：物化/合并路径选择 merge 模式（惰性委托给 shard_executor）。
+
+    返回 :class:`~runtime.shard_execution_plan.ShardMergeMode`：
+    DIRECT_DURABLE_APPEND / CONCAT_ONLY / ORDERED_MERGE / REDUCE_STATE。
+    物化端（materialize_sharded 等批量落盘路径）据此决定：能直接落盘 → 只提交
+    manifest；已证明排序 + 不重叠 → 单次 concat；否则 ordered merge。
+    """
+    from runtime.shard_executor import choose_shard_merge_mode
+
+    return choose_shard_merge_mode(contract, chunks)
+
+
 def stable_bucket(key: str, shard_count: int) -> int:
     """SHA256 前 8 位 hex → ``[0, shard_count)``。"""
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()

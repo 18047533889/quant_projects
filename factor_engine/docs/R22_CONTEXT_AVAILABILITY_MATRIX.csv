@@ -838,8 +838,6 @@ ts_activity_clock_lagged_value,ashare|us,daily_bar,True
 ts_activity_clock_lagged_value_prior,ashare|us,daily_bar,True
 ts_ar_coeff_stability,ashare|us,daily_bar,True
 ts_ar_coefficient,ashare|us,daily_bar,True
-ts_ar_fitted_value,ashare|us,daily_bar,True
-ts_ar_in_sample_resid,ashare|us,daily_bar,True
 ts_ar_prior_coeff,ashare|us,daily_bar,True
 ts_ar_prior_forecast,ashare|us,daily_bar,True
 ts_ar_prior_innovation,ashare|us,daily_bar,True

@@ -145,6 +145,150 @@ def classify_stage_type(op: str) -> str:
     return TASK_OPERATOR
 
 
+#: stage 类型 → 合法 shard 维度（交集 barrier wins；asset > time > session）。
+_STAGE_SHARD_POLICY: dict[str, tuple[str, ...]] = {
+    TASK_STATEFUL: ("asset",),              # time 切分需 checkpoint 状态连续性（§93）
+    TASK_CROSS_SECTION: ("time",),          # asset 分片每片 rank 会改变因子（§91）
+    TASK_GROUP: ("time",),                  # group 完整性（§92）
+    TASK_ROLLING_SHARED: ("asset", "time"),  # time 需 warmup overlap
+    TASK_OPERATOR: ("asset", "time"),       # elementwise 平凡可切
+}
+#: 累计 / 全历史类算子：禁 time shard（需从最起点重放，片间不独立）。
+_FULL_HISTORY_OPS = frozenset({
+    "cum_delta", "cum_first", "cum_prod", "cumsum", "cum_max", "cum_min",
+    "cummean", "cumcount", "ffill",
+})
+
+
+def single_op_shard_policy(op: str) -> tuple[str, ...] | None:
+    """单个 op 的合法 shard 维度（结构化分类，不做脆弱子串匹配）。"""
+    if op in _FULL_HISTORY_OPS:
+        return ("asset",)
+    st = classify_stage_type(op)
+    return _STAGE_SHARD_POLICY.get(st, ("asset", "time"))
+
+
+def _replace_node(root: Any, target: Any, replacement: Any) -> Any:
+    """重建 plan 树，把 ``target`` 节点替换成 ``replacement``（PlanNode 不可变）。"""
+    from dataclasses import replace as _replace
+
+    if root is target:
+        return replacement
+    inputs = tuple(_replace_node(c, target, replacement) for c in getattr(root, "inputs", ()) or ())
+    if inputs == getattr(root, "inputs", ()):
+        return root
+    return _replace(root, inputs=inputs)
+
+
+def extract_stage_subplans(
+    plan: Any,
+    *,
+    factor_name: str = "f",
+) -> tuple[Any, list[tuple[str, Any]]]:
+    """把整棵 plan 在 **barrier 节点** 处拆成真实可独立执行的 stage 子计划。
+
+    P0-020（R33-P0 关键链的落地基建）：physical DAG 的 barrier stage 目前只是
+    规划视图（``executable=False``），真实计算仍是 ROOT 一次 ``backend.execute(
+    full_plan)``。本函数提供**真实 stage-by-stage 的管线**：
+
+        - 从叶到根逐个提取 barrier 子树（ts_rolling / group / cross-section /
+          stateful），每个子树是一个可独立执行的 stage 子计划；
+        - 提取后把原树中该 barrier 节点替换为 ``plan_ref(sid)``（复用既有
+          CSE plan_ref 解析机制）；
+        - 返回 ``(reference_plan, [(sid, subplan), ...])``，其中
+          ``backend.execute(reference_plan, ctx)`` 在 stage 子计划已物化到
+          shared buffer 时 == ``backend.execute(plan, ctx)``（数值等价）。
+
+    示例 ``cs_rank(ts_mean(x))``：
+        stage:0 = ts_mean(x)
+        stage:1 = cs_rank(plan_ref(stage:0))
+        reference = plan_ref(stage:1)
+    依次 ``backend.execute`` 各 stage（先叶后根）再执行 reference，就是真实的
+    SOURCE_SCAN → barrier → barrier → ROOT 分阶段计算。
+
+    注意：本函数是 stage 执行管线的**落地基建**；production scheduler 默认仍走
+    整 root 一次性执行（数值等价，已大量验证）。把 stage 执行接成 production 默认
+    （stage 级 spill / backend region routing / 逐 stage 写）是后续接线步骤。
+    """
+    from dataclasses import replace as _replace
+
+    from planner.logical_plan import PlanNode
+
+    stages: list[tuple[str, Any]] = []
+    cur = plan
+    while True:
+        best: tuple[Any, int] | None = None
+
+        def _deepest_barrier(node: Any, depth: int) -> None:
+            nonlocal best
+            op = str(getattr(node, "op", "") or "")
+            if op in {"column", "literal", "plan_ref"}:
+                return
+            if classify_stage_type(op) != TASK_OPERATOR:
+                if best is None or depth > best[1]:
+                    best = (node, depth)
+            for child in getattr(node, "inputs", ()) or ():
+                _deepest_barrier(child, depth + 1)
+
+        _deepest_barrier(cur, 0)
+        if best is None:
+            break
+        barrier, _depth = best
+        sid = f"stage:{factor_name}:{len(stages)}"
+        stages.append((sid, barrier))
+        cur = _replace_node(
+            cur,
+            barrier,
+            PlanNode(op="plan_ref", inputs=(), attrs={"sid": sid}),
+        )
+    if not stages:
+        return plan, []
+    return cur, stages
+
+
+def plan_shard_semantics(plan: Any) -> tuple[bool, str | None]:
+    """递归整棵 plan 的最严格 shard 语义（交集 barrier wins，不看顶层 op 名）。
+
+    返回 ``(shardable, shard_dimension)``：
+        - 纯 elementwise → (True, "asset")
+        - 含 cs/group 节点 → 交集收窄到 (time,)
+        - 含 stateful/full-history → (asset,)（time 需 checkpoint / 全历史重放）
+        - 交集为空（如 cs + stateful 并存）→ (False, None)（禁止任意切分）
+    例如 ``add(cs_rank(x), y)``：cs 节点给出 {time}，add 给出 {asset, time}，
+    交集 = {time} —— 顶层 op 是 add，但整树只能 time shard。
+    """
+    if plan is None:
+        return False, None
+    dim_sets: list[set[str]] = []
+    seen: set[int] = set()
+
+    def walk(node: Any) -> None:
+        if node is None or id(node) in seen:
+            return
+        seen.add(id(node))
+        op = str(getattr(node, "op", "") or "")
+        if op and op not in {"column", "literal"}:
+            policy = single_op_shard_policy(op)
+            valid = {d for d in policy if d}
+            dim_sets.append(valid if valid else set())
+        for child in getattr(node, "inputs", ()) or ():
+            walk(child)
+
+    walk(plan)
+    if not dim_sets:
+        # 纯 column/literal 计划：平凡 elementwise。
+        return True, "asset"
+    acc = set(dim_sets[0])
+    for ds in dim_sets[1:]:
+        acc &= ds
+        if not acc:
+            return False, None
+    for preferred in ("asset", "time", "session"):
+        if preferred in acc:
+            return True, preferred
+    return False, None
+
+
 @dataclass(frozen=True)
 class BackendStageContext:
     """R31-P0-003/004：stage 的真实 backend 上下文。"""
@@ -267,6 +411,8 @@ def contract_for_plan(
     cpu_tokens = engine_threads
     io_tokens = 1 if backend in {"duckdb_sql", "clickhouse_sql", "sql"} else 0
     out_bytes = max(1, (rows or 500_000) * 8)
+    # 整棵 plan 的最严格 shard 语义（交集 barrier wins）——不再统一 False。
+    shardable, shard_dim = plan_shard_semantics(plan)
     return TaskResourceContract(
         predicted_elapsed_ms=max(1.0, float(estimate_plan_cost(plan, rows=rows).get("total_work", 1.0))),
         cpu_tokens=cpu_tokens,
@@ -278,8 +424,8 @@ def contract_for_plan(
         releases_gil=backend != "pandas_numpy",
         backend=backend,
         backend_threads=engine_threads,
-        shardable=False,
-        shard_dimension=None,
+        shardable=shardable,
+        shard_dimension=shard_dim,
         uncertainty=uncertainty,
         estimate_basis=basis,
     )

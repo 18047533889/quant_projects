@@ -655,6 +655,14 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "rolling_beta_to_market": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_poly2_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_poly2_resid": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    # R22-058 causal siblings: the model is fit STRICTLY on [t-d, t-1], the
+    # current observation only evaluates (forecast error / prior coeff) — no
+    # current row participates in its own fit.  These are causal by construction
+    # and must be PIT-safe (R38 evidence-regen blocker: without this declaration
+    # the factor certifier reports them "PIT policy is not causal").
+    "ts_poly2_prior_coeff": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_poly2_forecast_error": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_poly2_forecast_error_z": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "idio_vol": {"scope": "ts", "pit_safe": True, "min_periods": 5},
     "idio_skew": {"scope": "ts", "pit_safe": True, "min_periods": 5},
     "downside_beta": {"scope": "ts", "pit_safe": True, "min_periods": 3},

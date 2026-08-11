@@ -152,7 +152,7 @@ NO_PANDAS_CASES = [
     ("ts_autocorr", lambda: F("ts_autocorr")(col("close"), 3, 1)),
     ("ts_corr", lambda: F("ts_corr")(col("close"), col("open"), 2)),
     ("ts_cov", lambda: F("ts_cov")(col("ret"), col("close"), 2)),
-    ("ts_beta", lambda: F("ts_beta")(col("ret"), col("close"), 2)),
+    ("ts_beta", lambda: F("ts_beta")(col("ret"), col("close"), 2, min_periods=2)),
     ("volatility", lambda: F("volatility")(col("close"), 2)),
     ("vwap", lambda: F("vwap")(col("close"), col("volume"), 3)),
     ("div_or_default", lambda: F("div_or_default")(col("close"), col("volume"))),

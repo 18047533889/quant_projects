@@ -298,6 +298,113 @@ class DependencySummary:
         }
 
 
+def _write_manifest_record(
+    conn: sqlite3.Connection,
+    *,
+    fid: str,
+    edge_list: list[FactorDependencyEdge],
+    cols: set[str],
+    lookback: int,
+    frequency: str | None,
+    source_dataset: str | None,
+    full_definition: dict[str, Any] | None,
+    now: str,
+) -> None:
+    """单个 factor 的完整 dependency definition 写入（R11 #8 的 conn 级实现）。
+
+    R39-PERF-039：提取自 ``record_factor_manifest`` 的原子写入块，供单条与
+    ``record_factor_manifests_many`` 批量共用同一 SQL，避免两套写入漂移。
+    """
+    conn.execute(
+        "INSERT INTO factor_dependency "
+        "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(factor_id) DO UPDATE SET "
+        "referenced_columns_json=excluded.referenced_columns_json, "
+        "lookback=excluded.lookback, frequency=excluded.frequency, "
+        "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
+        (
+            fid,
+            json.dumps(sorted(cols), ensure_ascii=False),
+            int(lookback),
+            frequency,
+            source_dataset,
+            now,
+        ),
+    )
+    conn.execute(
+        "DELETE FROM factor_column_dep WHERE factor_id = ?", (fid,)
+    )
+    for col in sorted(cols):
+        conn.execute(
+            "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) "
+            "VALUES (?, ?)",
+            (col, fid),
+        )
+    conn.execute(
+        "DELETE FROM factor_dependency_edge WHERE factor_id = ?", (fid,)
+    )
+    for edge in edge_list:
+        conn.execute(
+            "INSERT OR REPLACE INTO factor_dependency_edge "
+            "(factor_id, dependency_id, source_dataset, field_id, physical_field, "
+            " transform, snapshot_semantics, lookback, forward_impact, logical_table, "
+            " join_policy, source_ref_params, semantic_filters, operator_canonical, "
+            " operator_semantic_version, implementation_hash, calendar_version, "
+            " field_catalog_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                fid,
+                edge.dependency_id,
+                str(edge.source_dataset),
+                str(edge.field_id),
+                edge.physical_field or edge.field_id,
+                edge.transform,
+                edge.snapshot_semantics,
+                int(edge.lookback),
+                edge.forward_impact,
+                edge.logical_table,
+                edge.join_policy,
+                edge.source_ref_params,
+                edge.semantic_filters,
+                edge.operator_canonical,
+                edge.operator_semantic_version,
+                edge.implementation_hash,
+                edge.calendar_version,
+                edge.field_catalog_hash,
+            ),
+        )
+    if full_definition is not None:
+        spec = {
+            k: v
+            for k, v in dict(full_definition).items()
+            if v is not None
+        }
+        conn.execute(
+            "INSERT INTO factor_full_definition (factor_id, spec_json, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(factor_id) DO UPDATE SET "
+            "spec_json=excluded.spec_json, updated_at=excluded.updated_at",
+            (
+                fid,
+                json.dumps(spec, sort_keys=True, ensure_ascii=False, default=str),
+                now,
+            ),
+        )
+        ds_config = spec.get("data_source_config")
+        if ds_config:
+            conn.execute(
+                "UPDATE factor_registry SET data_source_json = ? "
+                "WHERE factor_id = ?",
+                (
+                    json.dumps(
+                        ds_config, sort_keys=True, default=str, ensure_ascii=False
+                    ),
+                    fid,
+                ),
+            )
+
+
 class DependencyCatalog:
     """``FactorCatalog.factor_dependency`` 表的只读/写入门面（R10 edge + full spec）。"""
 
@@ -524,97 +631,19 @@ class DependencyCatalog:
         lookback = lookback or max((e.lookback for e in edge_list), default=0)
         now = datetime.now(timezone.utc).isoformat()
 
-        def _write(conn) -> None:
-            conn.execute(
-                "INSERT INTO factor_dependency "
-                "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?) "
-                "ON CONFLICT(factor_id) DO UPDATE SET "
-                "referenced_columns_json=excluded.referenced_columns_json, "
-                "lookback=excluded.lookback, frequency=excluded.frequency, "
-                "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
-                (
-                    fid,
-                    json.dumps(sorted(cols), ensure_ascii=False),
-                    int(lookback),
-                    frequency,
-                    source_dataset,
-                    now,
-                ),
+        self._atomic_apply(
+            lambda conn: _write_manifest_record(
+                conn,
+                fid=fid,
+                edge_list=edge_list,
+                cols=cols,
+                lookback=lookback,
+                frequency=frequency,
+                source_dataset=source_dataset,
+                full_definition=full_definition,
+                now=now,
             )
-            conn.execute(
-                "DELETE FROM factor_column_dep WHERE factor_id = ?", (fid,)
-            )
-            for col in sorted(cols):
-                conn.execute(
-                    "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) "
-                    "VALUES (?, ?)",
-                    (col, fid),
-                )
-            conn.execute(
-                "DELETE FROM factor_dependency_edge WHERE factor_id = ?", (fid,)
-            )
-            for edge in edge_list:
-                conn.execute(
-                    "INSERT OR REPLACE INTO factor_dependency_edge "
-                    "(factor_id, dependency_id, source_dataset, field_id, physical_field, "
-                    " transform, snapshot_semantics, lookback, forward_impact, logical_table, "
-                    " join_policy, source_ref_params, semantic_filters, operator_canonical, "
-                    " operator_semantic_version, implementation_hash, calendar_version, "
-                    " field_catalog_hash) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        fid,
-                        edge.dependency_id,
-                        str(edge.source_dataset),
-                        str(edge.field_id),
-                        edge.physical_field or edge.field_id,
-                        edge.transform,
-                        edge.snapshot_semantics,
-                        int(edge.lookback),
-                        edge.forward_impact,
-                        edge.logical_table,
-                        edge.join_policy,
-                        edge.source_ref_params,
-                        edge.semantic_filters,
-                        edge.operator_canonical,
-                        edge.operator_semantic_version,
-                        edge.implementation_hash,
-                        edge.calendar_version,
-                        edge.field_catalog_hash,
-                    ),
-                )
-            if full_definition is not None:
-                spec = {
-                    k: v
-                    for k, v in dict(full_definition).items()
-                    if v is not None
-                }
-                conn.execute(
-                    "INSERT INTO factor_full_definition (factor_id, spec_json, updated_at) "
-                    "VALUES (?, ?, ?) "
-                    "ON CONFLICT(factor_id) DO UPDATE SET "
-                    "spec_json=excluded.spec_json, updated_at=excluded.updated_at",
-                    (
-                        fid,
-                        json.dumps(spec, sort_keys=True, ensure_ascii=False, default=str),
-                        now,
-                    ),
-                )
-                ds_config = spec.get("data_source_config")
-                if ds_config:
-                    conn.execute(
-                        "UPDATE factor_registry SET data_source_json = ? "
-                        "WHERE factor_id = ?",
-                        (
-                            json.dumps(
-                                ds_config, sort_keys=True, default=str, ensure_ascii=False
-                            ),
-                            fid,
-                        ),
-                    )
-
-        self._atomic_apply(_write)
+        )
         return {
             "factor_id": fid,
             "edges": [e.to_dict() for e in edge_list],
@@ -624,6 +653,81 @@ class DependencyCatalog:
             "source_dataset": source_dataset,
             "full_definition": bool(full_definition),
         }
+
+    def record_factor_manifests_many(
+        self,
+        entries: Iterable[dict[str, Any]],
+    ) -> int:
+        """R39-PERF-039：多个 factor 的完整 dependency definition 写进**一个**事务。
+
+        每个 entry 形如 ``record_factor_manifest`` 的关键字参数 + ``factor_id``：
+        ``{"factor_id": ..., "edges": [...], "referenced_columns": ...,
+          "lookback": ..., "frequency": ..., "source_dataset": ...,
+          "full_definition": ...}``。
+
+        返回写入条数。全部 entry 在单个 ``BEGIN IMMEDIATE`` 事务内原子提交——
+        从 N 次 ``record_factor_manifest``（N 次 BEGIN/COMMIT）降为 1 次，供
+        ``materialize_many_fast`` 批量落值时实现 ``batch_write_transaction_count
+        << factor_count``。
+        """
+        entries = list(entries)
+        if not entries:
+            return 0
+        self._ensure_tables()
+        now = datetime.now(timezone.utc).isoformat()
+        prepared = []
+        for e in entries:
+            fid = str(e.get("factor_id"))
+            edge_iter = e.get("edges") or ()
+            edge_list = [
+                FactorDependencyEdge.from_dict(x.to_dict())
+                if not isinstance(x, FactorDependencyEdge)
+                else x
+                for x in edge_iter
+            ]
+            source_dataset = e.get("source_dataset")
+            if source_dataset is None and edge_list:
+                source_dataset = edge_list[0].source_dataset
+            cols: set[str] = set()
+            for edge in edge_list:
+                if edge.field_id:
+                    cols.add(edge.field_id)
+                if edge.physical_field:
+                    cols.add(edge.physical_field)
+            if e.get("referenced_columns"):
+                cols.update(str(c) for c in e["referenced_columns"] if c)
+            lookback = int(
+                e.get("lookback")
+                or max((edge.lookback for edge in edge_list), default=0)
+            )
+            prepared.append(
+                (
+                    fid,
+                    edge_list,
+                    cols,
+                    lookback,
+                    e.get("frequency"),
+                    source_dataset,
+                    e.get("full_definition"),
+                )
+            )
+
+        def _write_all(conn) -> None:
+            for fid, edge_list, cols, lookback, frequency, source_dataset, full_definition in prepared:
+                _write_manifest_record(
+                    conn,
+                    fid=fid,
+                    edge_list=edge_list,
+                    cols=cols,
+                    lookback=lookback,
+                    frequency=frequency,
+                    source_dataset=source_dataset,
+                    full_definition=full_definition,
+                    now=now,
+                )
+
+        self._atomic_apply(_write_all)
+        return len(prepared)
 
     def get_factor_dependency_edges(self, factor_id: str) -> list[FactorDependencyEdge]:
         """Return all rich dependency edges recorded for ``factor_id``."""

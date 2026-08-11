@@ -21,6 +21,7 @@ R38 修复 —— **root reservation accounting（§34 方案A，推荐）**：
 """
 from __future__ import annotations
 
+import contextvars
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -39,6 +40,12 @@ KIND_REMOTE = "remote"
 
 #: 终端 lease 保留数（P1-021：避免 _leases 无限增长）。
 TERMINAL_RING_SIZE = 64
+
+#: 当前 job 的活跃 JobLease（P0-018：service worker 在 job 执行期间设置；
+#: FE scheduler / DA scan / writer 从当前 context 拿 job lease 申请 child）。
+_ACTIVE_JOB_LEASE: contextvars.ContextVar = contextvars.ContextVar(
+    "fe_active_job_lease", default=None
+)
 
 
 @dataclass
@@ -175,7 +182,9 @@ class HostResourceCoordinator:
     def sync_da_limits(self) -> dict[str, Any]:
         """R38 P0-022：**显式动作**——把 Safe Envelope 应用到 DA governor。
 
-        （不再藏在 ``summary()`` 里做 observability side effect。）
+        P0-018：同时注入 host child-lease 桥——DA 扫描的 admission 先向当前
+        JobLease 请求 DAScanLease child（同一棵 lease 树），不再只走独立的
+        GlobalResourceGovernor（双权威 → 资源账本分裂）。
         """
         gov = self._da_governor()
         if gov is None:
@@ -192,7 +201,45 @@ class HostResourceCoordinator:
             scan = max(0, int(safe * 0.5))
             scan_setter(scan)
             out["max_total_scan_bytes_inflight"] = scan
+        bridge = getattr(gov, "set_host_lease_request", None)
+        if callable(bridge):
+            bridge(self.request_da_child_lease)
+            out["host_lease_bridge"] = "installed"
         return out
+
+    def set_active_job_lease(self, job_lease: Any | None) -> None:
+        """P0-018：设置当前 context 的活跃 JobLease（service worker 在 job 执行
+        期间设置；线程/协程间互不干扰，ContextVar request-scoped）。"""
+        _ACTIVE_JOB_LEASE.set(job_lease)
+
+    def active_job_lease(self) -> Any | None:
+        return _ACTIVE_JOB_LEASE.get()
+
+    def request_da_child_lease(
+        self,
+        memory_bytes: int,
+        scan_bytes: int = 0,
+    ) -> Any | None:
+        """P0-018：DA 扫描从当前 JobLease 申请 DAScanLease child。
+
+        无活跃 job（standalone DA / 非 service 路径）→ 返回 None（admit 回退
+        本地 governor）。child 只在 job 剩余额度内分配，不重复计 host。返回
+        :class:`_HostLeaseRef`（带 ``release()``，DA governor release 时一并释放）。
+        """
+        job = _ACTIVE_JOB_LEASE.get()
+        if job is None:
+            return None
+        try:
+            lease = job.request_child(
+                owner="da-scan",
+                kind=KIND_DA_SCAN,
+                memory_bytes=max(0, int(memory_bytes)),
+            )
+        except Exception:
+            return None
+        if lease is None:
+            return None
+        return _HostLeaseRef(self, lease)
 
     def apply_da_envelope(self) -> dict[str, Any]:
         """R36 兼容别名：内部调用 :meth:`sync_da_limits`。"""
@@ -356,9 +403,8 @@ class HostResourceCoordinator:
             if lease is None:
                 # 已在 terminal ring（幂等）：仍返回 True（无害）。
                 return any(l.lease_id == lease_id for l in self._terminal)
-            if not lease.released:
-                self._release_subtree(lease)
-            # 从主 dict 移到 terminal ring（P1-021）。
+            self._release_subtree(lease)
+            # 顶层 root 从主 dict 移到 terminal ring（P1-021）。
             self._leases.pop(lease_id, None)
             self._terminal.append(lease)
             if len(self._terminal) > TERMINAL_RING_SIZE:
@@ -366,11 +412,22 @@ class HostResourceCoordinator:
             return True
 
     def _release_subtree(self, lease: HostResourceLease) -> None:
+        """P0-019：递归标记 released，并**把 child 也从主 dict 移出**。
+
+        旧实现只把 root 移出 ``_leases``，child 长期留在 dict 里积累 released
+        对象（长时间 service 内存泄漏）。现在每个 child 都进 terminal ring。
+        """
         lease.released = True
         for cid in list(lease.child_lease_ids):
             child = self._leases.get(cid)
-            if child is not None and not child.released:
-                self._release_subtree(child)
+            if child is not None:
+                if not child.released:
+                    self._release_subtree(child)
+                # 子节点移入 terminal ring（不再留主 dict）。
+                self._leases.pop(cid, None)
+                self._terminal.append(child)
+                if len(self._terminal) > TERMINAL_RING_SIZE:
+                    self._terminal = self._terminal[-TERMINAL_RING_SIZE:]
         lease.child_lease_ids.clear()
 
     def reconcile(self) -> dict[str, Any]:
@@ -431,3 +488,22 @@ def reset_host_coordinator() -> None:
     global _COORDINATOR
     with _COORDINATOR_LOCK:
         _COORDINATOR = None
+
+
+class _HostLeaseRef:
+    """host-backed DA 扫描租约引用（P0-018：可 release，DA governor 释放用）。"""
+
+    __slots__ = ("_coordinator", "lease_id", "released")
+
+    def __init__(self, coordinator: "HostResourceCoordinator", lease: HostResourceLease) -> None:
+        self._coordinator = coordinator
+        self.lease_id = lease.lease_id
+        self.released = False
+
+    def release(self) -> None:
+        if not self.released:
+            self.released = True
+            try:
+                self._coordinator.release_lease(self.lease_id)
+            except Exception:
+                pass

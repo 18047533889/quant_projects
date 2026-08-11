@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.10.3 — R30 全维度成熟度 / 极致读取性能 / FE 深度协同
+
+> 执行时最新 main 为 `a2dc3a1a`（R47）。并发 session 活跃 → 本轮 **additive-only**：
+> 全部新文件，零修改既有文件（避免卷走并发未提交改动）。验收报告见
+> `DATAACCESS_R30_FINAL_ACCEPTANCE_REPORT.md`。
+
+- **P0**：Benchmark Suite（`benchmarks/` B01-B09 + fixtures/report/run_benchmarks，B01-B04
+  small 全 PASS）；QueryTrace + Observability（`r30/query_trace.py` 18 stage +
+  `r30/metrics.py` Prometheus/OTel）；FE 批量 IR（`factor_engine/planner/factor_source_plan.py`
+  / `factor_batch_plan.py` / `field_request_coalescer.py`，10k factors → 7 source groups，
+  物理扫描数与 factor 数脱钩 amp=0.0007）；`r30/session.py` R30ReadSession（prepared +
+  source-block 缓存 + CostModel）；Partition Index 立面 + CoverageService.describe +
+  CalendarSnapshot 全量 digest + ExperimentDataSnapshot + DataChangeSet→最小重算 +
+  ConceptId/UnitType（Money[CNY]+Money[USD] 无 FX 编译期 reject）。
+- **P1**：SourceAdapter/Capabilities、JoinCostPlanner、CacheHierarchy、ExecutionLease、
+  LineageStore（DuckDB 索引 + 内存降级）、PolicyManifest、DataQualityService、MiningFieldProfile/
+  FieldCapabilityCatalog、FactorArtifactMetadata、RevisionFidelity、SemanticColumnVersion、
+  AggregationRecipeIdentity、版本治理拆分（`r30/versioning.py`）。
+- **P2 接口**：TrainingDatasetSpec / 多资产 DerivativeContractSpec / Distributed providers /
+  API Surface 收敛（`r30/`）。
+- **基础设施**：`_shared.py` digest 优先级 bug 修复；3 条静态审计（source_contracts /
+  semantic_concept_coverage / perf_paths 全 0 违规）；current-state 三文档；perf-gate CI
+  workflow；`dataaccess/r30/lineage.py` 登记 allowlist 豁免。
+- **测试/证据**：新增 185 tests（DA 173 + FE 12）；全量 1195 passed，4 失败全为并发 session
+  未提交改动（隔离实验证明与本轮无关）；`docs/evidence/r30/`（BENCHMARK_ENV/RESULTS/
+  SUMMARY + FE_DA_1000/10000_FACTOR_TRACE）。
+- **如实**：NO CURRENT-HEAD CI EVIDENCE（未 push）；B07/B08 COS SKIP（无真实 COS）；
+  深度接线（QueryTrace/session/partition 进 store 热路径）待并发 session 落定后推进。
+
 ## 0.10.2 — R29 Execution/Governance/Security Second-Pass Closure
 
 R28 修完后暴露的下一层（基线 `main@8449d9c`）：契约/治理实际缺口、执行旁路、

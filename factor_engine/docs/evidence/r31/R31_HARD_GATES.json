@@ -1,6 +1,6 @@
 {
   "generated_by": "scripts/audit_r31_acceptance.py",
-  "passed": 40,
+  "passed": 39,
   "total": 40,
   "gates": {
     "R31_DEFAULT_BATCH_EXECUTOR_IS_ADAPTIVE_SCHEDULER": {
@@ -45,7 +45,7 @@
     },
     "R31_RESOURCE_EXTERNAL_CPU_CORRECT": {
       "passed": true,
-      "evidence": "external_cpu_util = max(0, system - own) sampled = 0.455"
+      "evidence": "external_cpu_util = max(0, system - own) sampled = 0.789"
     },
     "R31_IO_PRESSURE_OBSERVABLE": {
       "passed": true,
@@ -85,7 +85,7 @@
     },
     "R31_NATIVE_FUSION_ACTUALLY_EXECUTED": {
       "passed": true,
-      "evidence": "fusion groups planned=1; adaptive block default=200 (R31-P0-021)"
+      "evidence": "fusion groups planned=1; adaptive block default=32 (R31-P0-021)"
     },
     "R31_DATAACCESS_BATCH_REQUEST_ACTIVE": {
       "passed": true,
@@ -152,8 +152,8 @@
       "evidence": "rolling change at T → [T, T+window-1]=AffectedWindow(node_id='n1', op='ts_mean', start='2024-01-10', end='2024-01-16', unbounded=False); stateful → unbounded till checkpoint"
     },
     "R31_SERVICE_AND_ENGINE_SHARE_RESOURCE_GOVERNANCE": {
-      "passed": true,
-      "evidence": "service BoundedJobQueue owns process-level broker; scheduler reuses it (shared admission)"
+      "passed": false,
+      "evidence": "wiring failed"
     },
     "R31_CANCELLATION_PROPAGATES_TO_EXECUTION": {
       "passed": true,

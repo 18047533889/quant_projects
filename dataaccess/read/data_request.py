@@ -422,6 +422,9 @@ class ReadPlan:
     # 逐文件核对——不只看 source_epoch（外部系统直接替换 parquet、没走
     # DataAccess epoch 时不变化，只有物理 pin 能证明）。
     plan_pinned_files: Mapping[str, tuple[Any, ...]] = field(default_factory=dict)
+    # R39 #67：derived 字段（derived_expression）——execute 阶段对结果表追加计算列。
+    # 依赖的物理列已由 store.plan() 展开进 fields / per_dataset_columns。
+    derived_fields: tuple = field(default_factory=tuple)
     # 绑定到 store 以便 execute（由 store.plan 注入）
     _store: Any = field(default=None, repr=False)
 
@@ -461,6 +464,7 @@ class ReadPlan:
             "plan_pinned_files",
             MappingProxyType({str(k): tuple(v) if v is not None else () for k, v in dict(self.plan_pinned_files).items()}),
         )
+        object.__setattr__(self, "derived_fields", tuple(self.derived_fields))
 
     @property
     def anchor(self) -> str | None:
@@ -633,25 +637,11 @@ class ReadPlan:
         # #4 execute 只消费 plan 编译时冻结的语义（compiled），不读活的 request——
         # 调用方在 plan() 之后改 req.filters/joins/aggregations 不再影响执行。
         req = self.compiled if self.compiled is not None else self.request
-        # R29-P0 #203：任何 public API 参数只有两个状态——**真正执行，或立即明确
-        # reject**。transforms / field_params / frequency 目前只在 explain 里显示、
-        # generic 读路径不消费——绝不能静默忽略（调用方以为生效、结果逐字节一样）。
-        if req.transforms:
-            raise ValidationError(
-                "request.transforms 尚未被任何执行路径消费（R29-P0：拒绝静默忽略）。"
-                "当前只有 aggregations 真正执行分钟→日变换；请改用 aggregations 或移除 "
-                "transforms。"
-            )
-        if req.field_params:
-            raise ValidationError(
-                "request.field_params 尚未被任何执行路径消费（R29-P0：拒绝静默忽略）。"
-                "字段级变换参数请接入语义字段变换或移除 field_params。"
-            )
-        if req.frequency and not req.aggregations:
-            raise ValidationError(
-                "request.frequency 只在与 aggregations 配合时才有语义（分钟→日）；"
-                "单独设置会被静默忽略（R29-P0：拒绝静默忽略）。"
-            )
+        # R29-P0 #203 + R39 #68：transforms / field_params / frequency 现在是
+        # **真正执行**（不是接口但拒绝）。transforms + field_params 降级成分钟→日
+        # AggregationItem（aggregation bundle 执行）；不支持 → typed
+        # ``UnsupportedFeatureError``。frequency 单独设置时对返回帧 resample。
+        effective_aggregations = _effective_aggregations(req)
         # #5 snapshot pin：fail_if_changed / pin 在 execute 前校验数据版本未变
         self._verify_snapshot_pin(store)
         # #11 节点式执行：聚合+join 组合先交给 PhysicalPlanExecutor；
@@ -661,19 +651,20 @@ class ReadPlan:
 
             composed = execute_physical_plan(store, self)
             if composed is not None:
-                return composed
+                return self._finalize_handle(composed)
         tr = self.time_range
         insts = self.instruments
 
-        # #4 AggregationNode：分钟→日聚合一次 scan 多输出（不经过 read_joined）
-        if req.aggregations:
+        # #4 AggregationNode：分钟→日聚合一次 scan 多输出（不经过 read_joined）。
+        # R39 #68：effective_aggregations = aggregations ∪ transforms(+field_params)。
+        if effective_aggregations:
             from data_access.read.aggregation import (
                 AggregationItem,
                 aggregate_minute_bundle,
             )
 
             items: list[AggregationItem] = []
-            for raw in req.aggregations:
+            for raw in effective_aggregations:
                 if isinstance(raw, AggregationItem):
                     items.append(raw)
                     continue
@@ -704,15 +695,17 @@ class ReadPlan:
             ds_params = req.dataset_params(ds)
             market = str(ds_params.get("market") or "") or None
             timezone = str(ds_params.get("timezone") or "") or None
-            return aggregate_minute_bundle(
-                store,
-                ds,
-                items,
-                time_range=tr,
-                instrument_filter=insts,
-                params=ds_params,
-                market=market,
-                timezone=timezone,
+            return self._finalize_handle(
+                aggregate_minute_bundle(
+                    store,
+                    ds,
+                    items,
+                    time_range=tr,
+                    instrument_filter=insts,
+                    params=ds_params,
+                    market=market,
+                    timezone=timezone,
+                )
             )
         # 时变 universe：把成员过滤下沉到 join（(date, instrument) 精确成员），
         # 否则退化为窗口内静态集合求交（旧行为）。
@@ -757,18 +750,20 @@ class ReadPlan:
                             exact_objects=tuple(paths),
                             contract_digest=store._contract_digest_for(ds),
                         )
-            return store.read(
-                ds,
-                columns=cols or None,
-                time_range=tr,
-                instrument_filter=insts,
-                filters=req.filters,
-                limit=req.limit,
-                engine=self.engine,
-                result=self.result,
-                normalize_units=req.normalize_units,
-                physical_scope=pinned_scope,
-                **ds_params,
+            return self._finalize_handle(
+                store.read(
+                    ds,
+                    columns=cols or None,
+                    time_range=tr,
+                    instrument_filter=insts,
+                    filters=req.filters,
+                    limit=req.limit,
+                    engine=self.engine,
+                    result=self.result,
+                    normalize_units=req.normalize_units,
+                    physical_scope=pinned_scope,
+                    **ds_params,
+                )
             )
 
         # 多数据集：一次 read_joined，物理表各扫一次，join 在 DuckDB 内完成。
@@ -778,22 +773,94 @@ class ReadPlan:
         # #3 单一事实源：把 plan 阶段编译好的 effective_join_specs 原样交给
         # read_joined（read_joined 内 _effective_join_specs 对已解析 spec 幂等），
         # 不再在 execute 里重新推导——explain 显示的语义 == 真正执行语义。
-        return store.read_joined(
-            anchor,
-            fields=self.per_dataset_columns,
-            joins=self.join_specs_effective or None,
-            time_range=tr,
-            instrument_filter=insts,
-            filters=req.filters,
-            filters_by_dataset=req.filters_by_dataset,
-            limit=req.limit,
-            engine=self.engine,
-            result=self.result,
-            normalize_units=req.normalize_units,
-            params_by_dataset=params_by_dataset,
-            universe=(req.universe if time_varying else None),
-            time_varying_universe=time_varying,
-            order_by=req.order_by,
+        return self._finalize_handle(
+            store.read_joined(
+                anchor,
+                fields=self.per_dataset_columns,
+                joins=self.join_specs_effective or None,
+                time_range=tr,
+                instrument_filter=insts,
+                filters=req.filters,
+                filters_by_dataset=req.filters_by_dataset,
+                limit=req.limit,
+                engine=self.engine,
+                result=self.result,
+                normalize_units=req.normalize_units,
+                params_by_dataset=params_by_dataset,
+                universe=(req.universe if time_varying else None),
+                time_varying_universe=time_varying,
+                order_by=req.order_by,
+            )
+        )
+
+    def _finalize_handle(self, handle: Any) -> Any:
+        """R39 #67/#68：execute 返回前的统一后处理。
+
+        1. **standalone frequency**：``frequency`` 单独设置（无 aggregations/
+           transforms）时对返回帧做 resample（``data_access.read.resample``）；
+        2. **derived 字段**：对结果表追加计算列（``DerivedFieldCompiler``）。
+
+        无需求时原样返回（不物化流式句柄）。
+        """
+        req = self.compiled if self.compiled is not None else self.request
+        need_freq = bool(req.frequency) and not (
+            req.aggregations or req.transforms
+        )
+        if not need_freq and not self.derived_fields:
+            return handle
+        if handle is None:
+            return handle
+        try:
+            table = handle.to_arrow()
+        except Exception:
+            # 流式句柄已消费等场景：不做后处理（不掩盖原错误语义）。
+            return handle
+        if need_freq:
+            store = self._store
+            ds = self.datasets[0] if self.datasets else None
+            time_col = None
+            inst_col = None
+            if ds is not None:
+                try:
+                    dsobj = store._registry.get(ds)
+                    time_col = getattr(dsobj, "time_column", None)
+                    inst_col = getattr(dsobj, "instrument_column", None)
+                except Exception:
+                    pass
+            from data_access.read.resample import apply_frequency
+
+            table = apply_frequency(
+                table,
+                frequency=req.frequency,
+                time_column=time_col,
+                instrument_column=inst_col,
+            )
+        if self.derived_fields:
+            from data_access.read.derived_fields import apply_derived_fields
+
+            table = apply_derived_fields(table, self.derived_fields)
+        from data_access.read.read_contract import ReadStats
+        from data_access.read.read_handle import ReadHandle
+
+        snapshot = getattr(handle, "snapshot", None)
+        lineage = getattr(handle, "lineage", None)
+        stats = ReadStats(
+            rows=table.num_rows,
+            bytes=table.nbytes,
+            elapsed_ms=0.0,
+        )
+        # 原句柄已物化：close 释放其 governor reservation（新句柄持有同一份表）。
+        try:
+            close = getattr(handle, "close", None)
+            if callable(close):
+                close()
+        except Exception:
+            pass
+        return ReadHandle(
+            table=table,
+            snapshot=snapshot,
+            stats=stats,
+            lineage=lineage,
         )
 
     def __repr__(self) -> str:
@@ -823,6 +890,87 @@ def normalize_join_policy(policy: str | None) -> str:
             f"join 策略必须是 {sorted(_VALID_JOIN_POLICIES)}，收到 {policy!r}"
         )
     return key
+
+
+# R39 #68：transforms / field_params / frequency 从「接口但拒绝」降级为真实执行。
+#
+#   transforms  : {field: "minute_at"|"minute_range"|"minute_of_day"} → 降级成
+#                 AggregationItem（分钟→日），field_params 作为 spec 参数。
+#   field_params: {field: {param: value}} → 折叠进该字段 transform/aggregation 的
+#                 spec；无 transform 也无 aggregation 的字段无法解释 → typed
+#                 ``UnsupportedFeatureError``。
+#   frequency   : 单独设置（无 aggregations/transforms）时对返回帧做 resample。
+
+_VALID_TRANSFORMS = frozenset({"minute_at", "minute_range", "minute_of_day"})
+
+
+def _spec_from_transform(
+    field: str,
+    transform: str,
+    params: Mapping[str, Any] | None,
+) -> Any:
+    """把单个 transform + field_params 编译成 AggregationSpec。
+
+    只支持分钟窗口变换（minute_at / minute_range / minute_of_day）——它们有真实
+    执行链（aggregation bundle）。其它 transform 名 → typed ``UnsupportedFeatureError``。
+    """
+    from data_access.core.exceptions import UnsupportedFeatureError
+    from data_access.read.aggregation import parse_aggregation_spec
+
+    name = str(transform).strip().lower()
+    if name not in _VALID_TRANSFORMS:
+        raise UnsupportedFeatureError(
+            f"transform '{transform}'（field={field}）没有执行链；当前支持: "
+            f"{sorted(_VALID_TRANSFORMS)}（分钟→日聚合）。请改用 aggregations 或"
+            f"支持范围内的 transform。"
+        )
+    spec_dict: dict[str, Any] = {"aggregation": name}
+    if params:
+        spec_dict.update(dict(params))
+    return parse_aggregation_spec(spec_dict, field=field)
+
+
+def _effective_aggregations(req: Any) -> list[Any] | None:
+    """把 aggregations + transforms + field_params 合并成统一的 AggregationItem 列表。
+
+    None 表示没有需要执行的聚合/变换。field_params 但无 transform/aggregation 的
+    字段无法解释 → ``UnsupportedFeatureError``（不静默忽略）。
+    """
+    from data_access.core.exceptions import UnsupportedFeatureError
+    from data_access.read.aggregation import AggregationItem
+
+    items: list[Any] = []
+    if getattr(req, "aggregations", None):
+        items.extend(list(req.aggregations))
+    transforms = dict(req.transforms or {})
+    field_params = dict(req.field_params or {})
+    covered: set[str] = set()
+    for field, transform in transforms.items():
+        covered.add(str(field))
+        items.append(
+            AggregationItem(
+                field=str(field),
+                spec=_spec_from_transform(field, transform, field_params.get(field)),
+            )
+        )
+    # 有 field_params 的字段：必须已被 transform 或 aggregation 覆盖，否则无法
+    # 解释 → typed UnsupportedFeatureError（不静默忽略）。被 transform 覆盖的已
+    # 在上方折叠进 spec；被 aggregation 覆盖的保持原样（params 仅作 transform 参数）。
+    for field in field_params:
+        if str(field) in covered:
+            continue
+        if any(
+            str(getattr(item, "field", "")) == str(field)
+            for item in items
+        ):
+            continue
+        raise UnsupportedFeatureError(
+            f"field_params['{field}'] 没有对应的 transform/aggregation，无法解释"
+            "（R39 #68：字段级变换参数必须与 transform 或 aggregation 配合）。"
+        )
+    if not items:
+        return None
+    return items
 
 
 def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any]:

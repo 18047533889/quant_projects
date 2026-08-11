@@ -83,7 +83,17 @@ class AmbiguousFieldError(ValidationError):
     """字段回退到 registry 全局查找时命中多个候选（#33 fail ambiguous）。
 
     典型场景：``resolve_fields("Close")`` 未传 dataset，registry 里几十张表都
-    有 Close 物理列——生产模式抛错，禁止「取 registry 第一个」。
+    有 Close 物理列——R39 #69 起 research/production 一律抛错，禁止「取 registry
+    第一个」。
+    """
+
+
+class UnsupportedFeatureError(ValidationError):
+    """接口已声明但当前执行链真正不支持的降级/变换功能（R39 #67/#68）。
+
+    不同于 generic ValidationError：这是 typed 的「功能不支持」错误——调用方
+    可以精确 catch 并决定回退策略，而不是把「不支持的 feature」和「参数非法」
+    混为一谈。
     """
 
 
@@ -237,6 +247,25 @@ class UnknownProvenanceError(DataAccessError):
     """R25 §50 / §78：裸 DataFrame/无 provenance 帧进入 production。
 
     FactorEngine production 接裸 dataframe 时抛 UnknownProvenanceError。
+    """
+
+
+class CapabilityUnavailableError(DataAccessError):
+    """R39 P0 #43：后端能力不可用（组合读共享 pool 数据库不可用）。
+
+    与「数据库损坏 / schema 错误 / pool 状态错误」严格区分：只有能力（如
+    DuckDB 共享 pool 文件不可用）明确缺失时才抛本错误，调用方可以回退
+    （临时 parquet）；其余底层错误必须原样传播，禁止 ``except Exception``
+    一把抓当能力缺失回退。
+    """
+
+
+class SourceResolutionError(DataAccessError):
+    """R39 P0 #44：物理读取范围解析失败（不是「数据集为空」）。
+
+    与 ``EmptyPhysicalScope``（合法空数据集）严格区分：解析异常（glob 失败 /
+    远程不可达 / 授权拒绝）抛本错误；``[]`` 只能表示「合法空」，绝不静默
+    同时代表「解析失败」。
     """
 
 

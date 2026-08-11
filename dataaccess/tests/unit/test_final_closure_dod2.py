@@ -462,28 +462,32 @@ def test_pit_index_null_filing_rejected(tmp_path):
 def test_derived_field_fail_closed_catalog_and_planner(tmp_path):
     from data_access.read.semantic_catalog import parse_semantic_field
 
-    # catalog load：derived + mining_allowed=true → 拒绝
-    with pytest.raises(ValidationError, match="DerivedFieldCompiler|derived"):
-        parse_semantic_field("us_market_cap_daily", {
-            "market": "us", "dataset": None,
-            "derived_expression": "a.Close * b.shares",
-            "mining_allowed": True,
-        })
-    # derived + mining_allowed=false → 可加载（fail-closed 正确姿势）
+    # R39 #67：DerivedFieldCompiler 已实现执行链 → derived + mining_allowed=true
+    # 现在**允许**加载（compile 成功即真正可执行）。
+    f_ok = parse_semantic_field("us_market_cap_daily", {
+        "market": "us", "dataset": None,
+        "derived_expression": "a.Close * b.shares",
+        "mining_allowed": True,
+    })
+    assert f_ok.derived_expression and f_ok.mining_allowed is True
+    # derived + mining_allowed=false → 可加载
     f = parse_semantic_field("us_market_cap_daily", {
         "market": "us", "derived_expression": "a.Close * b.shares",
         "mining_allowed": False,
     })
     assert f.derived_expression and not f.mining_allowed
 
-    # planner：直接读取 derived 字段 → 清晰 ValidationError
+    # planner：derived 字段不再被「DerivedFieldCompiler 未实现」拒绝。依赖数据集
+    # 不在 registry → 抛的是数据集缺失（不再是 derived 执行链缺失）。
     d = tmp_path / "d"
     d.mkdir()
     store = _store(tmp_path, _writable_ds(d, "myds"))
     store.write_arrow("myds", pa.table(
         {"ts": [dt.date(2024, 1, 1)], "sym": ["A"], "val": [1.0]}))
-    with pytest.raises(ValidationError, match="derived"):
+    with pytest.raises(ValidationError) as exc_info:
         store.plan(DataRequest(fields=["us_market_cap_daily"]))
+    assert "DerivedFieldCompiler" not in str(exc_info.value)
+    assert "derived" not in str(exc_info.value).lower()
 
 
 # ---------------------------------------------------------------------------

@@ -392,17 +392,13 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
     # #P0-24 derived 字段不落在单一物理表：允许无 dataset，但必须有 derived_expression。
     if not dataset and not derived_expr:
         raise ValidationError(f"{context}: 缺少 dataset（逻辑字段必须落到某个数据集）")
-    # #P1-final closure 7：DerivedFieldCompiler 尚未实现执行链。derived 字段
-    # **绝不能**宣称 mining_allowed=true——catalog 不能宣称可用而执行链没实现。
-    # 显式 mining_allowed: true 的 derived 字段在 load 时直接拒绝（fail-closed）。
-    if derived_expr:
-        mining_raw = raw.get("mining_allowed")
-        if mining_raw is None or _strict_bool(mining_raw, context=context, default=False):
-            raise ValidationError(
-                f"{context}: derived 字段（derived_expression）暂未实现执行链"
-                "（DerivedFieldCompiler 未落地），不允许 mining_allowed=true。"
-                "请先把该字段改为物理字段，或等 derived 执行链实现后再开放。"
-            )
+    # #P1-final closure 7 + R39 #67：DerivedFieldCompiler 已实现执行链。derived
+    # 字段允许 mining_allowed=true（compile 成功即真正可执行）；表达式编译失败时
+    # 由 plan() 阶段抛 ``UnsupportedFeatureError``，catalog load 不再一刀切拒绝。
+    # 未显式声明 mining_allowed 时保持 fail-closed（默认 False）。
+    if derived_expr and raw.get("mining_allowed") is None:
+        raw = dict(raw)
+        raw["mining_allowed"] = False
     temporal_model = _str_or_none(raw.get("temporal_model"))
     # #9：财务事件字段默认 latest_period——「最新可见会计期 + 该期内最新修订」。
     # 未显式写 period_selection 时，financial_event/event 字段默认 latest_period，

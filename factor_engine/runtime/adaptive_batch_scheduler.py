@@ -38,6 +38,11 @@ from planner.physical_factor_dag import (
 from planner.read_wave_planner import ReadWavePlan, build_waves_from_dag
 from runtime.buffer_ref import SourceWaveExecutor
 from runtime.hybrid_executor import HybridExecutor, classify_backend_execution
+from runtime.micro_batch_task import MicroBatchTask, dispatch_micro_batch
+from runtime.plan_execution_certificate import (
+    PlanExecutionCertificate,
+    build_plan_execution_certificate,
+)
 from runtime.resource_broker import ReservationLease, ResourceBroker
 from runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
@@ -46,6 +51,13 @@ _logger = logging.getLogger(__name__)
 #: R33-P0-040：``wait(FIRST_COMPLETED)`` 事件驱动，超时只作兜底上限（不再固定
 #: 50ms 轮询）。
 _EVENT_WAIT_TIMEOUT_S = 0.05
+
+#: R39-PERF-018（§6）：micro-batch 参数。
+#: 每个 micro-batch 合并 16–128 个低成本 root，组内估计总 work < 阈值。
+_MICRO_BATCH_MIN_ROOTS = 16
+_MICRO_BATCH_MAX_ROOTS = 128
+_MICRO_BATCH_MAX_TOTAL_WORK = 1_000_000.0
+_MICRO_BATCH_ROOT_WORK_CAP = 100_000.0
 
 
 @dataclass
@@ -296,8 +308,12 @@ class AdaptiveBatchScheduler:
         self._shard_partials: dict[str, dict[str, Any]] = {}
         #: 已失败（OOM）的 shape 签名——same shape 禁止重试（R38_P0_ZERO_SAME_SHAPE_OOM_RETRY）。
         self._failed_shapes: set[str] = set()
-        #: task_id -> 该 task 对应的分片 shape 签名（OOM 时定位失败 shape）。
+        #: original_task_id -> 该 task 当前 attempt 的 shape 签名（OOM 时定位失败
+        #: shape）。统一按 **original_task_id** 存（不再 merge_id/orig_tid 混用）。
         self._shard_shape_of: dict[str, str] = {}
+        #: original_task_id -> 分片 attempt 序号（OOM replan 起 >=2，task id 带
+        #: ``:attempt:N:`` 段，隔离旧 in-flight future，P0-010）。
+        self._shard_attempts: dict[str, int] = {}
         #: original_root_id -> 原始 ROOT task（shard 替换后保留，OOM replan 用）。
         self._shard_original_task: dict[str, Any] = {}
         self._oom_replans = 0
@@ -307,6 +323,20 @@ class AdaptiveBatchScheduler:
         self._wave_covered_tasks: set[str] = set()
         # R38 P0-007：task 提交时刻（dispatch 时记录，完成时算真实 duration）。
         self._task_started_at: dict[str, float] = {}
+        # R39-PERF-016：plan() 阶段构建的 task 执行证书（运行期 O(1) 读取）。
+        self._certificates: dict[str, PlanExecutionCertificate] = {}
+        # R39-PERF-016：critical-path 成本图缓存（避免每 ready task 重走整棵 DAG
+        # 构建 cost_ms；DAG 被 shard/OOM replan 时置 None 强制重建）。
+        self._cost_ms_cache: dict[str, float] | None = None
+        # R39-PERF-018/019：结构化性能计数（run() 开始时重置）。
+        self._perf_metrics: dict[str, Any] = {
+            "future_count": 0,
+            "factor_count": 0,
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "scheduler_wait_polling_count": 0,
+        }
+        self._micro_batch_counter = 0
 
     def cancel(self) -> None:
         """请求取消：后续 admission 一律拒绝；run 在无在跑任务时提前结束。"""
@@ -364,6 +394,10 @@ class AdaptiveBatchScheduler:
             scan_cost_map=scan_cost_map,
         )
         cost_by_task: dict[str, Any] = {}
+        # R39-PERF-016：plan() 阶段为每个 task 构建执行证书——复用这里已算好的
+        # plan cost，固化成 frozen 证书，运行期 O(1) 读取，不再重走 DAG。
+        self._certificates = {}
+        self._cost_ms_cache = None
         for tid, task in physical.tasks.items():
             plan_cost = (
                 task.estimated_cost
@@ -371,6 +405,7 @@ class AdaptiveBatchScheduler:
                 else _plan_cost_bytes(task.node_ref)
             )
             cost_by_task[tid] = plan_cost
+            self._certificates[tid] = build_plan_execution_certificate(task, plan_cost)
             self._reuse_counts[tid] = len(task.consumers)
         # shared ROOT inputs：root 消费的 CSE sid 记入 ROOT.inputs（可执行依赖），
         # 同时给 CSE shared task 补 consumer 边（topological_order 靠它释放）。
@@ -423,6 +458,152 @@ class AdaptiveBatchScheduler:
             meta={"n_shared": len(dag.shared_nodes or {}), "n_roots": len(dag.roots)},
         )
 
+    # -- certificate (R39-PERF-016) --
+
+    def task_execution_certificate(
+        self, task_id: str
+    ) -> PlanExecutionCertificate | None:
+        """PERF-016：O(1) 读取 task 的执行证书（plan() 阶段构建；无则 None）。"""
+        return self._certificates.get(task_id)
+
+    def _cert_cost_for(self, task: PhysicalFactorTask) -> float:
+        """O(1) 读取 task 的估计 work：优先证书，回退 contract。"""
+        cert = self._certificates.get(task.task_id)
+        if cert is not None:
+            return cert.total_work()
+        contract = task.resource_contract
+        if contract is not None:
+            return float(contract.predicted_elapsed_ms or 0.0)
+        return 0.0
+
+    # -- micro-batch (R39-PERF-018) --
+
+    def _next_micro_batch_id(self) -> int:
+        self._micro_batch_counter += 1
+        return self._micro_batch_counter
+
+    def _micro_batch_contract(
+        self, mb: MicroBatchTask, dag: PhysicalFactorDAG
+    ) -> Any | None:
+        """构造 micro-batch 的合成资源契约（串行执行的真实 footprint）。
+
+        micro-batch 在**一个**线程内串行执行 root —— 同一时刻只占一个 root 的
+        CPU 与峰值内存（工作集），但全部输出会累积到结果 dict。因此：
+            cpu_tokens        = max(组内 root)（串行：不是求和）
+            peak_memory_bytes = max(组内 root peak) + sum(输出 bytes)
+            output_bytes      = sum(组内 root 输出)
+        admission 仍走 ``broker.try_reserve``（R36/R37/R38 资源治理原样保留），
+        只是把「一个串行 micro-batch」作为一个执行单元计租——不再 per-root
+        over-reserve CPU token（那会让 16-root batch 在 8 核机器上永远无法准入）。
+        """
+        roots = [dag.tasks[t] for t in mb.roots if t in dag.tasks]
+        if not roots:
+            return None
+        try:
+            from runtime.task_resource_contract import TaskResourceContract
+        except Exception:
+            return None
+        peak = 0
+        out = 0
+        cpu = 0
+        io = 0
+        elapsed = 0.0
+        backend_threads = 1
+        for t in roots:
+            c = getattr(t, "resource_contract", None)
+            if c is None:
+                continue
+            peak = max(peak, int(getattr(c, "peak_memory_bytes", 0) or 0))
+            out += int(getattr(c, "output_bytes", 0) or 0)
+            cpu = max(cpu, int(getattr(c, "cpu_tokens", 0) or 0))
+            io = max(io, int(getattr(c, "io_tokens", 0) or 0))
+            elapsed += float(getattr(c, "predicted_elapsed_ms", 0.0) or 0.0)
+            backend_threads = max(
+                backend_threads, int(getattr(c, "backend_threads", 1) or 1)
+            )
+        return TaskResourceContract(
+            predicted_elapsed_ms=max(1.0, elapsed),
+            cpu_tokens=max(1, cpu),
+            io_tokens=io,
+            peak_memory_bytes=max(1, peak + out),
+            output_bytes=max(1, out),
+            spill_bytes=0,
+            gil_bound=True,
+            releases_gil=False,
+            backend=mb.backend,
+            backend_threads=backend_threads,
+            shardable=False,
+            uncertainty=1.0,
+            estimate_basis="micro-batch",
+        )
+
+    def _make_micro_batch(
+        self, backend: str, roots: list[str], work: float
+    ) -> MicroBatchTask:
+        return MicroBatchTask(
+            roots=tuple(roots),
+            backend=backend,
+            same_backend=True,
+            same_axis=True,
+            same_source_buffers=True,
+            estimated_total_work=float(work),
+        )
+
+    def _plan_micro_batches(
+        self,
+        ready: list[tuple[float, str]],
+        dag: PhysicalFactorDAG,
+        group_by_root: dict[str, Any],
+        micro_batched: set[str],
+    ) -> list[MicroBatchTask]:
+        """R39-PERF-018：把低成本 ready ROOT 聚成 micro-batch（一个 Future 串行）。
+
+        - 只考虑：ROOT、executable、未 fusion、未在跑、成本 < per-root cap。
+        - 按 (preferred_backend, source_scope, execution_scope) 分组 → 共享
+          backend + axis + source buffers。
+        - 每组内按 task_id 确定性排序，切成 16–128 个 root、总 work 有界的 batch。
+        不足 ``_MICRO_BATCH_MIN_ROOTS`` 的尾组不形成 micro-batch（走逐 root 路径）。
+        """
+        candidates: list[PhysicalFactorTask] = []
+        for _priority, tid in ready:
+            if tid in group_by_root or tid in micro_batched:
+                continue
+            task = dag.tasks.get(tid)
+            if task is None or task.task_type != TASK_ROOT or not task.executable:
+                continue
+            if self._cert_cost_for(task) >= _MICRO_BATCH_ROOT_WORK_CAP:
+                continue
+            candidates.append(task)
+        if len(candidates) < _MICRO_BATCH_MIN_ROOTS:
+            return []
+        by_scope: dict[tuple[str, str, str], list[PhysicalFactorTask]] = {}
+        for task in candidates:
+            key = (task.preferred_backend, task.source_scope, task.execution_scope)
+            by_scope.setdefault(key, []).append(task)
+        batches: list[MicroBatchTask] = []
+        for key in sorted(by_scope.keys()):
+            backend, _src, _exec = key
+            tasks = sorted(by_scope[key], key=lambda t: t.task_id)
+            chunk: list[str] = []
+            chunk_work = 0.0
+            for task in tasks:
+                work = self._cert_cost_for(task)
+                if len(chunk) >= _MICRO_BATCH_MAX_ROOTS:
+                    if len(chunk) >= _MICRO_BATCH_MIN_ROOTS:
+                        batches.append(self._make_micro_batch(backend, chunk, chunk_work))
+                    chunk = []
+                    chunk_work = 0.0
+                if chunk and chunk_work + work > _MICRO_BATCH_MAX_TOTAL_WORK:
+                    if len(chunk) >= _MICRO_BATCH_MIN_ROOTS:
+                        batches.append(self._make_micro_batch(backend, chunk, chunk_work))
+                    chunk = []
+                    chunk_work = 0.0
+                chunk.append(task.task_id)
+                chunk_work += work
+            if len(chunk) >= _MICRO_BATCH_MIN_ROOTS:
+                batches.append(self._make_micro_batch(backend, chunk, chunk_work))
+        return batches
+
     # -- run --
 
     def _explain(self, msg: str) -> None:
@@ -453,14 +634,18 @@ class AdaptiveBatchScheduler:
             fn = self._dispatch_shard_or_merge
         if contract is None:
             self._explain(f"task={task.task_id}: no contract, admit (vacuous)")
-            return (
-                self.executor.submit(
-                    task.preferred_backend,
-                    fn, task, backend, ctx, execute_root, materialize_shared,
-                    prefer="thread",
-                ),
-                None,
+            self._pin_consumed_sids(ctx, task)
+            # R38 P0-007：先记录 dispatch 时刻再 submit——极快 task 也有真实起点
+            #（避免 started_at 还没写入任务就完成 → elapsed 失真 / 负值）。
+            import time
+
+            self._task_started_at[task.task_id] = time.monotonic() * 1000.0
+            future = self.executor.submit(
+                task.preferred_backend,
+                fn, task, backend, ctx, execute_root, materialize_shared,
+                prefer="thread",
             )
+            return future, None
         stage = self.broker.pressure_stage()
         if stage in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
             self._explain(f"task={task.task_id}: blocked by pressure_stage={stage}")
@@ -473,18 +658,26 @@ class AdaptiveBatchScheduler:
             )
             return None, None
         self._explain(f"task={task.task_id}: admitted (stage={stage})")
+        # P0-015：消费的 CSE 共享 sid 在消费期内 pin（最后一个消费者完成时才
+        # unpin+release），防止 LRU 把仍有消费者的共享结果逐出 → plan_ref miss。
+        self._pin_consumed_sids(ctx, task)
         # R31-P0-007 诚实声明：FE root 执行模型（backend.execute + 共享 ctx/cache）
         # 的 payload 不可 pickle；进程执行需要 worker-local runtime（Phase D）。
         # scheduler 统一走 thread pool，并发由 ResourceBroker CPU token 约束。
-        future = self.executor.submit(
-            task.preferred_backend,
-            fn, task, backend, ctx, execute_root, materialize_shared,
-            prefer="thread",
-        )
-        # R38 P0-007：记录 dispatch 时刻（真实 duration 的起点）。
+        # R38 P0-007：**先**记录 dispatch 时刻（真实 duration 的起点）再 submit——
+        # 极快 task 可能在 started_at 写入前完成（elapsed 失真），submit 失败再清理。
         import time
 
         self._task_started_at[task.task_id] = time.monotonic() * 1000.0
+        try:
+            future = self.executor.submit(
+                task.preferred_backend,
+                fn, task, backend, ctx, execute_root, materialize_shared,
+                prefer="thread",
+            )
+        except Exception:
+            self._task_started_at.pop(task.task_id, None)
+            raise
         return future, lease
 
     def _shard_executor(self) -> Any:
@@ -535,10 +728,13 @@ class AdaptiveBatchScheduler:
         if limit is None or limit <= 0:
             limit = 2 ** 31
         # R36 P0-002：broker 算出的动态目标必须被消费（推荐值真正生效）。
+        # P0-017：``target_concurrency``（AIMD 控制的**任务数**上限）才是并发闸；
+        # ``target_cpu_tokens`` 是 CPU 线程预算，由 admission 内的 token-sum 门消费
+        #（一个 8-thread DuckDB task ≠ 八个单线程 Numba task）。
         decision = getattr(self, "_last_decision", None)
         broker_limit = 1
         if decision is not None:
-            broker_limit = max(1, int(decision.target_cpu_tokens))
+            broker_limit = max(1, int(decision.target_concurrency))
         else:
             try:
                 broker_limit = max(1, int(self.broker.cpu_budget()))
@@ -559,6 +755,44 @@ class AdaptiveBatchScheduler:
             except Exception:
                 pass
         return max(1, limit)
+
+    def _decision_cpu_token_budget(self) -> int | None:
+        """P0-017：当前 decision 的 CPU token 总预算（admission 内 token-sum 门）。"""
+        decision = getattr(self, "_last_decision", None)
+        if decision is None:
+            return None
+        try:
+            return max(1, int(decision.target_cpu_tokens))
+        except Exception:
+            return None
+
+    def _running_cpu_tokens(
+        self,
+        futures: dict[str, Future],
+        dag: Any,
+        micro_batch_contracts: dict[str, Any] | None = None,
+    ) -> int:
+        """P0-017：在跑 task 的 CPU token 总和（fusion group 走 lease 记账，跳过）。
+
+        R39-PERF-018：micro-batch future 的 key 是 ``microbatch:N``（不在
+        dag.tasks）——用其合成契约（串行执行的真实 footprint，cpu_tokens =
+        max(组内 root)）计入 token-sum 门。
+        """
+        tasks = getattr(dag, "tasks", dag)  # PhysicalFactorDAG（.tasks）或裸 dict
+        total = 0
+        for key in futures:
+            task = tasks.get(key)
+            if task is None:
+                contract = (micro_batch_contracts or {}).get(key)
+            else:
+                contract = task.resource_contract
+            if contract is None:
+                continue
+            try:
+                total += max(0, int(getattr(contract, "cpu_tokens", 0) or 0))
+            except (TypeError, ValueError):
+                continue
+        return total
 
     def _execute_read_waves(
         self,
@@ -751,6 +985,8 @@ class AdaptiveBatchScheduler:
             - P0-039 ready set 按 priority 排序主导 admission。
             - P0-040 ``wait(FIRST_COMPLETED)`` 事件驱动（不再固定 50ms 轮询）。
         """
+        # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
+        self._run_ctx = ctx
         from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
         def _default_execute_root(task: PhysicalFactorTask) -> Any:
@@ -787,6 +1023,22 @@ class AdaptiveBatchScheduler:
             for _tid in _g.roots:
                 group_by_root[_tid] = _g
         remaining = set(pending)
+        # R39-PERF-018/019：本 run 的 micro-batch 状态 + 结构化性能计数。
+        micro_batched: set[str] = set()
+        future_micro_batch_roots: dict[Future, tuple[str, ...]] = {}
+        #: microbatch key -> 合成资源契约（token-sum 门用其真实 footprint）。
+        micro_batch_contracts: dict[str, Any] = {}
+        self._perf_metrics = {
+            "future_count": 0,
+            "factor_count": sum(
+                1
+                for _t in dag.tasks.values()
+                if getattr(_t, "task_type", "") == TASK_ROOT
+            ),
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "scheduler_wait_polling_count": 0,
+        }
         # R33-P0-016：read wave 真实执行 trace。
         self._wave_summary = {"waves_planned": 0, "waves_executed": 0, "events": []}
         self._scheduler_stats: dict[str, Any] = {}
@@ -800,6 +1052,14 @@ class AdaptiveBatchScheduler:
             if self._cancelled and not futures:
                 self._explain(
                     f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # P0-023：writer fatal → 立即停止 admission（不等 finish() 才暴露）——
+            # compute 不再往已死的 writer 队列塞结果。
+            if sink is not None and getattr(sink, "fatal_error", None) is not None:
+                self._explain(
+                    f"SINK_FATAL: writer failed ({type(sink.fatal_error).__name__}); "
+                    "stopping admission"
                 )
                 break
             # R36 P0-002/003：每个 control tick 消费 broker 的 ResourceDecision——
@@ -876,6 +1136,7 @@ class AdaptiveBatchScheduler:
                 for t in roots:
                     remaining.discard(t)
                 admitted_this_round += 1
+                self._perf_metrics["future_count"] += 1
                 self._explain(
                     f"fusion group {group.group_id}: admitted {len(roots)} roots "
                     f"(backend={group.backend})"
@@ -886,6 +1147,7 @@ class AdaptiveBatchScheduler:
             #     前就真实 pre-shard（不等 200 轮 no-progress）。
             self._maybe_preshard_oversized(dag, remaining)
             concurrency_limit = self._dynamic_concurrency_limit(sink)
+            cpu_token_budget = self._decision_cpu_token_budget()
             ready: list[tuple[float, str]] = []
             for tid in remaining:
                 if tid in futures or tid in committed or tid in group_by_root:
@@ -898,13 +1160,109 @@ class AdaptiveBatchScheduler:
                 priority = self._priority_score(dag, task)
                 ready.append((priority, tid))
             ready.sort(reverse=True)
+            # 2.1) R39-PERF-018：低成本 ready ROOT 合并成 micro-batch（scheduler
+            #      dispatch coalescing，不是 native fusion）。先 micro-batch（共享
+            #      backend + axis + source buffers 的 cheap root 一组一个 Future），
+            #      剩余 root 再逐 root 走原有 admission。admission 仍走 broker
+            #      try_reserve（R36/R37/R38 资源治理原样保留），但 micro-batch 是
+            #      串行执行单元 → 用合成契约（真实 footprint）计一份租约。
+            if not self._cancelled:
+                try:
+                    stage = self.broker.pressure_stage()
+                except Exception:
+                    stage = ""
+                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
+                    micro_batches = self._plan_micro_batches(
+                        ready, dag, group_by_root, micro_batched
+                    )
+                    for mb in micro_batches:
+                        if len(futures) >= concurrency_limit:
+                            self._explain(
+                                f"microbatch: deferred (concurrency_limit={concurrency_limit})"
+                            )
+                            break
+                        mb_key = f"microbatch:{self._next_micro_batch_id()}"
+                        mb_contract = self._micro_batch_contract(mb, dag)
+                        lease = None
+                        if mb_contract is not None:
+                            lease = self.broker.try_reserve(
+                                mb_contract, task_id=mb_key
+                            )
+                            if lease is None:
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (admission)"
+                                )
+                                continue
+                        # P0-017：micro-batch 合成契约的 CPU token 也受
+                        # ``target_cpu_tokens`` 约束（token-sum 门）。
+                        if cpu_token_budget is not None:
+                            mb_tokens = (
+                                int(getattr(mb_contract, "cpu_tokens", 0) or 0)
+                                if mb_contract is not None
+                                else 0
+                            )
+                            running_tokens = self._running_cpu_tokens(
+                                futures, dag, micro_batch_contracts
+                            )
+                            if running_tokens + mb_tokens > cpu_token_budget:
+                                _release_lease(lease)
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (cpu_tokens "
+                                    f"{running_tokens}+{mb_tokens} > "
+                                    f"target_cpu_tokens={cpu_token_budget})"
+                                )
+                                continue
+                        # P0-015：消费的 CSE 共享 sid 在消费期内 pin（同逐 root 路径）。
+                        for tid in mb.roots:
+                            _t = dag.tasks.get(tid)
+                            if _t is not None:
+                                self._pin_consumed_sids(ctx, _t)
+                        import time
+
+                        for tid in mb.roots:
+                            self._task_started_at[tid] = time.monotonic() * 1000.0
+                        future = self.executor.submit(
+                            mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
+                            execute_root, prefer="thread",
+                        )
+                        futures[mb_key] = future
+                        future_to_task_id[future] = mb_key
+                        future_micro_batch_roots[future] = mb.roots
+                        if mb_contract is not None:
+                            future_leases[future] = lease
+                            micro_batch_contracts[mb_key] = mb_contract
+                        for tid in mb.roots:
+                            micro_batched.add(tid)
+                            remaining.discard(tid)
+                        admitted_this_round += 1
+                        self._perf_metrics["future_count"] += 1
+                        self._perf_metrics["micro_batch_task_count"] += 1
+                        self._perf_metrics["micro_batch_root_count"] += len(mb.roots)
+                        self._explain(
+                            f"microbatch {mb_key}: {len(mb.roots)} roots "
+                            f"(backend={mb.backend}, work={mb.estimated_total_work:.0f})"
+                        )
+            # 2.2) 逐 root admission（与 R33 相同；跳过已在 micro-batch 中的 root）。
             for _priority, tid in ready:
-                if tid in futures or tid in committed:
+                if tid in futures or tid in committed or tid in micro_batched:
                     continue
                 if len(futures) >= concurrency_limit:
                     self._explain(f"task={tid}: deferred (concurrency_limit={concurrency_limit})")
                     break
+                # P0-017：CPU token 总和也受 ``target_cpu_tokens`` 约束——任务数达标
+                # 但 token 总和已满（8-thread DuckDB 占 8 token）时不再 admit。
                 task = dag.tasks[tid]
+                if cpu_token_budget is not None:
+                    token_cost = int(getattr(task.resource_contract, "cpu_tokens", 0) or 0)
+                    running_tokens = self._running_cpu_tokens(
+                        futures, dag, micro_batch_contracts
+                    )
+                    if running_tokens + token_cost > cpu_token_budget:
+                        self._explain(
+                            f"task={tid}: deferred (cpu_tokens {running_tokens}+"
+                            f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
+                        )
+                        continue
                 future, lease = self._admit_and_run(
                     task,
                     backend=backend,
@@ -919,17 +1277,116 @@ class AdaptiveBatchScheduler:
                         future_leases[future] = lease
                     remaining.discard(tid)
                     admitted_this_round += 1
+                    self._perf_metrics["future_count"] += 1
             # 3) FIRST_COMPLETED：有 future 时等第一个完成（R33-P0-040 事件驱动）。
+            # R39-PERF-019：正常路径不依赖周期 polling——wait 事件驱动返回非空
+            # done；只有 wait 因 timeout 兜底返回空（watchdog/deadlock fallback）
+            # 才计一次 ``scheduler_wait_polling_count``（happy path 应为 0）。
             done: set[Future] = set()
             if futures:
                 done = wait(list(futures.values()), timeout=_EVENT_WAIT_TIMEOUT_S,
                             return_when=FIRST_COMPLETED)[0]
+                if not done:
+                    self._perf_metrics["scheduler_wait_polling_count"] += 1
             for future in done:
                 key = future_to_task_id.pop(future, None)
                 if key is None:
                     continue
                 lease = future_leases.pop(future, None)
                 futures.pop(key, None)
+                # R39-PERF-018：micro-batch future 完成 → 逐 root 处理（结果 /
+                # 失败按 root 独立；成功 root 照常提交，失败 root 走原有 retry/raise）。
+                # 整个 micro-batch 只持有一份合成租约（``lease``），在组内全部
+                # root 处理完一次性释放（exactly once）。
+                mb_roots = future_micro_batch_roots.pop(future, None)
+                if mb_roots is not None:
+                    micro_batch_contracts.pop(key, None)
+                    try:
+                        results_by_root, failures_by_root = future.result(timeout=1.0)
+                    except Exception as exc:  # noqa: BLE001
+                        _release_lease(lease)
+                        for _tid in mb_roots:
+                            micro_batched.discard(_tid)
+                            remaining.add(_tid)
+                        self._explain(
+                            f"microbatch {key}: FUTURE_FAILED "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        continue
+                    for _tid in mb_roots:
+                        micro_batched.discard(_tid)
+                        # P0-010 attempt 隔离：OOM replan 后旧 root 已不在 dag.tasks
+                        # → 结果/异常都不触碰新 DAG 状态（租约在组末统一释放）。
+                        if _tid not in dag.tasks:
+                            continue
+                        if _tid in failures_by_root:
+                            _exc = failures_by_root[_tid]
+                            _kind = classify_error(_exc)
+                            if _kind == ERROR_OOM:
+                                if self._handle_oom(_tid, _exc, dag, remaining):
+                                    continue
+                                self._explain(
+                                    f"task={_tid}: OOM_NOT_REPLANNABLE "
+                                    f"{type(_exc).__name__}: {_exc}"
+                                )
+                                raise _exc
+                            _retries = self._retries_remaining.get(_tid, 1)
+                            if _retries > 0 and _kind in {
+                                ERROR_TRANSIENT, ERROR_UNKNOWN,
+                            }:
+                                self._retries_remaining[_tid] = _retries - 1
+                                self._explain(
+                                    f"task={_tid}: FAILED {type(_exc).__name__}: "
+                                    f"{_exc} (class={_kind}, retrying, "
+                                    f"{_retries - 1} left)"
+                                )
+                                remaining.add(_tid)
+                                continue
+                            self._explain(
+                                f"task={_tid}: FAILED_FATAL {type(_exc).__name__}: "
+                                f"{_exc} (class={_kind})"
+                            )
+                            raise _exc
+                        committed.add(_tid)
+                        real_done += 1
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(
+                            _tid, dag.tasks[_tid], results_by_root[_tid]
+                        )
+                        _tt = dag.tasks[_tid].task_type
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            if sink is not None:
+                                if not sink.submit(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                ):
+                                    self._explain(
+                                        f"sink.submit FALSE (microbatch) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer "
+                                        "fatal; abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} "
+                                        "(R39-PERF-018: writer failure must abort)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                )
+                            else:
+                                self._results[dag.tasks[_tid].factor_name] = (
+                                    results_by_root[_tid]
+                                )
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            self._release_consumed(dag, _tid, ctx)
+                    _release_lease(lease)
+                    continue
+                # P0-010 attempt 隔离：OOM replan 后旧 attempt 的 in-flight future
+                # 完成时其 task id 已不在 dag.tasks（被 ``:attempt:N:`` 新 id 取代）→
+                # 直接丢弃（结果/异常都不触碰新 DAG 状态，绝不写入新 partial map）。
+                if key not in dag.tasks and not key.startswith("fusion:"):
+                    _release_lease(lease)
+                    continue
                 try:
                     _ret_key, result = future.result(timeout=1.0)
                 except Exception as exc:  # noqa: BLE001
@@ -977,12 +1434,24 @@ class AdaptiveBatchScheduler:
                     for _tid in group_roots:
                         committed.add(_tid)
                         real_done += 1
+                        # P0-011：先取 ``_res`` 再用——旧顺序在 ``_record_task_calibration``
+                        # 时 ``_res`` 还没赋值（首轮 UnboundLocalError / 上一轮残留值）。
+                        _res = results_by_root.get(_tid)
                         self._record_timing(_tid, dag.tasks[_tid])
                         self._record_task_calibration(_tid, dag.tasks[_tid], _res)
-                        _res = results_by_root.get(_tid)
                         if dag.tasks[_tid].task_type == TASK_ROOT:
                             if sink is not None:
-                                sink.submit(dag.tasks[_tid].factor_name, _res)
+                                if not sink.submit(dag.tasks[_tid].factor_name, _res):
+                                    self._explain(
+                                        f"sink.submit FALSE (fusion) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer fatal; "
+                                        "abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} (P0-023: writer "
+                                        "failure must abort the generation)"
+                                    )
                             if result_handler is not None:
                                 result_handler(dag.tasks[_tid].factor_name, _res)
                             else:
@@ -998,7 +1467,20 @@ class AdaptiveBatchScheduler:
                     # R38 P0-001：shard 子任务完成 → 结果写入 merge 的 partials
                     #（大结果 spool 到磁盘，merge 前不全部常驻内存，§P0-003）。
                     merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
-                    stored = self._shard_executor().spool_or_keep(result)
+                    # R39-PERF-027：spool 阈值自适应（live_headroom / writer 队列
+                    # 余量 / 盘吞吐 / merge 邻近）。全部信号缺失时 policy 安全回退
+                    # 固定 512MiB（与原行为一致），绝不比旧行为更激进地 spool。
+                    try:
+                        from runtime.spool_policy import default_spool_policy_factory
+
+                        policy = default_spool_policy_factory(
+                            broker=self.broker, sink=self.sink
+                        )
+                        stored = self._shard_executor().spool_or_keep(
+                            result, policy=policy
+                        )
+                    except Exception:  # noqa: BLE001
+                        stored = self._shard_executor().spool_or_keep(result)
                     self._shard_partials.setdefault(merge_id, {})[key] = stored
                     continue
                 # R38 P0-001：MERGE 任务结果 = 因子最终结果（同 ROOT 处理）。
@@ -1066,6 +1548,19 @@ class AdaptiveBatchScheduler:
                 else None
             ),
             "resource_controller": self.broker.resource_controller_summary(),
+            # R39-PERF-018/019：结构化性能计数。
+            "future_count": self._perf_metrics["future_count"],
+            "factor_count": self._perf_metrics["factor_count"],
+            "micro_batch_task_count": self._perf_metrics["micro_batch_task_count"],
+            "micro_batch_root_count": self._perf_metrics["micro_batch_root_count"],
+            "future_per_factor": round(
+                self._perf_metrics["future_count"]
+                / max(1, self._perf_metrics["factor_count"]),
+                4,
+            ),
+            "scheduler_wait_polling_count": self._perf_metrics[
+                "scheduler_wait_polling_count"
+            ],
         }
         return {
             "results": self._results,
@@ -1156,6 +1651,17 @@ class AdaptiveBatchScheduler:
             "real_task_done": len(committed),
             "virtual_task_done": 0,
             "read_waves": self._wave_summary,
+            # R39-PERF-018/019：serial-fused 路径不建 future / 不轮询。
+            "future_count": 0,
+            "factor_count": sum(
+                1
+                for _t in dag.tasks.values()
+                if getattr(_t, "task_type", "") == TASK_ROOT
+            ),
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "future_per_factor": 0.0,
+            "scheduler_wait_polling_count": 0,
         }
         return {
             "results": self._results,
@@ -1168,19 +1674,60 @@ class AdaptiveBatchScheduler:
         }
 
     def _priority_score(self, dag: PhysicalFactorDAG, task: PhysicalFactorTask) -> float:
-        """R33-P0-039：ready queue 优先级 = critical path + reuse + fanout - memory。"""
+        """R33-P0-039：ready queue 优先级 = critical path + reuse + fanout - memory。
+
+        R39-PERF-016：cost_ms 从证书 O(1) 读取并缓存——不再每 ready task 重走整棵
+        DAG 构造 cost map（DAG 被 shard/OOM replan 时缓存已置 None 强制重建）。
+        """
+        cost_ms = self._cost_ms_cache
+        if cost_ms is None:
+            cost_ms = {}
+            for tid, t in dag.tasks.items():
+                cert = self._certificates.get(tid)
+                if cert is not None:
+                    cost_ms[tid] = cert.total_work()
+                else:
+                    cost_ms[tid] = float(
+                        (t.resource_contract.predicted_elapsed_ms or 0.0)
+                        if t.resource_contract else 0.0
+                    )
+            self._cost_ms_cache = cost_ms
         try:
-            cost_ms = {
-                tid: float((t.resource_contract.predicted_elapsed_ms or 0.0) if t.resource_contract else 0.0)
-                for tid, t in dag.tasks.items()
-            }
             critical = dag.critical_path_remaining_ms(task.task_id, cost_ms)
         except Exception:
             critical = 0.0
         reuse = self._reuse_counts.get(task.task_id, len(task.consumers))
         fanout = len(task.consumers)
-        memory = float(task.resource_contract.peak_memory_bytes if task.resource_contract else 0)
+        cert = self._certificates.get(task.task_id)
+        if cert is not None:
+            memory = float(cert.peak_memory_bytes())
+        else:
+            memory = float(
+                task.resource_contract.peak_memory_bytes
+                if task.resource_contract else 0
+            )
         return critical * 1.0 + reuse * 1000.0 + fanout * 100.0 - memory / (1024**3)
+
+    def _pin_consumed_sids(self, ctx: Any, task: PhysicalFactorTask) -> None:
+        """P0-015：任务即将执行，其消费的 CSE 共享 sid 在消费期内必须 pin。
+
+        防止 LRU 把仍有消费者的共享结果逐出（``plan_ref`` 命中后被 evict → miss）。
+        最后一个消费者完成时 ``_release_consumed_sids`` → ``store.release(sid)``
+        才会 unpin + 释放（refcount 归零）。
+        """
+        node = getattr(task, "node_ref", None)
+        if node is None or ctx is None:
+            return
+        try:
+            from planner.cse import collect_consumed_sids
+
+            store = getattr(ctx, "shared_buffers", None)
+            if store is None or getattr(store, "pin", None) is None:
+                return
+            for sid in collect_consumed_sids(getattr(node, "root", node)):
+                store.pin(sid)
+        except Exception:
+            pass
 
     def _release_consumed(self, dag: PhysicalFactorDAG, tid: str, ctx: Any) -> None:
         """root 完成后对其消费的 CSE sid 引用计数归零则释放（复用 batch_service）。
@@ -1253,6 +1800,7 @@ class AdaptiveBatchScheduler:
                     instrument_universe=list(task.instrument_scope)
                     if task.instrument_scope else None,
                     lookback_bars=self._lookback_bars(task),
+                    calendar=self._trading_calendar_for(),
                 )
                 if plan is None:
                     continue
@@ -1278,6 +1826,40 @@ class AdaptiveBatchScheduler:
             return max(20, int(midpoints.get(shape.window_bucket, 60)) * 2)
         except Exception:
             return 60
+
+    def _next_shard_attempt(self, original_task_id: str) -> int:
+        """分配分片 attempt 序号（P0-010 attempt 隔离）。
+
+        pre-shard 首次 = 1（task id 用旧命名）；OOM replan 起每次递增（>=2），
+        新 shard/merge id 带 ``:attempt:N:`` 段，与旧 attempt 的 in-flight
+        future 彻底隔离。
+        """
+        with self._lock:
+            n = self._shard_attempts.get(original_task_id, 1) + 1
+            self._shard_attempts[original_task_id] = n
+            return n
+
+    def _trading_calendar_for(self) -> Any | None:
+        """从 run ctx 的数据源推导真实交易日历（无 ctx / 无法推断 → None）。
+
+        有真实日历时 time-shard 按真实 session 切分 + warmup 按 N 个真实交易日
+        回退；None 时 planner 回退 bdate 近似（research / 未知市场不阻塞 shard）。
+        """
+        try:
+            ctx = getattr(self, "_run_ctx", None)
+            if ctx is None:
+                return None
+            ds = getattr(ctx, "data_source", None)
+            dataset = str(getattr(ds, "dataset", "") or "")
+            universe = str(getattr(ctx, "universe", "") or "")
+            from storage.trading_calendar import get_trading_calendar, infer_market
+
+            market = infer_market(universe=universe, dataset=dataset)
+            if not market:
+                return None
+            return get_trading_calendar(market, allow_approximate_calendar=True)
+        except Exception:
+            return None
 
     def _replace_with_shard_plan(
         self, dag: PhysicalFactorDAG, original_task_id: str, plan: Any
@@ -1308,23 +1890,38 @@ class AdaptiveBatchScheduler:
             if contract is not None
             else None
         )
+        # Merge 任务用**独立内存模型**（P0-003）：不再退回 original_peak（那正是
+        # 超 SafeEnvelope 被拆的原因——merge 会把自己卡死；auto-shard 不拆 MERGE）。
+        # merge 峰值 ≈ 一片输入 + 累计输出（大 shard 已 spool，逐片 reload）。
+        from runtime.shard_execution_plan import merge_resource_model
+
+        merge_peak = merge_resource_model(
+            original_peak_bytes=plan.original_peak_bytes,
+            per_shard_peak_bytes=plan.per_shard_peak_bytes,
+            output_bytes=int(getattr(contract, "output_bytes", 0) or 0)
+            if contract is not None else 0,
+            shard_count=len(plan.shards),
+        )
         merge_contract = (
             _replace(
                 contract,
-                peak_memory_bytes=plan.original_peak_bytes,
-                output_bytes=plan.original_peak_bytes,
+                peak_memory_bytes=merge_peak,
+                output_bytes=max(1, merge_peak),
                 estimate_basis="shard-merge",
             )
             if contract is not None
             else contract
         )
-        # 移除旧 task 及其已存在的 shard/merge（幂等重建）。
+        # 移除旧 task 及其已存在的 shard/merge（幂等重建）。attempt>=2 的旧命名
+        # ``root:x:attempt:N:*`` 一并移除（OOM replan 旧 attempt 的 in-flight
+        # future 完成后按「不在 dag.tasks」直接丢弃，不复用同名 id）。
         old_ids = [
             tid
             for tid in list(dag.tasks)
             if tid == original_task_id
             or tid.startswith(original_task_id + ":shard:")
             or tid == f"{original_task_id}:merge"
+            or tid.startswith(original_task_id + ":attempt:")
         ]
         for tid in old_ids:
             dag.tasks.pop(tid, None)
@@ -1383,7 +1980,11 @@ class AdaptiveBatchScheduler:
             shard_count=len(plan.shards),
             per_shard_peak_bytes=plan.per_shard_peak_bytes,
         )
-        self._shard_shape_of[merge_id] = sig
+        # shape 身份统一按 **original_task_id** 存（OOM 查找也是 orig_tid，不再
+        # merge_id/orig_id 混用导致查找永远 miss、same-shape 保护失效）。
+        self._shard_shape_of[original_task_id] = sig
+        # R39-PERF-016：DAG 被真实改造（shard/merge 新 task）→ 强制重建成本图缓存。
+        self._cost_ms_cache = None
         self._explain(
             f"R38_REAL_AUTOSHARD: {original_task_id} -> {len(plan.shards)} "
             f"{plan.dimension} shards + merge (sig {sig[:8]})"
@@ -1425,6 +2026,7 @@ class AdaptiveBatchScheduler:
                     instrument_universe=list(task.instrument_scope)
                     if task.instrument_scope else None,
                     lookback_bars=self._lookback_bars(task),
+                    calendar=self._trading_calendar_for(),
                 )
                 if plan is None:
                     continue
@@ -1525,6 +2127,10 @@ class AdaptiveBatchScheduler:
                 else (self.broker.resource_envelope().safe_memory_bytes or 0)
             )
             safe = max(1, safe)
+            # attempt 隔离（P0-010）：每次 OOM replan 递增 attempt，新 shard/merge
+            # task id 带 ``:attempt:N:`` 段——旧 attempt 的 in-flight future 完成后
+            # 按「id 不在 dag.tasks」丢弃，绝不写入新 attempt 的 partial map。
+            attempt = self._next_shard_attempt(orig_tid)
             new_plan = planner.build_shard_execution_plan(
                 orig_task,
                 safe_envelope_bytes=safe,
@@ -1532,6 +2138,8 @@ class AdaptiveBatchScheduler:
                 instrument_universe=list(universe) if universe else None,
                 lookback_bars=self._lookback_bars(orig_task),
                 failed_signature=failed_sig,
+                calendar=self._trading_calendar_for(),
+                attempt_id=attempt,
             )
             if new_plan is None:
                 return False
@@ -1546,6 +2154,11 @@ class AdaptiveBatchScheduler:
             # 6) 重建 DAG 并重新调度。
             if not self._replace_with_shard_plan(dag, orig_tid, new_plan):
                 return False
+            # 旧 attempt 的 shard/merge id 从 remaining 移除（已在 dag 中被替换，
+            # 不能留在调度队列里造成 KeyError 或旧 merge 空跑）。
+            if plan is not None:
+                for _old in (*plan.shard_task_ids, plan.merge_task_id):
+                    remaining.discard(_old)
             for sid in new_plan.shard_task_ids:
                 remaining.add(sid)
             remaining.add(new_plan.merge_task_id)

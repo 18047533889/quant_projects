@@ -31,16 +31,17 @@ logger = logging.getLogger("data_access.resource_governor")
 def _auto_bound_standalone_memory() -> bool:
     """R38 P0-025：DA standalone 是否自动从 host/cgroup/RLIMIT 派生 safe cap。
 
-    ``DATA_ACCESS_AUTO_BOUND_MEMORY`` 显式开启（production standalone 部署）；
-    默认关闭保持既有测试语义（None = 由上层 coordinator 注入）。
+    **默认开启**（P0-025 fail-closed）：standalone 下没有上层 coordinator 注入
+    上限时，``None`` ≈ 无限是内存安全漏洞，必须自动派生保守 safe cap。
+    仅显式 ``DATA_ACCESS_AUTO_BOUND_MEMORY=0/false/no/off`` 才允许无上限
+    （测试 / 无上限部署显式选择）。
     """
     import os
 
-    return os.environ.get("DATA_ACCESS_AUTO_BOUND_MEMORY", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    raw = os.environ.get("DATA_ACCESS_AUTO_BOUND_MEMORY", "").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True  # 默认 fail-closed（含未设置 / "1"/"true"/"yes"）
 
 
 def _default_safe_memory_bytes() -> int:
@@ -92,6 +93,42 @@ class ResourceReservation:
     remote_requests: int = 0
 
     released: bool = field(default=False)
+    #: R38 P0-020（P0-018）：host-backed 时附加的 HostLeaseRef（FE JobLease child
+    #: lease）。release 时一并释放——DA 扫描真正进同一棵 host lease 树。
+    host_lease: Any = field(default=None, repr=False)
+
+
+class _DuckDBSemaphore(threading.BoundedSemaphore):
+    """R39 #66：BoundedSemaphore 子类，acquire/release 维护同一份 inflight 计数。
+
+    旧 ``duckdb_inflight()`` 读私有 ``BoundedSemaphore._value``（``max - _value``），
+    是依赖 CPython 私有字段的实现细节。这里把计数收进信号量自身：``acquire`` 成功
+    即 ``+1``、``release`` 即 ``-1``。engine 直接 acquire 同一信号量（``_exec_sem``
+    与 governor ``_duckdb_sem`` 是同一对象）时计数也同步更新——单一权威，不读私有
+    字段。
+    """
+
+    def __init__(self, value: int) -> None:
+        super().__init__(value=value)
+        self._inflight_lock = threading.Lock()
+        self._inflight = 0
+
+    def acquire(self, *args: Any, **kwargs: Any) -> bool:
+        ok = super().acquire(*args, **kwargs)
+        if ok:
+            with self._inflight_lock:
+                self._inflight += 1
+        return ok
+
+    def release(self) -> None:
+        with self._inflight_lock:
+            if self._inflight > 0:
+                self._inflight -= 1
+        super().release()
+
+    def inflight(self) -> int:
+        with self._inflight_lock:
+            return max(0, self._inflight)
 
 
 class GlobalResourceGovernor:
@@ -127,6 +164,9 @@ class GlobalResourceGovernor:
         #: R38 P0-026：动态 setter 与 admit() 同锁；cap 收缩到低于当前 reservations
         #: 时**不 kill incumbents**，只阻止新 admission，telemetry 标 over_current_target。
         self._over_current_target = False
+        #: R38 P0-020（P0-018）：FE HostResourceCoordinator 注入的 host child-lease 桥
+        #: ``fn(estimated_memory, estimated_scan_bytes) -> HostLeaseRef | None``。
+        self._host_lease_request: Any = None
 
         self._lock = threading.Lock()
         self._active: dict[str, ResourceReservation] = {}
@@ -136,7 +176,7 @@ class GlobalResourceGovernor:
         self._remote_requests_total = 0
         # R26-P1-016：DuckDB 并发用信号量（blocking acquire，遵守上限但并行任务
         # 排队而非误报）；全局 active-queries 才是 fail-closed admission。
-        self._duckdb_sem = threading.BoundedSemaphore(
+        self._duckdb_sem = _DuckDBSemaphore(
             value=max(1, int(max_duckdb_concurrency))
         )
 
@@ -152,6 +192,23 @@ class GlobalResourceGovernor:
         ``remote_requests`` 参与 admission；``released`` 状态受控。
         """
         with self._lock:
+            # R38 P0-020（P0-018）：host-backed admission——FE HostResourceCoordinator
+            # 注入 child-lease 桥时，DA 扫描先向当前 JobLease 请求 DAScanLease child。
+            # 成功 → host 是权威（本 governor 的内存上限由 host 统一治理，不双重计）；
+            # 失败/无活跃 job → 回退本地 governor admission（fail-closed 语义保持）。
+            if self._host_lease_request is not None:
+                try:
+                    host_lease = self._host_lease_request(
+                        reservation.estimated_memory,
+                        reservation.estimated_scan_bytes,
+                    )
+                except Exception:
+                    host_lease = None
+                if host_lease is not None:
+                    reservation.host_lease = host_lease
+                    self._active[reservation.query_id] = reservation
+                    self._remote_requests_total += max(0, reservation.remote_requests)
+                    return reservation
             if reservation.query_id in self._active:
                 raise ResourceAdmissionError(
                     f"resource admission: query_id={reservation.query_id!r} 已存在"
@@ -266,14 +323,31 @@ class GlobalResourceGovernor:
         return self._duckdb_sem
 
     def duckdb_inflight(self) -> int:
-        with self._lock:
-            return max(0, self._max_duckdb - self._duckdb_sem._value)
+        """R39 #66：读原子 inflight 计数（不再读私有 ``BoundedSemaphore._value``）。"""
+        return self._duckdb_sem.inflight()
 
     # ---- 释放 ----
 
+    def set_host_lease_request(self, fn: Any) -> None:
+        """R38 P0-020（P0-018）：注入 FE host child-lease 桥。
+
+        ``fn(estimated_memory, estimated_scan_bytes) -> HostLeaseRef | None``；
+        None（无活跃 job / 无 headroom）→ admit 回退本地 governor。
+        """
+        with self._lock:
+            self._host_lease_request = fn
+
     def release(self, query_id: str) -> None:
         with self._lock:
-            self._active.pop(query_id, None)
+            reservation = self._active.pop(query_id, None)
+            # host-backed reservation：一并释放 host child lease（同一棵 lease 树）。
+            if reservation is not None and reservation.host_lease is not None:
+                try:
+                    release_fn = getattr(reservation.host_lease, "release", None)
+                    if callable(release_fn):
+                        release_fn()
+                except Exception:
+                    pass
             # R38 P0-026：incumbent release 后重算 over_current_target。
             used = sum(r.estimated_memory for r in self._active.values())
             self._over_current_target = (

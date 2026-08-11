@@ -49,21 +49,46 @@ _UNKNOWN_POLICY: tuple[str | None, ...] = (SHARD_NONE,)
 
 
 def _policy_for(task: Any) -> tuple[str | None, ...]:
-    """§89..96：按算子族语义给出合法维度（不 consult contract——语义真相）。"""
+    """§89..96：按算子族语义给出合法维度（递归整棵 plan，最严格 barrier wins）。
+
+    - SOURCE_SCAN → (time, asset)（扫描本身可任意切）。
+    - 带 ``node_ref`` 的 task（ROOT / CSE shared / shard）→ 递归整棵 plan 取
+      交集：``add(cs_rank(x), y)`` 顶层 op 是 ``add``，但内部 cs 节点把合法维度
+      收窄到 time——**不能只看顶层 op 名**（stateful / group neutralization /
+      PCA 同理，最严格 barrier wins）。
+    - 无 plan 的裸 task → 按单 op 结构化分类（不 consult contract——语义真相）。
+    """
     task_type = str(getattr(task, "task_type", "") or "")
     if task_type.endswith("SOURCE_SCAN"):
         return (SHARD_TIME, SHARD_ASSET)
+    node_ref = getattr(task, "node_ref", None)
+    if node_ref is not None:
+        root = getattr(node_ref, "root", None) or node_ref
+        try:
+            from planner.physical_lowerer import plan_shard_semantics
+
+            shardable, dim = plan_shard_semantics(root)
+        except Exception:
+            shardable, dim = False, None
+        if not shardable or dim is None:
+            return _UNKNOWN_POLICY
+        return (dim,)
     op = str(getattr(task, "op", "") or "")
     if not op:
         return _UNKNOWN_POLICY
-    if op.startswith("cs_") or "cross_section" in op:
-        return _SHARD_POLICY["cs"]
-    if op.startswith("ts_") and any(k in op for k in ("rank", "pct", "quantile", "zscore", "std", "demean")):
-        return _SHARD_POLICY["ts_rolling"]
-    if "state" in op or "recursive" in op or op in {"ewm", "kalman", "garch"}:
-        return _SHARD_POLICY["stateful"]
-    if op.startswith("ts_") or op.startswith("rolling"):
-        return _SHARD_POLICY["ts_rolling"]
+    return _single_op_policy(op)
+
+
+def _single_op_policy(op: str) -> tuple[str | None, ...]:
+    """单个 op 的合法 shard 维度（委托 planner 的结构化分类）。"""
+    try:
+        from planner.physical_lowerer import single_op_shard_policy
+
+        policy = single_op_shard_policy(op)
+        if policy:
+            return tuple(policy)
+    except Exception:
+        pass
     return _SHARD_POLICY["elementwise"]
 
 
@@ -114,27 +139,93 @@ class ShardPlan:
 def build_time_blocks(
     time_range: tuple[Any, Any],
     shard_count: int,
+    calendar: Any | None = None,
 ) -> list[tuple[Any, Any]]:
-    """把时间窗切成 ``shard_count`` 个连续块（按交易日分布）。"""
+    """把时间窗切成 ``shard_count`` 个连续块（按**真实交易日**分布）。
+
+    ``calendar`` 传 :class:`storage.trading_calendar.TradingCalendar`（真实市场
+    交易日，含节假日）时按真实交易日切分——春节/国庆等长假不会伪造工作日；
+    否则回退 ``pd.bdate_range`` 工作日近似（research / 无日历）。quotient/
+    remainder 切分，末块覆盖最后一个真实交易日（不丢尾部日期）。
+    """
     import pandas as pd
 
     start, end = time_range
-    try:
-        days = list(pd.bdate_range(start, end))
-    except Exception:
+    days = _window_trading_days(start, end, calendar)
+    if not days:
         return _fallback_time_blocks(start, end, shard_count)
     if len(days) < shard_count:
         shard_count = max(1, len(days))
-    n = max(1, len(days) // shard_count)
+    k = max(1, shard_count)
+    q, r = divmod(len(days), k)
     blocks: list[tuple[Any, Any]] = []
-    for i in range(shard_count):
-        lo = days[i * n]
-        hi = days[min(len(days) - 1, (i + 1) * n - 1)]
+    start_idx = 0
+    for i in range(k):
+        size = q + (1 if i < r else 0)
+        lo = days[start_idx]
+        hi = days[start_idx + size - 1]
         blocks.append((lo, hi))
-    # 末块必须覆盖最后一天（``shard_count * n`` 可能 < len(days)，丢掉尾部日期）。
+        start_idx += size
+    # 末块必须覆盖最后一个真实交易日。
     if blocks and blocks[-1][1] != days[-1]:
         blocks[-1] = (blocks[-1][0], days[-1])
     return blocks
+
+
+def _warmup_start_for(
+    lo: Any,
+    lookback_bars: int,
+    *,
+    calendar: Any | None,
+) -> Any:
+    """time shard 的 warmup overlap 起点。
+
+    有真实交易日历时按 ``lookback_bars`` 个**真实 session** 回退（`calendar.offset`）；
+    越界 / 无日历回退旧近似 ``lo - Timedelta(days=lookback_bars*2)``。
+    """
+    import pandas as pd
+
+    lb = max(0, int(lookback_bars))
+    if lb <= 0:
+        return lo
+    if calendar is not None:
+        try:
+            offset = getattr(calendar, "offset", None)
+            if callable(offset):
+                return offset(lo, -lb)
+        except Exception:
+            pass
+    return lo - pd.Timedelta(days=lb * 2)
+
+
+def _window_trading_days(
+    start: Any,
+    end: Any,
+    calendar: Any | None,
+) -> list[Any]:
+    """[start, end] 内的真实交易日；无日历/不可用 → 空（调用方走 bdate fallback）。"""
+    import pandas as pd
+
+    if start is None or end is None:
+        return []
+    try:
+        s = pd.Timestamp(start).normalize()
+        e = pd.Timestamp(end).normalize()
+    except Exception:
+        return []
+    if calendar is not None:
+        try:
+            days = getattr(calendar, "days", None)
+            if days:
+                return [d for d in days if s <= pd.Timestamp(d).normalize() <= e]
+        except Exception:
+            pass
+        return []
+    # 无真实日历：工作日近似（bdate_range，仅 research / 无日历环境）。
+    try:
+        return list(pd.bdate_range(s, e))
+    except Exception:
+        return []
 
 
 def _fallback_time_blocks(start: Any, end: Any, shard_count: int) -> list[tuple[Any, Any]]:
@@ -163,12 +254,25 @@ def split_instrument_universe(
     universe: list[Any],
     shard_count: int,
 ) -> list[list[Any]]:
-    """把仪器全集切成 ``shard_count`` 个连续子集（确定性排序）。"""
+    """把仪器全集切成 ``shard_count`` 个连续子集（确定性排序，**不丢尾部**）。
+
+    quotient/remainder 切分（``np.array_split`` 语义）：前 ``r`` 片每片 ``q+1``
+    个、其余 ``q`` 个，**覆盖全部仪器**。修复旧实现 ``len//shard_count`` +
+    ``[i*n:(i+1)*n]`` 把余数尾部静默丢弃的 bug（如 5000 只切 3 片丢最后 2 只）。
+    ``shard_count > 全集长度`` 时尾部为空片（调用方已跳过空片）。
+    """
     ordered = sorted(universe)
-    n = max(1, len(ordered) // max(1, shard_count))
+    k = max(1, int(shard_count))
+    n = len(ordered)
+    if n == 0:
+        return [[] for _ in range(k)]
+    q, r = divmod(n, k)
     out: list[list[Any]] = []
-    for i in range(shard_count):
-        out.append(ordered[i * n : (i + 1) * n])
+    start = 0
+    for i in range(k):
+        size = q + (1 if i < r else 0)
+        out.append(ordered[start:start + size])
+        start += size
     return out
 
 
@@ -266,6 +370,8 @@ class AutoShardPlanner:
         lookback_bars: int = 0,
         history_requirement: str = "none",
         failed_signature: str = "",
+        calendar: Any | None = None,
+        attempt_id: int = 0,
     ) -> "ShardExecutionPlan | None":
         """构造**真实可执行**的 :class:`ShardExecutionPlan`（§4 切片 + merge）。
 
@@ -273,6 +379,12 @@ class AutoShardPlanner:
             - asset shard → ``instrument_universe``（必须给出仪器全集）；
             - time/session shard → ``time_range``（必须给出时间窗）；
             - rolling/stateful time shard → ``lookback_bars``（warmup overlap 长度）。
+        ``calendar`` 传真实交易日历（``TradingCalendar``）时 time shard 按真实
+        交易日切分、warmup 按 ``lookback_bars`` 个**真实 session** 回退，而不是
+        ``Timedelta(days=lookback_bars*2)`` 自然日近似。
+        ``attempt_id``：OOM replan 第 2 次起，shard/merge task id 带 ``attempt:N``
+        段（``root:x:attempt:2:shard:0``）——旧 attempt 的 in-flight future 与新
+        DAG 不复用同名 task id，避免旧结果污染新 merge（P0-010 attempt 隔离）。
         信息不足 / 语义不合法 / 最小分片也放不下 → 返回 None（诚实不可分片）。
         """
         import pandas as pd
@@ -300,6 +412,12 @@ class AutoShardPlanner:
         shard_task_ids: list[str] = []
         descriptors: list[ShardDescriptor] = []
         task_id = str(getattr(task, "task_id", "") or "")
+        # attempt 隔离：第 2 次起 id 带 ``:attempt:N:`` 段（attempt 1 保持旧命名，
+        # 兼容既有测试）。旧 attempt 的 in-flight future 完成后按新 id 命名空间
+        # 丢弃，绝不复用同一 task id 污染新 partial map。
+        prefix = task_id
+        if int(attempt_id or 0) > 1:
+            prefix = f"{task_id}:attempt:{int(attempt_id)}"
 
         if dim == SHARD_ASSET:
             if not instrument_universe:
@@ -308,7 +426,7 @@ class AutoShardPlanner:
             for i, subset in enumerate(subsets):
                 if not subset:
                     continue
-                sid = f"{task_id}:shard:{i}"
+                sid = f"{prefix}:shard:{i}"
                 shard_task_ids.append(sid)
                 descriptors.append(
                     ShardDescriptor(
@@ -324,14 +442,16 @@ class AutoShardPlanner:
         elif dim in (SHARD_TIME, SHARD_SESSION):
             if not time_range:
                 return None  # 没有时间窗，time 切片无法真实构造
-            blocks = build_time_blocks(time_range, n)
+            blocks = build_time_blocks(time_range, n, calendar=calendar)
             for i, (lo, hi) in enumerate(blocks):
-                sid = f"{task_id}:shard:{i}"
+                sid = f"{prefix}:shard:{i}"
                 shard_task_ids.append(sid)
                 warmup_start = None
                 needs_warmup = base.needs_warmup and lookback_bars > 0
                 if needs_warmup:
-                    warmup_start = lo - pd.Timedelta(days=int(lookback_bars) * 2)
+                    warmup_start = _warmup_start_for(
+                        lo, lookback_bars, calendar=calendar
+                    )
                 descriptors.append(
                     ShardDescriptor(
                         shard_id=sid,
@@ -348,7 +468,7 @@ class AutoShardPlanner:
 
         if not descriptors:
             return None
-        merge_task_id = f"{task_id}:merge"
+        merge_task_id = f"{prefix}:merge"
         per_shard = base.per_shard_peak_bytes
         return ShardExecutionPlan(
             original_task_id=task_id,
@@ -378,6 +498,7 @@ class AutoShardPlanner:
         lookback_bars: int = 0,
         failed_shape_signature: str = "",
         min_shards_override: int | None = None,
+        calendar: Any | None = None,
     ) -> "ShardExecutionPlan | None":
         """OOM 后 smaller-shape replan（R38-P0-005）。
 
@@ -398,6 +519,7 @@ class AutoShardPlanner:
                 instrument_universe=instrument_universe,
                 lookback_bars=lookback_bars,
                 failed_signature=failed_shape_signature,
+                calendar=calendar,
             )
         finally:
             self._min_shards = old

@@ -34,10 +34,12 @@ Multi-aggregation coalescing（#6）
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
+from data_access.read.minute_filter import FilterSignature, hhmm_to_minutes
 
 _VALID_AGGREGATIONS = frozenset({"minute_at", "minute_range", "minute_of_day"})
 _METRIC_FUNCS = {
@@ -294,6 +296,19 @@ class AggregationItem:
         return f"{base}_{spec.aggregation}"
 
 
+@dataclass(frozen=True)
+class ParsedAggregationItem:
+    """R39-PERF-033：已 parse 的 bundle 条目（AggregationItem + 归一化后的 spec）。
+
+    从 ``aggregate_minute_bundle`` 的校验阶段一路传给 SQL builder，避免
+    ``_build_bundle_sql`` 对每个 item 重复 ``parse_aggregation_spec``。frozen 保证
+    bundle 内多次复用安全。
+    """
+
+    item: AggregationItem
+    spec: AggregationSpec
+
+
 def _quote_ident(name: str) -> str:
     return f'"{name.replace(chr(34), chr(34) * 2)}"'
 
@@ -340,15 +355,14 @@ def _local_time_expr(
     return _quote_ident(t_col)
 
 
-def _local_min_expr(
-    t_col: str,
-    market: str | None,
-    timezone: str | None,
-    *,
-    time_is_tz: bool = False,
-) -> str:
-    loc = _local_time_expr(t_col, market, timezone, time_is_tz=time_is_tz)
-    return f"(EXTRACT(HOUR FROM {loc}) * 60 + EXTRACT(MINUTE FROM {loc}))"
+def _minute_from_local_expr(local_expr: str) -> str:
+    """PERF-034：把「本地时间表达式/列名」包成整数分钟表达式。
+
+    与 ``strftime('%H:%M')`` 同语义（分钟向下取整）：09:30:59 → 570（排除），
+    09:31:00 → 571（包含）。``local_expr`` 应为已经过时区换算的表达式或 CTE 列名
+    （如 ``_local``），避免每列重复应用 timezone()。
+    """
+    return f"(EXTRACT(HOUR FROM {local_expr}) * 60 + EXTRACT(MINUTE FROM {local_expr}))"
 
 
 def _elapsed_expr(
@@ -378,36 +392,21 @@ def _session_total_bars(market: str | None) -> int:
 def _spec_filter_sql(
     spec: AggregationSpec,
     *,
-    hhmm_expr: str,
+    minute_expr: str,
     elapsed_expr: str,
     market: str | None,
-) -> tuple[str | None, list[Any]]:
-    """构建单个 spec 的 FILTER 条件；None 表示不过滤（全时段聚合）。"""
-    if spec.aggregation == "minute_at":
-        if not spec.hhmm:
-            raise ValidationError("minute_at 需要 hhmm")
-        return f"{hhmm_expr} = ?", [spec.hhmm]
-    if spec.aggregation == "minute_range":
-        if not spec.start or not spec.end:
-            raise ValidationError("minute_range 需要 start 和 end")
-        if spec.start >= spec.end:
-            raise ValidationError("minute_range start 必须早于 end")
-        return (
-            f"{hhmm_expr} >= ? AND {hhmm_expr} <= ?",
-            [spec.start, spec.end],
-        )
-    if spec.aggregation == "minute_of_day":
-        period = max(1, spec.period)
-        total = _session_total_bars(market)
-        # index=0 → 最新桶；桶号从 session 尾部向前数
-        last_slot = max(0, (total - 1) // period)
-        slot = max(0, last_slot - max(0, spec.index))
-        return (
-            f"{elapsed_expr} >= {slot * period} AND "
-            f"{elapsed_expr} < {(slot + 1) * period}",
-            [],
-        )
-    raise ValidationError(f"不支持的聚合: {spec.aggregation}")
+) -> str | None:
+    """构建单个 spec 的 FILTER 条件；None 表示不过滤（全时段聚合）。
+
+    PERF-034：minute_at / minute_range 改用整数分钟比较（``minute_expr >= 571``），
+    不再 ``strftime('%H:%M')`` 字符串比较；边界语义逐字相同（分钟向下取整）。
+    PERF-035：经 ``FilterSignature`` 规范化，相同窗口的签名可去重共享。
+    整数分钟/桶号都是校验过的整数值，直接内联 SQL 字面量（无注入风险），不再
+    产生绑定参数。
+    """
+    return FilterSignature.canonicalize(
+        spec, session_total_bars=_session_total_bars(market)
+    ).to_sql(minute_expr=minute_expr, elapsed_expr=elapsed_expr)
 
 
 def build_minute_aggregation_sql(
@@ -432,52 +431,47 @@ def build_minute_aggregation_sql(
     market = getattr(spec, "market", None)
     timezone = getattr(spec, "timezone", None)
 
+    # PERF-034：timezone() 只在 _raw 的 _local 应用一次；整数分钟在 _clock 计算
+    # 一次。minute_at / minute_range 过滤用整数分钟（_minute），不再 strftime。
     local = _local_time_expr(time_column, market, timezone, time_is_tz=time_is_tz)
-    hhmm_expr = f"strftime({local}, '%H:%M')"
-    date_expr = f"CAST({local} AS DATE)"
-    local_min = _local_min_expr(time_column, market, timezone, time_is_tz=time_is_tz)
-    elapsed = _elapsed_expr(local_min, market, timezone)
-    params: list[Any] = []
-    agg_expr = _METRIC_FUNCS[metric].replace("value", val).replace("ts", local)
+    date_expr = f"CAST(_local AS DATE)"
+    minute_expr = _minute_from_local_expr("_local")
+    cond = _spec_filter_sql(
+        spec, minute_expr="_minute", elapsed_expr="_el", market=market
+    )
+    # ``_raw`` 把 value 列投影为 ``_v``（避免 read_parquet 宽列名直接出现在 CTE
+    # 里的重复/转义问题），聚合引用 ``_v`` 而不是原始列名。
+    agg_expr = _METRIC_FUNCS[metric].replace("value", "_v").replace("ts", "_local")
 
-    if spec.aggregation == "minute_at":
-        cond, p = _spec_filter_sql(spec, hhmm_expr=hhmm_expr, elapsed_expr=elapsed, market=market)
-        params.extend(p)
-        sel = f"{date_expr} AS ts, {inst} AS inst, {agg_expr} AS value"
-        group = f"{date_expr}, {inst}"
-    elif spec.aggregation == "minute_range":
-        cond, p = _spec_filter_sql(spec, hhmm_expr=hhmm_expr, elapsed_expr=elapsed, market=market)
-        params.extend(p)
-        sel = f"{date_expr} AS ts, {inst} AS inst, {agg_expr} AS value"
-        group = f"{date_expr}, {inst}"
-    elif spec.aggregation == "minute_of_day":
-        cond, p = _spec_filter_sql(spec, hhmm_expr=hhmm_expr, elapsed_expr=elapsed, market=market)
-        params.extend(p)
-        sel = f"{date_expr} AS ts, {inst} AS inst, {agg_expr} AS value"
-        group = f"{date_expr}, {inst}"
-    else:  # pragma: no cover
-        raise ValidationError(f"不支持的聚合: {spec.aggregation}")
-
-    # minute_of_day：FILTER 已把桶号（session elapsed）限定到目标桶，直接按
-    # (date, inst) 聚合该桶——而不是按 elapsed 分组再挑最后一分钟。
+    raw = (
+        f"SELECT {local} AS _local, {inst} AS _inst, {val} AS _v "
+        f"FROM read_parquet(?)"
+    )
+    # _el（session elapsed）只有 minute_of_day 需要；minute_at/range 不生成，避免
+    # 每行重复 EXTRACT。
     if spec.aggregation == "minute_of_day":
-        sel = f"{date_expr} AS ts, {inst} AS inst, {agg_expr} AS value"
-        sql = (
-            f"SELECT {sel} FROM (SELECT * FROM read_parquet(?)) "
-            f"WHERE {cond} GROUP BY {date_expr}, {inst}"
+        elapsed = _elapsed_expr(minute_expr, market, timezone)
+        clock = (
+            f"SELECT _inst, {date_expr} AS _tsd, {minute_expr} AS _minute, "
+            f"{elapsed} AS _el, _local, _v FROM _raw"
         )
     else:
-        if cond:
-            sql = (
-                f"SELECT {sel} FROM (SELECT * FROM read_parquet(?)) "
-                f"WHERE {cond} GROUP BY {group}"
-            )
-        else:
-            sql = (
-                f"SELECT {sel} FROM (SELECT * FROM read_parquet(?)) "
-                f"GROUP BY {group}"
-            )
-    return sql, params
+        clock = (
+            f"SELECT _inst, {date_expr} AS _tsd, {minute_expr} AS _minute, "
+            f"_local, _v FROM _raw"
+        )
+    sel = f"_tsd AS ts, _inst AS inst, {agg_expr} AS value"
+    if cond:
+        sql = (
+            f"WITH _raw AS ({raw}), _clock AS ({clock}) "
+            f"SELECT {sel} FROM _clock WHERE {cond} GROUP BY _tsd, _inst"
+        )
+    else:
+        sql = (
+            f"WITH _raw AS ({raw}), _clock AS ({clock}) "
+            f"SELECT {sel} FROM _clock GROUP BY _tsd, _inst"
+        )
+    return sql, []
 
 
 def _build_bundle_sql(
@@ -486,66 +480,109 @@ def _build_bundle_sql(
     predicate_where: str,
     time_column: str,
     instrument_column: str,
-    items: Sequence[AggregationItem],
+    parsed_items: Sequence[ParsedAggregationItem],
     market: str | None,
     timezone: str | None,
     time_is_tz: bool = False,
 ) -> tuple[str, list[Any]]:
     """#6 一次 scan 多聚合：单条 GROUP BY，每输出列 ``agg(val) FILTER (WHERE ...)``。
 
-    返回 (sql, params)；params 顺序 = 扫描谓词参数 → 各 item 的 FILTER 参数。
-    派生列（_hhmm/_el/_local/_tsd）在 ``_scan`` CTE 内各算一次，外层只引用别名。
+    PERF-033：``parsed_items`` 由上层（``aggregate_minute_bundle``）已 parse 一次
+    传入，这里不再重复 parse（旧实现这里又 ``parse_aggregation_spec`` 一遍）。
+    PERF-034：timezone() 只在 ``_raw`` 的 ``_local`` 应用一次；整数分钟在 ``_clock``
+    算一次（``_minute``），minute_at / minute_range 过滤用整数比较，不再
+    ``strftime('%H:%M')`` 字符串比较。
+    PERF-035：同一 ``FilterSignature`` 的多个输出共享一个 ``_fN`` 条件列——过滤
+    条件只在 ``_scan`` CTE 定义一次，各输出列 ``FILTER (WHERE _fN)`` 复用。
+
+    返回 (sql, params)。整数分钟/桶号都是校验过的整数值，直接内联 SQL 字面量
+    （无注入风险），因此 params 恒为 []；真正的绑定参数只剩扫描路径 + 扫描谓词
+    （由调用方拼接）。
     """
     inst = _quote_ident(instrument_column)
     local = _local_time_expr(time_column, market, timezone, time_is_tz=time_is_tz)
-    hhmm_expr = f"strftime({local}, '%H:%M')"
-    date_expr = f"CAST({local} AS DATE)"
-    local_min = _local_min_expr(time_column, market, timezone, time_is_tz=time_is_tz)
-    elapsed = _elapsed_expr(local_min, market, timezone)
+    date_expr = f"CAST(_local AS DATE)"
+    minute_expr = _minute_from_local_expr("_local")
+    # _el（session elapsed）只有 minute_of_day 项需要；否则不生成，避免每行重复
+    # EXTRACT（PERF-034）。
+    need_elapsed = any(p.spec.aggregation == "minute_of_day" for p in parsed_items)
+    if need_elapsed:
+        elapsed = _elapsed_expr(minute_expr, market, timezone)
+    session_total_bars = _session_total_bars(market)
 
-    cols: list[str] = []
-    select_parts: list[str] = []
-    filter_params: list[Any] = []
-
-    parsed: list[tuple[AggregationItem, AggregationSpec]] = []
-    for item in items:
-        parsed.append((item, parse_aggregation_spec(item.spec, field=item.field)))
     # 去重 value 列（多 item 复用同一物理列时只投影一次）
+    cols: list[str] = []
     seen_cols: dict[str, str] = {}
-    for idx, (item, spec) in enumerate(parsed):
+    for parsed in parsed_items:
+        item = parsed.item
         col_alias = seen_cols.get(item.field)
         if col_alias is None:
             col_alias = f"_v{len(seen_cols)}"
             seen_cols[item.field] = col_alias
             cols.append(f"{_quote_ident(item.field)} AS {col_alias}")
 
-    # _scan CTE：派生列算一次；read_parquet(?) 在 SQL 文本最前 → 参数顺序
-    # [path, predicate, filters] 天然正确（WITH 在最前）。
-    base = (
-        f"SELECT {inst} AS _inst, {date_expr} AS _tsd, {hhmm_expr} AS _hhmm, "
-        f"{elapsed} AS _el, {local} AS _local, {', '.join(cols)} "
+    # PERF-035：同一 filter signature 只生成一次 _fN 条件列，多输出共享。
+    sig_alias: dict[FilterSignature, str] = {}
+    filter_cols: list[str] = []
+    sig_list: list[tuple[ParsedAggregationItem, FilterSignature | None]] = []
+    for parsed in parsed_items:
+        sig = FilterSignature.canonicalize(
+            parsed.spec, session_total_bars=session_total_bars
+        )
+        cond = sig.to_sql(minute_expr="_minute", elapsed_expr="_el")
+        if cond is not None:
+            if sig not in sig_alias:
+                alias = f"_f{len(sig_alias)}"
+                sig_alias[sig] = alias
+                filter_cols.append(f"({cond}) AS {alias}")
+            sig_list.append((parsed, sig))
+        else:
+            sig_list.append((parsed, None))
+
+    value_aliases = ", ".join(seen_cols.values())
+    # _raw（timezone 一次）→ _clock（整数分钟 / elapsed 一次）→ _scan（过滤条件
+    # 一次）。DuckDB 不允许同一 SELECT 列表内引用别名，因此派生值各占一层 CTE。
+    # ``_scan`` 里 ``({cond}) AS _fN`` 引用 ``_clock`` 的 _minute/_el（不同 CTE，
+    # 允许）；外层 ``FILTER (WHERE _fN)`` 复用这些条件列。
+    raw = (
+        f"SELECT {local} AS _local, {inst} AS _inst, {', '.join(cols)} "
         f"FROM {from_clause} {predicate_where}".strip()
     )
-    for idx, (item, spec) in enumerate(parsed):
+    if need_elapsed:
+        clock = (
+            f"SELECT _inst, {date_expr} AS _tsd, {minute_expr} AS _minute, "
+            f"{elapsed} AS _el, _local, {value_aliases} FROM _raw"
+        )
+    else:
+        clock = (
+            f"SELECT _inst, {date_expr} AS _tsd, {minute_expr} AS _minute, "
+            f"_local, {value_aliases} FROM _raw"
+        )
+    scan = (
+        f"SELECT _tsd, _inst, _local, {value_aliases}"
+        f"{', ' + ', '.join(filter_cols) if filter_cols else ''} FROM _clock"
+    )
+
+    select_parts: list[str] = []
+    for parsed, sig in sig_list:
+        item, spec = parsed.item, parsed.spec
         out = item.effective_output_name(spec)
         col_alias = seen_cols[item.field]
         metric = spec.effective_metric(item.field)
         agg = _METRIC_FUNCS[metric].replace("value", col_alias).replace("ts", "_local")
-        cond, p = _spec_filter_sql(
-            spec, hhmm_expr="_hhmm", elapsed_expr="_el", market=market
-        )
-        if cond:
-            select_parts.append(f"{agg} FILTER (WHERE {cond}) AS {_quote_ident(out)}")
-            filter_params.extend(p)
+        if sig is not None and sig in sig_alias:
+            select_parts.append(
+                f"{agg} FILTER (WHERE {sig_alias[sig]}) AS {_quote_ident(out)}"
+            )
         else:
             select_parts.append(f"{agg} AS {_quote_ident(out)}")
 
     sql = (
-        f"WITH _scan AS ({base}) "
+        f"WITH _raw AS ({raw}), _clock AS ({clock}), _scan AS ({scan}) "
         f"SELECT _tsd AS ts, _inst AS inst, {', '.join(select_parts)} "
         f"FROM _scan GROUP BY _tsd, _inst"
     )
-    return sql, filter_params
+    return sql, []
 
 
 def _resolve_budget(store: Any, dataset: str, query_budget: Any) -> Any:
@@ -630,6 +667,81 @@ def _audit_and_handle(
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 
 
+_RESULT_MODES = ("arrow", "relation", "arrow_stream")
+
+
+def _validate_result_mode(
+    result_mode: str,
+) -> Literal["arrow", "relation", "arrow_stream"]:
+    """PERF-037：result_mode 白名单校验（fail-closed，不静默降级）。"""
+    if result_mode not in _RESULT_MODES:
+        raise ValidationError(
+            f"result_mode 必须为 {sorted(_RESULT_MODES)}，收到 {result_mode!r}"
+        )
+    return result_mode  # type: ignore[return-value]
+
+
+def _audit_lazy_aggregate(
+    store: Any,
+    dataset: str,
+    *,
+    paths: list[str],
+    params: dict[str, Any],
+    elapsed_ms: float,
+    kind: str,
+    spec_info: dict[str, Any] | None = None,
+    time_range: tuple[Any, Any] | None = None,
+    instrument_filter: Sequence[str] | None = None,
+    result_mode: str = "lazy",
+) -> None:
+    """PERF-037：relation / arrow_stream 模式的审计（无物化表，rows=None）。
+
+    lazy 结果没有 ``table.num_rows``，这里只记录「聚合请求已下发」+ lineage/
+    snapshot 参数（下游物化时由 RelationHandle/ManagedBatchReader 自己再上报真实
+    行数/字节）。不做 ``enforce_arrow_budget``——物化发生在调用方，由调用方负责
+    治理。
+    """
+    from data_access.core import audit as _audit
+    from data_access.read.read_contract import (
+        ReadLineage,
+        build_data_snapshot,
+        lineage_params,
+    )
+
+    ds = store._registry.get(dataset)
+    snapshot = build_data_snapshot(
+        dataset=dataset,
+        registry_hash=store.registry_fingerprint(),
+        schema=getattr(ds, "schema", None),
+        paths=paths,
+        params=params if getattr(ds, "params_schema", None) else None,
+    )
+    lineage = ReadLineage(
+        dataset=dataset,
+        columns=tuple(spec_info.get("fields") or ()) if spec_info else (),
+        time_range=time_range,
+        instrument_filter=(
+            tuple(instrument_filter)
+            if instrument_filter is not None
+            else None
+        ),
+        params=lineage_params(params),
+    )
+    extra: dict[str, Any] = {"aggregation": True, "result_mode": result_mode}
+    if spec_info:
+        extra["aggregation_spec"] = spec_info
+    _audit.record(
+        op=kind,
+        dataset=dataset,
+        ok=True,
+        rows=None,
+        paths=paths[:5] if paths else None,
+        params=params or None,
+        elapsed_ms=elapsed_ms,
+        extra=extra,
+    )
+
+
 def aggregate_minute_to_daily(
     store: Any,
     dataset: str,
@@ -640,18 +752,29 @@ def aggregate_minute_to_daily(
     instrument_filter: Sequence[str] | None = None,
     params: Mapping[str, Any] | None = None,
     query_budget: Any = None,
+    result_mode: Literal["arrow", "relation", "arrow_stream"] = "arrow",
 ) -> Any:
     """分钟→日聚合（DuckDB 内完成，不物化整份分钟数据）。
 
-    返回带 ``DataSnapshot`` 的 ``ReadHandle``：``.to_arrow()`` 得到
-    Arrow Table（``ts`` DATE + ``inst`` + ``value``），``.to_pandas()`` 同理。
-    走完整 QueryBudget / deadline / audit（#7）。
+    ``result_mode``（PERF-037）：
+        - ``"arrow"``（默认）：物化为 Arrow Table，返回带 ``DataSnapshot`` 的
+          ``ReadHandle``（``.to_arrow()`` / ``.to_pandas()``，走 budget/deadline/
+          audit）；
+        - ``"relation"``：返回惰性 DuckDB Relation（不物化，调用方稍后
+          ``.to_arrow_table()`` / ``.df()`` / ``.fetchall()``）。跳过 arrow budget
+          强制——物化治理由调用方负责；
+        - ``"arrow_stream"``：返回 ``ManagedBatchReader``（流式 RecordBatch，低
+          内存峰值），同样跳过物化前的 arrow budget。
+
+    默认 ``"arrow"``，既有调用方/测试零行为变化。整条 分钟→日 链路（PERF-036）在
+    单条 DuckDB SQL 内完成（filter → daily aggregate），不物化整份分钟数据。
     """
     import pyarrow as pa
 
     from data_access.read.formats import format_adapter_for_dataset
     from data_access.read.predicate import Predicate, compile_predicate
 
+    result_mode = _validate_result_mode(result_mode)
     ds = store._registry.get(dataset)
     if not ds.time_column or not ds.instrument_column:
         raise ValidationError(f"分钟数据集 '{dataset}' 未声明 time/instrument 列")
@@ -718,9 +841,36 @@ def aggregate_minute_to_daily(
     inner = f"SELECT * FROM {from_clause} {compiled.where_sql}".strip()
     sql = sql.replace("FROM read_parquet(?)", f"FROM ({inner}) AS _m")
 
+    # PERF-037：结果形态按 result_mode 分流（默认 arrow 物化，行为与旧版一致）。
+    exec_params = [path_param, *compiled.params, *agg_params]
     start = _time.perf_counter()
+    if result_mode == "relation":
+        rel = store._engine.relation(sql, exec_params)
+        elapsed_ms = (_time.perf_counter() - start) * 1000
+        _audit_lazy_aggregate(
+            store, dataset, paths=paths, params=dict(params or {}),
+            elapsed_ms=elapsed_ms, kind="aggregate",
+            spec_info={"field": field, "fields": [field], "spec": agg.to_dict()},
+            time_range=time_range, instrument_filter=instrument_filter,
+            result_mode=result_mode,
+        )
+        return rel
+    if result_mode == "arrow_stream":
+        reader = store._engine.execute_reader(
+            sql, exec_params, deadline_ms=budget.max_elapsed_ms
+        )
+        elapsed_ms = (_time.perf_counter() - start) * 1000
+        _audit_lazy_aggregate(
+            store, dataset, paths=paths, params=dict(params or {}),
+            elapsed_ms=elapsed_ms, kind="aggregate",
+            spec_info={"field": field, "fields": [field], "spec": agg.to_dict()},
+            time_range=time_range, instrument_filter=instrument_filter,
+            result_mode=result_mode,
+        )
+        return reader
+    # arrow：物化 + budget/deadline/audit + ReadHandle（现状）
     table = store._engine.execute_arrow(
-        sql, [path_param, *compiled.params, *agg_params], deadline_ms=budget.max_elapsed_ms
+        sql, exec_params, deadline_ms=budget.max_elapsed_ms
     )
     elapsed_ms = (_time.perf_counter() - start) * 1000
     return _audit_and_handle(
@@ -743,19 +893,27 @@ def aggregate_minute_bundle(
     query_budget: Any = None,
     market: str | None = None,
     timezone: str | None = None,
+    result_mode: Literal["arrow", "relation", "arrow_stream"] = "arrow",
 ) -> Any:
     """#6 一次 scan 多聚合：同一 (dataset, time_range, instruments) 只扫一次，
     单条 SQL 产出几十列（每列 ``agg FILTER (WHERE spec)``）。
 
     ``items``：``AggregationItem(field, spec, output_name)`` 列表。
     ``market``/``timezone``：未在 item.spec 上声明时作为全局默认。
-    返回带 ``DataSnapshot`` 的 ``ReadHandle``（budget/deadline/audit，见 #7）。
+    ``result_mode``（PERF-037）：与 ``aggregate_minute_to_daily`` 相同——
+    ``"arrow"``（默认，返回带 ``DataSnapshot`` 的 ``ReadHandle``）/ ``"relation"``
+    （惰性 DuckDB Relation）/ ``"arrow_stream"``（``ManagedBatchReader`` 流）。
+
+    PERF-033：items 在入口 parse 一次（``ParsedAggregationItem``）后一路传给 SQL
+    builder，builder 不再重复 parse。PERF-035：同一 minute-window 的多个输出共享
+    一个 SQL 过滤条件列。
     """
     import pyarrow as pa
 
     from data_access.read.formats import format_adapter_for_dataset
     from data_access.read.predicate import Predicate, compile_predicate
 
+    result_mode = _validate_result_mode(result_mode)
     if not items:
         raise ValidationError("aggregate_minute_bundle: items 不能为空")
     ds = store._registry.get(dataset)
@@ -772,11 +930,17 @@ def aggregate_minute_bundle(
     budget = _resolve_budget(store, dataset, query_budget)
 
     # #P0-9 输出列名必须唯一：两个 item 同名输出 → DuckDB 会产生重复列，语义不明。
+    # PERF-033：parse 一次成 ParsedAggregationItem，一路传给 SQL builder，避免
+    # builder 内再 parse 一遍。
     parsed_items = [
-        (item, parse_aggregation_spec(item.spec, field=item.field)) for item in items
+        ParsedAggregationItem(
+            item=item, spec=parse_aggregation_spec(item.spec, field=item.field)
+        )
+        for item in items
     ]
-    out_names = [item.effective_output_name(spec) for item, spec in parsed_items]
-    dup = {name for name in out_names if out_names.count(name) > 1}
+    out_names = [p.item.effective_output_name(p.spec) for p in parsed_items]
+    # PERF-033：Counter 去重 O(K)，不再 ``list.count`` O(K²)。错误消息逐字不变。
+    dup = {name for name, count in Counter(out_names).items() if count > 1}
     if dup:
         raise ValidationError(
             f"aggregate_minute_bundle 输出列名重复: {sorted(dup)}。"
@@ -786,10 +950,10 @@ def aggregate_minute_bundle(
     # #P0-8 同一 bundle 必须 clock-compatible：各 item 自己声明的 market/timezone
     # 不一致时不能编译到同一条 SQL（时区换算/时段不同会串味）。
     declared_markets = {
-        spec.market for _, spec in parsed_items if spec.market is not None
+        p.spec.market for p in parsed_items if p.spec.market is not None
     }
     declared_timezones = {
-        spec.timezone for _, spec in parsed_items if spec.timezone is not None
+        p.spec.timezone for p in parsed_items if p.spec.timezone is not None
     }
     if market is not None:
         declared_markets.add(market)
@@ -811,7 +975,7 @@ def aggregate_minute_bundle(
     # #P0-8 已校验所有 item 的 market 一致；effective = 全局 market 或 item 声明值。
     # （提前计算：空路径分支的 spec_info 也要用，不能等 SQL 分支再算。）
     effective_market = market or next(
-        (spec.market for _, spec in parsed_items if spec.market is not None),
+        (p.spec.market for p in parsed_items if p.spec.market is not None),
         None,
     )
 
@@ -825,22 +989,22 @@ def aggregate_minute_bundle(
     store._enforce_scan_files(budget, paths)
     if not paths:
         cols = ["ts", "inst"]
-        for item, spec in parsed_items:
-            cols.append(item.effective_output_name(spec))
+        for p in parsed_items:
+            cols.append(p.item.effective_output_name(p.spec))
         return _audit_and_handle(
             store, dataset, pa.table({c: [] for c in cols}),
             paths=[], params=dict(params or {}), elapsed_ms=0.0, budget=budget,
             kind="aggregate",
             spec_info={
                 "bundle": True,
-                "fields": [item.field for item, _ in parsed_items],
+                "fields": [p.item.field for p in parsed_items],
                 "items": [
                     {
-                        "field": item.field,
-                        "output_name": item.effective_output_name(spec),
-                        "spec": spec.to_dict(),
+                        "field": p.item.field,
+                        "output_name": p.item.effective_output_name(p.spec),
+                        "spec": p.spec.to_dict(),
                     }
-                    for item, spec in parsed_items
+                    for p in parsed_items
                 ],
                 "market": effective_market,
                 "timezone": timezone,
@@ -872,34 +1036,59 @@ def aggregate_minute_bundle(
         predicate_where=compiled.where_sql,
         time_column=ds.time_column,
         instrument_column=ds.instrument_column,
-        items=items,
+        parsed_items=parsed_items,
         market=effective_market,
         timezone=timezone,
         time_is_tz=time_is_tz,
     )
 
+    spec_info = {
+        "bundle": True,
+        "fields": [p.item.field for p in parsed_items],
+        "items": [
+            {
+                "field": p.item.field,
+                "output_name": p.item.effective_output_name(p.spec),
+                "spec": p.spec.to_dict(),
+            }
+            for p in parsed_items
+        ],
+        "market": effective_market,
+        "timezone": timezone,
+    }
+    # PERF-037：结果形态按 result_mode 分流（默认 arrow 物化，行为与旧版一致）。
+    exec_params = [path_param, *compiled.params, *agg_params]
     start = _time.perf_counter()
+    if result_mode == "relation":
+        rel = store._engine.relation(sql, exec_params)
+        elapsed_ms = (_time.perf_counter() - start) * 1000
+        _audit_lazy_aggregate(
+            store, dataset, paths=paths, params=dict(params or {}),
+            elapsed_ms=elapsed_ms, kind="aggregate", spec_info=spec_info,
+            time_range=time_range, instrument_filter=instrument_filter,
+            result_mode=result_mode,
+        )
+        return rel
+    if result_mode == "arrow_stream":
+        reader = store._engine.execute_reader(
+            sql, exec_params, deadline_ms=budget.max_elapsed_ms
+        )
+        elapsed_ms = (_time.perf_counter() - start) * 1000
+        _audit_lazy_aggregate(
+            store, dataset, paths=paths, params=dict(params or {}),
+            elapsed_ms=elapsed_ms, kind="aggregate", spec_info=spec_info,
+            time_range=time_range, instrument_filter=instrument_filter,
+            result_mode=result_mode,
+        )
+        return reader
     table = store._engine.execute_arrow(
-        sql, [path_param, *compiled.params, *agg_params], deadline_ms=budget.max_elapsed_ms
+        sql, exec_params, deadline_ms=budget.max_elapsed_ms
     )
     elapsed_ms = (_time.perf_counter() - start) * 1000
     return _audit_and_handle(
         store, dataset, table, paths=paths, params=dict(params or {}),
         elapsed_ms=elapsed_ms, budget=budget, kind="aggregate",
-        spec_info={
-            "bundle": True,
-            "fields": [item.field for item, _ in parsed_items],
-            "items": [
-                {
-                    "field": item.field,
-                    "output_name": item.effective_output_name(spec),
-                    "spec": spec.to_dict(),
-                }
-                for item, spec in parsed_items
-            ],
-            "market": effective_market,
-            "timezone": timezone,
-        },
+        spec_info=spec_info,
         time_range=time_range,
         instrument_filter=instrument_filter,
     )
