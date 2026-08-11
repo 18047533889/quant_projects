@@ -1,5 +1,61 @@
 [
   {
+    "canonical": "ALMA",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "CoppockCurve",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ElderRay",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "FisherTransform",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "HMA",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "QQE",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "RSX",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "acos",
     "current_surface": "daily",
     "direct_use_status": "move_internal",
@@ -163,6 +219,14 @@
     "canonical": "cs_physical_panel_coverage",
     "current_surface": "extended",
     "direct_use_status": "direct_global_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_predictability_mosaic_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
     "disposition": "direct_visible",
     "reason_not_mineable": "",
     "recommended_factor_replacement": ""
@@ -520,12 +584,76 @@
     "recommended_factor_replacement": ""
   },
   {
+    "canonical": "intra_consolidation_quality",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_eod_reversal_decomposition",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_event_pre_post_contrast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_event_window_reduce",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "intra_idiosyncratic_variance",
     "current_surface": "daily",
     "direct_use_status": "research_tool",
     "disposition": "moved_research_tool",
     "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
     "recommended_factor_replacement": "intra_idiosyncratic_variance_ex_self"
+  },
+  {
+    "canonical": "intra_impulse_event_detector",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_limit_pre_hit_pressure_profile",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_liquidity_resilience_curve_fit",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_multiresolution_resample_reduce",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
   },
   {
     "canonical": "intra_negative_jump_variation",
@@ -536,11 +664,43 @@
     "recommended_factor_replacement": ""
   },
   {
+    "canonical": "intra_neighbor_event_class",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "intra_positive_jump_variation",
     "current_surface": "daily",
     "direct_use_status": "move_internal",
     "disposition": "moved_internal",
     "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_post_impulse_response",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_probe_outcome_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_range_gap_flag",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
     "recommended_factor_replacement": ""
   },
   {
@@ -560,6 +720,14 @@
     "recommended_factor_replacement": "intra_realized_correlation_ex_self"
   },
   {
+    "canonical": "intra_response_curve_features",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "intra_return_profile_cosine",
     "current_surface": "daily",
     "direct_use_status": "move_internal",
@@ -568,11 +736,179 @@
     "recommended_factor_replacement": ""
   },
   {
+    "canonical": "intra_round_price_barrier_response",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_round_price_clustering_share",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_same_slot_zscore",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_session_boundary_jump",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "intra_signed_jump_ratio",
     "current_surface": "daily",
     "direct_use_status": "move_internal",
     "disposition": "moved_internal",
     "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_slice_mask_pair_reduce",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_slice_mask_reduce",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_dwell_stats",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_follow_beta",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_follow_corr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_follow_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_interval_moment",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_pair_same_slot_corr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_sum",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_transition_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_state_vwap",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_supply_absorption_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_volume_at_price_profile",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_volume_profile_peak_geometry",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_volume_profile_supply_structure",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_volume_profile_value_area",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
     "recommended_factor_replacement": ""
   },
   {
@@ -680,9 +1016,33 @@
     "recommended_factor_replacement": ""
   },
   {
+    "canonical": "panel_async_beta_ex_self",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_factor_pocket_strength",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "panel_mixture_of_experts_score",
     "current_surface": "extended",
     "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_predictability_mosaic_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
     "disposition": "direct_visible",
     "reason_not_mineable": "",
     "recommended_factor_replacement": ""
@@ -2241,6 +2601,22 @@
   },
   {
     "canonical": "ts_weighted_downside_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "turnover_chip_age_cost_surface",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "turnover_chip_overhang_surface",
     "current_surface": "extended",
     "direct_use_status": "direct_alpha",
     "disposition": "direct_visible",

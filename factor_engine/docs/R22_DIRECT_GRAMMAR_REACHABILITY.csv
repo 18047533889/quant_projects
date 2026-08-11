@@ -1,15 +1,20 @@
 canonical,mining_visible,composition_usable,terminal_usable,ast_positions,data_inputs,scalar_parameters,smoke_recipe,reachable
 ADX,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close']",['window'],"smoke:ADX::close=continuous_close,high=continuous_high,low=continuous_low",True
+ALMA,True,True,True,"['intermediate', 'terminal']",['x'],"['window', 'offset', 'sigma']",smoke:ALMA::x=continuous_close,True
 ATR_WILDER,True,True,False,['intermediate'],"['high', 'low', 'close']",['window'],"smoke:ATR_WILDER::close=continuous_close,high=continuous_high,low=continuous_low",True
 CMF,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close', 'volume']",['window'],"smoke:CMF::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",True
 CMO,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:CMO::close=continuous_close,True
 ChaikinOscillator,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close', 'volume', 'fast_window', 'slow_window', 'adl_window']",[],"smoke:ChaikinOscillator::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",True
+CoppockCurve,True,True,True,"['intermediate', 'terminal']",['close'],"['roc1', 'roc2', 'wma_window', 'roc_mode']",smoke:CoppockCurve::close=continuous_close,True
 DEMA,True,True,False,['intermediate'],['x'],['window'],smoke:DEMA::x=continuous_close,True
 DMI_minus,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close']",['window'],"smoke:DMI_minus::close=continuous_close,high=continuous_high,low=continuous_low",True
 DMI_plus,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close']",['window'],"smoke:DMI_plus::close=continuous_close,high=continuous_high,low=continuous_low",True
 DX,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close']",['window'],"smoke:DX::close=continuous_close,high=continuous_high,low=continuous_low",True
 EaseOfMovement,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'volume', 'volume_scale']",['window'],"smoke:EaseOfMovement::high=continuous_high,low=continuous_low,volume=raw_volume_shares",True
+ElderRay,True,True,True,"['intermediate', 'terminal']",['close'],"['high', 'low', 'ema', 'output']",smoke:ElderRay::close=continuous_close,True
+FisherTransform,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'smooth', 'signal_smooth', 'output']",['window'],"smoke:FisherTransform::high=continuous_high,low=continuous_low",True
 ForceIndex,True,True,True,"['intermediate', 'terminal']","['close', 'volume']",['window'],"smoke:ForceIndex::close=continuous_close,volume=raw_volume_shares",True
+HMA,True,True,True,"['intermediate', 'terminal']",['x'],"['window', 'rounding']",smoke:HMA::x=continuous_close,True
 KAMA,True,True,False,['intermediate'],['close'],"['er_window', 'fast_window', 'slow_window']",smoke:KAMA::close=continuous_close,True
 KeltnerLower,True,True,False,['intermediate'],"['high', 'low', 'close']","['ema_window', 'atr_window', 'multiplier']","smoke:KeltnerLower::close=continuous_close,high=continuous_high,low=continuous_low",True
 KeltnerMid,True,True,False,['intermediate'],['close'],['ema_window'],smoke:KeltnerMid::close=continuous_close,True
@@ -27,7 +32,9 @@ PSAR,True,True,False,['intermediate'],"['high', 'low']","['acceleration', 'maxim
 PVO,True,True,True,"['intermediate', 'terminal']",['volume'],"['fast_window', 'slow_window']",smoke:PVO::volume=raw_volume_shares,True
 PVO_hist,True,True,True,"['intermediate', 'terminal']",['volume'],"['fast_window', 'slow_window', 'signal_window']",smoke:PVO_hist::volume=raw_volume_shares,True
 PVO_signal,True,True,True,"['intermediate', 'terminal']",['volume'],"['fast_window', 'slow_window', 'signal_window']",smoke:PVO_signal::volume=raw_volume_shares,True
+QQE,True,True,True,"['intermediate', 'terminal']",['x'],"['length', 'smooth', 'factor', 'output']",smoke:QQE::x=continuous_close,True
 RSI_WILDER,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:RSI_WILDER::x=continuous_close,True
+RSX,True,True,True,"['intermediate', 'terminal']",['x'],['length'],smoke:RSX::x=continuous_close,True
 Supertrend,True,True,False,['intermediate'],"['high', 'low', 'close']","['atr_window', 'multiplier']","smoke:Supertrend::close=continuous_close,high=continuous_high,low=continuous_low",True
 SupertrendDirection,True,True,True,"['intermediate', 'terminal']","['high', 'low', 'close']","['atr_window', 'multiplier']","smoke:SupertrendDirection::close=continuous_close,high=continuous_high,low=continuous_low",True
 TEMA,True,True,False,['intermediate'],['x'],['window'],smoke:TEMA::x=continuous_close,True
@@ -188,6 +195,7 @@ cs_neighbor_gap,True,True,True,"['intermediate', 'terminal']",['x'],"['k', 'grou
 cs_neutralize,True,True,True,"['intermediate', 'terminal']","['y', 'exposures', 'group', 'weight', 'add_intercept', 'min_obs']",[],smoke:cs_neutralize::y=return_decimal,True
 cs_pct_rank,True,True,True,"['intermediate', 'terminal']",['x'],[],smoke:cs_pct_rank::x=continuous_close,True
 cs_physical_panel_coverage,True,True,False,"['gate', 'interaction']",['x'],[],smoke:cs_physical_panel_coverage::x=continuous_close,True
+cs_predictability_mosaic_score,True,True,True,"['intermediate', 'terminal']","['base_signal', 'realized_return', 'state_feature']","['window', 'min_history', 'clusters', 'lag']",smoke:cs_predictability_mosaic_score::base_signal=continuous_close,True
 cs_quantile,True,True,False,"['gate', 'interaction']",['x'],['p'],smoke:cs_quantile::x=continuous_close,True
 cs_quantile_resid,True,True,True,"['intermediate', 'terminal']","['y', 'x']",['q'],"smoke:cs_quantile_resid::x=continuous_close,y=return_decimal",True
 cs_rank_churn,True,True,False,"['gate', 'interaction']",['x'],"['lag', 'group']",smoke:cs_rank_churn::x=continuous_close,True
@@ -530,6 +538,7 @@ intra_beta_asymmetry,True,True,True,"['intermediate', 'terminal']","['close', 'f
 intra_bipower_variation,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_bipower_variation::close=continuous_close,True
 intra_close_participation,True,True,True,"['intermediate', 'terminal']",['volume'],['tail_minutes'],smoke:intra_close_participation::volume=raw_volume_shares,True
 intra_concentration,True,True,True,"['intermediate', 'terminal']",['value'],[],smoke:intra_concentration::value=continuous_close,True
+intra_consolidation_quality,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'amount']","['trigger', 'trigger_z', 'horizon', 'output']","smoke:intra_consolidation_quality::amount=amount_local,price=continuous_close,volume=raw_volume_shares",True
 intra_continuous_variance,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_continuous_variance::close=continuous_close,True
 intra_down_down_semibeta,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_down_down_semibeta::close=continuous_close,True
 intra_down_up_semibeta,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_down_up_semibeta::close=continuous_close,True
@@ -537,6 +546,9 @@ intra_drawdown_depth,True,True,True,"['intermediate', 'terminal']",['close'],[],
 intra_drawdown_duration,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_drawdown_duration::close=continuous_close,True
 intra_drawdown_recovery_half_life,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_drawdown_recovery_half_life::close=continuous_close,True
 intra_entropy,True,True,True,"['intermediate', 'terminal']",['value'],['normalize'],smoke:intra_entropy::value=continuous_close,True
+intra_eod_reversal_decomposition,True,True,True,"['intermediate', 'terminal']",['price'],"['volume', 'amount', 'window_minutes', 'baseline', 'output']",smoke:intra_eod_reversal_decomposition::price=continuous_close,True
+intra_event_pre_post_contrast,True,True,True,"['intermediate', 'terminal']","['x', 'event_mask']","['pre', 'post', 'metric', 'event_select', 'min_obs']",smoke:intra_event_pre_post_contrast::x=continuous_close,True
+intra_event_window_reduce,True,True,True,"['intermediate', 'terminal']","['x', 'event_mask']","['pre', 'post', 'reducer', 'event_select', 'min_obs']",smoke:intra_event_window_reduce::x=continuous_close,True
 intra_extreme_bar_return,True,True,True,"['intermediate', 'terminal']",['close'],['side'],smoke:intra_extreme_bar_return::close=continuous_close,True
 intra_high_low_affinity,True,True,True,"['intermediate', 'terminal']","['high', 'low']",['window'],"smoke:intra_high_low_affinity::high=continuous_high,low=continuous_low",True
 intra_high_time,True,True,True,"['intermediate', 'terminal']",['high'],[],smoke:intra_high_time::high=continuous_high,True
@@ -545,6 +557,7 @@ intra_idiosyncratic_kurtosis_ex_self,True,True,True,"['intermediate', 'terminal'
 intra_idiosyncratic_skewness,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_idiosyncratic_skewness::close=continuous_close,True
 intra_idiosyncratic_skewness_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_idiosyncratic_skewness_ex_self::close=continuous_close,True
 intra_idiosyncratic_variance_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_idiosyncratic_variance_ex_self::close=continuous_close,True
+intra_impulse_event_detector,True,True,True,"['intermediate', 'terminal']",['price'],"['volume', 'event', 'threshold', 'z', 'min_bars', 'merge_gap', 'output']",smoke:intra_impulse_event_detector::price=continuous_close,True
 intra_industry_lead_lag_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'industry']","['lag', 'min_obs']",smoke:intra_industry_lead_lag_ex_self::close=continuous_close,True
 intra_interval_amount_share,True,True,True,"['intermediate', 'terminal']",['amount'],"['start_minute', 'end_minute']",smoke:intra_interval_amount_share::amount=amount_local,True
 intra_interval_illiquidity,True,True,True,"['intermediate', 'terminal']","['close', 'amount']","['start_minute', 'end_minute']","smoke:intra_interval_illiquidity::amount=amount_local,close=continuous_close",True
@@ -562,7 +575,9 @@ intra_jump_variation,True,True,True,"['intermediate', 'terminal']",['close'],[],
 intra_kyle_lambda_proxy,True,True,True,"['intermediate', 'terminal']","['close', 'amount']",[],"smoke:intra_kyle_lambda_proxy::amount=amount_local,close=continuous_close",True
 intra_limit_duration,True,True,True,"['intermediate', 'terminal']",['close'],"['high_limit', 'low_limit', 'side']",smoke:intra_limit_duration::close=continuous_close,True
 intra_limit_first_hit_time,True,True,True,"['intermediate', 'terminal']",['close'],"['high', 'low', 'high_limit', 'low_limit', 'side']",smoke:intra_limit_first_hit_time::close=continuous_close,True
+intra_limit_pre_hit_pressure_profile,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'high_limit', 'low_limit']","['side', 'pre_window', 'output', 'require_hit']","smoke:intra_limit_pre_hit_pressure_profile::price=continuous_close,volume=raw_volume_shares",True
 intra_limit_reopen_count,True,True,True,"['intermediate', 'terminal']",['close'],"['high_limit', 'low_limit', 'side', 'transition']",smoke:intra_limit_reopen_count::close=continuous_close,True
+intra_liquidity_resilience_curve_fit,True,True,True,"['intermediate', 'terminal']","['price', 'activity']","['shock_threshold', 'horizon', 'output']",smoke:intra_liquidity_resilience_curve_fit::price=continuous_close,True
 intra_longest_above_vwap_streak,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_longest_above_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_longest_below_vwap_streak,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_longest_below_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_low_time,True,True,True,"['intermediate', 'terminal']",['low'],[],smoke:intra_low_time::low=continuous_low,True
@@ -572,12 +587,17 @@ intra_market_model_r2,True,True,True,"['intermediate', 'terminal']","['close', '
 intra_market_model_r2_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_market_model_r2_ex_self::close=continuous_close,True
 intra_max_drawdown,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_max_drawdown::close=continuous_close,True
 intra_max_drawup,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_max_drawup::close=continuous_close,True
+intra_multiresolution_resample_reduce,True,True,True,"['intermediate', 'terminal']",['x'],"['bar_minutes', 'lookback_days', 'reducer', 'session_split', 'min_coverage']",smoke:intra_multiresolution_resample_reduce::x=continuous_close,True
 intra_negative_tail_variation,True,True,True,"['intermediate', 'terminal']",['close'],['threshold_scale'],smoke:intra_negative_tail_variation::close=continuous_close,True
+intra_neighbor_event_class,True,True,True,"['intermediate', 'terminal']",['event_mask'],"['radius', 'isolated_code', 'clustered_code']",smoke:intra_neighbor_event_class::event_mask=continuous_close,True
 intra_path_efficiency,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_path_efficiency::close=continuous_close,True
 intra_positive_tail_variation,True,True,True,"['intermediate', 'terminal']",['close'],['threshold_scale'],smoke:intra_positive_tail_variation::close=continuous_close,True
+intra_post_impulse_response,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'amount']","['direction', 'threshold', 'z', 'horizon', 'output']","smoke:intra_post_impulse_response::amount=amount_local,price=continuous_close,volume=raw_volume_shares",True
 intra_price_vwap_max_negative_excursion,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_price_vwap_max_negative_excursion::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_price_vwap_max_positive_excursion,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_price_vwap_max_positive_excursion::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
+intra_probe_outcome_score,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'amount']","['direction', 'z', 'probe_horizon', 'response_horizon', 'output']","smoke:intra_probe_outcome_score::amount=amount_local,price=continuous_close,volume=raw_volume_shares",True
 intra_profile_earth_mover_distance,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:intra_profile_earth_mover_distance::x=continuous_close,True
+intra_range_gap_flag,True,True,True,"['intermediate', 'terminal']",['event_mask'],"['high', 'low', 'neighbor_bars']",smoke:intra_range_gap_flag::event_mask=continuous_close,True
 intra_realized_beta_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_realized_beta_ex_self::close=continuous_close,True
 intra_realized_correlation_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_realized_correlation_ex_self::close=continuous_close,True
 intra_realized_kurtosis,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_realized_kurtosis::close=continuous_close,True
@@ -585,21 +605,39 @@ intra_realized_quarticity,True,True,True,"['intermediate', 'terminal']",['close'
 intra_realized_semivariance,True,True,True,"['intermediate', 'terminal']",['close'],['side'],smoke:intra_realized_semivariance::close=continuous_close,True
 intra_realized_skewness,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_realized_skewness::close=continuous_close,True
 intra_realized_variance,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_realized_variance::close=continuous_close,True
+intra_response_curve_features,True,True,True,"['intermediate', 'terminal']","['price', 'activity']","['trigger', 'horizon', 'curve', 'output']",smoke:intra_response_curve_features::price=continuous_close,True
 intra_return_activity_corr,True,True,True,"['intermediate', 'terminal']","['close', 'activity']",['absolute_return'],smoke:intra_return_activity_corr::close=continuous_close,True
+intra_round_price_barrier_response,True,True,True,"['intermediate', 'terminal']",['price'],"['lattice', 'lookback_days', 'tolerance_ticks', 'output', 'min_events']",smoke:intra_round_price_barrier_response::price=continuous_close,True
+intra_round_price_clustering_share,True,True,True,"['intermediate', 'terminal']",['price'],"['lattice', 'tolerance_ticks', 'window', 'output', 'min_bars']",smoke:intra_round_price_clustering_share::price=continuous_close,True
 intra_same_slot_momentum,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:intra_same_slot_momentum::close=continuous_close,True
 intra_same_slot_reversal,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:intra_same_slot_reversal::close=continuous_close,True
+intra_same_slot_zscore,True,True,True,"['intermediate', 'terminal']",['x'],"['history_days', 'ddof', 'min_history']",smoke:intra_same_slot_zscore::x=continuous_close,True
 intra_segment_amount_share,True,True,True,"['intermediate', 'terminal']","['amount', 'segment', 'session_tz']",[],smoke:intra_segment_amount_share::amount=amount_local,True
 intra_segment_realized_vol,True,True,True,"['intermediate', 'terminal']",['close'],"['segment', 'session_tz']",smoke:intra_segment_realized_vol::close=continuous_close,True
 intra_segment_return,True,True,True,"['intermediate', 'terminal']",['close'],"['segment', 'session_tz', 'endpoint_policy']",smoke:intra_segment_return::close=continuous_close,True
 intra_segment_volume_share,True,True,True,"['intermediate', 'terminal']","['volume', 'segment', 'session_tz']",[],smoke:intra_segment_volume_share::volume=raw_volume_shares,True
 intra_segment_vwap_deviation,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']","['segment', 'session_tz']","smoke:intra_segment_vwap_deviation::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
+intra_session_boundary_jump,True,True,True,"['intermediate', 'terminal']",['price'],"['volume', 'pre_close', 'boundary', 'pre_bars', 'post_bars', 'output']",smoke:intra_session_boundary_jump::price=continuous_close,True
 intra_session_return_asymmetry,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_session_return_asymmetry::close=continuous_close,True
 intra_signed_imbalance_proxy,True,True,True,"['intermediate', 'terminal']","['close', 'value']",[],"smoke:intra_signed_imbalance_proxy::close=continuous_close,value=continuous_close",True
 intra_signed_return_profile_cosine,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:intra_signed_return_profile_cosine::close=continuous_close,True
 intra_signed_tail_variation_ratio,True,True,True,"['intermediate', 'terminal']",['close'],['threshold_scale'],smoke:intra_signed_tail_variation_ratio::close=continuous_close,True
+intra_slice_mask_pair_reduce,True,True,True,"['intermediate', 'terminal']","['x', 'y', 'mask_field']","['window', 'slice', 'mask_side', 'mask_q', 'y_lag', 'reducer', 'min_pairs']","smoke:intra_slice_mask_pair_reduce::x=continuous_close,y=return_decimal",True
+intra_slice_mask_reduce,True,True,True,"['intermediate', 'terminal']","['x', 'mask_field']","['window', 'slice', 'mask_side', 'mask_q', 'reducer', 'min_bars']",smoke:intra_slice_mask_reduce::x=continuous_close,True
 intra_slot_amount_surprise,True,True,True,"['intermediate', 'terminal']",['amount'],['window'],smoke:intra_slot_amount_surprise::amount=amount_local,True
 intra_slot_volatility_surprise,True,True,True,"['intermediate', 'terminal']","['high', 'low']",['window'],"smoke:intra_slot_volatility_surprise::high=continuous_high,low=continuous_low",True
 intra_slot_volume_surprise,True,True,True,"['intermediate', 'terminal']",['volume'],['window'],smoke:intra_slot_volume_surprise::volume=raw_volume_shares,True
+intra_state_count,True,True,True,"['intermediate', 'terminal']",['state'],"['target', 'window_days']",smoke:intra_state_count::state=continuous_close,True
+intra_state_dwell_stats,True,True,True,"['intermediate', 'terminal']",['state'],"['target_state', 'output', 'min_slots']",smoke:intra_state_dwell_stats::state=continuous_close,True
+intra_state_follow_beta,True,True,True,"['intermediate', 'terminal']","['x', 'state', 'target']","['lead_bars', 'window_days', 'min_events']","smoke:intra_state_follow_beta::target=return_decimal,x=continuous_close",True
+intra_state_follow_corr,True,True,True,"['intermediate', 'terminal']","['x', 'state', 'target']","['lead_bars', 'window_days', 'min_events']","smoke:intra_state_follow_corr::target=return_decimal,x=continuous_close",True
+intra_state_follow_ratio,True,True,True,"['intermediate', 'terminal']","['x', 'state', 'target']","['lead_bars', 'window_days']","smoke:intra_state_follow_ratio::target=return_decimal,x=continuous_close",True
+intra_state_interval_moment,True,True,True,"['intermediate', 'terminal']","['state', 'target']","['moment', 'window_days', 'min_events']",smoke:intra_state_interval_moment::target=return_decimal,True
+intra_state_pair_same_slot_corr,True,True,True,"['intermediate', 'terminal']","['state_a', 'target_a', 'state_b', 'target_b']","['window_days', 'min_slots']",smoke:intra_state_pair_same_slot_corr::state_a=continuous_close,True
+intra_state_sum,True,True,True,"['intermediate', 'terminal']","['x', 'state', 'target']",['window_days'],"smoke:intra_state_sum::target=return_decimal,x=continuous_close",True
+intra_state_transition_entropy,True,True,True,"['intermediate', 'terminal']",['state'],"['min_slots', 'normalize', 'include_self']",smoke:intra_state_transition_entropy::state=continuous_close,True
+intra_state_vwap,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'state', 'target']",['window_days'],"smoke:intra_state_vwap::price=continuous_close,target=return_decimal,volume=raw_volume_shares",True
+intra_supply_absorption_score,True,True,True,"['intermediate', 'terminal']","['price', 'volume', 'amount']","['event', 'horizon', 'output']","smoke:intra_supply_absorption_score::amount=amount_local,price=continuous_close,volume=raw_volume_shares",True
 intra_tail_event_count,True,True,True,"['intermediate', 'terminal']",['close'],['threshold_scale'],smoke:intra_tail_event_count::close=continuous_close,True
 intra_tail_volume_share,True,True,True,"['intermediate', 'terminal']","['close', 'volume']",['tail_quantile'],"smoke:intra_tail_volume_share::close=continuous_close,volume=raw_volume_shares",True
 intra_time_above_vwap,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_time_above_vwap::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
@@ -608,9 +646,13 @@ intra_up_down_semibeta,True,True,True,"['intermediate', 'terminal']","['close', 
 intra_up_up_semibeta,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_up_up_semibeta::close=continuous_close,True
 intra_ute_high,True,True,True,"['intermediate', 'terminal']",['close'],['edge_minutes'],smoke:intra_ute_high::close=continuous_close,True
 intra_ute_low,True,True,True,"['intermediate', 'terminal']",['close'],"['mid_start', 'mid_end']",smoke:intra_ute_low::close=continuous_close,True
+intra_volume_at_price_profile,True,True,True,"['intermediate', 'terminal']","['price', 'volume']","['bins', 'weighting', 'price_basis', 'normalize', 'output']","smoke:intra_volume_at_price_profile::price=continuous_close,volume=raw_volume_shares",True
 intra_volume_price_alignment,True,True,True,"['intermediate', 'terminal']","['close', 'volume']",[],"smoke:intra_volume_price_alignment::close=continuous_close,volume=raw_volume_shares",True
 intra_volume_profile_cosine,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:intra_volume_profile_cosine::x=continuous_close,True
 intra_volume_profile_jsd,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:intra_volume_profile_jsd::x=continuous_close,True
+intra_volume_profile_peak_geometry,True,True,True,"['intermediate', 'terminal']","['price', 'volume']","['bins', 'smooth', 'min_prominence', 'output']","smoke:intra_volume_profile_peak_geometry::price=continuous_close,volume=raw_volume_shares",True
+intra_volume_profile_supply_structure,True,True,True,"['intermediate', 'terminal']","['price', 'volume']","['bins', 'decay', 'output']","smoke:intra_volume_profile_supply_structure::price=continuous_close,volume=raw_volume_shares",True
+intra_volume_profile_value_area,True,True,True,"['intermediate', 'terminal']","['price', 'volume']","['bins', 'target_mass', 'output']","smoke:intra_volume_profile_value_area::price=continuous_close,volume=raw_volume_shares",True
 intra_vwap_above_ratio,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_vwap_above_ratio::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_vwap_cross_count,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_vwap_cross_count::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_vwap_path_curvature,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_vwap_path_curvature::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
@@ -681,7 +723,10 @@ open_to_vwap_return,True,True,True,"['intermediate', 'terminal']",['vwap'],"['op
 or_,True,True,False,['condition'],"['x', 'y']",[],"smoke:or_::x=continuous_close,y=return_decimal",True
 overnight_return,True,True,True,"['intermediate', 'terminal']",['pre_close'],"['open', 'price_basis']",smoke:overnight_return::pre_close=continuous_close,True
 overnight_volatility,True,True,True,"['intermediate', 'terminal']","['open', 'close']",['window'],"smoke:overnight_volatility::close=continuous_close,open=continuous_open",True
+panel_async_beta_ex_self,True,True,True,"['intermediate', 'terminal']","['ret', 'weight']","['window', 'min_periods', 'refresh_freq']",smoke:panel_async_beta_ex_self::ret=return_decimal,True
+panel_factor_pocket_strength,True,True,True,"['intermediate', 'terminal']","['ret', 'factor']","['window', 'min_periods', 'threshold']","smoke:panel_factor_pocket_strength::factor=continuous_close,ret=return_decimal",True
 panel_mixture_of_experts_score,True,True,True,"['intermediate', 'terminal']","['y', 'x1', 'x2', 'x3', 'x4', 'market_state']","['window', 'n_experts', 'label_horizon']",smoke:panel_mixture_of_experts_score::y=return_decimal,True
+panel_predictability_mosaic_score,True,True,True,"['intermediate', 'terminal']","['base_signal', 'realized_return', 'state_feature']","['window', 'min_history', 'clusters', 'lag']",smoke:panel_predictability_mosaic_score::base_signal=continuous_close,True
 panel_regime_conditioned_forecast,True,True,True,"['intermediate', 'terminal']","['y', 'x1', 'x2', 'x3', 'x4', 'market_state']","['window', 'n_regimes', 'label_horizon']",smoke:panel_regime_conditioned_forecast::y=return_decimal,True
 panel_rolling_elastic_net_forecast,True,True,True,"['intermediate', 'terminal']","['y', 'x1', 'x2', 'x3', 'x4']","['window', 'alpha', 'l1_ratio', 'label_horizon']",smoke:panel_rolling_elastic_net_forecast::y=return_decimal,True
 panel_rolling_pca_explained_ratio,True,True,True,"['intermediate', 'terminal']",['ret'],"['window', 'n_components']",smoke:panel_rolling_pca_explained_ratio::ret=return_decimal,True
@@ -1339,6 +1384,8 @@ ttm_from_quarterly,True,True,True,"['intermediate', 'terminal']","['x', 'period_
 turnover_acceleration,True,True,True,"['intermediate', 'terminal']","['turnover', 'short_window', 'long_window']",[],smoke:turnover_acceleration::turnover=turnover,True
 turnover_adjusted_volatility,True,True,True,"['intermediate', 'terminal']","['ret', 'turnover']",['window'],"smoke:turnover_adjusted_volatility::ret=return_decimal,turnover=turnover",True
 turnover_autocorr,True,True,True,"['intermediate', 'terminal']",['turnover'],"['window', 'lag']",smoke:turnover_autocorr::turnover=turnover,True
+turnover_chip_age_cost_surface,True,True,True,"['intermediate', 'terminal']","['close', 'turnover']","['window', 'price_bins', 'age_bins', 'output']","smoke:turnover_chip_age_cost_surface::close=continuous_close,turnover=turnover",True
+turnover_chip_overhang_surface,True,True,True,"['intermediate', 'terminal']","['close', 'turnover']","['window', 'bins', 'output']","smoke:turnover_chip_overhang_surface::close=continuous_close,turnover=turnover",True
 turnover_momentum,True,True,True,"['intermediate', 'terminal']",['turnover'],['window'],smoke:turnover_momentum::turnover=turnover,True
 turnover_shock,True,True,True,"['intermediate', 'terminal']",['turnover'],['window'],smoke:turnover_shock::turnover=turnover,True
 turnover_volatility,True,True,True,"['intermediate', 'terminal']",['turnover'],['window'],smoke:turnover_volatility::turnover=turnover,True

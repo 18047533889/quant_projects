@@ -32,6 +32,36 @@
     "target_terminal": true
   },
   {
+    "canonical": "ALMA",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "ATR_WILDER",
     "cost_budget": 9,
     "current_direct_status": "direct_intermediate",
@@ -148,6 +178,36 @@
     "production_certified": false,
     "replacement": "",
     "search_prior": 0.2,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "CoppockCurve",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "close": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
     "source_recipes": [
       "daily_bar"
     ],
@@ -316,6 +376,67 @@
     "target_terminal": true
   },
   {
+    "canonical": "ElderRay",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "close": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "FisherTransform",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "high": "continuous_high",
+      "low": "continuous_low"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "ForceIndex",
     "cost_budget": 6,
     "current_direct_status": "direct_alpha_high_cost",
@@ -336,6 +457,36 @@
     "production_certified": false,
     "replacement": "",
     "search_prior": 0.2,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "HMA",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
     "source_recipes": [
       "daily_bar"
     ],
@@ -864,11 +1015,71 @@
     "target_terminal": true
   },
   {
+    "canonical": "QQE",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "RSI_WILDER",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
     "current_mining_role": "alpha",
     "current_surface": "daily",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "RSX",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
     "default_recipe": {
       "x": "continuous_close"
     },
@@ -6017,6 +6228,36 @@
     ],
     "target_disposition": "direct_visible",
     "target_terminal": false
+  },
+  {
+    "canonical": "cs_predictability_mosaic_score",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "base_signal": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
   },
   {
     "canonical": "cs_quantile",
@@ -16684,6 +16925,38 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_consolidation_quality",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "amount": "amount_local",
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_continuous_variance",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -16880,6 +17153,96 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "continuous_nonnegative",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_eod_reversal_decomposition",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_event_pre_post_contrast",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_event_window_reduce",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -17139,6 +17502,36 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_impulse_event_detector",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -17674,6 +18067,36 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_limit_pre_hit_pressure_profile",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_limit_reopen_count",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -17689,6 +18112,36 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "count",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_liquidity_resilience_curve_fit",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -17977,6 +18430,36 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_multiresolution_resample_reduce",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_negative_jump_variation",
     "cost_budget": 9,
     "current_direct_status": "move_internal",
@@ -18011,6 +18494,36 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_neighbor_event_class",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "event_mask": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18121,6 +18634,38 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_post_impulse_response",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "amount": "amount_local",
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_price_vwap_max_negative_excursion",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -18185,6 +18730,38 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_probe_outcome_score",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "amount": "amount_local",
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_profile_earth_mover_distance",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -18201,6 +18778,36 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "continuous_nonnegative",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_range_gap_flag",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "event_mask": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -18479,6 +19086,36 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_response_curve_features",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_return_activity_corr",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -18536,6 +19173,66 @@
     "target_terminal": false
   },
   {
+    "canonical": "intra_round_price_barrier_response",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_round_price_clustering_share",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "bounded_0_1",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_same_slot_momentum",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -18582,6 +19279,36 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_same_slot_zscore",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "zscore",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -18725,6 +19452,36 @@
       "amount": "amount_local",
       "close": "continuous_close",
       "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_session_boundary_jump",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18896,6 +19653,67 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_slice_mask_pair_reduce",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close",
+      "y": "return_decimal"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_slice_mask_reduce",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_slot_amount_surprise",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -18963,6 +19781,344 @@
     "current_mining_role": "intraday_eod",
     "current_surface": "daily",
     "default_recipe": {
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_count",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "state": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "count",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_dwell_stats",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "state": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_follow_beta",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "target": "return_decimal",
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_follow_corr",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "target": "return_decimal",
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "neg_one_one",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_follow_ratio",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "target": "return_decimal",
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "ratio",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_interval_moment",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "target": "return_decimal"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_pair_same_slot_corr",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "state_a": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "neg_one_one",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_sum",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "target": "return_decimal",
+      "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_transition_entropy",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "state": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_nonnegative",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_state_vwap",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "target": "return_decimal",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_supply_absorption_score",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "amount": "amount_local",
+      "price": "continuous_close",
       "volume": "raw_volume_shares"
     },
     "delete_reason": "",
@@ -19230,6 +20386,37 @@
     "target_terminal": true
   },
   {
+    "canonical": "intra_volume_at_price_profile",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "intra_volume_price_alignment",
     "cost_budget": 9,
     "current_direct_status": "direct_alpha",
@@ -19298,6 +20485,99 @@
     "current_surface": "daily",
     "default_recipe": {
       "x": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_volume_profile_peak_geometry",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_volume_profile_supply_structure",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "minute_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "intra_volume_profile_value_area",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "intraday_eod",
+    "current_surface": "extended",
+    "default_recipe": {
+      "price": "continuous_close",
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -21466,6 +22746,67 @@
     "target_terminal": true
   },
   {
+    "canonical": "panel_async_beta_ex_self",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "ret": "return_decimal"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "panel_factor_pocket_strength",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "factor": "continuous_close",
+      "ret": "return_decimal"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_nonnegative",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
     "canonical": "panel_mixture_of_experts_score",
     "cost_budget": 6,
     "current_direct_status": "direct_alpha_high_cost",
@@ -21485,6 +22826,36 @@
     "production_certified": false,
     "replacement": "",
     "search_prior": 0.2,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "panel_predictability_mosaic_score",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "base_signal": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
     "source_recipes": [
       "daily_bar"
     ],
@@ -42260,6 +43631,68 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
+      "turnover": "turnover"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "turnover_chip_age_cost_surface",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "close": "continuous_close",
+      "turnover": "turnover"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "daily_bar"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "turnover_chip_overhang_surface",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "close": "continuous_close",
       "turnover": "turnover"
     },
     "delete_reason": "",

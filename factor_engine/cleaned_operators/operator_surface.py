@@ -536,7 +536,7 @@ def daily_factor_migrated() -> frozenset[str]:
     return frozenset(REVIEWED_MIGRATION_MANIFEST)
 
 
-RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
+RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate","nonfinite_to_num"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 # =====================================================================
 # #310: three ORTHOGONAL dimensions.

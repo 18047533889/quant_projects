@@ -339,7 +339,7 @@ _ASHARE_ONLY_CANONICALS = frozenset(
         # ``()`` for these specialized names — they are ashare-context direct
         # alphas, never a global DELETE (contextual availability, R22-070).
         "intra_limit_first_hit_time", "intra_limit_duration",
-        "intra_limit_reopen_count",
+        "intra_limit_reopen_count", "intra_limit_pre_hit_pressure_profile",
         "suspension_frequency", "suspension_status_coverage",
     }
 )

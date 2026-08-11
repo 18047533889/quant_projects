@@ -21,6 +21,26 @@
   },
   {
     "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "ALMA",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "offset",
+      "sigma"
+    ],
+    "smoke_recipe": "smoke:ALMA::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
       "intermediate"
     ],
     "canonical": "ATR_WILDER",
@@ -97,6 +117,27 @@
     "reachable": true,
     "scalar_parameters": [],
     "smoke_recipe": "smoke:ChaikinOscillator::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "CoppockCurve",
+    "composition_usable": true,
+    "data_inputs": [
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "roc1",
+      "roc2",
+      "wma_window",
+      "roc_mode"
+    ],
+    "smoke_recipe": "smoke:CoppockCurve::close=continuous_close",
     "terminal_usable": true
   },
   {
@@ -202,6 +243,49 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "ElderRay",
+    "composition_usable": true,
+    "data_inputs": [
+      "close"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "high",
+      "low",
+      "ema",
+      "output"
+    ],
+    "smoke_recipe": "smoke:ElderRay::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "FisherTransform",
+    "composition_usable": true,
+    "data_inputs": [
+      "high",
+      "low",
+      "smooth",
+      "signal_smooth",
+      "output"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window"
+    ],
+    "smoke_recipe": "smoke:FisherTransform::high=continuous_high,low=continuous_low",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "ForceIndex",
     "composition_usable": true,
     "data_inputs": [
@@ -214,6 +298,25 @@
       "window"
     ],
     "smoke_recipe": "smoke:ForceIndex::close=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "HMA",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "rounding"
+    ],
+    "smoke_recipe": "smoke:HMA::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -557,6 +660,27 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "QQE",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "length",
+      "smooth",
+      "factor",
+      "output"
+    ],
+    "smoke_recipe": "smoke:QQE::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "RSI_WILDER",
     "composition_usable": true,
     "data_inputs": [
@@ -568,6 +692,24 @@
       "window"
     ],
     "smoke_recipe": "smoke:RSI_WILDER::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "RSX",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "length"
+    ],
+    "smoke_recipe": "smoke:RSX::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -3606,6 +3748,29 @@
     "scalar_parameters": [],
     "smoke_recipe": "smoke:cs_physical_panel_coverage::x=continuous_close",
     "terminal_usable": false
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "cs_predictability_mosaic_score",
+    "composition_usable": true,
+    "data_inputs": [
+      "base_signal",
+      "realized_return",
+      "state_feature"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "min_history",
+      "clusters",
+      "lag"
+    ],
+    "smoke_recipe": "smoke:cs_predictability_mosaic_score::base_signal=continuous_close",
+    "terminal_usable": true
   },
   {
     "ast_positions": [
@@ -10582,6 +10747,29 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_consolidation_quality",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "amount"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "trigger",
+      "trigger_z",
+      "horizon",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_consolidation_quality::amount=amount_local,price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_continuous_variance",
     "composition_usable": true,
     "data_inputs": [
@@ -10691,6 +10879,74 @@
       "normalize"
     ],
     "smoke_recipe": "smoke:intra_entropy::value=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_eod_reversal_decomposition",
+    "composition_usable": true,
+    "data_inputs": [
+      "price"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "volume",
+      "amount",
+      "window_minutes",
+      "baseline",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_eod_reversal_decomposition::price=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_event_pre_post_contrast",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "event_mask"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "pre",
+      "post",
+      "metric",
+      "event_select",
+      "min_obs"
+    ],
+    "smoke_recipe": "smoke:intra_event_pre_post_contrast::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_event_window_reduce",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "event_mask"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "pre",
+      "post",
+      "reducer",
+      "event_select",
+      "min_obs"
+    ],
+    "smoke_recipe": "smoke:intra_event_window_reduce::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -10829,6 +11085,30 @@
     "reachable": true,
     "scalar_parameters": [],
     "smoke_recipe": "smoke:intra_idiosyncratic_variance_ex_self::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_impulse_event_detector",
+    "composition_usable": true,
+    "data_inputs": [
+      "price"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "volume",
+      "event",
+      "threshold",
+      "z",
+      "min_bars",
+      "merge_gap",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_impulse_event_detector::price=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11154,6 +11434,30 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_limit_pre_hit_pressure_profile",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "high_limit",
+      "low_limit"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "side",
+      "pre_window",
+      "output",
+      "require_hit"
+    ],
+    "smoke_recipe": "smoke:intra_limit_pre_hit_pressure_profile::price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_limit_reopen_count",
     "composition_usable": true,
     "data_inputs": [
@@ -11168,6 +11472,27 @@
       "transition"
     ],
     "smoke_recipe": "smoke:intra_limit_reopen_count::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_liquidity_resilience_curve_fit",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "activity"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "shock_threshold",
+      "horizon",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_liquidity_resilience_curve_fit::price=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11334,6 +11659,28 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_multiresolution_resample_reduce",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "bar_minutes",
+      "lookback_days",
+      "reducer",
+      "session_split",
+      "min_coverage"
+    ],
+    "smoke_recipe": "smoke:intra_multiresolution_resample_reduce::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_negative_tail_variation",
     "composition_usable": true,
     "data_inputs": [
@@ -11345,6 +11692,26 @@
       "threshold_scale"
     ],
     "smoke_recipe": "smoke:intra_negative_tail_variation::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_neighbor_event_class",
+    "composition_usable": true,
+    "data_inputs": [
+      "event_mask"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "radius",
+      "isolated_code",
+      "clustered_code"
+    ],
+    "smoke_recipe": "smoke:intra_neighbor_event_class::event_mask=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11379,6 +11746,30 @@
       "threshold_scale"
     ],
     "smoke_recipe": "smoke:intra_positive_tail_variation::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_post_impulse_response",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "amount"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "direction",
+      "threshold",
+      "z",
+      "horizon",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_post_impulse_response::amount=amount_local,price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11422,6 +11813,30 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_probe_outcome_score",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "amount"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "direction",
+      "z",
+      "probe_horizon",
+      "response_horizon",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_probe_outcome_score::amount=amount_local,price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_profile_earth_mover_distance",
     "composition_usable": true,
     "data_inputs": [
@@ -11433,6 +11848,26 @@
       "window"
     ],
     "smoke_recipe": "smoke:intra_profile_earth_mover_distance::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_range_gap_flag",
+    "composition_usable": true,
+    "data_inputs": [
+      "event_mask"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "high",
+      "low",
+      "neighbor_bars"
+    ],
+    "smoke_recipe": "smoke:intra_range_gap_flag::event_mask=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11556,6 +11991,28 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_response_curve_features",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "activity"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "trigger",
+      "horizon",
+      "curve",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_response_curve_features::price=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_return_activity_corr",
     "composition_usable": true,
     "data_inputs": [
@@ -11568,6 +12025,50 @@
       "absolute_return"
     ],
     "smoke_recipe": "smoke:intra_return_activity_corr::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_round_price_barrier_response",
+    "composition_usable": true,
+    "data_inputs": [
+      "price"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "lattice",
+      "lookback_days",
+      "tolerance_ticks",
+      "output",
+      "min_events"
+    ],
+    "smoke_recipe": "smoke:intra_round_price_barrier_response::price=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_round_price_clustering_share",
+    "composition_usable": true,
+    "data_inputs": [
+      "price"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "lattice",
+      "tolerance_ticks",
+      "window",
+      "output",
+      "min_bars"
+    ],
+    "smoke_recipe": "smoke:intra_round_price_clustering_share::price=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11604,6 +12105,26 @@
       "window"
     ],
     "smoke_recipe": "smoke:intra_same_slot_reversal::close=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_same_slot_zscore",
+    "composition_usable": true,
+    "data_inputs": [
+      "x"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "history_days",
+      "ddof",
+      "min_history"
+    ],
+    "smoke_recipe": "smoke:intra_same_slot_zscore::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -11707,6 +12228,29 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_session_boundary_jump",
+    "composition_usable": true,
+    "data_inputs": [
+      "price"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "volume",
+      "pre_close",
+      "boundary",
+      "pre_bars",
+      "post_bars",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_session_boundary_jump::price=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_session_return_asymmetry",
     "composition_usable": true,
     "data_inputs": [
@@ -11776,6 +12320,56 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_slice_mask_pair_reduce",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "y",
+      "mask_field"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "slice",
+      "mask_side",
+      "mask_q",
+      "y_lag",
+      "reducer",
+      "min_pairs"
+    ],
+    "smoke_recipe": "smoke:intra_slice_mask_pair_reduce::x=continuous_close,y=return_decimal",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_slice_mask_reduce",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "mask_field"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "slice",
+      "mask_side",
+      "mask_q",
+      "reducer",
+      "min_bars"
+    ],
+    "smoke_recipe": "smoke:intra_slice_mask_reduce::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_slot_amount_surprise",
     "composition_usable": true,
     "data_inputs": [
@@ -11824,6 +12418,236 @@
       "window"
     ],
     "smoke_recipe": "smoke:intra_slot_volume_surprise::volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_count",
+    "composition_usable": true,
+    "data_inputs": [
+      "state"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "target",
+      "window_days"
+    ],
+    "smoke_recipe": "smoke:intra_state_count::state=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_dwell_stats",
+    "composition_usable": true,
+    "data_inputs": [
+      "state"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "target_state",
+      "output",
+      "min_slots"
+    ],
+    "smoke_recipe": "smoke:intra_state_dwell_stats::state=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_follow_beta",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "lead_bars",
+      "window_days",
+      "min_events"
+    ],
+    "smoke_recipe": "smoke:intra_state_follow_beta::target=return_decimal,x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_follow_corr",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "lead_bars",
+      "window_days",
+      "min_events"
+    ],
+    "smoke_recipe": "smoke:intra_state_follow_corr::target=return_decimal,x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_follow_ratio",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "lead_bars",
+      "window_days"
+    ],
+    "smoke_recipe": "smoke:intra_state_follow_ratio::target=return_decimal,x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_interval_moment",
+    "composition_usable": true,
+    "data_inputs": [
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "moment",
+      "window_days",
+      "min_events"
+    ],
+    "smoke_recipe": "smoke:intra_state_interval_moment::target=return_decimal",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_pair_same_slot_corr",
+    "composition_usable": true,
+    "data_inputs": [
+      "state_a",
+      "target_a",
+      "state_b",
+      "target_b"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window_days",
+      "min_slots"
+    ],
+    "smoke_recipe": "smoke:intra_state_pair_same_slot_corr::state_a=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_sum",
+    "composition_usable": true,
+    "data_inputs": [
+      "x",
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window_days"
+    ],
+    "smoke_recipe": "smoke:intra_state_sum::target=return_decimal,x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_transition_entropy",
+    "composition_usable": true,
+    "data_inputs": [
+      "state"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "min_slots",
+      "normalize",
+      "include_self"
+    ],
+    "smoke_recipe": "smoke:intra_state_transition_entropy::state=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_state_vwap",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "state",
+      "target"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window_days"
+    ],
+    "smoke_recipe": "smoke:intra_state_vwap::price=continuous_close,target=return_decimal,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_supply_absorption_score",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume",
+      "amount"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "event",
+      "horizon",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_supply_absorption_score::amount=amount_local,price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11973,6 +12797,29 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "intra_volume_at_price_profile",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "bins",
+      "weighting",
+      "price_basis",
+      "normalize",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_volume_at_price_profile::price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "intra_volume_price_alignment",
     "composition_usable": true,
     "data_inputs": [
@@ -12019,6 +12866,70 @@
       "window"
     ],
     "smoke_recipe": "smoke:intra_volume_profile_jsd::x=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_volume_profile_peak_geometry",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "bins",
+      "smooth",
+      "min_prominence",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_volume_profile_peak_geometry::price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_volume_profile_supply_structure",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "bins",
+      "decay",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_volume_profile_supply_structure::price=continuous_close,volume=raw_volume_shares",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "intra_volume_profile_value_area",
+    "composition_usable": true,
+    "data_inputs": [
+      "price",
+      "volume"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "bins",
+      "target_mass",
+      "output"
+    ],
+    "smoke_recipe": "smoke:intra_volume_profile_value_area::price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -13282,6 +14193,48 @@
       "intermediate",
       "terminal"
     ],
+    "canonical": "panel_async_beta_ex_self",
+    "composition_usable": true,
+    "data_inputs": [
+      "ret",
+      "weight"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "min_periods",
+      "refresh_freq"
+    ],
+    "smoke_recipe": "smoke:panel_async_beta_ex_self::ret=return_decimal",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "panel_factor_pocket_strength",
+    "composition_usable": true,
+    "data_inputs": [
+      "ret",
+      "factor"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "min_periods",
+      "threshold"
+    ],
+    "smoke_recipe": "smoke:panel_factor_pocket_strength::factor=continuous_close,ret=return_decimal",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
     "canonical": "panel_mixture_of_experts_score",
     "composition_usable": true,
     "data_inputs": [
@@ -13300,6 +14253,29 @@
       "label_horizon"
     ],
     "smoke_recipe": "smoke:panel_mixture_of_experts_score::y=return_decimal",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "panel_predictability_mosaic_score",
+    "composition_usable": true,
+    "data_inputs": [
+      "base_signal",
+      "realized_return",
+      "state_feature"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "min_history",
+      "clusters",
+      "lag"
+    ],
+    "smoke_recipe": "smoke:panel_predictability_mosaic_score::base_signal=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26478,6 +27454,49 @@
       "lag"
     ],
     "smoke_recipe": "smoke:turnover_autocorr::turnover=turnover",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "turnover_chip_age_cost_surface",
+    "composition_usable": true,
+    "data_inputs": [
+      "close",
+      "turnover"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "price_bins",
+      "age_bins",
+      "output"
+    ],
+    "smoke_recipe": "smoke:turnover_chip_age_cost_surface::close=continuous_close,turnover=turnover",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "turnover_chip_overhang_surface",
+    "composition_usable": true,
+    "data_inputs": [
+      "close",
+      "turnover"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "window",
+      "bins",
+      "output"
+    ],
+    "smoke_recipe": "smoke:turnover_chip_overhang_surface::close=continuous_close,turnover=turnover",
     "terminal_usable": true
   },
   {
