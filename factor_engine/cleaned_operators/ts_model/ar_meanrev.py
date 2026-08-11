@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.ts_model._rolling_core import (
     frame_like,
     metadata,
@@ -22,6 +22,15 @@ from cleaned_operators.ts_model._rolling_core import (
 )
 
 _CANONICALS: list[str] = []
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations
+# for the AR model scalars.  ``window`` is the alpha horizon (HORIZON, searched);
+# ``order`` is the AR model order — an estimator-resolution knob, never a
+# full-resolution search dimension (M-115/M-162/M-170).
+_AR_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "order": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+}
 
 
 def _ar_fit(seg: np.ndarray, order: int) -> tuple[np.ndarray | None, np.ndarray]:
@@ -120,7 +129,8 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
         status="experimental",
     )
     class _ArOp(SeriesOperator):
-        metadata = metadata(name, description, ["x", "window", "order"], unit=unit, cost=cost, diagnostic_only=diagnostic_only)
+        metadata = metadata(name, description, ["x", "window", "order"], unit=unit, cost=cost,
+                            diagnostic_only=diagnostic_only, param_specs=_AR_PARAM_SPECS)
 
         def _calculate_series(self, x, window=60, order=1, **_):
             xv = x.to_numpy(dtype=float)
@@ -142,14 +152,22 @@ _ar_op("ts_ar_fitted_value", "AR(order) 窗口内拟合值(fit_lag=0, in-sample)
 _ar_op("ts_ar_in_sample_resid", "当前实际值减窗口内 AR 拟合值(in-sample resid)。", "level", "innovation", diagnostic_only=True)
 _ar_op("ts_ar_forecast", "AR(order) 当前值预测（legacy 名称——实为窗口内拟合值，见 ts_ar_fitted_value）。", "level", "forecast", diagnostic_only=True)
 _ar_op("ts_ar_innovation", "当前实际值减 AR 预测（legacy 名称——实为样本内残差，见 ts_ar_in_sample_resid）。", "level", "innovation", diagnostic_only=True)
-_ar_op("ts_ar_innovation_z", "AR 创新标准化。", "level", "innovation_z", diagnostic_only=True)
+# M-043: ``ts_ar_innovation_z`` is an IN-SAMPLE kernel (fit_lag=0, fit includes
+# the current row, identical to ``ts_ar_in_sample_resid`` but standardised by
+# the window residual std).  Its name contains ``_innovation`` so the name-driven
+# timing default auto-generates a PREDICTIVE contract (fit_cutoff_offset=1),
+# which contradicts the in-sample kernel.  The reconciler must add an explicit
+# MODEL_TIMING_CONTRACTS entry with ``fit_cutoff_offset=0`` (descriptive
+# in-sample), like the other ``ts_ar_fitted_value`` / ``ts_ar_in_sample_resid``
+# entries.
+_ar_op("ts_ar_innovation_z", "AR 创新标准化（in-sample：拟合含当前样本，描述性标准化残差，非样本外创新）。", "level", "innovation_z", diagnostic_only=True)
 
 # Prior-window (out-of-sample) AR forms: fit on t-window..t-1, forecast t.
 _ar_op("ts_ar_prior_forecast", "AR(order) 截至 t-1 训练的一步预测。", "level", "forecast", fit_lag=1)
 _ar_op("ts_ar_prior_innovation", "当前实际值减截至 t-1 训练的 AR 预测。", "level", "innovation", fit_lag=1)
 _ar_op("ts_ar_prior_innovation_z", "AR 样本外创新 / 历史残差标准差。", "level", "innovation_z", fit_lag=1)
 _ar_op("ts_ar_prior_coeff", "AR(order) 截至 t-1 训练的一阶滞后系数。", "level", "coeff", fit_lag=1)
-_ar_op("ts_ar_coeff_stability", "AR 一阶滞后系数在最近 K 个窗口的标准差。", "level", "coeff_stability", fit_lag=1, stability_k=5, cost=6)
+_ar_op("ts_ar_coeff_stability", "AR 一阶滞后系数在最近 K 个严格截至 t-1 的滚动拟合中的标准差（因果 model-state alpha，衡量系数稳定性，非诊断）。", "level", "coeff_stability", fit_lag=1, stability_k=5, cost=6)
 
 
 def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -> float:
@@ -177,6 +195,55 @@ def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -
     return float(np.log(0.5) / np.log(phi))
 
 
+def _warn_if_trending_input(panel: np.ndarray, operator_name: str) -> None:
+    """Warn (not raise) when a mean-reversion half-life input looks like a raw
+    trending price rather than a stationary / spread / residual series.
+
+    The half-life kernels regress ``d(seg)`` on ``seg[:-1]`` (audit M-044): they
+    estimate the mean-reversion speed of a *stationary* deviation.  On a raw
+    trending price the drift dominates and the implied ``phi`` / half-life is
+    meaningless.  Detection is heuristic — a high linear-trend R² or a large
+    ``|mean| / mean|Δ|`` drift ratio flags the series.  The operator still
+    returns its (meaningless) value: this is a research-gate warning, not a
+    fail-closed error.  Warnings are de-duplicated per call (one message total).
+    """
+    import warnings
+
+    warned = False
+    for col in range(panel.shape[1]):
+        vals = panel[:, col]
+        finite = vals[np.isfinite(vals)]
+        if finite.size < 4:
+            continue
+        x = np.arange(finite.size, dtype=float)
+        xc = x - x.mean()
+        denom = float(np.dot(xc, xc))
+        if denom <= 0.0:
+            continue
+        slope = float(np.dot(xc, finite - finite.mean()) / denom)
+        pred = finite.mean() + slope * xc
+        ss_res = float(np.sum((finite - pred) ** 2))
+        ss_tot = float(np.sum((finite - finite.mean()) ** 2))
+        if ss_tot <= 0.0:
+            continue
+        r2 = 1.0 - ss_res / ss_tot
+        diffs = np.diff(finite)
+        mad = float(np.mean(np.abs(diffs))) if diffs.size else 0.0
+        drift = abs(float(np.mean(finite))) / mad if mad > 0.0 else 0.0
+        if r2 > 0.85 or drift > 5.0:
+            if not warned:
+                warnings.warn(
+                    f"{operator_name}: input looks like a raw TRENDING price "
+                    "(high linear-trend R² or large |mean|/mean|Δ| ratio); "
+                    "mean-reversion half-life is only meaningful for a "
+                    "spread/residual/stationary input — result is a research "
+                    "gate, not a production signal.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+                warned = True
+
+
 @register_operator(
     name="ts_mean_reversion_half_life",
     category="time_series_regression",
@@ -187,14 +254,25 @@ def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -
     status="experimental",
 )
 class TsMeanReversionHalfLife(SeriesOperator):
-    """均值回复半衰期 ln(0.5)/ln(1+beta)（离散 AR(1) 精确解）。"""
+    """均值回复半衰期 ln(0.5)/ln(1+beta)（离散 AR(1) 精确解）。
+
+    INPUT SEMANTIC (audit M-044): the kernel regresses ``d(seg)`` on
+    ``seg[:-1]`` and is only meaningful for a STATIONARY / SPREAD / RESIDUAL
+    input.  Feeding a raw trending price produces a meaningless half-life; a
+    runtime warning is raised when the input looks trending (research gate).
+    """
 
     metadata = metadata(
-        "ts_mean_reversion_half_life", "均值回复半衰期（AR(1) 精确离散）。", ["x", "window", "min_periods"], unit="count", cost=3,
+        "ts_mean_reversion_half_life",
+        "均值回复半衰期（AR(1) 精确离散）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
+        ["x", "window", "min_periods"],
+        unit="count", cost=3,
+        input_units={"x": "spread_or_residual_or_stationary"},
     )
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)
+        _warn_if_trending_input(xv, "ts_mean_reversion_half_life")
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
@@ -236,18 +314,27 @@ def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int
     status="experimental",
 )
 class TsMeanReversionOuApproxHalfLife(SeriesOperator):
-    """均值回复半衰期 OU 近似 -log(2)/beta（beta<0 时定义）。"""
+    """均值回复半衰期 OU 近似 -log(2)/beta（beta<0 时定义）。
+
+    INPUT SEMANTIC (audit M-044): like ``ts_mean_reversion_half_life``, the
+    kernel regresses ``d(seg)`` on ``seg[:-1]`` and is only meaningful for a
+    STATIONARY / SPREAD / RESIDUAL input.  A raw trending price yields a
+    meaningless half-life; a runtime warning is raised when the input looks
+    trending (research gate).
+    """
 
     metadata = metadata(
         "ts_mean_reversion_ou_approx_half_life",
-        "均值回复半衰期（OU 连续近似 -ln2/beta）。",
+        "均值回复半衰期（OU 连续近似 -ln2/beta）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
         ["x", "window", "min_periods"],
         unit="count",
         cost=3,
+        input_units={"x": "spread_or_residual_or_stationary"},
     )
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)
+        _warn_if_trending_input(xv, "ts_mean_reversion_ou_approx_half_life")
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
@@ -316,10 +403,17 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
     status="experimental",
 )
 class TsVarianceRatioSlope(SeriesOperator):
-    """多持有期方差比相对 log(q) 的斜率（趋势/随机游走/均值回复判别）。"""
+    """多持有期方差比相对 log(q) 的斜率（趋势/随机游走/均值回复判别）。
+
+    Slope of ``(VR(q) - 1)`` against ``log(q)`` across the horizons
+    ``q = 2..max_q`` (audit M-045 sign convention): a POSITIVE slope means VR
+    grows with q -> positive serial correlation -> TRENDING tendency; a NEGATIVE
+    slope means VR falls with q -> negative serial correlation -> MEAN-REVERSION
+    tendency; ~0 slope is consistent with a random walk.
+    """
 
     metadata = metadata(
-        "ts_variance_ratio_slope", "方差比斜率。", ["x", "window", "max_q", "min_periods"], unit="level", cost=4,
+        "ts_variance_ratio_slope", "方差比相对 log(q) 的斜率（正=趋势，负=均值回复）。", ["x", "window", "max_q", "min_periods"], unit="level", cost=4,
     )
 
     def _calculate_series(self, x, window=120, max_q=10, min_periods=20, **_):

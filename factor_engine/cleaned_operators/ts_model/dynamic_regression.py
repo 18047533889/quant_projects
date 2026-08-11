@@ -24,7 +24,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.ts_model._rolling_core import (
     aligned,
     build_design,
@@ -45,6 +45,31 @@ from cleaned_operators.ts_model._rolling_core import (
 from cleaned_operators.ts_model._rolling_core import expectile_fit  # noqa: E402
 
 _CANONICALS: list[str] = []
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
+# ``window`` is the alpha horizon (HORIZON, searched); ``coefficient_index`` is
+# an estimator selector; ``min_periods`` is a statistical-support floor; and
+# ``add_intercept`` is boolean governance — none of the latter three is a
+# full-resolution search dimension (M-115/M-162/M-170).  ``q``/``q_high``/``q_low``
+# ARE the economic tail mechanism in quantile/expectile regression, so they are
+# declared ECONOMIC and searched.
+_MULTI_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "coefficient_index": ParamSpec(dtype=int, min=0, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "add_intercept": ParamSpec(dtype=bool, param_role=ParamRole.POLICY, searchable=False),
+}
+_QUANTILE_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "q": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+}
+_QUANTILE_SPREAD_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "q_high": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
+    "q_low": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+}
 
 
 def _gather_features(args: tuple[Any, ...], n: int) -> list[pd.DataFrame]:
@@ -250,6 +275,7 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
             input_units=input_units if input_units is not None else _DEFAULT_INPUT_UNITS,
             output_unit=output_unit if output_unit is not None else _DEFAULT_OUTPUT_UNIT.get(stat),
             diagnostic_only=diagnostic_only,
+            param_specs=_MULTI_PARAM_SPECS,
         )
 
         def _calculate_series(self, y, x1=None, x2=None, x3=None, x4=None,
@@ -302,6 +328,14 @@ _register_multi(
 # rows strictly before the current one and reports the current row's coefficient
 # / forecast error against that historical fit, so the output is a true
 # out-of-sample anomaly rather than an in-sample residual.
+#
+# M-051: every ``*_prior`` / ``*_forecast_error`` variant below is a strict
+# prior fit: the training window ends at ``t-1`` (fit_lag=1).  None of them has
+# an explicit MODEL_TIMING_CONTRACTS entry — they rely on the name-driven
+# auto-generated default, which is a research hint only (R34 P0-025).  The
+# reconciler must add explicit ``fit_cutoff_offset=1`` timing entries for each
+# of these names (the name-based default happens to be correct for them, but
+# production admission requires an explicit reviewed contract).
 # ---------------------------------------------------------------------------
 _register_multi(
     "ts_multi_regression_coeff_prior", "多变量回归系数（截至 t-1 训练）。",
@@ -324,7 +358,8 @@ _register_multi(
     ols_fit, None, "r2_adj", "r2", fit_lag=1,
 )
 _register_multi(
-    "ts_multi_regression_coeff_stability", "多变量回归系数在最近 K 个滚动窗口的标准差。",
+    "ts_multi_regression_coeff_stability",
+    "多变量回归系数在最近 K 个滚动窗口的标准差（因果 model-state alpha：衡量截至 t-1 的连续历史拟合中系数的稳定性，非诊断）。",
     ols_fit, None, "coeff", "level", fit_lag=1, stability_k=5, cost=7,
 )
 _register_multi(
@@ -396,6 +431,7 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0, d
             input_units={"y": "target", "x": "predictor"},
             output_unit="unit(y)/unit(x) (intercept: unit(y))" if stat == "coeff" else "unit(y)",
             diagnostic_only=diagnostic_only,
+            param_specs=_QUANTILE_PARAM_SPECS,
         )
 
         def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -411,6 +447,11 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0, d
 
 _expectile_op("ts_expectile_regression_coeff", "expectile 回归斜率（IRLS 非对称加权最小二乘；in-sample，训练窗口含当前观测，因果 t-1 版本用 ts_expectile_regression_coeff_prior）。", "coeff", diagnostic_only=True)
 _expectile_op("ts_expectile_regression_resid", "expectile 回归当前残差（in-sample）。", "resid", diagnostic_only=True)
+# M-051: the two ``*_prior`` / ``*_forecast_error`` expectile variants below are
+# strict prior fits (fit_lag=1, window ends at t-1).  They have no explicit
+# MODEL_TIMING_CONTRACTS entry and rely on the auto-generated name-based default
+# (research hint only, R34 P0-025) — the reconciler must add explicit
+# ``fit_cutoff_offset=1`` timing entries.
 _expectile_op("ts_expectile_regression_coeff_prior", "expectile 回归斜率（截至 t-1 训练）。", "coeff", fit_lag=1)
 _expectile_op("ts_expectile_regression_forecast_error", "expectile 回归预测误差（截至 t-1 训练）。", "resid", fit_lag=1)
 
@@ -425,13 +466,20 @@ _expectile_op("ts_expectile_regression_forecast_error", "expectile 回归预测�
     status="experimental",
 )
 class TsExpectileBetaSpread(SeriesOperator):
-    """高 expectile Beta 减 低 expectile Beta：上涨/下跌尾部非对称响应。"""
+    """高 expectile Beta 减 低 expectile Beta：上涨/下跌尾部非对称响应。
+
+    IN-SAMPLE (audit M-050): the training window includes the current
+    observation (fit_lag=0), so the spread is a descriptive self-fit, not a
+    causal t-1 signal — tagged ``diagnostic_only`` and hidden from default
+    mining.
+    """
 
     metadata = metadata(
-        "ts_expectile_beta_spread", "expectile(q_high) - expectile(q_low)。",
+        "ts_expectile_beta_spread", "expectile(q_high) - expectile(q_low)（in-sample，训练窗口含当前观测，诊断用）。",
         ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x)",
+        diagnostic_only=True,
     )
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
@@ -486,6 +534,10 @@ class TsQuantileRegressionCoeff(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
+# M-051: this is a strict prior fit (fit_lag=1, window ends at t-1) with no
+# explicit MODEL_TIMING_CONTRACTS entry — the name-driven auto-generated default
+# (fit_cutoff_offset=1) is a research hint only (R34 P0-025).  The reconciler
+# must add an explicit ``fit_cutoff_offset=1`` timing contract.
 class TsQuantileRegressionCoeffPrior(SeriesOperator):
     """条件分位数回归斜率，截至 t-1 训练（pinball-loss LP，因果槽位）。
 
@@ -499,6 +551,7 @@ class TsQuantileRegressionCoeffPrior(SeriesOperator):
         ["y", "x", "window", "q", "min_periods"], unit="level",
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x) (intercept: unit(y))",
+        param_specs=_QUANTILE_PARAM_SPECS,
     )
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -548,13 +601,21 @@ class TsQuantileRegressionResid(SeriesOperator):
     status="experimental",
 )
 class TsQuantileBetaSpread(SeriesOperator):
-    """高分位 Beta 减 低分位 Beta（pinball LP）：上涨/下跌尾部非对称响应。"""
+    """高分位 Beta 减 低分位 Beta（pinball LP）：上涨/下跌尾部非对称响应。
+
+    IN-SAMPLE (audit M-050): the training window includes the current
+    observation (fit_lag=0), so the spread is a descriptive self-fit, not a
+    causal t-1 signal — tagged ``diagnostic_only`` and hidden from default
+    mining.  The strictly-prior causal variant is
+    ``ts_quantile_beta_spread_prior``.
+    """
 
     metadata = metadata(
-        "ts_quantile_beta_spread", "beta(q_high) - beta(q_low)（pinball LP）。",
+        "ts_quantile_beta_spread", "beta(q_high) - beta(q_low)（pinball LP，in-sample，训练窗口含当前观测，诊断用；prior 版本用 ts_quantile_beta_spread_prior）。",
         ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x)",
+        diagnostic_only=True,
     )
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
@@ -565,6 +626,49 @@ class TsQuantileBetaSpread(SeriesOperator):
                                   pinball_quantile_fit, qh, "coeff", qh, 1)
         low = _single_regression(y, x, int(window), int(min_periods), True,
                                  pinball_quantile_fit, ql, "coeff", ql, 1)
+        return high - low
+
+
+# M-057: NEW CANONICAL — ``ts_quantile_beta_spread_prior``.  The reconciler must
+# add surface + layer_governance registration for this name (it is registered
+# here via the module's ``_CANONICALS`` / ``extend_extended_only`` idiom, but the
+# static surface partition and layer-governance stores are shared files that
+# need the new name added).
+@register_operator(
+    name="ts_quantile_beta_spread_prior",
+    category="time_series_regression",
+    business_category="time_series_regression",
+    canonical="ts_quantile_beta_spread_prior",
+    source="ts_model.dynamic_regression",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class TsQuantileBetaSpreadPrior(SeriesOperator):
+    """高分位 Beta 减 低分位 Beta（pinball LP），严格截至 t-1 拟合的 prior 版。
+
+    Identical quantile-beta spread to ``ts_quantile_beta_spread`` (high-quantile
+    beta minus low-quantile beta, pinball LP) but each beta is fit strictly on
+    rows before the current one (fit_lag=1): the training window ends at ``t-1``
+    and the reported spread is the causal prior-window spread, not an in-sample
+    self-fit.  The in-sample diagnostic variant is ``ts_quantile_beta_spread``.
+    """
+
+    metadata = metadata(
+        "ts_quantile_beta_spread_prior", "beta(q_high) - beta(q_low)（pinball LP，严格截至 t-1 拟合的 prior 版）。",
+        ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)/unit(x)",
+        param_specs=_QUANTILE_SPREAD_PARAM_SPECS,
+    )
+
+    def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
+        qh, ql = float(q_high), float(q_low)
+        if not (0.0 < ql < qh < 1.0):
+            raise ValueError("q_low < q_high must hold in (0, 1)")
+        high = _single_regression(y, x, int(window), int(min_periods), True,
+                                  pinball_quantile_fit, qh, "coeff", qh, 1, fit_lag=1)
+        low = _single_regression(y, x, int(window), int(min_periods), True,
+                                 pinball_quantile_fit, ql, "coeff", ql, 1, fit_lag=1)
         return high - low
 
 
@@ -582,6 +686,7 @@ _CANONICALS.extend(
         "ts_quantile_regression_coeff_prior",
         "ts_quantile_regression_resid",
         "ts_quantile_beta_spread",
+        "ts_quantile_beta_spread_prior",
         "ts_multi_regression_coeff_prior",
         "ts_multi_regression_forecast_error",
         "ts_multi_regression_forecast_error_z",

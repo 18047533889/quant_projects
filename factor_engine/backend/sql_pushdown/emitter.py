@@ -9,12 +9,311 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+import hashlib
+import json
 import math
+import threading
+from collections import OrderedDict
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Any, Sequence
 
 from cleaned_operators.registry import OperatorRegistry
 from planner.logical_plan import PlanNode
+
+FE_ROOT = Path(__file__).resolve().parents[2]
+
+
+class CompileStatus(str, Enum):
+    """R40 #216：编译结果三态——SUPPORTED / SEMANTICALLY_UNSUPPORTED /
+    COMPILER_ERROR。
+
+    旧实现 ``_compile_layer_impl`` 返回 ``_Layer | None``，None 同时表示
+    「语义不支持」和「内部编译错误」。现在二者可区分：production 对
+    COMPILER_ERROR hard fail（回归/内部 bug），对 SEMANTICALLY_UNSUPPORTED
+    允许回退 pandas。
+    """
+
+    SUPPORTED = "supported"
+    SEMANTICALLY_UNSUPPORTED = "semantically_unsupported"
+    COMPILER_ERROR = "compiler_error"
+
+
+class SqlCompileError(RuntimeError):
+    """R40 #216：内部编译错误（区别于语义不支持）。"""
+
+
+#: 最近一次编译的状态（compile_plan_to_sql / compile_plans_batch_to_sql 记录）。
+_last_compile_status: CompileStatus | None = None
+_compile_status_lock = threading.Lock()
+
+
+def last_compile_status() -> CompileStatus | None:
+    """最近一次 SQL 编译的状态（R40 #216）。"""
+    with _compile_status_lock:
+        return _last_compile_status
+
+
+def _record_compile_status(status: CompileStatus) -> None:
+    global _last_compile_status
+    with _compile_status_lock:
+        _last_compile_status = status
+
+
+def _is_production_sql_mode() -> bool:
+    try:
+        from runtime.production_policy import is_production_mode
+
+        return is_production_mode()
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# R40 #214：emitter identity 从 build manifest 取（不用运行时 file inspection）。
+# ---------------------------------------------------------------------------
+
+EMITTER_IDENTITY_MANIFEST = FE_ROOT / "evidence" / "emitter_identity.json"
+
+
+def _emitter_source_bytes() -> bytes:
+    """emitter.py 当前源码字节（供构建期生成 manifest 用）。"""
+    return Path(__file__).read_bytes()
+
+
+def generate_emitter_identity_manifest(
+    *, out_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """构建期：把 emitter.py 的 source hash + build commit 固化进 manifest。
+
+    运行期绝不读源码算 hash（那会受工作区脏改动影响且无法区分「真缺失」）。
+    返回 manifest dict 并落盘。
+    """
+    from backend.evidence_provenance import compute_implementation_hash
+
+    out = Path(out_path) if out_path is not None else EMITTER_IDENTITY_MANIFEST
+    build_commit = ""
+    try:
+        import subprocess
+
+        build_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(FE_ROOT),
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        build_commit = ""
+    manifest = {
+        "schema_version": 1,
+        "emitter_source_hash": compute_implementation_hash(_emitter_source_bytes().decode("utf-8")),
+        "build_commit_sha": build_commit,
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    return manifest
+
+
+@dataclass(frozen=True)
+class EmitterIdentity:
+    """emitter identity（R40 #214）。``known=False`` 表示无法从 build manifest
+    确定 emitter source hash——production SQL capability 必须 hard fail。"""
+
+    known: bool
+    source_hash: str = ""
+    build_commit_sha: str = ""
+
+
+def emitter_identity(manifest_path: str | Path | None = None) -> EmitterIdentity:
+    """从 build manifest 读 emitter identity（不做运行时 file inspection）。
+
+    manifest 缺失 / 损坏 / 字段缺失 → ``known=False``（与「真缺失」无法区分的
+    情况一律视为未知——这是 #214 的核心：绝不把 unknown 缓存成可用身份）。
+    ``FACTOR_ENGINE_EMITTER_IDENTITY_MANIFEST`` 可覆盖 manifest 路径（测试/部署）。
+    """
+    if manifest_path is None:
+        override = __import__("os").environ.get("FACTOR_ENGINE_EMITTER_IDENTITY_MANIFEST", "")
+        if override:
+            manifest_path = override
+    p = Path(manifest_path) if manifest_path is not None else EMITTER_IDENTITY_MANIFEST
+    if not p.is_file():
+        return EmitterIdentity(known=False)
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return EmitterIdentity(known=False)
+    if not isinstance(data, dict):
+        return EmitterIdentity(known=False)
+    source_hash = str(data.get("emitter_source_hash") or "")
+    if not source_hash:
+        return EmitterIdentity(known=False)
+    return EmitterIdentity(
+        known=True,
+        source_hash=source_hash,
+        build_commit_sha=str(data.get("build_commit_sha") or ""),
+    )
+
+
+def assert_emitter_identity_known(
+    *, production: bool | None = None, manifest_path: str | Path | None = None,
+) -> str:
+    """R40 #214：production SQL capability 要求 emitter identity 已知。
+
+    ``production`` 缺省按 run_mode 判定；production + unknown → raise
+    ``SqlCompileError``（hard fail，绝不静默以 unknown 身份继续 SQL 下推）。
+    返回已知的 emitter source hash。
+    """
+    if production is None:
+        production = _is_production_sql_mode()
+    ident = emitter_identity(manifest_path=manifest_path)
+    if production and not ident.known:
+        raise SqlCompileError(
+            "emitter identity unknown（build manifest 缺失/损坏）：production SQL "
+            "下推必须绑定已知 emitter source hash（R40 #214）。请运行 "
+            "generate_emitter_identity_manifest() 生成 evidence/emitter_identity.json。"
+        )
+    return ident.source_hash
+
+
+# ---------------------------------------------------------------------------
+# R40 #65/#217：编译模板缓存（模板 = 计划形状；literal binding 分离）。
+# ---------------------------------------------------------------------------
+
+
+def _plan_shape_key(plan: PlanNode, dialect: SqlDialect) -> str:
+    """计划「模板」key：结构 + 算子参数名/类型，**literal 值被类型化抽象**。
+
+    两个计划仅 literal 值不同（如 ``ts_mean(w=5)`` 与 ``ts_mean(w=10)``）→
+    同一 template key（结构形状相同）。这使缓存按「模板」而非「每个 literal
+    组合」组织——不同 binding 不导致缓存条目数随 literal 值爆炸。
+    """
+    import json as _json
+
+    def rec(n: PlanNode) -> dict[str, Any]:
+        attrs: dict[str, Any] = {}
+        for k, v in sorted((n.attrs or {}).items()):
+            if n.op == "literal" and k == "value":
+                attrs[k] = f"<{type(v).__name__}>"  # 抽象 literal 值，保留类型
+            else:
+                try:
+                    _json.dumps(v)
+                    attrs[k] = v
+                except (TypeError, ValueError):
+                    attrs[k] = repr(v)
+        return {"op": n.op, "a": attrs, "in": [rec(c) for c in n.inputs]}
+
+    payload = _json.dumps(
+        rec(plan), sort_keys=True, separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(
+        f"{payload}|{getattr(dialect, 'value', dialect)}".encode("utf-8")
+    ).hexdigest()[:20]
+
+
+def _literal_binding_key(plan: PlanNode) -> str:
+    """计划里全部 literal 值的有序摘要（binding 指纹）。"""
+    vals: list[Any] = []
+
+    def walk(n: PlanNode) -> None:
+        if n.op == "literal" and (n.attrs or {}).get("value") is not None:
+            vals.append(n.attrs["value"])
+        for c in n.inputs:
+            walk(c)
+
+    walk(plan)
+    payload = json.dumps(vals, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
+
+
+@dataclass(frozen=True)
+class SqlTemplate:
+    """R40 #65/#217：已编译模板（按 plan 形状缓存）+ literal binding。
+
+    - ``shape_key``   模板 key（结构，literal 值类型化抽象）；
+    - ``binding_key`` 首次编译时使用的 literal 值指纹；
+    - ``compiled``    该 binding 下的完整 ``CompiledSql``。
+    """
+
+    shape_key: str
+    binding_key: str
+    compiled: "CompiledSql"
+
+    def bind(self, plan: PlanNode, **kw: Any) -> "CompiledSql | None":
+        """把 literal binding 绑定回模板。
+
+        binding 一致 → 直接复用缓存编译结果（零重编译）；binding 不一致 →
+        诚实重编译（结构参数变化时 SQL 形状可能不同，绝不硬凑复用）。
+        """
+        from backend.sql_pushdown.emitter import compile_plan_to_sql
+
+        if _literal_binding_key(plan) == self.binding_key:
+            return self.compiled
+        return compile_plan_to_sql(
+            plan,
+            dataset=kw.get("dataset"),
+            table=kw.get("table"),
+            time_column=kw["time_column"],
+            instrument_column=kw["instrument_column"],
+            filt=kw.get("filt"),
+            dialect=kw.get("dialect", SqlDialect.DUCKDB),
+        )
+
+
+class _SqlTemplateCache:
+    """R40 #65/#217：有界模板缓存（按 shape key；每个 shape 保留一个 binding）。
+
+    与「per-literal 缓存」的区别：缓存条目数由**不同结构形状**决定，不随
+    literal 值组合增长。超过 max_entries / max_bytes 按 LRU 逐出。
+    """
+
+    def __init__(self, *, max_entries: int = 64, max_bytes: int = 2 * 1024 * 1024) -> None:
+        self._max_entries = max(1, int(max_entries))
+        self._max_bytes = max(1, int(max_bytes))
+        self._data: "OrderedDict[str, SqlTemplate]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, shape_key: str, binding_key: str) -> "CompiledSql | None":
+        with self._lock:
+            tpl = self._data.get(shape_key)
+            if tpl is None or tpl.binding_key != binding_key:
+                return None
+            self._data.move_to_end(shape_key)
+            return tpl.compiled
+
+    def put(self, shape_key: str, binding_key: str, compiled: "CompiledSql") -> None:
+        with self._lock:
+            self._data[shape_key] = SqlTemplate(shape_key, binding_key, compiled)
+            self._data.move_to_end(shape_key)
+            size = sum(
+                len(str(k)) + len(str(v.compiled.query)) + len(v.binding_key)
+                for k, v in self._data.items()
+            )
+            while (len(self._data) > self._max_entries or size > self._max_bytes) \
+                    and len(self._data) > 1:
+                k, v = self._data.popitem(last=False)
+                size -= len(str(k)) + len(str(v.compiled.query)) + len(v.binding_key)
+
+    def info(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "entries": len(self._data),
+                "max_entries": self._max_entries,
+                "max_bytes": self._max_bytes,
+                "shapes": list(self._data.keys()),
+            }
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+
+#: 进程级模板缓存（#65/#217）。
+_SQL_TEMPLATE_CACHE: _SqlTemplateCache = _SqlTemplateCache()
+
+
+def reset_sql_template_cache() -> None:
+    """测试用：清空模板缓存。"""
+    _SQL_TEMPLATE_CACHE.clear()
 
 
 class SqlDialect(str, Enum):
@@ -7266,6 +7565,34 @@ def _compile_layer(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     return _Layer(f"SELECT ts, inst, _v FROM {memo.refs[key]}")
 
 
+def _template_cache_key(
+    plan: PlanNode,
+    dialect: SqlDialect,
+    *,
+    dataset: str | None,
+    table: str | None,
+    time_column: str,
+    instrument_column: str,
+    filt: SqlPushdownFilter | None,
+) -> str:
+    """模板缓存 key = 计划形状 + 编译上下文（dataset/table/轴/过滤）。
+
+    形状（literal 值类型化抽象）决定「模板」；上下文决定最终 SQL 的 base CTE
+    与源引用。二者任一变化 → 不同缓存条目。
+    """
+    shape = _plan_shape_key(plan, dialect)
+    filt_sig = "none"
+    if filt is not None:
+        filt_sig = "|".join([
+            str(getattr(filt, "instrument_filter_kind", "")),
+            str(filt.start), str(filt.end),
+            ",".join(str(x) for x in (filt.instruments or ())),
+        ])
+    ctx = f"{dataset}|{table}|{time_column}|{instrument_column}|{filt_sig}"
+    ctx_hash = hashlib.sha256(ctx.encode("utf-8")).hexdigest()[:16]
+    return f"{shape}:{ctx_hash}"
+
+
 def compile_plan_to_sql(
     plan: PlanNode,
     *,
@@ -7280,29 +7607,61 @@ def compile_plan_to_sql(
 
     DuckDB 使用 registry 数据集名（``{{dataset}}`` 占位符），ClickHouse 使用物理表名。
     计划不可 SQL 化或编译失败时返回 ``None``。
+
+    R40：
+        #214  production 下 emitter identity 未知 → hard fail；
+        #216  编译三态（SUPPORTED / SEMANTICALLY_UNSUPPORTED / COMPILER_ERROR）
+              记录到 ``last_compile_status()``；
+        #65/217  按模板（计划形状）+ literal binding 的有界缓存复用。
     """
+    # #214：production SQL capability 要求 emitter identity 已知。
+    assert_emitter_identity_known()
     if not plan_is_sql_capable(plan):
+        _record_compile_status(CompileStatus.SEMANTICALLY_UNSUPPORTED)
         return None
 
-    use_counts = _structural_use_counts(plan)
-    memo = _SqlCompileMemo(use_counts=use_counts) if any(c > 1 for c in use_counts.values()) else None
-    token = _sql_memo_ctx.set(memo)
+    tkey = _template_cache_key(
+        plan, dialect, dataset=dataset, table=table,
+        time_column=time_column, instrument_column=instrument_column, filt=filt,
+    )
+    bkey = _literal_binding_key(plan)
+    cached = _SQL_TEMPLATE_CACHE.get(tkey, bkey)
+    if cached is not None:
+        _record_compile_status(CompileStatus.SUPPORTED)
+        return cached
+
     try:
-        layer = _compile_layer(plan, dialect=dialect)
-    finally:
-        _sql_memo_ctx.reset(token)
+        use_counts = _structural_use_counts(plan)
+        memo = _SqlCompileMemo(use_counts=use_counts) if any(c > 1 for c in use_counts.values()) else None
+        token = _sql_memo_ctx.set(memo)
+        try:
+            layer = _compile_layer(plan, dialect=dialect)
+        finally:
+            _sql_memo_ctx.reset(token)
+    except Exception as exc:
+        # #216：内部编译错误（COMPILER_ERROR）与「语义不支持」严格区分。
+        _record_compile_status(CompileStatus.COMPILER_ERROR)
+        if _is_production_sql_mode():
+            raise SqlCompileError(
+                f"SQL 编译器内部错误（R40 #216 COMPILER_ERROR）："
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        return None
     if layer is None:
+        _record_compile_status(CompileStatus.SEMANTICALLY_UNSUPPORTED)
         return None
 
     cols: set[str] = set()
     _collect_columns(plan, cols)
     if not cols:
+        _record_compile_status(CompileStatus.SEMANTICALLY_UNSUPPORTED)
         return None
 
     source_from = table if dialect == SqlDialect.CLICKHOUSE else (dataset or table)
     if source_from and dialect == SqlDialect.DUCKDB and dataset:
         source_from = _duckdb_dataset_ref(dataset)
     if not source_from:
+        _record_compile_status(CompileStatus.SEMANTICALLY_UNSUPPORTED)
         return None
 
     push_filter = filt or SqlPushdownFilter(
@@ -7328,13 +7687,44 @@ def compile_plan_to_sql(
         f"ORDER BY ts, inst"
     )
     read_datasets = (dataset,) if dataset and dialect == SqlDialect.DUCKDB else tuple()
-    return CompiledSql(
+    compiled = CompiledSql(
         query=query,
         read_datasets=read_datasets,
         referenced_columns=frozenset(cols),
         dialect=dialect,
         table=table if dialect == SqlDialect.CLICKHOUSE else None,
     )
+    _SQL_TEMPLATE_CACHE.put(tkey, bkey, compiled)
+    _record_compile_status(CompileStatus.SUPPORTED)
+    return compiled
+
+
+def compile_plan_to_sql_template(
+    plan: PlanNode,
+    *,
+    dataset: str | None = None,
+    table: str | None = None,
+    time_column: str,
+    instrument_column: str,
+    filt: SqlPushdownFilter | None = None,
+    dialect: SqlDialect = SqlDialect.DUCKDB,
+) -> SqlTemplate | None:
+    """R40 #65/#217：返回 :class:`SqlTemplate`（模板 + 首个 literal binding）。
+
+    调用方随后用 ``SqlTemplate.bind(plan, **ctx)`` 把不同 literal binding 绑定
+    回模板——binding 一致时零重编译；不一致时诚实重编译。
+    """
+    compiled = compile_plan_to_sql(
+        plan, dataset=dataset, table=table, time_column=time_column,
+        instrument_column=instrument_column, filt=filt, dialect=dialect,
+    )
+    if compiled is None:
+        return None
+    tkey = _template_cache_key(
+        plan, dialect, dataset=dataset, table=table,
+        time_column=time_column, instrument_column=instrument_column, filt=filt,
+    )
+    return SqlTemplate(shape_key=tkey, binding_key=_literal_binding_key(plan), compiled=compiled)
 
 
 @dataclass(frozen=True)

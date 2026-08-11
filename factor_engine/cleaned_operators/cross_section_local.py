@@ -19,6 +19,27 @@ space**.
 Features are rank-standardised per day (scale-free L2); all kernels are
 per-day cross-sections (prefix-causal, no future stocks/days), deterministic,
 fail-closed to NaN on degenerate neighbourhoods.
+
+SameTimeCrossSection semantics (audit M-110 / M-111)
+----------------------------------------------------
+The KNN-local kernels (``cs_knn_local_linear_residual`` /
+``cs_knn_local_gradient_norm`` / ``cs_knn_tangent_residual``) are date-``t``
+**same-time** peer cross-section fits — NOT fit-through-``t-1`` predictive
+models.  The reconciler's timing contract for ``cs_knn_local_linear_residual``
+is ``ModelTimingContract("knn", fit_cutoff_offset=0)`` /
+``TimingKind.SAME_TIME_CROSS_SECTIONAL``:
+
+* ``as_of=0`` — the decision row is the same time slice as the fit.
+* ``self_excluded=True`` — a stock never fits against itself (``dist[i]=inf``).
+* ``peer_feature_available=0`` — a peer's date-``t`` features are usable at ``t``.
+* ``peer_target_available=0`` — a peer's date-``t`` target is usable at ``t``.
+
+Because a same-day target is only known after the close, the residual is NOT a
+same-day VWAP-tradable signal; a pre-open variant needs a prior-label
+(``target_{t-1}``) recipe.  The as-of universe / tradable mask is never
+invented as a parameter here: the operator operates on the given panel, and
+production pipelines must apply universe/tradable membership before the call
+and include it in the factor's semantic identity (M-116).
 """
 from __future__ import annotations
 
@@ -34,6 +55,7 @@ from cleaned_operators.base import (
     SeriesOperator,
     register_operator,
 )
+from cleaned_operators.closure.strict_scalar import strict_float, strict_int
 from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
@@ -134,7 +156,17 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int, peer_mask: np.n
     when several peers tie at the k-th distance **all** of them are included so
     the neighbourhood does not depend on the stock-column ordering (a plain
     ``argsort(...)[:k]`` would silently pick an arbitrary subset of a tied group
-    and make the result column-order-dependent).  Self is always excluded.
+    and make the result column-order-dependent).  Self is always excluded
+    (``dist[i] = inf`` — the SameTimeCrossSection ``self_excluded=True``
+    contract, M-110).
+
+    The effective neighbour count is capped at ``peer_count - 1``: you cannot
+    have more genuine neighbours than there are eligible peers.  This is the
+    legitimate breadth limit (M-113) — ``k`` itself is validated STRICTLY at the
+    operator boundary (``strict_int(k, "k", lower=1)``, so fractional / NaN /
+    Inf / bool / ``k<1`` never reach this kernel); the ``max(1, int(k))`` here
+    is a defensive lower bound for direct kernel calls, never a silent
+    truncation of an operator-supplied fractional ``k``.
     """
     mask = valid if peer_mask is None else peer_mask
     dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
@@ -143,6 +175,8 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int, peer_mask: np.n
     peer_count = int(mask.sum())
     if peer_count < 2:
         return np.array([], dtype=int)
+    # M-113: ``k`` is boundary-validated (>= 1, exact integer); the only
+    # legitimate clamp here is the breadth cap ``peer_count - 1``.
     k_eff = min(max(1, int(k)), peer_count - 1)
     if k_eff < 1:
         return np.array([], dtype=int)
@@ -153,6 +187,14 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int, peer_mask: np.n
 
 
 def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
+    """SameTimeCrossSection local ridge residual (M-110).
+
+    At date ``t`` the graph is built on date-``t`` features and the regression
+    fits date-``t`` peer targets (``as_of=0`` same time slice;
+    ``self_excluded=True`` via ``_neighbors``'s ``dist[i]=inf``;
+    ``peer_feature_available=0``; ``peer_target_available=0``).  A peer whose
+    date-``t`` target is missing is excluded by ``peer_mask = valid & target_fin``
+    (R4-82) — it can never contribute a ``y`` value (M-111)."""
     rows, n, d = feats.shape
     out = np.full((rows, n), np.nan, dtype=float)
     # R11 round-3 P1-A (item 93): 3 features + intercept = 4 parameters; k≈4-5
@@ -330,12 +372,15 @@ def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn)
         ridge: float = 1e-3,
         **_: Any,
     ) -> pd.DataFrame:
-        kk = int(k)
+        # M-113 / M-240: strict operator-boundary validation — never silently
+        # ``int(k)``-truncate a fractional / NaN / Inf / bool ``k`` or coerce a
+        # negative ``ridge``.  ``strict_int``/``strict_float`` reject those with
+        # a clear contract error; the ``_KNN_MIN_K`` DOF-floor raise is kept
+        # verbatim (the audited raise pattern).
+        kk = strict_int(k, "k", lower=1)
         if kk < _KNN_MIN_K:
             raise ValueError(f"{canonical} requires k >= {_KNN_MIN_K}")
-        rg = float(ridge)
-        if rg < 0.0:
-            raise ValueError(f"{canonical} requires ridge >= 0")
+        rg = strict_float(ridge, "ridge", lower=0.0)
         return frame_like(
             target,
             fn(target.to_numpy(dtype=float), _stack_feats(f1, f2, f3), kk, rg),
@@ -385,14 +430,24 @@ def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn)
 
 CsKnnLocalLinearResidual = _register_knn_op(
     "cs_knn_local_linear_residual",
-    "KNN 局部线性回归残差（peer-relative mispricing）。",
+    "KNN 局部线性回归残差（peer-relative mispricing）。SameTimeCrossSection："
+    "as_of=0（同日截面）、self_excluded=True、peer_feature_available=0、"
+    "peer_target_available=0——NOT fit-through-t-1。k 是最小邻居数/kth-distance "
+    "radius（tie-inclusive，边界平局全收，可>k）；内部对 peer_count-1 的封顶是"
+    "合法广度上限（邻居不可能多于候选 peer）。同一交易日 target 仅收盘后可知——"
+    "本因子不可回测同日 VWAP；如需盘前可用需 prior-label 变体。as-of "
+    "universe/tradable mask 由调用方在面板上应用，纳入语义身份（算子不引入 "
+    "universe 参数）。",
     "ratio",
     8,
     _local_linear_series,
 )
 CsKnnLocalGradientNorm = _register_knn_op(
     "cs_knn_local_gradient_norm",
-    "KNN 局部回归梯度范数 ||beta||（局部响应灵敏度）。"
+    "KNN 局部回归梯度范数 ||beta||（局部响应灵敏度）。SameTimeCrossSection："
+    "as_of=0 / self_excluded=True / peer_feature_available=0 / "
+    "peer_target_available=0；k 是最小邻居数/kth-distance radius（tie-inclusive，"
+    "边界平局全收，可>k）。"
     "预测因子是秩坐标（无量纲），故 ||beta|| 单位与 target 相同（same_as:target），"
     "不是 generic norm。",
     "same_as:target",
@@ -423,7 +478,9 @@ class CsKnnTangentResidual(SeriesOperator):
 
     metadata = _metadata(
         "cs_knn_tangent_residual",
-        "KNN 局部切平面距离（off-manifold 程度）。",
+        "KNN 局部切平面距离（off-manifold 程度）。SameTimeCrossSection：as_of=0 / "
+        "self_excluded=True / peer_feature_available=0；k 是最小邻居数/kth-distance "
+        "radius（tie-inclusive，边界平局全收，可>k）。",
         ["f1", "f2", "f3", "k"],
         unit="distance",
         cost=8,
@@ -439,7 +496,9 @@ class CsKnnTangentResidual(SeriesOperator):
     def _calculate_series(
         self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 20, **_: Any
     ) -> pd.DataFrame:
-        kk = int(k)
+        # M-113 / M-240: strict operator-boundary validation of ``k`` (rejects
+        # fractional / NaN / Inf / bool / <1 with a clear contract error).
+        kk = strict_int(k, "k", lower=1)
         if kk < _KNN_MIN_K:
             raise ValueError(f"cs_knn_tangent_residual requires k >= {_KNN_MIN_K}")
         return frame_like(f1, _tangent_series(_stack_feats(f1, f2, f3), kk))

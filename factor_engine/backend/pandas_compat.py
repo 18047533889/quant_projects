@@ -9,13 +9,26 @@
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from typing import Any
 
 _cached_impl: Any | None = None
 
+#: R40 #140: modin 选择的 execution-context scoped 开关 —— 不再靠
+#: ``build_backend("pandas_modin")`` 改 process-global ``os.environ``（禁止 job
+#: path 污染环境）。ContextVar 让选择绑定到当前执行上下文；env 仅作向后兼容兜底。
+_MODIN_ENABLED: ContextVar[bool] = ContextVar(
+    "factor_engine_use_modin", default=False
+)
+
+
+def set_modin_enabled(enabled: bool) -> None:
+    """R40 #140: 在当前 execution context 内设置 modin 开关。"""
+    _MODIN_ENABLED.set(bool(enabled))
+
 
 def _env_use_modin() -> bool:
-    """检查环境变量是否请求使用 Modin。"""
+    """检查环境变量是否请求使用 Modin（向后兼容兜底）。"""
     return os.environ.get("FACTOR_ENGINE_USE_MODIN", "").strip().lower() in (
         "1",
         "true",
@@ -23,12 +36,17 @@ def _env_use_modin() -> bool:
     )
 
 
+def _use_modin() -> bool:
+    """execution-context scoped 读取（R40 #140）：ContextVar 优先，env 兜底。"""
+    return bool(_MODIN_ENABLED.get()) or _env_use_modin()
+
+
 def resolve_pandas_module() -> Any:
     """返回 ``modin.pandas`` 或 ``pandas``；可被测试用来预热或检查。"""
     global _cached_impl
     if _cached_impl is not None:
         return _cached_impl
-    if _env_use_modin():
+    if _use_modin():
         try:
             import modin.pandas as mpd  # type: ignore
 

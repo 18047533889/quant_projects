@@ -5,6 +5,13 @@ Rolling PCA residuals / loadings, PCR / PLS / ElasticNet forecasts, regime-
 conditioned and mixture-of-experts forecasts, and a linear (PCA) autoencoder
 reconstruction-error baseline.
 
+M-030 (per-symbol, not pooled): despite the ``panel`` prefix, every operator in
+this module is a PER-SYMBOL rolling time-series model.  The cross-section is
+used only to share a PCA fit across stocks on the same date (the same date's
+cross-section is fit once and broadcast to member stocks); it is never pooled
+into a single stock×date regression.  A genuinely pooled panel model would be a
+separate canonical.
+
 R35-P0-M10 (doc drift fix): the caller does NOT need to pre-lag / pre-embargo a
 label panel.  ``_forecast_loop`` / ``_regime_forecast`` / ``_moe_forecast``
 enforce ``fit_lag>=1`` AND ``label_horizon`` maturity internally: a forward-H
@@ -38,15 +45,44 @@ _EPS = 1e-12
 # are module-public so the R35 gate can assert them and the parameter-domain
 # matrix can explore around them (see ``tests/operators/r35/``).
 # Note: this is a per-stock coverage gate inside the fit window.  A separate
-# "no output before the window has enough rows" floor is enforced by the
-# rolling loops calling ``_rolling_pca`` (output starts only once
-# ``fit_end >= window - 1``, i.e. an explicit minimum history of ``window``
-# rows before the first scored row).
+# "no output before the window has enough rows" floor is enforced by
+# ``_rolling_pca`` / ``_industry_pca_loading`` in full-history mode
+# (``warmup_policy="full"``, the default): the first scored row is the one
+# whose training window holds a FULL ``window`` rows (``fit_end >= window - 1``).
+# Expanding warmup (fitting on fewer than ``window`` rows) is only available to
+# a caller that explicitly opts in via ``warmup_policy="expanding"`` (M-020).
 PCA_MIN_HISTORY = 2
 PCA_MIN_COVERAGE = 0.7
 _ABSOLUTE_MIN_OBS = PCA_MIN_HISTORY
 _MIN_COVERAGE_RATIO = PCA_MIN_COVERAGE
 _CANONICALS: list[str] = []
+
+#: M-036: internal fit-quality telemetry for the supervised regime / MoE
+#: forecasts.  Populated on every (col, row) fit that reaches the design stage;
+#: the module-level ``last_fit_telemetry()`` accessor exposes the most recent
+#: snapshot to audit probes.  This is a DIAGNOSTIC accessor (mirroring
+#: ``ts_model.state_space.numba_dispatch_stats``), NOT a public operator
+#: canonical — no new operator surface is registered from it.
+_LAST_FIT_TELEMETRY: dict[str, Any] = {}
+
+
+def last_fit_telemetry() -> dict[str, Any]:
+    """Fit-quality telemetry from the most recent regime / MoE supervised fit.
+
+    Keys captured (M-036): ``model``, ``effective_train_obs``,
+    ``effective_regime_obs`` (regime) / ``active_expert_count`` (MoE),
+    ``condition_number``, ``convergence``, ``gate_entropy`` and (MoE)
+    ``expert_weight_max``.  Returns a defensive copy.
+    """
+    return dict(_LAST_FIT_TELEMETRY)
+
+
+def _design_cond(design: np.ndarray) -> float:
+    """Condition number of a design matrix (``inf`` on a degenerate design)."""
+    try:
+        return float(np.linalg.cond(design))
+    except (np.linalg.LinAlgError, ValueError):
+        return float("inf")
 
 
 # R10-P0-009: panel-model integer knobs must declare ``ParamSpec(dtype=int)``.
@@ -137,12 +173,17 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
     return cls
 
 
-def _pca_svd(X: np.ndarray, n_components: int):
+def _pca_svd(X: np.ndarray, n_components: int, *, rank_policy: str = "reconstruction"):
     """Standardised SVD PCA; returns the model in the *active sub-space* only.
 
     R38 P0-060（§23）：唯一 authoritative 数学在 ``pca_state`` 模块——canonical
     与 shared ``PCABlock`` 共用同一 fit（coverage-gated active / 标准化 SVD /
     rank cap / missing imputation），不再在 backend 复制第二套。
+
+    ``rank_policy`` (M-021): ``"reconstruction"`` (default) caps ``k <= p-1``
+    so the reconstruction residual is never trivially zero; ``"regression"``
+    allows ``k <= p`` so PCR can use every component.  The PCR forecast path
+    (``_model_predict``) calls this with ``rank_policy="regression"``.
     """
     from cleaned_operators.cross_section.pca_state import PCAState
 
@@ -150,6 +191,7 @@ def _pca_svd(X: np.ndarray, n_components: int):
         X, n_components,
         min_coverage_ratio=_MIN_COVERAGE_RATIO,
         absolute_min_obs=_ABSOLUTE_MIN_OBS,
+        rank_policy=rank_policy,
     )
     return state.to_dict() if state is not None else None
 
@@ -168,23 +210,31 @@ def _pca_transform(pca, row: np.ndarray) -> np.ndarray:
     return pca["loadings"] @ z
 
 
-def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1) -> pd.DataFrame:
+def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1, warmup_policy: str = "full") -> pd.DataFrame:
     """Rolling PCA evaluated row by row.
 
     ``fit_lag>=1`` (default) trains the PCA on rows ``[start, row-1]`` and
     evaluates the *current* row against that historical model, so the current
     observation never enters its own training set (no in-sample projection).
     ``fit_lag=0`` reproduces the legacy in-sample behaviour.
+
+    ``warmup_policy`` (M-020): ``"full"`` (default) enforces a full-history
+    floor — the output stays NaN until ``fit_end >= window - 1``, i.e. the
+    training window is a complete ``window`` rows.  ``"expanding"`` opts in to
+    the legacy expanding warmup that fits on partial windows.
     """
     rv = ret.to_numpy(dtype=float)
     rows, cols = rv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     lag = max(0, int(fit_lag))
+    w = int(window)
     for row in range(rows):
         fit_end = row - lag
         if fit_end < 0:
             continue
-        start = max(0, fit_end - int(window) + 1)
+        if warmup_policy == "full" and fit_end < w - 1:
+            continue
+        start = max(0, fit_end - w + 1)
         X = rv[start : fit_end + 1]
         out[row] = fn(X, rv[row])
     return _frame_like(ret, out)
@@ -300,27 +350,33 @@ def _industry_pca_loading(ret, group, window, component):
     col_ids = tuple(ret.columns)
     rows, cols = rv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
     for row in range(rows):
         fit_end = row - 1
         if fit_end < 0:
             continue
-        start = max(0, fit_end - int(window) + 1)
-        for col in range(cols):
-            g = gv[row, col]
+        # M-020: full-history floor — no expanding warmup for industry PCA.
+        if fit_end < w - 1:
+            continue
+        start = max(0, fit_end - w + 1)
+        # M-026: fit ONCE per (date, unique industry) and broadcast the loading
+        # to every member stock — every member shares the same fit, so the
+        # per-(row, col) SVD refit was wasted work.
+        for g in np.unique(gv[row]):
             mask = gv[row] == g
             members = np.flatnonzero(mask)
             if len(members) < 4:
                 continue
-            # Local position of ``col`` inside the industry members; correct
-            # even when the industry's columns are not contiguous in the panel.
-            local = int(np.where(members == col)[0][0])
             X = rv[start : fit_end + 1][:, members]
             # R10-P0-004: the loading kernel is STATELESS (3 args) — the old
             # call omitted the fourth ``prev`` argument and crashed with a
             # TypeError as soon as any industry had >= 4 members.
             member_ids = tuple(col_ids[int(i)] for i in members)
             loading = _pca_loading(X, rv[row][members], int(component), member_ids)
-            out[row, col] = loading[local] if np.isfinite(loading).any() else np.nan
+            # ``local`` = position of each member inside the industry members;
+            # correct even when the industry's columns are not contiguous.
+            for local, col in enumerate(members):
+                out[row, col] = loading[local] if np.isfinite(loading).any() else np.nan
     return _frame_like(ret, out)
 
 
@@ -331,7 +387,7 @@ def _pca_resid_vol(ret: pd.DataFrame, window: int, n_components: int) -> pd.Data
 
 _mk(
     "panel_rolling_pca_resid_vol",
-    "PCA 残差波动率（过去窗口）。",
+    "PCA 残差波动率（过去窗口）。两级成熟（M-027）：先需完整 window 行 PCA 训练窗（full-history floor，输出在第 window 行才开始），再需 ≥10 行残差滚动统计 —— 首次输出在第 (window-1)+10 行，不是短窗口统计。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。",
     ["ret", "window", "n_components"],
     lambda ret, window=120, n_components=5: _pca_resid_vol(ret, int(window), int(n_components)),
     unit="volatility",
@@ -345,7 +401,7 @@ def _pca_resid_momentum(ret: pd.DataFrame, window: int, n_components: int) -> pd
 
 _mk(
     "panel_rolling_pca_resid_momentum",
-    "PCA 残差累计收益。",
+    "PCA 残差累计收益。两级成熟（M-027）：先需完整 window 行 PCA 训练窗（full-history floor），再需 ≥10 行残差滚动累计 —— 首次输出在第 (window-1)+10 行，不是短窗口统计。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。",
     ["ret", "window", "n_components"],
     lambda ret, window=120, n_components=5: _pca_resid_momentum(ret, int(window), int(n_components)),
 )
@@ -417,7 +473,19 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
     sd = np.where(sd > _EPS, sd, 1.0)
     Xs = (Xv - mu) / sd
     if method == "pcr":
-        pca = _pca_svd(Xs, min(int(n_components), Xs.shape[1]))
+        # M-022: a single predictor (p=1) cannot be PCA-compressed —
+        # ``PCAState`` requires >= 2 active features.  Degrade to a legal
+        # standardized linear regression (still respects ``fit_lag`` and
+        # ``label_horizon`` maturity via ``_forecast_loop``'s slicing).
+        if Xs.shape[1] == 1:
+            design = np.column_stack([np.ones(len(Xs)), Xs])
+            beta = fit_linear_model_checked(design, yv)
+            if beta is None:
+                return np.nan
+            z = (x_cur - mu) / sd
+            return float(beta[0] + beta[1:] @ z)
+        # M-021: PCR is a REGRESSION — allow k <= p (every component).
+        pca = _pca_svd(Xs, min(int(n_components), Xs.shape[1]), rank_policy="regression")
         if pca is None:
             return np.nan
         # P0-14: components live in the active sub-space only.
@@ -535,9 +603,9 @@ def _forecast_generic(y, feats, window, method, n_components, alpha, l1_ratio, l
                                          label_horizon=int(label_horizon)))
 
 
-_mk_forecast("panel_rolling_pcr_forecast", "pcr", "滚动 PCR 预测（label_horizon 内训练标签自动排除，未成熟标签不参与拟合）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
-_mk_forecast("panel_rolling_pls_forecast", "pls", "滚动 PLS 预测（label_horizon 内未成熟标签自动排除）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
-_mk_forecast("panel_rolling_elastic_net_forecast", "enet", "滚动 ElasticNet 预测（label_horizon 内未成熟标签自动排除）。", ["y", "x1", "x2", "x3", "x4", "window", "alpha", "l1_ratio", "label_horizon"])
+_mk_forecast("panel_rolling_pcr_forecast", "pcr", "滚动 PCR 预测（label_horizon 内训练标签自动排除，未成熟标签不参与拟合）。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
+_mk_forecast("panel_rolling_pls_forecast", "pls", "滚动 PLS 预测（label_horizon 内未成熟标签自动排除）。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
+_mk_forecast("panel_rolling_elastic_net_forecast", "enet", "滚动 ElasticNet 预测（label_horizon 内未成熟标签自动排除）。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。", ["y", "x1", "x2", "x3", "x4", "window", "alpha", "l1_ratio", "label_horizon"])
 
 
 def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1):
@@ -552,6 +620,15 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
+    # M-033: market_state is a routing/state variable — it does NOT satisfy the
+    # predictor requirement.  Fail closed with a clear message instead of
+    # reaching ``np.column_stack([])`` and raising an opaque
+    # "need at least one array to concatenate".
+    if not collected:
+        raise ValueError(
+            "panel_regime_conditioned_forecast requires at least one predictor "
+            "feature (market_state alone does not count)"
+        )
 
     # per-stock, per-row regime assignment from market_state quantiles.  Both
     # the regime quantile edges and the training rows use the window *ending at
@@ -564,6 +641,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     nr = max(2, int(n_regimes))
     h = max(1, int(label_horizon))
+    _LAST_FIT_TELEMETRY.clear()
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
@@ -597,7 +675,23 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             Xs = (Xm - mu) / sd
             # ModelDesignGate: a rank-deficient / ill-conditioned regime design
             # fails closed (NaN) instead of returning a meaningless coefficient.
-            beta = fit_linear_model_checked(np.column_stack([np.ones(len(ym)), Xs]), ym)
+            design = np.column_stack([np.ones(len(ym)), Xs])
+            beta = fit_linear_model_checked(design, ym)
+            # M-036: fit-quality telemetry (module-level diagnostic accessor).
+            reg_tr = np.digitize(win_ms_tr[win_valid_tr], edges)
+            reg_counts = np.bincount(reg_tr, minlength=nr)
+            reg_p = reg_counts / max(int(reg_counts.sum()), 1)
+            gate_entropy = float(-np.sum(reg_p[reg_p > 0] * np.log(reg_p[reg_p > 0])))
+            _LAST_FIT_TELEMETRY.update({
+                "model": "regime",
+                "effective_train_obs": int(mask.sum()),
+                "effective_regime_obs": int(mask.sum()),
+                "condition_number": _design_cond(design),
+                "convergence": bool(beta is not None),
+                "gate_entropy": gate_entropy,
+                "regime_index": int(reg),
+                "n_regimes": int(nr),
+            })
             if beta is None:
                 continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
@@ -608,7 +702,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
 
 _mk(
     "panel_regime_conditioned_forecast",
-    "按市场状态分 regime 训练的条件线性预测（训练窗口截至前一日，label_horizon 内未成熟标签自动排除）。",
+    "按市场状态分 regime 训练的条件线性预测（market_state_t 选择当前 regime；历史 regime 边界与专家参数严格截至 t-1；label_horizon 内未成熟标签自动排除）。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。",
     ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_regimes", "label_horizon"],
     lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_regimes=3, label_horizon=1: _regime_forecast(
         y, (x1, x2, x3, x4), market_state, int(window), int(n_regimes), int(label_horizon)),
@@ -627,10 +721,20 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
+    # M-033: market_state is a routing/state variable — it does NOT satisfy the
+    # predictor requirement.  Fail closed with a clear message instead of
+    # reaching ``np.column_stack([])`` in the (now dead) ``Xc.shape[1] == 0``
+    # guard below.
+    if not collected:
+        raise ValueError(
+            "panel_mixture_of_experts_score requires at least one predictor "
+            "feature (market_state alone does not count)"
+        )
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     ne = max(2, int(n_experts))
     h = max(1, int(label_horizon))
+    _LAST_FIT_TELEMETRY.clear()
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
@@ -665,6 +769,7 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
             preds = []
+            row_cond_max = 0.0
             for e in range(ne):
                 # A NaN market_state must never place a training sample into an
                 # expert: win_valid_tr excludes missing-regime rows (np.digitize
@@ -680,10 +785,12 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
                 sd = np.where(sd > _EPS, sd, 1.0)
                 # ModelDesignGate: an ill-conditioned expert design fails closed.
-                beta = fit_linear_model_checked(np.column_stack([np.ones(len(ym)), (Xm - mu) / sd]), ym)
+                design = np.column_stack([np.ones(len(ym)), (Xm - mu) / sd])
+                beta = fit_linear_model_checked(design, ym)
                 if beta is None:
                     preds.append(np.nan)
                     continue
+                row_cond_max = max(row_cond_max, _design_cond(design))
                 z = (x_cur - mu) / sd
                 preds.append(float(beta[0] + beta[1:] @ z))
             valid_preds = [p for p in preds if np.isfinite(p)]
@@ -713,12 +820,26 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 p = pred_arr[finite_experts]
                 g = g / g.sum()
                 out[row, col] = float(np.dot(g, p))
+                # M-036: fit-quality telemetry (module-level diagnostic accessor).
+                eff_train = int(np.sum(
+                    np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc) & win_valid_tr
+                ))
+                _LAST_FIT_TELEMETRY.update({
+                    "model": "moe",
+                    "effective_train_obs": eff_train,
+                    "active_expert_count": int(finite_experts.sum()),
+                    "condition_number": row_cond_max,
+                    "convergence": bool(len(valid_preds) == ne),
+                    "gate_entropy": float(-np.sum(g * np.log(np.clip(g, 1e-12, None)))),
+                    "expert_weight_max": float(g.max()),
+                    "n_experts": int(ne),
+                })
     return _frame_like(y, out)
 
 
 _mk(
     "panel_mixture_of_experts_score",
-    "基于市场状态的 Mixture-of-Experts 加权预测（训练窗口截至前一日，label_horizon 内未成熟标签自动排除）。",
+    "基于市场状态的 Mixture-of-Experts 加权预测（训练窗口截至前一日，market_state_t 选择当前 gating；历史专家边界/参数严格截至 t-1；label_horizon 内未成熟标签自动排除）。逐股票独立滚动时序模型，非 pooled stock×date 模型（M-030）。",
     ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_experts", "label_horizon"],
     lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_experts=3, label_horizon=1: _moe_forecast(
         y, (x1, x2, x3, x4), market_state, int(window), int(n_experts), int(label_horizon)),

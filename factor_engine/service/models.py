@@ -86,24 +86,81 @@ class WriteTarget(str, Enum):
 # Size budgets (R21-036..043)
 # ---------------------------------------------------------------------------
 
+# R40 #148: DEFAULT_SIZE_BUDGET 退化为「模板」——只含字面默认值，import-time
+# 绝不读 os.environ（import 时固化环境变量会让测试/部署换 env 后预算失真）。
+# 实际预算在每次 ``size_budget()`` 调用时 snapshot 成不可变
+# ``RequestBudgetSnapshot``（per-request immutable，不可在请求中途被改）。
 DEFAULT_SIZE_BUDGET = {
-    "max_formula_bytes": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_FORMULA_BYTES", "65536")),
-    "max_formula_chars": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_FORMULA_CHARS", "65536")),
-    "max_string_literal_bytes": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_STRING_LITERAL_BYTES", "8192")),
-    "max_identifier_length": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_IDENTIFIER_LENGTH", "256")),
-    "max_keyword_length": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_KEYWORD_LENGTH", "128")),
-    "max_name_length": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_NAME_LENGTH", "128")),
-    "max_idempotency_key_length": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_IDEMPOTENCY_KEY_LENGTH", "128")),
-    "max_source_refs": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_SOURCE_REFS", "64")),
-    "max_instrument_filter": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_INSTRUMENT_FILTER", "10000")),
-    "max_metadata_items": int(__import__("os").environ.get("FACTOR_ENGINE_MAX_METADATA_ITEMS", "64")),
+    "max_formula_bytes": 65536,
+    "max_formula_chars": 65536,
+    "max_string_literal_bytes": 8192,
+    "max_identifier_length": 256,
+    "max_keyword_length": 128,
+    "max_name_length": 128,
+    "max_idempotency_key_length": 128,
+    "max_source_refs": 64,
+    "max_instrument_filter": 10000,
+    "max_metadata_items": 64,
 }
 
 
-def size_budget() -> dict[str, int]:
-    """Return the current size budget dict (env-configurable)."""
-    return {k: int(__import__("os").environ.get("FACTOR_ENGINE_" + k[len("max_"):].upper(), str(v)))
-            for k, v in DEFAULT_SIZE_BUDGET.items()}
+@dataclass(frozen=True)
+class RequestBudgetSnapshot:
+    """R40 #148: immutable per-request size budget snapshot。
+
+    每次请求在 ``size_budget()`` 调用时对 env 做一次 snapshot，返回 frozen
+    dataclass —— 请求中途不可被修改。为向后兼容 dict 型消费者，额外提供
+    ``__getitem__`` / ``__contains__``（``budget["max_formula_bytes"]`` 照常可用）。
+    """
+
+    max_formula_bytes: int
+    max_formula_chars: int
+    max_string_literal_bytes: int
+    max_identifier_length: int
+    max_keyword_length: int
+    max_name_length: int
+    max_idempotency_key_length: int
+    max_source_refs: int
+    max_instrument_filter: int
+    max_metadata_items: int
+
+    def __getitem__(self, key: str) -> int:
+        if key not in self.__dataclass_fields__:
+            raise KeyError(key)
+        return getattr(self, key)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.__dataclass_fields__
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "max_formula_bytes": self.max_formula_bytes,
+            "max_formula_chars": self.max_formula_chars,
+            "max_string_literal_bytes": self.max_string_literal_bytes,
+            "max_identifier_length": self.max_identifier_length,
+            "max_keyword_length": self.max_keyword_length,
+            "max_name_length": self.max_name_length,
+            "max_idempotency_key_length": self.max_idempotency_key_length,
+            "max_source_refs": self.max_source_refs,
+            "max_instrument_filter": self.max_instrument_filter,
+            "max_metadata_items": self.max_metadata_items,
+        }
+
+
+def size_budget() -> RequestBudgetSnapshot:
+    """Return an immutable per-request budget snapshot (env snapshot at call).
+
+    R40 #148: env 键 = ``FACTOR_ENGINE_<FIELD_UPPER>``（保留 ``MAX_`` 前缀，与
+    ``DEFAULT_SIZE_BUDGET`` 的命名一致 —— 旧实现 ``k[len("max_"):].upper()`` 把
+    ``MAX_`` 前缀丢掉，导致 ``FACTOR_ENGINE_MAX_FORMULA_BYTES`` 永远读不到）。
+    """
+    env = __import__("os").environ
+    return RequestBudgetSnapshot(
+        **{
+            k: int(env.get("FACTOR_ENGINE_" + k.upper(), str(v)))
+            for k, v in DEFAULT_SIZE_BUDGET.items()
+        }
+    )
 
 
 class _RequestModel(BaseModel):
@@ -143,6 +200,9 @@ class ComputeRequest(_RequestModel):
     factor: Optional[dict[str, Any]] = None
     formula_schema_version: Optional[str] = None
     max_cost_per_job: Optional[int] = None
+    # R40 #93: timeout 必须显式声明并经 Pydantic 校验（此前 ``_submit_job``
+    # 直接 ``payload.get("timeout_seconds")`` 绕过校验）。
+    timeout_seconds: Optional[float] = None
 
     @field_validator("backend")
     @classmethod
@@ -179,9 +239,23 @@ class ComputeRequest(_RequestModel):
     def _universe_cap(cls, v: Optional[list[str]]) -> Optional[list[str]]:
         if v is None:
             return v
-        if len(v) > DEFAULT_SIZE_BUDGET["max_instrument_filter"]:
+        # R40 #148: 用 per-request snapshot（不再用 import-time 固化的模板）。
+        if len(v) > size_budget()["max_instrument_filter"]:
             raise ValueError("universe too large")
         return v
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def _timeout_cap(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        x = float(v)
+        # R40 #93: 显式边界 —— 0.5 秒太短（瞬时超时）、5000 秒太长（配额失控）。
+        if not (1.0 <= x <= 3600.0):
+            raise ValueError(
+                f"timeout_seconds must be within [1.0, 3600.0] seconds, got {x}"
+            )
+        return x
 
     def formula_text(self) -> str:
         return str(self.formula or self.dsl or "").strip()
@@ -199,6 +273,20 @@ class MaterializeRequest(_RequestModel):
     idempotency_key: Optional[str] = None
     sync: bool = False
     request_metadata: dict[str, Any] = Field(default_factory=dict)
+    # R40 #93: 与 ComputeRequest 一致，materialize job 的 timeout 也走校验。
+    timeout_seconds: Optional[float] = None
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def _timeout_cap_materialize(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        x = float(v)
+        if not (1.0 <= x <= 3600.0):
+            raise ValueError(
+                f"timeout_seconds must be within [1.0, 3600.0] seconds, got {x}"
+            )
+        return x
 
     @field_validator("factor_id")
     @classmethod
@@ -242,6 +330,17 @@ _DIGEST_FIELDS = (
     "catalog_generations",
     "complexity_budget",
     "source_profile",
+    # R40 #90: backend 选择必须进 digest —— 不同 backend 的请求 digest 相同
+    # 会在 idempotency / cache / checkpoint 上错误复用。
+    "backend",
+    "resolved_backend_policy",
+    # R40 #91: 绑定 source profile 的具体版本 / 契约 —— 同 profile_id 不同版本
+    # 的 digest 必须不同（profile_id 只是引用，不是内容指纹）。
+    "source_profile_version",
+    "source_contract_hash",
+    "dataset_contract",
+    "snapshot_policy",
+    "provider_identity",
 )
 
 
@@ -265,6 +364,15 @@ class ValidatedFactorRequest:
     catalog_generations: tuple[str, ...] = ()
     complexity_budget: str = "default"
     source_profile: str | None = None
+    # R40 #90: backend 维度。
+    backend: str | None = None
+    resolved_backend_policy: str | None = None
+    # R40 #91: source profile 版本 / 契约维度（同 profile_id 不同版本 digest 不同）。
+    source_profile_version: str | None = None
+    source_contract_hash: str | None = None
+    dataset_contract: str | None = None
+    snapshot_policy: str | None = None
+    provider_identity: str | None = None
     extra: dict[str, Any] = dc_field(default_factory=dict)
 
     def to_payload(self) -> dict[str, Any]:
@@ -282,6 +390,13 @@ class ValidatedFactorRequest:
             "catalog_generations": list(self.catalog_generations),
             "complexity_budget": self.complexity_budget,
             "source_profile": self.source_profile,
+            "backend": self.backend,
+            "resolved_backend_policy": self.resolved_backend_policy,
+            "source_profile_version": self.source_profile_version,
+            "source_contract_hash": self.source_contract_hash,
+            "dataset_contract": self.dataset_contract,
+            "snapshot_policy": self.snapshot_policy,
+            "provider_identity": self.provider_identity,
         }
 
     def digest(self) -> str:

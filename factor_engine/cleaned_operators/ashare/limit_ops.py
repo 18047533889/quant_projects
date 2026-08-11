@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from market.price_basis import PriceBasis, validate_limit_ops_price_basis
+from market.price_grid import price_grid_for_market
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
@@ -46,11 +48,24 @@ def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame) -> pd.DataFr
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def _tolerance(value: Any) -> float:
+def _tolerance(value: Any, market: str | None = None) -> float:
     tolerance = float(value)
     if tolerance < 0:
         raise ValueError("tick_tolerance must be non-negative")
-    return tolerance
+    # R40 #231: tick_tolerance 上限受市场 PriceGridContract 约束（不再硬编码）。
+    grid = price_grid_for_market(market or "ashare")
+    return grid.validate_tick_tolerance(tolerance)
+
+
+def _check_price_basis(price_basis: dict | None) -> None:
+    """R40 #228: compile-time 检查输入价格 basis。
+
+    ``price_basis`` 形如 ``{"close": PriceBasis.ADJUSTED, ...}``。未传入（None）
+    时保持 research 兼容（不检查）；production 运行时必须显式注入 basis，
+    任何 ADJUSTED/CONTINUOUS 输入都 hard fail。
+    """
+    if price_basis is not None:
+        validate_limit_ops_price_basis(price_basis)
 
 
 @register_operator(
@@ -70,7 +85,8 @@ class AshareLimitDistance(SeriesOperator):
         ["close", "upper_limit"],
     )
 
-    def _calculate_series(self, close: pd.DataFrame, upper_limit: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, close: pd.DataFrame, upper_limit: pd.DataFrame, price_basis: dict | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
         return _safe_ratio(close, upper_limit) - 1.0
 
 
@@ -92,8 +108,9 @@ class AshareLimitUpTouch(SeriesOperator):
         unit="boolean",
     )
 
-    def _calculate_series(self, high: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+    def _calculate_series(self, high: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         valid = high.notna() & upper_limit.notna()
         return (high >= upper_limit - tolerance).astype(float).where(valid)
 
@@ -116,8 +133,9 @@ class AshareLimitDownTouch(SeriesOperator):
         unit="boolean",
     )
 
-    def _calculate_series(self, low: pd.DataFrame, lower_limit: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+    def _calculate_series(self, low: pd.DataFrame, lower_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         valid = low.notna() & lower_limit.notna()
         return (low <= lower_limit + tolerance).astype(float).where(valid)
 
@@ -150,9 +168,12 @@ class AshareLimitOnePrice(SeriesOperator):
         lower_limit: pd.DataFrame,
         side: str = "up",
         tick_tolerance: float = 0.005,
+        price_basis: dict | None = None,
+        market: str | None = None,
         **_: Any,
     ) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         direction = str(side).lower()
         limit = upper_limit if direction == "up" else lower_limit
         valid = (
@@ -195,8 +216,9 @@ class AshareLimitFailed(SeriesOperator):
         unit="boolean",
     )
 
-    def _calculate_series(self, high: pd.DataFrame, close: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+    def _calculate_series(self, high: pd.DataFrame, close: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         valid = high.notna() & close.notna() & upper_limit.notna()
         touched = high >= upper_limit - tolerance
         held = close >= upper_limit - tolerance
@@ -221,8 +243,9 @@ class AshareOpenAtUpperLimit(SeriesOperator):
         unit="boolean",
     )
 
-    def _calculate_series(self, open_px: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+    def _calculate_series(self, open_px: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         valid = open_px.notna() & upper_limit.notna()
         return (open_px >= upper_limit - tolerance).astype(float).where(valid)
 
@@ -245,8 +268,9 @@ class AshareLimitOpenFailed(SeriesOperator):
         unit="boolean",
     )
 
-    def _calculate_series(self, open_px: pd.DataFrame, low: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        tolerance = _tolerance(tick_tolerance)
+    def _calculate_series(self, open_px: pd.DataFrame, low: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+        _check_price_basis(price_basis)
+        tolerance = _tolerance(tick_tolerance, market)
         valid = open_px.notna() & low.notna() & upper_limit.notna()
         opened_at_limit = open_px >= upper_limit - tolerance
         broke = low < upper_limit - tolerance

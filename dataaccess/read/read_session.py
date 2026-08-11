@@ -24,12 +24,111 @@ FactorEngine 批量挖因子时对同一批 dataset/factor_id 反复 ``read``—
 """
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from data_access.security.execution_context import (
     _execution_ctx_var,
     resolve_execution_context,
 )
+
+
+@dataclass(frozen=True)
+class PhysicalResolutionContext:
+    """R40 #56：物理解析缓存的**身份维度**。
+
+    resolution cache key 过去只含 ``(dataset, params, time_range, instruments)``——
+    不区分 namespace / contract_digest / source_profile / mutation_generation。
+    两个 job 用相同 params/范围读同一 dataset，但 contract 已更新、或数据源
+    profile 变化、或发生了 mutation——旧缓存仍会命中（把「变了的版本」当成
+    同一版本读）。本 dataclass 把这些维度打包进 cache key。
+    """
+
+    namespace: str = ""
+    contract_digest: str = ""
+    source_profile: str = ""
+    mutation_generation: str = ""
+
+    def to_cache_tuple(self) -> tuple[str, str, str, str]:
+        return (self.namespace, self.contract_digest, self.source_profile, self.mutation_generation)
+
+    @classmethod
+    def from_store(cls, store: Any, dataset: str) -> "PhysicalResolutionContext":
+        """从 store 防御性派生各维度（任一步失败 → 空串，不抛）。"""
+        namespace = ""
+        source_profile = ""
+        mutation_generation = ""
+        try:
+            ds = store._registry.get(dataset)
+            namespace = str(getattr(ds, "namespace", "") or getattr(ds, "provider", "") or "")
+            source_profile = "|".join([
+                str(getattr(ds, "storage", "") or getattr(ds, "source", "") or ""),
+                str(getattr(ds, "format", "") or ""),
+                str(getattr(ds, "base_path", "") or ""),
+            ])
+        except Exception:
+            pass
+        try:
+            token = store.manifest_version(dataset)
+            if isinstance(token, dict):
+                mutation_generation = str(
+                    token.get("manifest_generation_id")
+                    or token.get("source_epoch")
+                    or ""
+                )
+        except Exception:
+            pass
+        contract_digest = ""
+        try:
+            contract_digest = str(store._contract_digest_for(dataset) or "")
+        except Exception:
+            pass
+        return cls(
+            namespace=namespace,
+            contract_digest=contract_digest,
+            source_profile=source_profile,
+            mutation_generation=mutation_generation,
+        )
+
+
+class _ResolutionCache(dict):
+    """R40 #56：dict 子类——get/set 时按当前 PhysicalResolutionContext 扩键。
+
+    Store 以 ``(dataset, params_fingerprint, time_range, instruments)`` 为基键
+    访问 resolution cache；本类在基键后追加 ``namespace / contract_digest /
+    source_profile / mutation_generation`` 四维——contract 更新 / mutation /
+    source profile 变化都会改变 cache key，旧条目不再误命中。
+    """
+
+    def __init__(self, context_provider: Callable[[str], PhysicalResolutionContext] | None = None) -> None:
+        super().__init__()
+        self._context_provider = context_provider
+        self._memo: dict[str, PhysicalResolutionContext] = {}
+
+    def _enrich(self, key: Any) -> Any:
+        if self._context_provider is None or not isinstance(key, tuple) or not key:
+            return key
+        dataset = key[0]
+        if not isinstance(dataset, str):
+            return key
+        if dataset not in self._memo:
+            try:
+                self._memo[dataset] = self._context_provider(dataset)
+            except Exception:
+                return key
+        return key + self._memo[dataset].to_cache_tuple()
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        return super().get(self._enrich(key), default)
+
+    def __getitem__(self, key: Any) -> Any:
+        return super().__getitem__(self._enrich(key))
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        super().__setitem__(self._enrich(key), value)
+
+    def __contains__(self, key: object) -> bool:
+        return super().__contains__(self._enrich(key))
 
 
 class DataReadSession:
@@ -61,7 +160,11 @@ class DataReadSession:
             run_mode=base.run_mode,
             security_digest=base.security_digest,
         )
-        self._resolution_cache: dict[tuple[Any, ...], Any] = {}
+        # R40 #56：resolution cache 键含 PhysicalResolutionContext 维度（namespace /
+        # contract_digest / source_profile / mutation_generation）。
+        self._resolution_cache: dict[tuple[Any, ...], Any] = _ResolutionCache(
+            context_provider=lambda ds: PhysicalResolutionContext.from_store(store, ds)
+        )
         self._token: Any = None
         self._mode_token: Any = None
         self._prev_cache: Any = None

@@ -998,6 +998,20 @@ def _factor_scope_field(factor: Any, hint_attr: str, direct_attr: str) -> str:
     return str(v) if v is not None and str(v) != "" else ""
 
 
+def _market_of_factor(factor: Any) -> str | None:
+    """从 factor 解析显式 market（R40 #174 集成）：semantic_identity.market →
+    factor.market；都没有返回 ``None``（production 下由 Analyzer 构造 fail-closed）。
+    """
+    semantic = getattr(factor, "semantic_identity", None)
+    for cand in (
+        getattr(semantic, "market", None),
+        getattr(factor, "market", None),
+    ):
+        if cand is not None and str(cand) != "":
+            return str(cand)
+    return None
+
+
 def _verify_factor_semantic_identity(
     factor: Any,
     full_def: dict[str, Any],
@@ -1035,7 +1049,12 @@ def _verify_factor_semantic_identity(
             # production 事件（full_def 含 ast_hash）永远无法证明 identity。
             from ir.analyzer import Analyzer
 
-            ir_node = Analyzer(production=production).lower(factor.expr).ir
+            # R40 #174：production 下 Analyzer 必须带显式 market（从 factor 解析，
+            # 解析不到 → ProductionMarketContextRequiredError，fail-closed）。
+            market = _market_of_factor(factor)
+            ir_node = Analyzer(production=production, market=market).lower(
+                factor.expr
+            ).ir
             actual_hash = compute_ir_hash(ir_node)
         except Exception as exc:  # Expr is not always a serializable IR node
             if production:

@@ -20,6 +20,7 @@ DSL 常用 ``ts_*`` 前缀：``ts_mean``、``ts_std``、``ts_corr``、``ts_rank`
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,7 @@ from cleaned_operators._causal import causal_lag
 from cleaned_operators._rolling_fast import (
     cum_top_n_mean,
     cum_top_n_sum,
+    check_wma_partial_policy,
     rolling_beta,
     rolling_bottom_n_mean,
     rolling_bottom_n_sum,
@@ -37,6 +39,7 @@ from cleaned_operators._rolling_fast import (
     rolling_top_n_std,
     rolling_top_n_sum,
     rolling_top_n_sum_window,
+    wma_partial_policy_digest,
 )
 from cleaned_operators.base import (
     Operator,
@@ -56,6 +59,304 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+
+# ---------------------------------------------------------------------------
+# TopKContract (R40 #196).  A top-k / bottom-k / nlargest / nsmallest operator
+# must DECLARE its sample policy and tie policy; an undeclared tie policy is
+# rejected in production because tie-breaking by row/column iteration order is
+# not a deterministic execution identity.
+# ---------------------------------------------------------------------------
+class TopKTiePolicy:
+    STABLE_INSTRUMENT_KEY = "stable_instrument_key"   # ties break on canonical instrument key
+    INCLUDE_ALL_TIES = "include_all_ties"             # all tied values enter the selection
+    AVERAGE_WEIGHT = "average_weight"                 # tied values share the remaining slot weight
+
+
+TOPK_TIE_POLICIES = frozenset({
+    TopKTiePolicy.STABLE_INSTRUMENT_KEY,
+    TopKTiePolicy.INCLUDE_ALL_TIES,
+    TopKTiePolicy.AVERAGE_WEIGHT,
+})
+
+
+class TopKSamplePolicy:
+    FINITE_ONLY = "finite_only"
+    NAN_AND_INF_ARE_MISSING = "nan_and_inf_are_missing"
+
+
+TOPK_SAMPLE_POLICIES = frozenset({TopKSamplePolicy.FINITE_ONLY, TopKSamplePolicy.NAN_AND_INF_ARE_MISSING})
+
+
+@dataclass(frozen=True)
+class TopKContract:
+    """Declared sample/tie policy for a top-k selection operator (R40 #196).
+
+    ``sample_policy=FINITE_ONLY`` means ±Inf is not a valid observation (a top
+    ``k`` selection that silently ranks Inf above every finite value is not an
+    economically meaningful top-k); ``tie_policy`` fixes how equal sort values
+    are ordered so two executions on the same data always select the same rows.
+    """
+
+    sample_policy: str = TopKSamplePolicy.FINITE_ONLY
+    tie_policy: str | None = None  # MUST be declared for production top-k
+
+
+def check_topk_contract(
+    contract: TopKContract,
+    *,
+    production: bool = True,
+    canonical: str = "",
+) -> None:
+    """Production gate: a top-k operator must declare a deterministic tie policy.
+
+    Raises ``ValueError`` when ``tie_policy`` is undeclared in production (R40
+    #196 — undeclared tie-breaking is row-order dependent and must not enter a
+    production surface).  Research callers pass ``production=False`` to degrade.
+    """
+    if contract.sample_policy not in TOPK_SAMPLE_POLICIES:
+        raise ValueError(
+            f"{canonical or 'topk'}: unknown sample_policy {contract.sample_policy!r} "
+            f"(expected one of {sorted(TOPK_SAMPLE_POLICIES)})"
+        )
+    if production and contract.tie_policy is None:
+        raise ValueError(
+            f"{canonical or 'topk'}: production top-k requires a declared tie_policy "
+            f"(one of {sorted(TOPK_TIE_POLICIES)}); undeclared tie-breaking is "
+            "row-order dependent and rejected"
+        )
+    if contract.tie_policy is not None and contract.tie_policy not in TOPK_TIE_POLICIES:
+        raise ValueError(
+            f"{canonical or 'topk'}: unknown tie_policy {contract.tie_policy!r} "
+            f"(expected one of {sorted(TOPK_TIE_POLICIES)})"
+        )
+
+
+def _select_top_k_with_tie_policy(
+    values: pd.Series,
+    k: int,
+    *,
+    ascending: bool,
+    tie_policy: str | None,
+) -> "pd.Index":
+    """Deterministic top-k selection honoring a :class:`TopKContract`.
+
+    ``values`` is a Series indexed by instrument key.  Missing (±Inf/NaN under
+    FINITE_ONLY) are dropped; ties under ``STABLE_INSTRUMENT_KEY`` break on the
+    canonical instrument key (ascending) so the selection is independent of the
+    input column order.
+    """
+    mask = np.isfinite(values.to_numpy(dtype=np.float64, copy=False))
+    clean = values[mask]
+    if clean.empty or k < 1:
+        return clean.index[:0]
+    if tie_policy == TopKTiePolicy.INCLUDE_ALL_TIES:
+        # Include every instrument whose value equals the k-th selected value.
+        ordered = clean.sort_values(ascending=ascending, kind="mergesort")
+        if len(ordered) <= k:
+            return ordered.index
+        kth = ordered.iloc[k - 1]
+        return ordered.index[ordered <= kth if not ascending else ordered >= kth]
+    if tie_policy == TopKTiePolicy.AVERAGE_WEIGHT:
+        # Take the first k after a stable instrument-key tie-break (weights are
+        # applied downstream by the caller).
+        ordered = clean.sort_values(ascending=ascending, kind="stable")
+        # stable in the sense of deterministic: primary value, secondary key.
+        ordered = ordered.iloc[_stable_topk_order(ordered, ascending)]
+        return ordered.index[:k]
+    # STABLE_INSTRUMENT_KEY (default) / explicit: value first, instrument key second.
+    ordered = clean.sort_values(ascending=ascending, kind="stable")
+    ordered = ordered.iloc[_stable_topk_order(ordered, ascending)]
+    return ordered.index[:k]
+
+
+def _stable_topk_order(ordered: pd.Series, ascending: bool) -> np.ndarray:
+    """Deterministic index order: value (per ``ascending``) then instrument key.
+
+    pandas ``sort_values(kind="stable")`` preserves the *original* order of tied
+    rows; sorting (value, instrument-key) tuples canonically makes the tie-break
+    independent of the input column order so the same cross-section always
+    selects the same rows.
+    """
+    vals = ordered.to_numpy(dtype=np.float64, copy=False)
+    keys = [str(i) for i in ordered.index]
+    decorated = list(enumerate(zip(vals, keys)))
+    if ascending:
+        decorated.sort(key=lambda t: (t[1][0], t[1][1]))
+    else:
+        decorated.sort(key=lambda t: (-t[1][0], t[1][1]))
+    return np.asarray([pos for pos, _ in decorated], dtype=np.int64)
+
+
+# ---------------------------------------------------------------------------
+# SupportPolicy (R40 #193).  ``min_periods`` (the minimum number of valid
+# observations a window needs) is an ECONOMIC part of a rolling operator's
+# definition — a change from ``min_periods=1`` to ``min_periods=3`` changes the
+# output.  ``SupportPolicy`` makes the support explicit so it enters the
+# operator semantic version / factor identity / evidence.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class SupportPolicy:
+    """Declared window-support policy (R40 #193)."""
+
+    min_observations: int = 1
+    require_contiguous: bool = False
+    partial_window: str = "allow"       # allow | reject
+    ddof: int = 0                       # standard-deviation degrees of freedom
+
+    def digest(self) -> str:
+        import hashlib as _hashlib
+
+        return _hashlib.sha256(
+            f"support|{self.min_observations}|{self.require_contiguous}|"
+            f"{self.partial_window}|{self.ddof}".encode("utf-8")
+        ).hexdigest()[:12]
+
+
+#: Canonical support policies for the rolling family.
+SUPPORT_POLICIES: dict[str, SupportPolicy] = {
+    "ts_mean": SupportPolicy(min_observations=1, ddof=0),
+    "ts_std": SupportPolicy(min_observations=2, ddof=1),
+    "ts_corr": SupportPolicy(min_observations=3, ddof=1),
+    "ts_rank": SupportPolicy(min_observations=1, ddof=0),
+}
+
+
+def support_policy_for(canonical: str) -> SupportPolicy | None:
+    return SUPPORT_POLICIES.get(canonical)
+
+
+def check_support_policy(policy: SupportPolicy | None, *, canonical: str) -> None:
+    """Production gate: a rolling statistic must declare its SupportPolicy."""
+    if policy is None:
+        raise ValueError(
+            f"{canonical}: no declared SupportPolicy; min_periods is an economic "
+            "parameter and must enter the semantic version (R40 #193)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# EWMContract (R40 #194).  The exponential-moving-average family hard-coded
+# ``ewm(span=span, adjust=False)``.  The EWM policy is now an explicit contract
+# (adjust / ignore_na / min_periods / decay mapping / bias / seed policy) whose
+# ``digest()`` enters the operator semantic version and evidence — changing the
+# policy automatically invalidates old cache/materialization identities.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class EWMContract:
+    """Explicit EWM policy for the EMA family (R40 #194)."""
+
+    canonical: str
+    decay_mapping: str = "span"          # span | alpha | halflife
+    adjust: bool = False                 # ewm(adjust=...)
+    ignore_na: bool = False
+    min_periods: int = 0
+    bias: bool = False
+    ddof: int = 1                        # std/var correction
+    seed_policy: str = "ewm_zero_initialization"  # how the recursion is seeded
+
+    def to_kwargs(self, span: float | None = None) -> dict[str, Any]:
+        """Build the ``ewm(...)`` keyword mapping for this contract."""
+        kw: dict[str, Any] = {"adjust": self.adjust, "ignore_na": self.ignore_na, "min_periods": self.min_periods}
+        if self.decay_mapping == "span":
+            if span is None:
+                raise ValueError("EWMContract(decay_mapping='span') needs span")
+            kw["span"] = span
+        elif self.decay_mapping == "alpha":
+            kw["alpha"] = span  # alpha passed via the span slot for span-aliased canons
+        elif self.decay_mapping == "halflife":
+            kw["halflife"] = span
+        return kw
+
+    def digest(self) -> str:
+        import hashlib as _hashlib
+
+        canonical = _hashlib.sha256(
+            f"ewm|{self.canonical}|{self.decay_mapping}|{self.adjust}|{self.ignore_na}"
+            f"|{self.min_periods}|{self.bias}|{self.ddof}|{self.seed_policy}".encode()
+        ).hexdigest()[:12]
+        return canonical
+
+
+#: Canonical EWM contracts (single source of truth for the EMA family).
+EWM_CONTRACTS: dict[str, EWMContract] = {
+    "ts_ema": EWMContract(canonical="ts_ema", decay_mapping="span", adjust=False),
+}
+
+
+def ewm_contract_for(canonical: str) -> EWMContract | None:
+    return EWM_CONTRACTS.get(canonical)
+
+
+def check_ewm_contract(contract: EWMContract | None, *, canonical: str) -> None:
+    """Production gate: an EMA-family canonical MUST declare an EWM contract.
+
+    An operator that computes an exponential moving average without a declared
+    EWM contract cannot prove cross-backend parity and is rejected in
+    production (R40 #194).
+    """
+    if contract is None:
+        raise ValueError(
+            f"{canonical}: EMA-family operator has no declared EWMContract; "
+            "production requires the explicit adjust/ignore_na/decay/seed policy"
+        )
+
+
+# ---------------------------------------------------------------------------
+# StatisticalSamplePolicy (R40 #187).  Every statistical operator
+# (rank/mean/std/zscore/neutralize/regression/group) must use the SAME missing
+# policy: a ``FINITE_ONLY`` sample is a value in ``np.isfinite`` (NaN AND ±Inf
+# are missing).  ``uniform_finite_mask`` is the single mask provider so a window
+# full of Inf never passes ``min_periods`` and yields a garbage statistic.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class StatisticalSamplePolicy:
+    """Missing-sample policy for statistical operators (R40 #187)."""
+
+    valid: str = "finite_only"   # finite_only | nan_is_missing
+    min_count: int = 0           # minimum valid samples for the statistic to exist
+
+    def mask(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Boolean mask of valid samples (``True`` = valid)."""
+        arr = frame.to_numpy(dtype=np.float64, copy=False)
+        if self.valid == "finite_only":
+            valid = np.isfinite(arr)
+        else:
+            valid = ~np.isnan(arr)  # Inf counts as valid under nan_is_missing
+        return pd.DataFrame(valid, index=frame.index, columns=frame.columns)
+
+    def masked(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """``frame`` with every invalid sample set to NaN (for pandas rolling)."""
+        mask = self.mask(frame)
+        return frame.where(mask)
+
+
+STATISTICAL_SAMPLE_POLICY_DEFAULT = StatisticalSamplePolicy(valid="finite_only", min_count=0)
+
+
+def uniform_finite_mask(frame: pd.DataFrame) -> pd.DataFrame:
+    """The single uniform missing mask provider for all statistical operators.
+
+    ``True`` = valid (finite); ``False`` = NaN or ±Inf (missing).  Using this
+    everywhere guarantees the SAME sample policy across rank/mean/std/zscore/
+    neutralize/regression/group statistics (R40 #187).
+    """
+    return STATISTICAL_SAMPLE_POLICY_DEFAULT.mask(frame)
+
+
+def check_statistical_sample_policy(policy: StatisticalSamplePolicy, *, canonical: str = "") -> None:
+    """Production gate: a statistical operator must declare its sample policy.
+
+    An undeclared policy is rejected in production because NaN-only masking
+    (``notna``) silently counts ±Inf as a valid observation, corrupting every
+    window statistic that includes one.
+    """
+    if policy.valid not in {"finite_only", "nan_is_missing"}:
+        raise ValueError(
+            f"{canonical or 'stat'}: unknown sample policy {policy.valid!r}; "
+            "expected 'finite_only' or 'nan_is_missing'"
+        )
+
+
 # 重复实现：见 ts_mean；dedupe 注销
 # @register_operator(name="SMA", category="time_series", business_category="time_series", canonical="SMA", source="factor_dsl_np")
 class SMA(SeriesOperator):
@@ -72,7 +373,10 @@ class SMA(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).mean()
+        # R40 #187: uniform FINITE_ONLY sample policy — mask ±Inf to NaN so a
+        # window "full" of Inf never yields an Inf mean (previously a lone Inf
+        # passed min_periods=1 and produced Inf).
+        return x.where(uniform_finite_mask(x)).rolling(window=window, min_periods=1).mean()
 
 
 
@@ -91,7 +395,12 @@ class WMA(SeriesOperator):
         tags=["time_series", "wma", "weighted"]
     )
 
+    # R40 #195: the partial-warmup policy digest is part of the operator
+    # contract / factor identity — a policy change invalidates cache identity.
+    wma_partial_policy_digest = wma_partial_policy_digest()
+
     def _calculate_series(self, x: pd.DataFrame, window: int = 10, **kwargs) -> pd.DataFrame:
+        check_wma_partial_policy(kwargs.get("partial_policy"))
         return rolling_linear_weighted(x, window)
 
 
@@ -115,12 +424,13 @@ class AggrTopN(SeriesOperator):
         name="aggr_top_n", category="cross_sectional",
         description="自定义Top-N跨截面路由聚合（按 sort_col 取前 N 标的聚合，结果广播回选中位置）",
         examples=["aggr_top_n('sum', close, volume, 10, True)"],
-        param_names=["aggr_func", "x", "sort_col", "top", "asc"], return_type="series",
+        param_names=["aggr_func", "x", "sort_col", "top", "asc", "tie_policy"], return_type="series",
         tags=["cross_sectional", "routing", "top_n", "aggregate"]
     )
     def _calculate_series(self, aggr_func: str = "sum", x: pd.DataFrame = None,
                           sort_col: pd.DataFrame = None, top: int = 10,
-                          asc: bool = True, **kwargs) -> pd.DataFrame:
+                          asc: bool = True, tie_policy: str | None = None,
+                          **kwargs) -> pd.DataFrame:
         aggr = str(aggr_func).lower()
         if aggr not in _AGGR_TOP_N_FUNCS:
             raise ValueError(
@@ -131,16 +441,30 @@ class AggrTopN(SeriesOperator):
             return pd.DataFrame()
         if sort_col is None:
             sort_col = x
+        # R40 #196: an undeclared tie policy degrades to the deterministic
+        # stable-instrument-key policy so the selection is never row-order
+        # dependent; the compile-time gate (check_topk_contract) rejects an
+        # undeclared policy in production.
+        eff_tie = tie_policy if tie_policy is not None else TopKTiePolicy.STABLE_INSTRUMENT_KEY
         result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
         for idx in x.index:
             row_x = x.loc[idx]
             row_sort = sort_col.loc[idx] if idx in sort_col.index else row_x
-            valid_mask = row_x.notna() & row_sort.notna()
-            if valid_mask.sum() == 0:
+            # R40 #196: FINITE_ONLY sample policy — ±Inf is not a valid
+            # observation (a top-k that ranks Inf above every finite value is
+            # not economically meaningful).  np.isfinite (not notna) enforces it.
+            valid_mask = pd.Series(
+                np.isfinite(row_x.to_numpy(dtype=np.float64, copy=False))
+                & np.isfinite(row_sort.to_numpy(dtype=np.float64, copy=False)),
+                index=x.columns,
+            )
+            if int(valid_mask.sum()) == 0:
                 continue
             valid_x = row_x[valid_mask]
             valid_sort = row_sort[valid_mask]
-            sorted_cols = valid_sort.sort_values(ascending=asc).index[:top]
+            sorted_cols = _select_top_k_with_tie_policy(
+                valid_sort, int(top), ascending=bool(asc), tie_policy=eff_tie
+            )
             selected = valid_x[sorted_cols]
             if aggr == "sum":
                 result.loc[idx, sorted_cols] = selected.sum()
@@ -227,7 +551,12 @@ class EMA(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, span: int = 12, **kwargs) -> pd.DataFrame:
-        return x.ewm(span=span, adjust=False).mean()
+        # R40 #194: the EWM policy comes from the declared EWMContract (single
+        # source of truth) instead of a hard-coded ``ewm(span=span, adjust=False)``.
+        contract = ewm_contract_for("ts_ema")
+        check_ewm_contract(contract, canonical="ts_ema")
+        assert contract is not None
+        return x.ewm(**contract.to_kwargs(span=float(span))).mean()
 
 
 

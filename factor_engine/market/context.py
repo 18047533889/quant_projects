@@ -81,6 +81,8 @@ class MarketContext:
     calendar_version: str | None = None
     # R17-049: explicit annualization basis (None == resolve from calendar).
     annualization_basis: str | None = None
+    # R40 #137: engine 启动解析真实交易日历后写入的实际年交易日数 —— 非 252 兜底。
+    resolved_trading_days_per_year: int | None = None
     extra: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -100,6 +102,19 @@ class MarketContext:
                 raise ValueError(
                     "MarketContext.decision_timestamp must be tz-aware (R17-051); "
                     f"got naive {ts!r}"
+                )
+        # R40 #138: ``extra`` 不参与 identity（compare/hash=False），因此不得放入
+        # 语义字段名（market/currency/calendar_id/session_id/…）—— 否则同一语义
+        # 字段可绕过 identity 比较被静默改写。
+        if self.extra:
+            from dataclasses import fields as _dataclass_fields
+
+            field_names = frozenset(f.name for f in _dataclass_fields(type(self)))
+            collisions = sorted(set(self.extra) & field_names)
+            if collisions:
+                raise ValueError(
+                    f"MarketContext.extra must not shadow semantic fields: "
+                    f"{collisions} (R40 #138: extra is excluded from identity)"
                 )
 
     def with_profile(self, profile: str) -> "MarketContext":
@@ -137,12 +152,20 @@ class MarketContext:
         # fallback when no calendar is available; the resolved market calendar /
         # requested-window session count should drive operators.  Minute
         # volatility must NOT use 252 directly (session length differs).
+        # R40 #137: engine 启动解析真实日历后写入 ``resolved_trading_days_per_year``，
+        # 该真实值优先于 252 兜底。
+        if self.resolved_trading_days_per_year is not None:
+            return int(self.resolved_trading_days_per_year)
         if self.annualization_basis == "calendar":
             return 0  # sentinel: caller must resolve from the calendar
         return 252
 
     @property
     def annualization_factor(self) -> float:
+        # R40 #137: 真实日历值优先 —— 一旦 engine 解析出真实年交易日数，返回该
+        # 值而非 252 兜底。
+        if self.resolved_trading_days_per_year is not None:
+            return float(self.resolved_trading_days_per_year)
         if self.annualization_basis == "calendar":
             raise ValueError(
                 "annualization_basis='calendar' requires resolving the market "
@@ -175,6 +198,7 @@ class MarketContext:
             "universe_policy_hash",
             "calendar_version",
             "annualization_basis",
+            "resolved_trading_days_per_year",
         ):
             value = getattr(self, key, None)
             if value is not None:

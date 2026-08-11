@@ -50,9 +50,25 @@ class IdentityHashTypeError(TypeError):
 
 
 def _typed_hash_value(v: Any) -> Any:
-    """把身份 payload 值归一为 typed JSON schema（R20-073..078）。"""
+    """把身份 payload 值归一为 typed JSON schema（R20-073..078）。
+
+    R40 #115: numpy scalars（``np.int32`` / ``np.int64`` / ``np.float32`` /
+    ``np.float64``）不是 Python ``int``/``float`` 的实例，无法用
+    ``isinstance(v, int)`` 区分 —— 这里按 dtype 归一为
+    ``{"type": str(v.dtype), "value": v.item()}``，使 ``int32(1)`` 与
+    ``int64(1)`` 得到不同的身份 payload（int64 vs int32 在计划里不是同一个值）。
+    """
     if isinstance(v, (str, int, float, bool)) or v is None:
         return v
+    # R40 #115: numpy scalar 前置检测（在其它 isinstance 分支之前）。
+    dtype = getattr(v, "dtype", None)
+    if dtype is not None:
+        kind = getattr(dtype, "kind", None)
+        if kind in "iufb" and hasattr(v, "item"):
+            return {"type": str(dtype), "value": v.item()}
+        if kind in "mM":
+            # numpy datetime64/timedelta64 scalar → ISO 表示（时间语义绑定 dtype）。
+            return {"type": str(dtype), "value": str(v)}
     if isinstance(v, Enum):
         return _typed_hash_value(v.value)
     if isinstance(v, (date, datetime)):
@@ -261,38 +277,116 @@ def _plan_column_names(plan: Any) -> list[str]:
     return sorted(seen)
 
 
+@dataclass(frozen=True)
+class OperatorSemanticContractDigest:
+    """R40 #110: 算子语义契约的单一 digest（投影源）。
+
+    ``planner.plan_hash._operator_semantic_contract``（计划结构键）与
+    ``runtime.factor_identity.scoped_operator_contract_hash``（因子身份依赖
+    digest）都从这一个 frozen dataclass 投影 —— 同一算子的 semantic_version /
+    policy / signature / implementation 变更会同步改变两条哈希路径，避免
+    「plan key 已变但 identity 未变」的 split-brain。
+    """
+
+    canonical: str
+    semantic_version: str
+    policy_hash: str
+    signature_hash: str
+    implementation_hash: str
+    #: backend 维度的 implementation 源码哈希（``backend_hashes`` dict 的稳定
+    #: tuple 表示，dataclass 可 hash）。
+    backend_hashes: tuple[tuple[str, str], ...] = ()
+
+    def to_payload(self) -> dict[str, Any]:
+        """哈希用 typed payload（排序键稳定）。"""
+        return {
+            "canonical": self.canonical,
+            "semantic_version": self.semantic_version,
+            "policy_hash": self.policy_hash,
+            "signature_hash": self.signature_hash,
+            "implementation_hash": self.implementation_hash,
+            "backend_hashes": dict(self.backend_hashes),
+        }
+
+    def contract_hash(self) -> str:
+        return _stable_hash(self.to_payload())
+
+    @classmethod
+    def for_canonical(cls, canonical: str) -> "OperatorSemanticContractDigest":
+        """从 registry + evidence 构建单个算子的契约 digest（单一权威）。
+
+        与 ``planner.plan_hash._operator_semantic_contract`` 同一字段集合：
+        semantic_version / policy_hash / signature_hash / implementation_hash /
+        backend_hashes。registry 未加载 / 未知算子时抛出底层异常，由调用方
+        决定回退（plan_hash 回退 ``semantic_version="unregistered"``）。
+        """
+        from cleaned_operators.operator_policy import infer_operator_policy
+        from cleaned_operators.registry import OperatorRegistry
+        from backend.evidence_provenance import (
+            compute_payload_hash,
+            implementation_hashes_for,
+        )
+        from backend.production_signature import signature_for
+
+        resolved = OperatorRegistry.resolve_canonical(canonical)
+        catalog = OperatorRegistry._catalog.get(resolved, {})
+        signature = signature_for(resolved)
+        signature_payload = None
+        if signature is not None:
+            signature_payload = {
+                "default_status": signature.default_status,
+                "params": [(p.name, p.constraint, p.status) for p in signature.params],
+            }
+        impl_hash: dict[str, str] = {}
+        try:
+            impl_hash = implementation_hashes_for(resolved)
+        except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
+            impl_hash = {}
+        return cls(
+            canonical=resolved,
+            semantic_version=str(catalog.get("semantic_version") or "1.0"),
+            policy_hash=compute_payload_hash(
+                infer_operator_policy(resolved, canonical=resolved).to_dict()
+            ),
+            signature_hash=compute_payload_hash(signature_payload),
+            implementation_hash=compute_payload_hash(impl_hash),
+            backend_hashes=tuple(sorted(impl_hash.items())),
+        )
+
+
 def scoped_operator_contract_hash(plan: Any, *, backend: str = "pandas_numpy") -> str:
     """R32-P0-040: ``PlanOperatorDependencyDigest`` —— 只对计划引用的算子做 hash。
 
     与整库 ``compute_operator_catalog_hash`` 不同：无关算子变化不再污染本因子
     的 identity。未加载 registry / 未知算子按原 op 名保守计入（fail-closed：
     注册后 digest 必变）。
+
+    R40 #109: 每个算子条目通过 :class:`OperatorSemanticContractDigest` 纳入
+    ``implementation_hash``（backend.evidence_provenance 的 implementation 源码
+    哈希）—— 算子 kernel 实现改动即使忘记 bump semantic_version 也会改变
+    因子身份，使 checkpoint / factor_version / cache 失效。
     """
     import json
-
-    from cleaned_operators.operator_policy import infer_operator_policy
-    from cleaned_operators.registry import OperatorRegistry
 
     canons = _plan_operator_canonicals(plan)
     entries: list[dict[str, Any]] = []
     for canon in canons:
         try:
-            op = OperatorRegistry.get(canon, backend=backend, mode="any")
-            policy = (
-                infer_operator_policy(op, canonical=canon).to_dict()
-                if op is not None
-                else None
-            )
+            digest = OperatorSemanticContractDigest.for_canonical(canon)
             entries.append({
-                "canonical": canon,
-                "category": (
-                    str(getattr(getattr(op, "metadata", None), "category", ""))
-                    if op is not None else ""
-                ),
-                "policy": policy,
+                "canonical": digest.canonical,
+                "semantic_version": digest.semantic_version,
+                "policy_hash": digest.policy_hash,
+                "signature_hash": digest.signature_hash,
+                "implementation_hash": digest.implementation_hash,
+                "backend_hashes": dict(digest.backend_hashes),
             })
         except Exception:  # noqa: BLE001 - bootstrap 保守计入
-            entries.append({"canonical": canon, "policy": None})
+            entries.append({
+                "canonical": canon,
+                "policy_hash": None,
+                "implementation_hash": None,
+            })
     payload = json.dumps(entries, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -604,11 +698,79 @@ def compute_identity_from_materialize_ctx(
 # ---------------------------------------------------------------------------
 
 
+def _col_canonical_bytes(s: Any) -> str:
+    """dtype-preserving canonical bytes for one column (R40 #111/#116).
+
+    - integer/unsigned/bool: raw in-memory bytes (int32 vs int64 differ in
+      width; ``2**53`` vs ``2**53+1`` are preserved exactly, no float loss);
+    - float: normalized -0.0 -> +0.0 and NaN -> a single bit pattern so the
+      fingerprint is value-canonical across representations;
+    - datetime/timedelta: 64-bit integer view (stable across pandas versions);
+    - object/string: stable ``repr`` of the scalar list.
+    """
+    import numpy as np
+
+    try:
+        arr = np.asarray(s.to_numpy())
+    except Exception:  # noqa: BLE001 - non-convertible column
+        return repr(list(s))
+    kind = getattr(arr.dtype, "kind", None)
+    if kind == "f":
+        arr = np.asarray(arr, dtype="float64")
+        arr[np.isnan(arr)] = np.nan
+        # -0.0 == 0.0 numerically; normalize to +0.0 for canonical equality.
+        arr = np.where(arr == 0.0, np.float64(0.0), arr)
+        return arr.tobytes().hex()
+    if kind in "iub":
+        return np.ascontiguousarray(arr).tobytes().hex()
+    if kind in "mM":
+        return np.asarray(arr, dtype="int64").tobytes().hex()
+    if kind in "OUS":
+        return repr([(x if isinstance(x, str) else repr(x)) for x in arr])
+    return np.ascontiguousarray(arr).tobytes().hex()
+
+
+def _null_mask_bytes(sub: Any) -> str:
+    """Per-column NaN/None mask bytes (R40 #111)."""
+    import numpy as np
+    import pandas as pd
+
+    parts: list[bytes] = []
+    for col in sub.columns:
+        mask = np.asarray(pd.isna(sub[col]), dtype=bool)
+        parts.append(mask.tobytes())
+    return b"\x00".join(parts).hex()
+
+
+def _stable_index_bytes(sub: Any) -> str:
+    """Stable hash of the frame index (R40 #111)."""
+    import numpy as np
+
+    idx = sub.index
+    try:
+        arr = np.asarray(idx)
+    except Exception:  # noqa: BLE001 - exotic index
+        arr = None
+    if arr is None:
+        return hashlib.sha256(repr(list(idx)).encode("utf-8")).hexdigest()
+    if getattr(arr.dtype, "kind", None) in "mM":
+        arr = arr.astype("int64")
+    return hashlib.sha256(np.ascontiguousarray(arr).tobytes()).hexdigest()
+
+
 def partition_input_fingerprint(frame: Any) -> str:
     """对分区输入行（datetime, asset, value）做稳定哈希。
 
     用于断点续写：同一分区在当前 run 的输入与上次成功 run 不同 → 必须重算。
     对空帧返回确定性空指纹。
+
+    R40 #111/#116: 不再 ``astype(str)`` 字符串化（int64 vs int32 vs datetime64
+    会全部变成 str 导致碰撞）。payload 携带 typed schema（每列 dtype）、
+    index 稳定字节、typed canonical values 与 null mask —— ``int64`` 与 ``int32``
+    同值得到不同指纹，``2**53`` 与 ``2**53+1`` 不碰撞。
+
+    R40 #112: 含 ``datetime`` + ``asset`` 列时先按两列稳定排序再 hash —— 同一
+    逻辑分区不同物理行序得到同一指纹，避免误重算。
 
     NEW-P0-29: a fingerprint-computation FAILURE is a hard error (fail closed to
     full recompute), NEVER degraded to ``""`` — otherwise two failed computations
@@ -625,8 +787,21 @@ def partition_input_fingerprint(frame: Any) -> str:
     sub = frame[cols]
     if sub.empty:
         return _stable_hash({"empty": True})
-    # 统一转字符串，避免 dtype/float 表示跨进程不稳定。
-    payload = sub.astype(str).to_dict(orient="list")
+    # R40 #112: 同一逻辑分区、不同物理行序 → 相同指纹。
+    if "datetime" in cols and "asset" in cols:
+        try:
+            sub = sub.sort_values(["datetime", "asset"], kind="stable")
+        except Exception:  # noqa: BLE001 - 非可排序列保守跳过
+            pass
+    sub = sub.reset_index(drop=True)
+    schema = {col: str(sub[col].dtype) for col in cols}
+    payload = {
+        "schema": schema,
+        "index": _stable_index_bytes(sub),
+        "values": "|".join(_col_canonical_bytes(sub[col]) for col in cols),
+        "null_mask": _null_mask_bytes(sub),
+        "n_rows": int(len(sub)),
+    }
     return _stable_hash(payload)
 
 

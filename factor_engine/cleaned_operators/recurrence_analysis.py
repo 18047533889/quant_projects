@@ -22,12 +22,21 @@ From ``R`` four statistics are derived:
 
 All operators are trailing-window, prefix-causal and deterministic.
 
-R11 round-3 #67: the line-structure statistics (diagonal entropy, trapping
-time, divergence) are strongly sample-size dependent — the recurrence matrix
-size changes the operator.  In production their effective length (longest
-trailing contiguous finite run) must cover at least ``0.8 * window``; below
-that the reading is NaN, so a gap is never followed by a short-sample recompute
-that is a different operator than a full-window reading.
+R11 round-3 #67 / M-160: the whole RQA family is strongly sample-size
+dependent — the recurrence matrix size changes the operator.  In production the
+effective length (longest trailing contiguous finite run) must cover at least
+``_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT`` (0.8) of the window for EVERY operator
+— recurrence rate included — below that the reading is NaN, so a gap is never
+followed by a short-sample recompute that is a different operator than a
+full-window reading.  One shared module-level constant is the single family
+policy (previously only the line-structure statistics used 0.8 and
+``ts_recurrence_rate`` silently used 0.0).
+
+M-162: the estimator knobs (``dim``/``delay``/``eps_fraction``) and support
+floor (``min_periods``) carry non-searchable ParamSpecs; only ``window`` (the
+HORIZON dimension) is searchable.  ``min_line`` is a fixed internal preset (2)
+and is not an exposed parameter, so it carries no ParamSpec
+(``keys(param_specs) ⊆ param_names``).
 """
 from __future__ import annotations
 
@@ -36,11 +45,25 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
+
+# M-160: ONE family-wide effective-history maturity policy (see module docstring).
+_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT = 0.8
+
+# M-162: non-searchable estimator-resolution / preset knobs, a non-searchable
+# support floor, and the searchable HORIZON window.  Shared by all four RQA
+# canonicals (identical scalar param_names).
+_RQA_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "dim": ParamSpec(dtype=int, min=1, max=4, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "delay": ParamSpec(dtype=int, min=1, max=4, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "eps_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+}
 
 
 def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
@@ -184,16 +207,16 @@ def _recurrence_series(
     min_line: int,
     min_periods: int,
     which: int,
-    min_effective_fraction: float = 0.0,
+    min_effective_fraction: float = _RQA_MIN_EFFECTIVE_FRACTION_DEFAULT,
 ) -> np.ndarray:
     rows, cols = values.shape
     w = max(2, int(window))
     mp = max(4, int(min_periods))
-    # R11 round-3 #67: line-structure statistics (diagonal entropy / trapping
-    # time / divergence) are strongly sample-size dependent — the recurrence
-    # matrix size changes the operator.  Require the effective length (longest
-    # trailing contiguous finite run) to cover at least ``min_effective_fraction``
-    # of the window (production: 0.8) before emitting a value; below that -> NaN.
+    # R11 round-3 #67 / M-160: every RQA statistic is strongly sample-size
+    # dependent — the recurrence matrix size changes the operator.  Require the
+    # effective length (longest trailing contiguous finite run) to cover at
+    # least ``min_effective_fraction`` of the window (family default 0.8) before
+    # emitting a value; below that -> NaN.
     min_eff = max(mp, int(np.ceil(float(min_effective_fraction) * w)))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
@@ -253,6 +276,7 @@ class TsRecurrenceRate(SeriesOperator):
         unit="ratio",
         cost=6,
     )
+    metadata.param_specs = dict(_RQA_PARAM_SPECS)
 
     def _calculate_series(
         self,
@@ -265,7 +289,12 @@ class TsRecurrenceRate(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
-        out = _recurrence_series(x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 0)
+        # M-160: recurrence rate shares the family maturity policy (0.8) — it is
+        # sample-size dependent too, so a gap must not emit a short-sample value.
+        out = _recurrence_series(
+            x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 0,
+            min_effective_fraction=_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT,
+        )
         return frame_like(x, out)
 
 
@@ -291,6 +320,7 @@ class TsRecurrenceDiagonalEntropy(SeriesOperator):
         unit="entropy",
         cost=6,
     )
+    metadata.param_specs = dict(_RQA_PARAM_SPECS)
 
     def _calculate_series(
         self,
@@ -305,7 +335,7 @@ class TsRecurrenceDiagonalEntropy(SeriesOperator):
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
         out = _recurrence_series(
             x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 1,
-            min_effective_fraction=0.8,
+            min_effective_fraction=_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT,
         )
         return frame_like(x, out)
 
@@ -332,6 +362,7 @@ class TsRecurrenceTrappingTime(SeriesOperator):
         unit="bars",
         cost=6,
     )
+    metadata.param_specs = dict(_RQA_PARAM_SPECS)
 
     def _calculate_series(
         self,
@@ -346,7 +377,7 @@ class TsRecurrenceTrappingTime(SeriesOperator):
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
         out = _recurrence_series(
             x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 2,
-            min_effective_fraction=0.8,
+            min_effective_fraction=_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT,
         )
         return frame_like(x, out)
 
@@ -374,6 +405,7 @@ class TsRecurrenceDivergence(SeriesOperator):
         unit="inverse_bars",
         cost=6,
     )
+    metadata.param_specs = dict(_RQA_PARAM_SPECS)
 
     def _calculate_series(
         self,
@@ -388,7 +420,7 @@ class TsRecurrenceDivergence(SeriesOperator):
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
         out = _recurrence_series(
             x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 3,
-            min_effective_fraction=0.8,
+            min_effective_fraction=_RQA_MIN_EFFECTIVE_FRACTION_DEFAULT,
         )
         return frame_like(x, out)
 

@@ -15,7 +15,102 @@ canonical 名（``RSI``、``rank``、``decay_linear``）指向同一 ``Operator`
 
 本模块无函数定义，import 时产生副作用（向 ``OperatorRegistry`` 登记别名）。
 """
+from dataclasses import dataclass
+
 from cleaned_operators.registry import OperatorRegistry
+
+
+# ---------------------------------------------------------------------------
+# R40 #147: 版本化 migration table —— deprecated alias → canonical 的完整凭证。
+#
+# ``register_compat_alias`` 只在 registry catalog 上记录
+# ``compat_aliases[alias] = {migration_reason, deprecated_since, removal_version}``，
+# 但没有版本化的迁移语义表（old → new → 生效 DSL 版本 → 语义等价 → 迁移规则 →
+# 弃用时间 → 移除时间）。本表补齐该语义，供 mining / 审计 / 公式迁移统一消费；
+# ``test_migration_table_completeness`` 校验所有 deprecated alias 都在表中。
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OperatorMigrationRecord:
+    """一条 deprecated alias → canonical 的版本化迁移记录（R40 #147）。"""
+
+    old_canonical: str
+    new_canonical: str
+    effective_dsl_version: str
+    semantic_equivalent: bool
+    migration_rule: str
+    deprecated_since: str
+    remove_after: str
+
+
+MIGRATION_TABLE: tuple[OperatorMigrationRecord, ...] = (
+    # R40 #146: fin_mad 是 fin_mean_abs_deviation 的兼容名（mean(|x-mean|)，非
+    # median-based MAD）。从 canonical 降为 registry alias，mining 只搜 canonical。
+    OperatorMigrationRecord(
+        old_canonical="fin_mad",
+        new_canonical="fin_mean_abs_deviation",
+        effective_dsl_version="0.11.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="0.11.0",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_matrix_profile_motif_distance",
+        new_canonical="ts_matrix_profile_discord_score",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="2026-08",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_weighted_semivariance_sqrt",
+        new_canonical="ts_weighted_downside_deviation",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="0.11.0",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_garch_vol_forecast",
+        new_canonical="ts_garch_next_vol_forecast",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="2026-08",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_har_rv_next_forecast",
+        new_canonical="ts_har_rv_next_vol_forecast",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="2026-08",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_har_rv_forecast",
+        new_canonical="ts_har_rv_next_vol_forecast",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="2026-08",
+        remove_after="1.0",
+    ),
+    OperatorMigrationRecord(
+        old_canonical="ts_har_rv_innovation_z",
+        new_canonical="ts_har_rv_forecast_error_z",
+        effective_dsl_version="1.0",
+        semantic_equivalent=True,
+        migration_rule="rename",
+        deprecated_since="2026-08",
+        remove_after="1.0",
+    ),
+)
 
 # ---------------------------------------------------------------------------
 # § 统计 / 回归（statistics_regression.py）

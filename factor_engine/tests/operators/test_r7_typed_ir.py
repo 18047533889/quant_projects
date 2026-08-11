@@ -162,8 +162,19 @@ def test_production_rejects_unknown_raw_column():
     from api.columns import col
     from ir.analyzer import Analyzer, UnknownRawColumnError
 
+    # R40 #174：production Analyzer 必须带显式 market（market=None 只在
+    # research/compat 合法）——market 显式声明后，未知裸列仍被 production 拒绝。
     with pytest.raises(UnknownRawColumnError):
-        Analyzer(production=True).lower(col("custom_alpha_input"))
+        Analyzer(production=True, market="ashare").lower(col("custom_alpha_input"))
+
+
+def test_production_requires_explicit_market():
+    """R40 #174：Analyzer(production=True, market=None) 必须 fail-closed。"""
+    from api.columns import col
+    from ir.analyzer import Analyzer, ProductionMarketContextRequiredError
+
+    with pytest.raises(ProductionMarketContextRequiredError):
+        Analyzer(production=True).lower(col("close"))
 
 
 def test_research_allows_raw_column_opt_in():

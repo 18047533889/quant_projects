@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
+from uuid import uuid4
 
 from cache.expression_cache import ExpressionCache
 from cache.layers import CacheHitStats, CacheLayer
@@ -27,7 +28,11 @@ class ExecutionCacheSession:
     stats: CacheHitStats | None = None
     cse_budget_bytes: int | None = None
     panel_budget_bytes: int | None = None
-    execution_id: str = "session"
+    # R40 #124: 默认 execution_id 必须是每 session 唯一的 —— 历史默认 ``"session"``
+    # 让并发 session 的 governor layer 名（``{execution_id}:l0_cse``）互相碰撞，
+    # 记账互相踩。engine 构造 session 时显式传唯一 id；缺省用 uuid4。field
+    # default_factory（而非 `= uuid4().hex`）保证每个实例独立取值。
+    execution_id: str = field(default_factory=lambda: uuid4().hex)
     # R36 P0-022：governor 层注册失败时 fail-closed（production）/ warning（research）。
     strict: bool | None = None
     # R38 P0-039（§15）：run_mode 从 Engine execution context 显式传入，不再只看
@@ -186,12 +191,16 @@ class ExecutionCacheSession:
 
         if not isinstance(ctx, ExecutionContext):
             raise TypeError(f"expected ExecutionContext, got {type(ctx)!r}")
+        # R40 #122: 不再用 ``{"cache": self.stats}`` 完全覆盖 ctx 已有
+        # ``runtime_stats`` —— 合并进既有 stats（如其他层已写入的计数），只覆盖
+        # ``cache`` 键。
+        existing_stats = getattr(ctx, "runtime_stats", None) or {}
         return replace(
             ctx,
             cache=self.plan_cache,
             shared_result_cache=self.shared_result_cache,
             panel_cache=self.panel_cache,
-            runtime_stats={"cache": self.stats},
+            runtime_stats={**existing_stats, "cache": self.stats},
             shared_buffers=self._buffer_store,
         )
 

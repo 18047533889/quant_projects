@@ -1253,7 +1253,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_growth_acceleration", ("x", "period_id", "short_periods", "long_periods", "flow_type"), fin_growth_acceleration, "Short minus long growth."),
     ("fin_growth_change", ("x", "period_id", "growth_periods", "compare_periods", "flow_type"), fin_growth_change, "Growth change versus prior report period."),
     ("fin_std", ("x", "period_id", "periods"), fin_std, "Sample std of recent visible report values."),
-    ("fin_mad", ("x", "period_id", "periods"), fin_mad, "Mean absolute deviation of recent visible report values."),
+    ("fin_mean_abs_deviation", ("x", "period_id", "periods"), fin_mad, "Mean absolute deviation of recent visible report values."),
     ("fin_cv", ("x", "period_id", "periods"), fin_cv, "Coefficient of variation."),
     ("fin_stability", ("x", "period_id", "periods"), fin_stability, "Inverse-coefficient stability."),
     ("fin_range", ("x", "period_id", "periods"), fin_range, "Range of recent visible report values."),

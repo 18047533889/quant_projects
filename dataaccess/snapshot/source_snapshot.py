@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
+from data_access.snapshot.fidelity import SnapshotFidelity
+
 
 @dataclass(frozen=True)
 class ResolvedObject:
@@ -69,6 +71,10 @@ class ResolvedSourceSnapshot:
     source_generation: str | None = None
     objects: tuple[ResolvedObject, ...] = ()
     content_digest: str = ""
+    # R40 #52：证据保真度层级（PUBLISHER_MANIFEST > REMOTE_VERSION_ID >
+    # CONTENT_HASH > LOCAL_STAT > FALLBACK > UNKNOWN）。production 拒绝低于
+    # REMOTE_VERSION_ID 的 snapshot。
+    fidelity: SnapshotFidelity = SnapshotFidelity.UNKNOWN
     resolved_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -99,6 +105,7 @@ class ResolvedSourceSnapshot:
             "object_count": self.object_count,
             "total_bytes": self.total_bytes,
             "content_digest": self.content_digest,
+            "fidelity": getattr(self.fidelity, "name", str(self.fidelity)),
             "objects": [o.to_dict() for o in self.objects],
             "resolved_at": self.resolved_at.isoformat(),
         }

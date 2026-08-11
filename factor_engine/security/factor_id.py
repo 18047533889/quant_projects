@@ -31,6 +31,11 @@ MAX_FACTOR_ID_LENGTH = 128
 _FORBIDDEN_CHARS_RE = re.compile(r"[\x00-\x1f\x7f/\\]")
 _FORBIDDEN_SEGMENTS = frozenset({".", "..", ""})
 
+#: R40 #145: production factor_id 字符集白名单 —— NFC 归一化防不住视觉同形歧义
+#: （西里尔 ``а`` vs 拉丁 ``a``、全角 ``：`` vs 半角 ``:``）。production 只接受
+#: ASCII 字母/数字/``_``/``.``/``:``/``-``；research 放行但告警。
+_PRODUCTION_FACTOR_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+
 #: 保留名：因子湖目录拓扑占用的名字，不可用作 factor_id。
 _RESERVED_IDS = frozenset({
     "_catalog.sqlite",
@@ -63,6 +68,7 @@ def validate_factor_id(
     factor_id: Any,
     *,
     max_length: int = MAX_FACTOR_ID_LENGTH,
+    production: bool | None = None,
 ) -> str:
     """R32-P0-035/036: 统一 FactorId domain gate。
 
@@ -71,10 +77,13 @@ def validate_factor_id(
     - 禁 path separator / ``..`` / 控制字符；
     - Unicode NFC 归一化后返回；
     - 保留名拒绝。
+    - R40 #145: production 下额外执行 ASCII 字符集白名单（``^[A-Za-z0-9_.:-]+$``）
+      —— 拒绝同形异义（homoglyph）字符；非 production 放行但告警。
 
     参数:
         factor_id: 待校验的因子 ID
         max_length: 长度上限（可选）
+        production: 是否按 production 规则（``None`` 自动按 run mode 解析）
 
     返回:
         归一化后的 factor_id
@@ -106,6 +115,26 @@ def validate_factor_id(
     # ``..`` 作为连续片段：即使不在 / 分隔后也要拒绝。
     if ".." in text:
         raise FactorIdError(f"factor_id must not contain '..': {text!r}")
+    # R40 #145: production 字符集白名单（homoglyph 防御）。
+    if not _PRODUCTION_FACTOR_ID_RE.match(text):
+        if production is None:
+            from runtime.production_policy import is_production_mode
+
+            production = is_production_mode()
+        if production:
+            raise FactorIdError(
+                f"factor_id {text!r} contains characters outside the production "
+                "whitelist [A-Za-z0-9_.:-]; homoglyph / non-ASCII letters are "
+                "rejected in production (R40 #145)"
+            )
+        import warnings
+
+        warnings.warn(
+            f"factor_id {text!r} contains characters outside the production "
+            "whitelist; non-ASCII / homoglyph IDs are research-only (R40 #145)",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return text
 
 

@@ -35,7 +35,9 @@ their dominant mode (level persistence), which is a different dynamics from a
 return series.  The variants make the input semantic explicit:
 ``ts_dmd_level_*`` declares ``x`` a price level (``price_level`` /
 ``log_price_level``) and ``ts_dmd_return_*`` declares ``x`` a return.  The
-legacy unconstrained ``ts_dmd_*`` names remain for compatibility.
+legacy unconstrained ``ts_dmd_*`` names remain for compatibility, stamped
+``diagnostic_only`` / ``compatibility_only`` (M-091): they are NOT first-class
+search canonicals — prefer the typed level/return variants.
 
 Deterministic (no randomized SVD / subsampling), strict-PIT, NaN fail-closed.
 """
@@ -55,6 +57,48 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+# M-092: DMD fit-feasibility telemetry.  ``last_dmd_telemetry()`` exposes the
+# most recent (col, row) fit's outcome — the physical (conjugate-merged) mode
+# count, requested rank, ``top_k`` and a machine-readable failure reason.  The
+# kernel fails closed to NaN silently for degenerate embeddings / spectra /
+# over-large ``top_k``; this accessor (mirroring the
+# ``state_space.numba_dispatch_stats`` / ``panel_model.last_fit_telemetry``
+# pattern) lets audit probes distinguish an infeasible combination from a
+# genuine zero.  DIAGNOSTIC accessor only — no operator surface is registered
+# from it.
+_LAST_DMD_TELEMETRY: dict[str, Any] = {
+    "physical_mode_count": None,
+    "rank": None,
+    "top_k": None,
+    "failure_reason": "not_run",
+}
+
+
+def last_dmd_telemetry() -> dict[str, Any]:
+    """Telemetry for the most recent DMD per-row fit.
+
+    Returns ``{"physical_mode_count": int|None, "rank": int, "top_k": int|None,
+    "failure_reason": "ok"|"top_k_gt_modes"|"singular"|"insufficient_window"}``.
+    ``physical_mode_count`` is the number of conjugate-merged physical modes and
+    is populated on the concentration path; the growth / frequency kernels
+    report the raw eigenvalue count (``rank``) instead.  ``top_k`` is the value
+    the caller requested (``None`` when the operator does not take ``top_k``).
+    """
+    return dict(_LAST_DMD_TELEMETRY)
+
+
+def _set_dmd_telemetry(
+    physical_mode_count: int | None,
+    rank: int,
+    top_k: int | None,
+    failure_reason: str,
+) -> None:
+    _LAST_DMD_TELEMETRY["physical_mode_count"] = physical_mode_count
+    _LAST_DMD_TELEMETRY["rank"] = rank
+    _LAST_DMD_TELEMETRY["top_k"] = top_k
+    _LAST_DMD_TELEMETRY["failure_reason"] = failure_reason
+
 
 # R16-087/088: VERSIONED numerical policy.  ``np.linalg.pinv`` default rcond is
 # library-version dependent; a fixed rcond + relative imaginary-mode tolerance
@@ -302,9 +346,18 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
             # for ``window``, so a gap-shrunken sample is rejected exactly as the
             # equivalent small declared window would be at compile time.
             if not dmd_feasibility(window=v.size, rank=int(rank), dim=int(dim), delay=int(delay)):
+                # M-092: the run length substituted for ``window`` is too short
+                # (or the declared rank/dim/delay is infeasible on it) — the row
+                # fails closed to NaN.  Record why so audit probes can tell an
+                # infeasible embedding from a genuine zero.
+                _set_dmd_telemetry(None, int(rank), int(top_k), "insufficient_window")
                 continue
             res = _hankel_dmd(v, int(rank), int(dim), int(delay))
             if res is None:
+                # M-092: the SVD/eigen path was degenerate (singular values,
+                # condition number, all-zero mode energy, empty spectrum) —
+                # record the singular failure reason.
+                _set_dmd_telemetry(None, int(rank), int(top_k), "singular")
                 continue
             lam0 = res["eig"][0]
             if which == "growth":
@@ -312,6 +365,12 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # ``log(max(|λ|, EPS))`` let a machine-constant decide an
                 # arbitrary finite growth.  λ == 0 -> NaN (undefined).
                 val = float(np.nan) if abs(lam0) == 0.0 else float(np.log(abs(lam0)))
+                if np.isfinite(val):
+                    out[r, c] = val
+                # M-092: the fit itself succeeded (zero-eig growth is a DEFINED
+                # NaN, not a feasibility failure) — report the raw eigenvalue
+                # count as the physical mode count.
+                _set_dmd_telemetry(int(res["eig"].size), int(rank), int(top_k), "ok")
             elif which == "frequency":
                 # P1-L (#138): the useful metric is the dominant OSCILLATORY
                 # frequency — the max-energy mode among the IMAGINARY modes.  A
@@ -327,6 +386,10 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                         dom = lam
                         break
                 if dom is None:
+                    # M-092: a valid fit with NO imaginary mode is a defined NaN
+                    # (the series is level-persistence, not oscillatory) — not a
+                    # feasibility failure, so report ``ok``.
+                    _set_dmd_telemetry(int(res["eig"].size), int(rank), int(top_k), "ok")
                     continue
                 # R6-202: for a real-valued time series the eigenvalues come in
                 # conjugate pairs (λ, conj(λ)) with near-identical energies.  The
@@ -335,11 +398,18 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # frequency uses |arg λ|/(2π) so the dominant frequency is stable
                 # and unambiguous for a real series.
                 val = float(abs(np.angle(dom)) / (2.0 * np.pi))
+                if np.isfinite(val):
+                    out[r, c] = val
+                _set_dmd_telemetry(int(res["eig"].size), int(rank), int(top_k), "ok")
             else:
                 # R6-200: top_k > rank is rejected, never silently clipped —
                 # rank=3 with top_k=3,4,10 must not compile to the same factor.
                 tk = int(top_k)
                 if tk > int(rank):
+                    # M-092: the declared relational spec ``top_k <= rank`` is
+                    # the compile-time gate; here it fires at runtime (the bound
+                    # ``rank`` caps the physical mode count) — record it.
+                    _set_dmd_telemetry(None, int(rank), int(top_k), "top_k_gt_modes")
                     continue
                 # R6-203: mode concentration must count a conjugate pair ONCE —
                 # a real oscillation splits its energy between the +f and -f
@@ -385,14 +455,20 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # is a data-dependent infeasibility, so the canonical fails
                 # closed (NaN) instead of silently collapsing to fewer modes.
                 if tk > len(merged_log):
+                    # M-092: the physical (conjugate-merged) mode count is
+                    # smaller than the requested ``top_k`` — record the actual
+                    # count so audit probes see the data-dependent infeasibility.
+                    _set_dmd_telemetry(len(merged_log), int(rank), int(top_k), "top_k_gt_modes")
                     continue
                 total_log = _logsumexp(merged_log)
                 if not np.isfinite(total_log) or total_log <= float(np.log(_EPS)):
+                    _set_dmd_telemetry(len(merged_log), int(rank), int(top_k), "singular")
                     continue
                 top_log = _logsumexp(merged_log[:tk])
                 val = float(np.exp(top_log - total_log))
-            if np.isfinite(val):
-                out[r, c] = val
+                if np.isfinite(val):
+                    out[r, c] = val
+                _set_dmd_telemetry(len(merged_log), int(rank), int(top_k), "ok")
     return out
 
 
@@ -450,6 +526,19 @@ def _dmd_variant_spec(
     }
 
 
+# M-091: the generic ``ts_dmd_*`` names below are the LEGACY, untyped DMD forms.
+# They stay registered for DSL compatibility (semantic_certification stamps them
+# ``compatibility_only`` in the catalog) but their metadata now carries an
+# explicit research/compat note + ``diagnostic_only``/``compatibility_only``
+# tags so the mining surface and the production-hardening audit never treat
+# them as first-class search candidates.  The formal search space is the typed
+# ``ts_dmd_level_*`` / ``ts_dmd_return_*`` variants below.
+_DMD_COMPAT_TAGS = [
+    "diagnostic_only",
+    "compatibility_only",
+    "research_compat:prefer_level_return_typed_variant",
+]
+
 _SPECS: dict[str, dict[str, Any]] = {
     # R9-OP-006 (honest units): ``log|λ|`` is a per-sample (per-bar) log-growth
     # rate, NOT a plain ``level``; ``|arg λ|/(2π)`` is cycles PER BAR, not bare
@@ -462,7 +551,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "dynamical_systems",
         "unit": "log_growth_per_bar",
         "cost": 8,
-        "tags_extra": [],
+        "tags_extra": list(_DMD_COMPAT_TAGS),
         "output_unit": "log_growth_per_bar",
         "param_specs": _DMD_BASE_SPEC,
         "relational_specs": _DMD_RELATIONAL_SPECS,
@@ -474,7 +563,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "dynamical_systems",
         "unit": "cycles_per_bar",
         "cost": 8,
-        "tags_extra": [],
+        "tags_extra": list(_DMD_COMPAT_TAGS),
         "output_unit": "cycles_per_bar",
         "param_specs": _DMD_BASE_SPEC,
         "relational_specs": _DMD_RELATIONAL_SPECS,
@@ -486,7 +575,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "dynamical_systems",
         "unit": "ratio",
         "cost": 8,
-        "tags_extra": [],
+        "tags_extra": list(_DMD_COMPAT_TAGS),
         "output_unit": "ratio",
         "param_specs": _DMD_CONCENTRATION_SPEC,
         "relational_specs": _DMD_CONCENTRATION_RELATIONAL_SPECS,

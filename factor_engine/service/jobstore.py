@@ -98,6 +98,11 @@ class JobRecord:
     request: dict[str, Any] = field(default_factory=dict)
     request_digest: Optional[str] = None
     execution_policy_digest: Optional[str] = None
+    # R40 #95: per-job 不可变 policy 快照 —— 提交时冻结 policy_id/version/digest，
+    # 之后 ``reload_policies()`` 刷新全局 policy 不影响在途 job 的旧快照。
+    policy_id: Optional[str] = None
+    policy_version: Optional[int] = None
+    policy_digest: Optional[str] = None
     cost_estimate: dict[str, Any] = field(default_factory=dict)
     result_summary: dict[str, Any] = field(default_factory=dict)
     artifacts: dict[str, Any] = field(default_factory=dict)
@@ -260,7 +265,13 @@ class JobStore:
             except json.JSONDecodeError:
                 self._quarantine_text(payload_text, run_id="unknown")
                 continue
-            job = self._job_from_raw(raw)
+            try:
+                job = self._job_from_raw(raw)
+            except (ValueError, TypeError, KeyError):
+                # R40 #104: 缺失/非法 schema_version 的 SQLite 行同样 quarantine
+                # （绝不静默当作 current 升级）。
+                self._quarantine_text(payload_text, run_id=str(raw.get("run_id") or "unknown"))
+                continue
             self._jobs[job.run_id] = job
             if job.idempotency_key:
                 self._idempotency_index[self._idem_key_for(job)] = job.run_id
@@ -277,9 +288,27 @@ class JobStore:
             checksum = payload.get("_checksum")
             body = dict(payload)
             body.pop("_checksum", None)
+            # R40 #103: MANIFEST_SCHEMA_VERSION>=3 时 checksum 必填 —— 当前 schema
+            # 的 manifest 缺 checksum 即 quarantine（损坏/手工删改，绝不静默通过）。
+            sv_raw = payload.get("schema_version")
+            sv = int(sv_raw) if sv_raw is not None else 0
+            if sv >= MANIFEST_SCHEMA_VERSION and not checksum:
+                self._quarantine_path(path)
+                continue
             if checksum and _manifest_checksum(body) != checksum:
                 self._quarantine_path(path)
                 continue
+            if sv < MANIFEST_SCHEMA_VERSION and not checksum:
+                # 旧 schema 缺 checksum：放行但 warning + 调度迁移（下次持久化
+                # 会写成 current schema + checksum）。
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "manifest %s (schema_version=%s) lacks checksum; scheduled "
+                    "for explicit migration",
+                    path.name,
+                    sv,
+                )
             try:
                 job = self._job_from_raw(payload)
             except (ValueError, TypeError, KeyError):
@@ -290,9 +319,37 @@ class JobStore:
                 self._idempotency_index[self._idem_key_for(job)] = job.run_id
                 self._idempotency_scoped[job.idempotency_key] = job.run_id
 
+    def _migrate_manifest(self, raw: dict[str, Any], *, from_version: int) -> dict[str, Any]:
+        """R40 #104: 显式 legacy→current manifest 迁移函数。
+
+        只做无损字段映射（legacy 缺省字段补默认值），并返回 schema_version 已
+        提升到 current 的 dict。不存在的破坏性变更（例如字段重命名）在
+        MANIFEST_SCHEMA_VERSION 前进时在此处显式实现 —— 绝不静默升级。
+        """
+        if from_version >= MANIFEST_SCHEMA_VERSION:
+            return raw
+        migrated = dict(raw)
+        # v1 -> v2: (placeholder —— 无已知破坏性变更，保持字段)
+        # v2 -> v3: (placeholder —— 无已知破坏性变更，保持字段)
+        migrated["schema_version"] = MANIFEST_SCHEMA_VERSION
+        return migrated
+
     def _job_from_raw(self, raw: dict[str, Any]) -> JobRecord:
-        if int(raw.get("schema_version", MANIFEST_SCHEMA_VERSION)) > MANIFEST_SCHEMA_VERSION:
+        raw_sv = raw.get("schema_version")
+        # R40 #104: 当前 schema（>=2）要求 manifest 显式声明 schema_version。
+        # 缺失 => 视为 legacy，绝不静默当作 current —— 拒绝并给迁移指引。
+        if raw_sv is None:
+            raise ValueError(
+                "manifest missing 'schema_version'; refusing to silently upgrade "
+                f"to current {MANIFEST_SCHEMA_VERSION}. Use "
+                "JobStore.migrate_manifest() / _migrate_manifest to convert "
+                "legacy manifests explicitly."
+            )
+        sv = int(raw_sv)
+        if sv > MANIFEST_SCHEMA_VERSION:
             raise ValueError("manifest schema version newer than supported")
+        if sv < MANIFEST_SCHEMA_VERSION:
+            raw = self._migrate_manifest(raw, from_version=sv)
         return JobRecord(
             run_id=str(raw["run_id"]),
             service=str(raw.get("service") or "factor_engine"),
@@ -323,6 +380,11 @@ class JobStore:
             request=dict(raw.get("request") or {}),
             request_digest=raw.get("request_digest"),
             execution_policy_digest=raw.get("execution_policy_digest"),
+            policy_id=raw.get("policy_id"),
+            policy_version=(
+                int(raw["policy_version"]) if raw.get("policy_version") is not None else None
+            ),
+            policy_digest=raw.get("policy_digest"),
             cost_estimate=dict(raw.get("cost_estimate") or {}),
             result_summary=dict(raw.get("result_summary") or {}),
             artifacts=dict(raw.get("artifacts") or {}),
@@ -541,6 +603,9 @@ class JobStore:
             "request": job.request,
             "request_digest": job.request_digest,
             "execution_policy_digest": job.execution_policy_digest,
+            "policy_id": job.policy_id,
+            "policy_version": job.policy_version,
+            "policy_digest": job.policy_digest,
             "cost_estimate": job.cost_estimate,
             "result_summary": job.result_summary,
             "artifacts": job.artifacts,

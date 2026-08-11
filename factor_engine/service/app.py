@@ -100,23 +100,126 @@ def _utc_now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Global service state
+# Global service state (R40 #94: 惰性运行时 —— import service.app 无副作用)
+#
+# STORE/EXECUTOR/QUEUE/FEATURE_POLICY/SOURCE_POLICY 都是 _LazyRuntimeProxy：
+# import 时不建目录、不启线程、不读 policy env。真正的构造 + QUEUE.start() 在
+# create_app() 的 FastAPI lifespan 启动 handler 里调 _ensure_runtime() 完成。
+# 模块级直接访问这些名字（如既有测试 ``from service.app import STORE``）会经代理
+# 惰性构造 —— 向后兼容且 import 干净。
 # ---------------------------------------------------------------------------
 
-STORE = JobStore()
 _EXECUTOR_MAX_WORKERS = max(1, int(os.environ.get("FACTOR_ENGINE_SERVICE_MAX_WORKERS", "4") or 4))
-EXECUTOR = ThreadPoolExecutor(
-    max_workers=_EXECUTOR_MAX_WORKERS,
-    thread_name_prefix="factor-engine-job",
-)
-QUEUE = BoundedJobQueue(
-    max_running=_EXECUTOR_MAX_WORKERS,
-    timeout_default=float(os.environ.get("FACTOR_ENGINE_SERVICE_JOB_TIMEOUT", "300") or "300"),
-)
-QUEUE.start(STORE)
+_JOB_TIMEOUT_DEFAULT = float(os.environ.get("FACTOR_ENGINE_SERVICE_JOB_TIMEOUT", "300") or "300")
 
-FEATURE_POLICY = RuntimeFeaturePolicy.from_env()
-SOURCE_POLICY = ApprovedSourcePolicy.from_env()
+_RUNTIME_LOCK = threading.RLock()
+_RUNTIME_CONSTRUCTED = False
+#: R40 #95: policy 版本 —— reload_policies() 刷新时 bump；在途 job 保留旧快照。
+_POLICY_VERSION = 0
+
+
+class _LazyRuntimeProxy:
+    """延迟构造的运行时对象代理：首次属性/调用访问时触发 _ensure_runtime()。"""
+
+    __slots__ = ("_attr",)
+
+    def __init__(self, attr: str) -> None:
+        object.__setattr__(self, "_attr", attr)
+
+    def __getattr__(self, name: str) -> Any:
+        _ensure_runtime(start=True)
+        return getattr(globals()[self._attr], name)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        _ensure_runtime(start=True)
+        return globals()[self._attr](*args, **kwargs)
+
+
+def _ensure_runtime(*, start: bool = True) -> None:
+    """构造（并可选启动）service 运行时：STORE/EXECUTOR/QUEUE/policies。
+
+    - ``import service.app`` 不调用本函数（无副作用）；
+    - create_app() 的 lifespan 启动 handler 调用 ``_ensure_runtime(start=True)``；
+    - 测试 monkeypatch ``service_app.STORE = JobStore(tmp_path)`` 后调用本函数会
+      保留被替换的 STORE（非代理），QUEUE 用它作为持久化后端启动。
+    """
+    global STORE, EXECUTOR, QUEUE, FEATURE_POLICY, SOURCE_POLICY
+    global _POLICY_VERSION, _RUNTIME_CONSTRUCTED
+    with _RUNTIME_LOCK:
+        if _RUNTIME_CONSTRUCTED:
+            return
+        _RUNTIME_CONSTRUCTED = True
+        if isinstance(STORE, _LazyRuntimeProxy):
+            STORE = JobStore()
+        if isinstance(EXECUTOR, _LazyRuntimeProxy):
+            EXECUTOR = ThreadPoolExecutor(
+                max_workers=_EXECUTOR_MAX_WORKERS,
+                thread_name_prefix="factor-engine-job",
+            )
+        if isinstance(QUEUE, _LazyRuntimeProxy):
+            QUEUE = BoundedJobQueue(
+                max_running=_EXECUTOR_MAX_WORKERS,
+                timeout_default=_JOB_TIMEOUT_DEFAULT,
+            )
+        if start and isinstance(QUEUE, BoundedJobQueue) and not getattr(QUEUE, "_started", False):
+            QUEUE.start(STORE)
+        if isinstance(FEATURE_POLICY, _LazyRuntimeProxy):
+            FEATURE_POLICY = RuntimeFeaturePolicy.from_env()
+        if isinstance(SOURCE_POLICY, _LazyRuntimeProxy):
+            SOURCE_POLICY = ApprovedSourcePolicy.from_env()
+
+
+def reload_policies() -> dict[str, Any]:
+    """R40 #95: 锁下刷新 FEATURE/SOURCE policy 并 bump version。
+
+    在途 job 保留提交时快照的 policy_id/version/digest（JobRecord 字段），
+    不受 reload 影响 —— 受控重载，不撕裂正在执行的 job 的不可变绑定。
+    """
+    global FEATURE_POLICY, SOURCE_POLICY, _POLICY_VERSION
+    with _RUNTIME_LOCK:
+        _ensure_runtime(start=False)
+        new_feature = RuntimeFeaturePolicy.from_env()
+        new_source = ApprovedSourcePolicy.from_env()
+        changed = (
+            new_feature.digest() != FEATURE_POLICY.digest()
+            or new_source.digest() != SOURCE_POLICY.digest()
+        )
+        if changed:
+            _POLICY_VERSION += 1
+        FEATURE_POLICY = new_feature
+        SOURCE_POLICY = new_source
+        return {
+            "policy_version": _POLICY_VERSION,
+            "feature_digest": FEATURE_POLICY.digest(),
+            "source_policy_digest": SOURCE_POLICY.digest(),
+            "changed": changed,
+        }
+
+
+STORE = _LazyRuntimeProxy("STORE")
+EXECUTOR = _LazyRuntimeProxy("EXECUTOR")
+QUEUE = _LazyRuntimeProxy("QUEUE")
+FEATURE_POLICY = _LazyRuntimeProxy("FEATURE_POLICY")
+SOURCE_POLICY = _LazyRuntimeProxy("SOURCE_POLICY")
+
+#: R40 #96: run_id -> request-scoped CancellationToken（job 线程可见，非持久化）。
+_JOB_TOKEN_LOCK = threading.Lock()
+_JOB_TOKENS: dict[str, Any] = {}
+
+
+def _set_job_cancellation_token(run_id: str, token: Any) -> None:
+    with _JOB_TOKEN_LOCK:
+        _JOB_TOKENS[run_id] = token
+
+
+def _get_job_cancellation_token(run_id: str) -> Any | None:
+    with _JOB_TOKEN_LOCK:
+        return _JOB_TOKENS.get(run_id)
+
+
+def _drop_job_cancellation_token(run_id: str) -> None:
+    with _JOB_TOKEN_LOCK:
+        _JOB_TOKENS.pop(run_id, None)
 
 
 def _resolve_version() -> str:
@@ -311,7 +414,10 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             validator = validate_production_dsl if run_mode == "production" else validate_factor_engine_dsl
             if run_mode == "production":
-                ok, msg = validator(formula)
+                # R40 #85: production 校验必须带真实 market —— US 公式绝不能用
+                # 默认 A-share registry 校验（R24-159）。
+                resolved_market = str(payload.get("market") or "ashare").strip().lower() or "ashare"
+                ok, msg = validator(formula, market=resolved_market)
             else:
                 ok, msg = validator(formula, surface=surface)
             checked["dsl"] = {"ok": bool(ok), "message": msg, "formula": formula}
@@ -349,6 +455,121 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _stable_hex(*parts: Any) -> str:
+    return hashlib.sha256("|".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:16]
+
+
+def _first(*values: Any) -> str | None:
+    for v in values:
+        if v is not None and str(v).strip():
+            return str(v)
+    return None
+
+
+def _catalog_generations(model: ComputeRequest, source_binding: dict[str, str | None]) -> tuple[str, ...]:
+    """R40 #149: catalog generations 多元组 —— 绑定全部 registry 维度。
+
+    ``op_gen / field_gen / market_gen / calendar_gen / source_profile_gen /
+    backend_evidence_gen / compiler_build_gen``。任一维度变化都会改变
+    ``ValidatedFactorRequest.digest()``，从而失效 idempotency / cache / checkpoint。
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    op_gen = str(OperatorRegistry.version())
+    field_gen = "unavailable"
+    try:
+        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+        registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(str(model.market or "ashare"))
+        field_gen = str(registry.catalog_hash())
+    except Exception:
+        pass
+    market_gen = _stable_hex("market", str(model.market or "ashare"))
+    calendar_gen = _stable_hex("calendar", str(model.calendar or ""))
+    source_profile_gen = str(source_binding["source_profile_version"] or "none")
+    backend_evidence_gen = _stable_hex("backend_evidence", str(model.backend or "auto"))
+    compiler_build_gen = _stable_hex("build", _VERSION)
+    return (
+        op_gen, field_gen, market_gen, calendar_gen,
+        source_profile_gen, backend_evidence_gen, compiler_build_gen,
+    )
+
+
+def _source_profile_binding(model: ComputeRequest, source_cfg: Any) -> dict[str, str | None]:
+    """R40 #91: 从 source config / approved profile 提取 profile 版本与契约绑定。
+
+    同 ``approved_source_profile_id`` 不同版本的 profile 内容 → 不同
+    ``source_profile_version`` → 不同 digest（profile_id 只是引用，不是内容指纹）。
+    """
+    if not isinstance(source_cfg, dict):
+        return {
+            "source_profile_version": None,
+            "source_contract_hash": None,
+            "dataset_contract": None,
+            "snapshot_policy": None,
+            "provider_identity": None,
+        }
+    try:
+        cfg_json = json.dumps(source_cfg, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        cfg_json = str(source_cfg)
+    binding: dict[str, str | None] = {
+        "source_contract_hash": _stable_hex("source", cfg_json),
+        "dataset_contract": _first(source_cfg.get("dataset")),
+        "snapshot_policy": _first(source_cfg.get("snapshot_policy")),
+        "provider_identity": _first(source_cfg.get("type"), "data_access"),
+        "source_profile_version": None,
+    }
+    profile_id = model.approved_source_profile_id
+    if profile_id:
+        profile = SOURCE_POLICY.approved_profiles.get(profile_id)
+        if profile:
+            try:
+                binding["source_profile_version"] = _stable_hex(
+                    "profile", json.dumps(profile, sort_keys=True, default=str)
+                )
+            except (TypeError, ValueError):
+                binding["source_profile_version"] = _stable_hex("profile", profile_id)
+        else:
+            binding["source_profile_version"] = _stable_hex("profile", profile_id)
+    return binding
+
+
+def _build_execution_semantic_identity(
+    model: ComputeRequest,
+    *,
+    formula: str,
+    universe: tuple[str, ...],
+    generation: str,
+    source_binding: dict[str, str | None],
+    run_mode: str,
+) -> Any:
+    """R40 #89: HTTP 路径构造不可变 ExecutionSemanticIdentityV2。
+
+    市场/日历/decision_time/run_mode/PIT/source_scope 全字段 —— 与 FE 内部
+    ``ExecutionSemanticIdentityV2`` 同一类型，供下游投影链消费（不可变 frozen）。
+    """
+    from runtime.factor_identity import ExecutionSemanticIdentityV2
+
+    return ExecutionSemanticIdentityV2(
+        ir_hash=_stable_hex("ir", formula),
+        operator_contract_hash=_stable_hex("op", generation),
+        field_contract_hash=_stable_hex("field", str(model.market or "ashare")),
+        source_contract_hash=str(source_binding["source_contract_hash"] or ""),
+        source_dependency_hash=_stable_hex("dep", str(model.calendar or "")),
+        universe_membership_hash=_stable_hex("universe", *sorted(universe)),
+        market=model.market,
+        calendar=model.calendar,
+        universe=str(sorted(universe)) or None,
+        pit_policy="enforce" if run_mode == "production" else None,
+        decision_time_policy=model.decision_time_policy,
+        dialect=model.dialect.value,
+        dialect_version=model.dialect_version,
+        frequency=model.freq,
+        source_scope_hash=str(source_binding["source_contract_hash"] or ""),
+    )
+
+
 def _validate_and_build_request(
     payload: dict[str, Any],
     *,
@@ -382,6 +603,19 @@ def _validate_and_build_request(
 
     generation = OperatorRegistry.version()
     universe = tuple(model.universe or [])
+    run_mode = endpoint_policy.value if endpoint_policy.is_production else model.run_mode.value
+
+    # R40 #91: source profile 版本/契约绑定 —— 同 profile_id 不同版本 digest 不同。
+    if endpoint_policy.is_production and not model.config_path:
+        source_binding_cfg = _production_source_config(model)
+    else:
+        source_binding_cfg = model.data_source
+    source_binding = _source_profile_binding(model, source_binding_cfg)
+
+    # R40 #149: catalog generations 多元组（op/field/market/calendar/source-profile/
+    # backend-evidence/compiler-build）。
+    catalog_generations = _catalog_generations(model, source_binding)
+
     vr = ValidatedFactorRequest(
         canonical_formula=formula,
         surface=model.surface.value,
@@ -393,9 +627,16 @@ def _validate_and_build_request(
         calendar=model.calendar,
         decision_time_policy=model.decision_time_policy,
         production_policy=endpoint_policy.value,
-        catalog_generations=(generation,),
+        catalog_generations=catalog_generations,
         complexity_budget=str(budget["max_ast_nodes"]) if "max_ast_nodes" in budget else "default",
         source_profile=model.approved_source_profile_id,
+        backend=model.backend or "auto",
+        resolved_backend_policy=model.backend or "auto",
+        source_profile_version=source_binding["source_profile_version"],
+        source_contract_hash=source_binding["source_contract_hash"],
+        dataset_contract=source_binding["dataset_contract"],
+        snapshot_policy=source_binding["snapshot_policy"],
+        provider_identity=source_binding["provider_identity"],
     )
 
     # R21-044..047: cost gate before queue admission.
@@ -417,13 +658,17 @@ def _validate_and_build_request(
             status=422,
         )
 
-    run_mode = endpoint_policy.value if endpoint_policy.is_production else model.run_mode.value
     execution = {
         "validated": vr.to_payload(),
         "run_mode": run_mode,
         "backend": model.backend or "auto",
         "config_path": model.config_path,
         "formula_schema_version": model.formula_schema_version,
+        # R40 #92: execution dict 必须带 factor name —— 否则 _execute_inline 里
+        # ``execution.get("name")`` 恒 None，所有 HTTP 因子都叫 "inline_factor"。
+        "name": model.name,
+        # R40 #93: timeout 经 Pydantic 校验后由这里流入（不再 raw payload.get）。
+        "timeout_seconds": model.timeout_seconds,
     }
     if endpoint_policy.is_production:
         # R21-020: production HTTP may only reference an approved source profile.
@@ -436,6 +681,39 @@ def _validate_and_build_request(
         execution["data_source"] = model.data_source
         execution["approved_source_profile_id"] = model.approved_source_profile_id
     execution["cost_estimate"] = cost.to_dict()
+    # R40 #88: DataSourceBuildContext（run_mode/market/calendar/PIT/snapshot_policy）
+    # 以 dict 形式流入 execution（JSON 可序列化），_execute_inline 再还原并传给
+    # build_data_source(..., build_context=ctx)。
+    from storage.factory import DataSourceBuildContext
+
+    build_context = DataSourceBuildContext(
+        run_mode=run_mode,
+        market=model.market,
+        calendar_id=model.calendar,
+        pit_enforce=endpoint_policy.is_production,
+        snapshot_policy=source_binding["snapshot_policy"],
+        coverage_policy=None,
+    )
+    execution["build_context"] = {
+        "run_mode": build_context.run_mode,
+        "market": build_context.market,
+        "calendar_id": build_context.calendar_id,
+        "timezone": build_context.timezone,
+        "pit_enforce": build_context.pit_enforce,
+        "enforce_mining_gate": build_context.enforce_mining_gate,
+        "snapshot_policy": build_context.snapshot_policy,
+        "coverage_policy": build_context.coverage_policy,
+    }
+    # R40 #89: HTTP 路径构造不可变 ExecutionSemanticIdentityV2（frozen dataclass，
+    # 全字段），to_dict 流入 execution dict；下游 _execute_inline 还原同一对象。
+    execution["identity"] = _build_execution_semantic_identity(
+        model,
+        formula=formula,
+        universe=universe,
+        generation=str(generation),
+        source_binding=source_binding,
+        run_mode=run_mode,
+    ).to_dict()
     return execution, vr.digest()
 
 
@@ -447,13 +725,21 @@ def _production_source_config(model: ComputeRequest) -> dict[str, Any]:
 
 
 def _validate_config_path_sources(config_path: str, *, production: bool) -> None:
-    """R21-027: config-file sources pass the same approved-source policy."""
+    """R21-027 + R40 #84: config-file sources pass the same approved-source policy.
+
+    import 失败绝不复现旧 fail-open（``except Exception: return`` 会让 production
+    config-path source 绕过 approved-source 校验）—— 显式 INTERNAL_ERROR。
+    """
     if not production:
         return
     try:
         from runtime.config_runtime import load_config
-    except Exception:
-        return
+    except ImportError as exc:
+        raise ServiceError(
+            "INTERNAL_ERROR",
+            f"cannot validate config path sources: {exc}",
+            status=500,
+        ) from exc
     config = load_config(config_path)
     SOURCE_POLICY.validate_source(config.data_source, production=True)
 
@@ -466,6 +752,10 @@ def _validate_config_path_sources(config_path: str, *, production: bool) -> None
 def _execute_config_path(job: JobRecord, config_path: str) -> dict[str, Any]:
     from runtime.engine import FactorEngine
 
+    # R40 #96: engine 入口边界检查 request-scoped cancellation token。
+    token = _get_job_cancellation_token(job.run_id)
+    if token is not None:
+        token.raise_if_cancelled()
     authorized = _authorized_config_path(config_path)
     _validate_config_path_sources(str(authorized), production=job.endpoint_policy == "production")
     return FactorEngine.run_from_config(
@@ -495,6 +785,14 @@ def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]
         catalog_generations=tuple(validated.get("catalog_generations") or ()),
         complexity_budget=str(validated.get("complexity_budget") or "default"),
         source_profile=validated.get("source_profile"),
+        # R40 #90/#91: 与 _validate_and_build_request 构造的 digest 全字段对齐。
+        backend=validated.get("backend"),
+        resolved_backend_policy=validated.get("resolved_backend_policy"),
+        source_profile_version=validated.get("source_profile_version"),
+        source_contract_hash=validated.get("source_contract_hash"),
+        dataset_contract=validated.get("dataset_contract"),
+        snapshot_policy=validated.get("snapshot_policy"),
+        provider_identity=validated.get("provider_identity"),
     )
     # R21-010: execution must use exactly the validated request.
     if not vr.execution_digest_matches(job.request_digest or ""):
@@ -508,7 +806,21 @@ def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]
     source_cfg = execution.get("data_source")
     if not isinstance(source_cfg, dict):
         raise ValueError("compute job requires config_path or data_source")
-    source = build_data_source(source_cfg)
+    # R40 #96: engine 入口边界检查 request-scoped cancellation token。
+    token = _get_job_cancellation_token(job.run_id)
+    if token is not None:
+        token.raise_if_cancelled()
+    # R40 #88: 把验证期构造的 DataSourceBuildContext 传给 build_data_source
+    #（run_mode/market/calendar/timezone/PIT/snapshot_policy/coverage_policy 流入源）。
+    from storage.factory import DataSourceBuildContext
+
+    build_ctx_raw = execution.get("build_context")
+    build_context = (
+        DataSourceBuildContext(**build_ctx_raw)
+        if isinstance(build_ctx_raw, dict)
+        else None
+    )
+    source = build_data_source(source_cfg, build_context=build_context)
     backend = build_backend(str(execution.get("backend") or "auto"))
     engine = FactorEngine(
         backend=backend,
@@ -543,56 +855,84 @@ def _run_materialize(job: JobRecord) -> None:
 
 def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
     """Run a job worker with full lifecycle: phases, heartbeat, deadline,
-    cancel, sanitized errors (R21-055..060, 087..090)."""
-    from service.errors import json_dumps_redacted
+    cancel, sanitized errors (R21-055..060, 087..090).
 
-    if job.status == JobStatus.CANCELLED or job.cancel_requested_at:
-        job.status = JobStatus.CANCELLED
-        job.finished_at = _utc_now()
-        STORE.update(job)
-        return
-    job.status = JobStatus.RUNNING
-    job.started_at = _utc_now()
-    job.worker_id = os.environ.get("FACTOR_ENGINE_SERVICE_NODE", "local")
-    job.touch_heartbeat()
-    STORE.update(job)
-    execution = job.request.get("execution") if isinstance(job.request, dict) else None
-    info("job.start", run_id=job.run_id, job_type=job.job_type, endpoint_policy=job.endpoint_policy)
+    R40 #96: 阶段边界额外查 request-scoped CancellationToken —— cancel/deadline
+    在 engine 入口与阶段边界都能立即停止，而不是等 worker 自然结束。
+    """
+    from service.errors import json_dumps_redacted
+    from runtime.exceptions import (
+        Cancellation,
+        DeadlineExceeded,
+        reset_active_cancellation_token,
+        set_active_cancellation_token,
+    )
+
+    _token_ctx = None
     try:
-        set_phase(job, STORE, JobPhase.VALIDATING)
-        check_job_alive(job)
-        set_phase(job, STORE, phase_target)
-        out = _dispatch_execution(job, execution)
-        set_phase(job, STORE, JobPhase.FINALIZING)
-        summary = _summarize_result(out, job)
-        job.result_summary = summary
-        job.status = JobStatus.SUCCEEDED
-        job.finished_at = _utc_now()
-        METRICS.incr("job_succeeded", labels={"job_type": job.job_type})
-        info("job.end", run_id=job.run_id, status="succeeded")
-    except JobCancelledError:
-        job.status = JobStatus.CANCELLED
-        job.error_code = "JOB_CANCELLED"
-        job.finished_at = _utc_now()
-        METRICS.incr("job_cancel", labels={"job_type": job.job_type})
-        info("job.cancelled", run_id=job.run_id)
-    except JobDeadlineExceeded:
-        job.status = JobStatus.TIMED_OUT
-        job.error_code = "JOB_DEADLINE_EXCEEDED"
-        job.finished_at = _utc_now()
-        METRICS.incr("job_timeout", labels={"job_type": job.job_type})
-        info("job.timeout", run_id=job.run_id)
-    except Exception as exc:  # noqa: BLE001
-        se = _to_service_error(exc, run_mode=job.endpoint_policy)
-        job.status = JobStatus.FAILED
-        job.error_code = se.code
-        job.error_id = se.error_id
-        job.error = sanitize_message(se.message)
-        job.finished_at = _utc_now()
-        job.artifacts["traceback"] = traceback.format_exc(limit=15)
-        METRICS.incr("error_total", labels={"error_code": se.code, "job_type": job.job_type})
-        info("job.failed", run_id=job.run_id, error_code=se.code, error_id=se.error_id)
-    STORE.update(job)
+        token = _get_job_cancellation_token(job.run_id)
+        if token is not None:
+            # R40 #96: 把 token 放进 engine/scheduler 可见的 ContextVar —— engine
+            # 阶段边界查询。finally 里 reset。
+            _token_ctx = set_active_cancellation_token(token)
+        try:
+            if token is not None:
+                token.raise_if_cancelled()
+            if job.status == JobStatus.CANCELLED or job.cancel_requested_at:
+                job.status = JobStatus.CANCELLED
+                job.finished_at = _utc_now()
+                STORE.update(job)
+                return
+            job.status = JobStatus.RUNNING
+            job.started_at = _utc_now()
+            job.worker_id = os.environ.get("FACTOR_ENGINE_SERVICE_NODE", "local")
+            job.touch_heartbeat()
+            STORE.update(job)
+            execution = job.request.get("execution") if isinstance(job.request, dict) else None
+            info("job.start", run_id=job.run_id, job_type=job.job_type, endpoint_policy=job.endpoint_policy)
+            set_phase(job, STORE, JobPhase.VALIDATING)
+            if token is not None:
+                token.raise_if_cancelled()
+            check_job_alive(job)
+            set_phase(job, STORE, phase_target)
+            out = _dispatch_execution(job, execution)
+            set_phase(job, STORE, JobPhase.FINALIZING)
+            summary = _summarize_result(out, job)
+            job.result_summary = summary
+            job.status = JobStatus.SUCCEEDED
+            job.finished_at = _utc_now()
+            METRICS.incr("job_succeeded", labels={"job_type": job.job_type})
+            info("job.end", run_id=job.run_id, status="succeeded")
+        except (JobCancelledError, Cancellation):
+            job.status = JobStatus.CANCELLED
+            job.error_code = "JOB_CANCELLED"
+            job.finished_at = _utc_now()
+            METRICS.incr("job_cancel", labels={"job_type": job.job_type})
+            info("job.cancelled", run_id=job.run_id)
+        except (JobDeadlineExceeded, DeadlineExceeded):
+            job.status = JobStatus.TIMED_OUT
+            job.error_code = "JOB_DEADLINE_EXCEEDED"
+            job.finished_at = _utc_now()
+            METRICS.incr("job_timeout", labels={"job_type": job.job_type})
+            info("job.timeout", run_id=job.run_id)
+        except Exception as exc:  # noqa: BLE001
+            se = _to_service_error(exc, run_mode=job.endpoint_policy)
+            job.status = JobStatus.FAILED
+            job.error_code = se.code
+            job.error_id = se.error_id
+            job.error = sanitize_message(se.message)
+            job.finished_at = _utc_now()
+            job.artifacts["traceback"] = traceback.format_exc(limit=15)
+            METRICS.incr("error_total", labels={"error_code": se.code, "job_type": job.job_type})
+            info("job.failed", run_id=job.run_id, error_code=se.code, error_id=se.error_id)
+        STORE.update(job)
+    finally:
+        _drop_job_cancellation_token(job.run_id)
+        if _token_ctx is not None:
+            try:
+                reset_active_cancellation_token(_token_ctx)
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _dispatch_execution(job: JobRecord, execution: dict[str, Any] | None) -> dict[str, Any]:
@@ -632,9 +972,82 @@ def _execute_materialize(job: JobRecord) -> dict[str, Any]:
     return {"out": out, "mode": "materialize_from_config"}
 
 
+#: R40 #150: 角色 → 可读数据敏感度上限（与 security/access 的 tag 分级对齐：
+#: public=10, market.basic=20, fundamental=30, alt.premium=40, internal.restricted=50）。
+_ROLE_ACCESS_LEVEL = {
+    "READ": 10,
+    "COMPUTE": 20,
+    "MATERIALIZE": 30,
+    "PUBLISH": 40,
+    "ADMIN": 50,
+}
+
+
+def _principal_access_level(roles: Any) -> int:
+    if not roles:
+        return 10  # 未知/anonymous → 只能看 public
+    return max((_ROLE_ACCESS_LEVEL.get(str(r), 10) for r in roles), default=10)
+
+
+def _collect_source_access_tags(source_cfg: Any) -> list[str]:
+    """递归收集 source config 的 access_tags / classification（含 composite 子源）。"""
+    tags: list[str] = []
+    if isinstance(source_cfg, dict):
+        for key, value in source_cfg.items():
+            if key in ("access_tags", "classification"):
+                if isinstance(value, str):
+                    tags.append(value)
+                elif isinstance(value, (list, tuple)):
+                    tags.extend(str(v) for v in value if v)
+                elif isinstance(value, dict):
+                    tags.extend(str(v) for v in value.values() if v)
+            elif key in ("sources", "source", "inner") and isinstance(value, dict):
+                tags.extend(_collect_source_access_tags(value))
+            elif key == "sources" and isinstance(value, list):
+                for sub in value:
+                    tags.extend(_collect_source_access_tags(sub))
+    return tags
+
+
+def _redact_preview_for_access(source_cfg: Any, job: JobRecord) -> str | None:
+    """R40 #150: 结果预览继承 source 的 derived access classification。
+
+    max_sensitivity(source tags) 超过调用方（job owner）principal.access_level 时
+    拒绝写入原始预览 —— 返回 redacted 占位串；否则返回 None（原样写入）。
+    """
+    if not isinstance(source_cfg, dict):
+        return None
+    try:
+        from security.access import derive_derived_access_tags, max_sensitivity
+
+        tags = derive_derived_access_tags(_collect_source_access_tags(source_cfg))
+        sensitivity = max_sensitivity(tags)
+        if sensitivity <= 0:
+            return None
+        roles: list[Any] = []
+        meta = job.request_metadata if isinstance(job.request_metadata, dict) else {}
+        roles = list(meta.get("roles") or [])
+        if _principal_access_level(roles) >= sensitivity:
+            return None
+        return (
+            f"<preview redacted: source access classification max_sensitivity="
+            f"{sensitivity}>"
+        )
+    except Exception:  # noqa: BLE001 - redaction 失败不阻断结果汇总
+        return None
+
+
 def _summarize_result(payload: dict[str, Any], job: JobRecord) -> dict[str, Any]:
     mode = payload.get("mode")
     out = payload.get("out") or {}
+    execution = job.request.get("execution") if isinstance(job.request, dict) else {}
+    source_cfg = execution.get("data_source") if isinstance(execution, dict) else None
+
+    def _store_preview(result: Any) -> None:
+        preview = str(result.head(5).to_string())
+        redacted = _redact_preview_for_access(source_cfg, job)
+        job.artifacts["result_preview"] = redacted if redacted is not None else preview
+
     if mode == "run_from_config":
         summary: dict[str, Any] = {"mode": mode}
         if isinstance(out, dict):
@@ -642,7 +1055,7 @@ def _summarize_result(payload: dict[str, Any], job: JobRecord) -> dict[str, Any]
             if result is not None:
                 try:
                     summary["rows"] = int(getattr(result, "shape", [0])[0])
-                    job.artifacts["result_preview"] = str(result.head(5).to_string())
+                    _store_preview(result)
                 except Exception:
                     summary["result_type"] = type(result).__name__
             summary["factor"] = getattr(out.get("factor"), "name", None)
@@ -663,7 +1076,7 @@ def _summarize_result(payload: dict[str, Any], job: JobRecord) -> dict[str, Any]
         if result is not None:
             try:
                 summary["rows"] = int(getattr(result, "shape", [0])[0])
-                job.artifacts["result_preview"] = str(result.head(5).to_string())
+                _store_preview(result)
             except Exception:
                 pass
     return summary
@@ -725,7 +1138,15 @@ def _submit_job(
             }
 
     run_id = uuid.uuid4().hex
-    timeout = float(payload.get("timeout_seconds") or QUEUE.timeout_default)
+    # R40 #93: timeout 走 Pydantic 校验后的值（execution dict），不再 raw
+    # ``payload.get("timeout_seconds")`` —— 非法值在模型校验阶段已被拒。
+    timeout = float(execution.get("timeout_seconds") or QUEUE.timeout_default)
+    # R40 #95: 提交时快照当前 policy 的 id/version/digest —— 之后 reload_policies()
+    # 刷新全局 policy 不影响在途 job 的不可变绑定。
+    _ensure_runtime(start=True)
+    policy_id = "runtime_feature_policy"
+    policy_version = _POLICY_VERSION
+    policy_digest = FEATURE_POLICY.digest()
     job = JobRecord(
         run_id=run_id,
         requested_by=principal.identity,
@@ -738,7 +1159,10 @@ def _submit_job(
         request_metadata=dict(payload.get("request_metadata") or {}),
         request={"execution": execution},
         request_digest=digest,
-        execution_policy_digest=FEATURE_POLICY.digest(),
+        execution_policy_digest=policy_digest,
+        policy_id=policy_id,
+        policy_version=policy_version,
+        policy_digest=policy_digest,
         timeout_seconds=timeout,
         attempt=1,
         phase=JobPhase.VALIDATING,
@@ -749,6 +1173,11 @@ def _submit_job(
 
     job.deadline_at = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=timeout)).isoformat()
     job.deadline_monotonic = _time.monotonic() + timeout  # R21-277
+    # R40 #96: request-scoped CancellationToken（cancel event + monotonic deadline），
+    # _job_wrapper / _execute_inline / _execute_config_path 阶段边界查询。
+    from runtime.exceptions import CancellationToken
+
+    _set_job_cancellation_token(run_id, CancellationToken(deadline_monotonic=_time.monotonic() + timeout))
     job = STORE.create(job)
     target = _run_compute if job_type == "compute" else _run_materialize
     if sync:
@@ -782,6 +1211,8 @@ def _validate_materialize_request(
         "expression": model.expression,
         "write_target": model.write_target.value if not endpoint_policy.is_production else "production",
         "run_mode": run_mode,
+        # R40 #93: timeout 经 Pydantic 校验后由这里流入。
+        "timeout_seconds": model.timeout_seconds,
     }
     digest = hashlib.sha256(
         json.dumps({"config_path": model.config_path, "write_target": execution["write_target"], "policy": run_mode}, sort_keys=True).encode()
@@ -850,6 +1281,9 @@ def create_app():
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # R40 #94: 运行时（STORE/EXECUTOR/QUEUE/policies）在 lifespan 启动时构造并
+        # start —— ``import service.app`` 无副作用（无线程/无目录）。
+        _ensure_runtime(start=True)
         # R21-264..266: one-shot production preflight before ready.
         PREFLIGHT.update(production_preflight())
         try:

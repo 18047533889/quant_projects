@@ -16,6 +16,20 @@ R14 P1/P2:
   today never emits a stale value from an older window), and Theiler exclusion
   uses the ORIGINAL physical time positions of the surviving points (never the
   compressed ordinal index after dropping rows).
+
+M-150 (divergence horizon): the DEFAULT path measures divergence over COMPRESSED
+ordinal steps — ``Z[i+k]`` / ``Z[j+k]`` advance the compressed index, so after an
+interior NaN drop ``k`` no longer spans ``k`` physical bars.  ``physical_time=True``
+switches the divergence horizon to the PHYSICAL clock: the k-th successor of each
+trajectory is the surviving embedded point whose anchor sits exactly ``k`` physical
+bars later (the physical index advances even over dropped rows) and the least-squares
+slope is taken against physical elapsed bars.  The physical clock is the honest
+interpretation of the module contract; the compressed path is preserved as the
+default for backward compatibility.
+
+M-151 (strict params): ``window``/``tau``/``embedding_dim``/``horizon``/
+``min_anchors`` are validated strictly (never ``int()``-truncated or clamped);
+a fractional, non-finite, bool or out-of-range value RAISES.
 """
 from __future__ import annotations
 
@@ -24,7 +38,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.closure.strict_scalar import strict_bool, strict_int
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -55,12 +70,72 @@ def _embedding_matrix(series: np.ndarray, tau: int, dim: int) -> np.ndarray:
     return X
 
 
-def _lyapunov_series(series: np.ndarray, window: int, tau: int, dim: int, horizon: int, min_anchors: int) -> np.ndarray:
+def _physical_divergence(
+    Z: np.ndarray,
+    phys: np.ndarray,
+    z_len: int,
+    i: int,
+    j: int,
+    horizon: int,
+    d0j: float,
+) -> np.ndarray | None:
+    """Divergence curve ``log d(k) - log d(0)`` against PHYSICAL elapsed bars.
+
+    M-150: the compressed-ordinal path (``Z[i+k]`` / ``Z[j+k]``) redefines the
+    step index when interior NaN rows are dropped — ``k`` compressed steps can
+    span more than ``k`` physical bars, and the two trajectories' indices no
+    longer advance in lockstep.  This path scans ``k`` PHYSICAL bars forward
+    from each trajectory's anchor position, so the k-th successor of anchor
+    ``i`` (physical position ``phys[i]``) and neighbour ``j`` (physical position
+    ``phys[j]``) is the surviving embedded point whose anchor sits exactly
+    ``k`` physical bars later — the physical index advances even across dropped
+    rows.  A physical bar with no surviving point yields NaN for that ``k``.
+    Returns None when no ``k`` in ``1..horizon`` has a finite successor on both
+    trajectories (nothing to regress).
+    """
+    H = int(horizon)
+    div = np.full(H + 1, np.nan)
+    div[0] = 0.0
+    # Map physical position -> compressed embedded index.  Only rows ``m < z_len``
+    # are valid anchors/successors (the trailing ``span`` physical positions have
+    # no complete future window).
+    pos_to_idx = {int(phys[m]): m for m in range(z_len)}
+    p = int(phys[i])
+    q = int(phys[j])
+    found = 0
+    for k in range(1, H + 1):
+        ip = pos_to_idx.get(p + k)
+        iq = pos_to_idx.get(q + k)
+        if ip is None or iq is None:
+            continue
+        dk = float(np.sqrt(np.sum((Z[ip] - Z[iq]) ** 2)))
+        if not np.isfinite(dk) or dk <= _EPS:
+            continue
+        div[k] = np.log(dk + _EPS) - np.log(d0j + _EPS)
+        found += 1
+    if found == 0:
+        return None
+    return div
+
+
+def _lyapunov_series(
+    series: np.ndarray,
+    window: int,
+    tau: int,
+    dim: int,
+    horizon: int,
+    min_anchors: int,
+    physical_time: bool = False,
+) -> np.ndarray:
     n = series.shape[0]
-    w = max(2, int(window))
-    th = max(1, dim * tau)
-    H = max(1, int(horizon))
-    ma = max(1, int(min_anchors))
+    # M-151: strict scalar contract — a fractional/non-finite/bool/out-of-range
+    # value is a contract violation, never a value to silently coerce.  ``dim``
+    # is kept in [2, 6] (the documented embedding contract).
+    w = strict_int(window, "window", lower=2)
+    th = dim * strict_int(tau, "tau", lower=1)
+    H = strict_int(horizon, "horizon", lower=1)
+    ma = strict_int(min_anchors, "min_anchors", lower=1)
+    dim = strict_int(dim, "embedding_dim", lower=2, upper=6)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -113,22 +188,54 @@ def _lyapunov_series(series: np.ndarray, window: int, tau: int, dim: int, horizo
             if not np.isfinite(d0[j]) or d0[j] <= _EPS:
                 continue
             d0j = float(d0[j])
-            if i + H >= z_len or j + H >= z_len:
-                continue
-            div = np.zeros(H + 1)
-            for k in range(H + 1):
-                dk = float(np.sqrt(np.sum((Z[i + k] - Z[j + k]) ** 2)))
-                div[k] = np.log(dk + _EPS) - np.log(d0j + _EPS)
+            if physical_time:
+                # M-150: physical-clock divergence horizon.  The k-th successor
+                # is found by scanning k PHYSICAL bars forward from each
+                # trajectory's anchor position; a NaN row advances the physical
+                # index but contributes no successor point (NaN for that k).
+                div = _physical_divergence(Z, phys, z_len, i, j, H, d0j)
+                if div is None:
+                    continue
+            else:
+                # Default (compressed-ordinal) divergence horizon.  DOCUMENTED
+                # M-150: ``k`` counts COMPRESSED steps, not physical bars — after
+                # an interior NaN drop ``k`` can span more physical bars.  Use
+                # ``physical_time=True`` for the physical-clock interpretation.
+                if i + H >= z_len or j + H >= z_len:
+                    continue
+                div = np.zeros(H + 1)
+                for k in range(H + 1):
+                    dk = float(np.sqrt(np.sum((Z[i + k] - Z[j + k]) ** 2)))
+                    div[k] = np.log(dk + _EPS) - np.log(d0j + _EPS)
             logs.append(div)
             n_anchors += 1
         if n_anchors < ma:
             continue
-        L = np.mean(np.stack(logs), axis=0)
-        ks = np.arange(H + 1, dtype=float)
-        var_k = float(np.sum((ks - ks.mean()) ** 2))
-        if var_k <= _EPS:
-            continue
-        lam = float(np.sum((ks - ks.mean()) * (L - L.mean())) / var_k)
+        Lstack = np.stack(logs)
+        if physical_time:
+            # M-150: physical-time path — some k steps may be unavailable for a
+            # given anchor (no surviving point at that physical offset), so the
+            # mean curve and the least-squares slope use only the k's with a
+            # finite mean over anchors.  The regressor IS physical elapsed bars:
+            # each k = exactly k physical bars forward from the anchor.
+            L = np.nanmean(Lstack, axis=0)
+            ks = np.arange(H + 1, dtype=float)
+            ok = np.isfinite(L)
+            if int(ok.sum()) < 2:
+                continue
+            kk = ks[ok]
+            LL = L[ok]
+            var_k = float(np.sum((kk - kk.mean()) ** 2))
+            if var_k <= _EPS:
+                continue
+            lam = float(np.sum((kk - kk.mean()) * (LL - LL.mean())) / var_k)
+        else:
+            L = np.mean(Lstack, axis=0)
+            ks = np.arange(H + 1, dtype=float)
+            var_k = float(np.sum((ks - ks.mean()) ** 2))
+            if var_k <= _EPS:
+                continue
+            lam = float(np.sum((ks - ks.mean()) * (L - L.mean())) / var_k)
         out[t] = lam
     return out
 
@@ -151,15 +258,30 @@ class TsLocalLyapunovExponent(SeriesOperator):
     特征。P2 / Research。
     R14 P1/P2: 当前行 NaN -> NaN（绝不输出陈旧值）；内部 NaN 行剔除后 Theiler
     排除使用原始物理时间距离。
+    M-150: 默认发散步长按 COMPRESSED ordinal 推进（k 步可能跨更多物理 bar）；
+    ``physical_time=True`` 改为按物理时钟扫 k 个物理 bar，回归对物理流逝时间。
+    M-151: 参数严格校验（window/tau/horizon/min_anchors 非法值抛错，不裁剪）。
     """
 
     metadata = _metadata(
         "ts_local_lyapunov_exponent",
         "局部 Lyapunov 指数 λ（Takens 嵌入最近邻居发散斜率，per-step rate）。",
-        ["x", "window", "tau", "embedding_dim", "horizon", "min_anchors"],
+        ["x", "window", "tau", "embedding_dim", "horizon", "min_anchors", "physical_time"],
         unit="rate",
         cost=8,
     )
+    # M-151/M-150: strict int/bool contracts + role-aware search classification.
+    # ``window``/``horizon`` are the economic look-ahead dimensions; ``tau``/
+    # ``embedding_dim`` are estimator resolution; ``min_anchors`` is a support
+    # floor and ``physical_time`` is a governance switch — neither is searched.
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "tau": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "embedding_dim": ParamSpec(dtype=int, min=2, max=6, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "horizon": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "min_anchors": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        "physical_time": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(
         self,
@@ -169,17 +291,23 @@ class TsLocalLyapunovExponent(SeriesOperator):
         embedding_dim: int = 3,
         horizon: int = 5,
         min_anchors: int = 3,
+        physical_time: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
-        tau_i = max(1, int(tau))
-        dim = int(embedding_dim)
-        if not 2 <= dim <= 6:
-            raise ValueError("ts_local_lyapunov_exponent requires embedding_dim in [2, 6]")
+        # M-151: strict integer/boolean contract — a fractional window, a bool
+        # tau, a NaN horizon or an out-of-range value raises instead of being
+        # silently clamped (Master Spec A-4/5).
+        w = strict_int(window, "window", lower=2)
+        tau_i = strict_int(tau, "tau", lower=1)
+        dim = strict_int(embedding_dim, "embedding_dim", lower=2, upper=6)
+        H = strict_int(horizon, "horizon", lower=1)
+        ma = strict_int(min_anchors, "min_anchors", lower=1)
+        pt = strict_bool(physical_time, "physical_time")
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
-            out[:, c] = _lyapunov_series(xv[:, c], window, tau_i, dim, horizon, min_anchors)
+            out[:, c] = _lyapunov_series(xv[:, c], w, tau_i, dim, H, ma, pt)
         return frame_like(x, out)
 
 

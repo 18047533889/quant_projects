@@ -1,0 +1,3213 @@
+{
+  "generated_by": "scripts/audit_model_silent_clamp.py",
+  "purpose": "M-240 gate support: locate silent max/min clamp + bare int() coercion of user parameters in model-operator kernel bodies (pure AST, read-only).",
+  "scanned_modules": [
+    "cleaned_operators/cross_section/panel_model.py",
+    "cleaned_operators/cross_section/pca_state.py",
+    "cleaned_operators/ts_model/ar_meanrev.py",
+    "cleaned_operators/regression_models.py",
+    "cleaned_operators/ts_model/dynamic_regression.py",
+    "cleaned_operators/ts_model/_rolling_core.py",
+    "cleaned_operators/ts_model/state_space.py",
+    "cleaned_operators/ts_model/volatility.py",
+    "cleaned_operators/dmd.py",
+    "cleaned_operators/hankel.py",
+    "cleaned_operators/ts_model/sequence_anomaly.py",
+    "cleaned_operators/candle_state_space.py",
+    "cleaned_operators/dynamic_knn.py",
+    "cleaned_operators/cross_section_local.py",
+    "cleaned_operators/markov_dynamics.py",
+    "cleaned_operators/state_geometry.py",
+    "cleaned_operators/first_passage.py",
+    "cleaned_operators/local_lyapunov.py",
+    "cleaned_operators/recurrence_analysis.py",
+    "cleaned_operators/advanced_information.py",
+    "cleaned_operators/glr_change.py",
+    "cleaned_operators/nonlinear_dependence.py",
+    "cleaned_operators/ts_model/path_signature.py",
+    "cleaned_operators/research_transform.py"
+  ],
+  "module_errors": {},
+  "pattern_counts": {
+    "max(...int(...))": 88,
+    "int(param)": 353,
+    "int(...max/min(...))": 5,
+    "min(...int(...))": 4
+  },
+  "total_findings": 450,
+  "per_file_counts": {
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py": 24,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py": 6,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py": 64,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py": 6,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py": 10,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py": 60,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py": 12,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py": 7,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py": 12,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/local_lyapunov.py": 4,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py": 59,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py": 8,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py": 7,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py": 41,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py": 16,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py": 26,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py": 5,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py": 22,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py": 37,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py": 9,
+    "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py": 15
+  },
+  "findings": [
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 115,
+      "function": "_te_feasibility",
+      "pattern": "max(...int(...))",
+      "source": "max(lag + 2, int(min_transitions))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 115,
+      "function": "_te_feasibility",
+      "pattern": "int(param)",
+      "source": "int(min_transitions)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 198,
+      "function": "_te_state_space_floor",
+      "pattern": "int(param)",
+      "source": "int(nxb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 198,
+      "function": "_te_state_space_floor",
+      "pattern": "int(param)",
+      "source": "int(nxb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 198,
+      "function": "_te_state_space_floor",
+      "pattern": "int(param)",
+      "source": "int(nyb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 363,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 364,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 365,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 535,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 536,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 537,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 626,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 695,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 846,
+      "function": "_te_peak_window_excess",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(n_surrogates))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 846,
+      "function": "_te_peak_window_excess",
+      "pattern": "int(param)",
+      "source": "int(n_surrogates)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 904,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 905,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 969,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 970,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 1042,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 1043,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 1045,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(n_surrogates))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 1045,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(n_surrogates)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "line": 1063,
+      "function": "_calculate_series.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(seed)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 113,
+      "function": "_mahalanobis_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 208,
+      "function": "_local_density_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 209,
+      "function": "_local_density_series",
+      "pattern": "int(param)",
+      "source": "int(k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 298,
+      "function": "_matrix_profile_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 299,
+      "function": "_matrix_profile_series",
+      "pattern": "int(param)",
+      "source": "int(subsequence_length)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "line": 300,
+      "function": "_matrix_profile_series",
+      "pattern": "int(param)",
+      "source": "int(history)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 229,
+      "function": "_rolling_pca",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(fit_lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 229,
+      "function": "_rolling_pca",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 230,
+      "function": "_rolling_pca",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 269,
+      "function": "_pca_loading",
+      "pattern": "int(...max/min(...))",
+      "source": "int(min(range(len(ids)), key=lambda i: str(ids[i])))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 280,
+      "function": "_pca_loading_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 280,
+      "function": "_pca_loading_series.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(component)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 288,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 288,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(component)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 294,
+      "function": "_pca_resid",
+      "pattern": "min(...int(...))",
+      "source": "min(int(n_components), X.shape[1])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 294,
+      "function": "_pca_resid",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 317,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 317,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 330,
+      "function": "_pca_commonality",
+      "pattern": "min(...int(...))",
+      "source": "min(int(n_components), X.shape[1])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 330,
+      "function": "_pca_commonality",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 343,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 343,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 353,
+      "function": "_industry_pca_loading",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 375,
+      "function": "_industry_pca_loading",
+      "pattern": "int(param)",
+      "source": "int(component)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 384,
+      "function": "_pca_resid_vol",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 384,
+      "function": "_pca_resid_vol.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 385,
+      "function": "_pca_resid_vol",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 392,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 392,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 398,
+      "function": "_pca_resid_momentum",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 398,
+      "function": "_pca_resid_momentum.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 399,
+      "function": "_pca_resid_momentum",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 406,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 406,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 414,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 414,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(component)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 447,
+      "function": "_forecast_loop",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(fit_lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 447,
+      "function": "_forecast_loop",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 448,
+      "function": "_forecast_loop",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(label_horizon))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 448,
+      "function": "_forecast_loop",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 456,
+      "function": "_forecast_loop",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 488,
+      "function": "_model_predict",
+      "pattern": "min(...int(...))",
+      "source": "min(int(n_components), Xs.shape[1])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 488,
+      "function": "_model_predict",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 499,
+      "function": "_model_predict",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 585,
+      "function": "_mk_forecast.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 585,
+      "function": "_mk_forecast.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 585,
+      "function": "_mk_forecast.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 603,
+      "function": "_forecast_generic",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 642,
+      "function": "_regime_forecast",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(n_regimes))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 642,
+      "function": "_regime_forecast",
+      "pattern": "int(param)",
+      "source": "int(n_regimes)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 643,
+      "function": "_regime_forecast",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(label_horizon))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 643,
+      "function": "_regime_forecast",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 650,
+      "function": "_regime_forecast",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 708,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 708,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_regimes)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 708,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 735,
+      "function": "_moe_forecast",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(n_experts))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 735,
+      "function": "_moe_forecast",
+      "pattern": "int(param)",
+      "source": "int(n_experts)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 736,
+      "function": "_moe_forecast",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(label_horizon))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 736,
+      "function": "_moe_forecast",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 743,
+      "function": "_moe_forecast",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 845,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 845,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_experts)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 845,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(label_horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 881,
+      "function": "_autoencoder_error",
+      "pattern": "min(...int(...))",
+      "source": "min(int(n_components), n_features - 1)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 881,
+      "function": "_autoencoder_error",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 887,
+      "function": "_autoencoder_error",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 924,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 924,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/panel_model.py",
+      "line": 935,
+      "function": "<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 54,
+      "function": "_fit",
+      "pattern": "max(...int(...))",
+      "source": "max(int(absolute_min_obs), int(np.ceil(window * min_coverage_ratio)))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 54,
+      "function": "_fit",
+      "pattern": "int(param)",
+      "source": "int(absolute_min_obs)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 66,
+      "function": "_fit",
+      "pattern": "int(...max/min(...))",
+      "source": "int(min(n_components, n_active, Xs.shape[0] - 1))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 68,
+      "function": "_fit",
+      "pattern": "int(...max/min(...))",
+      "source": "int(min(n_components, n_active - 1, Xs.shape[0] - 1))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 149,
+      "function": "resid",
+      "pattern": "int(...max/min(...))",
+      "source": "int(min(self.k, n_components if n_components is not None else self.k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section/pca_state.py",
+      "line": 162,
+      "function": "transform",
+      "pattern": "int(...max/min(...))",
+      "source": "int(min(self.k, n_components if n_components is not None else self.k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 180,
+      "function": "_neighbors",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 180,
+      "function": "_neighbors",
+      "pattern": "int(param)",
+      "source": "int(k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 211,
+      "function": "_local_linear_series",
+      "pattern": "max(...int(...))",
+      "source": "max(min_neigh, int(k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 211,
+      "function": "_local_linear_series",
+      "pattern": "int(param)",
+      "source": "int(k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 278,
+      "function": "_local_gradient_series",
+      "pattern": "max(...int(...))",
+      "source": "max(min_neigh, int(k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 278,
+      "function": "_local_gradient_series",
+      "pattern": "int(param)",
+      "source": "int(k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 323,
+      "function": "_tangent_series",
+      "pattern": "max(...int(...))",
+      "source": "max(_MIN_NEIGH_FLOOR, int(k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 323,
+      "function": "_tangent_series",
+      "pattern": "int(param)",
+      "source": "int(k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 526,
+      "function": "_copula_cross_series",
+      "pattern": "int(param)",
+      "source": "int(grid)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "line": 570,
+      "function": "_register_copula_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(grid)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 165,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 165,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 165,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 166,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 168,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 168,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 168,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 170,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 170,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 170,
+      "function": "dmd_feasibility",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 254,
+      "function": "_hankel_dmd",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(dim))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 254,
+      "function": "_hankel_dmd",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 255,
+      "function": "_hankel_dmd",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(delay))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 255,
+      "function": "_hankel_dmd",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 257,
+      "function": "_hankel_dmd",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 267,
+      "function": "_hankel_dmd",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 337,
+      "function": "_dmd_series",
+      "pattern": "max(...int(...))",
+      "source": "max(10, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 337,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 348,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 348,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 348,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 353,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 353,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 355,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 355,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 355,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 360,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 360,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 373,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 373,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 392,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 392,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 403,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 403,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 407,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 408,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 412,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 412,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 461,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 461,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 465,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 465,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 471,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 471,
+      "function": "_dmd_series",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 476,
+      "function": "_ts_dmd_dominant_growth_rate",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 478,
+      "function": "_ts_dmd_dominant_growth_rate",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 478,
+      "function": "_ts_dmd_dominant_growth_rate",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 478,
+      "function": "_ts_dmd_dominant_growth_rate",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 478,
+      "function": "_ts_dmd_dominant_growth_rate",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 483,
+      "function": "_ts_dmd_dominant_frequency",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 485,
+      "function": "_ts_dmd_dominant_frequency",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 485,
+      "function": "_ts_dmd_dominant_frequency",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 485,
+      "function": "_ts_dmd_dominant_frequency",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 485,
+      "function": "_ts_dmd_dominant_frequency",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 490,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 492,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 492,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(rank)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 492,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 492,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/dmd.py",
+      "line": 492,
+      "function": "_ts_dmd_mode_concentration",
+      "pattern": "int(param)",
+      "source": "int(top_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 139,
+      "function": "_first_passage_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 139,
+      "function": "_first_passage_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 140,
+      "function": "_first_passage_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(horizon))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 140,
+      "function": "_first_passage_series",
+      "pattern": "int(param)",
+      "source": "int(horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 142,
+      "function": "_first_passage_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_anchors))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 142,
+      "function": "_first_passage_series",
+      "pattern": "int(param)",
+      "source": "int(min_anchors)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 256,
+      "function": "_fp_stats_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 256,
+      "function": "_fp_stats_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 257,
+      "function": "_fp_stats_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(horizon))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 257,
+      "function": "_fp_stats_series",
+      "pattern": "int(param)",
+      "source": "int(horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 259,
+      "function": "_fp_stats_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_anchors))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "line": 259,
+      "function": "_fp_stats_series",
+      "pattern": "int(param)",
+      "source": "int(min_anchors)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 294,
+      "function": "_glr_series",
+      "pattern": "max(...int(...))",
+      "source": "max(4, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 294,
+      "function": "_glr_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 295,
+      "function": "_glr_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_segment))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 295,
+      "function": "_glr_series",
+      "pattern": "int(param)",
+      "source": "int(min_segment)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 323,
+      "function": "_glr_feasibility",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 324,
+      "function": "_glr_feasibility",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_segment))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/glr_change.py",
+      "line": 324,
+      "function": "_glr_feasibility",
+      "pattern": "int(param)",
+      "source": "int(min_segment)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 141,
+      "function": "_set_hankel_telemetry",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 142,
+      "function": "_set_hankel_telemetry",
+      "pattern": "int(param)",
+      "source": "int(embedding_dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 330,
+      "function": "_hankel_effective_rank_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 330,
+      "function": "_hankel_effective_rank_series",
+      "pattern": "int(param)",
+      "source": "int(emb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 403,
+      "function": "_hankel_singular_gap_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 403,
+      "function": "_hankel_singular_gap_series",
+      "pattern": "int(param)",
+      "source": "int(emb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 463,
+      "function": "_ssa_reconstruction_residual_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 463,
+      "function": "_ssa_reconstruction_residual_series",
+      "pattern": "int(param)",
+      "source": "int(emb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 463,
+      "function": "_ssa_reconstruction_residual_series",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 583,
+      "function": "_ssa_prior_reconstruction_error_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 583,
+      "function": "_ssa_prior_reconstruction_error_series",
+      "pattern": "int(param)",
+      "source": "int(emb)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/hankel.py",
+      "line": 583,
+      "function": "_ssa_prior_reconstruction_error_series",
+      "pattern": "int(param)",
+      "source": "int(n_components)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/local_lyapunov.py",
+      "line": 96,
+      "function": "_physical_divergence",
+      "pattern": "int(param)",
+      "source": "int(horizon)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/local_lyapunov.py",
+      "line": 102,
+      "function": "_physical_divergence",
+      "pattern": "int(param)",
+      "source": "int(phys[m])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/local_lyapunov.py",
+      "line": 103,
+      "function": "_physical_divergence",
+      "pattern": "int(param)",
+      "source": "int(phys[i])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/local_lyapunov.py",
+      "line": 104,
+      "function": "_physical_divergence",
+      "pattern": "int(param)",
+      "source": "int(phys[j])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 118,
+      "function": "_quantile_edges",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(n_bins))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 118,
+      "function": "_quantile_edges",
+      "pattern": "int(param)",
+      "source": "int(n_bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 257,
+      "function": "_state_dynamics_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 258,
+      "function": "_state_dynamics_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 259,
+      "function": "_state_dynamics_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 259,
+      "function": "_state_dynamics_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 260,
+      "function": "_state_dynamics_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 396,
+      "function": "_run_kernel",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 396,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 397,
+      "function": "_run_kernel",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(bins))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 397,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 398,
+      "function": "_run_kernel",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 398,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 399,
+      "function": "_run_kernel",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 399,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 411,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 413,
+      "function": "_run_kernel",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 495,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 495,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 507,
+      "function": "_state_entropy_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(bins))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 507,
+      "function": "_state_entropy_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 569,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(bins))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 569,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 570,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 570,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 640,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 640,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 641,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 641,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 722,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 722,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 788,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 788,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 877,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 877,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 878,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 879,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(history_length)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 927,
+      "function": "_committor_series",
+      "pattern": "int(param)",
+      "source": "int(res['counts'][t, col, B - 1])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 984,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 984,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1036,
+      "function": "_mfpt_series",
+      "pattern": "int(param)",
+      "source": "int(res['counts'][t, col, a])"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1086,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1086,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1087,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1087,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1154,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1154,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1221,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1221,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1239,
+      "function": "_equilibrium_distance_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1239,
+      "function": "_equilibrium_distance_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1315,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1315,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1316,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1316,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1384,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1384,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1477,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/markov_dynamics.py",
+      "line": 1477,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 299,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 363,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(bins)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 455,
+      "function": "_tail_dependence",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_tail_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 455,
+      "function": "_tail_dependence",
+      "pattern": "int(param)",
+      "source": "int(min_tail_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 495,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_tail_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 495,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_tail_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 540,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_tail_count))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "line": 540,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_tail_count)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 135,
+      "function": "_recurrence_stats_window",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(dim))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 135,
+      "function": "_recurrence_stats_window",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 178,
+      "function": "_recurrence_stats_window",
+      "pattern": "int(param)",
+      "source": "int(min_line)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 213,
+      "function": "_recurrence_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 213,
+      "function": "_recurrence_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 214,
+      "function": "_recurrence_series",
+      "pattern": "max(...int(...))",
+      "source": "max(4, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/recurrence_analysis.py",
+      "line": 214,
+      "function": "_recurrence_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 218,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 219,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 219,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 257,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 258,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 258,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 298,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 299,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 299,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 340,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 341,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 341,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 377,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 378,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 378,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 438,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 439,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 439,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 440,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 440,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 564,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 567,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(q)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 575,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(6, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 575,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 636,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 639,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(q)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 644,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(6, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 644,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 692,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 695,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(q)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 700,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(6, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 700,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 746,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 749,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(3, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 749,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 798,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 799,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(4, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 799,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 849,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 850,
+      "function": "_calculate_series",
+      "pattern": "max(...int(...))",
+      "source": "max(4, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "line": 850,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 69,
+      "function": "_haar_lowpass_current",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 70,
+      "function": "_haar_lowpass_current",
+      "pattern": "int(param)",
+      "source": "int(level)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 75,
+      "function": "_haar_lowpass_current",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 149,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 155,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(level)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 200,
+      "function": "_sig_mahalanobis_series",
+      "pattern": "int(param)",
+      "source": "int(path_window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 201,
+      "function": "_sig_mahalanobis_series",
+      "pattern": "int(param)",
+      "source": "int(history_window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 315,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(depth)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 329,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(path_window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 329,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(history_window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 345,
+      "function": "_bifurcation_score",
+      "pattern": "int(param)",
+      "source": "int(tau)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 345,
+      "function": "_bifurcation_score",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 392,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 397,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 404,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(tau)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/research_transform.py",
+      "line": 404,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(dim)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 45,
+      "function": "_effective_pattern_floor",
+      "pattern": "max(...int(...))",
+      "source": "max(int(min_patterns), _PE_FLOOR_C * math.factorial(order))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 45,
+      "function": "_effective_pattern_floor",
+      "pattern": "int(param)",
+      "source": "int(min_patterns)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 69,
+      "function": "_irreversibility_feasible",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 69,
+      "function": "_irreversibility_feasible",
+      "pattern": "int(param)",
+      "source": "int(min_patterns)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 70,
+      "function": "_irreversibility_feasible",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 70,
+      "function": "_irreversibility_feasible",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 70,
+      "function": "_irreversibility_feasible",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 77,
+      "function": "_multiscale_feasible",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 77,
+      "function": "_multiscale_feasible",
+      "pattern": "int(param)",
+      "source": "int(min_patterns)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 78,
+      "function": "_multiscale_feasible",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 78,
+      "function": "_multiscale_feasible",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 126,
+      "function": "_state_density_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 126,
+      "function": "_state_density_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 128,
+      "function": "_state_density_series",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(min_periods))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 128,
+      "function": "_state_density_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 274,
+      "function": "_irreversibility_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 274,
+      "function": "_irreversibility_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 275,
+      "function": "_irreversibility_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_patterns))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 275,
+      "function": "_irreversibility_series",
+      "pattern": "int(param)",
+      "source": "int(min_patterns)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 352,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 355,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(delay)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 384,
+      "function": "_multiscale_slope_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 384,
+      "function": "_multiscale_slope_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 385,
+      "function": "_multiscale_slope_series",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(min_patterns))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 385,
+      "function": "_multiscale_slope_series",
+      "pattern": "int(param)",
+      "source": "int(min_patterns)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "line": 479,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+      "line": 414,
+      "function": "rolling_fit",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+      "line": 415,
+      "function": "rolling_fit",
+      "pattern": "max(...int(...))",
+      "source": "max(int(min_periods), n_coeffs + 1)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+      "line": 415,
+      "function": "rolling_fit",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+      "line": 416,
+      "function": "rolling_fit",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(fit_lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+      "line": 416,
+      "function": "rolling_fit",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 61,
+      "function": "_ar_apply",
+      "pattern": "max(...int(...))",
+      "source": "max(1, int(order))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 61,
+      "function": "_ar_apply",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 62,
+      "function": "_ar_apply",
+      "pattern": "max(...int(...))",
+      "source": "max(o + 2, int(window))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 62,
+      "function": "_ar_apply",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 63,
+      "function": "_ar_apply",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(fit_lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 63,
+      "function": "_ar_apply",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 64,
+      "function": "_ar_apply",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(stability_k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 64,
+      "function": "_ar_apply",
+      "pattern": "int(param)",
+      "source": "int(stability_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 130,
+      "function": "_ar_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 130,
+      "function": "_ar_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(order)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 131,
+      "function": "_ar_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 131,
+      "function": "_ar_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(stability_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 270,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 270,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 333,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 333,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 339,
+      "function": "_variance_ratio_slope",
+      "pattern": "max(...int(...))",
+      "source": "max(2, int(max_q))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 339,
+      "function": "_variance_ratio_slope",
+      "pattern": "int(param)",
+      "source": "int(max_q)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 345,
+      "function": "_variance_ratio_slope",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 415,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 415,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(max_q)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "line": 415,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 114,
+      "function": "_multi_regression",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 115,
+      "function": "_multi_regression",
+      "pattern": "max(...int(...))",
+      "source": "max(int(min_periods), n_coeffs + 1)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 115,
+      "function": "_multi_regression",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 116,
+      "function": "_multi_regression",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(fit_lag))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 116,
+      "function": "_multi_regression",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 117,
+      "function": "_multi_regression",
+      "pattern": "max(...int(...))",
+      "source": "max(0, int(stability_k))"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 117,
+      "function": "_multi_regression",
+      "pattern": "int(param)",
+      "source": "int(stability_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 259,
+      "function": "_register_multi._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 259,
+      "function": "_register_multi._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 260,
+      "function": "_register_multi._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(coefficient_index)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 261,
+      "function": "_register_multi._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 261,
+      "function": "_register_multi._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(stability_k)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 381,
+      "function": "_single_regression",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 381,
+      "function": "_single_regression",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 382,
+      "function": "_single_regression",
+      "pattern": "int(param)",
+      "source": "int(coeff_index)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 382,
+      "function": "_single_regression",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 414,
+      "function": "_expectile_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 414,
+      "function": "_expectile_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 415,
+      "function": "_expectile_op._calculate_series",
+      "pattern": "int(param)",
+      "source": "int(fit_lag)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 462,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 462,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 464,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 464,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 497,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 497,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 533,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 533,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 562,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 562,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 597,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 597,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 599,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 599,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 639,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 639,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 641,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+      "line": 641,
+      "function": "_calculate_series",
+      "pattern": "int(param)",
+      "source": "int(min_periods)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 88,
+      "function": "_sig_level2",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 89,
+      "function": "_sig_level2",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 127,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 160,
+      "function": "_sig_depth2_norm",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 161,
+      "function": "_sig_depth2_norm",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 177,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 188,
+      "function": "_leadlag_area",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 189,
+      "function": "_leadlag_area",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "line": 196,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 271,
+      "function": "_garch_path",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 378,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 381,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 384,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 387,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 400,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 403,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 415,
+      "function": "_garch_vol_surprise",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 452,
+      "function": "_gjr_leverage",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 465,
+      "function": "_har_rv",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 529,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 539,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 542,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 545,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    },
+    {
+      "file": "/home/shw/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py",
+      "line": 548,
+      "function": "<lambda>.<lambda>",
+      "pattern": "int(param)",
+      "source": "int(window)"
+    }
+  ]
+}

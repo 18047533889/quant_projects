@@ -7,6 +7,7 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamRole, ParamSpec
 from cleaned_operators.overhaul.base import (
     Spec,
     aligned_pd,
@@ -15,6 +16,16 @@ from cleaned_operators.overhaul.base import (
     register_specs,
     window_params,
 )
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations for
+# the OLS forecast-error family.  ``window`` is the alpha horizon (HORIZON,
+# searched); ``min_periods`` is a statistical-support floor and ``add_intercept``
+# is boolean governance — neither is a search dimension (M-115/M-162/M-170).
+_REG_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "add_intercept": ParamSpec(dtype=bool, param_role=ParamRole.POLICY, searchable=False),
+}
 
 
 def _fit_1d(
@@ -398,8 +409,8 @@ def register() -> None:
         "ts_regression_intercept": Spec("time_series_regression", regression_params, "滚动 OLS 截距", pd_reg_intercept),
         "ts_regression_resid": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差", pd_reg_resid),
         "ts_regression_in_sample_resid": Spec("time_series_regression", regression_params, "样本内 OLS 当前残差（fit 含当前行）", pd_reg_in_sample_resid),
-        "ts_regression_forecast_error": Spec("time_series_regression", regression_params, "out-of-sample OLS 预测误差（fit 截止 t-1）", pd_reg_forecast_error),
-        "ts_regression_forecast_error_z": Spec("time_series_regression", regression_params, "OLS 预测误差 / 样本内残差 std", pd_reg_forecast_error_z),
+        "ts_regression_forecast_error": Spec("time_series_regression", regression_params, "out-of-sample OLS 预测误差（fit 截止 t-1）", pd_reg_forecast_error, param_specs=_REG_PARAM_SPECS),
+        "ts_regression_forecast_error_z": Spec("time_series_regression", regression_params, "OLS 预测误差 / 样本内残差 std", pd_reg_forecast_error_z, param_specs=_REG_PARAM_SPECS),
         "ts_regression_resid_mean": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差的窗口均值", pd_reg_resid_mean),
         "ts_regression_r2": Spec("time_series_regression", regression_params, "滚动 OLS 决定系数", pd_reg_r2),
         "ts_regression_tstat": Spec("time_series_regression", regression_params, "滚动 OLS 斜率 t 值", pd_reg_tstat),

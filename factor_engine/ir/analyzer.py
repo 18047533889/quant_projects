@@ -15,6 +15,8 @@ from ir.types import (
     MIXED,
     OPERATOR_INPUT_TYPE_CONTRACTS,
     SemanticLattice,
+    axis_effect_contract_for,
+    check_axis_effect_declared,
     lattice_join_semantic_attrs,
     semantic_type_of,
 )
@@ -1024,6 +1026,13 @@ def validate_max_domains(analysis: AnalysisResult, *, max_domains: int = 2) -> l
     ]
 
 
+class ProductionMarketContextRequiredError(ValueError):
+    """R40 #174: a production Analyzer must be constructed with an explicit
+    market context.  ``market=None`` keeps the legacy A-share fallback only in
+    research/compat mode — a production formula that cannot prove its market
+    must fail closed instead of silently resolving leaves A-share-bound."""
+
+
 class Analyzer:
     """Lower Expr trees to IR and derive deterministic causal history."""
 
@@ -1035,6 +1044,15 @@ class Analyzer:
         # R17-037: the analyzer resolves leaf fields through the per-market
         # registry when a market is declared.  ``None`` keeps legacy behavior
         # (A-share-bound) for callers that cannot prove a market.
+        # R40 #174: production mode requires an explicit market context — the
+        # legacy A-share fallback (market=None) is only a research/compat path.
+        if self._production and market is None:
+            raise ProductionMarketContextRequiredError(
+                "production Analyzer requires an explicit market context "
+                "(e.g. Analyzer(production=True, market='ashare')); market=None "
+                "keeps the legacy A-share fallback only in research/compat mode "
+                "(R40 #174)"
+            )
         self._market = market
 
     def _resolve_field_ir(self, node: Any):
@@ -1223,8 +1241,22 @@ class Analyzer:
             canonical = OperatorRegistry.resolve_canonical_strict(node.op)
             implementation = OperatorRegistry.get(canonical)
 
-            if implementation is not None:
-                category = getattr(implementation.metadata, "category", "") or ""
+            # R40 #176: the declared AxisEffectContract is the single authority
+            # for has_ts/has_cs.  Production REJECTS an undeclared operator
+            # (name/category heuristics are research-only compat fallback).
+            axis_contract = axis_effect_contract_for(canonical)
+            if axis_contract is not None:
+                if axis_contract.has_time_series_effect:
+                    has_ts = True
+                if axis_contract.has_cross_section_effect:
+                    has_cs = True
+            elif effective_production:
+                check_axis_effect_declared(canonical, production=True)
+            else:
+                if implementation is None:
+                    category = ""
+                else:
+                    category = getattr(implementation.metadata, "category", "") or ""
                 if category in {
                     "time_series",
                     "technical_signal",
@@ -1241,24 +1273,24 @@ class Analyzer:
                     has_ts = True
                 if category in {"cross_sectional", "group_neutralization"}:
                     has_cs = True
-            if canonical.startswith("ts_") or canonical in {
-                "SMA",
-                "EMA",
-                "WMA",
-                "delay",
-                "decay_linear",
-            }:
-                has_ts = True
-            if canonical in {
-                "rank",
-                "zscore",
-                "scale",
-                "normalize",
-                "winsorize",
-                "quantile",
-                "neutralize",
-            } or canonical.startswith("group_"):
-                has_cs = True
+                if canonical.startswith("ts_") or canonical in {
+                    "SMA",
+                    "EMA",
+                    "WMA",
+                    "delay",
+                    "decay_linear",
+                }:
+                    has_ts = True
+                if canonical in {
+                    "rank",
+                    "zscore",
+                    "scale",
+                    "normalize",
+                    "winsorize",
+                    "quantile",
+                    "neutralize",
+                } or canonical.startswith("group_"):
+                    has_cs = True
 
             try:
                 from cleaned_operators.production_hardening import (
@@ -1268,6 +1300,14 @@ class Analyzer:
                 if canonical in FULL_HISTORY_REPLAY_CANONICALS:
                     requires_full_history = True
             except ImportError:
+                # R40 #177: a production plan must NEVER silently underestimate
+                # lookback because the full-history contract could not be
+                # imported — that would under-allocate causal history and
+                # silently corrupt the factor.  Production hard-fails; research
+                # degrades (no full-history flag) and keeps the heuristic sets
+                # below as a compat fallback.
+                if effective_production:
+                    raise
                 pass
 
             visited_inputs = [visit(argument) for argument in node.args]

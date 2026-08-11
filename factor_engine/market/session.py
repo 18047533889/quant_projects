@@ -15,12 +15,65 @@ US (COS_us_massive_data_dictionary 2026-08-08):
 """
 from __future__ import annotations
 
+import enum
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, time
 from typing import Any
 
 TIMEZONE_ASHARE = "Asia/Shanghai"
 TIMEZONE_US = "America/New_York"
+
+
+class EarlyCloseNormalizationPolicy(str, enum.Enum):
+    """R40 #237：early-close 日的明确归一化策略（替代裸字符串常量）。
+
+    每个策略有明确的数学公式（按 session duration ratio）：
+
+    * ``NONE`` — 不调整（1.0）；
+    * ``DOWN_WEIGHT`` — 按可用时长比例缩放
+      ``session_duration / full_duration``（US 半日市约 210/390）；
+    * ``EXCLUDE`` — 该日从样本中剔除（权重 0.0）。
+
+    ``applicable_operator_families`` 声明该策略适用的 operator 家族
+    （volume / volatility / session-profile…）；``semantic_version`` 绑定公式
+    版本，任何公式变更都会改变依赖它的 factor 语义身份。
+    """
+
+    NONE = "none"
+    DOWN_WEIGHT = "down_weight"
+    EXCLUDE = "exclude"
+
+    def normalization_formula(
+        self, full_duration_minutes: int, session_duration_minutes: int
+    ) -> float:
+        """按 session duration ratio 的明确公式。"""
+        full = max(1, int(full_duration_minutes))
+        sess = int(session_duration_minutes)
+        if self is EarlyCloseNormalizationPolicy.NONE:
+            return 1.0
+        if self is EarlyCloseNormalizationPolicy.EXCLUDE:
+            return 0.0
+        # DOWN_WEIGHT: scale by the fraction of regular session time available.
+        return float(max(0.0, sess) / full)
+
+    @property
+    def applicable_operator_families(self) -> tuple[str, ...]:
+        if self is EarlyCloseNormalizationPolicy.DOWN_WEIGHT:
+            return ("volume", "volatility", "session_profile", "amount_share")
+        if self is EarlyCloseNormalizationPolicy.EXCLUDE:
+            return ("volume", "volatility", "session_profile")
+        return ()
+
+    @property
+    def semantic_version(self) -> str:
+        return "r40#237-v1"
+
+    @classmethod
+    def from_value(cls, value: Any) -> "EarlyCloseNormalizationPolicy":
+        if isinstance(value, EarlyCloseNormalizationPolicy):
+            return value
+        return cls(str(value or "none").strip().lower())
 
 
 @dataclass(frozen=True)
@@ -34,7 +87,14 @@ class SessionSegment:
 
 @dataclass(frozen=True)
 class SessionSpec:
-    """A market's intraday session contract."""
+    """A market's intraday session contract.
+
+    R40 #232：本类是 **immutable projection** —— 业务规则的单一权威是
+    :class:`market.exchange_session_calendar.ExchangeSessionCalendar`。
+    ``SessionSpec`` 保留给既有调用方（minute slot 映射 / early-close 感知），
+    但不再维护独立的 calendar 业务规则；真实 holiday / DST / early-close 来源
+    应经 ``ExchangeSessionCalendar`` 生成，再投影成本对象。
+    """
 
     session_id: str
     timezone: str
@@ -178,7 +238,35 @@ class SessionSpec:
         except Exception:  # pragma: no cover - defensive
             return _time(13, 0)
 
+    def normalization(self) -> EarlyCloseNormalizationPolicy:
+        """R40 #237：把字符串 ``early_close_policy`` 解析为归一化策略对象。"""
+        return EarlyCloseNormalizationPolicy.from_value(self.early_close_policy)
+
+    def calendar_digest(self) -> str:
+        """R40 #236：绑定 calendar version + early-close 来源 + segments +
+        timezone 的 digest（供 factor identity / cache 使用）。"""
+        h = hashlib.sha256()
+        h.update(b"SessionSpecV2")
+        h.update(b"\x00" + self.session_id.encode("utf-8"))
+        h.update(b"\x00" + self.timezone.encode("utf-8"))
+        for seg in self.segments:
+            h.update(b"\x00" + f"{seg.start:%H:%M}-{seg.end:%H:%M}".encode("utf-8"))
+        h.update(b"\x00" + str(self.slot_count).encode("utf-8"))
+        h.update(b"\x00" + self.bar_convention.encode("utf-8"))
+        h.update(b"\x00" + self.normalization().value.encode("utf-8"))
+        h.update(b"\x00" + ",".join(sorted(self.early_close_dates)).encode("utf-8"))
+        ec_times = dict(self._early_close_times or {})
+        h.update(
+            b"\x00"
+            + ",".join(
+                f"{d}:{t.strftime('%H:%M') if hasattr(t, 'strftime') else t}"
+                for d, t in sorted(ec_times.items())
+            ).encode("utf-8")
+        )
+        return h.hexdigest()[:16]
+
     def to_dict(self) -> dict[str, Any]:
+        ec_times = dict(self._early_close_times or {})
         return {
             "session_id": self.session_id,
             "timezone": self.timezone,
@@ -191,6 +279,14 @@ class SessionSpec:
             "early_close_policy": self.early_close_policy,
             "bar_convention": self.bar_convention,
             "notes": self.notes,
+            # R40 #236: early-close 信息必须进 to_dict（不再是 notes-only）。
+            "early_close_dates": sorted(self.early_close_dates),
+            "early_close_times": {
+                d: (t.strftime("%H:%M") if hasattr(t, "strftime") else t)
+                for d, t in sorted(ec_times.items())
+            },
+            "early_close_normalization_policy": self.normalization().value,
+            "calendar_digest": self.calendar_digest(),
         }
 
 
@@ -253,6 +349,7 @@ def session_for_date(market: str, trade_date: Any) -> SessionSpec:
 
 __all__ = [
     "ASHARE_SESSION",
+    "EarlyCloseNormalizationPolicy",
     "SessionSegment",
     "SessionSpec",
     "US_SESSION",

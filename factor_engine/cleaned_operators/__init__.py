@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
 """可独立交付的统一算子库（唯一 production runtime 层）。"""
+import importlib.util
+import threading
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any
+
 from cleaned_operators.registry import OperatorRegistry
 
 from cleaned_operators import common  # noqa: F401
@@ -377,7 +383,94 @@ _REVIEWED_EXTENSIONS = (
 )
 
 
-import importlib.util
+# ---------------------------------------------------------------------------
+# BootstrapModuleSpec (R40 #154).  ``PRODUCTION_LOAD_MODULES`` /
+# ``RESEARCH_LOAD_MODULES`` / ``INTERNAL_KERNEL_MODULES`` are plain tuples with
+# no typed role.  Each bootstrap module is now a typed spec
+# (IMPLEMENTATION | INTERNAL_KERNEL | RESEARCH_EXTENSION | GOVERNANCE) with a
+# ``required`` flag; the load loop is driven by the spec and a post-init
+# validation guarantees the role invariants.
+# ---------------------------------------------------------------------------
+class BootstrapModuleRole(Enum):
+    IMPLEMENTATION = "implementation"
+    INTERNAL_KERNEL = "internal_kernel"
+    RESEARCH_EXTENSION = "research_extension"
+    GOVERNANCE = "governance"
+
+
+@dataclass(frozen=True)
+class BootstrapModuleSpec:
+    """Typed bootstrap module spec (R40 #154)."""
+
+    module: str
+    role: BootstrapModuleRole
+    required: bool = True
+
+    @property
+    def in_production_surface(self) -> bool:
+        """True when the module belongs to the strictly-production surface."""
+        return (
+            self.role in (BootstrapModuleRole.IMPLEMENTATION, BootstrapModuleRole.GOVERNANCE)
+            and self.module not in RESEARCH_LOAD_MODULES
+            and self.module not in INTERNAL_KERNEL_MODULES
+        )
+
+
+def _build_bootstrap_module_specs() -> tuple[BootstrapModuleSpec, ...]:
+    """Classify every default/reviewed module into a typed BootstrapModuleSpec."""
+    specs: list[BootstrapModuleSpec] = []
+    for mod in _LOAD_MODULES:
+        if mod in RESEARCH_LOAD_MODULES:
+            role = BootstrapModuleRole.RESEARCH_EXTENSION
+        elif mod in INTERNAL_KERNEL_MODULES:
+            role = BootstrapModuleRole.INTERNAL_KERNEL
+        else:
+            role = BootstrapModuleRole.IMPLEMENTATION
+        specs.append(BootstrapModuleSpec(module=mod, role=role, required=True))
+    for mod in _REVIEWED_EXTENSIONS:
+        specs.append(
+            BootstrapModuleSpec(module=mod, role=BootstrapModuleRole.IMPLEMENTATION, required=True)
+        )
+    return tuple(specs)
+
+
+BOOTSTRAP_MODULE_SPECS: tuple[BootstrapModuleSpec, ...] = _build_bootstrap_module_specs()
+
+
+def validate_bootstrap_module_specs(specs: tuple[BootstrapModuleSpec, ...]) -> list[str]:
+    """R40 #154 post-init validation of the typed module-spec roles.
+
+    Guarantees:
+      * an INTERNAL_KERNEL module never appears in the PRODUCTION surface;
+      * a RESEARCH_EXTENSION module never auto-enters the PRODUCTION surface;
+      * a ``required`` module is never silently skippable (it must be present in
+        the spec table).
+    Returns a list of violations (empty == valid).
+    """
+    errors: list[str] = []
+    for spec in specs:
+        if spec.role is BootstrapModuleRole.INTERNAL_KERNEL and spec.in_production_surface:
+            errors.append(
+                f"internal-kernel module {spec.module!r} must not be in the "
+                "production surface (R40 #154)"
+            )
+        if spec.role is BootstrapModuleRole.RESEARCH_EXTENSION and spec.in_production_surface:
+            errors.append(
+                f"research-extension module {spec.module!r} must not auto-enter "
+                "the production surface (R40 #154)"
+            )
+    required_modules = {spec.module for spec in specs if spec.required}
+    declared = {spec.module for spec in specs}
+    if required_modules - declared:
+        errors.append(f"required modules missing from spec table: {sorted(required_modules - declared)}")
+    return errors
+
+
+def check_bootstrap_module_specs() -> None:
+    """Raise on bootstrap module-spec role violations (R40 #154)."""
+    violations = validate_bootstrap_module_specs(BOOTSTRAP_MODULE_SPECS)
+    if violations:
+        raise RuntimeError("bootstrap module spec violation: " + "; ".join(violations))
 
 
 def _optional_backend_available(module: str) -> bool:
@@ -425,31 +518,232 @@ _LOADED = False
 _INITIALIZING = False
 _SKIPPED_OPTIONAL_MODULES: set[str] = set()
 
+# ---------------------------------------------------------------------------
+# RegistryBootstrap (R40 #151-#155).
+#
+# The legacy ``_LOADED``/``_INITIALIZING`` module bools were unlocked globals:
+# a second thread that saw ``_INITIALIZING=True`` returned a HALF-LOADED
+# registry.  ``RegistryBootstrap`` is the single thread-safe coordinator:
+#   * NEW        -> first caller becomes the owner and initializes;
+#   * INITIALIZING -> non-owner threads WAIT (never return half-loaded);
+#   * READY      -> every caller returns the same fully-loaded registry;
+#   * FAILED     -> every caller receives the SAME recorded initialization error;
+#   * ``reset()`` clears a FAILED state for an explicit clean retry.
+# ``ensure_ready(include_research=...)`` freezes the surface on FIRST call; a
+# later call with a different ``include_research`` value returns the SAME
+# already-loaded registry (R40 #152 — the flag never changes global behavior).
+# ---------------------------------------------------------------------------
+class _RegistryBootstrapState(Enum):
+    NEW = "new"
+    INITIALIZING = "initializing"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class RegistryBootstrap:
+    """Thread-safe, once-only registry initialization coordinator (R40 #151)."""
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition(threading.RLock())
+        self._state = _RegistryBootstrapState.NEW
+        self._owner_thread_id: int | None = None
+        self._error: BaseException | None = None
+        self._include_research: bool = True
+
+    # -- state ------------------------------------------------------------
+    @property
+    def state(self) -> str:
+        with self._cond:
+            return self._state.value
+
+    def _run_initialization(self, include_research: bool) -> None:
+        from cleaned_operators.registry import RegistryInitializationError
+
+        if OperatorRegistry.lifecycle() != "building":
+            raise RegistryInitializationError(
+                f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
+            )
+        # R40 #153: staging runs and publishes atomically from the caller's
+        # perspective — a failure leaves the registry in the pre-init state
+        # (lifecycle stays "building") so a clean retry reproduces the same
+        # digest.
+        _load_all_impl(include_research=include_research)
+
+    def ensure_ready(self, *, include_research: bool = True) -> None:
+        """Initialize once and return the fully-loaded registry.
+
+        First caller becomes the owner (INITIALIZING).  Non-owner callers WAIT
+        on the condition until READY/FAILED — they never observe a half-loaded
+        registry.  A FAILED bootstrap re-raises the SAME recorded error for
+        every caller.
+        """
+        with self._cond:
+            if self._state is _RegistryBootstrapState.READY:
+                return
+            if self._state is _RegistryBootstrapState.FAILED:
+                assert self._error is not None
+                raise self._error
+            if self._state is _RegistryBootstrapState.INITIALIZING:
+                # Owner re-entry: the current thread is already inside
+                # ``_run_initialization`` and called back (e.g. SQL emitter
+                # capability certification → typed signature → ensure_cleaned_loaded).
+                # Waiting here would deadlock — the owner is the only thread that
+                # can ever set READY.  Return immediately; the registry already
+                # carries the operator definitions the re-entrant caller needs.
+                if self._owner_thread_id == threading.get_ident():
+                    return
+                # Non-owner: wait for the owner to finish (never return early).
+                while self._state is _RegistryBootstrapState.INITIALIZING:
+                    self._cond.wait()
+                if self._state is _RegistryBootstrapState.READY:
+                    return
+                assert self._state is _RegistryBootstrapState.FAILED
+                assert self._error is not None
+                raise self._error
+            # NEW -> owner.
+            self._state = _RegistryBootstrapState.INITIALIZING
+            self._owner_thread_id = threading.get_ident()
+            self._include_research = bool(include_research)
+            try:
+                self._run_initialization(self._include_research)
+            except BaseException as exc:  # noqa: BLE001 - re-raised identically to all waiters
+                self._state = _RegistryBootstrapState.FAILED
+                self._error = exc
+                self._owner_thread_id = None
+                self._cond.notify_all()
+                raise
+            else:
+                self._state = _RegistryBootstrapState.READY
+                self._owner_thread_id = None
+                self._cond.notify_all()
+
+    def reset(self) -> None:
+        """Clear a FAILED state so a later call retries cleanly (R40 #153)."""
+        with self._cond:
+            if self._state is not _RegistryBootstrapState.FAILED:
+                return
+            self._state = _RegistryBootstrapState.NEW
+            self._error = None
+
+
+REGISTRY_BOOTSTRAP = RegistryBootstrap()
+
+# R40 #210: typed backend-replacement audit trail.  A direct ``_backends.pop``
+# bypassed the registry's replacement audit; ``replace_backend`` records the
+# old implementation hash / source / reason / migration id so every replacement
+# is traceable.
+_BACKEND_REPLACEMENT_AUDIT: list[dict[str, Any]] = []
+_REPLACEMENT_MIGRATION_IDS: dict[str, str] = {}
+
+
+def _implementation_identity(operator: Any) -> str:
+    import hashlib
+
+    if operator is None:
+        return ""
+    return hashlib.sha256(
+        f"{type(operator).__module__}.{type(operator).__qualname__}".encode("utf-8")
+    ).hexdigest()[:12]
+
+
+def replace_backend(
+    canonical: str,
+    backend: str,
+    *,
+    reason: str = "",
+    source: str = "",
+) -> str:
+    """Replace a canonical's backend slot with a typed audit trail (R40 #210).
+
+    Records the OLD implementation identity/source (before removal), pops the
+    slot, and returns a migration id.  The caller then registers the new
+    implementation; ``record_backend_replacement_after`` appends the new
+    identity so the audit has old -> new.
+    """
+    import uuid
+
+    from cleaned_operators.registry import OperatorRegistry
+
+    migration_id = uuid.uuid4().hex[:12]
+    backends = OperatorRegistry._operators.get(canonical)
+    old = backends.get(backend) if backends is not None else None
+    old_meta = (
+        (OperatorRegistry._catalog.get(canonical, {}).get("backend_meta") or {})
+        .get(backend) or {}
+    )
+    _BACKEND_REPLACEMENT_AUDIT.append({
+        "migration_id": migration_id,
+        "canonical": canonical,
+        "backend": backend,
+        "old_source": str(old_meta.get("source", "")),
+        "old_type": type(old).__name__ if old is not None else "",
+        "old_implementation_hash": _implementation_identity(old),
+        "reason": str(reason),
+    })
+    if backends is not None:
+        backends.pop(backend, None)
+    return migration_id
+
+
+def record_backend_replacement_after(
+    migration_id: str,
+    canonical: str,
+    backend: str,
+    *,
+    source: str = "",
+) -> None:
+    """Append the NEW implementation identity to a replacement audit entry."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    backends = OperatorRegistry._operators.get(canonical)
+    new = backends.get(backend) if backends is not None else None
+    for row in _BACKEND_REPLACEMENT_AUDIT:
+        if row.get("migration_id") == migration_id:
+            row["new_source"] = str(source)
+            row["new_type"] = type(new).__name__ if new is not None else ""
+            row["new_implementation_hash"] = _implementation_identity(new)
+            break
+
+
+def backend_replacement_audit() -> tuple[dict[str, Any], ...]:
+    """Read-only view of the backend-replacement audit trail (R40 #210)."""
+    return tuple(dict(row) for row in _BACKEND_REPLACEMENT_AUDIT)
+
+
+# R40 #215: production signature authority availability.  Set to True only after
+# ``apply_production_signature_v2`` has actually applied the signature overlay.
+_SIGNATURE_AUTHORITY_AVAILABLE = False
+
+
+def signature_authority_available() -> bool:
+    """Whether the production signature authority has been applied."""
+    return bool(_SIGNATURE_AUTHORITY_AVAILABLE)
+
+
+def check_signature_authority(*, production: bool = True) -> None:
+    """R40 #215: production capability check — a missing signature authority is
+    a hard fail (never silently degraded to an un-signed capability surface).
+    Research callers pass ``production=False`` to degrade.
+    """
+    global _SIGNATURE_AUTHORITY_AVAILABLE
+    if production and not _SIGNATURE_AUTHORITY_AVAILABLE:
+        raise RuntimeError(
+            "production signature authority is not available: apply_production_"
+            "signature_v2() did not apply (R40 #215 — an unsigned capability "
+            "surface must not enter production)"
+        )
+
 
 def load_all(*, include_research: bool = True) -> None:
-    global _LOADED, _INITIALIZING
-    if _LOADED:
-        if OperatorRegistry.lifecycle() == "frozen":
-            return
-        from cleaned_operators.registry import RegistryInitializationError
-        raise RegistryInitializationError(
-            f"loaded registry is unexpectedly {OperatorRegistry.lifecycle()!r}"
-        )
-    if _INITIALIZING:
-        return
-    if OperatorRegistry.lifecycle() != "building":
-        from cleaned_operators.registry import RegistryInitializationError
-        raise RegistryInitializationError(
-            f"unloaded registry cannot initialize from {OperatorRegistry.lifecycle()!r}"
-        )
+    """Initialize the registry exactly once (thread-safe, R40 #151-#155).
 
-    _INITIALIZING = True
-    try:
-        _load_all_impl(include_research=include_research)
-    finally:
-        # ``_INITIALIZING`` must always be reset even when a module raises
-        # mid-load, so a later load_all() can retry instead of deadlocking.
-        _INITIALIZING = False
+    The first caller becomes the initialization owner; concurrent callers WAIT
+    and receive the same fully-loaded registry (never a half-loaded one).  A
+    failed initialization re-raises the same error to every caller.  The
+    ``include_research`` flag is frozen on the FIRST call and never changes the
+    global surface afterwards (R40 #152).
+    """
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
 
 
 def _load_all_impl(*, include_research: bool = True) -> None:
@@ -463,20 +757,19 @@ def _load_all_impl(*, include_research: bool = True) -> None:
 
     from backend.production_signature_v2 import apply_production_signature_v2
     apply_production_signature_v2()
+    global _SIGNATURE_AUTHORITY_AVAILABLE
+    _SIGNATURE_AUTHORITY_AVAILABLE = True
 
     from cleaned_operators.registration_audit import install_registration_audit
     install_registration_audit()
 
-    # R30 §7: ``include_research=False`` loads only the strictly production
-    # surface (all non-research modules of the default list + reviewed
-    # extensions).  Research model families are explicit opt-in.
-    for mod in _LOAD_MODULES:
-        if mod in RESEARCH_LOAD_MODULES and not include_research:
+    # R40 #154: the load loop is driven by the typed BootstrapModuleSpec table
+    # (IMPLEMENTATION / INTERNAL_KERNEL / RESEARCH_EXTENSION / GOVERNANCE).
+    check_bootstrap_module_specs()
+    for spec in BOOTSTRAP_MODULE_SPECS:
+        if spec.role is BootstrapModuleRole.RESEARCH_EXTENSION and not include_research:
             continue
-        _load_module_if_available(mod)
-
-    for mod in _REVIEWED_EXTENSIONS:
-        _load_module_if_available(mod)
+        _load_module_if_available(spec.module)
 
     # Snapshot the raw registered lifecycle status now, before any promotion
     # layer (dedupe / overhaul / layer_governance* / production_hardening)
@@ -515,18 +808,29 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     # Later compatibility layers can overwrite the strict fiscal primitives.
     # Remove only their in-memory backend slots, then re-register the audited
     # ordinal/revision implementation before the final signature audit.
+    # R40 #210: replacement goes through the typed ``replace_backend`` audit
+    # trail (old/new implementation hash + reason + migration id) instead of a
+    # bare ``_backends.pop`` that bypassed the registry audit.
     from cleaned_operators import fiscal_strict, fiscal_event_ops
     for _canonical in (
         "period_lag", "period_change", "period_average", "period_cagr",
         "quarter_from_cumulative", "ttm_from_quarterly", "ttm_from_cumulative",
         "yoy_by_period",
     ):
-        _backends = OperatorRegistry._operators.get(_canonical)
-        if _backends is not None:
-            _backends.pop("pandas_numpy", None)
-            _backends.pop("polars", None)
+        for _backend in ("pandas_numpy", "polars"):
+            _migration = replace_backend(
+                _canonical, _backend,
+                reason="fiscal strict ordinal/revision implementation replaces legacy layer",
+                source="cleaned_operators.fiscal_strict",
+            )
+            _REPLACEMENT_MIGRATION_IDS[_canonical] = _migration
     fiscal_strict.register()
     fiscal_event_ops.register()
+    for _canonical, _migration in _REPLACEMENT_MIGRATION_IDS.items():
+        record_backend_replacement_after(
+            _migration, _canonical, "pandas_numpy",
+            source="cleaned_operators.fiscal_strict",
+        )
 
     # Strict fiscal implementations are registered after the general cleanup
     # pass, so attach the same explicit native capability contract here.
@@ -573,6 +877,13 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.stateful_contract_migration import apply_stateful_contract_migration
 
     apply_stateful_contract_migration()
+
+    # R40 #176 收尾：所有注册算子批量声明 AxisEffectContract——production
+    # planning 只读契约、绝无 name/category fallback（静态门
+    # PRODUCTION_AXIS_EFFECT_UNDECLARED == 0 由本声明覆盖全部算子保证）。
+    from ir.types import register_axis_effects_for_surface
+
+    register_axis_effects_for_surface()
 
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()

@@ -38,6 +38,57 @@ try:
     from scipy import stats as scipy_stats
 except ImportError:
     scipy_stats = None  # type: ignore
+
+# ---------------------------------------------------------------------------
+# Rank tie-method policy (R40 #197).
+#
+# ``rank(method="first")`` assigns ranks by row/column *iteration* order — the
+# result depends on the physical ordering of instruments and is not a stable
+# execution identity.  Production rejects ``method="first"`` (a deterministic
+# ``method="average"``/``"min"``/``"max"``/``"dense"`` must be declared).  If a
+# rank must order ties by instrument, the caller sorts the cross-section by the
+# canonical InstrumentKey before ranking — this gate is the single authority.
+# ---------------------------------------------------------------------------
+_RANK_DETERMINISTIC_METHODS = frozenset({"average", "min", "max", "dense"})
+
+
+def check_rank_method(method: str | None, *, production: bool = True, canonical: str = "") -> str:
+    """Production gate for the rank tie method (R40 #197).
+
+    ``method="first"`` is rejected in production (iteration-order dependent).
+    ``None`` resolves to the deterministic default ``"average"``.  An unknown
+    method raises rather than silently degrading.  This policy is NOT a mining
+    continuous-search dimension — the gate always pins a deterministic method.
+    """
+    eff = (method or "average").lower()
+    if production and eff == "first":
+        raise ValueError(
+            f"{canonical or 'rank'}: method='first' is rejected in production "
+            "(tie-break by iteration order is not a stable execution identity; "
+            "use a deterministic method or sort by canonical InstrumentKey first — "
+            "R40 #197)"
+        )
+    if eff not in _RANK_DETERMINISTIC_METHODS and eff != "first":
+        raise ValueError(
+            f"{canonical or 'rank'}: unknown rank method {method!r}; expected one "
+            f"of {sorted(_RANK_DETERMINISTIC_METHODS)} (research may use 'first' only "
+            "explicitly)"
+        )
+    return eff
+
+
+def _finite_stats_input(arr: np.ndarray) -> np.ndarray:
+    """Map ±Inf → NaN so ``np.nan*`` statistics ignore Inf as a valid sample.
+
+    R40 #188: ``np.nanmean/np.nanstd/np.nanmedian/np.nanpercentile`` treat ±Inf
+    as a real observation, which manufactures garbage cross-sectional stats (a
+    single Inf column makes the whole row's mean Inf).  Masking non-finite to
+    NaN first makes every fallback use the same finite-sample policy as the
+    ``np.isfinite``-masked paths.
+    """
+    out = np.array(arr, dtype=np.float64, copy=True)
+    out[~np.isfinite(out)] = np.nan
+    return out
 try:
     import polars as pl
 except ImportError:
@@ -1005,7 +1056,7 @@ class CrossSectionalStdPolars(SeriesOperator):
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
         # 计算每行标准差
-        arr = x.select(numeric_cols).to_numpy()
+        arr = _finite_stats_input(x.select(numeric_cols).to_numpy())
         stds = np.nanstd(arr, axis=1, ddof=1, keepdims=True)
 
         # 转换回 Polars
@@ -1034,7 +1085,7 @@ class CrossSectionalMadPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
-        arr = x.select(numeric_cols).to_numpy()
+        arr = _finite_stats_input(x.select(numeric_cols).to_numpy())
         med = np.nanmedian(arr, axis=1, keepdims=True)
         mad = np.nanmedian(np.abs(arr - med), axis=1, keepdims=True)
         out = np.repeat(mad, len(numeric_cols), axis=1)
@@ -1061,7 +1112,7 @@ class CrossSectionalMadZscorePolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
-        arr = x.select(numeric_cols).to_numpy()
+        arr = _finite_stats_input(x.select(numeric_cols).to_numpy())
         med = np.nanmedian(arr, axis=1, keepdims=True)
         mad = np.nanmedian(np.abs(arr - med), axis=1, keepdims=True)
         mad = np.where(mad == 0, np.nan, mad)
@@ -1178,7 +1229,10 @@ class CrossSectionalNeutralizePolars(SeriesOperator):
             for g in unique_groups:
                 mask = row_group == g
                 if np.any(mask):
-                    group_mean = np.nanmean(row_data[mask])
+                    # R40 #188: ±Inf is not a valid sample — mask non-finite to
+                    # NaN so np.nanmean ignores it (a lone Inf in the group would
+                    # otherwise make the whole group mean Inf).
+                    group_mean = np.nanmean(_finite_stats_input(row_data[mask]))
                     result_arr[row_idx, mask] = row_data[mask] - group_mean
 
         # 转换回 Polars
@@ -1394,7 +1448,7 @@ class CrossSectionalWinsorizePolars(SeriesOperator):
         min_pct, max_pct = lower, upper
 
         # 使用 Numba 计算分位数并裁剪
-        arr = x.select(numeric_cols).to_numpy()
+        arr = _finite_stats_input(x.select(numeric_cols).to_numpy())
 
         # 计算每行的分位数
         lower = np.nanpercentile(arr, min_pct * 100, axis=1, keepdims=True)

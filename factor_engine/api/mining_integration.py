@@ -128,7 +128,9 @@ def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple
     return True, "OK"
 
 
-def validate_production_fastpath_dsl(formula: str, *, strict: bool | None = None) -> tuple[bool, str]:
+def validate_production_fastpath_dsl(
+    formula: str, *, strict: bool | None = None, market: str | None = None
+) -> tuple[bool, str]:
     """production fast path 公式校验：语法 + 高性能 backend 允许。
 
     Parameters
@@ -137,13 +139,17 @@ def validate_production_fastpath_dsl(formula: str, *, strict: bool | None = None
         DSL 公式字符串。
     strict : bool | None
         传给 ``check_production_fastpath_formula_ops``；``None`` 用模块默认。
+    market : str | None
+        R40 #86: 透传给 ``validate_production_dsl`` —— production 校验必须带
+        真实 market（US 公式绝不能用默认 A-share registry 校验）。``None``
+        时按 ``validate_production_dsl`` 的缺省（ashare）处理。
 
     Returns
     -------
     tuple[bool, str]
         ``(True, "OK")`` 或 ``(False, 违规说明)``。
     """
-    ok, msg = validate_production_dsl(formula)
+    ok, msg = validate_production_dsl(formula, market=market)
     if not ok:
         return False, msg
     from backend.production_fastpath_gate import check_production_fastpath_formula_ops
@@ -231,9 +237,32 @@ def validate_factor_engine_dsl(
         return False, str(exc)
 
 
-def validate_us_dsl(formula: str, *, surface: str = "daily") -> tuple[bool, str]:
-    """兼容旧名；同 :func:`validate_factor_engine_dsl`。"""
+def validate_syntax_only_dsl(formula: str, *, surface: str = "daily") -> tuple[bool, str]:
+    """仅做 factor_engine DSL **语法** + 白名单解析校验。
+
+    R40 #87: 旧名 ``validate_us_dsl`` 冒充「US 市场校验」——它实际上不校验
+    US 市场/字段注册表/算子契约/提供者绑定，只是 ``parse_expr`` 语法解析。
+    新名如实表达能力：**syntax-only**。要真正校验 US production 公式，请用
+    :func:`validate_production_dsl` 并传 ``market="us"``。
+    """
     return validate_factor_engine_dsl(formula, surface=surface)
+
+
+def validate_us_dsl(formula: str, *, surface: str = "daily") -> tuple[bool, str]:
+    """R40 #87 兼容旧名；同 :func:`validate_syntax_only_dsl`。
+
+    Deprecated: 该名字暗示「US 市场校验」，实际只是语法解析。生产 US 校验请
+    用 :func:`validate_production_dsl`(``market="us"``)。
+    """
+    import warnings
+
+    warnings.warn(
+        "validate_us_dsl is deprecated; use validate_syntax_only_dsl (syntax-only) "
+        "or validate_production_dsl(formula, market='us') for a real US contract check.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return validate_syntax_only_dsl(formula, surface=surface)
 
 
 def list_dsl_allowlist(*, surface: str = "daily") -> list[str]:
@@ -1087,9 +1116,9 @@ def validate_manifest_for_execution(
     ).strip() or "daily"
 
     if require_fastpath:
-        return validate_production_fastpath_dsl(formula)
+        return validate_production_fastpath_dsl(formula, market=mkt)
     if require_production:
-        return validate_production_dsl(formula)
+        return validate_production_dsl(formula, market=mkt)
     return validate_factor_engine_dsl(formula, surface=surf)
 
 

@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import BroadcastSpec, OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import BroadcastSpec, OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_legacy, _daily_agg_two
 from cleaned_operators.rolling_pack import register_polars_udf
 
@@ -505,7 +505,14 @@ class IntradayQuantileCurvePcaScore(SeriesOperator):
         unit="ratio",
         cost=8,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    # Model-audit Phase 4 (M-240): window is the PCA horizon (HORIZON, searchable);
+    # k is the principal-component index — ESTIMATOR_RESOLUTION, never a free
+    # full-resolution search dimension (M-115/M-162/M-170).
+    metadata.param_specs = {
+        "session_tz": ParamSpec(dtype=str, searchable=False),
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    }
 
     def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         w = int(window)
@@ -538,7 +545,13 @@ class IntradayQuantileCurvePcaResidual(SeriesOperator):
         unit="ratio",
         cost=8,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    # Model-audit Phase 4 (M-240): window = PCA horizon (HORIZON, searchable);
+    # k = principal-component index — ESTIMATOR_RESOLUTION, not free-searched.
+    metadata.param_specs = {
+        "session_tz": ParamSpec(dtype=str, searchable=False),
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    }
 
     def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         w = int(window)

@@ -24,6 +24,17 @@ def _minute(value: str) -> int:
     return hour * 60 + minute
 
 
+class CalendarAuthorityError(RuntimeError):
+    """R40 #233：production 需要 EXCHANGE_CERTIFIED 日历，但当前是
+    WEEKDAY_APPROXIMATION（无真实节假日集）—— hard fail。"""
+
+
+#: 日历权威性：``EXCHANGE_CERTIFIED``（真实交易所节假日集）vs
+#: ``WEEKDAY_APPROXIMATION``（仅周一到周五近似，无真实 holidays）。
+EXCHANGE_CERTIFIED = "EXCHANGE_CERTIFIED"
+WEEKDAY_APPROXIMATION = "WEEKDAY_APPROXIMATION"
+
+
 @dataclass(frozen=True)
 class SessionCalendar:
     """Trading-session definition used by minute-native helpers and runtimes.
@@ -44,6 +55,12 @@ class SessionCalendar:
     #: R32-P0-004: 跨日偏移的交易日过滤。缺省按周一到周五（A 股常规）；真实
     #: 节假日日历由上层 TradingCalendar 提供（``holidays`` 冻结日期集）。
     holidays: frozenset[str] = frozenset()
+    #: R40 #234：会话本地时区（必填，默认 UTC）。session_key / minute_ordinal /
+    #: segment_id / bar_slots 先统一到该时区再算。
+    timezone: str = "UTC"
+    #: R40 #233：日历权威性。默认 WEEKDAY_APPROXIMATION（向后兼容既有调用方）；
+    #: production 的 offset_bars / warmup_load_start 要求 EXCHANGE_CERTIFIED。
+    authoritativeness: str = WEEKDAY_APPROXIMATION
 
     def __post_init__(self) -> None:
         market = str(self.market or "US").upper()
@@ -76,6 +93,39 @@ class SessionCalendar:
         )
         if self.session_bars <= 0:
             raise ValueError("SessionCalendar requires a positive bar count")
+        auth = str(self.authoritativeness or "").strip().upper()
+        if auth not in {EXCHANGE_CERTIFIED, WEEKDAY_APPROXIMATION}:
+            raise ValueError(
+                f"authoritativeness must be {EXCHANGE_CERTIFIED} or "
+                f"{WEEKDAY_APPROXIMATION}, got {self.authoritativeness!r}"
+            )
+        object.__setattr__(self, "authoritativeness", auth)
+        object.__setattr__(self, "timezone", str(self.timezone or "UTC"))
+
+    def _session_local_ts(self, timestamps: Iterable[object]) -> pd.DatetimeIndex:
+        """R40 #234：把 timestamps 统一到 session-local timezone。
+
+        naive 输入视为已是会话本地；tz-aware 输入先 tz_convert 到
+        ``self.timezone`` 再剥离 tz（本地 wall-clock）。
+        """
+        ts = pd.DatetimeIndex(pd.to_datetime(timestamps))
+        if ts.tz is not None:
+            return ts.tz_convert(self.timezone).tz_localize(None)
+        return ts
+
+    def require_exchange_certified(self, *, mode: str = "production") -> None:
+        """R40 #233：production 要求 EXCHANGE_CERTIFIED 才允许
+        offset_bars / warmup_load_start。WEEKDAY_APPROXIMATION（空节假日集
+        的 weekday 近似）→ hard fail，不再继续用近似日历跨日偏移。
+        """
+        if str(mode).strip().lower() == "production" and self.authoritativeness != EXCHANGE_CERTIFIED:
+            raise CalendarAuthorityError(
+                f"production requires an EXCHANGE_CERTIFIED calendar for "
+                f"offset_bars / warmup_load_start; current calendar for "
+                f"{self.market!r} is {self.authoritativeness} (holidays set "
+                f"size={len(self.holidays)}) — a weekday approximation cannot "
+                "certify cross-day bar offsets"
+            )
 
     def _is_trading_day(self, day: pd.Timestamp) -> bool:
         """R32-P0-004: 交易日过滤 —— 周末 + 显式 holidays 非交易日。"""
@@ -115,11 +165,15 @@ class SessionCalendar:
             return int(np.ceil(self.session_minutes / width))
 
     def session_key(self, timestamps: Iterable[object]) -> pd.DatetimeIndex:
-        return pd.DatetimeIndex(pd.to_datetime(timestamps)).normalize()
+        """R40 #234: 统一到 session-local timezone 后取交易日。"""
+        return self._session_local_ts(timestamps).normalize()
 
     def minute_ordinal(self, timestamps: Iterable[object]) -> np.ndarray:
-        """Return continuous in-session minute ordinals; recess/outside is -1."""
-        ts = pd.DatetimeIndex(pd.to_datetime(timestamps))
+        """Return continuous in-session minute ordinals; recess/outside is -1.
+
+        R40 #234: timestamps 先统一到 session-local timezone。
+        """
+        ts = self._session_local_ts(timestamps)
         minute = ts.hour * 60 + ts.minute
         output = np.full(len(ts), -1, dtype=int)
         offset = 0
@@ -136,8 +190,11 @@ class SessionCalendar:
         return output
 
     def segment_ordinal(self, timestamps: Iterable[object]) -> np.ndarray:
-        """Return minute ordinal within each segment; recess/outside is -1."""
-        ts = pd.DatetimeIndex(pd.to_datetime(timestamps))
+        """Return minute ordinal within each segment; recess/outside is -1.
+
+        R40 #234: timestamps 先统一到 session-local timezone。
+        """
+        ts = self._session_local_ts(timestamps)
         minute = ts.hour * 60 + ts.minute
         output = np.full(len(ts), -1, dtype=int)
         for start_text, stop_text in self.segments or ():
@@ -152,8 +209,11 @@ class SessionCalendar:
         return output
 
     def segment_id(self, timestamps: Iterable[object]) -> np.ndarray:
-        """Return the segment number, with -1 for recess/outside timestamps."""
-        ts = pd.DatetimeIndex(pd.to_datetime(timestamps))
+        """Return the segment number, with -1 for recess/outside timestamps.
+
+        R40 #234: timestamps 先统一到 session-local timezone。
+        """
+        ts = self._session_local_ts(timestamps)
         minute = ts.hour * 60 + ts.minute
         output = np.full(len(ts), -1, dtype=int)
         for number, (start_text, stop_text) in enumerate(self.segments or ()):
@@ -191,16 +251,21 @@ class SessionCalendar:
                     k += 1
         return slots
 
-    def offset_bars(self, anchor: str | pd.Timestamp, n_bars: int) -> pd.Timestamp:
+    def offset_bars(self, anchor: str | pd.Timestamp, n_bars: int, *, mode: str = "research") -> pd.Timestamp:
         """R32-P0-004: session-slot-aware bar offset（跳过午休 / 跨交易日）。
 
         anchor 若不在合法 slot 上，先按偏移方向吸附到最近的合法 slot；再沿
         session grid 逐 slot 偏移 n_bars。跨日时进入下一交易日（business day
         近似；节假日裁剪由上层 TradingCalendar 负责）。n_bars 有界（lookback
         通常 ≤ 数千），逐 slot 走是廉价且正确的。
+
+        R40 #233：``mode="production"`` 时要求 EXCHANGE_CERTIFIED 日历，否则
+        hard fail——跨日偏移不能靠 weekday 近似在 production 里静默继续。
+        R40 #234：anchor 先统一到 session-local timezone。
         """
+        self.require_exchange_certified(mode=mode)
         n = int(n_bars)
-        ts = pd.Timestamp(anchor)
+        ts = self._session_local_ts([pd.Timestamp(anchor)])[0]
         if n == 0:
             return ts
         sign = 1 if n > 0 else -1
@@ -254,14 +319,18 @@ class SessionCalendar:
         requested_start: str | pd.Timestamp,
         *,
         lookback_bars: int,
+        mode: str = "research",
     ) -> pd.Timestamp:
+        """R40 #233：``mode="production"`` 要求 EXCHANGE_CERTIFIED（warmup
+        load 依赖跨日 offset，weekday 近似不能用于 production 预加载窗口）。"""
+        self.require_exchange_certified(mode=mode)
         lb = max(0, int(lookback_bars))
         if lb <= 0:
             return pd.Timestamp(requested_start)
-        anchor = pd.Timestamp(requested_start)
+        anchor = self._session_local_ts([pd.Timestamp(requested_start)])[0]
         if anchor == anchor.normalize():
             anchor += self.bar_timedelta * (self.session_bars - 1)
-        return self.offset_bars(anchor, -lb)
+        return self.offset_bars(anchor, -lb, mode=mode)
 
 
 # Backward-compatible public name used by existing callers.

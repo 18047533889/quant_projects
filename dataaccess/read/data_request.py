@@ -610,6 +610,15 @@ class ReadPlan:
                 except Exception:
                     changed.append(f"{ds}（无法重新枚举物理文件）")
                     continue
+                # R40 #54：pin 只核对实际 time_range / instrument scope 覆盖到的
+                # partition 文件——不在读取范围内的 partition 被外部改写不构成
+                # 本次读取的版本变化（避免全量 pin 误伤）。
+                pinned, current = _scope_file_manifests(
+                    store, ds, pinned, current,
+                    time_range=self.time_range,
+                    instruments=self.instruments,
+                    params=req.dataset_params(ds),
+                )
                 if _physical_manifest_changed(pinned, current):
                     changed.append(f"{ds}（物理文件变化）")
         if unpinnable:
@@ -987,6 +996,48 @@ def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any]:
         getattr(fv, "etag", None),
         getattr(fv, "version_id", None),
     )
+
+
+def _scope_file_manifests(
+    store: Any,
+    dataset: str,
+    pinned: Sequence[Any],
+    current: Sequence[Any],
+    *,
+    time_range: tuple[Any, Any] | None,
+    instruments: Sequence[str] | None,
+    params: dict[str, Any],
+) -> tuple[Sequence[Any], Sequence[Any]]:
+    """R40 #54：把 pinned/current 物理文件清单**收窄**到读取实际覆盖的 partition。
+
+    - 从 manifest 推导 time_range + instrument_scope 匹配的 partition 路径集；
+    - 只保留路径落在该集合内的文件做 pin 对比——不在读取范围内的 partition 被
+      外部改写不构成本次读取的版本变化；
+    - manifest 不可用 / 无法裁剪 → 返回原清单（保守全量对比，fail-closed）。
+    """
+    if time_range is None and not instruments:
+        return pinned, current
+    try:
+        from data_access.read.manifest import load_manifest_for_dataset
+
+        manifest = load_manifest_for_dataset(store, dataset, **params)
+    except Exception:
+        manifest = None
+    if manifest is None:
+        return pinned, current
+    try:
+        scoped = set(
+            manifest.prune(time_range=time_range, instrument_filter=instruments)
+        )
+    except Exception:
+        return pinned, current
+    pinned_scoped = tuple(
+        f for f in pinned if str(getattr(f, "path", "")) in scoped
+    )
+    current_scoped = tuple(
+        f for f in current if str(getattr(f, "path", "")) in scoped
+    )
+    return pinned_scoped, current_scoped
 
 
 def _physical_manifest_changed(pinned: Sequence[Any], current: Sequence[Any]) -> bool:

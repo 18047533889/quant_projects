@@ -14,8 +14,85 @@ absent the limits are a no-op (honest: it is an optional performance dep).
 from __future__ import annotations
 
 import dataclasses
+import enum
+import os
 from dataclasses import dataclass
 from typing import Any, Iterator
+
+
+class NumericDeterminismLevel(str, enum.Enum):
+    """R40 #256：production 数值确定性的三级分类。
+
+    * ``BITWISE_DETERMINISTIC`` — 相同输入 + 相同环境位级复现（纯 numpy /
+      numba 单线程内核）；
+    * ``DETERMINISTIC_WITHIN_TOLERANCE`` — 结果在容差内复现（BLAS 线程数 /
+      vendor 变化会带来浮点舍入差异，但 allclose 通过）；
+    * ``NONDETERMINISTIC_RESEARCH_ONLY`` — 不可确定性（某些 research 内核），
+      production 禁止。
+
+    production evidence 必须声明每个算子的确定级别；同时记录 BLAS
+    vendor/version/thread config（线程数变化会让位级复现失效）。
+    """
+
+    BITWISE_DETERMINISTIC = "bitwise_deterministic"
+    DETERMINISTIC_WITHIN_TOLERANCE = "deterministic_within_tolerance"
+    NONDETERMINISTIC_RESEARCH_ONLY = "nondeterministic_research_only"
+
+
+def determinism_level_for(backend: str) -> NumericDeterminismLevel:
+    """按 backend 分类确定级别（#256）。
+
+    * duckdb/polars native 与 numpy vectorized 在固定线程数下是
+      ``DETERMINISTIC_WITHIN_TOLERANCE``（内部 BLAS/向量化有舍入）；
+    * numba nogil 单线程内核 = ``BITWISE_DETERMINISTIC``；
+    * research_python（纯 Python 任意迭代）保守归
+      ``NONDETERMINISTIC_RESEARCH_ONLY``。
+    """
+    b = (backend or "").lower()
+    if "research" in b:
+        return NumericDeterminismLevel.NONDETERMINISTIC_RESEARCH_ONLY
+    if "numba" in b:
+        return NumericDeterminismLevel.BITWISE_DETERMINISTIC
+    if "duckdb" in b or "polars" in b or "numpy" in b or b == "sql":
+        return NumericDeterminismLevel.DETERMINISTIC_WITHIN_TOLERANCE
+    return NumericDeterminismLevel.DETERMINISTIC_WITHIN_TOLERANCE
+
+
+def record_blas_config() -> dict[str, str]:
+    """记录 BLAS vendor/version/thread config（#256 evidence）。
+
+    线程环境变量 / threadpoolctl 可用信息都收进一个 dict，供 production
+    evidence 与 cross-process determinism 对照。
+    """
+    config: dict[str, str] = {}
+    for var in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "POLARS_MAX_THREADS",
+        "DUCKDB_MAX_THREADS",
+    ):
+        config[var] = os.environ.get(var, "")
+    config["threadpoolctl_available"] = str(THREADPOOLCTL_AVAILABLE)
+    if THREADPOOLCTL_AVAILABLE:
+        try:
+            import threadpoolctl
+
+            libs = threadpoolctl.threadpool_info()
+            config["blas_libraries"] = repr(
+                [
+                    {
+                        "name": getattr(l, "name", ""),
+                        "version": getattr(l, "version", ""),
+                        "threads": getattr(l, "num_threads", ""),
+                    }
+                    for l in libs
+                ]
+            )
+        except Exception:  # pragma: no cover - defensive
+            config["blas_libraries"] = "unavailable"
+    return config
 
 try:
     from threadpoolctl import threadpool_limits

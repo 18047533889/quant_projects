@@ -44,6 +44,12 @@ _PERMANENT_MARKERS = (
 )
 _MAX_RETRIES = 3
 
+#: R39-PERF-040+045 收口：join timeout 的每项写预算。batch_size 默认 64 后
+#: 一次 flush 可写 64 个因子（本机实测单因子 ~1.2s），旧固定 10s 必然误杀
+#: 活着的慢 writer。join timeout = max(10s, batch_size×预算, finish 时队列剩余×预算)。
+#: 显式 ``join_timeout`` 覆盖一切。
+_PER_ITEM_JOIN_BUDGET_S = 2.0
+
 
 def _bytes_of(value: Any) -> int:
     try:
@@ -323,9 +329,22 @@ class StreamingResultSink:
         partition_key: Callable[[ResultItem], str] | None = None,
         target_batch_bytes: int | None = None,
         max_batch_age_s: float | None = None,
+        join_timeout: float | None = None,
     ) -> None:
         self._writer = writer
         self._batch_size = max(1, batch_size)
+        # R39-PERF-040+045 收口：batch_size 变大后单次 flush（一次 writer 调用）
+        # 可远超旧 10s。join timeout 必须覆盖「当前 batch 写完」所需时间，否则
+        # finish() 对活着的慢 writer 误判 fatal 丢弃全部工作。sink 设计保证
+        # queue closed 后 worker 必然退出（见 _run：closed 且空 → break），
+        # 因此 join 只在 writer 卡死时才会超时——给足时间窗口不会掩盖真死锁。
+        # 默认下限 = max(10s, batch_size × 每项写预算 2s)；finish() 时还会按
+        # 队列剩余 items 动态放宽（见 _join_timeout_for_finish）。显式覆盖优先。
+        self._join_timeout = (
+            float(join_timeout)
+            if join_timeout is not None
+            else max(10.0, self._batch_size * _PER_ITEM_JOIN_BUDGET_S)
+        )
         self._target_batch_bytes = (
             max(1, int(target_batch_bytes)) if target_batch_bytes is not None else None
         )
@@ -438,6 +457,22 @@ class StreamingResultSink:
         idx = self._route_worker(item)
         return self._worker_queues[idx].put(item)
 
+    def _join_timeout_for_finish(self) -> float:
+        """finish() 使用的 join timeout：默认基础上按队列剩余 items 放宽。
+
+        固定 10s（或 batch_size×预算）只覆盖「一个 batch」；batch=1 下 writer
+        逐项慢写（实测 ~1.2s/项），finish 时若队列仍有大量剩余（producer 快于
+        consumer），join 必须在剩余 items × 每项预算内等到写完。worker 消耗是
+        并发的，这里取 close 瞬间的队列深度做保守估计（多算不误杀，少算才危险）。
+        """
+        remaining = sum(q.queued_count for q in self._worker_queues)
+        return max(
+            self._join_timeout,
+            10.0,
+            self._batch_size * _PER_ITEM_JOIN_BUDGET_S,
+            remaining * _PER_ITEM_JOIN_BUDGET_S,
+        )
+
     def finish(self) -> None:
         """R33-P0-050：收尾并**证明写完**。
 
@@ -447,8 +482,9 @@ class StreamingResultSink:
         """
         for q in self._worker_queues:
             q.close()
+        join_timeout = self._join_timeout_for_finish()
         for t in self._threads:
-            t.join(timeout=10.0)
+            t.join(timeout=join_timeout)
         # R38 P0-045（§17）：join 超时后 writer 线程仍 alive → **fatal**（abort
         # generation），**不** main 线程并发 drain 补写（避免并发消费/写竞态）。
         alive = [t for t in self._threads if t.is_alive()]

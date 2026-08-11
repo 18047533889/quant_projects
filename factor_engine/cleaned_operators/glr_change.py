@@ -27,6 +27,14 @@ returning all-NaN.
 All are strict-PIT (only the trailing contiguous finite window), deterministic
 and NaN fail-closed.
 
+M-200 role: all three are STRUCTURAL-STATE / DIAGNOSTIC change-point scores, NOT
+next-return predictors.  They describe a regime/structural break already present
+in the trailing window (STATE_CONDITION_EVENT / DIAGNOSTIC_STRUCTURE semantics) —
+a diagnostic read-out of the recent state, with no claim that the detected
+level/volatility shift predicts the next return.  Each canonical carries a
+``diagnostic_structure`` tag so the typed layer / search grammar never consumes
+them as alpha features.
+
 P0-L round-3 calibration (both GLR scores):
 * *Perfect-split cap.*  A perfect split (residual within-segment SS ≈ 0) has an
   unbounded true LLR.  The old ``EPS * full_ss`` denominator made the max score
@@ -349,7 +357,9 @@ _SPECS: dict[str, dict[str, Any]] = {
         # R6-162: sqrt(max_LLR) is a dimensionless score, NOT a level.
         "unit": "dimensionless_score",
         "cost": 3,
-        "tags_extra": ["condition", _GLR_POLICY_DIGEST],
+        # M-200: change-point scores are STRUCTURAL-STATE / DIAGNOSTIC, not
+        # next-return predictors — tagged diagnostic_structure + state_condition_event.
+        "tags_extra": ["diagnostic_structure", "state_condition_event", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_glr_variance_shift_score": {
@@ -359,7 +369,9 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "change_point",
         "unit": "dimensionless_score",
         "cost": 3,
-        "tags_extra": ["condition", _GLR_POLICY_DIGEST],
+        # M-200: change-point scores are STRUCTURAL-STATE / DIAGNOSTIC, not
+        # next-return predictors — tagged diagnostic_structure + state_condition_event.
+        "tags_extra": ["diagnostic_structure", "state_condition_event", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_pettitt_change_score": {
@@ -369,13 +381,29 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "change_point",
         "unit": "ratio",
         "cost": 4,
-        "tags_extra": ["state", _GLR_POLICY_DIGEST],
+        # M-200: change-point scores are STRUCTURAL-STATE / DIAGNOSTIC, not
+        # next-return predictors — tagged diagnostic_structure + state_condition_event.
+        "tags_extra": ["diagnostic_structure", "state_condition_event", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
 }
 
 
+# M-200: change-point scores are structural-state / diagnostic read-outs, NOT
+# next-return predictors.  ``register_dual`` leaves the metadata description as
+# the bare canonical name, so the role is carried explicitly here (and as the
+# ``diagnostic_structure`` / ``state_condition_event`` tags above) for the typed
+# layer / catalog.
+_CHANGE_POINT_ROLE_DESCRIPTION = (
+    "Structural-state / diagnostic change-point score (STATE_CONDITION_EVENT / "
+    "DIAGNOSTIC_STRUCTURE): reports a regime/structural break in the trailing "
+    "window, NOT a next-return predictor."
+)
+
+
 def _register() -> None:
+    from cleaned_operators.registry import OperatorRegistry
+
     for canonical, spec in _SPECS.items():
         register_dual(
             canonical,
@@ -391,6 +419,12 @@ def _register() -> None:
             param_specs=spec.get("param_specs"),
             relational_specs=_GLR_RELATIONAL_SPECS,
         )
+        # ``mode="any"``: ``union_extended`` below has not run yet, so the
+        # canonical is still unclassified and the production-mode ``get`` would
+        # filter it out (only the two GLR names happen to be pre-listed daily).
+        _pandas = OperatorRegistry.get(canonical, "pandas_numpy", mode="any")
+        if _pandas is not None:
+            _pandas.metadata.description = _CHANGE_POINT_ROLE_DESCRIPTION
     union_extended(*_SPECS.keys())
 
 

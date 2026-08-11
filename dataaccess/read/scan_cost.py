@@ -42,6 +42,13 @@ _ARROW_MAX_ROWS = 5_000_000
 _STREAM_MIN_ROWS = 1_000_000
 _ENGINE_STARTUP_MS = {"duckdb": 5.0, "polars": 15.0, "pyarrow": 3.0}
 
+# R40 #53：cost basis sentinel —— 成本未知但已用保守估计兜底。
+COST_UNKNOWN_CONSERVATIVE = "cost_unknown_conservative"
+
+#: 保守估计的 safe ceiling（estimated_rows=MAX，total_bytes=SAFE_CEILING）。
+COST_MAX_ESTIMATED_ROWS = 10**12
+COST_SAFE_CEILING_BYTES = (1 << 63) - 1
+
 
 @dataclass(frozen=True)
 class ScanCost:
@@ -66,6 +73,9 @@ class ScanCost:
     projection_bytes: int | None = None       # 选定列 × 行数的近似物化字节
     estimate_ms: float = 0.0                  # 成本估算本身的耗时（校准用）
     calibrated_factor: float = 1.0            # #27 estimate-vs-actual 在线校准乘子
+    # R40 #53：cost basis —— "manifest" | "stats" | COST_UNKNOWN_CONSERVATIVE |
+    # "unknown"。production 对 "unknown"（无法计算保守估计）reject。
+    cost_basis: str = "stats"
 
     @property
     def calibrated_score(self) -> float:
@@ -92,6 +102,7 @@ class ScanCost:
             "calibrated_factor": self.calibrated_factor,
             "calibrated_score": self.calibrated_score,
             "file_format": self.file_format,
+            "cost_basis": self.cost_basis,
         }
 
 
@@ -134,6 +145,8 @@ def estimate_scan_cost(
     selected_files = 0
     selected_bytes: int | None = None
     selected_rowgroups: int | None = None
+    # R40 #53：cost basis（manifest / stats / unknown_conservative / unknown）。
+    basis = "stats"
 
     manifest = None
     try:
@@ -144,6 +157,7 @@ def estimate_scan_cost(
         manifest = None
 
     if manifest is not None and manifest.files:
+        basis = "manifest"
         by_path = {f.path: f for f in manifest.files}
         pruned_paths = manifest.prune(
             time_range=time_range, instrument_filter=instrument_filter
@@ -165,6 +179,7 @@ def estimate_scan_cost(
                 }
             ) or None
     else:
+        stats_failed = False
         try:
             stats = store.dataset_read_stats(
                 dataset,
@@ -176,8 +191,19 @@ def estimate_scan_cost(
             estimated_rows = stats.estimated_rows
             file_count = stats.parquet_files
         except Exception:
+            # 只有估算**真的失败**（异常）才视为成本未知；空数据集（stats 成功但
+            # 0 行）是合法零成本，绝不当成 MAX。
+            stats_failed = True
             estimated_rows = 0
             file_count = 0
+
+    # R40 #53：既无 manifest 又**估算失败** → 成本未知（``basis="unknown"``）。
+    # 不在此处篡改 estimated_rows/bytes 为 MAX——那会误伤写路径/新建数据集
+    # （写 generation 时 manifest/stats 天然不可用）。保守 MAX 由
+    # :func:`conservative_scan_cost` 显式构造，production 由
+    # :func:`assert_scan_cost_usable` 对 ``"unknown"`` reject。
+    if manifest is None and stats_failed:
+        basis = "unknown"
 
     total_bytes = selected_bytes
     if total_bytes is None:
@@ -254,7 +280,70 @@ def estimate_scan_cost(
         estimate_ms=estimate_ms,
         calibrated_factor=calibrated,
         file_format=file_format,
+        cost_basis=basis,
     )
+
+
+def conservative_scan_cost(
+    dataset: str,
+    *,
+    instrument_count: int = 0,
+    remote: bool = False,
+) -> ScanCost:
+    """R40 #53：成本未知时的保守估计（estimated_rows=MAX, total_bytes=SAFE_CEILING）。
+
+    ``cost_basis = COST_UNKNOWN_CONSERVATIVE``——与「真未知」（``unknown``）区分：
+    有保守估计兜底 → 可继续；完全无法估计 → production reject。
+    """
+    return ScanCost(
+        dataset=dataset,
+        file_count=0,
+        total_bytes=COST_SAFE_CEILING_BYTES,
+        estimated_rows=COST_MAX_ESTIMATED_ROWS,
+        projected_columns=0,
+        total_columns=None,
+        remote=remote,
+        instrument_count=instrument_count,
+        cost_basis=COST_UNKNOWN_CONSERVATIVE,
+    )
+
+
+def assert_scan_cost_usable(
+    cost: ScanCost | None,
+    *,
+    production: bool | None = None,
+    dataset: str = "",
+) -> bool:
+    """R40 #53：production 下 cost basis 为 ``unknown``（无法计算保守估计）→ reject。
+
+    - ``cost is None`` → 无法估计 → production reject；
+    - ``cost_basis == "unknown"`` → production reject（无保守估计兜底）；
+    - ``COST_UNKNOWN_CONSERVATIVE`` / ``manifest`` / ``stats`` → 可继续。
+
+    research 模式只记录 warning，不拒绝。返回是否可用。
+    """
+    from data_access.core.exceptions import ResourceAdmissionError
+    from data_access.read.query_budget import is_strict_semantics
+
+    if production is None:
+        production = is_strict_semantics()
+    if cost is None:
+        if production:
+            raise ResourceAdmissionError(
+                f"scan cost 无法估计（R40 #53）：dataset={dataset or '<unknown>'} "
+                "production 拒绝无成本的读路径。"
+            )
+        return False
+    basis = getattr(cost, "cost_basis", "stats") or "unknown"
+    if basis == "unknown":
+        if production:
+            raise ResourceAdmissionError(
+                f"scan cost basis 未知且无法计算保守估计（R40 #53）：dataset="
+                f"{dataset or cost.dataset or '<unknown>'} basis={basis!r}。"
+                "production 拒绝以未知成本继续。"
+            )
+        return False
+    return True
 
 
 # ---- #27 estimate-vs-actual 在线校准（轻量 EMA） ----

@@ -37,8 +37,10 @@ def build_backend(backend_type: str):
     if normalized == "pandas":
         return PandasBackend()
     if normalized == "pandas_modin":
-        os.environ.setdefault("FACTOR_ENGINE_USE_MODIN", "1")
-        return PandasBackend()  # 与 pandas 同类，经 pandas_compat 走 modin.pandas
+        # R40 #140: 不再改 process-global ``os.environ``（禁止 job path 污染环境）。
+        # modin 选择改为 execution-context scoped —— PandasBackend 在构造时把
+        # 开关写入 ``pandas_compat._MODIN_ENABLED`` ContextVar。
+        return PandasBackend(use_modin_pandas=True)
     if normalized == "polars":
         return PolarsBackend()
     if normalized in {"polars_long", "polars_native", "long_polars"}:
@@ -58,11 +60,47 @@ def build_backend(backend_type: str):
     if normalized in {"clickhouse_sql", "ch_sql", "clickhouse_pushdown"}:
         from .duckdb_pushdown_backend import DuckDBPushdownBackend
 
-        # SqlBackend 按 data_source 自动选 DuckDB / ClickHouse 方言
-        return DuckDBPushdownBackend()
+        # SqlBackend 按 data_source 自动选 DuckDB / ClickHouse 方言。
+        # R40 #141: 显式记录 backend 选择链（requested_backend / resolved_dialect /
+        # datasource_identity），供 ProductionExecutionCertificate.build() 纳入
+        # certificate —— runtime backend 事件校验可证明实际方言。
+        backend = DuckDBPushdownBackend()
+        backend._requested_backend = "clickhouse_sql"
+        backend._resolved_dialect = "clickhouse"
+        backend._datasource_identity = ""
+        return backend
     if normalized in {"auto", "hybrid"}:
         from .hybrid_backend import HybridBackend
 
         return HybridBackend()
 
     raise ValueError(f"Unsupported backend type: {backend_type}")
+
+
+def build_backend_execution_certificate(
+    backend,
+    *,
+    structural_hash: str,
+    bound_ops,
+    backend_eligibility,
+    output_shape_hash: str,
+):
+    """R40 #141: 构建带 backend 选择链的 ``ProductionExecutionCertificate``。
+
+    ``build_backend("clickhouse_sql")`` 返回的 backend 已携带
+    ``_requested_backend="clickhouse_sql"`` / ``_resolved_dialect="clickhouse"``
+    （以及可选的 ``_datasource_identity``）。本 helper 把这些选择链字段写入
+    证书，使 runtime O(1) backend 事件校验能证明实际解析方言，而不是把
+    clickhouse 路由静默落到无记录的 DuckDB 路径。
+    """
+    from runtime.production_execution_certificate import ProductionExecutionCertificate
+
+    return ProductionExecutionCertificate.build(
+        structural_hash=str(structural_hash or ""),
+        bound_ops=bound_ops,
+        backend_eligibility=backend_eligibility,
+        output_shape_hash=str(output_shape_hash or ""),
+        requested_backend=str(getattr(backend, "_requested_backend", "") or ""),
+        resolved_dialect=str(getattr(backend, "_resolved_dialect", "") or ""),
+        datasource_identity=str(getattr(backend, "_datasource_identity", "") or ""),
+    )

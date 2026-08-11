@@ -424,6 +424,22 @@ class MarketFieldBinding:
     # tickers.  ``None`` == not declared (conservative: assume level-sensitive).
     level_sensitive: bool | None = None
 
+    @property
+    def availability_expr(self) -> Any:
+        """Typed availability expression for this binding (R40 #180).
+
+        ``available_at`` is a single string slot that historically mixed a
+        policy label (``"session_close"``) with a column name (``"PubDate"``).
+        This property normalizes it to a typed :class:`AvailabilityExpr`:
+        known policy labels resolve to their expr; anything that is NOT a known
+        policy label is treated as a column reference
+        (``TimestampColumn(name)``).  ``knowledge_time`` / ``effective_time``
+        remain explicit column references.
+        """
+        from ir.types import availability_expr_of, normalize_availability_descriptor
+
+        return normalize_availability_descriptor(self.available_at)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "concept": self.concept_id,
@@ -440,6 +456,7 @@ class MarketFieldBinding:
             "knowledge_time": self.knowledge_time,
             "effective_time": self.effective_time,
             "available_at": self.available_at,
+            "availability_expr": str(self.availability_expr),
             "required_filters": [f.to_dict() for f in self.required_filters],
             "source_certified": self.source_certified,
             "derived_expression": self.derived_expression,

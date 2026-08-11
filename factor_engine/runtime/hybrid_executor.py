@@ -118,6 +118,10 @@ class HybridExecutor:
         self._process_breaker_hits = 0
         # R39-P1-PERF-082: 最近一次 runtime backend event（submit 时记录）。
         self._last_runtime_backend_event: dict[str, Any] | None = None
+        # R40 #256: 记录 BLAS vendor/version/thread config（production evidence）。
+        from runtime.execution_traits import record_blas_config
+
+        self._blas_config = record_blas_config()
 
     def cohort_worker_threads(
         self,
@@ -293,4 +297,6 @@ class HybridExecutor:
             "max_process_workers": self.max_process_workers,
             "worker_threads": self.worker_threads,
             "last_runtime_backend_event": self._last_runtime_backend_event,
+            # R40 #256: BLAS vendor/version/thread config（production evidence）。
+            "blas_config": self._blas_config,
         }

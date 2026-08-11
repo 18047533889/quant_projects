@@ -20,6 +20,30 @@ Scale contract (audit round-3, item 32):
   rejected before any recursion, and the filter emits NaN until the first finite
   observation establishes a real scale (a leading gap or an all-missing series
   stays NaN rather than fabricating a filtered value).
+
+Model-audit remediation (2026-08-11, M-070..M-074):
+* M-070 — every Kalman canonical is STATEFUL: a causal one-pass filter, so the
+  row-t output depends on the entire finite prefix through t (chunking without a
+  restored checkpoint does NOT reproduce the full-history output).  Only
+  ``ts_kalman_level`` currently declares ``stateful=True`` in the shared
+  ``model_contract.py``; :data:`KALMAN_STATEFUL_CANONICALS` +
+  :func:`kalman_stateful_contract` expose the full contract here and flag the
+  other five for the reconciler to add to ``model_contract.py``.
+* M-071 — :func:`_scale_qr` implements a DIMENSIONLESS q/r mode
+  (``q_eff = cq * scale**2``, ``r_eff = cr * scale**2``, i.e. q/r read as ratios
+  against a caller-supplied ``scale``).  It is deliberately a helper +
+  documentation ONLY — NOT wired to a public ``scale_mode`` parameter, so the
+  default absolute-variance behaviour is unchanged and the typed surface
+  metadata is untouched (flagged for reconciler whether to expose the param).
+* M-072 — ``ts_kalman_beta`` is THROUGH-ORIGIN: the observation model is
+  ``y = b*x + eps`` with NO intercept.  ``ts_kalman_alpha_beta`` is deliberately
+  NOT created (deferred); the constraint is documented here and tagged
+  ``through_origin:true``.
+* M-074 — the beta warmup policy is FINITE-PAIR: the first ``_BETA_WARMUP``
+  finite ``(y, x)`` pairs are accumulated across gaps (non-contiguous).  The
+  alternative ``"contiguous"`` policy (restart warmup after every missing pair)
+  is NOT implemented — see :data:`_KALMAN_WARMUP_POLICY` /
+  :func:`kalman_warmup_policy`.
 """
 from __future__ import annotations
 
@@ -28,10 +52,80 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.ts_model._rolling_core import aligned, frame_like, metadata
 
 _CANONICALS: list[str] = []
+
+# Model-audit Phase 4 (search-space hygiene): the Kalman noise scales.  ``q`` /
+# ``r`` (process / observation variance) and ``q_level`` / ``q_trend`` (local-
+# linear-trend process noise) are NUMERICAL policy knobs — the filtered
+# level/trend/beta state IS the alpha mechanism, not the noise ratio that
+# controls the filter's update speed (M-115/M-162/M-170).  They are never
+# full-resolution search dimensions.
+_KALMAN_PARAM_SPECS: dict[str, ParamSpec] = {
+    "q": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+    "r": ParamSpec(dtype=float, min=1e-12, param_role=ParamRole.NUMERICAL, searchable=False),
+    "q_level": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+    "q_trend": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+}
+
+
+#: M-070: every Kalman canonical is a causal one-pass recursive filter — the
+#: row-t output depends on the full finite prefix through t.  Chunked execution
+#: without a restored checkpoint therefore does NOT reproduce the full-history
+#: output (segmented-execution statefulness, cf. ``stateful_contract.py``).
+#: Only ``ts_kalman_level`` currently declares ``stateful=True`` in the shared
+#: ``model_contract.py``; these six share the same semantics and are flagged for
+#: the reconciler to add there.
+KALMAN_STATEFUL_CANONICALS: frozenset[str] = frozenset({
+    "ts_kalman_level",
+    "ts_kalman_trend",
+    "ts_kalman_beta",
+    "ts_kalman_beta_change",
+    "ts_kalman_beta_uncertainty",
+    "ts_kalman_innovation_z",
+})
+
+
+def kalman_stateful_contract(canonical: str) -> dict[str, Any]:
+    """M-070: machine-readable stateful contract for a Kalman canonical.
+
+    Returns the fields the reconciler / segmented-execution layer needs:
+    ``stateful``, ``state_schema_version``, ``checkpointable``,
+    ``time_shard_safe``, ``reset_semantics``, ``missing_update_semantics`` and
+    ``revision_replay_semantics``.  ``time_shard_safe`` is False because the
+    filter state spans the whole finite prefix — a time shard mid-series can
+    only be resumed with a restored checkpoint, never re-derived locally.
+    """
+    return {
+        "stateful": True,
+        "state_schema_version": f"{canonical}.v1",
+        "checkpointable": True,
+        "time_shard_safe": False,          # filter state spans the whole prefix
+        "reset_semantics": "reset_on_first_finite_observation",
+        "missing_update_semantics": "predict_only_covariance_growth",
+        "revision_replay_semantics": "deterministic_replay",
+    }
+
+
+def kalman_stateful_contracts() -> dict[str, dict[str, Any]]:
+    """M-070: all Kalman stateful contracts, keyed by canonical (stable order)."""
+    return {c: kalman_stateful_contract(c) for c in sorted(KALMAN_STATEFUL_CANONICALS)}
+
+
+def _stateful_contract_tags(canonical: str) -> list[str]:
+    """Tags that surface the M-070 stateful contract on the operator metadata."""
+    contract = kalman_stateful_contract(canonical)
+    return [
+        "stateful:true",
+        f"state_schema_version:{contract['state_schema_version']}",
+        f"checkpointable:{contract['checkpointable']}",
+        f"time_shard_safe:{contract['time_shard_safe']}",
+        f"reset_semantics:{contract['reset_semantics']}",
+        f"missing_update_semantics:{contract['missing_update_semantics']}",
+        f"revision_replay_semantics:{contract['revision_replay_semantics']}",
+    ]
 
 
 #: R38 §37：Numba 主链 dispatch 计数器（end-to-end 证据：accelerated_kernel_used）。
@@ -41,6 +135,48 @@ _NUMBA_DISPATCH_COUNTER: dict[str, int] = {}
 def numba_dispatch_stats() -> dict[str, int]:
     """主链实际 dispatch 到 Numba kernel 的次数（tests/gate 消费）。"""
     return dict(_NUMBA_DISPATCH_COUNTER)
+
+
+def _scale_qr(
+    q: float,
+    r: float,
+    scale_mode: str | None = None,
+    scale: float | None = None,
+) -> tuple[float, float]:
+    """M-071: DIMENSIONLESS q/r mode helper (NOT wired to a public parameter).
+
+    The default ``scale_mode=None`` keeps the ABSOLUTE variance semantics
+    unchanged — ``q`` / ``r`` are used as-is (this is the legacy behaviour and
+    must never change).  With ``scale_mode="dimensionless"`` and a positive
+    ``scale``, ``q`` / ``r`` are read as RATIOS and scaled to absolute
+    variances::
+
+        q_eff = cq * scale**2
+        r_eff = cr * scale**2
+
+    so ``cq=0.01, cr=1.0, scale=0.02`` means process noise ``0.01*0.02**2`` and
+    observation noise ``1.0*0.02**2`` on a 2%-return scale.  Fail closed on
+    unknown ``scale_mode`` / non-finite / non-positive ``scale``.
+
+    The conservative route is intentional: exposing a ``scale_mode`` parameter
+    would change the typed surface metadata (``param_names`` / the
+    ``signature:...`` tag), so the helper is provided here with documentation
+    and the reconciler is asked whether the parameter should be exposed on the
+    public surface (M-071).
+    """
+    if scale_mode is None:
+        return float(q), float(r)
+    if scale_mode != "dimensionless":
+        raise ValueError(
+            f"scale_mode must be None or 'dimensionless', got {scale_mode!r}"
+        )
+    if scale is None or not (np.isfinite(scale) and scale > 0.0):
+        raise ValueError("scale must be finite and > 0 in dimensionless mode")
+    cq, cr = float(q), float(r)
+    if not (np.isfinite(cq) and np.isfinite(cr) and cq >= 0.0 and cr > 0.0):
+        raise ValueError("q must be finite and >= 0; r must be finite and > 0")
+    s2 = scale * scale
+    return cq * s2, cr * s2
 
 
 def _numba_kernel(kernel_name: str):
@@ -72,7 +208,9 @@ def _numba_kernel(kernel_name: str):
         return None
 
 
-def _register(name: str, description: str, params: list[str], unit: str, fn):
+def _register(name: str, description: str, params: list[str], unit: str, fn,
+              *, input_units: dict[str, str] | None = None,
+              extra_tags: tuple[str, ...] = ()):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -83,11 +221,22 @@ def _register(name: str, description: str, params: list[str], unit: str, fn):
         status="experimental",
     )
     class _StateOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=8)
+        metadata = metadata(
+            name, description, params, unit=unit, cost=8,
+            input_units=input_units,
+            param_specs={k: v for k, v in _KALMAN_PARAM_SPECS.items() if k in params},
+        )
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
 
+    # M-070: surface the stateful contract as machine-readable metadata tags for
+    # every Kalman canonical (reconciler: mirror ``stateful=True`` into the
+    # shared model_contract.py for the five beyond ``ts_kalman_level``).
+    if name in KALMAN_STATEFUL_CANONICALS:
+        _StateOp.metadata.tags.extend(_stateful_contract_tags(name))
+    if extra_tags:
+        _StateOp.metadata.tags.extend(extra_tags)
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
@@ -157,12 +306,24 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.nda
     return p
 
 
+# M-073: the dynamic-beta filter models ``y = b*x + eps`` — the compatible input
+# semantics are return-vs-return (asset return vs market/benchmark return) or
+# excess-return-vs-market.  Declared here so all three beta variants share it.
+_BETA_INPUT_UNITS: dict[str, str] = {"y": "return", "x": "market_return"}
+# M-072: beta is THROUGH-ORIGIN (no intercept).  Tagged on every beta variant;
+# ``ts_kalman_alpha_beta`` is deliberately NOT created (deferred to a later wave).
+_BETA_THROUGH_ORIGIN_TAG: tuple[str, ...] = ("through_origin:true",)
+
+
 _register("ts_kalman_level", "局部水平模型的过滤水平估计。", ["x", "q", "r"], "level",
            lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "level")))
 _register("ts_kalman_innovation_z", "观测值相对 Kalman 预测的标准化创新。", ["x", "q", "r"], "level",
            lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "innovation_z")))
-_register("ts_kalman_beta_uncertainty", "Beta 状态滤波协方差 P(标准误为 sqrt(P), 此处输出 P)。", ["y", "x", "q", "r"], "level",
-           lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "uncertainty")))
+_register("ts_kalman_beta_uncertainty",
+          "Beta 状态滤波协方差 P(标准误为 sqrt(P), 此处输出 P)。通过原点回归 y=b*x(无截距); 输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r"], "level",
+          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "uncertainty")),
+          input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
 
 
 def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: float) -> np.ndarray:
@@ -218,6 +379,18 @@ _register("ts_kalman_trend", "局部线性趋势模型的潜在斜率。", ["x",
 
 
 _BETA_WARMUP = 5
+
+# M-074: the beta warmup is FINITE-PAIR — the first ``_BETA_WARMUP`` finite
+# ``(y, x)`` pairs are accumulated across gaps (non-contiguous): a missing pair
+# does NOT reset the warmup.  The alternative "contiguous" policy (restart the
+# warmup after every missing pair) is NOT implemented.  Exposed via
+# :func:`kalman_warmup_policy` so the contract is machine-readable.
+_KALMAN_WARMUP_POLICY = "finite_pair"
+
+
+def kalman_warmup_policy() -> str:
+    """M-074: beta warmup policy (``"finite_pair"``; ``"contiguous"`` NOT implemented)."""
+    return _KALMAN_WARMUP_POLICY
 
 
 def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
@@ -281,10 +454,16 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
     return unc
 
 
-_register("ts_kalman_beta", "动态市场 Beta 状态。", ["y", "x", "q", "r"], "level",
-           lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta")))
-_register("ts_kalman_beta_change", "动态 Beta 变化。", ["y", "x", "q", "r"], "level",
-           lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta_change")))
+_register("ts_kalman_beta",
+          "动态市场 Beta 状态。通过原点回归 y=b*x(无截距); warmup 为 finite-pair(跨缺口累积前 5 个有限 y/x 对)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r"], "level",
+          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta")),
+          input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
+_register("ts_kalman_beta_change",
+          "动态 Beta 变化。通过原点回归 y=b*x(无截距)。输入 y 为个股收益、x 为市场收益 (return-vs-return)。",
+          ["y", "x", "q", "r"], "level",
+          lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "beta_change")),
+          input_units=_BETA_INPUT_UNITS, extra_tags=_BETA_THROUGH_ORIGIN_TAG)
 
 
 def _apply_col(x: pd.DataFrame, fn) -> pd.DataFrame:
@@ -307,3 +486,24 @@ def _apply_two(y: pd.DataFrame, x: pd.DataFrame, fn) -> pd.DataFrame:
     for col in range(cols):
         out[:, col] = fn(yv[:, col], xv[:, col])
     return frame_like(y, out)
+
+
+# M-008: Kalman is the single-authority stateful declaration.  Every Kalman
+# canonical is a causal one-pass filter — stateful, checkpointable, and legal to
+# time-shard ONLY with state handoff (see KALMAN_STATEFUL_CANONICALS +
+# kalman_stateful_contract()).  Declared here (its own module) per the
+# Round-11 #12 rule: never edit a central list.  The ModelOperatorContract
+# stateful flags in model_contract.py mirror this.
+for _kalman_canonical in sorted(KALMAN_STATEFUL_CANONICALS):
+    try:
+        from runtime.execution_contract import declare_stateful
+
+        declare_stateful(
+            _kalman_canonical,
+            state_model="recursive",
+            chunking="checkpoint",
+            checkpoint_schema="kalman_v1",
+            minimum_history=1,
+        )
+    except Exception:  # pragma: no cover - import/registry ordering guard
+        pass

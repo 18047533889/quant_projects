@@ -188,6 +188,162 @@ class UnitSpec:
 
 
 # ---------------------------------------------------------------------------
+# UnitExpr — dimensionless-exponent unit algebra (R40 #186).
+#
+# ``UnitSpec`` is a *structural* unit (dimension + currency + denominator +
+# scale); ``UnitExpr`` adds the exponent algebra the compiler needs to prove
+# dimensional legality of derived formulas:
+#   * MUL   -> unit(x) * unit(y)       (exponents add per base dimension)
+#   * DIV   -> unit(x) / unit(y)       (exponents subtract per base dimension)
+#   * POW   -> base^exponent           (exponent * 2 for x**2, 1/2 for sqrt)
+#   * LOG   -> requires a dimensionless operand
+#   * RANK  -> ratio / dimensionless
+# A ``UnitExpr`` is expressed as a mapping ``dimension -> exponent`` over the
+# primitive dimensions.  ``UnitSpec`` converts to/from ``UnitExpr`` losslessly
+# for the primitive dimensions (currency/denominator are carried through the
+# structural spec only; a cross-currency DIV already fails in ``UnitSpec``).
+# ---------------------------------------------------------------------------
+class UnitExpr:
+    """A product of primitive dimensions to rational powers.
+
+    ``factors`` maps a primitive dimension key to an exponent (``int`` or
+    ``float``).  ``pow(UnitExpr, 1/2)`` yields a ``sqrt`` (exponent 0.5).
+    The dimensionless expression is the empty mapping.
+    """
+
+    __slots__ = ("factors",)
+
+    def __init__(self, factors: dict[str, float | int] | None = None):
+        object.__setattr__  # no-op; class uses __slots__
+        self.factors = {k: float(v) for k, v in (factors or {}).items() if float(v) != 0.0}
+
+    @property
+    def is_dimensionless(self) -> bool:
+        return not self.factors
+
+    def __mul__(self, other: "UnitExpr") -> "UnitExpr":
+        merged = dict(self.factors)
+        for dim, exp in other.factors.items():
+            merged[dim] = merged.get(dim, 0.0) + exp
+        return UnitExpr({d: e for d, e in merged.items() if e != 0.0})
+
+    def __truediv__(self, other: "UnitExpr") -> "UnitExpr":
+        merged = dict(self.factors)
+        for dim, exp in other.factors.items():
+            merged[dim] = merged.get(dim, 0.0) - exp
+        return UnitExpr({d: e for d, e in merged.items() if e != 0.0})
+
+    def __pow__(self, exponent: float) -> "UnitExpr":
+        if not isinstance(exponent, (int, float)) or isinstance(exponent, bool):
+            raise TypeError(f"UnitExpr.__pow__ needs a numeric exponent, got {exponent!r}")
+        return UnitExpr({d: e * float(exponent) for d, e in self.factors.items()})
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, UnitExpr):
+            return NotImplemented
+        return self.factors == other.factors
+
+    def __hash__(self) -> int:
+        return hash(tuple(sorted(self.factors.items())))
+
+    def __repr__(self) -> str:
+        if not self.factors:
+            return "UnitExpr(dimensionless)"
+        parts = []
+        for dim in sorted(self.factors):
+            exp = self.factors[dim]
+            if exp == 1.0:
+                parts.append(dim)
+            elif exp == int(exp):
+                parts.append(f"{dim}^{int(exp)}")
+            else:
+                parts.append(f"{dim}^{exp:g}")
+        return "UnitExpr(" + "*".join(parts) + ")"
+
+    # -- construction from UnitSpec ---------------------------------------
+    @classmethod
+    def from_spec(cls, spec: UnitSpec | None) -> "UnitExpr":
+        """Lossless primitive-dimension view of a :class:`UnitSpec`.
+
+        ``price`` maps to ``money^1 * share^-1``; ``money`` to ``money^1``;
+        ``count`` to ``count^1``; a ratio/dimensionless to the empty mapping.
+        """
+        if spec is None:
+            return cls()
+        dim = spec.dimension
+        if dim == DIM_PRICE:
+            return cls({"money": 1.0, "count": -1.0})
+        if dim in (DIM_MONEY,):
+            return cls({"money": 1.0})
+        if dim == DIM_COUNT:
+            return cls({"count": 1.0})
+        if dim in (DIM_RATIO, DIM_DIMENSIONLESS):
+            return cls()
+        # Non-numeric units (boolean/date/datetime/identifier/text) have no
+        # numeric dimension; treated as dimensionless for algebra but flagged
+        # by the compiler's legality pass when mixed with money/count.
+        return cls()
+
+
+UNIT_EXPR_DIMENSIONLESS = UnitExpr()
+UNIT_EXPR_MONEY = UnitExpr({"money": 1.0})
+UNIT_EXPR_COUNT = UnitExpr({"count": 1.0})
+UNIT_EXPR_RATIO = UnitExpr()  # canonical ratio is dimensionless
+
+
+def unit_algebra_kind(expr: UnitExpr) -> str:
+    """Classify a ``UnitExpr`` for the operator legality pass (R40 #186).
+
+    ``dimensionless`` -> the empty product (also pure ratio);
+    ``money`` / ``money_count`` (price) / ``count`` -> the primitive economic
+    dimensions; ``mixed`` -> anything else (a ``price^2`` energy-like quantity
+    is legal but must be explicitly declared, never silently produced by an
+    elementwise MUL of two prices).
+    """
+    keys = set(expr.factors)
+    if not keys:
+        return "dimensionless"
+    if keys == {"money"} and expr.factors["money"] == 1.0:
+        return "money"
+    if keys == {"money", "count"} and expr.factors["money"] == 1.0 and expr.factors["count"] == -1.0:
+        return "price"
+    if keys == {"count"} and expr.factors["count"] == 1.0:
+        return "count"
+    return "mixed"
+
+
+class UnitAlgebraError(ValueError):
+    """An operator would combine units illegally (R40 #186).
+
+    Raised by :func:`assert_log_operand_dimensionless` and the operator
+    legality pass when e.g. ``log(close)`` is attempted (a price has dimension
+    ``money*count^-1`` — the logarithm is only defined for a dimensionless
+    operand).
+    """
+
+
+def assert_log_operand_dimensionless(operand: UnitExpr, *, operator: str = "") -> None:
+    """Reject ``log``/``log1p``/``log10`` of a dimensioned operand (R40 #186).
+
+    ``log`` requires a dimensionless operand; ``log(price)`` is economically
+    meaningless and is rejected at compile time by the operator legality pass.
+    A ratio / pure dimensionless operand passes.
+    """
+    if operand.is_dimensionless:
+        return
+    raise UnitAlgebraError(
+        f"{operator or 'log'} requires a dimensionless operand, got {operand!r} "
+        "(a price/amount/count cannot be passed through a logarithm — use a "
+        "return/ratio or a protected log that declares the unit transformation)"
+    )
+
+
+def assert_rank_produces_dimensionless() -> UnitExpr:
+    """A rank/bucket operator produces a dimensionless (ratio) expression."""
+    return UNIT_EXPR_RATIO
+
+
+# ---------------------------------------------------------------------------
 # Legacy string vocabulary -> v2 UnitSpec (source units keep their scale).
 # ---------------------------------------------------------------------------
 def unit_spec_from_legacy(unit: str | None, *, canonical: bool = False) -> UnitSpec:
@@ -332,10 +488,17 @@ __all__ = [
     "RATIO",
     "SHARES",
     "TEXT",
-    "USD",
-    "USD_PER_SHARE",
+    "UNIT_EXPR_COUNT",
+    "UNIT_EXPR_DIMENSIONLESS",
+    "UNIT_EXPR_MONEY",
+    "UNIT_EXPR_RATIO",
+    "UnitAlgebraError",
+    "UnitExpr",
     "UnitSpec",
+    "assert_log_operand_dimensionless",
+    "assert_rank_produces_dimensionless",
     "legacy_unit_string",
     "resolve_unit",
+    "unit_algebra_kind",
     "unit_spec_from_legacy",
 ]

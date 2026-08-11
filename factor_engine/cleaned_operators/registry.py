@@ -719,8 +719,55 @@ def _calculate_is_framework_or_declared(operator: Any) -> bool:
     return bool(getattr(type(operator), "_HANDLES_CALL_CONTRACT", False))
 
 
-def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
-    """Preserve the first canonical positional contract across backend adapters."""
+@dataclasses.dataclass(frozen=True)
+class CanonicalOperatorManifest:
+    """R40 #211: 一个 canonical 的权威逻辑契约（先声明，backend 后 attest）。
+
+    ``param_names`` / ``defaults`` / ``output_type`` 是 canonical 级语义，不应由
+    哪个 backend 先 import 决定。注册 manifest 后，`_merge_param_names` 以
+    manifest 为准，import 顺序不再影响 canonical 契约。
+    """
+
+    canonical: str
+    param_names: tuple[str, ...] = ()
+    defaults: tuple[tuple[str, Any], ...] = ()
+    output_type: str = "series"
+
+
+@dataclasses.dataclass(frozen=True)
+class BackendOverrideSpec:
+    """R40 #209: 显式 backend override 契约 —— 比 auto-pin 更强、order-independent。
+
+    ``expected_old_source`` 锁旧实现来源，``expected_old_contract_hash`` 锁旧
+    逻辑契约哈希（额外防御），``new_source`` 锁新实现来源。生产 override 必须走
+    显式 ``BackendOverrideSpec``，而非依赖 import 顺序的 auto-pin。
+    """
+
+    canonical: str
+    backend: str
+    expected_old_source: str
+    expected_old_contract_hash: str
+    new_source: str
+
+
+def _merge_param_names(
+    existing: list[str] | None,
+    new: list[str] | None,
+    *,
+    canonical: str | None = None,
+) -> list[str]:
+    """Preserve the first canonical positional contract across backend adapters.
+
+    R40 #211: 若该 canonical 已注册 ``CanonicalOperatorManifest``，manifest 的
+    ``param_names`` 是唯一权威 —— 实现 import 顺序（first-registered）不再决定
+    canonical 契约。未注册 manifest 时保持历史 first-registered 语义。
+    """
+    if canonical is not None:
+        from cleaned_operators.registry import OperatorRegistry
+
+        manifest = OperatorRegistry._canonical_manifests.get(canonical)
+        if manifest is not None and manifest.param_names:
+            return list(manifest.param_names)
     old = list(existing or [])
     cur = list(new or [])
     if not old:
@@ -956,6 +1003,14 @@ class OperatorRegistry:
     _catalog: Dict[str, dict] = {}
     _lifecycle: Lifecycle = Lifecycle.BUILDING
     _version: int = 0
+    # R40 #208: 变更令牌 —— 只有 bootstrap 持有（``_BOOTSTRAP_TOKEN``）。finalize
+    # 后置 None，任何 register/replace/unregister/alias 都必须有令牌。直接改
+    # ``_operators``/``_aliases``/``_catalog``（freeze 后已是不可变 MappingProxyType）
+    # 也会失败。
+    _mutation_token: object | None = _BOOTSTRAP_TOKEN
+    # R40 #208: freeze 后的不可变快照 —— 运行时公开读走快照，不受任何残留可变
+    # 引用影响。
+    _frozen: Dict[str, Any] | None = None
     # R7-234: FIRST registration identity — captured the first time a canonical
     # is registered (before any override/fastpath/repair module replaces it), so
     # the original experimental status/source/implementation hash is never lost.
@@ -1036,11 +1091,41 @@ class OperatorRegistry:
     # replacement of ``ts_mean/pandas_numpy`` is independent of
     # ``ts_mean/polars``.  The dict key is ``(canonical, backend)``.
     _DECLARED_OVERRIDE_MANIFEST: dict[tuple, tuple[str, str]] = {}
+    # R40 #209: per-(canonical, backend) 的 expected_old_contract_hash（
+    # ``BackendOverrideSpec`` 显式 pin）—— override 还要证明旧实现的逻辑契约哈希
+    # 匹配，比仅锁 source 更强、order-independent。
+    _DECLARED_OVERRIDE_CONTRACT_HASHES: dict[tuple, str] = {}
+    # R40 #211: declared canonical manifest —— 每个 canonical 的权威逻辑契约
+    # （param_names / defaults / output_type）。先注册 manifest 后，任何 backend
+    # 实现都必须 attest 与之 conforms；实现 import 顺序不再决定 canonical 契约
+    # （``_merge_param_names`` 的 first-registered 语义被 manifest 取代）。
+    _canonical_manifests: dict[str, "CanonicalOperatorManifest"] = {}
 
     @classmethod
     def overwrite_log(cls) -> List[dict]:
         """Audit trail of intentional canonical+backend overrides."""
         return list(cls._overwrite_log)
+
+    @classmethod
+    def register_canonical_manifest(
+        cls,
+        manifest: "CanonicalOperatorManifest",
+    ) -> None:
+        """R40 #211: 先声明 canonical 权威契约，backend 实现 import 后 attest。
+
+        在任意 backend 注册前调用 —— 后续所有 ``_merge_param_names`` 都以此
+        manifest 为准，import 顺序不再影响 param_names/defaults/output_type。
+        """
+        cls._assert_writable()
+        if not str(manifest.canonical or "").strip():
+            raise ValueError("CanonicalOperatorManifest requires a non-empty canonical")
+        existing = cls._canonical_manifests.get(manifest.canonical)
+        if existing is not None and existing != manifest:
+            raise ValueError(
+                f"conflicting CanonicalOperatorManifest for {manifest.canonical!r}: "
+                f"{existing!r} vs {manifest!r}"
+            )
+        cls._canonical_manifests[manifest.canonical] = manifest
 
     @classmethod
     def register_declared_override(
@@ -1050,8 +1135,14 @@ class OperatorRegistry:
         expected_old_source: str,
         new_source: str,
         reason: str,
+        *,
+        spec: "BackendOverrideSpec | None" = None,
     ) -> None:
         """Pin an exact same-backend override in the declared-override manifest.
+
+        R40 #209: ``spec``（``BackendOverrideSpec``）提供更强的 order-independent
+        契约 —— 除了 expected_old_source 还校验 ``expected_old_contract_hash``
+        （旧实现的逻辑契约哈希），生产 override 应走显式 spec 而非 auto-pin。
 
         P0-22: the legacy ``_DECLARED_OVERRIDE_SOURCES`` frozenset is a
         source-wide allowlist — any override from a declared module bypasses the
@@ -1062,6 +1153,17 @@ class OperatorRegistry:
         ``new_source`` as the new source.  ``reason`` is recorded in the
         overwrite audit trail.
         """
+        if spec is not None:
+            if spec.canonical != canonical or spec.backend != backend:
+                raise ValueError(
+                    "BackendOverrideSpec.canonical/backend must match the positional "
+                    "canonical/backend arguments"
+                )
+            expected_old_source = spec.expected_old_source
+            new_source = spec.new_source
+            expected_old_contract_hash = spec.expected_old_contract_hash
+        else:
+            expected_old_contract_hash = ""
         if not str(expected_old_source or "").strip():
             raise ValueError(
                 "register_declared_override requires a non-empty expected_old_source"
@@ -1078,11 +1180,16 @@ class OperatorRegistry:
             str(expected_old_source),
             str(new_source),
         )
+        if expected_old_contract_hash:
+            cls._DECLARED_OVERRIDE_CONTRACT_HASHES[(canonical, backend)] = str(
+                expected_old_contract_hash
+            )
         cls._overwrite_log.append({
             "canonical": canonical,
             "backend": backend,
             "old_source": expected_old_source,
             "new_source": new_source,
+            "expected_old_contract_hash": expected_old_contract_hash,
             "reason": f"declared override manifest: {reason}",
         })
 
@@ -1098,6 +1205,41 @@ class OperatorRegistry:
     def _assert_writable(cls) -> None:
         if cls._lifecycle is not cls.Lifecycle.BUILDING:
             raise RuntimeError(f"operator registry is not writable: {cls._lifecycle.value}")
+        # R40 #208: 变更令牌 —— 生命周期外（finalize/freeze 之后）不再可写；
+        # 生命周期内也要求持有 bootstrap 令牌（防伪造/绕过）。
+        if cls._mutation_token is not _BOOTSTRAP_TOKEN:
+            raise PermissionError(
+                "registry mutation requires the internal bootstrap mutation token "
+                "(R40 #208)"
+            )
+
+    @classmethod
+    def assert_production_semantic_versions_declared(
+        cls,
+        canonicals: Iterable[str] | None = None,
+    ) -> list[str]:
+        """R40 #212: production 注册门 —— 校验每个 production 算子显式声明
+        semantic_version。
+
+        返回未声明（空）的 canonical 列表；调用方（production runtime 门禁）对
+        非空列表 fail-closed。``canonicals`` 省略时扫描全部 catalog 里
+        ``status == "production"`` 的算子。
+        """
+        targets = list(canonicals) if canonicals is not None else sorted(
+            c for c, entry in cls._catalog.items()
+            if str(entry.get("status") or "").lower() == "production"
+        )
+        missing: list[str] = []
+        for c in targets:
+            resolved = cls.resolve_canonical(c)
+            entry = cls._catalog.get(resolved, {})
+            declared = str(entry.get("semantic_version") or "").strip()
+            if declared:
+                continue
+            # fail-closed：未声明 semantic_version 的 production 算子一律计入
+            # missing（不做策略推断跳过 —— 推断失败必须保守计入，不能放行）。
+            missing.append(resolved)
+        return missing
 
     @classmethod
     def finalize(cls) -> None:
@@ -1111,6 +1253,8 @@ class OperatorRegistry:
             if cls.resolve_canonical(canonical) != canonical:
                 raise ValueError(f"alias chain is not flattened: {alias!r}")
         cls._lifecycle = cls.Lifecycle.FINALIZED
+        # R40 #208: bootstrap 结束 —— 令牌失效；后续 mutation 必须显式 thaw。
+        cls._mutation_token = None
         cls._version += 1
 
     @classmethod
@@ -1139,16 +1283,43 @@ class OperatorRegistry:
                         "A catalog overlay desynchronized the manifest from the "
                         "runtime; fix the registration, not the check."
                     )
+            # R40 #208: freeze 后 live dict 变为不可变（MappingProxyType）——
+            # 直接 ``_operators.pop`` / ``_operators[canonical] = …`` 抛 TypeError，
+            # 公开读走 ``_frozen`` 不可变快照。
+            cls._frozen = {
+                "version": cls._version,
+                "operators": MappingProxyType({
+                    _c: MappingProxyType(dict(_impls))
+                    for _c, _impls in cls._operators.items()
+                }),
+                "aliases": MappingProxyType(dict(cls._aliases)),
+                "catalog": MappingProxyType(copy.deepcopy(cls._catalog)),
+            }
+            cls._operators = MappingProxyType({
+                _c: MappingProxyType(dict(_impls))
+                for _c, _impls in cls._operators.items()
+            })
+            cls._aliases = MappingProxyType(dict(cls._aliases))
+            cls._catalog = MappingProxyType(copy.deepcopy(cls._catalog))
             cls._lifecycle = cls.Lifecycle.FROZEN
+            cls._mutation_token = None
             cls._version += 1
 
     @classmethod
     def thaw_for_bootstrap(cls, token: object) -> None:
-        """Internal bootstrap escape hatch guarded by an unexported token."""
+        """Internal bootstrap escape hatch guarded by an unexported token.
+
+        R40 #208: 解冻时把 live dict 从不可变快照恢复为可变 dict，并重新授予
+        bootstrap 变更令牌（测试 / 维护工具在 freeze 后重开注册用）。
+        """
         if token is not _BOOTSTRAP_TOKEN:
             raise PermissionError("registry thaw requires the internal bootstrap token")
-        if cls._lifecycle is cls.Lifecycle.FROZEN:
+        if cls._lifecycle is not cls.Lifecycle.BUILDING:
             cls._lifecycle = cls.Lifecycle.BUILDING
+            cls._operators = {k: dict(v) for k, v in cls._operators.items()}
+            cls._aliases = dict(cls._aliases)
+            cls._catalog = copy.deepcopy(dict(cls._catalog))
+            cls._mutation_token = _BOOTSTRAP_TOKEN
             cls._version += 1
 
     @classmethod
@@ -1165,9 +1336,13 @@ class OperatorRegistry:
         replace: bool = False,
         replacement_reason: str = "",
         expected_old_source: str = "",
-        semantic_version: str = "1.0",
+        semantic_version: str = "",
     ) -> None:
         """注册一个已实现算子到 registry。
+
+        R40 #212: ``semantic_version`` 不再默认 ``"1.0"`` —— 缺失 = 未声明。
+        显式 ``status="production"`` 的注册必须声明非空 ``semantic_version``
+        （production 注册门，fail-closed）。
 
         参数:
             operator: 算子实例（须含 ``metadata``）。
@@ -1259,6 +1434,20 @@ class OperatorRegistry:
                         f"declared override of {canonical!r}/{backend} requires a "
                         "non-empty replacement_reason"
                     )
+                # R40 #209: BackendOverrideSpec 显式 pin 的 expected_old_contract_hash
+                # 必须匹配旧实现的逻辑契约哈希 —— 仅锁 source 不够，还要证明旧契约
+                # 身份一致（order-independent）。
+                expected_old_contract_hash = cls._DECLARED_OVERRIDE_CONTRACT_HASHES.get(
+                    (canonical, backend)
+                )
+                if expected_old_contract_hash:
+                    old_contract_hash = _contract_hash(existing_ops[backend])
+                    if old_contract_hash != expected_old_contract_hash:
+                        raise ValueError(
+                            f"declared override of {canonical!r}/{backend}: expected "
+                            f"old contract hash {expected_old_contract_hash!r} but "
+                            f"registry holds {old_contract_hash!r} (R40 #209)"
+                        )
                 declared = True
             else:
                 declared = source in cls._DECLARED_OVERRIDE_SOURCES
@@ -1359,7 +1548,8 @@ class OperatorRegistry:
                     expected_old_source and old_source == expected_old_source
                 ),
                 "reason": replacement_reason or f"declared override layer ({source})",
-                "semantic_version": str(semantic_version or "1.0"),
+                # R40 #212: 不再把缺失的 semantic_version 伪造为 "1.0"。
+                "semantic_version": str(semantic_version or ""),
             })
             cls._override_chain.setdefault((canonical, backend), []).append(source)
         existing_ops[backend] = operator
@@ -1386,6 +1576,7 @@ class OperatorRegistry:
         canonical_params = _merge_param_names(
             prev.get("param_names"),
             getattr(operator.metadata, "param_names", []),
+            canonical=canonical,
         )
         # R6 P0-25: a backend adapter (polars bridge, SQL marker, …) frequently
         # registers with its own empty ``param_names``.  The canonical positional
@@ -1517,20 +1708,36 @@ class OperatorRegistry:
                 cls.register_alias(alias, canonical)
 
     @classmethod
+    def _read_state(cls) -> tuple[Any, Any, Any]:
+        """R40 #208: 公开读统一走 freeze 后的不可变快照。
+
+        返回 ``(operators, aliases, catalog)``；FROZEN 且快照可用时用
+        ``_frozen``，否则用 live dict（BUILDING/FINALIZED）。
+        """
+        if cls._lifecycle is cls.Lifecycle.FROZEN and cls._frozen is not None:
+            return (
+                cls._frozen["operators"],
+                cls._frozen["aliases"],
+                cls._frozen["catalog"],
+            )
+        return cls._operators, cls._aliases, cls._catalog
+
+    @classmethod
     def resolve_canonical(cls, name: str, *, max_depth: int = 8) -> str:
         """Resolve aliases transitively and reject cycles or missing targets."""
         from cleaned_operators.tombstones import assert_callable
 
         assert_callable(name)
+        operators, aliases, catalog = cls._read_state()
         current = name
         seen: set[str] = set()
         for _ in range(max_depth + 1):
             if current in seen:
                 raise ValueError(f"alias cycle detected at {current!r}")
             seen.add(current)
-            target = cls._aliases.get(current)
+            target = aliases.get(current)
             if target is None:
-                if current in cls._catalog or current in cls._operators:
+                if current in catalog or current in operators:
                     return current
                 # Unknown names remain unchanged for optional lookup compatibility.
                 return current
@@ -1879,7 +2086,8 @@ class OperatorRegistry:
             已注册 backend 名排序列表，如 ``["pandas_numpy", "polars"]``。
         """
         canonical = cls.resolve_canonical(name)
-        return sorted(cls._operators.get(canonical, {}).keys())
+        operators, _aliases, _catalog = cls._read_state()
+        return sorted(operators.get(canonical, {}).keys())
 
     @classmethod
     def get_preferred(
@@ -1937,7 +2145,8 @@ class OperatorRegistry:
 
         assert_callable(name)
         canonical = cls.resolve_canonical(name)
-        op = cls._operators.get(canonical, {}).get(backend)
+        operators, _aliases, _catalog = cls._read_state()
+        op = operators.get(canonical, {}).get(backend)
         if op is None:
             return None
         if mode == "production":
@@ -1954,21 +2163,24 @@ class OperatorRegistry:
         返回:
             排序后的 canonical 名列表。
         """
-        return sorted(set(cls._operators.keys()) | set(cls._catalog.keys()))
+        operators, _aliases, catalog = cls._read_state()
+        return sorted(set(operators.keys()) | set(catalog.keys()))
 
     @classmethod
     def catalog(cls) -> Dict[str, dict]:
         """导出完整 catalog 深拷贝，防止调用者修改 registry 内部状态。"""
-        return copy.deepcopy(cls._catalog)
+        _operators, _aliases, catalog = cls._read_state()
+        return copy.deepcopy(dict(catalog))
 
     @classmethod
     def snapshot(cls):
         """Return an immutable deep snapshot after the registry is frozen."""
         if cls._lifecycle is not cls.Lifecycle.FROZEN:
             raise RuntimeError("registry snapshot is available only after freeze")
+        operators, aliases, catalog = cls._read_state()
         return MappingProxyType({
             "version": cls._version,
-            "operators": MappingProxyType(copy.deepcopy(cls._operators)),
-            "aliases": MappingProxyType(copy.deepcopy(cls._aliases)),
-            "catalog": MappingProxyType(copy.deepcopy(cls._catalog)),
+            "operators": MappingProxyType(copy.deepcopy(dict(operators))),
+            "aliases": MappingProxyType(copy.deepcopy(dict(aliases))),
+            "catalog": MappingProxyType(copy.deepcopy(dict(catalog))),
         })

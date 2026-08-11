@@ -44,6 +44,8 @@ from tests.helpers import InMemorySeriesSource
 
 OUT = Path(__file__).resolve().parent.parent / "build" / "r39_evidence"
 QUICK = bool(os.environ.get("R39_BENCH_QUICK", ""))
+# B6 构造 dataaccess store 时跳过 COS mirror（本地直读）。
+os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
 
 
 def _scale():
@@ -101,14 +103,18 @@ def _timed(fn):
     return result, dt_ms
 
 
-def _summary(scale: dict, timing: dict, counts=None, extra=None) -> dict:
+def _summary(scale: dict, timing: dict, counts=None, extra=None, ttdc_ms=None) -> dict:
     counts = counts or get_global_counters()
-    total = sum(
-        v
-        for k, v in timing.items()
-        if k.endswith("_ms") and isinstance(v, (int, float))
-    )
-    timing["total_ttdc_ms"] = round(total, 2)
+    if ttdc_ms is None:
+        # 默认对全部 *_ms 求和（等价于单阶段 workload）；多阶段 workload 必须
+        # 显式传 ``ttdc_ms``（见 _b1_b2_b3/_b4），避免 scan/compute/serialize
+        # 冗余别名键把 run_many/materialize 重复计入。
+        ttdc_ms = sum(
+            v
+            for k, v in timing.items()
+            if k.endswith("_ms") and isinstance(v, (int, float))
+        )
+    timing["total_ttdc_ms"] = round(float(ttdc_ms), 2)
     summary = PerformanceRunSummary.from_counters(counts, timing)
     data = summary.to_dict(environment=capture_environment())
     data["workload"] = scale
@@ -154,6 +160,7 @@ def _b1_b2_b3(name: str, n_factors: int, stocks: int, days: int, pool) -> dict:
         {"workload": name, "n_factors": n_factors, "stocks": stocks, "days": days},
         timing,
         extra=extra,
+        ttdc_ms=run_ms + mat_ms,
     )
 
 
@@ -208,6 +215,7 @@ def _b4_incremental_1day(n_factors: int, stocks: int, days: int, pool) -> dict:
         {"workload": "B4-incremental-1day", "n_factors": n_factors, "stocks": stocks},
         timing,
         extra=extra,
+        ttdc_ms=inc_ms,
     )
 
 
@@ -223,8 +231,19 @@ def _incremental_write_bytes(lake_root: str) -> dict:
 
 
 def _b6_minute_daily(stocks: int, days: int) -> dict:
-    """Minute→Daily：100 个聚合输出。直接量 native SQL 路径。"""
-    from dataaccess.read.aggregation import aggregate_minute_bundle
+    """Minute→Daily：100 个聚合输出。直接量 native SQL 路径。
+
+    构造真实 dataaccess DataAccessStore（datasets.yaml + parquet），与
+    dataaccess/tests/r39/test_perf_minute_agg fixture 同构。
+    """
+    from data_access.core.engine import DuckDBEngine
+    from data_access.read.aggregation import (
+        AggregationItem,
+        AggregationSpec,
+        aggregate_minute_bundle,
+    )
+    from data_access.registry import load_registry
+    from data_access.store import DataAccessStore
 
     reset_global_counters()
     source = _panel_source(stocks, days, minute=True)
@@ -233,26 +252,61 @@ def _b6_minute_daily(stocks: int, days: int) -> dict:
     start, end = ts.min().strftime("%Y-%m-%d %H:%M:%S"), ts.max().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
+    # 构造 parquet + datasets.yaml（UTC 时间存储，A 股时区）
+    tmp = OUT.parent / "bench_lakes" / "b6"
+    tmp.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(
+        {
+            "timestamp": ts,
+            "symbol": close.index.get_level_values("instrument"),
+            "volume": source.data["volume"].values,
+        }
+    )
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    pq.write_table(pa.table(df), str(tmp / "m.parquet"))
+    (tmp / "datasets.yaml").write_text(
+        f"""
+minute_ds:
+  kind: static
+  access_mode: published
+  layout: plain
+  format: parquet
+  root: {tmp}
+  glob: "*.parquet"
+  time_column: timestamp
+  instrument_column: symbol
+  schema:
+    timestamp: timestamp
+    symbol: string
+    volume: int
+""",
+        encoding="utf-8",
+    )
+    store = DataAccessStore(
+        registry=load_registry(tmp / "datasets.yaml"),
+        engine=DuckDBEngine(threads=2, enable_object_cache=False),
+    )
     items = []
     for i in range(100):
         items.append(
-            {
-                "name": f"m{i}",
-                "window": ("09:31", "15:00"),
-                "input_column": "close",
-                "agg": "sum" if i % 2 == 0 else "mean",
-            }
+            AggregationItem(
+                "volume",
+                AggregationSpec(
+                    aggregation="minute_range", start="09:31", end="15:00", market="ashare"
+                ),
+                f"m{i:03d}",
+            )
         )
-    from dataaccess.read.physical_plan import PhysicalPlan  # noqa: F401
-    from dataaccess.core import DataStore  # noqa: F401
-
-    store = _minimal_store(source)
     t0 = time.monotonic()
-    result = aggregate_minute_bundle(
-        store, items, time_range=(start, end), result_mode="arrow"
+    handle = aggregate_minute_bundle(
+        store, "minute_ds", items, time_range=(start, end), market="ashare",
+        result_mode="arrow",
     )
     dt_ms = (time.monotonic() - t0) * 1000.0
-    n_rows = getattr(result, "num_rows", 0) or getattr(result, "height", 0)
+    tbl = handle.to_arrow() if hasattr(handle, "to_arrow") else handle
+    n_rows = getattr(tbl, "num_rows", 0) or getattr(tbl, "height", 0)
     timing = {"aggregate_minute_bundle_ms": dt_ms, "scan_ms": dt_ms}
     extra = {
         "n_aggregations": len(items),
@@ -266,23 +320,10 @@ def _b6_minute_daily(stocks: int, days: int) -> dict:
     )
 
 
-def _minimal_store(source) -> Any:  # noqa: ANN001
-    from tests.helpers import InMemorySeriesSource
-
-    if isinstance(source, InMemorySeriesSource):
-        from runtime.engine import FactorEngine
-
-        eng = FactorEngine(data_source=source, backend=PandasBackend())
-        return eng.data_source
-    return source
-
-
 def _b8_matrix(n_factors: int, add: int) -> dict:
     """Matrix：初始 n 因子 → 新增 add 因子。测 rewrite amplification。"""
-    from storage.materialize.factor_matrix_materializer import FactorMatrixMaterializer
-
     reset_global_counters()
-    stocks, days = 500, 252
+    stocks, days = (200, 120) if QUICK else (500, 252)
     source = _panel_source(stocks, days)
     pool = _factor_pool(
         [ts_mean, ts_std, ts_sum, ts_max, rank] * (n_factors // 5 + 1),
@@ -292,17 +333,22 @@ def _b8_matrix(n_factors: int, add: int) -> dict:
     tmp = OUT.parent / "bench_lakes" / "b8"
     tmp.mkdir(parents=True, exist_ok=True)
 
-    from runtime.matrix_service import execute_materialize_matrix
+    from runtime.engine import FactorEngine
 
-    kwargs = {"lake_root": str(tmp), "write_target": "local"}
+    engine = FactorEngine(data_source=source, backend=PandasBackend())
+    mkwargs = {
+        "universe": "ALL",
+        "frequency": "1d",
+        "matrix_root": str(tmp),
+    }
     t0 = time.monotonic()
-    execute_materialize_matrix(source, factors, **kwargs)
+    engine.materialize_matrix(factors, **mkwargs)
     init_ms = (time.monotonic() - t0) * 1000.0
     base_bytes = sum(f.stat().st_size for f in tmp.rglob("*.parquet"))
 
     add_factors = pool[n_factors : n_factors + add]
     t0 = time.monotonic()
-    execute_materialize_matrix(source, factors + add_factors, **kwargs)
+    engine.materialize_matrix(factors + add_factors, **mkwargs)
     add_ms = (time.monotonic() - t0) * 1000.0
     after_bytes = sum(f.stat().st_size for f in tmp.rglob("*.parquet"))
 
@@ -323,6 +369,7 @@ def _b8_matrix(n_factors: int, add: int) -> dict:
         {"workload": "B8-matrix-add", "n_factors": n_factors, "added": add},
         timing,
         extra=extra,
+        ttdc_ms=add_ms,
     )
 
 
@@ -347,23 +394,29 @@ def main() -> int:
     b2 = _b1_b2_b3("B2-daily-large", min(n_factors, len(pool)), stocks, days, pool)
     _write("r39_scheduler_overhead.json", {"b2": b2, "future_per_factor": b2["extra"].get("future_per_factor")})
 
-    # B3 mining scale（若 QUICK 则 200）
-    b3_n = 200 if QUICK else min(1500, len(pool))
+    # B3 mining scale（若 QUICK 则 100）
+    b3_n = 100 if QUICK else min(1500, len(pool))
     b3 = _b1_b2_b3("B3-mining-scale", b3_n, stocks, days, pool)
     _write("r39_scan_amplification.json", {"b3": b3})
 
-    # B4 incremental 1-day
-    b4_n = min(300, len(pool))
+    # B4 incremental 1-day（若 QUICK 则 100）
+    b4_n = 100 if QUICK else min(300, len(pool))
     b4 = _b4_incremental_1day(b4_n, stocks, days, pool)
     _write("r39_write_amplification.json", {"b4": b4})
     _write("r39_delta_compaction_report.json", {"b4": b4})
 
-    # B6 minute→daily
-    b6 = _b6_minute_daily(min(stocks, 300), min(days, 60))
+    # B6 minute→daily（QUICK 时进一步缩小）
+    if QUICK:
+        b6 = _b6_minute_daily(min(stocks, 150), min(days, 40))
+    else:
+        b6 = _b6_minute_daily(min(stocks, 300), min(days, 60))
     _write("r39_minute_aggregation_benchmark.json", {"b6": b6})
 
-    # B8 matrix
-    b8 = _b8_matrix(min(100, len(pool)), 50)
+    # B8 matrix（QUICK 时更小）
+    if QUICK:
+        b8 = _b8_matrix(min(50, len(pool)), 20)
+    else:
+        b8 = _b8_matrix(min(100, len(pool)), 50)
     _write("r39_matrix_benchmark.json", {"b8": b8})
 
     _write("r39_conversion_amplification.json", {})

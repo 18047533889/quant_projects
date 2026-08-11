@@ -264,6 +264,10 @@ class OperatorSpec:
     production_policy: ProductionPolicy = "denied"
     lowering_available: bool = False
     dual_backend_target: bool = False
+    # R40 #127/#128: manifest 的真实频率 / 输出类型 —— 从 operator metadata 的
+    # grain/input_grain 与 return_type 推断，不再是硬编码 "any"/"series"。
+    frequency: str = "any"
+    output_type: str = "series"
 
     def to_dict(self) -> dict[str, Any]:
         """将 ``OperatorSpec`` 序列化为普通字典。
@@ -293,6 +297,8 @@ class OperatorSpec:
             "production_policy": self.production_policy,
             "lowering_available": self.lowering_available,
             "dual_backend_target": self.dual_backend_target,
+            "frequency": self.frequency,
+            "output_type": self.output_type,
         }
 
 
@@ -541,6 +547,34 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
     production_policy = infer_production_policy(resolved)
     lowering_available = has_composite_lowering(resolved)
     panel_params = _infer_panel_params(op, meta, catalog)
+    # R40 #129: supports_panel 由真实 panel_params 推导（不再对全部算子硬编码
+    # True）。声明了 panel_params / input_fields / kernel 无默认参数的都是 panel
+    # 输入算子；纯标量算子（如 ``add`` 单标量模式）不再误报 panel 能力。
+    supports_panel = bool(panel_params)
+    # R40 #130: dual_backend_target 从 certified backend evidence 导出 —— 不再
+    # 按 execution_kind 猜。production 允许且 ≥2 个 production-certified backend
+    # 的算子才是 dual-backend 目标。
+    try:
+        from backend.operator_capability import production_eligible_backends
+
+        _eligible = production_eligible_backends(resolved)
+        dual_backend_target = bool(allow_in_production and len(_eligible) >= 2)
+    except Exception:  # noqa: BLE001 - 证据不可用时保守 False
+        dual_backend_target = False
+    # R40 #127: frequency 从 grain 契约推断（output_grain 优先，其次 input_grain）。
+    frequency = (
+        str(catalog.get("output_grain") or "").strip()
+        or str(getattr(meta, "output_grain", None) or "").strip()
+        or str(catalog.get("input_grain") or "").strip()
+        or str(getattr(meta, "input_grain", None) or "").strip()
+        or "any"
+    )
+    # R40 #128: output_type 从 return_type 契约推断（metadata 优先，catalog 兜底）。
+    output_type = (
+        str(getattr(meta, "return_type", None) or "").strip()
+        or str(catalog.get("return_type") or "").strip()
+        or "series"
+    )
 
     return OperatorSpec(
         canonical=resolved,
@@ -552,7 +586,7 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         policy=policy,
         param_names=tuple(getattr(meta, "param_names", None) or ()),
         panel_params=panel_params,
-        supports_panel=True,
+        supports_panel=supports_panel,
         supports_polars="polars" in all_backends,
         polars_long_tier=polars_long_tier,
         shape_preserving=shape_preserving,
@@ -563,7 +597,9 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         execution_kind=execution_kind,
         production_policy=production_policy,
         lowering_available=lowering_available,
-        dual_backend_target=execution_kind in {"composite", "primitive", "stateful"},
+        dual_backend_target=dual_backend_target,
+        frequency=frequency,
+        output_type=output_type,
     )
 
 
@@ -606,14 +642,17 @@ def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
     return {
         "name": spec.canonical,
         "scope": scope_map.get(pol.scope, pol.scope),
-        "frequency": "any",
+        # R40 #127: 真实 frequency（从 grain 契约推断，不再硬编码 "any"）。
+        "frequency": spec.frequency,
         # round-7: input_fields is now ONLY the panel data inputs.  Scalar knobs
         # (window / lag / alpha …) live under scalar_parameters — the machine
         # contract must not advertise ``window`` as a data field (audit item 10).
         "input_fields": panel_inputs,
         "scalar_parameters": scalar_params,
         "param_names": list(spec.param_names),
-        "output_type": "series",
+        # R40 #128: 真实 output_type（从 return_type / OutputShapeContract 推断，
+        # 不再硬编码 "series"；ts_last_if 等 scalar/frame 输出算子如实标注）。
+        "output_type": spec.output_type,
         "pit_safe": spec.pit_safe,
         "domain_policy": pol.domain_policy,
         "overflow_policy": pol.overflow_policy,

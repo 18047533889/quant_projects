@@ -89,44 +89,18 @@ def _operator_semantic_contract(op: str) -> dict[str, Any]:
     (e.g. editing ``_calculate_series``) that forgets to bump
     ``semantic_version`` still invalidates every plan and persistent-cache key
     depending on the operator, because the implementation source hash changes.
+
+    R40 #110: the contract payload is projected from the single
+    ``runtime.factor_identity.OperatorSemanticContractDigest`` — the SAME source
+    ``scoped_operator_contract_hash`` projects from — so a semantic change cannot
+    drift between the plan structural key and the factor identity digest.
     """
     if op in {"column", "literal", "plan_ref"}:
         return {"semantic_version": 1}
     try:
-        from cleaned_operators.operator_policy import infer_operator_policy
-        from cleaned_operators.registry import OperatorRegistry
-        from backend.evidence_provenance import compute_payload_hash
-        from backend.production_signature import signature_for
+        from runtime.factor_identity import OperatorSemanticContractDigest
 
-        canonical = OperatorRegistry.resolve_canonical(op)
-        catalog = OperatorRegistry._catalog.get(canonical, {})
-        signature = signature_for(canonical)
-        signature_payload = None
-        if signature is not None:
-            signature_payload = {
-                "default_status": signature.default_status,
-                "params": [(p.name, p.constraint, p.status) for p in signature.params],
-            }
-        # R6-154: bind the SELECTED backend's implementation source hash directly,
-        # not just the manually-bumped semantic_version.  A code change that
-        # forgets to bump ``semantic_version`` now still invalidates every plan
-        # and persistent-cache key that depends on the operator.
-        impl_hash: dict[str, str] = {}
-        from backend.evidence_provenance import implementation_hashes_for
-
-        try:
-            impl_hash = implementation_hashes_for(canonical)
-        except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
-            impl_hash = {}
-        return {
-            "canonical": canonical,
-            "semantic_version": str(catalog.get("semantic_version") or "1.0"),
-            "policy_hash": compute_payload_hash(
-                infer_operator_policy(canonical, canonical=canonical).to_dict()
-            ),
-            "signature_hash": compute_payload_hash(signature_payload),
-            "implementation_hash": compute_payload_hash(impl_hash),
-        }
+        return OperatorSemanticContractDigest.for_canonical(op).to_payload()
     except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
         # Bootstrap/compiler tooling can construct plans before registry load;
         # such plans remain deterministic but are intentionally version 0.

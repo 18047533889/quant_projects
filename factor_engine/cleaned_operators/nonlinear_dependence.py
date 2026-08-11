@@ -19,6 +19,25 @@ Contract notes
   window=60,lag=10 both report 60 aligned pairs).
 * Constant windows and degenerate quantiles return NaN (fail-closed).
 * Deterministic: the MI estimator is rank-quantile-binned (no randomness).
+
+M-180/M-182 — kernel-Granger / HSIC family (relocated by the reconciler)
+------------------------------------------------------------------------
+The live kernel-Granger / HSIC canonicals are registered from the *research*
+surface: ``ts_kernel_granger_score`` / ``ts_residualized_hsic`` in
+``research_spectral.py`` and ``ts_hsic`` in ``dependence_ext.py``.  The dead
+legacy names ``ts_kernel_granger_causality`` / ``ts_kernel_granger_oos`` /
+``ts_hsic_dependence`` were removed from the contract registries — they must NOT
+be re-registered as aliases.  ``ts_kernel_granger_score`` uses a BLOCKED
+out-of-sample train/test split and is a DIAGNOSTIC_STRUCTURE score, not a
+next-return predictor:
+
+* training data strictly before the test window — the trailing window is split
+  ``train = [0, train_end)``, ``test = [train_end, window)`` with
+  ``train_end = int(0.7 * n_available)``;
+* the scaler (per-block mean/std) and the RBF bandwidth (median pairwise
+  distance) are selected on the TRAINING partition only — the test partition is
+  never touched by any fit statistic, so ``ln(MSE_restricted / MSE_full)``
+  carries no in-sample / training-residual leakage.
 """
 from __future__ import annotations
 

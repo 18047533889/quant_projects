@@ -49,13 +49,29 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
-from runtime.session_calendar import SessionCalendar
+from runtime.session_calendar import EXCHANGE_CERTIFIED, SessionCalendar
 from runtime.session_panel import (
+    AxisMismatchError,
+    CalendarContractError,
+    DuplicateSlotError,
     SessionPanel,
+    TimezoneContractError,
     build_session_panel,
     default_ashare_calendar,
     session_trade_dates,
 )
+
+
+class MarketRequiredError(RuntimeError):
+    """R40 #242：minute 聚合算子必须显式指定 market；None 不再回退 ashare。"""
+
+
+class InvalidNumericSample(ValueError):
+    """R40 #239：数值样本非法（如非有限值）→ 该日输出 NaN。"""
+
+
+class InsufficientCoverage(ValueError):
+    """R40 #239：官方 slot 覆盖不足 → 该日输出 NaN。"""
 
 _EPS = 1e-12
 _MORNING = (571, 690)   # 09:31 .. 11:30 (A-share 240-bar session, matches DataAccess)
@@ -104,17 +120,52 @@ def _minute_of_day(times: np.ndarray) -> np.ndarray:
 
 
 def _declared_calendar(market: str | None, bar_freq: str | None) -> SessionCalendar:
-    """Declared A-share SessionCalendar from ``market`` + ``bar_freq``.
+    """Declared SessionCalendar from ``market`` + ``bar_freq``.
 
     R26-013/014: bar frequency is a DECLARED contract property (never a modal
     of observed deltas).  ``bar_freq`` defaults to the documented 1-minute
     session; anything else is an explicit declaration.
+
+    R40 #242: ``market`` 不再默认 ``"ashare"``——None/falsy 抛
+    :class:`MarketRequiredError`（production minute 算子从
+    ExecutionSemanticContext 取 market，绝不静默回退）。
+
+    R40 #243: 已知市场走权威日历适配器——US → America/New_York 09:30-16:00
+    （bar_start）；HK → Asia/Hong_Kong 09:30-12:00 + 13:00-16:00（bar_start）；
+    A 股 → default_ashare_calendar；未知市场 → unsupported error。
     """
     freq = str(bar_freq or "1min")
-    market_norm = (market or "ashare").lower().replace("_", "").replace(" ", "")
+    if market is None or not str(market or "").strip():
+        raise MarketRequiredError(
+            "minute aggregation requires an explicit `market`; the old "
+            "`market or 'ashare'` fallback is forbidden in R40 #242 — pass "
+            "the market from the execution semantic context"
+        )
+    market_norm = str(market).lower().replace("_", "").replace(" ", "")
     if market_norm in {"ashare", "cn", "a", "china"}:
         return default_ashare_calendar(bar_freq=freq)
-    return SessionCalendar(market=market_norm.upper(), bar_freq=freq, timestamp_convention="bar_end")
+    if market_norm in {"us", "usa"}:
+        return SessionCalendar(
+            market="US",
+            bar_freq=freq,
+            timestamp_convention="bar_start",
+            timezone="America/New_York",
+            authoritativeness=EXCHANGE_CERTIFIED,
+            segments=(("09:30", "16:00"),),
+        )
+    if market_norm in {"hk", "hongkong"}:
+        return SessionCalendar(
+            market="HK",
+            bar_freq=freq,
+            timestamp_convention="bar_start",
+            timezone="Asia/Hong_Kong",
+            authoritativeness=EXCHANGE_CERTIFIED,
+            segments=(("09:30", "12:00"), ("13:00", "16:00")),
+        )
+    raise ValueError(
+        f"unsupported market {market!r} for minute aggregation — known "
+        "markets: ashare / us / hk (R40 #243)"
+    )
 
 
 def _session_local_frame(
@@ -153,11 +204,16 @@ def _daily_agg(
     bar_freq: str | None = None,
     session_tz: str | None = None,
     source_timezone: str | None = None,
+    mode: str = "research",
 ) -> pd.DataFrame:
     """Apply fn(panel) per (instrument, session-local trade date).
 
     The panel is grid-aligned (SessionPanel); absent bars are explicit missing
     slots.  The trade-date is the session-local calendar date (R26-036).
+
+    R40 #238/#239：分层异常——数值/覆盖不足 → NaN；日历/时区/轴契约违反 →
+    run fail（重新抛出，不得吞成 NaN）；``mode="production"`` 时 duplicate
+    official slot / off-grid 超阈值 → hard DQ fail。
     """
     frame = _session_local_frame(
         _as_panel(frame), session_tz=session_tz, source_timezone=source_timezone, market=market
@@ -177,14 +233,18 @@ def _daily_agg(
             try:
                 panel = build_session_panel(
                     times, vals, cal,
-                    market=str(market or "ashare"),
+                    market=str(market),
                     session_timezone=tz,
                     source_timezone=None,  # already session-local
                     trade_date=pd.Timestamp(day),
                 )
+                if str(mode).strip().lower() == "production":
+                    panel.dq.hard_dq_fail()
                 per_day[day] = float(fn(panel))
-            except (ValueError, ZeroDivisionError, OverflowError):
+            except (InvalidNumericSample, InsufficientCoverage, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
+            except (CalendarContractError, TimezoneContractError, AxisMismatchError, DuplicateSlotError):
+                raise  # run / DQ hard fail —— 不吞成 NaN
         out[inst] = pd.Series(per_day, dtype=float)
     if not out:
         return pd.DataFrame(dtype=float)
@@ -200,12 +260,15 @@ def _pair_agg(
     bar_freq: str | None = None,
     session_tz: str | None = None,
     source_timezone: str | None = None,
+    mode: str = "research",
 ) -> pd.DataFrame:
     """Tuple-complete pair aggregation (R26-022..024).
 
     Both panels are reindexed onto the same official grid; a slot is usable only
     when BOTH carry a valid bar.  A bar with exactly one finite member is
     data-invalid and never acts as a single-series bar.
+
+    R40 #238/#239：分层异常（同 :func:`_daily_agg`）。
     """
     a = _session_local_frame(
         _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
@@ -215,6 +278,7 @@ def _pair_agg(
     )
     cal = _declared_calendar(market, bar_freq)
     tz = session_tz or _DEFAULT_SESSION_TZ
+    is_prod = str(mode).strip().lower() == "production"
     out: dict[str, pd.Series] = {}
     for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
@@ -229,13 +293,18 @@ def _pair_agg(
                 per_day[day] = np.nan
                 continue
             try:
-                pa = build_session_panel(ta, va, cal, market=str(market or "ashare"),
+                pa = build_session_panel(ta, va, cal, market=str(market),
                                          session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
-                pb = build_session_panel(tb, vb, cal, market=str(market or "ashare"),
+                pb = build_session_panel(tb, vb, cal, market=str(market),
                                          session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                if is_prod:
+                    pa.dq.hard_dq_fail()
+                    pb.dq.hard_dq_fail()
                 per_day[day] = float(fn(pa, pb))
-            except (ValueError, ZeroDivisionError, OverflowError):
+            except (InvalidNumericSample, InsufficientCoverage, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
+            except (CalendarContractError, TimezoneContractError, AxisMismatchError, DuplicateSlotError):
+                raise  # run / DQ hard fail
         out[inst] = pd.Series(per_day, dtype=float)
     if not out:
         return pd.DataFrame(dtype=float)
@@ -252,12 +321,15 @@ def _triple_agg(
     bar_freq: str | None = None,
     session_tz: str | None = None,
     source_timezone: str | None = None,
+    mode: str = "research",
 ) -> pd.DataFrame:
     """Tuple-complete three-input aggregation (R26-022..024).
 
     A required slot is usable only when ALL required inputs are valid — the old
     helper dropped on ``a`` alone and let ``b``/``c`` NaNs silently change the
     cohort / denominator (R26-154).
+
+    R40 #238/#239：分层异常（同 :func:`_daily_agg`）。
     """
     a = _session_local_frame(
         _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
@@ -270,6 +342,7 @@ def _triple_agg(
     )
     cal = _declared_calendar(market, bar_freq)
     tz = session_tz or _DEFAULT_SESSION_TZ
+    is_prod = str(mode).strip().lower() == "production"
     out: dict[str, pd.Series] = {}
     for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
@@ -286,15 +359,21 @@ def _triple_agg(
                 per_day[day] = np.nan
                 continue
             try:
-                pa = build_session_panel(ta, va, cal, market=str(market or "ashare"),
+                pa = build_session_panel(ta, va, cal, market=str(market),
                                          session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
-                pb = build_session_panel(tb, vb, cal, market=str(market or "ashare"),
+                pb = build_session_panel(tb, vb, cal, market=str(market),
                                          session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
-                pc = build_session_panel(tc, vc, cal, market=str(market or "ashare"),
+                pc = build_session_panel(tc, vc, cal, market=str(market),
                                          session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                if is_prod:
+                    pa.dq.hard_dq_fail()
+                    pb.dq.hard_dq_fail()
+                    pc.dq.hard_dq_fail()
                 per_day[day] = float(fn(pa, pb, pc))
-            except (ValueError, ZeroDivisionError, OverflowError):
+            except (InvalidNumericSample, InsufficientCoverage, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
+            except (CalendarContractError, TimezoneContractError, AxisMismatchError, DuplicateSlotError):
+                raise  # run / DQ hard fail
         out[inst] = pd.Series(per_day, dtype=float)
     if not out:
         return pd.DataFrame(dtype=float)

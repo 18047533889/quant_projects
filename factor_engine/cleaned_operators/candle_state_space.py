@@ -9,9 +9,13 @@ candle as an object* sits inside its own history:
 * ``ts_vector_state_mahalanobis``          — anomaly of today's state vector vs
   the trailing covariance of its own history (shrinkage-regularised
   Mahalanobis distance).  High = today's candle is atypical for the symbol.
+  Reference/query split (M-140): the reference is strictly ``<= t-1`` and the
+  query row is excluded from its own reference.
 * ``ts_vector_state_local_density``        — local density of today's state
   among its prior neighbours (inverse k-th nearest distance).  High = common
-  state, low = rare / isolated state.
+  state, low = rare / isolated state.  Reference/query split (M-140): the
+  reference is strictly ``<= t-1`` and the query row is excluded from its own
+  reference.
 * ``ts_multivariate_matrix_profile_novelty`` — distance of the current trailing
   subsequence of the caller-supplied scalar ``x`` to its nearest *prior*
   subsequence under z-normalised Euclidean distance (novelty).
@@ -31,19 +35,76 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
 
+# Model-audit Phase 4 (search-space hygiene): ``window`` and ``history`` are the
+# trailing lookback band (the alpha horizon, HORIZON, searched);
+# ``subsequence_length`` is the matrix-profile subsequence length — an
+# estimator-resolution grid knob, never a full-resolution search dimension
+# (M-115/M-162/M-170).
+_MATRIX_PROFILE_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "subsequence_length": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "history": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
+}
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+#: M-142: Mahalanobis fit-quality telemetry.  Populated on every (col, row) fit
+#: attempt inside ``_mahalanobis_series``; the module-level
+#: ``last_mahalanobis_telemetry()`` accessor exposes the most recent snapshot so
+#: audit probes can see WHY a cell was NaN (mirroring
+#: ``cross_section.panel_model.last_fit_telemetry`` /
+#: ``ts_model.state_space.numba_dispatch_stats``).  Diagnostic only — no operator
+#: surface is registered from it.
+_LAST_MAHALANOBIS_TELEMETRY: dict[str, Any] = {
+    "p_effective": None,
+    "N_effective": None,
+    "condition_number": None,
+    "dropped_constant_dims": None,
+    "failure_reason": "not_run",
+}
+
+
+def last_mahalanobis_telemetry() -> dict[str, Any]:
+    """Fit-quality telemetry of the most recent Mahalanobis covariance fit.
+
+    Keys: ``p_effective`` (kept feature dims after dropping constant features),
+    ``N_effective`` (valid history rows used in the fit), ``condition_number``
+    (of the shrunk covariance), ``dropped_constant_dims`` and ``failure_reason``
+    (one of ``ok`` | ``no_finite_history`` | ``all_constant`` |
+    ``insufficient_sample``; cells skipped because the current query row is
+    incomplete do NOT overwrite the last genuine fit decision).  Returns a
+    defensive copy.
+    """
+    return dict(_LAST_MAHALANOBIS_TELEMETRY)
+
+
+def _set_mahalanobis_telemetry(
+    *,
+    p_effective: int | None,
+    N_effective: int | None,
+    condition_number: float | None,
+    dropped_constant_dims: int | None,
+    failure_reason: str,
+) -> None:
+    _LAST_MAHALANOBIS_TELEMETRY["p_effective"] = p_effective
+    _LAST_MAHALANOBIS_TELEMETRY["N_effective"] = N_effective
+    _LAST_MAHALANOBIS_TELEMETRY["condition_number"] = condition_number
+    _LAST_MAHALANOBIS_TELEMETRY["dropped_constant_dims"] = dropped_constant_dims
+    _LAST_MAHALANOBIS_TELEMETRY["failure_reason"] = failure_reason
+
+
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int,
+              param_specs: dict[str, ParamSpec] | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="candle_state_space",
         description=description,
         param_names=params,
         return_type="series",
+        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
         tags=[
             "candle_state_space", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -70,6 +131,12 @@ def _mahalanobis_series(
         raise ValueError("window must be >= 2")
     feat = (f1, f2, f3, f4)
     p = len(feat)
+    # M-142: reset per kernel call so a fresh call starts at "not_run" and the
+    # accessor reflects THIS run's most recent (col, row) fit attempt.
+    _set_mahalanobis_telemetry(
+        p_effective=None, N_effective=None, condition_number=None,
+        dropped_constant_dims=None, failure_reason="not_run",
+    )
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
@@ -80,10 +147,17 @@ def _mahalanobis_series(
             hist = np.stack([feat[j][i0:r, c] for j in range(p)], axis=1)  # (n, p)
             cur = np.stack([feat[j][r, c] for j in range(p)])  # (p,)
             if not np.all(np.isfinite(cur)):
-                continue  # current state vector must be complete
+                # current state vector must be complete; this is a data-level
+                # skip, NOT a fit attempt — leave the telemetry on the last
+                # genuine fit decision (M-142).
+                continue
             finite = np.all(np.isfinite(hist), axis=1)
             valid = hist[finite].astype(float)
             if valid.shape[0] == 0:
+                _set_mahalanobis_telemetry(
+                    p_effective=None, N_effective=None, condition_number=None,
+                    dropped_constant_dims=None, failure_reason="no_finite_history",
+                )
                 continue
             z = cur.astype(float)
             # R6-147: a feature constant over the history has zero variance and
@@ -91,13 +165,25 @@ def _mahalanobis_series(
             # the distance depend on the feature's raw unit.  Drop constant
             # dimensions from both the history and the query before estimating.
             keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
+            dropped = p - int(keep_cols.size)
+            N_eff = int(valid.shape[0])
+            p_eff = int(keep_cols.size)
             if keep_cols.size == 0:
+                _set_mahalanobis_telemetry(
+                    p_effective=0, N_effective=N_eff, condition_number=None,
+                    dropped_constant_dims=dropped, failure_reason="all_constant",
+                )
                 continue
             # R11 round-3 #66: high-dimensional sample floor.  Estimating a
             # p x p covariance (then pseudo-inverting it) from only a handful of
             # observations is meaningless; require N >= 5p effective observations
             # after dropping constant dimensions.
             if valid.shape[0] < 5 * keep_cols.size:
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff, condition_number=None,
+                    dropped_constant_dims=dropped,
+                    failure_reason="insufficient_sample",
+                )
                 continue
             valid = valid[:, keep_cols]
             z = z[keep_cols]
@@ -111,10 +197,18 @@ def _mahalanobis_series(
             cov = np.atleast_2d(np.cov(valid, rowvar=False, ddof=1))
             cov = np.nan_to_num(cov, nan=0.0, posinf=0.0, neginf=0.0)
             shrunk = (1.0 - lam) * cov + lam * np.diag(np.diag(cov))
+            try:
+                cond = float(np.linalg.cond(shrunk))
+            except (np.linalg.LinAlgError, ValueError):
+                cond = float("inf")
             prec = np.linalg.pinv(shrunk + _EPS * np.eye(keep_cols.size))
             d = z - mu
             D = float(np.sqrt(max(0.0, float(d @ prec @ d))))
             out[r, c] = D
+            _set_mahalanobis_telemetry(
+                p_effective=p_eff, N_effective=N_eff, condition_number=cond,
+                dropped_constant_dims=dropped, failure_reason="ok",
+            )
     return out
 
 
@@ -298,11 +392,14 @@ class TsVectorStateMahalanobis(SeriesOperator):
     ``z_t=(f1..f4)_t`` 对比窗口内逐特征均值 μ 与收缩协方差
     ``(1-λ)Σ+λ·diag(Σ)``（R11 round-3 #65：均值+普通协方差，经典估计量一致配对）；
     ``N >= 5p`` 样本地板（R11 round-3 #66）。距离越大 → 今天蜡烛相对自身历史越异常。P1。
+
+    M-140 Reference/Query：历史参考严格 ≤ t-1（均值/协方差只由 ``[t-window, t)``
+    估计），当前查询 = t，查询行排除在参考之外（R6-145）。
     """
 
     metadata = _metadata(
         "ts_vector_state_mahalanobis",
-        "4D 状态向量相对窗口收缩协方差的马氏距离（蜡烛对象异常度）。",
+        "4D 状态向量相对窗口收缩协方差的马氏距离（蜡烛对象异常度）。历史参考严格 ≤t-1、当前查询=t，查询行排除在参考之外。",
         ["f1", "f2", "f3", "f4", "window", "shrinkage"],
         unit="ratio",
         cost=6,
@@ -334,11 +431,14 @@ class TsVectorStateLocalDensity(SeriesOperator):
     输出 **log-density = -log(max(r_k, 1e-3))**（R6-146：原 1/(r_k+eps) 在
     一字板/重复状态 r_k=0 时爆到 1/EPS；log-density 对重复状态给出大而有限的值）。
     高 → 常见状态；低 → 稀有/孤立状态。P1。
+
+    M-140 Reference/Query：历史参考严格 ≤ t-1（缩放参数/近邻都由 ``[t-window, t)``
+    估计），当前查询 = t，查询行排除在参考之外（R6-145）。
     """
 
     metadata = _metadata(
         "ts_vector_state_local_density",
-        "当前状态到前序窗口第 k 近邻距离的负对数（log-density，见 R6-146）。",
+        "当前状态到前序窗口第 k 近邻距离的负对数（log-density，见 R6-146）。历史参考严格 ≤t-1、当前查询=t，查询行排除在参考之外。",
         ["f1", "f2", "f3", "f4", "window", "k"],
         unit="log",
         cost=6,
@@ -380,6 +480,7 @@ class TsMultivariateMatrixProfileNovelty(SeriesOperator):
         ["x", "window", "subsequence_length", "history"],
         unit="ratio",
         cost=8,
+        param_specs=_MATRIX_PROFILE_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -414,6 +515,7 @@ class TsMatrixProfileMotifAge(SeriesOperator):
         ["x", "window", "subsequence_length", "history"],
         unit="ratio",
         cost=8,
+        param_specs=_MATRIX_PROFILE_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -447,6 +549,7 @@ class TsMatrixProfileMotifFrequency(SeriesOperator):
         ["x", "window", "subsequence_length", "history"],
         unit="ratio",
         cost=8,
+        param_specs=_MATRIX_PROFILE_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -479,6 +582,7 @@ class TsMatrixProfileNeighborDispersion(SeriesOperator):
         ["x", "window", "subsequence_length", "history"],
         unit="ratio",
         cost=8,
+        param_specs=_MATRIX_PROFILE_PARAM_SPECS,
     )
 
     def _calculate_series(

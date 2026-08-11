@@ -627,6 +627,20 @@ class AdaptiveBatchScheduler:
         if self._cancelled:
             self._explain(f"task={task.task_id}: not admitted (cancelled)")
             return None, None
+        # R40 #96: request-scoped CancellationToken（HTTP service → FE）——cancel
+        # 事件 / deadline 一到就停止新 admission（在跑 task 自然完成）。
+        try:
+            from runtime.exceptions import get_active_cancellation_token
+
+            _token = get_active_cancellation_token()
+            if _token is not None and (_token.is_cancelled or _token.expired):
+                self._cancelled = True
+                self._explain(
+                    f"task={task.task_id}: not admitted (request cancellation token set)"
+                )
+                return None, None
+        except Exception:  # noqa: BLE001 - token 缺失/异常时退化为既有行为
+            pass
         contract = task.resource_contract
         fn = _dispatch
         if task.task_type in (TASK_SHARD, TASK_MERGE):
@@ -1050,6 +1064,29 @@ class AdaptiveBatchScheduler:
         while remaining or futures:
             # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
             if self._cancelled and not futures:
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # R40 #96: request-scoped CancellationToken —— cancel/deadline 一到，
+            # 若无在跑 future 则提前结束（有在跑 future 时 _admit_and_run 拒新 admission）。
+            try:
+                from runtime.exceptions import get_active_cancellation_token
+
+                _req_token = get_active_cancellation_token()
+                if (
+                    _req_token is not None
+                    and (_req_token.is_cancelled or _req_token.expired)
+                    and not futures
+                ):
+                    self._cancelled = True
+                    self._explain(
+                        f"REQUEST_CANCELLED: stopping with {len(remaining)} "
+                        "pending tasks not admitted"
+                    )
+                    break
+            except Exception:  # noqa: BLE001
+                pass
                 self._explain(
                     f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
                 )

@@ -160,12 +160,16 @@ def _cs30_panels(seed=0):
 
 
 def test_knn_local_regression_dof_floor_nan_below_floor():
-    # k=5 < floor(20) -> the neighbourhood has <= k members -> NaN, never a
-    # near-interpolation z-score.
+    # M-113 (model-audit): k below the floor is now REJECTED at the operator
+    # boundary (strict k, no silent acceptance), so k=5 must raise instead of
+    # running with an under-sized neighbourhood and emitting NaN.  The
+    # under-sized-neighbourhood NaN path (kernel-level DOF floor) is exercised
+    # by test_knn_local_regression_dof_floor_ok_at_or_above_floor at k=20 with
+    # a small peer panel.
     tgt, f1, f2, f3 = _cs30_panels()
     for name in ("cs_knn_local_linear_residual", "cs_knn_local_gradient_norm"):
-        out = _op(name).calculate(tgt, f1, f2, f3, k=5, ridge=1e-3)
-        assert np.isnan(out.to_numpy(dtype=float)).all(), name
+        with pytest.raises(Exception):
+            _op(name).calculate(tgt, f1, f2, f3, k=5, ridge=1e-3)
 
 
 def test_knn_local_regression_dof_floor_ok_at_or_above_floor():
@@ -219,7 +223,8 @@ def test_tangent_nan_on_collinear_cloud():
     f1 = pd.DataFrame(vals, index=_ONE, columns=[chr(65 + i) for i in range(30)])
     f2 = f1.copy()
     f3 = f1.copy()
-    out = _op("cs_knn_tangent_residual").calculate(f1, f2, f3, k=5)
+    # k=20 (>= floor) — tests the kernel numerical-rank gate, not the boundary
+    out = _op("cs_knn_tangent_residual").calculate(f1, f2, f3, k=20)
     assert np.isnan(out.to_numpy(dtype=float)).all()
 
 
@@ -229,7 +234,7 @@ def test_tangent_finite_on_full_rank_cloud():
     f1 = pd.DataFrame(rng.normal(size=(1, 30)), index=_ONE, columns=cols)
     f2 = pd.DataFrame(rng.normal(size=(1, 30)), index=_ONE, columns=cols)
     f3 = pd.DataFrame(rng.normal(size=(1, 30)), index=_ONE, columns=cols)
-    out = _op("cs_knn_tangent_residual").calculate(f1, f2, f3, k=5)
+    out = _op("cs_knn_tangent_residual").calculate(f1, f2, f3, k=20)
     assert np.isfinite(out.to_numpy(dtype=float)).mean() >= 0.9
 
 

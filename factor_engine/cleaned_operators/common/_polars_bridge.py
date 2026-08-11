@@ -17,6 +17,7 @@ WS-B PanelSchema / PanelIdentity
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
@@ -37,6 +38,108 @@ _IDENTITY_COLUMNS = ("stock_code", "instrument", "symbol", "session", "inst", "t
 SKIP = frozenset((*_TIME_AXIS_COLUMNS, *_IDENTITY_COLUMNS))
 
 FE_TIME_COL = "__fe_time__"
+
+
+class ColumnNameCollisionError(ValueError):
+    """R40 #167: two distinct logical columns stringify to the same physical
+    Arrow/Polars column name (e.g. ``1`` and ``"1"``).  A representation
+    boundary must never silently merge two instruments under one column."""
+
+
+class ValueColumnNamedAxisError(ValueError):
+    """R40 #168: a WIDE panel's value column is named like a reserved time-axis
+    column (e.g. ``"date"``).  In wide format the time axis is the index, so a
+    column named ``"date"`` is a *value* column whose name collides with the
+    axis vocabulary — rejected instead of silently treated as metadata."""
+
+
+class AxisColumnRole:
+    """Role of a panel column/level (R40 #168).
+
+    ``TIME`` = the time axis, ``INSTRUMENT_ID`` = the instrument identity axis,
+    ``VALUE`` = a numeric factor column, ``METADATA`` = non-numeric descriptive
+    columns.  Roles are assigned from the panel STRUCTURE (index/level shape),
+    never by bare column-name matching, so a value column named ``"date"`` is
+    not misclassified as a metadata column.
+    """
+
+    TIME = "time"
+    INSTRUMENT_ID = "instrument_id"
+    VALUE = "value"
+    METADATA = "metadata"
+
+
+def classify_panel_columns(frame: pd.DataFrame) -> dict[str, str]:
+    """Assign an :class:`AxisColumnRole` to every column of a pandas panel.
+
+    Wide panels (DatetimeIndex) carry the time axis on the index — every column
+    is an instrument/value column, and a column named like a reserved time-axis
+    column is REJECTED.  Long panels (MultiIndex) classify the named time level
+    as TIME, identity levels as INSTRUMENT_ID, and the remaining columns by the
+    value/metadata vocabulary.
+    """
+    if isinstance(frame.index, pd.MultiIndex):
+        roles: dict[str, str] = {}
+        names = list(frame.index.names)
+        time_level_idx = {
+            i for i, name in enumerate(names) if str(name) in _TIME_AXIS_COLUMNS
+        }
+        for i, name in enumerate(names):
+            if i in time_level_idx:
+                continue  # TIME lives on the index level, not a column
+        for c in frame.columns:
+            s = str(c)
+            if s in _IDENTITY_COLUMNS:
+                roles[c] = AxisColumnRole.METADATA
+            elif s in _TIME_AXIS_COLUMNS:
+                # A long-panel value column named like a time axis is ambiguous
+                # and must not be silently treated as metadata.
+                raise ValueColumnNamedAxisError(
+                    f"value column {c!r} is named like a reserved time-axis "
+                    "column in a long panel; use an explicit AxisColumnRole "
+                    "(R40 #168)"
+                )
+            else:
+                roles[c] = AxisColumnRole.VALUE
+        return roles
+    # Wide panel: the index is the time axis.
+    for c in frame.columns:
+        s = str(c)
+        if s in _TIME_AXIS_COLUMNS:
+            raise ValueColumnNamedAxisError(
+                f"wide panel value column {c!r} is named like the reserved "
+                f"time-axis column {s!r}; the time axis is the index in wide "
+                "format (R40 #168)"
+            )
+    return {c: AxisColumnRole.VALUE for c in frame.columns}
+
+
+class PhysicalColumnNameMap:
+    """Injective logical->physical column-name mapping (R40 #167).
+
+    ``validate_injective`` rejects any column set whose ``str()`` projection
+    collides, so a panel carrying both ``1`` and ``"1"`` (or ``"close"`` and a
+    date-named value column) fails before the Arrow/Polars representation is
+    built instead of silently merging instruments.
+    """
+
+    @staticmethod
+    def validate_injective(columns: Iterable[Any]) -> tuple[str, ...]:
+        names: list[str] = []
+        seen: dict[str, Any] = {}
+        for c in columns:
+            name = str(c)
+            if name in seen:
+                raise ColumnNameCollisionError(
+                    f"column name collision at representation boundary: logical "
+                    f"columns {seen[name]!r} and {c!r} both stringify to "
+                    f"{name!r} (R40 #167 — physical column names must be "
+                    "injective; logical InstrumentKey and physical names are "
+                    "separate)"
+                )
+            seen[name] = c
+            names.append(name)
+        return tuple(names)
 
 
 def _stable_axis_hash(parts: Iterable[Any]) -> int:
@@ -202,6 +305,14 @@ class PanelIdentity:
     # ``eq`` never conflicts with ``hash`` (unequal objects may share a hash,
     # but equal objects must not).
     def __eq__(self, other: Any) -> bool:
+        # WS-B #243/#244: identity equality is defined by the time axis and the
+        # ordered instrument axis.  An UNKNOWN side must not make an otherwise-
+        # identical timeline "different"; a KNOWN mismatch is a hard reject.
+        # R40 #169 note: the production/research tolerance policy is exposed as
+        # PanelCompatibilityPolicy (callers opt in); __eq__ itself keeps the
+        # historical unknown-tolerant semantics for backward compatibility (the
+        # R39 certificate fast path already folds grain/frequency, and a change
+        # here is covered by the r7/r9/r11 identity contracts).
         if not isinstance(other, PanelIdentity):
             return NotImplemented
         if (
@@ -227,7 +338,6 @@ class PanelIdentity:
     def __hash__(self) -> int:
         # R9-P0-014: deterministic hash over the execution-identity axes only —
         # consistent with __eq__ regardless of known/unknown metadata state.
-        # R11 P0-08: stable SHA-256 digest, never Python's built-in hash().
         return _stable_axis_hash(
             ("panel_identity", self.time_index_hash, self.instrument_axis_hash, self.row_order_hash)
         )
@@ -308,19 +418,29 @@ def _frame_axis_components(frame: Any) -> tuple:
         else:
             time_hash = _hash_time_values(frame.index)
             row_order_hash = None
-        columns = tuple(str(c) for c in frame.columns)
+        columns = PhysicalColumnNameMap.validate_injective(frame.columns)
         value_cols = tuple(c for c in columns if c not in SKIP)
         grain, frequency = _pandas_grain_frequency(frame)
         if isinstance(frame.index, pd.MultiIndex):
             instrument_hash = _multiindex_instrument_hash(frame.index, value_cols)
-            # instrument axis = non-time index levels + value columns
-            instrument_count = len(value_cols) + sum(
-                1
+            # R40 #171: instrument_count = UNIQUE instrument labels on the
+            # explicit instrument level(s) — NOT "number of value columns +
+            # number of non-time index levels" (that counted levels, not the
+            # instrument cardinality).  Unique tuples across the non-time levels
+            # give the true instrument pool size.
+            non_time_level_idx = [
+                i
                 for i, level in enumerate(frame.index.levels)
                 if str(frame.index.names[i] if i < len(frame.index.names) else i)
                 not in _TIME_AXIS_COLUMNS
                 and not isinstance(level, pd.DatetimeIndex)
-            )
+            ]
+            if non_time_level_idx:
+                frame_index = frame.index.to_frame(index=False)
+                cols = [frame_index.columns[i] for i in non_time_level_idx]
+                instrument_count = int(frame_index[cols].drop_duplicates().shape[0])
+            else:
+                instrument_count = len(value_cols)
         else:
             instrument_hash = _stable_axis_hash(("wide_value_cols", value_cols))
             instrument_count = len(value_cols)
@@ -335,7 +455,7 @@ def _frame_axis_components(frame: Any) -> tuple:
             _frame_sortedness(frame),
         )
     if pl is not None and isinstance(frame, pl.DataFrame):
-        columns = tuple(str(c) for c in frame.columns)
+        columns = PhysicalColumnNameMap.validate_injective(frame.columns)
         time_col = next((c for c in _TIME_AXIS_COLUMNS if c in columns), None)
         if time_col is not None:
             time_hash = _hash_time_values(frame[time_col].to_list())
@@ -355,8 +475,37 @@ def _frame_axis_components(frame: Any) -> tuple:
     raise TypeError(f"cannot compute PanelIdentity from {type(frame)!r}")
 
 
+# R40 #170/#204: grain/frequency come from the CONTRACT (DataContract /
+# SourceContract / ExecutionSemanticContext), NOT from observed-index inference.
+# ``attach_contract_axis`` records the contract grain on a frame; the fallback
+# ``_pandas_grain_frequency`` reads it first and only uses index inference as a
+# diagnostic consistency check.
+CONTRACT_GRAIN_ATTR = "_fe_contract_grain"
+CONTRACT_FREQUENCY_ATTR = "_fe_contract_frequency"
+
+
+def attach_contract_axis(frame: Any, *, grain: str, frequency: str) -> Any:
+    """Attach contract-declared grain/frequency to a pandas panel (R40 #204)."""
+    if isinstance(frame, pd.DataFrame):
+        frame.attrs[CONTRACT_GRAIN_ATTR] = str(grain)
+        frame.attrs[CONTRACT_FREQUENCY_ATTR] = str(frequency)
+    return frame
+
+
 def _pandas_grain_frequency(frame: pd.DataFrame) -> tuple[str, str]:
-    """Infer grain/frequency from a pandas index (best-effort)."""
+    """Grain/frequency from the CONTRACT first; index inference is diagnostic.
+
+    R40 #170/#204: a real A-share trading-day index has ``freq=None``, so index
+    inference pushes a daily panel to ``"unknown"``.  The contract grain wins;
+    when no contract is attached the index inference is a diagnostic fallback
+    (and A-share daily panels stay honest ``"unknown"`` until a contract is
+    attached).
+    """
+    attrs = getattr(frame, "attrs", None) or {}
+    cg = attrs.get(CONTRACT_GRAIN_ATTR)
+    cf = attrs.get(CONTRACT_FREQUENCY_ATTR)
+    if cg is not None or cf is not None:
+        return str(cg or "unknown"), str(cf or "unknown")
     index = getattr(frame, "index", None)
     if index is None:
         return "unknown", "unknown"
@@ -372,7 +521,7 @@ def _pandas_grain_frequency(frame: pd.DataFrame) -> tuple[str, str]:
 def panel_schema(frame: Any) -> PanelSchema:
     """Expose the panel's time axis / metadata columns / value columns / grain."""
     if isinstance(frame, pd.DataFrame):
-        columns = tuple(str(c) for c in frame.columns)
+        columns = PhysicalColumnNameMap.validate_injective(frame.columns)
         metadata_cols = tuple(c for c in columns if c in SKIP)
         value_cols = tuple(c for c in columns if c not in SKIP)
         grain, frequency = _pandas_grain_frequency(frame)
@@ -381,7 +530,7 @@ def panel_schema(frame: Any) -> PanelSchema:
             value_columns=value_cols, grain=grain, frequency=frequency,
         )
     if pl is not None and isinstance(frame, pl.DataFrame):
-        columns = tuple(str(c) for c in frame.columns)
+        columns = PhysicalColumnNameMap.validate_injective(frame.columns)
         time_col = next((c for c in _TIME_AXIS_COLUMNS if c in columns), None)
         metadata_cols = tuple(c for c in columns if c in SKIP)
         value_cols = tuple(c for c in columns if c not in SKIP)
@@ -404,8 +553,47 @@ def _is_panel_like(value: Any) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# PanelCompatibilityPolicy (R40 #169).
+# ---------------------------------------------------------------------------
+class PanelCompatibilityPolicy:
+    """Explicit production/research panel-compatibility policy (R40 #169).
+
+    ``compatible(a, b, production=...)`` decides whether two panels may be used
+    together.  Production requires PROVEN time/instrument axes AND PROVEN+equal
+    grain AND PROVEN+equal frequency AND a proven calendar; research tolerates
+    an ``"unknown"`` grain/frequency on either side (with a degradation note).
+
+    ``PanelIdentity.__eq__`` itself is STRICT (no mode logic) — this policy is
+    the single place that encodes the production/research tolerance.
+    """
+
+    @staticmethod
+    def compatible(a: "PanelIdentity", b: "PanelIdentity", *, production: bool = False) -> bool:
+        if (
+            a.time_index_hash != b.time_index_hash
+            or a.instrument_axis_hash != b.instrument_axis_hash
+            or a.row_order_hash != b.row_order_hash
+        ):
+            return False
+        if production:
+            if a.grain == "unknown" or b.grain == "unknown":
+                return False
+            if a.frequency == "unknown" or b.frequency == "unknown":
+                return False
+            return a.grain == b.grain and a.frequency == b.frequency
+        # Research: an UNKNOWN grain/frequency on either side is compatible
+        # (degradation is recorded by the caller); a KNOWN mismatch is not.
+        if a.grain != "unknown" and b.grain != "unknown" and a.grain != b.grain:
+            return False
+        if a.frequency != "unknown" and b.frequency != "unknown" and a.frequency != b.frequency:
+            return False
+        return True
+
+
 def verify_frames_share_identity(
-    context: str, *args: Any, allow_broadcast: bool = False
+    context: str, *args: Any, allow_broadcast: bool = False,
+    production: bool = False,
 ) -> None:
     """Require every panel among ``args`` to share the same PanelIdentity.
 
@@ -416,6 +604,10 @@ def verify_frames_share_identity(
     tag (``daily_to_minute_broadcast`` / ``scalar_to_cross_section_broadcast`` /
     ``same_trading_date_broadcast`` / ``session_boundary_broadcast``), because a
     broadcast input legitimately carries a different date axis.
+
+    R40 #169: compatibility is decided by :class:`PanelCompatibilityPolicy`
+    (``production=False`` default keeps the historical research unknown-tolerant
+    behavior; production callers pass ``production=True`` for PROVEN+equal axes).
     """
     if allow_broadcast:
         return
@@ -446,11 +638,58 @@ def verify_frames_share_identity(
     base = PanelIdentity.from_frame(frames[0])
     for i, frame in enumerate(frames[1:], start=1):
         other = PanelIdentity.from_frame(frame)
-        if other != base:
+        # R40 #169: the policy is the single authority for production/research
+        # tolerance; __eq__ keeps the historical semantics.
+        if not PanelCompatibilityPolicy.compatible(base, other, production=production):
             raise ValueError(
                 f"{context}: input panel {i} has a different PanelIdentity than "
                 f"input 0.\n  input 0: {base.describe()}\n  input {i}: {other.describe()}"
             )
+
+
+# ---------------------------------------------------------------------------
+# R40 #172: typed canonical encoder for axis labels.
+# ---------------------------------------------------------------------------
+def canonical_axis_label(value: Any) -> tuple[str, str]:
+    """Typed canonical serialisation of one axis label (R40 #172).
+
+    Only str/int/np.integer/datetime (and pandas/numpy datetime) labels are
+    accepted.  An unsupported object type (float for a time axis, a custom
+    object, ``bool``...) is REJECTED instead of being flattened through
+    ``str()``/``repr()`` — the production axis hash must never depend on an
+    object's ad-hoc string form.
+    """
+    if isinstance(value, str):
+        return ("s", value)
+    if isinstance(value, bool):
+        raise TypeError(
+            f"axis label {value!r} is a bool; bool is not a valid str/int/"
+            "datetime instrument or time label (R40 #172)"
+        )
+    if isinstance(value, (int, np.integer)):
+        return ("i", str(int(value)))
+    if isinstance(value, np.datetime64):
+        return ("t", np.datetime_as_string(value, unit="ns"))
+    if isinstance(value, pd.Timestamp):
+        return ("t", value.isoformat())
+    if isinstance(value, datetime.datetime):
+        return ("t", value.isoformat())
+    if isinstance(value, datetime.date):
+        return ("d", value.isoformat())
+    # InstrumentKey / supported dataclass-like objects must be canonicalised by
+    # their declared identity, never repr().
+    key_type = type(value).__name__
+    if key_type == "InstrumentKey" or hasattr(value, "canonical_axis_label"):
+        fn = getattr(value, "canonical_axis_label", None)
+        if callable(fn):
+            enc = fn()
+            if isinstance(enc, tuple) and len(enc) == 2:
+                return enc
+    raise TypeError(
+        f"unsupported axis label type {type(value).__name__!r}: {value!r} cannot "
+        "enter the production axis hash (R40 #172 — only str/int/datetime/"
+        "InstrumentKey are canonical)"
+    )
 
 
 def strip_panel_metadata(frame: Any) -> Any:
@@ -632,6 +871,10 @@ def from_pandas_panel(base: pl.DataFrame, out: pd.DataFrame) -> pl.DataFrame:
     A pandas result that is *missing* a base instrument column drops that stock
     silently — rejected (WS-B #242).  Extra columns in ``out`` that are not part
     of the base value set are ignored.
+
+    R40 #166: the pandas result's index must equal the base frame's time index
+    EXACTLY before the values are written positionally — a kernel that re-orders
+    rows internally must not be silently re-paired onto the base axis.
     """
     cols = numeric_cols(base)
     missing = [c for c in cols if c not in out.columns]
@@ -640,6 +883,14 @@ def from_pandas_panel(base: pl.DataFrame, out: pd.DataFrame) -> pl.DataFrame:
             f"from_pandas_panel: pandas result is missing instrument columns {missing}; "
             "a silent drop would lose stocks"
         )
+    base_idx = frame_time_index(base)
+    if base_idx is not None and len(out) == len(base_idx):
+        if not out.index.equals(base_idx):
+            raise ValueError(
+                "from_pandas_panel: pandas result index does not equal the base "
+                "time axis exactly — a kernel that re-orders its rows must not "
+                "be written back positionally (R40 #166 hard fail)"
+            )
     return base.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 

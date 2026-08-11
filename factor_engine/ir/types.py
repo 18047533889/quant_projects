@@ -263,6 +263,46 @@ _SEMANTIC_IDENTITY_KEYS = (
 )
 
 
+_SUPPORTED_SEMANTIC_SCALARS = (str, int, float, bool, type(None), datetime.datetime, datetime.date)
+
+
+def _canonical_semantic_value(value: Any) -> Any:
+    """Canonical, typed serialization of one semantic dimension value (R40 #183).
+
+    Only supported types are accepted: str/int/float/bool/None/datetime, enums
+    (by ``.value``), ``AvailabilityExpr`` (by ``label``), ``SourceVintageSpec``
+    / ``UnitSpec`` (by their ``to_dict``), dicts and tuples/lists of supported
+    values.  Anything else (an arbitrary object whose only stable form is
+    ``repr``/``str``) raises ``TypeError`` — it must NOT silently enter the
+    digest via a ``str()`` fallback (two unrelated objects with identical
+    ``__str__`` would collide).
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, datetime.datetime):
+        return ("datetime", value.isoformat())
+    if isinstance(value, datetime.date):
+        return ("date", value.isoformat())
+    if isinstance(value, datetime.timedelta):
+        return ("timedelta", value.total_seconds())
+    if isinstance(value, Enum):
+        return ("enum", type(value).__name__, value.value)
+    if hasattr(value, "expr_kind") and hasattr(value, "label") and hasattr(value, "lateness"):
+        # AvailabilityExpr (incl. UNKNOWN sentinel) — canonical label.
+        return ("availability", value.label)
+    if hasattr(value, "to_dict") and type(value).__name__ in {"SourceVintageSpec", "UnitSpec", "UnitExpr"}:
+        return ("spec", type(value).__name__, _canonical_semantic_value(value.to_dict()))
+    if isinstance(value, dict):
+        return {str(k): _canonical_semantic_value(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return tuple(_canonical_semantic_value(v) for v in value)
+    raise TypeError(
+        f"unsupported semantic dimension value {type(value).__name__!r}: {value!r} "
+        "cannot enter a SemanticIdentityDigest (R40 #183 — no str()/repr() "
+        "fallback; declare a typed canonical form)"
+    )
+
+
 @dataclass(frozen=True)
 class SemanticIdentityDigest:
     """R24-132..134: the semantic-dimension digest for factor/cache identity.
@@ -271,6 +311,10 @@ class SemanticIdentityDigest:
     the economic definition.  Two formulas with the same text but different
     market / universe / same-day / revision / group-fallback semantics get
     DIFFERENT digests (R24-205..209).
+
+    R40 #183: the digest is built by a typed canonical serializer
+    (``_canonical_semantic_value``) — an unsupported object raises instead of
+    being flattened through ``str()``/``repr()``.
     """
 
     value: str
@@ -290,9 +334,9 @@ class SemanticIdentityDigest:
                 continue
             if exclude_debug and key in {"description", "debug_notes"}:
                 continue
-            dims[key] = value
+            dims[key] = _canonical_semantic_value(value)
         canonical = json.dumps(
-            dims, sort_keys=True, ensure_ascii=True, default=str,
+            dims, sort_keys=True, ensure_ascii=True,
             separators=(",", ":"),
         )
         return cls(value=hashlib.sha256(canonical.encode()).hexdigest()[:16], dimensions=dims)
@@ -364,6 +408,312 @@ class SemanticLattice:
 
     def scalar_semantic_kind(self) -> str | None:
         return self.semantic_kinds[0] if len(self.semantic_kinds) == 1 else None
+
+
+# ---------------------------------------------------------------------------
+# HistoryContract (R40 #178).  All production time/state operators DECLARE
+# their causal history requirement (window-1, window-1+lag, full-history replay,
+# report-periods, session-slots, event-count, checkpoint) instead of the
+# analyzer guessing from parameter NAMES.  The analyzer reads this contract; the
+# legacy ``_LAG_PARAM_NAMES`` / ``_WINDOW_PARAM_NAMES`` heuristics are a
+# research/compat fallback only.
+# ---------------------------------------------------------------------------
+class HistoryKind(str, Enum):
+    ROLLING = "rolling"                 # rows = window-1
+    LAG = "lag"                         # rows = lag
+    ROLLING_PLUS_LAG = "rolling_plus_lag"  # rows = window-1 + lag
+    FULL_HISTORY = "full_history"       # entire history replay
+    REPORT_PERIODS = "report_periods"   # N report periods
+    SESSION_SLOTS = "session_slots"     # N session slots
+    EVENT_COUNT = "event_count"         # N prior events
+    CHECKPOINT = "checkpoint"           # stateful checkpoint
+    ELEMENTWISE = "elementwise"         # no lookback
+
+
+@dataclass(frozen=True)
+class HistoryContract:
+    """Declared causal history of a time/state operator (R40 #178).
+
+    ``kind`` selects the requirement shape; ``rows`` is the concrete lookback in
+    pre-start trading rows when applicable (``None`` for full-history /
+    report-period / event-count kinds whose rows are data-driven).
+    """
+
+    kind: HistoryKind
+    rows: int | None = None
+    params: tuple[str, ...] = ()  # param names that drive the lookback
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, HistoryKind):
+            object.__setattr__(self, "kind", HistoryKind(str(self.kind)))
+
+    @property
+    def is_full_history(self) -> bool:
+        return self.kind is HistoryKind.FULL_HISTORY
+
+    @property
+    def is_elementwise(self) -> bool:
+        return self.kind is HistoryKind.ELEMENTWISE
+
+
+HISTORY_CONTRACTS: dict[str, HistoryContract] = {}
+
+
+def register_history_contract(canonical: str, contract: HistoryContract) -> None:
+    """Declare an operator's causal history contract (single authority, R40 #178)."""
+    HISTORY_CONTRACTS[str(canonical)] = contract
+
+
+def history_contract_for(canonical: str) -> HistoryContract | None:
+    return HISTORY_CONTRACTS.get(str(canonical))
+
+
+def check_history_contract_declared(canonical: str, *, production: bool = True) -> HistoryContract | None:
+    """Production gate: a time/state operator MUST declare a HistoryContract.
+
+    Raises ``ValueError`` in production for an undeclared operator — the name/
+    window heuristic fallback would silently underestimate lookback.
+    """
+    contract = HISTORY_CONTRACTS.get(str(canonical))
+    if contract is None and production:
+        raise ValueError(
+            f"{canonical}: no declared HistoryContract; production requires "
+            "register_history_contract() (name/window heuristics are "
+            "research-only — R40 #178)"
+        )
+    return contract
+
+
+# ---------------------------------------------------------------------------
+# AxisEffectContract (R40 #176).  The analyzer infers ``has_ts``/``has_cs`` from
+# hard-coded category/name sets, which silently misclassifies new operators.
+# An operator DECLARES its axis effect via ``register_axis_effect``; the
+# analyzer reads only the contract in production and never falls back to
+# name/category heuristics there.
+# ---------------------------------------------------------------------------
+class AxisEffectKind(str, Enum):
+    ELEMENTWISE = "elementwise"
+    TIME_SERIES = "time_series"
+    CROSS_SECTION = "cross_section"
+    GROUP_CROSS_SECTION = "group_cross_section"
+    GLOBAL_PANEL = "global_panel"
+    GRAIN_CHANGE = "grain_change"
+    RELATION = "relation"
+    STATEFUL = "stateful"
+
+
+AXIS_EFFECT_KINDS = frozenset(k.value for k in AxisEffectKind)
+
+#: How an axis effect maps onto the analyzer's ``has_ts`` / ``has_cs`` flags.
+_AXIS_EFFECT_TS = frozenset({
+    AxisEffectKind.TIME_SERIES.value,
+    AxisEffectKind.STATEFUL.value,
+    AxisEffectKind.GRAIN_CHANGE.value,
+})
+_AXIS_EFFECT_CS = frozenset({
+    AxisEffectKind.CROSS_SECTION.value,
+    AxisEffectKind.GROUP_CROSS_SECTION.value,
+    AxisEffectKind.GLOBAL_PANEL.value,
+    AxisEffectKind.RELATION.value,
+})
+
+
+@dataclass(frozen=True)
+class AxisEffectContract:
+    """Declared axis effect of an operator (R40 #176)."""
+
+    kind: AxisEffectKind
+    #: 显式双标志 override（has_ts, has_cs）。仅用于**同时**具有时间序列与截面
+    #: 效应、单 kind 无法表达的算子（如 ts_market_liquidity_beta：ts_ 前缀 +
+    #: group_neutralization category）。None = 按 kind 的标准映射。
+    _override_ts_cs: tuple[bool, bool] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, AxisEffectKind):
+            object.__setattr__(self, "kind", AxisEffectKind(str(self.kind)))
+
+    @property
+    def has_time_series_effect(self) -> bool:
+        if self._override_ts_cs is not None:
+            return self._override_ts_cs[0]
+        return self.kind.value in _AXIS_EFFECT_TS
+
+    @property
+    def has_cross_section_effect(self) -> bool:
+        if self._override_ts_cs is not None:
+            return self._override_ts_cs[1]
+        return self.kind.value in _AXIS_EFFECT_CS
+
+
+AXIS_EFFECT_CONTRACTS: dict[str, AxisEffectContract] = {}
+
+
+def register_axis_effect(canonical: str, kind: AxisEffectKind | str) -> None:
+    """Declare an operator's axis effect (single authority, R40 #176)."""
+    eff = kind if isinstance(kind, AxisEffectKind) else AxisEffectKind(str(kind))
+    AXIS_EFFECT_CONTRACTS[str(canonical)] = AxisEffectContract(kind=eff)
+
+
+#: R40 #176：批量声明用的算子族分类集合——与 analyzer 的 legacy name/category
+#: fallback 精确一致（ir/analyzer.py:1256-1293）。批量注册后，production 只读
+#: 契约、绝不在 planning 期 fallback 到 name/category 推断（静态门
+#: ``PRODUCTION_AXIS_EFFECT_UNDECLARED == 0`` 由全部算子已声明保证）。
+_AXIS_EFFECT_TS_CATEGORIES = frozenset({
+    "time_series", "technical_signal", "price_volume",
+    "price_volume_extension", "ohlc_volatility", "candle_pattern",
+    "intraday_microstructure", "signal", "price_structure", "chart_pattern",
+    "fundamental_period",
+})
+_AXIS_EFFECT_CS_CATEGORIES = frozenset({"cross_sectional", "group_neutralization"})
+_AXIS_EFFECT_TS_NAMES = frozenset({"SMA", "EMA", "WMA", "delay", "decay_linear"})
+_AXIS_EFFECT_CS_NAMES = frozenset({
+    "rank", "zscore", "scale", "normalize", "winsorize", "quantile", "neutralize",
+})
+
+
+def register_axis_effects_for_surface(registry: Any = None) -> dict[str, AxisEffectContract]:
+    """为注册表里每个算子批量声明 AxisEffectContract（R40 #176 收尾）。
+
+    #176 要求 production 只读契约、静态门 ``PRODUCTION_AXIS_EFFECT_UNDECLARED
+    == 0``。本函数把算子已 author 的 ``category``（显式元数据）与算子族命名约定
+    固化为**一次性显式声明**（load 期计算一次，planning 期零推断），覆盖全部
+    注册算子。同时具 ts+cs 效应的算子（如 ``ts_market_liquidity_beta``）用
+    ``_override_ts_cs`` 双标志表达。
+
+    返回当前契约表（幂等：已声明的 canonical 保留，不覆盖显式手工注册）。
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    reg = registry if registry is not None else OperatorRegistry
+    for canon in list(reg._operators):
+        if str(canon) in AXIS_EFFECT_CONTRACTS:
+            continue  # 保留显式手工注册
+        impls = reg._operators[canon]
+        impl = impls.get("pandas_numpy") if impls else None
+        category = str(getattr(getattr(impl, "metadata", None), "category", "") or "")
+        has_ts = (
+            category in _AXIS_EFFECT_TS_CATEGORIES
+            or str(canon).startswith("ts_")
+            or str(canon) in _AXIS_EFFECT_TS_NAMES
+        )
+        has_cs = (
+            category in _AXIS_EFFECT_CS_CATEGORIES
+            or str(canon).startswith("cs_")
+            or str(canon).startswith("group_")
+            or str(canon) in _AXIS_EFFECT_CS_NAMES
+        )
+        if has_ts and has_cs:
+            AXIS_EFFECT_CONTRACTS[str(canon)] = AxisEffectContract(
+                kind=AxisEffectKind.GROUP_CROSS_SECTION,
+                _override_ts_cs=(True, True),
+            )
+        elif has_ts:
+            AXIS_EFFECT_CONTRACTS[str(canon)] = AxisEffectContract(
+                kind=AxisEffectKind.TIME_SERIES
+            )
+        elif has_cs:
+            AXIS_EFFECT_CONTRACTS[str(canon)] = AxisEffectContract(
+                kind=AxisEffectKind.CROSS_SECTION
+            )
+        else:
+            AXIS_EFFECT_CONTRACTS[str(canon)] = AxisEffectContract(
+                kind=AxisEffectKind.ELEMENTWISE
+            )
+    return AXIS_EFFECT_CONTRACTS
+
+
+def axis_effect_contract_for(canonical: str) -> AxisEffectContract | None:
+    return AXIS_EFFECT_CONTRACTS.get(str(canonical))
+
+
+def check_axis_effect_declared(canonical: str, *, production: bool = True) -> AxisEffectContract:
+    """Production gate: a canonical MUST declare its axis effect (R40 #176).
+
+    Raises ``ValueError`` in production when the operator has no
+    ``AxisEffectContract`` — the analyzer must never fall back to name/category
+    heuristics that silently misclassify a new operator.
+    """
+    contract = AXIS_EFFECT_CONTRACTS.get(str(canonical))
+    if contract is None and production:
+        raise ValueError(
+            f"{canonical}: no declared AxisEffectContract; production requires "
+            "register_axis_effect() (name/category fallback is research-only — "
+            "R40 #176)"
+        )
+    return contract  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# SemanticTypeBundle (R40 #182).  Upgrades the 5-dimension SemanticLattice to a
+# full 8(+)-dimension bundle that covers every economic dimension the analyzer /
+# operator legality pass consumes:
+#   value_semantics / unit_expr / axis_type / temporal_type / knowledge_type /
+#   source_vintage / universe_type / missing_policy (+ period_duration).
+# ``SemanticLattice`` stays as the backward-compatible lattice join type.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class SemanticTypeBundle:
+    """Full economic-semantic bundle for a field/operator (R40 #182)."""
+
+    value_semantics: str | None = None          # price/return/volume/amount/ratio/...
+    unit_expr: Any = None                       # UnitExpr (dimension product)
+    axis_type: str | None = None                # time | cross_section | panel | relation
+    temporal_type: str | None = None            # daily | minute | fiscal_period | ...
+    knowledge_type: str | None = None           # availability/knowledge-time expr label
+    source_vintage: Any = None                  # SourceVintageSpec | None
+    universe_type: str | None = None            # universe / coverage identity
+    missing_policy: str | None = None           # forbid_forward_fill / finite_only / ...
+    period_duration: str | None = None          # R40 #181: QUARTER/HALF_YEAR/ANNUAL/TTM/YTD/IRREGULAR/UNKNOWN
+
+    @classmethod
+    def from_field_like(cls, spec: Any) -> "SemanticTypeBundle":
+        """Build a bundle from a FieldSpec-like object (getattr-based).
+
+        Reads every dimension defensively so a spec that does not carry the
+        field yet (legacy / read-only spec.py) yields ``None`` for that slot
+        instead of raising.
+        """
+        pdur = getattr(spec, "period_duration", None)
+        if pdur is not None:
+            pdur = normalize_period_duration(pdur)
+        return cls(
+            value_semantics=getattr(spec, "value_kind", None),
+            unit_expr=getattr(spec, "unit_expr", None),
+            axis_type=getattr(spec, "axis_type", None),
+            temporal_type=getattr(spec, "temporal_model", None) or getattr(spec, "frequency", None),
+            knowledge_type=getattr(spec, "knowledge_time_column", None),
+            source_vintage=getattr(spec, "source_vintage", None),
+            universe_type=getattr(spec, "universe_id", None),
+            missing_policy=getattr(spec, "missing_policy", None),
+            period_duration=pdur,
+        )
+
+
+#: R40 #181: canonical PeriodDuration values (alias-aware normalization).
+_PERIOD_DURATION_ALIASES = {
+    "q": "quarter", "quarter": "quarter", "quarterly": "quarter",
+    "h": "half_year", "half_year": "half_year", "half": "half_year", "semi_annual": "half_year",
+    "a": "annual", "annual": "annual", "yearly": "annual", "ann": "annual",
+    "ttm": "ttm", "trailing_twelve_months": "ttm",
+    "ytd": "ytd", "year_to_date": "ytd",
+    "irregular": "irregular", "unknown": "unknown",
+}
+
+
+def normalize_period_duration(value: Any) -> str:
+    """Canonicalize a period-duration value to the ``PeriodDuration`` vocabulary."""
+    if value is None:
+        return PeriodDuration.UNKNOWN.value
+    if isinstance(value, PeriodDuration):
+        return value.value
+    key = str(value).strip().lower().replace("-", "_")
+    canonical = _PERIOD_DURATION_ALIASES.get(key)
+    if canonical is None:
+        raise ValueError(
+            f"unknown period_duration {value!r}; expected one of "
+            f"{sorted(set(_PERIOD_DURATION_ALIASES.values()))} (R40 #181)"
+        )
+    return canonical
 
 
 def _dedup_tuple(*tuples: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -1295,6 +1645,47 @@ _LABEL_TO_EXPR: dict[str, AvailabilityExpr] = {
 }
 
 
+#: Known POLICY labels (as opposed to column-name references).  A descriptor
+#: that normalizes to one of these is a policy label; anything else is treated
+#: as a column reference by :func:`normalize_availability_descriptor`.
+#: Keys are stored in ``_normalize_label`` form (non-alphanumerics removed) so
+#: ``"session_close"`` and ``"session close"`` both resolve.
+_POLICY_AVAILABILITY_LABELS = frozenset(
+    _normalize_label(label)
+    for label in (
+        "unknown", "midnight", "session_open", "local_open", "pre_close",
+        "local_close", "session_close", "after_close", "next_session_open",
+        "next_open", "next_trading_day", "filing_date", "filing", "report_date",
+        "pub_date", "declaration_date", "declaration", "ex_date",
+        "ex_dividend_date", "record_date", "payment_date", "effective_date",
+        "knowledge_time",
+    )
+)
+
+
+def normalize_availability_descriptor(descriptor: Any) -> "AvailabilityExpr":
+    """R40 #180: type-safe availability descriptor — policy label OR column ref.
+
+    ``None``/empty -> UNKNOWN.  A known POLICY label (``"session_close"``,
+    ``"filing"``, ...) resolves to its typed expression.  Anything else is a
+    COLUMN REFERENCE (``"PubDate"``, ``"declaration_date"``, an arbitrary column
+    name) and becomes ``TimestampColumn(name)`` — never silently coerced to a
+    policy label.  This splits the old single ``str`` slot that mixed policy
+    labels with column names.
+    """
+    from ir.types import _normalize_label as _norm
+
+    if descriptor is None or isinstance(descriptor, str) and not descriptor.strip():
+        return UNKNOWN
+    if isinstance(descriptor, AvailabilityExpr):
+        return descriptor
+    low = _norm(descriptor)
+    if low in _POLICY_AVAILABILITY_LABELS:
+        return availability_expr_of(descriptor)
+    # Not a known policy label -> treat the raw spelling as a column reference.
+    return TimestampColumn(str(descriptor).strip())
+
+
 def availability_expr_of(descriptor: Any) -> AvailabilityExpr:
     """Normalize a legacy string label / ``AvailabilityExpr`` to an expr.
 
@@ -1679,6 +2070,7 @@ __all__ = [
     "SessionSegmentEnd",
     "SemanticLattice",
     "SemanticType",
+    "SemanticTypeBundle",
     "SourceVintageSpec",
     "TemporalResolutionError",
     "TimestampColumn",
@@ -1686,9 +2078,14 @@ __all__ = [
     "UnknownAvailability",
     "ValueType",
     "availability_expr_of",
+    "check_history_contract_declared",
+    "history_contract_for",
+    "register_history_contract",
     "infer_field_type",
     "latest_availability",
     "lattice_join_semantic_attrs",
+    "normalize_availability_descriptor",
     "normalize_dtype",
+    "normalize_period_duration",
     "semantic_type_of",
 ]

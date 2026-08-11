@@ -35,6 +35,10 @@ class ExecutionContext:
     prefer_polars_panel: bool = False
     # R36 P0-021（§104/105）：governed CSE buffer store（取代 raw dict 权威写入）。
     shared_buffers: Any = None
+    # R40 #140: pandas_modin 后端选择标记 —— execution-context scoped（不再靠
+    # 改 process-global env）。engine 显式构造 PandasBackend(use_modin_pandas=…)
+    # 时在对应执行上下文内生效。
+    _use_modin_pandas: bool = False
 
     def __post_init__(self) -> None:
         if not self.execution_id:

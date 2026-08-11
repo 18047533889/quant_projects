@@ -13,6 +13,9 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from cleaned_operators._causal import causal_linear_extrapolate_panel
@@ -42,6 +45,59 @@ _FFILL_METHOD_ALIASES = frozenset({"ffill", "pad", "forward_fill"})
 # exists; today the gate is keyword-driven at the operator boundary.
 _FORWARD_FILL_ALLOWED_DEFAULT = True
 _MAX_FFILL_GAP_DEFAULT = 0
+
+
+# ---------------------------------------------------------------------------
+# CarryForwardPolicy (R40 #190).  Forward-fill is a FIELD-SEMANTIC decision, not
+# a free user choice.  A non-ffillable field (returns / events / revisions)
+# must NEVER be forward-filled.  ``CarryForwardPolicy`` carries the allowed /
+# max-gap / reset contract; the compile-time gate binds it from the input
+# semantic contract and the user can only TIGHTEN (never loosen a provider
+# FORBID).
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CarryForwardPolicy:
+    """Declared carry-forward contract (R40 #190)."""
+
+    allowed: bool = True
+    max_gap_sessions: int = 0
+    reset_on_session_boundary: bool = True
+    reset_on_event: bool = False
+
+    def tighten(self, other: "CarryForwardPolicy") -> "CarryForwardPolicy":
+        """Combine a user policy with a provider policy — user can only tighten.
+
+        ``allowed`` is AND (provider FORBID wins); max gap is the MINIMUM of the
+        two (the tighter limit wins); reset flags OR (any reset requirement wins).
+        """
+        return CarryForwardPolicy(
+            allowed=bool(self.allowed and other.allowed),
+            max_gap_sessions=min(self.max_gap_sessions, other.max_gap_sessions),
+            reset_on_session_boundary=bool(self.reset_on_session_boundary or other.reset_on_session_boundary),
+            reset_on_event=bool(self.reset_on_event or other.reset_on_event),
+        )
+
+    def to_kwargs(self) -> dict[str, Any]:
+        return {
+            "forward_fill_allowed": self.allowed,
+            "max_ffill_gap": self.max_gap_sessions,
+        }
+
+
+def check_carry_forward_policy(policy: CarryForwardPolicy | None, *, canonical: str) -> CarryForwardPolicy:
+    """Production gate: forward-fill requires an explicit CarryForwardPolicy.
+
+    An undeclared policy is rejected in production (the old
+    ``_FORWARD_FILL_ALLOWED_DEFAULT=True`` silently allowed filling any field,
+    including returns/events/revisions that a provider FORBIDS).
+    """
+    if policy is None:
+        raise ValueError(
+            f"{canonical}: forward-fill has no declared CarryForwardPolicy; "
+            "production requires the allowed/max_gap/reset contract bound from "
+            "the field's semantic contract (R40 #190)"
+        )
+    return policy
 
 
 def _forward_fill_panel(
@@ -578,15 +634,35 @@ class IsInfinite(SeriesOperator):
 
 
 
+def _nan_only_to_num(arr: np.ndarray, num: float) -> np.ndarray:
+    """R40 #192: replace ONLY NaN with ``num``; ±Inf passes through unchanged.
+
+    ``np.nan_to_num(arr, nan=num, posinf=num, neginf=num)`` silently collapsed
+    ±Inf into ``num`` — a naming/semantic trap for a "nan_to_num" operator.  The
+    canonical semantics handle only NaN; callers who want ±Inf mapped too use
+    the explicitly-named :func:`_nonfinite_to_num` / ``nonfinite_to_num``.
+    """
+    out = np.array(arr, dtype=float, copy=True)
+    out[np.isnan(out)] = num
+    return out
+
+
+def _nonfinite_to_num(arr: np.ndarray, num: float) -> np.ndarray:
+    """Replace NaN AND ±Inf with ``num`` (legacy nan_to_num behavior)."""
+    out = np.array(arr, dtype=float, copy=True)
+    out[~np.isfinite(out)] = num
+    return out
+
+
 # canonical=nan_to_num backend=pandas_numpy selected=nan_to_num source=data_handling/missing_values.py
 @register_operator(name="nan_to_num", category="data_handling", business_category="data_cleaning", canonical="nan_to_num", source="factor_dsl_np")
 class NaNToNum(SeriesOperator):
-    """NaN转数值"""
+    """NaN转数值（仅 NaN；±Inf 透传）"""
 
     metadata = OperatorMetadata(
         name="nan_to_num",
         category="data_handling",
-        description="NaN转数值",
+        description="仅把 NaN 转为 num；±Inf 保持不变（R40 #192）。需要同时映射 ±Inf 请用 nonfinite_to_num",
         examples=["nan_to_num(close, 0)"],
         param_names=["x", "num"],
         return_type="series",
@@ -595,10 +671,31 @@ class NaNToNum(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, num: float = 0, **kwargs) -> pd.DataFrame:
         arr = x.to_numpy(dtype=float, copy=True)
-        filled = np.nan_to_num(arr, nan=num, posinf=num, neginf=num)
+        filled = _nan_only_to_num(arr, num)
         return pd.DataFrame(filled, index=x.index, columns=x.columns)
 
 # aliases: NAN_TO_NUM
+
+
+# canonical=nonfinite_to_num backend=pandas_numpy
+@register_operator(name="nonfinite_to_num", category="data_handling", business_category="data_cleaning", canonical="nonfinite_to_num", source="factor_dsl_np", status="research")
+class NonFiniteToNum(SeriesOperator):
+    """NaN 与 ±Inf 全部转为 num（旧 nan_to_num 行为，显式命名）。"""
+
+    metadata = OperatorMetadata(
+        name="nonfinite_to_num",
+        category="data_handling",
+        description="把 NaN 与 ±Inf 全部转为 num（旧 nan_to_num 行为；R40 #192 语义澄清）",
+        examples=["nonfinite_to_num(close, 0)"],
+        param_names=["x", "num"],
+        return_type="series",
+        tags=["data_handling", "missing", "fill"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, num: float = 0, **kwargs) -> pd.DataFrame:
+        arr = x.to_numpy(dtype=float, copy=True)
+        filled = _nonfinite_to_num(arr, num)
+        return pd.DataFrame(filled, index=x.index, columns=x.columns)
 
 
 

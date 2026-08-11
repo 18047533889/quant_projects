@@ -12,12 +12,22 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.candle_state_space import _matrix_profile_series
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.ts_model._rolling_core import frame_like, metadata
 
 _CANONICALS: list[str] = []
+
+# Model-audit Phase 4 (search-space hygiene): ``m`` is the matrix-profile
+# subsequence length — an estimator-resolution grid knob, never a full-search
+# dimension (M-115/M-162/M-170).  ``history_window`` caps the lookback and is
+# the alpha horizon (HORIZON, searched).
+_MP_PARAM_SPECS: dict[str, ParamSpec] = {
+    "m": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
+}
 
 
 def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 9):
@@ -31,7 +41,8 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
         status="experimental",
     )
     class _AnomalyOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=cost)
+        metadata = metadata(name, description, params, unit=unit, cost=cost,
+                            param_specs=_MP_PARAM_SPECS)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -72,19 +83,27 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
     ``motif`` are the same min-distance quantity and are both superseded by the
     novelty canonical (``ts_matrix_profile_novelty``).
 
-    ``history_window`` caps the lookback (round-7 audit): the kernel was called
-    with ``history = window = n``, an implicit expanding-history operator where
-    every row searches all of ``x[:t+1]`` — the factor then depends on the data
-    start date and the cost grows O(n * history).  When ``history_window`` is
-    finite the profile runs on the trailing window only.
+    M-101: ``m`` (subsequence length) is validated strictly as an integer >= 3
+    (``strict_int``, see ``cleaned_operators.closure.strict_scalar``).  ``m < 3``,
+    a fractional value, NaN/Inf or a bool now RAISE instead of being clamped or
+    truncated — the legacy ``max(3, int(m))`` silently coerced ``m=2`` to ``3``
+    and ``m=20.7`` to ``20``, manufacturing factors that never matched any
+    declared window.
+
+    M-102: ``history_window`` is validated strictly as a finite positive
+    integer.  The legacy ``history_window <= 0`` silently expanded to the full
+    history (an implicit expanding-history operator whose output depends on the
+    data start date); that is now a contract error and raises.  ``history_window``
+    caps the lookback (round-7 audit): the profile runs on the trailing window
+    only — every row searches its trailing ``history_window`` band, so the cost
+    stays O(n * history_window) and the output is invariant to history before the
+    band.
     """
     v = np.asarray(vals, dtype=float)
     if v.ndim == 1:
         v = v[:, None]
-    m = max(3, int(m))
-    hist = int(history_window)
-    if hist <= 0:
-        hist = v.shape[0]
+    m = strict_int(m, "m", lower=3)
+    hist = strict_int(history_window, "history_window", lower=1)
     n = v.shape[0]
     lo = max(0, n - hist)
     vw = v[lo:]
@@ -109,8 +128,8 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
     return float(dispersion[last, 0]) if np.isfinite(dispersion[last, 0]) else np.nan
 
 
-_register("ts_matrix_profile_discord_score", "末尾子序列到最近历史子序列距离（离群度，novelty canonical，history_window 截断回溯）。", ["x", "m", "history_window"], "level",
-           lambda x, m=20, history_window=252: _apply(x, lambda v: _mp_stats(v, int(m), "discord", int(history_window))))
+_register("ts_matrix_profile_discord_score", "末尾子序列到最近历史子序列距离（离群度，novelty canonical，history_window 截断回溯）。m 必须为 >=3 整数，history_window 必须为正整数，非法值报错不静默截断（M-101/M-102）。", ["x", "m", "history_window"], "level",
+           lambda x, m=20, history_window=252: _apply(x, lambda v: _mp_stats(v, m, "discord", history_window)))
 # P1-93 / round-7: ``motif_distance`` is the same novelty value as
 # ``discord_score``.  The canonical is ``ts_matrix_profile_discord_score``; this
 # name is a registry compatibility alias — a single canonical, NOT a second
@@ -122,5 +141,5 @@ OperatorRegistry.register_compat_alias(
     deprecated_since="2026-08",
     removal_version="1.0",
 )
-_register("ts_motif_recurrence_count", "相似历史模式出现次数（近邻计数，history_window 截断回溯）。", ["x", "m", "history_window"], "count",
-           lambda x, m=20, history_window=252: _apply(x, lambda v: _mp_stats(v, int(m), "recurrence", int(history_window))))
+_register("ts_motif_recurrence_count", "相似历史模式出现次数（近邻计数，history_window 截断回溯）。m 必须为 >=3 整数，history_window 必须为正整数，非法值报错不静默截断（M-101/M-102）。", ["x", "m", "history_window"], "count",
+           lambda x, m=20, history_window=252: _apply(x, lambda v: _mp_stats(v, m, "recurrence", history_window)))

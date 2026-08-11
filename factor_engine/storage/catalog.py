@@ -135,14 +135,25 @@ class CatalogJsonField(Generic[T]):
 
     _ENVELOPE_KEYS = frozenset({"schema_version", "checksum", "value"})
 
-    def dumps(self, *, checksum: bool = True) -> str:
-        """严格序列化（含可选 checksum 信封）。"""
+    def dumps(self) -> str:
+        """严格序列化（R40 #107：production 序列化永远带 checksum，禁省略）。
+
+        ``checksum=False`` 会让损坏/篡改在 reads 时无法被检测 —— 序列化端不可
+        选择省略。需要 legacy 无 checksum 格式时显式用 :meth:`dumps_legacy`。
+        """
         payload: dict[str, Any] = {
             "schema_version": self.schema_version,
             "value": self.value,
         }
-        if checksum:
-            payload["checksum"] = _canonical_checksum(self.value)
+        payload["checksum"] = _canonical_checksum(self.value)
+        return catalog_strict_dumps(payload)
+
+    def dumps_legacy(self) -> str:
+        """R40 #107：legacy 兼容的无 checksum 信封序列化（仅供旧格式写入路径）。"""
+        payload: dict[str, Any] = {
+            "schema_version": self.schema_version,
+            "value": self.value,
+        }
         return catalog_strict_dumps(payload)
 
     @classmethod
@@ -165,19 +176,36 @@ class CatalogJsonField(Generic[T]):
                 value = migrate(value)
             return cls(value, schema_version=schema_version)
         sv = int(parsed.get("schema_version", 1))
+        # R40 #105: 未来 schema 版本必须显式迁移，绝不允许静默接受。
+        if sv > schema_version:
+            raise CatalogCorruptionError(
+                f"catalog typed JSON 字段 schema_version={sv} 高于当前支持 "
+                f"{schema_version}；需要显式 schema migration，拒绝静默接受"
+            )
         value = parsed.get("value")
+        checksum = parsed.get("checksum")
+        # R40 #106: 迁移前必须先校验**旧值**的旧 checksum —— 否则被篡改的旧值
+        # 先被「迁移」掩盖，损坏到迁移完成后才暴露（甚至永远不暴露）。
+        if checksum:
+            if sv < schema_version:
+                # 此时 value 仍是迁移前旧值 —— 用信封里的旧 checksum 校验。
+                actual = _canonical_checksum(value)
+                if actual != str(checksum):
+                    raise CatalogCorruptionError(
+                        f"catalog typed JSON 字段旧值 checksum 不匹配（迁移前数据"
+                        f"损坏/篡改）: expected={checksum}, actual={actual}"
+                    )
+            else:
+                actual = _canonical_checksum(value)
+                if actual != str(checksum):
+                    raise CatalogCorruptionError(
+                        f"catalog typed JSON 字段 checksum 不匹配（数据损坏或篡改）: "
+                        f"expected={checksum}, actual={actual}"
+                    )
         if migrate is not None:
             while sv < schema_version:
                 value = migrate(value)
                 sv += 1
-        checksum = parsed.get("checksum")
-        if checksum:
-            actual = _canonical_checksum(value)
-            if actual != str(checksum):
-                raise CatalogCorruptionError(
-                    f"catalog typed JSON 字段 checksum 不匹配（数据损坏或篡改）: "
-                    f"expected={checksum}, actual={actual}"
-                )
         return cls(value, schema_version=sv)
 
 
@@ -202,13 +230,14 @@ def _parse_json_field(
         return {}
     if isinstance(raw, dict):
         return raw
-    strict_effective = _resolve_strict(strict)
+    # R40 #108: 非 dict/str/bytes 原始类型（标量 5、列表 [1,2,3]）一律抛
+    # CatalogCorruptionError —— 即使非 strict 也不能静默当 ``{}``（把损坏伪装成
+    # 「config 缺失」）。``{broken`` 这类坏 JSON **字符串**仍按 strict 开关处理。
     if not isinstance(raw, (str, bytes)):
-        if strict_effective:
-            raise CatalogCorruptionError(
-                f"catalog JSON 字段类型非法 {type(raw).__name__}（期望 str/dict）"
-            )
-        return {}
+        raise CatalogCorruptionError(
+            f"catalog JSON 字段类型非法 {type(raw).__name__}（期望 str/dict）"
+        )
+    strict_effective = _resolve_strict(strict)
     try:
         text = raw if isinstance(raw, str) else raw.decode("utf-8")
         parsed = json.loads(text)

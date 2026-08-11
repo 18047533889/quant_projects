@@ -23,14 +23,76 @@ _LOWERING_SEMANTIC_VERSION = "1"
 #: payload/meta 的防护）。历史实现 ``dict[str, Lock]`` 对每个唯一 key 保留
 #: Lock，per-key 表会无限增长。现在用有界 LRU（最多 ``_SAVE_LOCK_MAX`` 个锁，
 #: 超限时淘汰最久未用的 key）。
+#: R40 #120: 淘汰只允许命中 refcount==0 的 key —— 正被 ``with`` 持有的锁绝不
+#: 淘汰。refcount 在 ``__enter__`` 递增 / ``__exit__`` 递减（``_RefCountedSaveLock``）。
 _SAVE_LOCKS: dict[str, threading.Lock] = {}
 _SAVE_LOCKS_GUARD = threading.Lock()
 _SAVE_LOCKS_ORDER: list[str] = []
+_SAVE_LOCK_REFS: dict[str, int] = {}
 _SAVE_LOCK_MAX = 4096
 
 
-def _save_lock_for(key: str) -> threading.Lock:
-    """R32-P1-045: bounded lock registry —— 超限淘汰最久未用 key。"""
+class _RefCountedSaveLock:
+    """R40 #120: context-manager 包装的 per-key 写锁。
+
+    ``__enter__`` 在 ``_SAVE_LOCKS_GUARD`` 内把该 key 的 refcount +1（并重新取
+    当前 registry 里的锁 —— 若在 ``_save_lock_for`` 与 ``__enter__`` 之间被
+    淘汰，则取/建新锁，绝不在孤儿锁上序列化），``__exit__`` -1。持有期间
+    refcount > 0，LRU 淘汰永不命中该 key。
+    """
+
+    __slots__ = ("_key", "_lock", "_acquired")
+
+    def __init__(self, key: str) -> None:
+        self._key = key
+        self._lock: threading.Lock | None = None
+        self._acquired = False
+
+    def __enter__(self) -> "_RefCountedSaveLock":
+        with _SAVE_LOCKS_GUARD:
+            lock = _SAVE_LOCKS.get(self._key)
+            if lock is None:
+                lock = threading.Lock()
+                _SAVE_LOCKS[self._key] = lock
+                _SAVE_LOCKS_ORDER.append(self._key)
+            else:
+                try:
+                    _SAVE_LOCKS_ORDER.remove(self._key)
+                except ValueError:
+                    pass
+                _SAVE_LOCKS_ORDER.append(self._key)
+            _SAVE_LOCK_REFS[self._key] = _SAVE_LOCK_REFS.get(self._key, 0) + 1
+            self._lock = lock
+        self._lock.acquire()
+        self._acquired = True
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        try:
+            if self._lock is not None:
+                self._lock.release()
+        finally:
+            with _SAVE_LOCKS_GUARD:
+                refs = _SAVE_LOCK_REFS.get(self._key, 0) - 1
+                if refs > 0:
+                    _SAVE_LOCK_REFS[self._key] = refs
+                else:
+                    _SAVE_LOCK_REFS.pop(self._key, None)
+            self._acquired = False
+
+    @property
+    def lock(self) -> threading.Lock:
+        assert self._lock is not None
+        return self._lock
+
+
+def _save_lock_for(key: str) -> _RefCountedSaveLock:
+    """R32-P1-045 + R40 #120: bounded lock registry —— 只淘汰 refcount==0 的 key。
+
+    返回 context-manager 包装器（``with _save_lock_for(key):``）。超限时只淘汰
+    最久未用且**当前无 writer 持有**（refcount==0）的 key；全部 key 都在持有时
+    暂不淘汰（有界性退化为"同时持有锁的数量"）。
+    """
     global _SAVE_LOCKS, _SAVE_LOCKS_ORDER
     with _SAVE_LOCKS_GUARD:
         lock = _SAVE_LOCKS.get(key)
@@ -40,14 +102,21 @@ def _save_lock_for(key: str) -> threading.Lock:
             except ValueError:
                 pass
             _SAVE_LOCKS_ORDER.append(key)
-            return lock
-        lock = threading.Lock()
-        _SAVE_LOCKS[key] = lock
-        _SAVE_LOCKS_ORDER.append(key)
+        else:
+            lock = threading.Lock()
+            _SAVE_LOCKS[key] = lock
+            _SAVE_LOCKS_ORDER.append(key)
         while len(_SAVE_LOCKS) > _SAVE_LOCK_MAX:
-            oldest = _SAVE_LOCKS_ORDER.pop(0)
+            oldest = next(
+                (c for c in _SAVE_LOCKS_ORDER if _SAVE_LOCK_REFS.get(c, 0) == 0),
+                None,
+            )
+            if oldest is None:
+                break  # 所有锁都在持有中：绝不淘汰正被持有的锁
+            _SAVE_LOCKS_ORDER.remove(oldest)
             _SAVE_LOCKS.pop(oldest, None)
-        return lock
+            _SAVE_LOCK_REFS.pop(oldest, None)
+        return _RefCountedSaveLock(key)
 
 
 def _governor():

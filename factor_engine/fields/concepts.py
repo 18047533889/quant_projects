@@ -74,6 +74,8 @@ FLOW_SEMANTICS_STOCK = "stock"
 FLOW_SEMANTICS_SINGLE_PERIOD = "single_period_flow"
 FLOW_SEMANTICS_CUMULATIVE_YTD = "cumulative_ytd_flow"
 FLOW_SEMANTICS_TTM = "ttm_flow"
+# R40 #131: annual reporting-flow (e.g. US 10-K annual income/cashflow).
+FLOW_SEMANTICS_ANNUAL = "annual_flow"
 
 # role vocabulary
 ROLE_FEATURE = "feature"
@@ -83,6 +85,34 @@ ROLE_TIME = "time"
 ROLE_IDENTIFIER = "identifier"
 # R17-067: continuous weight (index weight, portfolio weight) — NOT a group key.
 ROLE_WEIGHT = "weight"
+
+
+#: R40 #218: keys that are ECONOMIC SEMANTIC dimensions of a concept.  They must
+#: live in explicit fields / ``semantic_extensions`` — never hidden in a loose
+#: ``descriptive_metadata`` dict (which does not enter compare/hash).
+_SEMANTIC_CONCEPT_KEYS = frozenset({
+    "concept_id", "domain", "value_kind", "canonical_unit", "unit", "frequency",
+    "grain", "role", "price_basis", "flow_semantics", "period_duration",
+    "cross_market_comparable", "unit_comparable", "definition_comparable",
+    "cross_market_rank_allowed", "market_local_only", "allowed_operator_families",
+    "missing_policy", "pit_safe", "temporal_model",
+})
+
+
+def validate_concept_metadata(descriptive: dict[str, Any]) -> None:
+    """R40 #218: forbid hiding a known SEMANTIC key in descriptive metadata.
+
+    A semantic dimension must be declared explicitly (or in
+    ``semantic_extensions``); a loose descriptive dict carrying it would evade
+    identity/compare/hash and let two concepts with the same visible fields but
+    different hidden semantics collide.
+    """
+    hidden = sorted(_SEMANTIC_CONCEPT_KEYS.intersection(str(k).lower() for k in descriptive))
+    if hidden:
+        raise ValueError(
+            f"concept descriptive_metadata must not carry semantic keys {hidden}; "
+            "declare them as explicit fields or in semantic_extensions (R40 #218)"
+        )
 
 
 @dataclass(frozen=True)
@@ -111,6 +141,14 @@ class FieldConceptSpec:
     allowed_operator_families: tuple[str, ...] = ()
     description: str = ""
     aliases: tuple[str, ...] = ()
+    # R40 #218: semantic_extensions ENTER identity/compare/hash; a loose
+    # descriptive_metadata dict does NOT.  A semantic key hidden in
+    # descriptive_metadata is rejected by ``validate_concept_metadata``.
+    semantic_extensions: dict[str, Any] = field(default_factory=dict, compare=True, hash=True)
+    descriptive_metadata: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        validate_concept_metadata(dict(self.descriptive_metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -132,6 +170,8 @@ class FieldConceptSpec:
             "allowed_operator_families": list(self.allowed_operator_families),
             "aliases": list(self.aliases),
             "description": self.description,
+            "semantic_extensions": dict(self.semantic_extensions),
+            "descriptive_metadata": dict(self.descriptive_metadata),
         }
 
 
@@ -372,6 +412,123 @@ _c("news_sentiment", "alternative", "ratio", RATIO, market_local_only=True,
   description="News sentiment. US-only in current data.")
 _c("holder_concentration", "alternative", "ratio", RATIO, market_local_only=True,
   description="Top-holder concentration. A-share only in current data.")
+
+
+class FieldLegalityError(ValueError):
+    """R40 #219: a field/operator combination violates the field legality pass."""
+
+
+def check_field_legality(
+    concept: FieldConceptSpec,
+    *,
+    operator_family: str | None = None,
+    role: str | None = None,
+    value_kind: str | None = None,
+    missing_policy: str | None = None,
+    mining_allowed: bool | None = None,
+    pit_safe: bool | None = None,
+    unit: UnitSpec | None = None,
+) -> list[str]:
+    """R40 #219: the field legality pass — 8-dimension operator eligibility check.
+
+    The compiler MUST consult ``allowed_operator_families`` (previously declared
+    + serialized but never read).  The check covers:
+      1. operator family allowed (against ``allowed_operator_families``)
+      2. role applicability (a group_key is not a numeric feature)
+      3. value_kind applicability
+      4. missing/null policy vs declared constraints
+      5. mining_allowed flag
+      6. PIT safety constraint
+      7. unit compatibility (numeric dimension vs ratio/pure)
+      8. (structure) cross-market rank eligibility
+
+    Returns a list of human-readable violations (empty == legal).  Callers
+    raise :class:`FieldLegalityError` from the list.
+    """
+    errors: list[str] = []
+    # 1. operator family
+    if operator_family and concept.allowed_operator_families:
+        if operator_family not in concept.allowed_operator_families:
+            errors.append(
+                f"operator family {operator_family!r} is not allowed for concept "
+                f"{concept.concept_id!r} (allowed: {sorted(concept.allowed_operator_families)})"
+            )
+    # 2. role applicability
+    if role and role != concept.role:
+        if concept.role == ROLE_GROUP_KEY and role != ROLE_GROUP_KEY:
+            errors.append(
+                f"concept {concept.concept_id!r} is a group key; it cannot be used "
+                "as a numeric feature"
+            )
+    # 3. value_kind
+    if value_kind and concept.value_kind and value_kind != concept.value_kind:
+        errors.append(
+            f"value_kind {value_kind!r} does not match concept {concept.concept_id!r} "
+            f"declared value_kind {concept.value_kind!r}"
+        )
+    # 4. missing policy
+    if missing_policy and concept.semantic_extensions.get("missing_policy"):
+        declared = concept.semantic_extensions["missing_policy"]
+        if declared == "forbid_forward_fill" and missing_policy not in {"none", "forbid"}:
+            errors.append(
+                f"concept {concept.concept_id!r} forbids forward-fill; missing_policy "
+                f"{missing_policy!r} is illegal"
+            )
+    # 5. mining_allowed
+    if mining_allowed is True and concept.semantic_extensions.get("mining_allowed") is False:
+        errors.append(
+            f"concept {concept.concept_id!r} is not mining-searchable"
+        )
+    # 6. PIT
+    if pit_safe is True and concept.semantic_extensions.get("pit_safe") is False:
+        errors.append(f"concept {concept.concept_id!r} is not PIT-safe")
+    # 7. unit
+    if unit is not None:
+        if concept.canonical_unit.is_ratio and not unit.is_ratio:
+            errors.append(
+                f"concept {concept.concept_id!r} is a ratio; a non-ratio unit "
+                f"{unit!r} is illegal"
+            )
+        if (concept.canonical_unit.is_price or concept.canonical_unit.is_money) and unit.is_ratio:
+            errors.append(
+                f"concept {concept.concept_id!r} is a price/money level; a ratio "
+                f"unit {unit!r} is illegal"
+            )
+    # 8. cross-market rank
+    if operator_family in {"rank", "cs_rank"} and concept.cross_market_rank_allowed is False and concept.market_local_only is False:
+        # rank of a non-cross-market-comparable concept is a soft warning; only
+        # a hard reject when the concept explicitly forbids it.
+        if concept.semantic_extensions.get("forbid_cross_market_rank") is True:
+            errors.append(
+                f"concept {concept.concept_id!r} explicitly forbids cross-market rank"
+            )
+    return errors
+
+
+def assert_field_legality(
+    concept: FieldConceptSpec,
+    *,
+    operator_family: str | None = None,
+    role: str | None = None,
+    value_kind: str | None = None,
+    missing_policy: str | None = None,
+    mining_allowed: bool | None = None,
+    pit_safe: bool | None = None,
+    unit: UnitSpec | None = None,
+) -> None:
+    """Raise :class:`FieldLegalityError` when the legality pass finds violations."""
+    errors = check_field_legality(
+        concept,
+        operator_family=operator_family,
+        role=role,
+        value_kind=value_kind,
+        missing_policy=missing_policy,
+        mining_allowed=mining_allowed,
+        pit_safe=pit_safe,
+        unit=unit,
+    )
+    if errors:
+        raise FieldLegalityError("; ".join(errors))
 
 
 def get_concept(concept_id: str) -> FieldConceptSpec | None:

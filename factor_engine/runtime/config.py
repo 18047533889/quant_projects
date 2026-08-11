@@ -1,5 +1,7 @@
 """Strongly typed FactorEngine YAML configuration."""
 from __future__ import annotations
+import json  # R40 #76: canonical_config_hash 依赖 json.dumps，此前模块级缺 import
+import re  # R40 #83: canonical hash 的 DSN 凭据脱敏
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -212,6 +214,108 @@ def _strict_int(value: Any, *, name: str) -> int:
     raise ValueError(f"config field {name!r}: expected an integer, got {value!r}")
 
 
+def _string_to_string_dict(value: Any, *, name: str) -> dict[str, str]:
+    """严格校验 string→string 映射（fields/joins/aliases）。"""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a mapping, got {type(value).__name__}")
+    out: dict[str, str] = {}
+    for k, v in value.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise ValueError(
+                f"{name} entries must be string→string, got {k!r}→{v!r}"
+            )
+        out[k] = v
+    return out
+
+
+@dataclass(frozen=True)
+class TypedDataSourceOptions:
+    """R40 #135: nested source config（composite/production options）的 typed coercion。
+
+    ``load_config`` 里 data_source 的 options（含 composite ``sources`` 下每个
+    子源的 options）统一经 :meth:`from_dict` 严格类型化：布尔走 ``_strict_bool``、
+    整数走 ``_strict_int``、已知结构字段做类型校验，未知键透传进 ``extra``
+    （避免过度拒绝破坏既有配置）。``to_dict()`` 还原普通 dict —— 下游
+    ``build_data_source_config`` 仍按 dict 展开（config.data_source.options 保持
+    dict 契约）。
+    """
+
+    dataset: str | None = None
+    fields: dict[str, str] | None = None
+    root: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    timestamp_col: str | None = None
+    instrument_col: str | None = None
+    anchor: str | None = None
+    anchor_column: str | None = None
+    sources: dict[str, "TypedDataSourceOptions"] | None = None
+    joins: dict[str, str] | None = None
+    aliases: dict[str, str] | None = None
+    max_files: int | None = None
+    read_auto: bool = False
+    snapshot_only: bool = False
+    normalize_timestamp: bool = False
+    join_policy: str | None = None
+    usage: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, raw: Any) -> "TypedDataSourceOptions":
+        if raw is None:
+            return cls()
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"data_source options must be a mapping, got {type(raw).__name__}"
+            )
+        out: dict[str, Any] = {}
+        extra: dict[str, Any] = {}
+        for k, v in raw.items():
+            if v is None:
+                continue
+            key = str(k)
+            if key in {
+                "dataset", "root", "start_date", "end_date", "timestamp_col",
+                "instrument_col", "anchor", "anchor_column", "join_policy", "usage",
+            }:
+                out[key] = str(v)
+            elif key in {"read_auto", "snapshot_only", "normalize_timestamp"}:
+                out[key] = _strict_bool(v, name=f"data_source.options.{key}")
+            elif key == "max_files":
+                out[key] = _strict_int(v, name="data_source.options.max_files")
+            elif key in {"fields", "joins", "aliases"}:
+                out[key] = _string_to_string_dict(
+                    v, name=f"data_source.options.{key}"
+                )
+            elif key == "sources":
+                if not isinstance(v, dict):
+                    raise ValueError(
+                        "data_source.options.sources must be a mapping of nested sources"
+                    )
+                out[key] = {
+                    str(name): cls.from_dict(sub) for name, sub in v.items()
+                }
+            else:
+                extra[key] = v
+        return cls(**out, extra=extra)
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = dict(self.extra)
+        for k in self.__dataclass_fields__:
+            if k == "extra":
+                continue
+            v = getattr(self, k)
+            if v is None:
+                continue
+            if k == "sources":
+                out[k] = {name: sub.to_dict() for name, sub in v.items()}
+            else:
+                out[k] = v
+        return out
+
+
 def _forbid_unknown(section: dict[str, Any], allowed: set[str], *, name: str) -> None:
     """Fail-fast on unknown keys (R10 #9).
 
@@ -260,66 +364,159 @@ def _factor_dialect(factor_payload: dict[str,Any]) -> tuple[str,str,str|None]:
 CONFIG_SCHEMA_VERSION = 1
 
 
-def _validate_config_schema_version(payload: dict[str, Any]) -> None:
-    """R21-217..219: config schema_version + unknown-field policy.
+#: R40 #78(d): 缺失 ``schema_version`` 的显式 legacy 策略。缺省允许（向后兼容
+#: 历史配置文件），但这是**显式策略决策**，不是「静默当 current」——缺失时按
+#: legacy(schema_version=0) 处理；``allow_missing=False`` 时缺失直接拒绝。
+_ALLOW_MISSING_SCHEMA_VERSION = True
 
-    ``schema_version`` absent => latest supported; a newer version is rejected
-    (forward migration must be explicit, never silently ignored).  Unknown
-    top-level keys are already rejected by ``_forbid_unknown``.
+
+def _validate_config_schema_version(
+    payload: dict[str, Any], *, allow_missing: bool = True
+) -> None:
+    """R21-217..219 + R40 #78: config schema_version 严格校验。
+
+    - ``schema_version`` 缺失 => 显式 legacy 策略（``allow_missing`` 缺省放行，
+      但绝不会被当作 current）；``allow_missing=False`` 时缺失直接报错；
+    - bool 值（``True``/``False`` 在 Python 是 int）必须拒绝 —— ``True`` 曾
+      被 ``int(True)=1`` 误判为 current；
+    - 负数 / 0 拒绝；
+    - 更新于支持版本 => 拒绝（前向迁移必须显式）；
+    - ``0 < version < CONFIG_SCHEMA_VERSION`` => 拒绝并给出迁移指引（本 repo
+      尚无迁移链，绝不静默跳过）。
     """
     version = payload.get("schema_version")
     if version is None:
-        return
+        if allow_missing:
+            return  # 显式 legacy 策略：按 schema_version=0（无迁移链）处理
+        raise ValueError(
+            "config schema_version is missing; set schema_version=<current> or "
+            "declare an explicit legacy-schema policy"
+        )
+    if isinstance(version, bool):
+        raise ValueError(
+            f"config schema_version must be an integer, got bool {version!r} "
+            "(True/False are ints in Python and would silently pass as 1/0)"
+        )
     try:
         version_int = int(version)
     except (TypeError, ValueError):
         raise ValueError(f"config schema_version must be an integer, got {version!r}") from None
+    if version_int < 0:
+        raise ValueError(
+            f"config schema_version={version_int} is negative; must be >= 1"
+        )
+    if version_int == 0:
+        raise ValueError(
+            f"config schema_version=0 is invalid; use schema_version="
+            f"{CONFIG_SCHEMA_VERSION} or declare an explicit legacy-schema policy"
+        )
     if version_int > CONFIG_SCHEMA_VERSION:
         raise ValueError(
             f"config schema_version={version_int} is newer than supported "
             f"{CONFIG_SCHEMA_VERSION}; run an explicit config migration"
         )
+    if version_int < CONFIG_SCHEMA_VERSION:
+        raise ValueError(
+            f"config schema_version={version_int} is older than supported "
+            f"{CONFIG_SCHEMA_VERSION}; a migration chain is required — run the "
+            "explicit config migration before loading"
+        )
+
+
+#: R40 #83: canonical hash 前必须剥除的敏感字段名子串（与 ``service.errors``
+#: 的边界脱敏保持同一策略：password/token/secret/api_key/… 绝不进 hash 依赖）。
+_SECRET_KEY_SUBSTRINGS = (
+    "password", "token", "secret", "api_key", "apikey", "authorization",
+    "dsn", "access_key", "private_key",
+)
+
+_DSN_CREDENTIAL_RE = re.compile(r"(?i)([a-z0-9+]+://)([^/\s:@]+)(:[^/\s@]+)?@")
+
+
+def _redact_dsn_credentials(text: str) -> str:
+    """剥掉 URL/DSN 字符串里的 ``user:password@`` 凭据段。"""
+    return _DSN_CREDENTIAL_RE.sub(r"\1<redacted>@", str(text))
+
+
+def _is_secret_key(key: Any) -> bool:
+    lowered = str(key).lower()
+    return any(seg in lowered for seg in _SECRET_KEY_SUBSTRINGS)
+
+
+def _redact_secrets_for_hash(obj: Any) -> Any:
+    """递归脱敏后返回**可哈希 canonical** 结构（R40 #83）。
+
+    - 字段名含 ``*password*``/``*token*``/``*secret*``/``*api_key*`` 等 => 值替换
+      为 ``"<redacted>"``（不同凭据 → 相同 hash）；
+    - 字符串里的 DSN 凭据（``scheme://user:pass@``）=> 剥除；
+    - 其余结构原样递归，保持确定性排序。
+    """
+    from dataclasses import asdict, is_dataclass
+
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return {
+            k: _redact_secrets_for_hash(v)
+            for k, v in asdict(obj).items()
+            if v is not None
+        }
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for k, v in sorted(obj.items()):
+            if v is None:
+                continue
+            out[k] = "<redacted>" if _is_secret_key(k) else _redact_secrets_for_hash(v)
+        return out
+    if isinstance(obj, (list, tuple)):
+        return [_redact_secrets_for_hash(v) for v in obj]
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, str):
+        return _redact_dsn_credentials(obj)
+    return obj
 
 
 def canonical_config_hash(config: "FactorEngineConfig") -> str:
-    """R21-220: reproducible canonical serialization/hash of a parsed config."""
+    """R21-220 + R40 #83: reproducible canonical hash of a parsed config.
+
+    先经 :func:`_redact_secrets_for_hash` 剥除密码/token/secret/api_key/DSN
+    凭据再 hashing —— 同一配置仅凭据不同 ⇒ 相同 hash（hash 永远不携带机密）。
+    """
     import hashlib
 
-    from dataclasses import asdict, is_dataclass
-
-    def _clean(obj: Any) -> Any:
-        if is_dataclass(obj):
-            return {k: _clean(v) for k, v in asdict(obj).items() if v is not None}
-        if isinstance(obj, dict):
-            return {k: _clean(v) for k, v in sorted(obj.items()) if v is not None}
-        if isinstance(obj, (list, tuple)):
-            return [_clean(v) for v in obj]
-        if isinstance(obj, Path):
-            return str(obj)
-        return obj
-
-    canonical = json.dumps(_clean(config), sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        _redact_secrets_for_hash(config),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig:
     config_path=Path(path); payload=yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload,dict): raise ValueError(f"Config must be a mapping: {config_path}")
-    _validate_config_schema_version(payload)
     profile_name=profile or payload.get("profile")
-    if profile_name: payload=_deep_merge(load_profile(str(profile_name)),payload)
+    if profile_name:
+        profile_payload = load_profile(str(profile_name))
+        # R40 #79: profile 文件可能携带「documented, not consumed」的
+        # data_access/label 段 —— 合并前剥掉，让 merged payload 通过严格
+        # top-level allowed set；用户自己配置里的 data_access/label 仍会被拒。
+        for _k in ("data_access", "label"):
+            profile_payload.pop(_k, None)
+        payload=_deep_merge(profile_payload,payload)
+    # R40 #77: schema_version 校验必须在 **merge 之后** —— 否则 profile 注入的
+    # 更高 schema_version 字段可绕过 schema 门（raw payload 校验时还没有该字段）。
+    _validate_config_schema_version(payload)
     base_dir=config_path.parent.resolve()
     # R10 #9: extra="forbid" semantics — a typo like ``run: {mdoe: production}``
     # must fail fast instead of silently falling back to research.
+    # R40 #79: data_access/label 从 allowed set 移除（DataAccess 由独立
+    # dataaccess/ 包自管，loader 不消费这两个段）→ 出现即 fail-fast。
     _forbid_unknown(
         payload,
         {
             "factor","data_source","backend","engine","run","dq","pit",
             "pipeline","materialization","materialize","profile",
             "schema_version",
-            # existing profile sections (merged into the payload from
-            # examples/profiles/*.yaml) — documented, not consumed by loader.
-            "data_access","label",
         },
         name="config",
     )
@@ -340,7 +537,15 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
     # is removed.
     parser_surface="lqtp" if dialect=="lqtp" else canonical_surface
     factor_config=FactorDefinitionConfig(name=str(fp["name"]),expr=str(fp["expr"]),freq=str(fp.get("freq","1d")),universe=fp.get("universe"),description=fp.get("description"),surface=parser_surface,dialect=dialect,dialect_version=version)
-    data_source_config=DataSourceConfig(type=str(dsp["type"]),options={k:v for k,v in dsp.items() if k!="type"})
+    # R40 #135: nested source options（含 composite sources 下每个子源）统一走
+    # TypedDataSourceOptions typed coercion（严格布尔/整数/结构校验），再还原为
+    # dict —— 下游 build_data_source_config 按 dict 展开的契约不变。
+    data_source_config=DataSourceConfig(
+        type=str(dsp["type"]),
+        options=TypedDataSourceOptions.from_dict(
+            {k:v for k,v in dsp.items() if k!="type"}
+        ).to_dict(),
+    )
     backend_config=BackendConfig(type=str(bp.get("type","auto")))
     engine_config=EngineConfig(enable_cache=_strict_bool(ep.get("enable_cache",True),name="engine.enable_cache"),plan_cache_dir=_resolve_optional_path(ep.get("plan_cache_dir"),base_dir=base_dir))
     materialization_config=None

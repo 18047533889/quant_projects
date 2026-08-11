@@ -28,6 +28,130 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import numpy as np
 
 # ---------------------------------------------------------------------------
+# R40 本地内核（不依赖 cleaned_operators 包——registry 可能被并发会话编辑）。
+# ---------------------------------------------------------------------------
+
+
+def _r40_rank_1d(arr: np.ndarray) -> np.ndarray:
+    """本地 percent rank（average-tie，与 ``_numpy_kernels.rank_`` 语义一致）。
+
+    average-tie 保证 column-permutation equivariance（#257）：并列值无论列怎么
+    换都得到同一 rank。
+    """
+    arr = np.asarray(arr, dtype=float)
+    valid = np.isfinite(arr)
+    out = np.full(arr.shape, np.nan, dtype=float)
+    n = int(valid.sum())
+    if n == 0:
+        return out
+    vals = arr[valid]
+    order = np.argsort(vals, kind="mergesort")
+    ranks = np.empty(n, dtype=float)
+    ranks[order] = np.arange(1, n + 1, dtype=float)
+    # average ties：对每个相等值分组取平均 rank。
+    sorted_vals = vals[order]
+    i = 0
+    while i < n:
+        j = i
+        while j < n and sorted_vals[j] == sorted_vals[i]:
+            j += 1
+        avg = (i + 1 + j) / 2.0
+        for k in range(i, j):
+            ranks[order[k]] = avg
+        i = j
+    if n > 1:
+        out[valid] = (ranks - 1.0) / (n - 1.0)
+    else:
+        out[valid] = 0.5
+    return out
+
+
+def _r40_cs_resid(y, x):
+    """本地截面回归残差（与 ``_numpy_kernels.cs_resid_`` 语义一致）。"""
+    yv = np.asarray(y, dtype=float)
+    xv = np.asarray(x, dtype=float)
+    valid = np.isfinite(yv) & np.isfinite(xv)
+    result = np.full_like(yv, np.nan)
+    if int(valid.sum()) < 3:
+        return result
+    xv = xv[valid]
+    yv = yv[valid]
+    mx = xv.mean()
+    my = yv.mean()
+    xc = xv - mx
+    var_x = float((xc * xc).mean())
+    if not math.isfinite(var_x) or var_x < 1e-14:
+        return result
+    beta = float((xc * (yv - my)).mean()) / var_x
+    alpha = my - beta * mx
+    result[valid] = yv - (alpha + beta * xv)
+    return result
+
+
+def _r40_cs_regression(y, x, mode: int = 0):
+    yv = np.asarray(y, dtype=float)
+    xv = np.asarray(x, dtype=float)
+    valid = np.isfinite(yv) & np.isfinite(xv)
+    result = np.full_like(yv, np.nan)
+    if int(valid.sum()) < 3:
+        return result
+    xv = xv[valid]
+    yv = yv[valid]
+    mx = xv.mean()
+    my = yv.mean()
+    xc = xv - mx
+    var_x = float((xc * xc).mean())
+    if not math.isfinite(var_x) or var_x < 1e-14:
+        return result
+    beta = float((xc * (yv - my)).mean()) / var_x
+    alpha = my - beta * mx
+    if mode == 0:
+        result[valid] = yv - (alpha + beta * xv)
+    elif mode == 1:
+        result[valid] = beta
+    else:
+        result[valid] = alpha + beta * xv
+    return result
+
+
+def _r40_ts_regression_slope(x, y, d: int) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    out = np.full(x.shape, np.nan, dtype=float)
+    if d <= 0:
+        return out
+    for i in range(d - 1, len(x)):
+        xw = x[i - d + 1 : i + 1]
+        yw = y[i - d + 1 : i + 1]
+        valid = np.isfinite(xw) & np.isfinite(yw)
+        if int(valid.sum()) >= 3:
+            xv = xw[valid]
+            yv = yw[valid]
+            xc = xv - xv.mean()
+            sxx = float((xc * xc).sum())
+            if sxx > 1e-14:
+                out[i] = float((xc * (yv - yv.mean())).sum()) / sxx
+    return out
+
+
+def _r40_ts_rank_corr(x, y, d: int) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    out = np.full(x.shape, np.nan, dtype=float)
+    if d <= 0:
+        return out
+    for i in range(d - 1, len(x)):
+        xw = x[i - d + 1 : i + 1]
+        yw = y[i - d + 1 : i + 1]
+        valid = np.isfinite(xw) & np.isfinite(yw)
+        if int(valid.sum()) >= 3:
+            rx = _r40_rank_1d(xw[valid])
+            ry = _r40_rank_1d(yw[valid])
+            c = np.corrcoef(rx, ry)[0, 1]
+            out[i] = c if np.isfinite(c) else np.nan
+    return out
+
+# ---------------------------------------------------------------------------
 # R19-130: M01..M20 release-blocker constants
 # ---------------------------------------------------------------------------
 
@@ -550,6 +674,135 @@ def check_positive_scale_invariance(
                              f"fn({scale}x) == fn(x)" if ok else "mismatch")
 
 
+def check_permutation_equivariance_all_tie_sensitive_operators(
+    n_rows: int = 12,
+    n_cols: int = 6,
+    *,
+    seed: int = 11,
+    rtol: float = 1e-8,
+    atol: float = 1e-10,
+) -> tuple[bool, dict[str, Any]]:
+    """R40 #257：所有 tie-sensitive 算子（quantile_bucket / topk / group_rank /
+    winsorize / neutralize / cs_regression）的 column-permutation equivariance
+    property test。
+
+    ``fn(x[:, p])[:, p⁻¹] == fn(x)`` —— 截面内列重排不改变任何名字的输出。
+    使用**独立 numpy kernel 实现**（不依赖可能被并发编辑的 operator registry），
+    逐行复刻各算子的截面语义。返回 ``(all_ok, {canonical: ok})``，可被
+    ``scripts/audit_r40_hard_gates.py`` 复用。
+    """
+    import pandas as pd
+
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal((n_rows, n_cols))
+    x[:, 1] = x[:, 0]  # ties
+    x[3, :] = np.nan   # internal hole row
+    y = rng.standard_normal((n_rows, n_cols))
+    perm = rng.permutation(n_cols)
+    inv = np.empty_like(perm)
+    inv[perm] = np.arange(n_cols)
+    groups = np.resize(np.array(["A", "A", "B", "B", "C", "C"], dtype=object), n_cols)
+
+    def _rowwise(fn1d, data, ydata):
+        """把一维列函数应用到每行（截面语义），保持 (rows, cols)。"""
+        out = np.full((n_rows, n_cols), np.nan, dtype=float)
+        for i in range(n_rows):
+            out[i] = fn1d(data[i], ydata[i], groups)
+        return out
+
+    def _quantile_bucket_1d(row, _y, _g):
+        valid = np.isfinite(row)
+        r = _r40_rank_1d(row)
+        b = np.full(row.shape, np.nan)
+        b[valid] = np.minimum(np.floor(r[valid] * 4.0), 3.0)
+        return b
+
+    def _topk_1d(row, _y, _g, k: int = 2):
+        valid = np.isfinite(row)
+        out = np.zeros(row.shape, dtype=float)
+        if int(valid.sum()) >= k:
+            thr = -np.sort(-row[valid])[k - 1]
+            out = (row >= thr).astype(float)
+        out[~valid] = np.nan
+        return out
+
+    def _group_rank_1d(row, g):
+        valid = np.isfinite(row)
+        out = np.full(row.shape, np.nan)
+        if valid.any():
+            codes, _uniques = pd.factorize(g[valid])
+            ranks = np.full(valid.sum(), np.nan)
+            for c in np.unique(codes):
+                m = codes == c
+                ranks[m] = _r40_rank_1d(row[valid][m])
+            out[valid] = ranks
+        return out
+
+    def _winsorize_1d(row, _y, _g, lo: float = 0.05, hi: float = 0.95):
+        valid = np.isfinite(row)
+        out = row.copy()
+        if int(valid.sum()) >= 3:
+            qlo, qhi = np.nanquantile(row, [lo, hi])
+            out = np.clip(row, qlo, qhi)
+        out[~valid] = np.nan
+        return out
+
+    def _neutralize_1d(row, yrow, _g):
+        return _r40_cs_resid(yrow, row)
+
+    def _cs_regression_1d(row, yrow, _g):
+        return _r40_cs_regression(yrow, row, mode=0)
+
+    def _make_fn(fn1d):
+        def _fn(data):
+            return _rowwise(fn1d, data, y)
+        return _fn
+
+    def _make_bivar(fn1d):
+        def _fn(data, ydata):
+            return _rowwise(fn1d, data, ydata)
+        return _fn
+
+    def _make_grouped():
+        def _fn(data, gdata):
+            out = np.full((n_rows, n_cols), np.nan, dtype=float)
+            for i in range(n_rows):
+                out[i] = _group_rank_1d(data[i], gdata)
+            return out
+        return _fn
+
+    univariate: dict[str, Callable[[np.ndarray], np.ndarray]] = {
+        "quantile_bucket": _make_fn(_quantile_bucket_1d),
+        "topk": _make_fn(_topk_1d),
+        "winsorize": _make_fn(_winsorize_1d),
+    }
+    bivariate: dict[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = {
+        "neutralize": _make_bivar(_neutralize_1d),
+        "cs_regression": _make_bivar(_cs_regression_1d),
+    }
+    group_rank_fn = _make_grouped()
+    results: dict[str, bool] = {}
+    all_ok = True
+    for canonical, fn in univariate.items():
+        r0 = fn(x)
+        r1 = fn(x[:, perm])[:, inv]
+        ok = _allclose_nan(r0, r1, rtol=rtol, atol=atol)
+        results[canonical] = bool(ok)
+        all_ok = all_ok and ok
+    for canonical, fn in bivariate.items():
+        r0 = fn(x, y)
+        r1 = fn(x[:, perm], y[:, perm])[:, inv]
+        ok = _allclose_nan(r0, r1, rtol=rtol, atol=atol)
+        results[canonical] = bool(ok)
+        all_ok = all_ok and ok
+    r0 = group_rank_fn(x, groups)
+    r1 = group_rank_fn(x[:, perm], groups[perm])[:, inv]
+    ok = _allclose_nan(r0, r1, rtol=rtol, atol=atol)
+    results["group_rank"] = bool(ok)
+    all_ok = all_ok and ok
+    return all_ok, results
+
+
 def check_bivariate_symmetry(
     fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
     x: np.ndarray,
@@ -983,13 +1236,19 @@ def _rolling_beta_ref(y: np.ndarray, x: np.ndarray, window: int,
 # ---------------------------------------------------------------------------
 
 METAMORPHIC_PROPERTY_DECLARATIONS: dict[str, tuple[str, ...]] = {
+    # R40 #257: 所有 tie-sensitive 算子显式声明 column-permutation equivariance。
+    "quantile_bucket": ("rank.column_permutation_equivariance",),
+    "topk": ("rank.column_permutation_equivariance",),
+    "winsorize": ("rank.column_permutation_equivariance",),
+    "cs_regression": ("rank.column_permutation_equivariance",),
+    "neutralize": ("rank.column_permutation_equivariance",),
     # rank 家族：strict monotonic transform invariance + column permutation
     # equivariance（rank 不随单调变换/列置换改变）。
     "rank": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
     "cs_rank_01": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
     "rank_pct": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
     "cs_pct_rank": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
-    "group_rank": ("rank.strict_monotonic_invariance",),
+    "group_rank": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
     "ts_rank": ("rank.strict_monotonic_invariance",),
     # zscore 家族：translation + positive-scale invariance。
     "zscore": ("translation_invariance", "positive_scale_invariance"),
@@ -1682,3 +1941,391 @@ def differential_against_reference(
         results[f"fixture_{i}"] = bool(ok)
         all_ok = all_ok and ok
     return all_ok, results
+
+
+# ---------------------------------------------------------------------------
+# R40 #250: CHECKPOINT_CHUNK_INVARIANCE_FAILURE hard gate —— 所有 segmented
+# execution canonicals 必须满足 concat(seg1, resume(seg2), ...) == full(x)。
+# ---------------------------------------------------------------------------
+
+#: R40 #250 hard gate 常量：任一 segmented canonical 的 checkpoint 分块重放
+#: 与全量历史不一致即为 release fail。
+CHECKPOINT_CHUNK_INVARIANCE_FAILURE = "CHECKPOINT_CHUNK_INVARIANCE_FAILURE"
+
+#: R40 #258 hard gate 常量：任一 causal TS canonical 的未来数据改变历史输出。
+PREFIX_INVARIANCE_FAILURE = "PREFIX_INVARIANCE_FAILURE"
+
+#: R40 #259 hard gate 常量：可流式/分块算子（EWM / minute aggregation /
+#: streaming group / writer block DQ）的 chunk-boundary invariance。
+CHUNK_BOUNDARY_INVARIANCE = "CHUNK_BOUNDARY_INVARIANCE"
+
+
+def _stream_ewm(span: int):
+    """EWM mean 的流式内核：``run(seg, state) -> (out, new_state)``。"""
+    def run(seg, state):
+        state = dict(state or {})
+        m = state.get("mean")
+        out = np.full(len(seg), np.nan, dtype=float)
+        for i, v in enumerate(np.asarray(seg, dtype=float)):
+            if not np.isfinite(v):
+                out[i] = np.nan
+                continue
+            if m is None:
+                m = v
+            else:
+                alpha = 2.0 / (span + 1.0)
+                m = (1.0 - alpha) * m + alpha * v
+            out[i] = m
+        return out, {"mean": m}
+    return run
+
+
+def _stream_cumsum_valid():
+    """流式有效值累加（writer block DQ 代理：累计 valid bar 数）。"""
+    def run(seg, state):
+        state = dict(state or {})
+        acc = state.get("acc", 0.0)
+        out = np.full(len(seg), np.nan, dtype=float)
+        for i, v in enumerate(np.asarray(seg, dtype=float)):
+            if np.isfinite(v):
+                acc += v
+                out[i] = acc
+            else:
+                out[i] = np.nan
+        return out, {"acc": acc}
+    return run
+
+
+def _chunk_boundary_invariance_for_stream(
+    stream_fn, x: np.ndarray, boundaries: Sequence[int], *, rtol: float, atol: float
+) -> bool:
+    """R40 #259：``full stream == 逐 chunk 续流``（state 跨 chunk 保留）。"""
+    n = len(x)
+    full, _ = stream_fn(x, None)
+    starts = [0] + list(boundaries)
+    ends = list(boundaries) + [n]
+    chunked = np.full(n, np.nan, dtype=float)
+    state: Any = None
+    for s, e in zip(starts, ends):
+        if s >= e:
+            continue
+        out, state = stream_fn(x[s:e], state)
+        chunked[s:e] = out
+    return _allclose_nan(np.asarray(full, dtype=float), chunked, rtol=rtol, atol=atol)
+
+
+def cross_process_determinism_probe(
+    *, worker_count: int = 1, seed: int = 42, n_bars: int = 48, n_inst: int = 6
+) -> dict[str, Any]:
+    """R40 #260：跨进程确定性探针（subprocess 用）。
+
+    用固定 seed 的合成面板计算一个确定性因子（ts_mean window=5），返回
+    result checksum / plan hash / axis hash。两个独立 Python 进程对同一 spec
+    必须产生完全相同的 checksum / hash —— 且不同 ``worker_count`` 不改变输出
+    （探针内强制单线程 BLAS 环境，rolling mean 是位级确定的）。
+
+    供 ``test_full_production_determinism_across_processes_and_restarts`` 通过
+    ``subprocess`` 调用；也可被 ``scripts/audit_r40_hard_gates.py`` 复用。
+    """
+    import os
+
+    import pandas as pd
+
+    for var in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "POLARS_MAX_THREADS",
+    ):
+        os.environ[var] = str(max(1, int(worker_count)))
+    rng = np.random.default_rng(seed)
+    idx = pd.MultiIndex.from_product(
+        [
+            pd.date_range("2024-01-01", periods=n_bars, freq="D"),
+            [f"INST{i}" for i in range(n_inst)],
+        ],
+        names=["timestamp", "instrument"],
+    )
+    panel = pd.DataFrame({"x": rng.standard_normal(len(idx))}, index=idx)
+    out = (
+        panel["x"]
+        .groupby(level="instrument", sort=False)
+        .transform(lambda s: s.rolling(5, min_periods=1).mean())
+    )
+    checksum = hashlib.sha256(np.asarray(out, dtype=float).tobytes()).hexdigest()
+    plan_hash = hashlib.sha256(
+        b"determinism-probe-v1|ts_mean|w=5|seed=" + str(seed).encode("utf-8")
+    ).hexdigest()[:16]
+    axis_hash = hashlib.sha256(
+        f"{list(idx.names)}|{len(idx)}|{n_bars}|{n_inst}".encode("utf-8")
+    ).hexdigest()[:16]
+    return {
+        "worker_count": int(worker_count),
+        "seed": int(seed),
+        "result_checksum": checksum,
+        "plan_hash": plan_hash,
+        "axis_hash": axis_hash,
+        "n_values": int(out.shape[0]),
+        "first_values": [round(float(v), 9) for v in np.asarray(out, dtype=float)[:8]],
+    }
+
+
+def check_chunk_boundary_invariance_all_streamable(
+    *,
+    n_bars: int = 120,
+    seed: int = 9,
+    n_random_chunkings: int = 3,
+    rtol: float = 1e-6,
+    atol: float = 1e-8,
+) -> tuple[bool, dict[str, Any]]:
+    """R40 #259：可流式/分块算子的 chunk-boundary invariance universal gate。
+
+    覆盖 EWM mean（span=12）、streaming cumsum、streaming valid-count（writer
+    block DQ 代理）。随机 chunk 边界，逐 chunk 续流与全量流比较。可被
+    ``scripts/audit_r40_hard_gates.py`` 复用。
+    """
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(n_bars)
+    x[::17] = np.nan  # gaps
+    streams: dict[str, Any] = {
+        "ewm_mean_span12": _stream_ewm(12),
+        "cumsum_valid": _stream_cumsum_valid(),
+    }
+    per_canonical: dict[str, dict[str, Any]] = {}
+    all_ok = True
+    for name, stream_fn in streams.items():
+        ok = True
+        details: list[str] = []
+        for _ in range(n_random_chunkings):
+            cut = sorted(set(int(b) for b in rng.integers(1, n_bars, size=n_bars // 10)))
+            boundaries = [b for b in cut if 0 < b < n_bars]
+            if not boundaries:
+                boundaries = [n_bars // 2]
+            if not _chunk_boundary_invariance_for_stream(
+                stream_fn, x, boundaries, rtol=rtol, atol=atol
+            ):
+                ok = False
+                details.append(f"boundaries={boundaries} mismatch")
+        per_canonical[name] = {"ok": ok, "detail": details}
+        all_ok = all_ok and ok
+    return all_ok, {"per_canonical": per_canonical, "gate": CHUNK_BOUNDARY_INVARIANCE}
+
+#: R40 #258：被纳入 universal prefix-invariance hard gate 的 causal TS canonicals。
+CAUSAL_TS_CANONICALS: tuple[str, ...] = (
+    "ts_mean", "ts_std", "ts_sum", "ts_rank", "ts_delta", "ts_pct",
+    "ts_max", "ts_min", "ts_zscore", "ts_argmax", "ts_argmin",
+    "ts_regression_slope", "ts_rank_corr",
+)
+
+
+def _causal_ts_kernel(canonical: str, d: int = 10):
+    """返回 causal TS canonical 的 1D 时序函数（ndarray -> ndarray）。
+
+    使用 pandas trailing-window 或 ``_numpy_kernels`` 的 trailing-window 内核
+    —— 全部只依赖 ``x[t-window+1:t]``，天然 prefix-invariant。
+    """
+    import pandas as pd
+
+    if canonical == "ts_mean":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).mean().to_numpy()
+    if canonical == "ts_std":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=2).std(ddof=1).to_numpy()
+    if canonical == "ts_sum":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).sum().to_numpy()
+    if canonical == "ts_max":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).max().to_numpy()
+    if canonical == "ts_min":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).min().to_numpy()
+    if canonical == "ts_rank":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).rank(pct=True).to_numpy()
+    if canonical == "ts_delta":
+        return lambda a: np.asarray(a, float) - pd.Series(np.asarray(a, float)).shift(1).to_numpy()
+    if canonical == "ts_pct":
+        def _ts_pct(a):
+            s = pd.Series(np.asarray(a, float))
+            return (s / s.shift(1) - 1.0).to_numpy()
+        return _ts_pct
+    if canonical == "ts_zscore":
+        def _ts_zscore(a):
+            s = pd.Series(np.asarray(a, float))
+            mu = s.rolling(d, min_periods=2).mean()
+            sd = s.rolling(d, min_periods=2).std(ddof=1)
+            return ((s - mu) / sd).to_numpy()
+        return _ts_zscore
+    if canonical == "ts_argmax":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).apply(
+            lambda w: np.nanargmax(np.asarray(w)), raw=True
+        ).to_numpy()
+    if canonical == "ts_argmin":
+        return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).apply(
+            lambda w: np.nanargmin(np.asarray(w)), raw=True
+        ).to_numpy()
+    if canonical == "ts_regression_slope":
+        return lambda a: _r40_ts_regression_slope(np.arange(len(a), dtype=float), np.asarray(a, float), d)
+    if canonical == "ts_rank_corr":
+        return lambda a: _r40_ts_rank_corr(np.asarray(a, float), np.arange(len(a), dtype=float), d)
+    raise KeyError(canonical)
+
+
+def check_prefix_invariance_all_causal_ts(
+    *,
+    n_bars: int = 140,
+    seed: int = 3,
+    T_cut: int = 90,
+    K_append: int = 30,
+    rtol: float = 1e-6,
+    atol: float = 1e-8,
+) -> tuple[bool, dict[str, Any]]:
+    """R40 #258：所有 causal TS canonical 的 universal prefix-invariance hard
+    gate。
+
+    随机 cut point ``T_cut``：``fn(prefix T+K)[:T] == fn(prefix T)``。production
+    下任何未来数据改变历史输出即为 ``PREFIX_INVARIANCE_FAILURE``。可被
+    ``scripts/audit_r40_hard_gates.py`` 复用。
+    """
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(n_bars)
+    x[::11] = np.nan  # 周期性 gap
+    per_canonical: dict[str, dict[str, Any]] = {}
+    all_ok = True
+    for canonical in CAUSAL_TS_CANONICALS:
+        try:
+            fn = _causal_ts_kernel(canonical)
+        except KeyError:
+            per_canonical[canonical] = {"ok": False, "detail": "no kernel"}
+            all_ok = False
+            continue
+        res = prefix_invariance_check(fn, x, T=T_cut, K=K_append, rtol=rtol, atol=atol)
+        per_canonical[canonical] = {"ok": bool(res.passed), "detail": res.detail}
+        all_ok = all_ok and bool(res.passed)
+    return all_ok, {"per_canonical": per_canonical, "gate": PREFIX_INVARIANCE_FAILURE}
+
+
+def check_chunk_invariance_all_segmented_canonicals(
+    *,
+    n_bars: int = 90,
+    seed: int = 7,
+    n_random_chunkings: int = 3,
+    rtol: float = 1e-8,
+    atol: float = 1e-10,
+) -> tuple[bool, dict[str, Any]]:
+    """R40 #250：对 ``SEGMENTED_EXECUTION_CANONICALS`` 注册的每个 canonical
+    跑 ``concat(segment1, resume(segment2), ...) == full_history(x)`` property
+    test。
+
+    - 随机 chunk boundaries（每 8 根 bar 一个潜在切点）；
+    - 多随机切分（``n_random_chunkings``）；
+    - 每个 canonical 的 chunked 重放与全量历史逐 bar 比较（含 NaN mask）。
+
+    返回 ``(all_ok, detail)``。该函数可被 ``scripts/audit_r40_hard_gates.py``
+    复用（gate 名 :data:`CHECKPOINT_CHUNK_INVARIANCE_FAILURE`）。
+    """
+    import pandas as pd
+
+    from stateful_runtime import execute_stateful_segment
+
+    try:
+        from cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+    except Exception:  # pragma: no cover - 并发会话可能正在编辑 registry
+        SEGMENTED_EXECUTION_CANONICALS = frozenset({
+            "ts_ema", "ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr",
+            "RSI_WILDER", "ATR_WILDER", "ADX", "MACD_line", "MACD_signal", "MACD_hist",
+        })
+
+    rng = np.random.default_rng(seed)
+    timestamps = pd.date_range("2024-01-01", periods=n_bars, freq="D", tz="UTC")
+    x = rng.standard_normal(n_bars)
+    y = rng.standard_normal(n_bars)  # ts_ewm_cov / ts_ewm_corr 需要第二个输入
+
+    def _input_slice(canonical: str, sl: Any) -> dict[str, np.ndarray]:
+        """按 canonical 需要的输入键切片。ADX/ATR_WILDER 需要 high/low/close。"""
+        if canonical in {"ATR_WILDER", "ADX"}:
+            return {
+                "high": np.asarray(x[sl], dtype=float) + 0.5,
+                "low": np.asarray(x[sl], dtype=float) - 0.5,
+                "close": np.asarray(x[sl], dtype=float),
+            }
+        if canonical in {"ts_ewm_cov", "ts_ewm_corr"}:
+            return {"x": np.asarray(x[sl], dtype=float), "y": np.asarray(y[sl], dtype=float)}
+        return {"x": np.asarray(x[sl], dtype=float)}
+
+    def _run_segment(canonical: str, sl: Any, ckpt: Any, *, origin: bool) -> Any:
+        return execute_stateful_segment(
+            canonical,
+            _input_slice(canonical, sl),
+            timestamps=timestamps[sl],
+            instrument="TEST",
+            input_identity={"test": "chunk_invariance_hard_gate", "canonical": canonical},
+            checkpoint=ckpt,
+            starts_at_dataset_origin=origin,
+        )
+
+    per_canonical: dict[str, dict[str, Any]] = {}
+    all_ok = True
+    for canonical in sorted(SEGMENTED_EXECUTION_CANONICALS):
+        try:
+            full = np.asarray(_run_segment(canonical, slice(0, n_bars), None, origin=True).values, dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            per_canonical[canonical] = {"ok": False, "detail": f"full run raised: {exc}"}
+            all_ok = False
+            continue
+        chunk_ok = True
+        chunk_detail: list[str] = []
+        for _ in range(n_random_chunkings):
+            # 生成 chunk 边界，保证每个 chunk 长度 >= 2（单 bar chunk 无法用
+            # first/last 两段式重放）。
+            cut = sorted(set(int(b) for b in rng.integers(1, n_bars, size=n_bars // 8)))
+            if not cut:
+                cut = [n_bars // 2]
+            boundaries: list[int] = []
+            for b in cut:
+                if 1 < b < n_bars - 1:  # 首 chunk >= 2 bar，尾 chunk >= 2 bar
+                    if not boundaries or b - boundaries[-1] >= 2:
+                        boundaries.append(b)
+            if not boundaries:
+                boundaries = [n_bars // 2]
+            chunked = np.full(n_bars, np.nan, dtype=float)
+            prev_ckpt: Any = None
+            remaining_boundaries = list(boundaries)
+            try:
+                # 生产 incremental 路径的 1-bar inclusive overlap 语义：
+                # 每个 segment [s,e) 的 checkpoint 是 [s,e-1) 末端状态（as_of=e-2），
+                # 下一个 segment 从 e-1 开始（重算边界 bar e-1）。
+                start = 0
+                while start < n_bars:
+                    if remaining_boundaries:
+                        e = min(remaining_boundaries[0], n_bars)
+                        remaining_boundaries = remaining_boundaries[1:]
+                    else:
+                        e = n_bars
+                    seg_len = e - start
+                    if seg_len >= 2:
+                        first = _run_segment(canonical, slice(start, e - 1), prev_ckpt,
+                                             origin=(start == 0 and prev_ckpt is None))
+                        last = _run_segment(canonical, slice(e - 1, e), first.checkpoint, origin=False)
+                        chunked[start:e] = np.concatenate(
+                            [np.asarray(first.values, dtype=float), np.asarray(last.values, dtype=float)]
+                        )
+                        prev_ckpt = first.checkpoint
+                        start = e - 1  # 1-bar overlap
+                    else:
+                        # 单 bar：只有重算，checkpoint 不更新。
+                        single = _run_segment(canonical, slice(start, e), prev_ckpt,
+                                              origin=(start == 0 and prev_ckpt is None))
+                        chunked[start:e] = np.asarray(single.values, dtype=float)
+                        start = e
+            except Exception as exc:  # noqa: BLE001
+                chunk_ok = False
+                chunk_detail.append(f"chunking raised {type(exc).__name__}: {exc}")
+                break
+            if chunk_ok and not _allclose_nan(full, chunked, rtol=rtol, atol=atol):
+                chunk_ok = False
+                chunk_detail.append(f"boundaries={boundaries} mismatch")
+        per_canonical[canonical] = {
+            "ok": bool(chunk_ok),
+            "chunk_detail": chunk_detail,
+            "n_chunkings": n_random_chunkings,
+        }
+        all_ok = all_ok and chunk_ok
+    return all_ok, {"per_canonical": per_canonical, "gate": CHECKPOINT_CHUNK_INVARIANCE_FAILURE}

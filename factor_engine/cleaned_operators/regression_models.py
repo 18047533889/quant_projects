@@ -26,9 +26,21 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.common.daily_panel import _aligned
-from cleaned_operators.ts_model._rolling_core import pinball_quantile_fit
+from cleaned_operators.ts_model._rolling_core import _HUBER_DELTA, pinball_quantile_fit
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
+# ``window`` is the alpha horizon (HORIZON, searched); ``min_periods`` is a
+# statistical-support floor; ``alpha`` is the ridge shrinkage (numerical
+# policy); ``lag`` in ``ts_ar_coefficient`` is the AR lag being estimated — the
+# economic mechanism, so it is searched (M-115/M-162/M-170).
+_REGRESSION_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "alpha": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+    "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC, searchable=True),
+}
 
 
 def _metadata(
@@ -41,6 +53,7 @@ def _metadata(
     output_unit: str | None = None,
     input_units: dict[str, str] | None = None,
     compatible_units: dict[str, tuple[str, ...]] | None = None,
+    param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -48,6 +61,7 @@ def _metadata(
         description=description,
         param_names=params,
         return_type="series",
+        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
         tags=[
             "time_series_regression", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", f"domain:{domain}",
@@ -163,7 +177,7 @@ def _regression_resid(
     return float(y_cur - (beta[0] + beta[1] * x_cur))
 
 
-def _huber_fit(design: np.ndarray, ys: np.ndarray, *, delta: float = 1.345, iterations: int = 5) -> np.ndarray:
+def _huber_fit(design: np.ndarray, ys: np.ndarray, *, delta: float = _HUBER_DELTA, iterations: int = 5) -> np.ndarray:
     beta, *_ = np.linalg.lstsq(design, ys, rcond=None)
     for _ in range(iterations):
         resid = ys - design @ beta
@@ -250,6 +264,7 @@ class TsHuberRegressionPredictiveResid(SeriesOperator):
         ["y", "x", "window", "min_periods"],
         domain="price_volume",
         unit="level",
+        param_specs=_REGRESSION_PARAM_SPECS,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -333,6 +348,7 @@ class TsRidgeRegressionPredictiveResid(SeriesOperator):
         ["y", "x", "window", "alpha", "min_periods"],
         domain="price_volume",
         unit="level",
+        param_specs=_REGRESSION_PARAM_SPECS,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, alpha: float = 0.1, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -415,14 +431,24 @@ def _quantile_slope(y: np.ndarray, x: np.ndarray, q: float, min_periods: int) ->
     status="experimental",
 )
 class TsArCoefficient(SeriesOperator):
-    """AR(lag) 系数：x_t 对 x_{t-lag} 的回归斜率。"""
+    """AR(lag) 系数：x_t 对 x_{t-lag} 的回归斜率。
+
+    IN-SAMPLE DESCRIPTIVE (audit M-040): the window used to compute the
+    covariance includes the current row, so the reported coefficient is a
+    trailing descriptive AR estimate over ``[t-w+1, t]`` — NOT a strictly-prior
+    fit.  It contains no future data (PIT-safe) but the current observation is a
+    member of the fitted window, so the output must be read as in-sample state,
+    not a predictive coefficient.  The strictly-prior variant that fits only on
+    rows ``<= t-1`` is ``ts_ar_prior_coeff``.
+    """
 
     metadata = _metadata(
         "ts_ar_coefficient",
-        "AR(lag) 回归系数。",
+        "AR(lag) 回归系数（IN-SAMPLE：拟合窗口含当前样本，描述性状态，非预测；严格截至 t-1 版本用 ts_ar_prior_coeff）。",
         ["x", "window", "lag", "min_periods"],
         domain="price_volume",
         unit="ratio",
+        param_specs=_REGRESSION_PARAM_SPECS,
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, lag: int = 1, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -437,6 +463,10 @@ class TsArCoefficient(SeriesOperator):
                 start = max(0, row - w + 1)
                 if row - lg < start:
                     continue
+                # IN-SAMPLE (audit M-040): the segment is ``[row-w+1, row]`` —
+                # it INCLUDES the current row, so the fitted AR(lag) covariance
+                # is a trailing descriptive estimate, NOT a strict-prior fit.
+                # ``ts_ar_prior_coeff`` (ar_meanrev) is the strictly t-1 variant.
                 segment = xv[start : row + 1, col]
                 current = segment[lg:]
                 lagged = segment[:-lg]
@@ -461,6 +491,9 @@ def _lo_mackinlay_vr(rets: np.ndarray, q: int) -> float:
         sigma_c^2  = (1/m)      sum (r_t(q) - q*mu)^2,
 
     so VR(q) == 1 for a random walk (drift-adjusted, overlapping returns).
+    Sign convention (audit M-045): VR(q) > 1 means positive serial correlation
+    (q-period variance grows more than linearly) -> a TRENDING tendency;
+    VR(q) < 1 means negative serial correlation -> a MEAN-REVERSION tendency.
     Requires ``n > q`` (at least q+1 returns) and a positive 1-period variance.
     """
     n = rets.size
@@ -485,6 +518,10 @@ def _lo_mackinlay_z(rets: np.ndarray, q: int) -> float:
     variance ``theta_2 = sum_{k=1}^{q-1} (2(q-k)/q)^2 * delta_k`` and
     ``delta_k = sum (r_t-mu)^2 (r_{t-k}-mu)^2 / (sum (r_t-mu)^2)^2``
     (Lo–MacKinlay 1988, eq. 14/17).  ``VR`` comes from :func:`_lo_mackinlay_vr`.
+
+    Sign convention (audit M-045): ``z > 0`` means ``VR > 1`` -> positive serial
+    correlation -> TRENDING tendency; ``z < 0`` means ``VR < 1`` -> negative
+    serial correlation -> MEAN-REVERSION tendency.
     """
     vr = _lo_mackinlay_vr(rets, q)
     if not np.isfinite(vr):
@@ -524,6 +561,10 @@ class TsVarianceRatioProxy(SeriesOperator):
     than a variance ratio.  Use ``ts_lo_mackinlay_vr`` / ``ts_lo_mackinlay_z``
     for the proper overlapping estimator and its z-test.  The legacy name
     ``ts_variance_ratio`` resolves here as a deprecated alias.
+
+    Sign convention (audit M-045): a positive proxy (``Var(q)/q/Var(1) > 1``) ->
+    positive serial correlation -> TRENDING tendency; a negative proxy ->
+    MEAN-REVERSION tendency.
     """
 
     metadata = _metadata(
@@ -591,6 +632,11 @@ class TsLoMackinlayVr(SeriesOperator):
     The proper overlapping Lo–MacKinlay variance-ratio estimator over q-period
     returns (VR == 1 for a random walk), computed on a trailing contiguous run
     of a PRICE / LOG-PRICE LEVEL input.  Deterministic.
+
+    Sign convention (audit M-045): VR(q) > 1 -> positive serial correlation ->
+    TRENDING tendency; VR(q) < 1 -> negative serial correlation ->
+    MEAN-REVERSION tendency.  ``ts_lo_mackinlay_z`` is the heteroskedasticity-
+    robust z-statistic of the same sign convention.
     """
 
     metadata = _metadata(
@@ -644,8 +690,9 @@ class TsLoMackinlayZ(SeriesOperator):
 
     ``(VR(q) - 1) / sqrt(theta_2)`` with the heteroskedasticity-robust variance
     ``theta_2`` — the z-statistic associated with :func:`_lo_mackinlay_vr`.
-    Deterministic; positive values indicate mean reversion, negative values
-    indicate trending (Lo–MacKinlay sign convention).
+    Deterministic.  Sign convention (audit M-045): ``z > 0`` (``VR > 1``) ->
+    positive serial correlation -> TRENDING tendency; ``z < 0`` (``VR < 1``) ->
+    negative serial correlation -> MEAN-REVERSION tendency (Lo–MacKinlay).
     """
 
     metadata = _metadata(

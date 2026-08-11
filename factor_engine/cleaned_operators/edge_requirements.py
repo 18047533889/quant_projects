@@ -111,6 +111,10 @@ class EdgeContract:
     A contract with every dimension ``invalid`` is *undeclared*
     (:attr:`declared` is False) and fails closed under
     :data:`EdgeGateMode.PRODUCTION`.
+
+    R40 #255：新增 signed-zero / subnormal / overflow 三档数值边沿策略，进入
+    numeric identity —— NaN 的 sign-bit、subnormal 归一、overflow 处理任一不同
+    都会改变 factor 数值身份。
     """
 
     nan: str = "invalid"
@@ -118,6 +122,12 @@ class EdgeContract:
     neg_inf: str = "invalid"
     zero: str = "invalid"
     domain_invalid: str = "invalid"
+    # R40 #255: +0.0 vs -0.0 —— "preserve" 保留符号位 / "normalize" 归一到 +0。
+    signed_zero_policy: str = "preserve"
+    # R40 #255: subnormal —— "preserve" 保留 / "flush_to_zero" 归零。
+    subnormal_policy: str = "preserve"
+    # R40 #255: overflow —— "preserve" 保留 Inf / "default" 回填默认 / "null"。
+    overflow_policy: str = "preserve"
 
     def __post_init__(self) -> None:
         for dim in EDGE_DIMENSIONS:
@@ -126,6 +136,12 @@ class EdgeContract:
                 raise ValueError(
                     f"EdgeContract.{dim}={value!r} not in {EDGE_BEHAVIORS}"
                 )
+        if self.signed_zero_policy not in {"preserve", "normalize"}:
+            raise ValueError(f"signed_zero_policy must be preserve|normalize, got {self.signed_zero_policy!r}")
+        if self.subnormal_policy not in {"preserve", "flush_to_zero"}:
+            raise ValueError(f"subnormal_policy must be preserve|flush_to_zero, got {self.subnormal_policy!r}")
+        if self.overflow_policy not in {"preserve", "default", "null"}:
+            raise ValueError(f"overflow_policy must be preserve|default|null, got {self.overflow_policy!r}")
 
     @property
     def declared(self) -> bool:
@@ -139,6 +155,26 @@ class EdgeContract:
             for dim in EDGE_DIMENSIONS
             if getattr(self, dim) in ("propagate", "break")
         )
+
+
+def edge_contract_numeric_identity(canonical: str) -> dict[str, str]:
+    """R40 #255：EdgeContract 的数值边沿策略进入 factor numeric identity。
+
+    返回 ``{"signed_zero_policy": ..., "subnormal_policy": ...,
+    "overflow_policy": ...}``（默认 preserve/preserve/preserve）。
+    """
+    contract = edge_contract(canonical)
+    if contract is None:
+        return {
+            "signed_zero_policy": "preserve",
+            "subnormal_policy": "preserve",
+            "overflow_policy": "preserve",
+        }
+    return {
+        "signed_zero_policy": contract.signed_zero_policy,
+        "subnormal_policy": contract.subnormal_policy,
+        "overflow_policy": contract.overflow_policy,
+    }
 
 
 def _factor_engine_root() -> Path:

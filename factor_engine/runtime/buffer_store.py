@@ -15,10 +15,11 @@ R38 修复：
 """
 from __future__ import annotations
 
+import enum
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable
 
 from runtime.spill_store import SpillStore, SpillRef
 
@@ -37,6 +38,23 @@ STATUS_MEMORY = "MEMORY"
 STATUS_SPILLED = "SPILLED"
 STATUS_RECOMPUTE = "RECOMPUTE"
 STATUS_REFUSED = "REFUSED"
+
+
+class BufferEntryState(str, enum.Enum):
+    """R40 #11：条目生命周期状态机。
+
+    - ``PINNED``       显式 pin（CSE 消费者在用），禁止淘汰；
+    - ``RECLAIMABLE``  空闲、可被淘汰（默认）；
+    - ``SPILLED``      backing 已落盘（SpillRef 保留，reload 依据）；
+    - ``RECOMPUTABLE`` 已 drop（淘汰路径选择 recompute，不再 spill）；
+    - ``EVICTED``      已从 entries 移除（终态）。
+    """
+
+    PINNED = "PINNED"
+    RECLAIMABLE = "RECLAIMABLE"
+    SPILLED = "SPILLED"
+    RECOMPUTABLE = "RECOMPUTABLE"
+    EVICTED = "EVICTED"
 
 
 @dataclass(frozen=True)
@@ -59,13 +77,77 @@ class BufferPutResult:
 
 @dataclass
 class _Entry:
-    """backing 条目（size + 访问时间）。"""
+    """backing 条目（size + 访问时间 + R40 #11 状态机/refcount + #14 淘汰因子）。"""
 
     value: Any
     bytes: int
     last_access: float = 0.0
     recompute_cost_ms: float = 0.0
     reuse_count: int = 1
+    # R40 #11：条目状态机 + 原子 refcount（在锁内读写）。
+    state: str = BufferEntryState.RECLAIMABLE
+    refcount: int = 0
+    # R40 #14：多因子淘汰决策的输入维度。
+    reload_cost_ms: float = 2.0
+    write_cost_ms: float = 5.0
+    future_consumers: int = 1
+
+
+class SpillDecisionEngine:
+    """R40 #14：多因子 eviction 打分（不再只按 LRU 字节预算淘汰）。
+
+    ``evict_candidate(entries, pressure)`` 对可淘汰条目（refcount==0 且非 PINNED）
+    按 recompute_cost / reload_cost / write_cost / future_consumers / stale_ms
+    综合打分，返回 ``[(key, score)]`` **升序**（分数越低 = 淘汰成本越低 = 越先
+    淘汰）。``pressure`` 是 disk_pressure ∈ [0,1]：磁盘越紧，写盘（spill）越贵，
+    该维度用 ``write_cost * (1 + 3*pressure)`` 放大 → spill 型条目排名靠后
+    （更倾向 drop/recompute）。
+    """
+
+    def __init__(self, weights: dict[str, float] | None = None) -> None:
+        self.weights = weights or {
+            "recompute_cost": 1.0,
+            "reload_cost": 0.6,
+            "write_cost": 0.4,
+            "future_consumers": 0.2,
+            "stale_ms": 0.01,
+        }
+
+    def evict_candidate(
+        self,
+        entries: Iterable[tuple[str, _Entry]],
+        *,
+        pressure: float = 0.0,
+        now: float | None = None,
+    ) -> list[tuple[str, float]]:
+        """返回 ``[(key, score)]`` 升序（最低分最先淘汰）。
+
+        refcount>0 或 PINNED 的条目一律跳过（不可淘汰）——这是 #11 的核心：
+        在用的共享 CSE 条目不能被字节预算误伤。
+        """
+        now = time.monotonic() if now is None else now
+        disk = max(0.0, min(1.0, float(pressure)))
+        w = self.weights
+        scored: list[tuple[str, float]] = []
+        for key, entry in entries:
+            if entry.refcount > 0 or entry.state == BufferEntryState.PINNED:
+                continue  # in-use：禁止淘汰
+            stale_ms = max(0.0, now - entry.last_access)
+            eff_write = max(0.0, entry.write_cost_ms) * (1.0 + 3.0 * disk)
+            # 分数越低越先淘汰：
+            #   + recompute/reload/write  → 淘汰成本越高排名越靠后；
+            #   - future_consumers        → 未来消费越多越不该淘汰；
+            #   - stale_ms                → 越久未用越应先淘汰（LRU 项）。
+            score = (
+                w.get("recompute_cost", 1.0) * max(0.0, entry.recompute_cost_ms)
+                + w.get("reload_cost", 0.6) * max(0.0, entry.reload_cost_ms)
+                + w.get("write_cost", 0.4) * eff_write
+                - w.get("future_consumers", 0.2) * max(0, entry.future_consumers)
+                - w.get("stale_ms", 0.01) * stale_ms
+            )
+            scored.append((key, score))
+        scored.sort(key=lambda kv: (kv[1], kv[0]))
+        return scored
 
 
 class GovernedBufferStore:
@@ -96,6 +178,8 @@ class GovernedBufferStore:
         self._spill_refs: dict[str, SpillRef] = {}
         # P0-013：execution 级 spill 生命周期（release/清理按 execution 收敛）。
         self._execution_id = str(execution_id or "batch")
+        # R40 #14：多因子淘汰决策引擎（recompute/reload/write/future/stale）。
+        self._decision_engine = SpillDecisionEngine()
 
     @property
     def budget_bytes(self) -> int | None:
@@ -209,20 +293,63 @@ class GovernedBufferStore:
         return None
 
     def pin(self, key: str) -> bool:
+        """R40 #11：pin 条目（状态 → PINNED，refcount 置 1）。
+
+        pin 是**幂等**的——多个消费者对同一 sid 各 pin 一次，内部 refcount 只
+        计一个 hold（多消费者计数由外部 ``ctx._cse_refcounts`` 负责，本 store
+        不再重复记账）。
+        """
         with self._lock:
-            if key not in self._entries:
+            entry = self._entries.get(key)
+            if entry is None:
                 return False
+            entry.state = BufferEntryState.PINNED
+            entry.refcount = max(1, entry.refcount)
             self._pinned.add(key)
             return True
+
+    def acquire_ref(self, key: str) -> bool:
+        """R40 #11：原子 refcount +1（消费者在**持有值期间**显式占用）。
+
+        占用中的条目（refcount>0）在 ``evict_if_over_budget`` 里被跳过——
+        在用的共享 CSE 条目不会被字节预算误淘汰。
+        """
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return False
+            entry.refcount += 1
+            return True
+
+    def release_ref(self, key: str) -> None:
+        """R40 #11：原子 refcount -1（与 :meth:`acquire_ref` 配对）。"""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return
+            if entry.refcount > 0:
+                entry.refcount -= 1
+            if entry.refcount == 0 and entry.state == BufferEntryState.PINNED:
+                entry.state = BufferEntryState.RECLAIMABLE
+                self._pinned.discard(key)
 
     def release(self, key: str) -> None:
         """§108/109：backing ref 与 accounting 同时释放（不留 ghost 账面）。
 
-        P0-013：同时删除 spill 文件（execution 级生命周期——release/失败/cancel
-        都收敛，不再积累 orphan parquet）。
+        R40 #11：``release`` 幂等地归还一个 hold——refcount 归零才真正 drop
+        （多消费者场景由外部 refcount 计数，最后一次 release 才落到本方法）。
+        P0-013：drop 时删除 spill 文件（execution 级生命周期——release/失败/
+        cancel 都收敛，不再积累 orphan parquet）。
         """
         with self._lock:
             existed = key in self._backing or key in self._entries
+            entry = self._entries.get(key)
+            if entry is not None and entry.refcount > 0:
+                entry.refcount -= 1
+                if entry.refcount > 0:
+                    # 仍有 hold：仅归还一个引用，条目保留。
+                    return
+            self._pinned.discard(key)
             ref = self._spill_refs.pop(key, None)
             if ref is not None and self._spill_store is not None:
                 try:
@@ -235,15 +362,35 @@ class GovernedBufferStore:
             if existed:
                 self._releases += 1
 
-    def evict_if_over_budget(self, target: int = 0) -> int:
+    def _disk_pressure(self) -> float:
+        """R40 #14：当前磁盘压力（∈ [0,1]）。
+
+        用 spill store 已落盘字节相对一个 safe ceiling 估算；无 spill store 或
+        无法探测 → 0（无额外压力）。压力高时 SpillDecisionEngine 抬高写盘成本，
+        淘汰更倾向 drop/recompute 而不是再写一份 spill。
+        """
+        if self._spill_store is None:
+            return 0.0
+        try:
+            s = self._spill_store.summary()
+            on_disk = max(0, int(s.get("bytes", 0)))
+        except Exception:
+            return 0.0
+        ceiling = max(1, self._spool_threshold or 512 * 1024**2)
+        return max(0.0, min(1.0, on_disk / ceiling))
+
+    def evict_if_over_budget(self, target: int = 0, *, pressure: float | None = None) -> int:
         """MemoryGovernor L0 evict hook（R38 P0-038：L0 唯一 owner 的逐出入口）。
 
-        governor 高压时从真实 store 逐出（pinned 不逐；P0-033 成本决策 spill/drop），
-        返回释放的**内存**字节数。旧实现把 hook 绑到 ExpressionCache（自己另记
-        一套 accounting），对 GovernedBufferStore 写入的值完全失效——split-brain。
+        governor 高压时从真实 store 逐出（pinned/refcount>0 不逐；R40 #11；
+        R40 #14 多因子打分 + disk pressure），返回释放的**内存**字节数。旧实现
+        把 hook 绑到 ExpressionCache（自己另记一套 accounting），对
+        GovernedBufferStore 写入的值完全失效——split-brain。
         """
         with self._lock:
-            return self._evict_lru(max(0, target))
+            if pressure is None:
+                pressure = self._disk_pressure()
+            return self._evict_lru(max(0, target), pressure=pressure)
 
     def cleanup_execution(self) -> int:
         """清理本 execution 的全部 spill 文件（P0-013：execution-scoped 收敛）。"""
@@ -274,6 +421,7 @@ class GovernedBufferStore:
                     entry.value, key=key, source_identity="cse-shared",
                     execution_id=self._execution_id,
                 )
+                entry.state = BufferEntryState.SPILLED
                 self._backing.pop(key, None)
                 self._entries.pop(key, None)
                 self._pinned.discard(key)
@@ -285,22 +433,28 @@ class GovernedBufferStore:
                     STATUS_RECOMPUTE, key, reason=f"spill_failed:{type(exc).__name__}"
                 )
 
-    def _evict_lru(self, needed: int) -> int:
-        """R38 P1-036 + P0-033：LRU 淘汰（last_access 最久未访问优先；pinned 不淘汰）。
+    def _evict_lru(self, needed: int, *, pressure: float = 0.0) -> int:
+        """R38 P1-036 + P0-033 + R40 #11/#14：多因子淘汰（pinned/in-use 不淘汰）。
 
-        每个候选先做 **spill-vs-recompute 成本决策**（``SpillStore.should_spill``）：
+        R40 #14：淘汰顺序由 :class:`SpillDecisionEngine` 按 recompute/reload/
+        write_cost/future_consumers/stale 综合打分（不再只按 LRU 字节预算）。
+        R40 #11：refcount>0 或 PINNED 的条目被引擎跳过——在用的共享 CSE 条目
+        绝不会被字节预算误伤。
+
+        每个候选仍做 **spill-vs-recompute 成本决策**（``SpillStore.should_spill``）：
             - 高 recompute 成本（PCA / GARCH / 大 source block）→ 真实 spill（写盘，
               保留 reload 依据），不 drop；
             - 低成本 elementwise（recompute 便宜）→ drop（并清掉旧 spill ref，
               防止 reload 复活过期数据）。
         返回释放的**内存**字节数（spill 与 drop 都释放内存）。
         """
-        candidates = sorted(
-            (k for k, e in self._entries.items() if k not in self._pinned),
-            key=lambda k: self._entries[k].last_access,
-        )
+        candidates = [
+            (k, e) for k, e in self._entries.items()
+            if e.refcount <= 0 and e.state != BufferEntryState.PINNED
+        ]
+        ranked = self._decision_engine.evict_candidate(candidates, pressure=pressure)
         freed = 0
-        for key in candidates:
+        for key, _score in ranked:
             if freed >= needed:
                 break
             entry = self._entries[key]
@@ -310,7 +464,7 @@ class GovernedBufferStore:
                 try:
                     decision = self._spill_store.should_spill(
                         recompute_cost_ms=float(entry.recompute_cost_ms),
-                        reload_cost_ms=2.0,  # 单次 parquet reload 基线（快）
+                        reload_cost_ms=float(entry.reload_cost_ms),
                         reuse_count=max(1, entry.reuse_count),
                     )
                 except Exception:
@@ -325,6 +479,7 @@ class GovernedBufferStore:
                     ref = None
                 if ref is not None:
                     self._spill_refs[key] = ref
+                    entry.state = BufferEntryState.SPILLED
                     self._spilled += 1
                     self._backing.pop(key, None)
                     self._entries.pop(key, None)
@@ -337,6 +492,7 @@ class GovernedBufferStore:
                     self._spill_store.delete(old_ref)
                 except Exception:
                     pass
+            entry.state = BufferEntryState.RECOMPUTABLE
             self._backing.pop(key, None)
             self._entries.pop(key, None)
             freed += entry.bytes
@@ -379,6 +535,12 @@ class GovernedBufferStore:
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
+            states: dict[str, int] = {}
+            in_use = 0
+            for e in self._entries.values():
+                states[str(e.state)] = states.get(str(e.state), 0) + 1
+                if e.refcount > 0:
+                    in_use += 1
             return {
                 "budget_bytes": self._budget,
                 "accounted_bytes": self._total_accounted(),
@@ -388,6 +550,8 @@ class GovernedBufferStore:
                 "spilled": self._spilled,
                 "releases": self._releases,
                 "pinned": len(self._pinned),
+                "in_use_refcount": in_use,
+                "states": states,
                 "spill_store": self._spill_store.summary() if self._spill_store else None,
                 "reconciliation": self.reconciliation(),
             }

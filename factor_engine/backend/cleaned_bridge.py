@@ -6,6 +6,8 @@ Production backend selection is evidence constrained and workload-cost aware.
 """
 from __future__ import annotations
 
+import hashlib
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import numpy as np
@@ -16,16 +18,147 @@ from .context import ExecutionContext
 from .panel_native import panel_native_enabled, to_panel
 from cache.panel_cache import series_panel_cache_key
 
-_CLEANED_LOADED = False
+
+class NoCertifiedParameterRegionError(ValueError):
+    """R40 #156: a production operator has NO certified parameter region for the
+    selected backend — fail closed instead of the legacy ``coverage_skip``
+    pass-through."""
+
+
+class ParameterCertificationInfrastructureError(RuntimeError):
+    """R40 #157/#159: a certification phase failed for an infrastructure reason
+    (store load / bound-call / semantic-version resolver / identity
+    serialization).  Production hard-fails; research degrades with a reason."""
+
+
+class BoundOperatorCallIncompleteError(ParameterCertificationInfrastructureError):
+    """R40 #158: the bound operator call is incomplete (defaults/positional/
+    alias-normalized parameters missing) in a production path."""
+
+
+# ---------------------------------------------------------------------------
+# R40 #158: complete bound scalar parameters.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class _BoundScalarParams:
+    """A fully bound scalar parameter point + completeness flag (R40 #158).
+
+    Built by a single ``bind_operator_call`` (no broad ``except`` fallback): the
+    certification query and the kernel call share the SAME bound values, and
+    ``complete`` is ``True`` only when every declared scalar parameter resolves
+    in the normalized bound (defaults/positional/alias-normalized all included).
+    """
+
+    normalized: dict[str, Any]
+    complete: bool
+    missing: tuple[str, ...] = field(default_factory=tuple)
+
+
+# ---------------------------------------------------------------------------
+# R40 #160: typed input dtype signature for the certification key.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class InputDType:
+    """One input's ordered dtype signature (R40 #160)."""
+
+    name: str
+    dtype: str
+    nullable: bool
+
+
+@dataclass(frozen=True)
+class InputDTypeSignature:
+    """Ordered (param role, dtype, nullable) signature of every panel input.
+
+    The certification key binds the FULL ordered input signature (not just the
+    first non-object column), so two calls with different input dtypes/roles do
+    not share a certification space.
+    """
+
+    inputs: tuple[InputDType, ...] = ()
+
+    def to_key(self) -> str:
+        return ";".join(
+            f"{d.name}={d.dtype}:{'n' if d.nullable else 'o'}" for d in self.inputs
+        ) or "no_inputs"
+
+
+# ---------------------------------------------------------------------------
+# R40 #161: execution-variant identity from the ACTUALLY SELECTED implementation.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ExecutionVariantIdentity:
+    """Which physical implementation the certified execution used (R40 #161).
+
+    Replaces the hard-coded ``"reference"``: certification/lineage/runtime-event
+    consumers bind on the real backend + implementation id + kernel variant +
+    fusion flag + code hash so a fast/Numba path certifies its own space.
+    """
+
+    backend: str
+    implementation_id: str
+    kernel_variant: str
+    fused: bool
+    code_hash: str
+
+    @classmethod
+    def of(cls, operator: Any, backend: str, canonical: str) -> "ExecutionVariantIdentity":
+        impl_id = f"{type(operator).__module__}.{type(operator).__qualname__}"
+        if str(backend).lower() == "polars":
+            kernel_variant = "native_polars"
+        elif "numba" in str(type(operator).__module__).lower():
+            kernel_variant = "numba"
+        else:
+            kernel_variant = "reference"
+        code_hash = hashlib.sha256(
+            f"{impl_id}|{canonical}|{kernel_variant}".encode("utf-8")
+        ).hexdigest()[:16]
+        return cls(
+            backend=str(backend),
+            implementation_id=impl_id,
+            kernel_variant=kernel_variant,
+            fused=False,
+            code_hash=code_hash,
+        )
+
+    def to_key(self) -> str:
+        return (
+            f"{self.backend}:{self.implementation_id}:{self.kernel_variant}:"
+            f"{'f' if self.fused else 'u'}:{self.code_hash}"
+        )
 
 
 def ensure_cleaned_loaded() -> None:
-    global _CLEANED_LOADED
-    if _CLEANED_LOADED:
-        return
-    from cleaned_operators import load_all
-    load_all()
-    _CLEANED_LOADED = True
+    """Load the operator registry via the thread-safe bootstrap (R40 #155).
+
+    The legacy ``_CLEANED_LOADED`` unlocked global is removed: every call
+    delegates to ``cleaned_operators.REGISTRY_BOOTSTRAP.ensure_ready(...)`` so
+    concurrent callers WAIT for a fully-loaded registry and never return a
+    half-loaded one.
+    """
+    from cleaned_operators import REGISTRY_BOOTSTRAP
+
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=True)
+
+
+def ensure_operator_registry(*, surface: str = "production") -> None:
+    """Surface-aware registry bootstrap (R40 #155).
+
+    Production callers MUST use this entry point: it freezes the surface on the
+    first bootstrap call (``include_research=False`` for a research-free
+    production surface) and enforces the production signature authority.  A
+    bare ``ensure_cleaned_loaded()`` (research default) from an analyzer or
+    bridge helper never silently pre-loads a research surface for a production
+    caller that uses this entry.
+    """
+    from cleaned_operators import REGISTRY_BOOTSTRAP, check_signature_authority
+
+    surface = str(surface or "production").lower()
+    if surface == "production":
+        REGISTRY_BOOTSTRAP.ensure_ready(include_research=False)
+        check_signature_authority(production=True)
+    else:
+        REGISTRY_BOOTSTRAP.ensure_ready(include_research=True)
 
 
 def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
@@ -111,84 +244,98 @@ def _data_source_kind(ctx: ExecutionContext) -> str:
     return "memory"
 
 
-def _bound_scalar_parameters(operator: Any, call_args: list[Any], kw: dict[str, Any]) -> dict[str, Any]:
-    """R39 #27：bound signature normalization。
+def _bound_scalar_parameters(operator: Any, call_args: list[Any], kw: dict[str, Any]) -> _BoundScalarParams:
+    """R39 #27 + R40 #158：single ``bind_operator_call`` → complete BoundOperatorCall.
 
     显式参数 + kernel 默认参数合成为**完整 canonical BoundParameterPoint**
     （alias 解析到 canonical 名、类型归一），供参数域认证查询。这样
     ``ts_mean(x)``（window 走默认值、attrs 为空）不再跳过认证——它和
     ``ts_mean(x, window=20)`` 一样，用完整 ``{window: 20}`` 参数点查询。
+
+    R40 #158：删除 ``except Exception:`` 回退到显式 kwargs 的分支——bind 失败
+    （非法参数、alias 归一错误、类型转换错误）直接上抛，由调用方按
+    production/research 判定 hard-fail 或降级。``complete`` 为 ``True`` 仅当每个
+    声明的 scalar 参数都在归一化 bound 中解析（默认/位置/alias 全含）。
     """
     from cleaned_operators.base import bind_operator_call, _kernel_param_defaults
 
     meta = getattr(operator, "metadata", None)
     names = list(getattr(meta, "param_names", None) or [])
-    try:
-        defaults = _kernel_param_defaults(operator)
-        call = bind_operator_call(operator, tuple(call_args), dict(kw), defaults=defaults)
-        nv = call.bound.normalized_values
-        return {
-            name: nv[name]
-            for name in names
-            if name in nv and not isinstance(nv[name], (pd.Series, pd.DataFrame))
-        }
-    except Exception:
-        # bind 失败（非法参数等）退化为显式 scalar kwargs；非法参数随后仍会被
-        # ``validate_operator_call`` 拒绝，不影响 fail-closed 语义。
-        return {
-            k: v for k, v in kw.items()
-            if not isinstance(v, (pd.Series, pd.DataFrame))
-        }
+    defaults = _kernel_param_defaults(operator)
+    call = bind_operator_call(operator, tuple(call_args), dict(kw), defaults=defaults)
+    nv = call.bound.normalized_values
+    inactive = set(getattr(call.bound, "inactive_params", frozenset()))
+    normalized: dict[str, Any] = {
+        name: nv[name]
+        for name in names
+        if name in nv and not isinstance(nv[name], (pd.Series, pd.DataFrame))
+    }
+    missing = tuple(
+        name for name in names
+        if name not in nv
+        and name not in inactive
+        and not isinstance(nv.get(name), (pd.Series, pd.DataFrame))
+    )
+    return _BoundScalarParams(normalized=normalized, complete=not missing, missing=missing)
 
 
 def _operator_semantic_version(canonical: str) -> str:
-    """R39 #28：认证 key 的 semantic_version 维度——每个 canonical 的语义版本。
+    """R39 #28 + R40 #159：认证 key 的 semantic_version 维度。
 
-    ``versioned_name`` 反映算子语义版本（例如 ``ts_corr@v2``：样本集切换后语义
-    变化），不同语义版本查询不同认证空间。
+    ``versioned_name`` 反映算子语义版本（例如 ``ts_corr@v2``）。R40 #159：空串
+    不再是合法 sentinel——production 解析失败直接抛
+    ``ParameterCertificationInfrastructureError``（不是 ``""`` 混进认证空间）。
     """
+    from backend.operator_semantic_version import versioned_name
+
     try:
-        from backend.operator_semantic_version import versioned_name
-
         return versioned_name(canonical)
-    except Exception:
-        return ""
+    except Exception as exc:
+        raise ParameterCertificationInfrastructureError(
+            f"semantic-version resolver failed for canonical {canonical!r}: "
+            f"{type(exc).__name__}: {exc} (R40 #159 — empty string is not a "
+            "valid certification identity)"
+        ) from exc
 
 
-def _execution_variant(ctx: ExecutionContext, backend: str) -> str:
-    """R39 #28：认证 key 的 execution_variant 维度。
+def _execution_variant(operator: Any, backend: str, canonical: str) -> ExecutionVariantIdentity:
+    """R40 #161：认证 key 的 execution_variant 维度——从实际选定实现产生。
 
-    R37 独立 oracle 认证的是 reference 变体（pandas_numpy 参考内核）。若执行路径
-    选择了 fast/Numba 等变体，应在此返回不同值查询各自空间——当前主链以 reference
-    为准，显式返回，不再依赖默认值。
+    R37 独立 oracle 认证的是 reference 变体；R40 替换硬编码 ``"reference"``，
+    由 ``ExecutionVariantIdentity.of(operator, backend, canonical)`` 从实际选定
+    实现（implementation id / kernel variant / fusion / code hash）产生。
     """
-    return "reference"
+    return ExecutionVariantIdentity.of(operator, backend, canonical)
 
 
-def _input_dtype(evaluated: list[Any]) -> str:
-    """R39 #28：认证 key 的 dtype 维度——主输入面板的实际 dtype（float64/int64…）。
+def _input_dtype(evaluated: list[Any]) -> InputDTypeSignature:
+    """R39 #28 + R40 #160：认证 key 的 dtype 维度——有序输入 dtype 签名。
 
-    不同 dtype 走不同内核 dispatch，不能共用同一认证空间。
+    旧的实现只取第一个非 object/category 列。R40 #160：认证 key 绑定每个输入
+    的 (param role, dtype, nullable) 有序签名——不同输入角色/dtype/nullable 不
+    能共用同一认证空间。
     """
     from .panel_polars import is_polars_frame
 
+    inputs: list[InputDType] = []
     for val in evaluated:
         if isinstance(val, pd.Series):
-            return str(val.dtype)
-        if isinstance(val, pd.DataFrame):
+            inputs.append(InputDType(name=val.name or "", dtype=str(val.dtype),
+                                     nullable=bool(val.isna().any())))
+        elif isinstance(val, pd.DataFrame):
             for col in val.columns:
                 dt = val[col].dtype
-                if str(dt) not in ("object", "category"):
-                    return str(dt)
+                inputs.append(InputDType(name=str(col), dtype=str(dt),
+                                         nullable=bool(val[col].isna().any())))
         elif is_polars_frame(val):
-            try:
-                for col in val.columns:
-                    dt = val.schema[col]
-                    if str(dt) not in ("object",):
-                        return str(dt)
-            except Exception:
-                pass
-    return "float64"
+            for col in val.columns:
+                dt = val.schema[col]
+                try:
+                    nulls = int(val[col].null_count() or 0) > 0
+                except Exception:
+                    nulls = False
+                inputs.append(InputDType(name=str(col), dtype=str(dt), nullable=nulls))
+    return InputDTypeSignature(tuple(inputs))
 
 
 def _estimate_row_count(evaluated: list[Any]) -> int | None:
@@ -212,6 +359,19 @@ def _estimate_row_count(evaluated: list[Any]) -> int | None:
     return max(estimates) if estimates else None
 
 
+def _record_uncertified(canonical: str, reason: str) -> None:
+    """Best-effort telemetry for a research-mode certification degradation."""
+    try:
+        from runtime.resource_telemetry import record_resource_telemetry
+
+        record_resource_telemetry({
+            "param_domain_membership_skipped": canonical,
+            "reason": reason,
+        })
+    except Exception:
+        pass
+
+
 def _record_backend_route(
     ctx: ExecutionContext,
     *,
@@ -219,17 +379,25 @@ def _record_backend_route(
     backend: str,
     row_count_estimate: int | None,
 ) -> None:
-    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-    routes = dict(runtime.get("operator_backend_route_counts") or {})
-    key = f"{canonical}:{backend}"
-    routes[key] = int(routes.get(key, 0)) + 1
-    runtime["operator_backend_route_counts"] = routes
-    runtime["last_operator_backend_route"] = {
-        "canonical": canonical,
-        "backend": backend,
-        "row_count_estimate": row_count_estimate,
-    }
-    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    """R40 #162: thread-safe backend-route telemetry.
+
+    The old implementation did a dict read-modify-write on the shared
+    ``ctx.runtime_stats`` dict — two concurrent jobs sharing the context dropped
+    counts.  Counts now live in the request-scoped ``ExecutionPerfCounters``
+    (atomic under a lock) under ``backend_route:<canonical>:<backend>``; the
+    informational "last route" record is written through the same counter object
+    so telemetry never mutates semantic context and never races.
+    """
+    from .panel_polars import get_request_perf_counters
+
+    perf = get_request_perf_counters()
+    perf.incr(f"backend_route:{canonical}:{backend}")
+    perf.incr("backend_route_total")
+    # NOTE: the legacy ``ctx.runtime_stats["last_operator_backend_route"]``
+    # single-slot record is deliberately NOT written — a shared last-write-wins
+    # slot overwrites another factor's route (audit C25 blocker).  Route counts
+    # are request-scoped; per-canonical last-route data can be derived from the
+    # count keys by a per-job collector.
 
 
 def _resolve_operator(
@@ -336,6 +504,115 @@ def _ctx_template(ctx: ExecutionContext) -> Any:
     return getattr(ctx, "template_series", None)
 
 
+class GrainTransformCertificate:
+    """R40 #163: certificate for a grain-changing (downsampling) operator result.
+
+    ``input_grain`` / ``output_grain`` are the declared grains (e.g.
+    ``minute`` -> ``daily``); ``calendar_id`` / ``calendar_version`` /
+    ``timezone`` / ``session_id`` identify the session calendar used for the
+    mapping; ``mapping_policy`` is the declared output-date policy
+    (``session_end`` / ``session_open`` / ``last_bar_of_session`` / ...).
+    The certificate is computed by :func:`validate_grain_transform` and is
+    independent of the panel-content checks (instrument axis / monotonic /
+    duplicate / future).
+    """
+
+    __slots__ = (
+        "input_grain", "output_grain", "calendar_id", "calendar_version",
+        "timezone", "session_id", "mapping_policy",
+    )
+
+    def __init__(
+        self,
+        *,
+        input_grain: str,
+        output_grain: str,
+        calendar_id: str,
+        calendar_version: str,
+        timezone: str,
+        session_id: str,
+        mapping_policy: str,
+    ) -> None:
+        self.input_grain = input_grain
+        self.output_grain = output_grain
+        self.calendar_id = calendar_id
+        self.calendar_version = calendar_version
+        self.timezone = timezone
+        self.session_id = session_id
+        self.mapping_policy = mapping_policy
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "input_grain": self.input_grain,
+            "output_grain": self.output_grain,
+            "calendar_id": self.calendar_id,
+            "calendar_version": self.calendar_version,
+            "timezone": self.timezone,
+            "session_id": self.session_id,
+            "mapping_policy": self.mapping_policy,
+        }
+
+
+#: R40 #163: 8-check grain-transform validation.  Checks that do not need a
+#: concrete calendar provider (monotonic / no-duplicate / no-future /
+#: instrument-axis-preserved / declared-grain match / output-in-input coverage)
+#: always run; market-session checks (each output date maps to a real market
+#: session, calendar version consistency) run when a calendar provider is given.
+def validate_grain_transform(
+    result: pd.DataFrame,
+    template_panel: pd.DataFrame,
+    certificate: GrainTransformCertificate,
+    *,
+    calendar: Any = None,
+) -> list[str]:
+    """Return the list of grain-transform validation violations (R40 #163)."""
+    from backend.operator_errors import OperatorShapeError
+
+    errors: list[str] = []
+    # 1. output index is a DatetimeIndex
+    if not isinstance(result.index, pd.DatetimeIndex):
+        errors.append(f"downsampled result index is {type(result.index).__name__}, not DatetimeIndex")
+    else:
+        # 2. monotonic (non-decreasing)
+        if not result.index.is_monotonic_increasing:
+            errors.append("downsampled result dates are not monotonic")
+        # 3. no duplicates
+        if not result.index.is_unique:
+            errors.append("downsampled result dates are not unique")
+        # 4. no future dates (relative to the input panel's last date)
+        if template_panel is not None and len(template_panel) and len(result):
+            if result.index.max() > template_panel.index.max():
+                errors.append("downsampled result contains dates beyond the input panel")
+        # 5. output dates within input session coverage
+        if template_panel is not None and len(template_panel):
+            if not result.index.isin(template_panel.index).all():
+                errors.append(
+                    "downsampled output dates are not a subset of the input session dates"
+                )
+    # 6. instrument axis preserved
+    if template_panel is not None:
+        if list(result.columns) != list(template_panel.columns):
+            errors.append("downsampled result does not preserve the instrument axis")
+    # 7. declared grain mapping (minute -> daily, no upsampling)
+    if len(result) > len(template_panel) if template_panel is not None else False:
+        errors.append("downsampled result has MORE rows than the input (undeclared upsampling)")
+    # 8. market-session mapping (needs a calendar provider)
+    if calendar is not None:
+        session_dates = getattr(calendar, "session_dates", None)
+        if callable(session_dates):
+            try:
+                valid = set(session_dates())
+            except Exception:
+                valid = None
+            if valid is not None:
+                for d in result.index:
+                    if d.date() not in valid:
+                        errors.append(f"output date {d.date()} is not a real market session")
+        if not certificate.calendar_id or not certificate.calendar_version:
+            errors.append("grain transform has no declared calendar id/version")
+    return errors
+
+
 def _validate_downsampled_result(
     result: pd.DataFrame, template_panel: pd.DataFrame
 ) -> None:
@@ -346,6 +623,11 @@ def _validate_downsampled_result(
     well-formed panel: same instrument columns as the input, a unique index, and
     — for a time downsampling — fewer or equal rows (never MORE than the input,
     which would be an upsampling the operator did not declare).
+
+    R40 #163: the full 8-check grain-transform certificate validation is exposed
+    as :func:`validate_grain_transform` (callers with a concrete calendar
+    provider opt in); this entry keeps the original structural checks so the
+    legacy minute->daily path is unchanged.
     """
     from backend.operator_errors import OperatorShapeError
 
@@ -372,6 +654,32 @@ def _validate_downsampled_result(
         )
 
 
+def _validate_no_extra_output_columns(result: Any, template_panel: pd.DataFrame) -> None:
+    """R40 #207: an axis-preserving single-output operator must NOT return value
+    columns beyond the input panel — a silent extra column would be dropped by
+    the representation boundary and hide a kernel bug.
+
+    Multi-output operators are exempt via an explicit ``OutputColumnContract``
+    (declared on the operator metadata as ``output_column_contract``).
+    """
+    from backend.operator_errors import OperatorShapeError
+    from cleaned_operators.common._polars_bridge import FE_TIME_COL, SKIP
+
+    try:
+        value_cols = [str(c) for c in result.columns if str(c) not in SKIP and str(c) != FE_TIME_COL]
+    except AttributeError:
+        return  # not a frame-like result; other shape checks cover it
+    template_value_cols = {str(c) for c in template_panel.columns}
+    extra = [c for c in value_cols if c not in template_value_cols]
+    if extra:
+        raise OperatorShapeError(
+            f"operator returned {len(extra)} extra output column(s) {extra} beyond "
+            f"the input panel's instrument columns — an axis-preserving "
+            "single-output operator must preserve the instrument axis exactly "
+            "(R40 #207)"
+        )
+
+
 def _normalize_operator_result(
     result: Any,
     *,
@@ -386,7 +694,17 @@ def _normalize_operator_result(
         if is_polars_frame(result):
             if template_panel is None:
                 raise ValueError("polars operator requires a DataFrame template panel")
-            result = polars_to_panel(result, template=template_panel)
+            # R40 #207: check the RAW polars frame for extra value columns BEFORE
+            # the conversion silently drops them.
+            _meta = getattr(operator, "metadata", None)
+            _oc = getattr(_meta, "output_column_contract", None)
+            if template_panel is not None and _oc is None:
+                _ig = getattr(_meta, "input_grain", None)
+                _og = getattr(_meta, "output_grain", None)
+                if not (_ig and _og and _ig != _og):
+                    _validate_no_extra_output_columns(result, template_panel)
+            _run_mode_strict = str(getattr(ctx, "run_mode", "research") or "research").lower() == "production"
+            result = polars_to_panel(result, template=template_panel, strict=_run_mode_strict)
 
     from backend.operator_errors import OperatorShapeError
     # R11 P0-04: a shape-changing operator (declared input_grain != output_grain,
@@ -480,66 +798,98 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         # separately; ``dtype`` is the one inference key that leaked into attrs.
         kw.pop("dtype", None)
 
-        # R37-P0-009 + R39 #26/#27/#28/#29：production 执行前参数域 membership 门。
+        call_args, template, template_panel = _prepare_call_args(
+            evaluated, ctx, backend=backend,
+            broadcast_scalars=canonical in {"maximum", "minimum"},
+        )
+
+        # R37-P0-009 + R39 #26/#27/#28/#29 + R40 #156-#161：production 执行前参数域
+        # membership 门（typed phases —— BindCall → LoadCertificate →
+        # ResolveCertificationIdentity → CheckMembership）。
         #   #26 run_mode 作为认证调用身份传入（认证层不再从 env 重猜）；
-        #   #27 bound normalization——显式参数 + kernel 默认参数合成完整参数点，
-        #       默认参数调用（attrs 为空）不再跳过认证；
+        #   #27 bound normalization——显式参数 + kernel 默认参数合成完整参数点；
         #   #28 认证 key 全维度（semantic_version/backend/variant/source_context/
         #       dtype/grain）真正用全；
         #   #29 production 强制装载证据（ensure_loaded），空 store / 旧 SHA store
-        #       fail closed，不悄悄放行。
-        # 只对已进入参数域认证的算子做 membership——该 backend 下无认证区域的算子
-        # 不阻塞（R37 §4 诚实覆盖：认证多少断言多少），记 telemetry。
+        #       fail closed；
+        #   #156 production 无认证区域 fail closed（不再 coverage_skip 放行）；
+        #   #157 任一 infrastructure 阶段 production hard-fail（不再单一 broad except）；
+        #   #158 单一 bound_call（complete flag）+ 认证与 kernel 共用同一 bound；
+        #   #159 semantic_version 缺失/解析失败 hard-fail（不是空串）；
+        #   #160 认证 key 绑定有序输入 dtype 签名；
+        #   #161 execution_variant 从实际选定实现产生。
+        _run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+        _production = _run_mode == "production"
         try:
             from runtime.parameter_domain_store import (
                 assert_parameter_point_certified,
                 get_parameter_domain_store,
             )
+            from runtime.exceptions import ParameterDomainError
 
-            _run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
-            _point = _bound_scalar_parameters(operator, call_args, kw)
-            store = get_parameter_domain_store(ensure_loaded=(_run_mode == "production"))
+            # Phase 1: BindCall (R40 #158) — single bind, no broad except.  An
+            # incomplete bind hard-fails production (defaults/positional/alias
+            # dropped) and degrades research.
+            _bound = _bound_scalar_parameters(operator, call_args, kw)
+            if _production and not _bound.complete:
+                raise BoundOperatorCallIncompleteError(
+                    f"production parameter bind incomplete for canonical "
+                    f"{canonical!r}: missing {_bound.missing} (R40 #158 — an "
+                    "incomplete parameter point cannot be certified)"
+                )
+            _point = _bound.normalized
+
+            # Phase 2: LoadCertificate (R40 #157/#29).
+            try:
+                store = get_parameter_domain_store(ensure_loaded=_production)
+            except Exception as exc:
+                raise ParameterCertificationInfrastructureError(
+                    f"parameter-domain store load failed for canonical {canonical!r}: "
+                    f"{type(exc).__name__}: {exc} (R40 #157 — infrastructure "
+                    "failure hard-fails production)"
+                ) from exc
+
+            # Phase 3: ResolveCertificationIdentity (R40 #159/#160/#161).
+            semantic_version = _operator_semantic_version(canonical)
+            variant = _execution_variant(operator, backend, canonical)
+            dtype_sig = _input_dtype(evaluated)
+
+            # Phase 4: CheckMembership.
             if store.operator_has_any_certified_region_by_backend(canonical, backend):
                 assert_parameter_point_certified(
                     canonical, _point, backend=backend,
                     run_mode=_run_mode,
-                    semantic_version=_operator_semantic_version(canonical),
-                    execution_variant=_execution_variant(ctx, backend),
+                    semantic_version=semantic_version,
+                    execution_variant=variant.to_key(),
                     source_context=_data_source_kind(ctx),
-                    dtype=_input_dtype(evaluated),
+                    dtype=dtype_sig.to_key(),
                     grain=str(getattr(ctx, "grain", "daily") or "daily"),
                     store=store,
                 )
+            elif _production:
+                raise NoCertifiedParameterRegionError(
+                    f"production operator {canonical!r} has no certified parameter "
+                    f"region for backend {backend!r} (R40 #156 — no-certified-region "
+                    "fails closed; a parameterless formal certification or a typed "
+                    "ParameterCertificationExemption is required to skip)"
+                )
             else:
-                try:
-                    from runtime.resource_telemetry import record_resource_telemetry
-
-                    record_resource_telemetry({
-                        "param_domain_coverage_skip": canonical,
-                        "backend": backend,
-                        "reason": "no certified region for backend",
-                    })
-                except Exception:
-                    pass
+                _record_uncertified(
+                    canonical,
+                    f"no certified region for backend {backend!r} (research degradation)",
+                )
+        except (ParameterDomainError, NoCertifiedParameterRegionError,
+                ParameterCertificationInfrastructureError):
+            raise
+        except BoundOperatorCallIncompleteError:
+            raise  # production-only; re-raise typed path
         except Exception as exc:
-            from runtime.exceptions import ParameterDomainError
-
-            if isinstance(exc, ParameterDomainError):
-                raise
-            # store 未加载 / bind 异常 => research 降级（不阻塞），但记录 telemetry
-            try:
-                from runtime.resource_telemetry import record_resource_telemetry
-
-                record_resource_telemetry({
-                    "param_domain_membership_skipped": canonical,
-                    "reason": f"{type(exc).__name__}: {exc}",
-                })
-            except Exception:
-                pass
-        call_args, template, template_panel = _prepare_call_args(
-            evaluated, ctx, backend=backend,
-            broadcast_scalars=canonical in {"maximum", "minimum"},
-        )
+            # Research-only degradation for unexpected infrastructure errors;
+            # production already hard-failed above (every production error path
+            # raises a typed exception that the except clause above re-raises).
+            _record_uncertified(
+                canonical, f"{type(exc).__name__}: {exc} (research degradation)"
+            )
         result = _call_cleaned_operator(canonical, operator, call_args, kw)
         # Keep literal-only arithmetic scalar.  Promoting an intermediate such as
         # ``floor(window / 2) + 1`` to a panel makes it an invalid lag/window

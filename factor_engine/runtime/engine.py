@@ -202,6 +202,23 @@ def _field_catalog_version() -> str:
     return compute_field_catalog_hash()
 
 
+def _market_of_factor(factor: Any) -> str | None:
+    """从 factor 解析显式 market（semantic_identity.market → factor.market）。
+
+    R40 #174：production compile 不得允许市场未知。优先取 semantic identity 的
+    market（执行语义真值），再取 factor 上的显式字段；都没有返回 ``None``——
+    绝不默认 ``"ashare"``（避免把 US 因子当 A 算）。
+    """
+    semantic = getattr(factor, "semantic_identity", None)
+    for cand in (
+        getattr(semantic, "market", None),
+        getattr(factor, "market", None),
+    ):
+        if cand is not None and str(cand) != "":
+            return str(cand)
+    return None
+
+
 def _scope_from_factor(
     factor: Any,
     *,
@@ -660,7 +677,22 @@ class FactorEngine:
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
         logger.info("开始编译因子 '%s'", factor.name)
-        analysis = self.analyzer.lower(factor.expr)
+        # R40 #174：production compile 的 Analyzer 必须带显式 market——从 factor
+        # 解析（semantic_identity.market → factor.market），解析不到即 fail-closed。
+        # research/compat 仍用 init 时构造的 analyzer（market=None legacy 路径）。
+        if is_production_mode(self.run_mode):
+            from ir.analyzer import Analyzer, ProductionMarketContextRequiredError
+
+            market = _market_of_factor(factor)
+            if not market:
+                raise ProductionMarketContextRequiredError(
+                    f"production compile of factor {factor.name!r} requires an "
+                    "explicit market (semantic_identity.market or factor.market); "
+                    "market=None 只在 research/compat 模式合法（R40 #174）"
+                )
+            analysis = Analyzer(production=True, market=market).lower(factor.expr)
+        else:
+            analysis = self.analyzer.lower(factor.expr)
         if pit_enforce:
             from runtime.pit_audit import assert_pit_safe
 

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.closure.strict_scalar import strict_int
 from cleaned_operators.ts_model._rolling_core import frame_like, metadata
 
 _CANONICALS: list[str] = []
@@ -122,7 +123,7 @@ def _sig_area(x: np.ndarray, y: np.ndarray, window: int) -> float:
     return np.nan if out is None else float(out[4])
 
 
-_register("ts_path_signature_area", "二维路径的有向面积（Levy 面积）。", ["x", "y", "window"], "level",
+_register("ts_path_signature_area", "二维路径的有向面积（Levy 面积）。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window"], "level",
            lambda x, y, window=60: _apply_two(x, y, lambda a, b: _sig_area(a, b, int(window))))
 
 
@@ -172,12 +173,18 @@ def _sig_depth2_norm(x: np.ndarray, y: np.ndarray, window: int) -> float:
     return float(np.sqrt(sum(c * c for c in out[:4])))
 
 
-_register("ts_path_signature_depth2_norm", "二阶路径签名各项 L2 范数。", ["x", "y", "window"], "level",
+_register("ts_path_signature_depth2_norm", "二阶路径签名各项 L2 范数。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window"], "level",
            lambda x, y, window=60: _apply_two(x, y, lambda a, b: _sig_depth2_norm(a, b, int(window))))
 
 
 def _leadlag_area(x: np.ndarray, y: np.ndarray, window: int, lag: int) -> float:
-    l = max(1, int(lag))
+    # M-240: strict parameter validation, never a silent clamp.  ``lag`` must be
+    # an exact positive integer; a bool, a fractional / NaN / Inf value or a
+    # ``lag < 1`` is a contract violation.  The old ``max(1, int(lag))`` quietly
+    # coerced ``True`` / ``0`` / ``-3`` to 1 and truncated ``2.9`` to 2 —
+    # manufacturing two distinct ASTs with identical output — so it is replaced
+    # by the central strict-int gate (``cleaned_operators.closure.strict_scalar``).
+    l = strict_int(lag, "lag", lower=1)
     seg_x = x[-int(window):]
     seg_y = y[-int(window):]
     if len(seg_x) <= l:
@@ -185,5 +192,5 @@ def _leadlag_area(x: np.ndarray, y: np.ndarray, window: int, lag: int) -> float:
     return _sig_area(seg_x[:-l], seg_y[l:], len(seg_x) - l)
 
 
-_register("ts_path_leadlag_area", "lead-lag 变换后的路径有向面积。", ["x", "y", "window", "lag"], "level",
-           lambda x, y, window=60, lag=1: _apply_two(x, y, lambda a, b: _leadlag_area(a, b, int(window), int(lag))))
+_register("ts_path_leadlag_area", "lead-lag 变换后的路径有向面积。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window", "lag"], "level",
+           lambda x, y, window=60, lag=1: _apply_two(x, y, lambda a, b: _leadlag_area(a, b, int(window), lag)))

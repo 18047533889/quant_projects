@@ -10,9 +10,11 @@ production 启动前：
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Sequence
 
 logger = logging.getLogger("data_access.startup_gate")
@@ -25,6 +27,105 @@ class StartupGateResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {"passed": self.passed, "problems": list(self.problems)}
+
+
+@dataclass
+class StartupCertificate:
+    """R40 #59：production store 启动证书。
+
+    - ``gate_name``   启动 gate 名称（默认 ``production_startup``）；
+    - ``passed``      全部 critical checks 通过；
+    - ``timestamp``   ISO-8601 证书签发时间；
+    - ``evidence_hash`` 问题清单 + gate 版本的确定性摘要（证明该证书对应哪一组
+      checks 判定）；
+    - ``problems``    research 模式收集的非阻塞问题（production 通过时为空）。
+    """
+
+    gate_name: str = "production_startup"
+    passed: bool = False
+    timestamp: str = ""
+    evidence_hash: str = ""
+    problems: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "gate_name": self.gate_name,
+            "passed": self.passed,
+            "timestamp": self.timestamp,
+            "evidence_hash": self.evidence_hash,
+            "problems": list(self.problems),
+        }
+
+
+#: 证书有效期（超时视为过期，production store 需重新跑 gate）。
+_STARTUP_CERTIFICATE_TTL_SECONDS = 24 * 3600
+
+
+def _evidence_hash_of(problems: Sequence[str], gate_name: str) -> str:
+    """问题清单 + gate 名称 → 确定性摘要（#59 证据哈希）。"""
+    payload = "\n".join([gate_name, *sorted(problems)]) or "ok"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def build_startup_certificate(
+    passed: bool, problems: Sequence[str], *, gate_name: str = "production_startup",
+) -> StartupCertificate:
+    """构造 StartupCertificate（timestamp + evidence_hash）。"""
+    return StartupCertificate(
+        gate_name=gate_name,
+        passed=bool(passed),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        evidence_hash=_evidence_hash_of(problems, gate_name),
+        problems=list(problems),
+    )
+
+
+def startup_certificate_expired(
+    cert: StartupCertificate | None,
+    *,
+    ttl_seconds: int = _STARTUP_CERTIFICATE_TTL_SECONDS,
+    now: datetime | None = None,
+) -> bool:
+    """证书是否过期（缺失 / 未通过 / timestamp 超过 TTL → 过期）。"""
+    if cert is None or not getattr(cert, "passed", False):
+        return True
+    raw = getattr(cert, "timestamp", "") or ""
+    if not raw:
+        return True
+    try:
+        ts = datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return True
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return (now - ts).total_seconds() > max(0, int(ttl_seconds))
+
+
+def require_startup_certificate(
+    store: Any,
+    *,
+    production: bool | None = None,
+    force: bool = False,
+    checks: Sequence[Callable[[], list[str]]] | None = None,
+) -> StartupCertificate:
+    """production store 要求未过期 StartupCertificate 才 proceed（R40 #59）。
+
+    - store 已有未过期且 passed 的证书 → 直接返回（不重跑 gate）；
+    - 否则跑 :func:`run_startup_gate`（production 失败会 raise）；
+    - 成功后把证书挂到 ``store._startup_certificate``。
+    """
+    cert = getattr(store, "_startup_certificate", None)
+    if cert is not None and not force and not startup_certificate_expired(cert):
+        return cert
+    cert = run_startup_gate(store, production=production, checks=checks)
+    try:
+        store._startup_certificate = cert
+    except Exception:
+        pass
+    return cert
 
 
 def _legacy_home_fallback_in_use(store: Any = None) -> list[str]:
@@ -64,13 +165,73 @@ def _security_policy_explicit(store: Any = None) -> list[str]:
     return []
 
 
-def _critical_calendar_authoritative(store: Any = None) -> list[str]:
-    """R26-P0-020：critical calendar 必须 authoritative（不 COALESCE same-day）。
+def calendar_digest(cal: Any) -> str:
+    """R40 #60：日历内容摘要——hash 全部交易日（有序）。
 
-    R29-P0：不再调错签名的 ``compile_available_from_result(dataset)``（需要
-    knowledge/availability），而是**真实加载** ashare/us 日历并对一个边界日期跑
-    ``next_trading_day`` + ``next_session_open`` smoke probe——证明「已注入的日历
-    真的能推出下一交易日/下一开盘点」，而不是只 import 一下。
+    日历 trading_days 变化（注入新日历 / 被替换）→ digest 变。这是「日历身份」
+    的确定性证明，不再依赖 ``date.today()`` 算上一个周六。
+    """
+    days = getattr(cal, "trading_days", None) or ()
+    payload = "\n".join(str(d) for d in sorted(set(days)))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def calendar_coverage_check(
+    cal: Any,
+    *,
+    market: str = "",
+    expected_digest: str | None = None,
+    required_window_days: int = 30,
+    lookback_days: int = 120,
+    now: datetime | None = None,
+) -> list[str]:
+    """R40 #60：calendar 权威性 + digest + 覆盖窗口校验。
+
+    - ``source == "fallback"`` → 非权威（fail）；
+    - ``expected_digest`` 提供且与 ``calendar_digest(cal)`` 不符 → 注入的日历与
+      期望身份不一致（fail）；
+    - 覆盖窗口：``[now - lookback_days, now]`` 内实际交易日数必须 ≥
+      ``required_window_days``——证明日历不是空壳/被截断到远古。
+    """
+    problems: list[str] = []
+    if not getattr(cal, "has_data", False):
+        problems.append(f"critical calendar {market} 无交易日数据")
+        return problems
+    if getattr(cal, "source", None) == "fallback":
+        problems.append(
+            f"critical calendar {market} 是 fallback 兜底日历（非权威，禁止 "
+            "look-ahead 语义依赖）"
+        )
+    digest = calendar_digest(cal)
+    if expected_digest and digest != expected_digest:
+        problems.append(
+            f"critical calendar {market} digest 不匹配：expected={expected_digest} "
+            f"actual={digest}（注入的日历与期望身份不一致）"
+        )
+    # 覆盖窗口：最近 lookback_days 天内至少有 required_window_days 个交易日。
+    now = now or datetime.now(timezone.utc)
+    today = now.date()
+    start = today - timedelta(days=max(1, int(lookback_days)))
+    days = getattr(cal, "trading_days", None) or ()
+    count = sum(1 for d in days if start <= d <= today)
+    if count < max(1, int(required_window_days)):
+        problems.append(
+            f"critical calendar {market} 覆盖不足：最近 {lookback_days} 天仅 "
+            f"{count} 个交易日，要求 ≥ {required_window_days}（日历可能被截断/"
+            "过期）。"
+        )
+    return problems
+
+
+def _critical_calendar_authoritative(store: Any = None) -> list[str]:
+    """R26-P0-020 + R40 #60：critical calendar 必须 authoritative（不 COALESCE
+    same-day）。
+
+    R40 #60：不再用 ``date.today()`` 算「上一个周六」做 smoke probe（依赖周末
+    结构、无法验证日历身份）；改为 **calendar digest + 覆盖窗口** 校验——注入的
+    日历必须是 authoritative（非 fallback）、digest 匹配期望、覆盖覆盖所需窗口。
+    期望 digest 从 store 的 ``calendar_expected_digest`` 配置读取（未配置 →
+    只校验权威 + 覆盖，digest 维度 N/A）。
     """
     from data_access.read.query_budget import is_strict_semantics
 
@@ -78,10 +239,6 @@ def _critical_calendar_authoritative(store: Any = None) -> list[str]:
         return []
     if store is None:
         return []
-    from datetime import date, datetime, timedelta
-
-    from data_access.read.session_calendar import compile_available_from
-
     problems: list[str] = []
     for market in ("ashare", "us"):
         try:
@@ -95,45 +252,18 @@ def _critical_calendar_authoritative(store: Any = None) -> list[str]:
                 "交易所日历，禁止 same_day fallback）"
             )
             continue
-        if not getattr(cal, "has_data", False):
-            problems.append(f"critical calendar {market} 无交易日数据")
-            continue
-        if getattr(cal, "source", None) == "fallback":
-            problems.append(
-                f"critical calendar {market} 是 fallback 兜底日历（非权威，禁止 "
-                "look-ahead 语义依赖）"
-            )
-            continue
-        # 真实 smoke probe：最近一个周六 → next_trading_day 必须返回交易日。
-        today = date.today()
-        sat = today - timedelta(days=(today.weekday() - 5) % 7)
+        expected = None
         try:
-            nxt = cal.next_trading_day(sat)
-        except Exception as exc:
-            problems.append(f"critical calendar {market} next_trading_day 失败：{exc}")
-            continue
-        if nxt is None or not cal.is_trading_day(nxt):
-            problems.append(
-                f"critical calendar {market} smoke probe 失败："
-                f"next_trading_day({sat})={nxt}（非交易日）"
-            )
-            continue
-        # next_session_open availability 必须编译成 authoritative（不降级）。
-        try:
-            res = compile_available_from(
-                datetime(nxt.year, nxt.month, nxt.day, 0, 0),
-                "next_session_open",
-                calendar=cal,
-            )
-            if getattr(res, "authoritative", True) is False:
-                problems.append(
-                    f"critical calendar {market} next_session_open 非 authoritative"
-                    f"（{getattr(res, 'degradation_reason', 'degraded')}）"
-                )
-        except Exception as exc:
-            problems.append(
-                f"critical calendar {market} next_session_open probe 失败：{exc}"
-            )
+            expected = getattr(store, "calendar_expected_digest", None)
+            if callable(expected):
+                expected = expected(market)
+            elif isinstance(expected, dict):
+                expected = expected.get(market)
+        except Exception:
+            expected = None
+        problems.extend(
+            calendar_coverage_check(cal, market=market, expected_digest=expected)
+        )
     return problems
 
 
@@ -265,8 +395,8 @@ def run_startup_gate(
             raise RuntimeError(
                 "Production startup gate failed:\n  " + "\n  ".join(problems)
             )
-        return StartupGateResult(passed=True)
-    # research：收集问题不失败。
+        return build_startup_certificate(True, [])
+    # research：收集问题不失败（证书 passed=True，problems 记录非阻塞项）。
     for p in problems:
         logger.warning("startup gate (research, non-blocking): %s", p)
-    return StartupGateResult(passed=True, problems=problems)
+    return build_startup_certificate(True, problems)

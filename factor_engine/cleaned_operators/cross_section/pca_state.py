@@ -15,6 +15,11 @@ canonical ``panel_model`` 与 shared ``PCABlock`` **都调用本模块**——�
 （P0-061）与 canonical 完全一致。sign orientation（P0-062）由 SVD 本身决定；
 canonical 的稳定 instrument-ID tie-break 由 ``_pca_loading`` 单独实现（本模块
 只负责 fit + commonality/resid/transform 的 shared math）。
+
+``rank_policy``（M-021）：fit 的 rank cap 拆成两种内部 semantic policy——
+reconstruction 用 ``k <= p-1``（避免 full-rank residual=0），regression（PCR）
+允许 ``k <= p``。PCR canonical 通过 ``_pca_svd(..., rank_policy="regression")``
+进入 regression policy。
 """
 from __future__ import annotations
 
@@ -34,8 +39,15 @@ def _fit(
     *,
     min_coverage_ratio: float = PCA_MIN_COVERAGE,
     absolute_min_obs: int = PCA_MIN_HISTORY,
+    rank_policy: str = "reconstruction",
 ) -> dict[str, Any] | None:
-    """Standardised SVD PCA（与 canonical ``_pca_svd`` 逐位一致，active-space only）。"""
+    """Standardised SVD PCA（与 canonical ``_pca_svd`` 逐位一致，active-space only）。
+
+    ``rank_policy``（M-021）：reconstruction（默认）用 ``k <= n_active - 1``——
+    避免 full-rank residual=0；regression（PCR）允许 ``k <= n_active``（全部
+    主成分都可用于回归）。默认 reconstruction 与 legacy ``_pca_svd`` 行为逐位
+    一致。非法 policy 值 fail-closed（回退 reconstruction）。
+    """
     n, d = X.shape
     window = max(1, int(n))
     finite_count = np.sum(np.isfinite(X), axis=0)
@@ -50,7 +62,10 @@ def _fit(
     sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
     Xc = np.where(np.isfinite(sub), sub, mu_sub)
     Xs = (Xc - mu_sub) / sd_sub
-    k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
+    if rank_policy == "regression":
+        k = int(min(n_components, n_active, Xs.shape[0] - 1))
+    else:
+        k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
     if k < 1:
         return None
     _U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
@@ -84,11 +99,13 @@ class PCAState:
         *,
         min_coverage_ratio: float = PCA_MIN_COVERAGE,
         absolute_min_obs: int = PCA_MIN_HISTORY,
+        rank_policy: str = "reconstruction",
     ) -> "PCAState | None":
         fit = _fit(
             X, n_components,
             min_coverage_ratio=min_coverage_ratio,
             absolute_min_obs=absolute_min_obs,
+            rank_policy=rank_policy,
         )
         return cls(fit) if fit is not None else None
 

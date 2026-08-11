@@ -18,6 +18,34 @@ _INTEGER_PARAMS = frozenset(
     {"window", "min_periods", "order", "lag", "coefficient_index", "max_q", "q"}
 )
 
+# Fixed numerical policy — VERSIONED (audit M-055).  The Huber outlier cutoff is a
+# fixed, documented constant; do NOT free-search / tune it per dataset.  Any change
+# to this value must ship as a NEW semantic version (the operator output changes
+# for every window), never silently edited in place.
+_HUBER_DELTA = 1.345
+
+#: Failure-reason telemetry of the most recent iterative regression fit (M-060).
+#: ``last_fit_status()`` lets callers distinguish a genuinely converged fit from a
+#: fail-closed one and *why*, mirroring the telemetry pattern used by
+#: ``group_ext`` / ``advanced_expectile``.
+_LAST_FIT_STATUS: dict[str, Any] = {"converged": False, "reason": "not_run"}
+
+
+def last_fit_status() -> dict[str, Any]:
+    """Telemetry for the last Expectile / Huber / quantile / OLS fit.
+
+    Returns ``{"converged": bool, "reason": str}`` where ``reason`` is one of
+    ``"converged" | "non_converged" | "singular" | "insufficient_sample" |
+    "invalid_params"``.  A non-converged fit returns ``None`` from the kernel and
+    the caller emits NaN (fail-closed); this accessor explains why.
+    """
+    return dict(_LAST_FIT_STATUS)
+
+
+def _set_fit_status(converged: bool, reason: str) -> None:
+    _LAST_FIT_STATUS["converged"] = bool(converged)
+    _LAST_FIT_STATUS["reason"] = reason
+
 
 def metadata(
     name: str,
@@ -30,6 +58,7 @@ def metadata(
     input_units: dict[str, str] | None = None,
     output_unit: str | None = None,
     diagnostic_only: bool = False,
+    param_specs: "dict[str, Any] | None" = None,
 ) -> OperatorMetadata:
     # P1-89: the typed-v2 surface carries explicit input_units / output_unit
     # field semantics.  Regression kernels that previously wrote a generic
@@ -59,6 +88,7 @@ def metadata(
         tags=tags,
         input_units=dict(input_units) if input_units else {},
         output_unit=output_unit,
+        param_specs=dict(param_specs) if param_specs else {},
     )
 
 
@@ -148,15 +178,20 @@ def fit_linear_model_checked(design: np.ndarray, y: np.ndarray) -> np.ndarray | 
 def ols_fit(design: np.ndarray, y: np.ndarray) -> np.ndarray | None:
     """OLS coefficients, None if design is rank deficient / degenerate."""
     if design.shape[0] < design.shape[1]:
+        _set_fit_status(False, "insufficient_sample")
         return None
     if not design_is_well_conditioned(design):
+        _set_fit_status(False, "singular")
         return None
     try:
         beta, *_ = np.linalg.lstsq(design, y, rcond=None)
     except (np.linalg.LinAlgError, ValueError):
+        _set_fit_status(False, "singular")
         return None
     if not np.all(np.isfinite(beta)):
+        _set_fit_status(False, "singular")
         return None
+    _set_fit_status(True, "converged")
     return beta
 
 
@@ -164,7 +199,7 @@ def huber_fit(
     design: np.ndarray,
     y: np.ndarray,
     *,
-    delta: float = 1.345,
+    delta: float = _HUBER_DELTA,
     iterations: int = 20,
     tolerance: float = 1e-6,
 ) -> np.ndarray | None:
@@ -175,6 +210,11 @@ def huber_fit(
     iteration is monotone; if it does not converge within ``iterations`` steps
     the fit is treated as degenerate and ``None`` is returned (callers then emit
     NaN rather than a half-converged coefficient).
+
+    The outlier cutoff ``delta`` defaults to the VERSIONED constant
+    ``_HUBER_DELTA`` (audit M-055) — a fixed numerical policy, never
+    free-searched.  Telemetry: the failure reason is exposed via
+    :func:`last_fit_status`.
     """
     beta = ols_fit(design, y)
     if beta is None:
@@ -189,6 +229,7 @@ def huber_fit(
             # Residual scale is exactly zero: a degenerate/exact residual vector
             # gives no robust scale to normalise by.  Fail closed (None) so the
             # caller emits NaN instead of re-using the last coefficient.
+            _set_fit_status(False, "singular")
             return None
         z = resid / scale
         abs_z = np.abs(z)
@@ -207,7 +248,9 @@ def huber_fit(
         # Iterations exhausted without meeting the convergence tolerance: the
         # last ``beta`` is a half-converged fit and must not be accepted.  The
         # caller emits NaN (fail-closed) rather than a spurious coefficient.
+        _set_fit_status(False, "non_converged")
         return None
+    _set_fit_status(True, "converged")
     return beta
 
 
@@ -235,7 +278,13 @@ def ridge_fit(design: np.ndarray, y: np.ndarray, alpha: float, *, has_intercept:
     return beta
 
 
-def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 8) -> np.ndarray | None:
+def quantile_fit(
+    design: np.ndarray,
+    y: np.ndarray,
+    q: float,
+    iterations: int = 8,
+    tolerance: float = 1e-6,
+) -> np.ndarray | None:
     """IRLS asymmetric-weighted least squares.
 
     This minimises an asymmetric *squared*-error objective, i.e. it is an
@@ -243,6 +292,12 @@ def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 
     pinball-loss quantile regression.  It is kept under the historic
     ``quantile_*`` operator names for backward compatibility, with the honest
     ``expectile_*`` names exposed alongside; both must be read as expectiles.
+
+    Convergence is checked (audit M-060): each iteration's max ``|beta_new -
+    beta|`` is tracked; if the budget ``iterations`` is exhausted with the last
+    change still above ``tolerance`` the fit is treated as NON-converged and
+    ``None`` is returned (fail-closed) instead of the half-converged last
+    iterate.  The failure reason is exposed via :func:`last_fit_status`.
     """
     beta = ols_fit(design, y)
     if beta is None:
@@ -256,10 +311,18 @@ def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 
         # ``weight`` itself would minimise ``sum w_i^2 e_i^2``, over-weighting
         # the asymmetric side (review P0: expectile family).
         sqrt_w = np.sqrt(weight)
-        beta = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
-        if beta is None:
+        beta_new = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
+        if beta_new is None:
             return None
-    return beta
+        if np.max(np.abs(beta_new - beta)) < tolerance:
+            _set_fit_status(True, "converged")
+            return beta_new
+        beta = beta_new
+    # Iterations exhausted without meeting the convergence tolerance: the last
+    # iterate is a half-converged fit and must not be accepted (M-060).  The
+    # caller emits NaN (fail-closed) rather than a spurious coefficient.
+    _set_fit_status(False, "non_converged")
+    return None
 
 
 # The IRLS asymmetric-weighted fit above is an expectile fit; expose an
@@ -277,11 +340,14 @@ def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndar
     deterministic for a given input, keeping the operator reproducible.
     Returns ``None`` when the LP is infeasible / unbounded or the sample is
     too small, so the caller emits NaN rather than a spurious coefficient.
+    The failure reason is exposed via :func:`last_fit_status` (M-060).
     """
     if _linprog is None:
+        _set_fit_status(False, "invalid_params")
         return None
     n, p = design.shape
     if n < p + 2:
+        _set_fit_status(False, "insufficient_sample")
         return None
     c = np.concatenate([np.zeros(p), q * np.ones(n), (1.0 - q) * np.ones(n)])
     a_eq = np.column_stack([design, np.eye(n), -np.eye(n)])
@@ -289,12 +355,16 @@ def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndar
     try:
         res = _linprog(c, A_eq=a_eq, b_eq=y.astype(float), bounds=bounds, method="highs")
     except Exception:  # pragma: no cover
+        _set_fit_status(False, "invalid_params")
         return None
     if not getattr(res, "success", False):
+        _set_fit_status(False, "non_converged")
         return None
     beta = np.asarray(res.x[:p], dtype=float)
     if not np.all(np.isfinite(beta)):
+        _set_fit_status(False, "singular")
         return None
+    _set_fit_status(True, "converged")
     return beta
 
 

@@ -29,6 +29,7 @@ from .source_snapshot import (
     ResolvedSourceSnapshot,
     content_digest_of_objects,
 )
+from data_access.snapshot.fidelity import SnapshotFidelity
 
 logger = logging.getLogger("data_access.source_snapshot")
 
@@ -348,9 +349,12 @@ class SourceSnapshotResolver:
 
         objects: tuple[ResolvedObject, ...] = ()
         generation = None
+        # R40 #52：保真度随解析来源升级（UNKNOWN → 具体层级）。
+        fidelity = SnapshotFidelity.UNKNOWN
         if manifest_present:
             objects = manifest.objects
             generation = manifest.source_generation
+            fidelity = SnapshotFidelity.PUBLISHER_MANIFEST
             logger.info(
                 "source_snapshot: %s via source_manifest gen=%s objects=%d",
                 dataset, generation, len(objects),
@@ -373,6 +377,8 @@ class SourceSnapshotResolver:
                             )
                         ]
                     objects = tuple(listed)
+                    if objects:
+                        fidelity = SnapshotFidelity.REMOTE_VERSION_ID
                 except Exception as exc:
                     if strict:
                         raise SourceSnapshotUnavailable(
@@ -396,6 +402,12 @@ class SourceSnapshotResolver:
                 if h is not None:
                     head_objs.append(h)
             objects = tuple(head_objs)
+            if objects:
+                # 远端对象带 etag/version_id → REMOTE_VERSION_ID；本地 stat → LOCAL_STAT。
+                remote = any(
+                    str(o.uri).startswith(("s3://", "cos://")) for o in objects
+                )
+                fidelity = SnapshotFidelity.REMOTE_VERSION_ID if remote else SnapshotFidelity.LOCAL_STAT
 
         # 4) R29-P0 主链兜底：FileVersion snapshot（fallback_fn）。manifest 缺席
         #    且无 exact 身份时，本地 file-manifest snapshot 是合法分支。
@@ -413,6 +425,8 @@ class SourceSnapshotResolver:
                 if objs:
                     objects = objs
                     generation = getattr(fb, "source_generation", None)
+                    # 兜底 FileVersion snapshot：本地 stat 兜底（非权威远端身份）。
+                    fidelity = SnapshotFidelity.FALLBACK
                     logger.debug(
                         "source_snapshot: %s via file_manifest objects=%d",
                         dataset, len(objs),
@@ -434,6 +448,9 @@ class SourceSnapshotResolver:
                 source_generation=generation,
                 objects=(),
                 content_digest="",
+                # 权威空 manifest → PUBLISHER_MANIFEST（合法空集）；否则 FALLBACK。
+                fidelity=(SnapshotFidelity.PUBLISHER_MANIFEST if manifest_present
+                          else SnapshotFidelity.FALLBACK),
             )
 
         # R26-P0-015：object 必须在 dataset registered boundary 下（paths 公共前缀）。
@@ -467,6 +484,9 @@ class SourceSnapshotResolver:
             source_generation=generation,
             objects=objects,
             content_digest=digest,
+            # 有 content digest 时至少 CONTENT_HASH；更强来源已升级 fidelity。
+            fidelity=(fidelity if fidelity != SnapshotFidelity.UNKNOWN
+                      else SnapshotFidelity.CONTENT_HASH),
         )
         if policy == "fail_if_changed":
             # R26-P0-015：fail_if_changed = 固定到当前 digest，执行期变化 → 拒绝。

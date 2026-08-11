@@ -70,6 +70,13 @@ class ProductionExecutionCertificate:
     backend_eligibility: frozenset[str]
     output_shape_hash: str
     certificate_hash: str
+    # R40 #141: backend 选择链 —— requested_backend / resolved_dialect /
+    # datasource_identity 显式记录在证书里（如 clickhouse_sql -> dialect
+    # ``clickhouse``），runtime backend 事件校验不再把 clickhouse 路由静默当
+    # 无记录的 DuckDB 路径。
+    requested_backend: str = ""
+    resolved_dialect: str = ""
+    datasource_identity: str = ""
 
     # ------------------------------------------------------------------
     # construction
@@ -82,6 +89,9 @@ class ProductionExecutionCertificate:
         bound_ops: Iterable[str],
         backend_eligibility: Iterable[str],
         output_shape_hash: str,
+        requested_backend: str = "",
+        resolved_dialect: str = "",
+        datasource_identity: str = "",
     ) -> "ProductionExecutionCertificate":
         """Build a certificate with a self-consistent ``certificate_hash``."""
         ops = frozenset(str(op) for op in bound_ops)
@@ -91,6 +101,9 @@ class ProductionExecutionCertificate:
             "bound_ops": sorted(ops),
             "backend_eligibility": sorted(elig),
             "output_shape_hash": str(output_shape_hash or ""),
+            "requested_backend": str(requested_backend or ""),
+            "resolved_dialect": str(resolved_dialect or ""),
+            "datasource_identity": str(datasource_identity or ""),
         }
         cert_hash = _digest(payload)
         return cls(
@@ -99,6 +112,9 @@ class ProductionExecutionCertificate:
             backend_eligibility=elig,
             output_shape_hash=str(output_shape_hash or ""),
             certificate_hash=cert_hash,
+            requested_backend=str(requested_backend or ""),
+            resolved_dialect=str(resolved_dialect or ""),
+            datasource_identity=str(datasource_identity or ""),
         )
 
     # ------------------------------------------------------------------
@@ -111,6 +127,9 @@ class ProductionExecutionCertificate:
             "bound_ops": sorted(self.bound_ops),
             "backend_eligibility": sorted(self.backend_eligibility),
             "output_shape_hash": self.output_shape_hash,
+            "requested_backend": self.requested_backend,
+            "resolved_dialect": self.resolved_dialect,
+            "datasource_identity": self.datasource_identity,
         }
         return _digest(payload)
 
@@ -156,6 +175,9 @@ class ProductionExecutionCertificate:
             "backend_eligibility": sorted(self.backend_eligibility),
             "output_shape_hash": self.output_shape_hash,
             "certificate_hash": self.certificate_hash,
+            "requested_backend": self.requested_backend,
+            "resolved_dialect": self.resolved_dialect,
+            "datasource_identity": self.datasource_identity,
         }
 
     @classmethod
@@ -165,6 +187,9 @@ class ProductionExecutionCertificate:
             bound_ops=list(payload.get("bound_ops") or ()),
             backend_eligibility=list(payload.get("backend_eligibility") or ()),
             output_shape_hash=str(payload.get("output_shape_hash") or ""),
+            requested_backend=str(payload.get("requested_backend") or ""),
+            resolved_dialect=str(payload.get("resolved_dialect") or ""),
+            datasource_identity=str(payload.get("datasource_identity") or ""),
         )
 
 

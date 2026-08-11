@@ -130,6 +130,8 @@ class PandasFunctionOperator(PandasOperator):
         params: list[str],
         description: str,
         fn: Callable[..., pd.DataFrame],
+        *,
+        param_specs: dict[str, Any] | None = None,
     ):
         self._fn = fn
         # R13 NEW-P0-05: a backend implementation must NOT self-declare
@@ -144,6 +146,7 @@ class PandasFunctionOperator(PandasOperator):
             description=description,
             param_names=params,
             return_type="series",
+            param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
             tags=["daily", "panel", category],
         )
 
@@ -163,6 +166,8 @@ class PolarsFunctionOperator(PolarsOperator):
         params: list[str],
         description: str,
         fn: Callable[..., "pl.DataFrame"],
+        *,
+        param_specs: dict[str, Any] | None = None,
     ):
         self._fn = fn
         # R13 NEW-P0-05: no self-declared ``pit_safe`` / ``audited`` tags — those
@@ -174,6 +179,7 @@ class PolarsFunctionOperator(PolarsOperator):
             description=description,
             param_names=params,
             return_type="series",
+            param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
             tags=["daily", "panel", "polars_native", category],
         )
 
@@ -193,6 +199,10 @@ class Spec:
     description: str
     pandas_fn: Callable[..., pd.DataFrame]
     polars_fn: Callable[..., "pl.DataFrame"] | None = None
+    # Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations
+    # carried onto the operator metadata by register_specs (subset-filtered to the
+    # declared ``params``).  ``None`` keeps the legacy empty contract.
+    param_specs: dict[str, Any] | None = None
 
 
 # R13 NEW-P0-04: logical-contract fields a replacement implementation may ONLY
@@ -306,7 +316,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
             .get("pandas_numpy", {}).get("source", "")
             or ""
         )
-        pandas_op = PandasFunctionOperator(name, spec.category, spec.params, spec.description, spec.pandas_fn)
+        pandas_op = PandasFunctionOperator(
+            name, spec.category, spec.params, spec.description, spec.pandas_fn,
+            param_specs=spec.param_specs,
+        )
         # R13 NEW-P0-04: a replacement may change only the implementation — the
         # canonical logical contract must be inherited / verified, never rebuilt.
         _inherit_canonical_logical_contract(name, pandas_op)
@@ -325,7 +338,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
             expected_old_source=prior_source,
         )
         if pl is not None and spec.polars_fn is not None:
-            polars_op = PolarsFunctionOperator(name, spec.category, spec.params, spec.description, spec.polars_fn)
+            polars_op = PolarsFunctionOperator(
+                name, spec.category, spec.params, spec.description, spec.polars_fn,
+                param_specs=spec.param_specs,
+            )
             _inherit_canonical_logical_contract(name, polars_op)
             OperatorRegistry.register(
                 polars_op,

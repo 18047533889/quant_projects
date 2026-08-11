@@ -46,12 +46,28 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, RelationalParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 _LN2 = float(np.log(2.0))
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
+# ``window`` is the alpha horizon (HORIZON, searched).  ``bins`` (the quantile
+# state-grid resolution) and ``lag`` (the transition lag) are estimator grid
+# knobs — the kernel enforces ``bins ∈ {3,5,8}`` and ``lag ∈ {1,2,3}`` — so they
+# are never full-resolution search dimensions (M-115/M-162/M-170).  ``min_count``
+# / ``min_periods`` are statistical-support floors; ``target`` is a string policy
+# selector.  All four are non-searchable.
+_MARKOV_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "bins": ParamSpec(dtype=int, choices=(3, 5, 8), param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "lag": ParamSpec(dtype=int, choices=(1, 2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "min_count": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "target": ParamSpec(dtype=str, choices=("upper", "lower", "extreme"), param_role=ParamRole.POLICY, searchable=False),
+}
 
 # R11 round-2 P0: ``min_count`` / ``min_periods`` are *relational* feasibility
 # gates — a window ``[t-W, t-1]`` holds at most ``window - lag`` lagged
@@ -82,6 +98,7 @@ def _metadata(
     unit: str,
     cost: int,
     relational_specs: list[RelationalParamSpec] | None = None,
+    param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -90,6 +107,7 @@ def _metadata(
         param_names=params,
         return_type="series",
         relational_specs=list(relational_specs) if relational_specs else [],
+        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
         tags=[
             "state_dynamics", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -286,8 +304,13 @@ def _state_dynamics_series(
         cur = series[t]
         if not np.isfinite(cur) or lg < 1:
             continue
-        finite = past[np.isfinite(past)]
-        if finite.size < 2:
+        # M-221: this is a COVERAGE gate only — it counts finite values and
+        # must NEVER compress the interior NaN rows.  Transitions below are
+        # formed on the ORIGINAL time axis at the physical lag ``lg``; a NaN row
+        # simply contributes no transition (its -1 state sentinel is excluded by
+        # ``trans_ok``), so a gap never re-pairs who is matched with whom and
+        # never silently redefines the lag.
+        if int(np.count_nonzero(np.isfinite(past))) < 2:
             continue
         edges = _quantile_edges(past, B)
         edges_out[t] = edges
@@ -308,6 +331,12 @@ def _state_dynamics_series(
         N = np.zeros((B, B), dtype=float)
         n_trans = 0
         if len(past) > lg:
+            # M-221: build lagged pairs on the ORIGINAL axis — ``base[i]`` and
+            # ``nxt[i]`` are window-local PHYSICAL rows ``lg`` apart, so the lag
+            # is the physical lag in rows.  A NaN row is a -1 state sentinel and
+            # is excluded by ``trans_ok``, so it contributes NO transition and
+            # never shifts who is paired with whom across the gap (interior NaN
+            # rows simply leave gaps in the transition support).
             base = past[:-lg]
             inc = past[lg:] - base
             base_bin = states_past[:-lg]
@@ -473,6 +502,7 @@ class TsMarkovPersistence(SeriesOperator):
         unit="probability",
         cost=4,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -547,6 +577,7 @@ class TsMarkovStateEntropy(SeriesOperator):
         unit="entropy",
         cost=4,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -618,6 +649,7 @@ class TsMarkovTransitionSurprisal(SeriesOperator):
         unit="nats",
         cost=4,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -701,6 +733,7 @@ class TsMarkovEntropyProduction(SeriesOperator):
         unit="nats",
         cost=5,
         relational_specs=_MIN_PERIODS_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -767,6 +800,7 @@ class TsKramersMoyalLocalStability(SeriesOperator):
         unit="ratio",
         cost=5,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -858,6 +892,7 @@ class TsActiveInformationStorage(SeriesOperator):
         ["x", "window", "bins", "history_length"],
         unit="nats",
         cost=7,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -963,6 +998,7 @@ class TsMarkovCommittor(SeriesOperator):
         unit="probability",
         cost=5,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1064,6 +1100,7 @@ class TsMarkovMeanFirstPassageTime(SeriesOperator):
         unit="days",
         cost=5,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1133,6 +1170,7 @@ class TsMarkovSpectralGap(SeriesOperator):
         unit="ratio",
         cost=5,
         relational_specs=_MIN_PERIODS_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1200,6 +1238,7 @@ class TsMarkovStationarySurprisal(SeriesOperator):
         unit="nats",
         cost=4,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1293,6 +1332,7 @@ class TsKmEquilibriumDistance(SeriesOperator):
         unit="zscore",
         cost=5,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1363,6 +1403,7 @@ class TsKmDiffusionGradient(SeriesOperator):
         unit="diffusion",
         cost=5,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1456,6 +1497,7 @@ class TsKmQuasipotentialDepth(SeriesOperator):
         unit="potential",
         cost=6,
         relational_specs=_MIN_COUNT_RELATIONAL,
+        param_specs=_MARKOV_PARAM_SPECS,
     )
 
     def _calculate_series(

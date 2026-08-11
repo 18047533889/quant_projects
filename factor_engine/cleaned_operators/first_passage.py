@@ -37,7 +37,9 @@ def _metadata(
     # units of ``x``.  x = price with scale = return-volatility violates the
     # contract (adding return-vol to a price level); x = log(price) with
     # scale = return-volatility is consistent.  The typed grammar enforces this;
-    # ``input_units`` documents the contract for the operator surface.
+    # ``input_units`` documents the contract for the operator surface, and
+    # ``_check_scale_unit_consistency`` raises at runtime on the raw-price-style
+    # unit mismatch (M-130).
     #
     # P1 (round 7): ``scale_horizon`` makes the scale's aggregation horizon
     # explicit — a 1-day vs 20-day return volatility are DIFFERENT barriers even
@@ -76,6 +78,53 @@ def _check_barrier(barrier: Any) -> float:
     if not np.isfinite(b) or b <= 0.0:
         raise ValueError("barrier must be a finite positive number")
     return b
+
+
+def _check_scale_unit_consistency(x: pd.DataFrame, scale: pd.DataFrame, canonical: str) -> None:
+    """M-130: enforce the typed ``unit(scale) == unit(x)`` relational contract.
+
+    ``barrier * scale_s`` is added to ``x_s``, so the ``_metadata`` declarations
+    (``input_units``/``compatible_units``) already document that ``scale`` must
+    share ``x``'s unit.  Bare pandas frames carry no unit metadata at runtime,
+    however, so the declaration alone cannot stop the one silent failure mode: a
+    RAW PRICE ``x`` fed with a RETURN-VOLATILITY ``scale``.  ``barrier*scale`` is
+    then tiny relative to the price level and its daily moves, the barrier is
+    essentially never touched, and the factor is dead — exactly the
+    ``unit(scale) != unit(x)`` mismatch the typed grammar is meant to reject.
+
+    Detection: ``x`` is a strictly-positive price LEVEL (``min(x) > 0`` and
+    ``median|x| > 1``) whose typical day-over-day move is an order of magnitude
+    larger than the scale.  ``log(close)`` + return-vol stays valid: a log price's
+    day move IS the return, so ``scale ~ median|Δx|`` (same unit).  Returns and
+    mean-0 panels never enter the price-level branch.  This guard only raises — it
+    never alters a computed value, so valid-input behaviour is identical.
+    """
+    xv = np.asarray(x.to_numpy(dtype=float), dtype=float)
+    sv = np.asarray(scale.to_numpy(dtype=float), dtype=float)
+    xf = xv[np.isfinite(xv)]
+    sf = sv[np.isfinite(sv)]
+    if xf.size == 0 or sf.size == 0:
+        return
+    x_level = float(np.median(np.abs(xf)))
+    if not (float(xf.min()) > 0.0 and x_level > 1.0):
+        return  # not a price-like level (returns / log series with a negative leg)
+    dx = np.diff(xf)
+    if dx.size == 0:
+        return
+    dx_med = float(np.median(np.abs(dx)))
+    s_med = float(np.median(np.abs(sf)))
+    if dx_med <= 0.0 or s_med <= 0.0:
+        return
+    if s_med < 0.05 * dx_med:
+        raise ValueError(
+            f"{canonical}: unit mismatch — x looks like a raw price LEVEL "
+            f"(median|x|={x_level:.3g}, min(x)={float(xf.min()):.3g}) but scale is a "
+            f"small volatility (median|scale|={s_med:.3g}, < 5% of x's typical day "
+            f"move {dx_med:.3g}).  barrier*scale must share x's unit "
+            f"(unit(scale) == unit(x)): feed log(close)/return as x with a "
+            f"same-unit volatility scale, not a raw price level with a return "
+            f"volatility."
+        )
 
 
 def _first_passage_series(
@@ -174,6 +223,7 @@ class TsFirstPassageBias(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
+        _check_scale_unit_consistency(x, scale, "ts_first_passage_bias")
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -291,6 +341,7 @@ class TsFirstPassageHitProbability(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
+        _check_scale_unit_consistency(x, scale, "ts_first_passage_hit_probability")
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -339,6 +390,7 @@ class TsFirstPassageConditionalTime(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
+        _check_scale_unit_consistency(x, scale, "ts_first_passage_conditional_time")
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape

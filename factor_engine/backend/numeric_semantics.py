@@ -17,6 +17,58 @@ ZscoreZeroStdPolicy = Literal["zero", "nan", "null"]
 
 
 @dataclass(frozen=True)
+class MomentConvention:
+    """R40 #253：矩（mean/std/var/skew/kurt）的完整约定 —— 进入 backend
+    parity evidence，禁止依赖 backend 默认。
+
+    旧 ``StdDdof`` 只有 sample/population 一个维度；实际 moment 语义还取决于
+    bias（总体矩 vs 样本矩）、fisher（Fisher 定义 skew/kurt vs Pearson）、
+    NaN policy（propagate vs skip）与 finite policy（±Inf 是否算样本）。
+    """
+
+    ddof: int = 1
+    bias: bool = False
+    fisher: bool = True
+    nan_policy: Literal["propagate", "omit"] = "omit"
+    finite_policy: Literal["exclude", "include"] = "exclude"
+
+    @classmethod
+    def from_std_ddof(cls, ddof: Literal["sample", "population"]) -> "MomentConvention":
+        return cls(ddof=1 if ddof == "sample" else 0)
+
+    def identity_payload(self) -> dict[str, object]:
+        return {
+            "ddof": self.ddof,
+            "bias": self.bias,
+            "fisher": self.fisher,
+            "nan_policy": self.nan_policy,
+            "finite_policy": self.finite_policy,
+        }
+
+    def moment_ddof(self) -> int:
+        return 1 if self.ddof == 1 else 0
+
+
+#: 全局默认 moment 约定（sample ddof=1, bias=False, fisher=True, 跳过 NaN/±Inf）。
+DEFAULT_MOMENT_CONVENTION = MomentConvention()
+
+
+def moment_convention_for(canon: str) -> MomentConvention:
+    """算子级 moment 约定；未覆盖时返回全局默认。
+
+    与 ``semantics_for`` 的 ``std_ddof`` 对齐（sample -> ddof=1，
+    population -> ddof=0）。
+    """
+    from backend.numeric_semantics import std_ddof_value
+
+    try:
+        ddof = std_ddof_value(canon)
+    except Exception:  # pragma: no cover - defensive
+        ddof = 1
+    return MomentConvention(ddof=ddof)
+
+
+@dataclass(frozen=True)
 class NumericSemantics:
     """单算子或全局默认数值语义。"""
 
@@ -329,6 +381,18 @@ def ts_pct_zero_prev_is_null() -> bool:
 def log_zero_returns_negative_infinity() -> bool:
     """``log``：输入为 0 时输出 -Inf；负数输出 NULL。"""
     return True
+
+
+def canonical_numeric_algorithm(canon: str) -> str:
+    """R40 #252：canonical 的数值稳定算法声明（pairwise / Welford / Neumaier）。
+
+    高动态范围（1e16 + 小量 / 大市值 / long expanding）的 sum / mean / variance
+    不得用朴素 numpy 顺序累加。声明进 numeric contract，parity evidence 据此
+    检查实现。
+    """
+    from cleaned_operators._numpy_kernels import canonical_numeric_algorithm as _cna
+
+    return _cna(canon)
 
 
 def sql_stddev_fn_key(canon: str) -> str:

@@ -17,6 +17,22 @@ HAR naming (audit round-3, item 34): the HAR kernel predicts the next-period
 named ``*_vol_forecast``; the raw-RV canonical is ``*_var_forecast``.  The two
 are distinct, honestly named canonicals rather than one name claiming the
 other's statistic.
+
+Missing-gap policy (model-audit M-084): all GARCH / GJR kernels follow
+``_GARCH_MISSING_POLICY = "fail_closed_on_gap"`` — any NaN inside the fit window
+makes that row's output NaN (fail-closed).  Gaps are NEVER dropped-and-rescaled;
+the conditional-variance recursion is not re-anchored across a hole.
+
+HAR min-train split (model-audit M-086): the HAR kernel's ``window`` (the rolling
+feature span) and ``_HAR_MIN_TRAIN_OBS`` (the minimum number of valid training
+rows the OLS design must have) are two SEPARATE quantities — a policy choice, not
+a derived value of ``window``.
+
+Legacy HAR aliases (model-audit M-088): ``ts_har_rv_forecast`` and
+``ts_har_rv_innovation_z`` are genuine registry compat aliases (not separate
+canonicals) for ``ts_har_rv_next_vol_forecast`` and
+``ts_har_rv_forecast_error_z`` respectively — mining must not double-search the
+same kernel under two independent research candidates.
 """
 from __future__ import annotations
 
@@ -25,11 +41,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked, frame_like, metadata
 
 _CANONICALS: list[str] = []
+
+# Model-audit Phase 4 (search-space hygiene): the GARCH / GJR / HAR scalars.
+# Every canonical in this module exposes exactly one scalar tuning parameter —
+# ``window`` (or the HAR ``window`` feature span) — which is the alpha horizon
+# (HORIZON, searched).  The GARCH alpha/beta/gamma and HAR design are estimated
+# inside the kernel, never user-searched (M-115/M-162/M-170).
+_VOL_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+}
 
 try:
     from scipy.optimize import minimize as _minimize
@@ -45,6 +70,52 @@ except Exception:  # pragma: no cover
 _PRICE_LEVEL_RATIO_THRESHOLD = 5.0
 _MIN_JUDGE_ROWS = 8
 _EPS = 1e-12
+
+# Model-audit M-084: explicit missing-gap policy for the GARCH / GJR kernels.
+# Any NaN inside the fit window fails that row's output to NaN (fail-closed);
+# gaps are never dropped-and-rescaled and the variance recursion is never
+# re-anchored across a hole.  This makes the previously-incidental NaN
+# propagation a documented, versioned contract.
+_GARCH_MISSING_POLICY = "fail_closed_on_gap"
+
+# Model-audit M-086: the minimum number of valid training rows the HAR OLS
+# design must have.  This is a SEPARATE policy minimum from the rolling
+# ``window`` (the feature span) — it is not derived from ``window`` and is
+# versioned independently.  It is intentionally NOT a user-facing parameter.
+_HAR_MIN_TRAIN_OBS = 25
+
+# Model-audit M-083: shared MLE fit cache.  ``_fit_garch`` / ``_fit_gjr``
+# (variance-targeting Nelder-Mead) dominate the cost of every GARCH / GJR
+# canonical.  Within a single operator call (``_calculate_series`` ->
+# ``_apply``) identical fit segments (e.g. duplicate columns, or the same
+# trailing window) are fit ONCE and reused.  The key is the EXACT input bytes so
+# reuse is bit-identical.  The cache is cleared at the start and end of every
+# ``_calculate_series`` (scoped to one call — no cross-row state leakage) and is
+# additionally size-capped so direct kernel calls can never grow it unboundedly.
+_GARCH_FIT_CACHE: dict[tuple[str, bytes], "tuple | None"] = {}
+_GARCH_FIT_CACHE_MAX_ENTRIES = 4096
+_GARCH_FIT_CACHE_KIND_GARCH = "garch"
+_GARCH_FIT_CACHE_KIND_GJR = "gjr"
+#: Sentinel distinguishing "not cached" from a cached ``None`` (failed fit).
+_GARCH_CACHE_MISS = object()
+
+# Model-audit M-081 telemetry: canonicals whose kernel intentionally fits
+# THROUGH the current row (in-sample, descriptive, fit_cutoff_offset=0).  The
+# reconciler consumes this to add explicit ``ModelTimingContract`` entries and to
+# re-evaluate lanes.  ``ts_gjr_leverage`` is the ONLY GARCH/GJR canonical here —
+# every other GARCH/GJR canonical fits strictly on ``seg[:-1]``.
+_IN_SAMPLE_FIT_THROUGH_T: dict[str, dict[str, Any]] = {
+    "ts_gjr_leverage": {
+        "fit_through_t": True,
+        "fit_cutoff_offset": 0,
+        "descriptive": True,
+        "flag_for_reconciler": (
+            "add explicit ModelTimingContract(fit_cutoff_offset=0, descriptive); "
+            "re-evaluate lane EXPENSIVE_CERTIFIED_ALPHA -> DIAGNOSTIC_RESEARCH "
+            "unless a strict-prior GJR-leverage variant is added"
+        ),
+    },
+}
 
 
 def _looks_like_price_level(vals: np.ndarray) -> bool:
@@ -87,12 +158,19 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
     )
     class _VolOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=8,
-                            input_units=input_units, output_unit=output_unit)
+                            input_units=input_units, output_unit=output_unit,
+                            param_specs=_VOL_PARAM_SPECS)
 
         def _calculate_series(self, *args, **kwargs):
             if reject_price_level and args:
                 _reject_price_level(args[0], name)
-            return fn(*args, **kwargs)
+            # M-083: scope the shared-fit cache to this one operator call.  The
+            # cache must never leak fits across rows / across calls.
+            _GARCH_FIT_CACHE.clear()
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _GARCH_FIT_CACHE.clear()
 
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
@@ -141,6 +219,24 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         return w, a, b
     except Exception:
         return None
+
+
+def _fit_garch_cached(rets: np.ndarray) -> "tuple[float, float, float] | None":
+    """Variance-targeting GARCH MLE with a per-call shared-fit cache (M-083).
+
+    The key is the exact input bytes, so a cache hit is bit-identical to a fresh
+    fit.  ``None`` (failed fit) is cached too, via the ``_GARCH_CACHE_MISS``
+    sentinel.  The cache is cleared per ``_calculate_series`` and size-capped.
+    """
+    key = (_GARCH_FIT_CACHE_KIND_GARCH, rets.tobytes())
+    hit = _GARCH_FIT_CACHE.get(key, _GARCH_CACHE_MISS)
+    if hit is not _GARCH_CACHE_MISS:
+        return hit  # type: ignore[return-value]
+    if len(_GARCH_FIT_CACHE) >= _GARCH_FIT_CACHE_MAX_ENTRIES:
+        _GARCH_FIT_CACHE.clear()
+    result = _fit_garch(rets)
+    _GARCH_FIT_CACHE[key] = result
+    return result
 
 
 def _variance_path(
@@ -195,11 +291,15 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     fit_seg = seg[:-1]
     if len(fit_seg) < 12:
         return np.nan
+    # Missing-gap policy (M-084): any NaN inside the fit window fails this row
+    # to NaN below — the MLE returns None on a non-finite input and we never
+    # drop-and-rescale across the gap.  The shared-fit cache (M-083) is scoped
+    # per operator call and bit-identical, so this is a pure reuse optimisation.
     if asymmetric:
         # GJR: h_t = w + (a + gamma*I(r<0))*r^2 + b*h
-        params = _fit_gjr(fit_seg)
+        params = _fit_gjr_cached(fit_seg)
     else:
-        params = _fit_garch(fit_seg)
+        params = _fit_garch_cached(fit_seg)
     if params is None:
         return np.nan
     gamma = 0.0
@@ -259,6 +359,20 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
         return None
 
 
+def _fit_gjr_cached(rets: np.ndarray) -> "tuple[float, float, float, float] | None":
+    """GJR-GARCH MLE with a per-call shared-fit cache (M-083).  Same contract as
+    :func:`_fit_garch_cached` but for the asymmetric (leverage) fit."""
+    key = (_GARCH_FIT_CACHE_KIND_GJR, rets.tobytes())
+    hit = _GARCH_FIT_CACHE.get(key, _GARCH_CACHE_MISS)
+    if hit is not _GARCH_CACHE_MISS:
+        return hit  # type: ignore[return-value]
+    if len(_GARCH_FIT_CACHE) >= _GARCH_FIT_CACHE_MAX_ENTRIES:
+        _GARCH_FIT_CACHE.clear()
+    result = _fit_gjr(rets)
+    _GARCH_FIT_CACHE[key] = result
+    return result
+
+
 def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     xv = x.to_numpy(dtype=float)
     rows, cols = xv.shape
@@ -315,7 +429,9 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
     # cannot leak into its own denominator through the initial variance.
     if len(seg) < 13:
         return np.nan
-    params = _fit_garch(seg[:-1])
+    # Missing-gap policy (M-084): a NaN anywhere in the fit window yields NaN
+    # here (fail-closed, never drop-and-rescale).  Shared-fit cache (M-083).
+    params = _fit_garch_cached(seg[:-1])
     if params is None:
         return np.nan
     w, a, b = params
@@ -326,9 +442,24 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
 
 
 def _gjr_leverage(vals: np.ndarray, window: int) -> float:
+    """GJR leverage coefficient gamma (asymmetric negative-return shock).
+
+    M-081 timing (explicit): this is the ONLY GARCH/GJR canonical whose kernel
+    fits its parameters THROUGH the current row — ``_fit_gjr(vals[-window:])``
+    INCLUDES ``r_t``.  It is an in-sample, descriptive estimate
+    (``fit_cutoff_offset=0``), NOT a predictive timing contract, and it is
+    deliberately left unchanged: the in-sample estimate is honest (the current
+    return genuinely informs its own leverage).  Reconciler must (a) add an
+    explicit ``ModelTimingContract(fit_cutoff_offset=0, descriptive)`` and
+    (b) re-evaluate the lane (currently EXPENSIVE_CERTIFIED_ALPHA ->
+    DIAGNOSTIC_RESEARCH unless a strict-prior GJR-leverage variant is added).
+    See the ``_IN_SAMPLE_FIT_THROUGH_T`` module telemetry.
+    """
     if len(vals) < max(window, 12):
         return np.nan
-    params = _fit_gjr(vals[-int(window):])
+    # Missing-gap policy (M-084): NaN anywhere in the fit window -> NaN below.
+    # Shared-fit cache (M-083).
+    params = _fit_gjr_cached(vals[-int(window):])  # fit-through-t: r_t IS in the fit
     return np.nan if params is None else float(params[2])
 
 
@@ -354,7 +485,8 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
         # Next-period forecast RV_{t+1}: target = next RV, features today.
         target = np.concatenate([seg[1:], [np.nan]])
         valid_t = np.isfinite(target) & valid
-        if valid_t.sum() < 25:
+        # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``.
+        if valid_t.sum() < _HAR_MIN_TRAIN_OBS:
             return np.nan
         Xs = X[valid_t]
         y = target[valid_t]
@@ -379,7 +511,8 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     fit_valid = valid[fit_rows]
     Xs = X[fit_rows][fit_valid]
     y = seg[fit_rows + 1][fit_valid]
-    if Xs.shape[0] < 25 or Xs.shape[0] <= Xs.shape[1]:
+    # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``.
+    if Xs.shape[0] < _HAR_MIN_TRAIN_OBS or Xs.shape[0] <= Xs.shape[1]:
         return np.nan
     # ModelDesignGate: an ill-conditioned HAR design fails closed (NaN).
     beta = fit_linear_model_checked(Xs, y)
@@ -424,9 +557,22 @@ _register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动�
 _register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。", ["ret", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")),
            input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
-# Deprecated aliases (kept registered); use the *_next_vol_forecast names.
-_register("ts_har_rv_forecast", "HAR-RV 下一期已实现波动率预测（平方根，deprecated 别名；与 ts_har_rv_next_vol_forecast 同核）。", ["rv", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")),
-           input_units={"rv": "realized_variance"}, output_unit="volatility")
-_register("ts_har_rv_innovation_z", "RV 相对 HAR 预测的标准化偏差（deprecated 别名）。", ["rv", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))
+# Model-audit M-088: ``ts_har_rv_forecast`` and ``ts_har_rv_innovation_z`` are
+# genuine registry compat aliases (NOT separate canonicals) — each is byte-for-
+# byte the same kernel/stat as its target canonical (``_har_rv`` ``forecast`` /
+# ``innovation_z`` respectively), so mining must never double-search the same
+# kernel under two independent research candidates.
+OperatorRegistry.register_compat_alias(
+    "ts_har_rv_forecast",
+    "ts_har_rv_next_vol_forecast",
+    migration_reason="legacy duplicate of the identical HAR next-period volatility forecast (same kernel _har_rv 'forecast', sqrt(RV))",
+    deprecated_since="2026-08",
+    removal_version="1.0",
+)
+OperatorRegistry.register_compat_alias(
+    "ts_har_rv_innovation_z",
+    "ts_har_rv_forecast_error_z",
+    migration_reason="legacy duplicate of the identical HAR innovation-z statistic (same kernel _har_rv 'innovation_z')",
+    deprecated_since="2026-08",
+    removal_version="1.0",
+)

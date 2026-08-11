@@ -5,6 +5,10 @@
 """
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
+from typing import Any
+
 from backend.production_fastpath_tiers import (
     P0_PRODUCTION_FASTPATH_CANONICALS,
     P1_DUCKDB_PARITY_PENDING,
@@ -617,31 +621,166 @@ def is_sql_production_safe(canon: str) -> bool:
     return name in SQL_PRODUCTION_SAFE_CANONICALS
 
 
-_DUCKDB_DOWNGRADE_CACHE: frozenset[str] | None = None
+class _BoundedLRU:
+    """R40 #64：entry/byte 双界 LRU 缓存（``max_entries`` + ``max_bytes``）。
+
+    ``get``/``put`` 线程安全；``put`` 超过任一上限时按 LRU 逐出最旧项。
+    """
+
+    def __init__(self, *, max_entries: int = 16, max_bytes: int = 256 * 1024) -> None:
+        self._max_entries = max(1, int(max_entries))
+        self._max_bytes = max(1, int(max_bytes))
+        self._data: "OrderedDict[Any, Any]" = OrderedDict()
+        self._bytes = 0
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _size(key: Any, value: Any) -> int:
+        try:
+            return max(1, len(str(key))) + max(1, len(repr(value)))
+        except Exception:
+            return 64
+
+    def get(self, key: Any) -> Any | None:
+        with self._lock:
+            if key in self._data:
+                value = self._data.pop(key)
+                self._data[key] = value  # MRU
+                return value
+            return None
+
+    def put(self, key: Any, value: Any) -> None:
+        with self._lock:
+            if key in self._data:
+                old = self._data.pop(key)
+                self._bytes -= self._size(key, old)
+            self._data[key] = value
+            self._bytes += self._size(key, value)
+            while len(self._data) > self._max_entries or self._bytes > self._max_bytes:
+                k, v = self._data.popitem(last=False)
+                self._bytes -= self._size(k, v)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)
+
+    def info(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "entries": len(self._data),
+                "bytes": self._bytes,
+                "max_entries": self._max_entries,
+                "max_bytes": self._max_bytes,
+            }
+
+
+#: R40 #64：DuckDB capability 报告的 entry/byte 双界 LRU（旧实现是单个 frozenset，
+#: 每次 refresh 覆盖、无界增长语义不明确；现在按 capability fingerprint 缓存
+#: 多个报告，超限按 LRU 逐出）。
+_DUCKDB_DOWNGRADE_CACHE: _BoundedLRU = _BoundedLRU()
+
+
+def _capability_fingerprint(report: Any) -> str:
+    """capability 报告 → 稳定 fingerprint（cache key 维度）。
+
+    绑定 duckdb version + features 字典——同版本同能力复用同一降级集。
+    """
+    try:
+        d = report.to_dict()
+        import hashlib
+        import json
+
+        payload = json.dumps(
+            {"version": d.get("version"), "features": d.get("features")},
+            sort_keys=True, separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        return str(getattr(report, "version", "") or "unknown")
 
 
 def duckdb_downgraded_canonicals(*, refresh: bool = False) -> frozenset[str]:
-    """按当前 DuckDB 部署能力应从 production SQL 降级的 canonical。"""
-    global _DUCKDB_DOWNGRADE_CACHE
-    if _DUCKDB_DOWNGRADE_CACHE is None or refresh:
-        try:
-            from backend.sql_pushdown.duckdb_capabilities import (
-                downgrade_sql_canonicals,
-                get_duckdb_capability_report,
-            )
+    """按当前 DuckDB 部署能力应从 production SQL 降级的 canonical（R40 #64 有界缓存）。
 
-            report = get_duckdb_capability_report(refresh=refresh)
-            _DUCKDB_DOWNGRADE_CACHE = downgrade_sql_canonicals(report)
-        except Exception:
-            _DUCKDB_DOWNGRADE_CACHE = frozenset()
-    return _DUCKDB_DOWNGRADE_CACHE
+    ``refresh=True`` 强制重新探测；否则按 capability fingerprint 命中缓存。
+    """
+    try:
+        from backend.sql_pushdown.duckdb_capabilities import (
+            downgrade_sql_canonicals,
+            get_duckdb_capability_report,
+        )
+
+        report = get_duckdb_capability_report(refresh=refresh)
+    except Exception:
+        return frozenset()
+    fp = _capability_fingerprint(report)
+    cached = _DUCKDB_DOWNGRADE_CACHE.get(fp)
+    if cached is not None and not refresh:
+        return cached
+    try:
+        downgraded = downgrade_sql_canonicals(report)
+    except Exception:
+        downgraded = frozenset()
+    _DUCKDB_DOWNGRADE_CACHE.put(fp, downgraded)
+    return downgraded
 
 
-def effective_sql_production_safe(canon: str, *, refresh_duckdb: bool = False) -> bool:
-    """静态 SQL_PRODUCTION_SAFE 减去 DuckDB 运行时能力降级。"""
+def duckdb_downgrade_cache_info() -> dict[str, Any]:
+    """capability 缓存状态（测试/诊断用）。"""
+    return _DUCKDB_DOWNGRADE_CACHE.info()
+
+
+# ---------------------------------------------------------------------------
+# R40 #61：production SQL safety = 静态白名单 ∩ parameter-domain backend 认证
+# ---------------------------------------------------------------------------
+
+
+def _parameter_domain_backend_certified(
+    canon: str, *, backend: str = "duckdb_sql",
+) -> bool:
+    """该 canonical 是否已有参数域认证证据覆盖指定 backend（fail-closed）。
+
+    惰性 import ``runtime.parameter_domain_store``（避免 sql_tiers 被反向 import
+    时成环）；store 未装载 / 无该 backend 的 passed 认证点 → False。这是
+    canonical 级别的强认证要求——production SQL 下推绝不能在**没有任何**该
+    backend 参数域证据时放行（具体调用点的 exact membership 由执行期
+    ``assert_parameter_point_certified`` 强制）。
+    """
+    try:
+        from runtime.parameter_domain_store import get_parameter_domain_store
+
+        store = get_parameter_domain_store()
+    except Exception:
+        return False
+    if store is None or not getattr(store, "_loaded", False):
+        return False
+    try:
+        return bool(store.operator_has_any_certified_region_by_backend(canon, backend))
+    except Exception:
+        return False
+
+
+def is_sql_production_safe(canon: str) -> bool:
+    """R40 #61：canonical 必须**同时**满足静态白名单 + 该 backend 参数域已认证。
+
+    旧实现只看静态 ``SQL_PRODUCTION_SAFE_CANONICALS``；现在额外要求
+    ParameterDomainCertificationStore 对 ``duckdb_sql`` 有 passed 认证点——
+    白名单是"emitter 能编译"，参数域认证才是"该 backend 行为已被独立 oracle
+    验证"。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
     name = OperatorRegistry._aliases.get(canon, canon)
     if name not in SQL_PRODUCTION_SAFE_CANONICALS:
+        return False
+    return _parameter_domain_backend_certified(name, backend="duckdb_sql")
+
+
+def effective_sql_production_safe(canon: str, *, refresh_duckdb: bool = False) -> bool:
+    """静态 SQL_PRODUCTION_SAFE ∩ 参数域认证 减去 DuckDB 运行时能力降级。"""
+    from cleaned_operators.registry import OperatorRegistry
+
+    name = OperatorRegistry._aliases.get(canon, canon)
+    if not is_sql_production_safe(name):
         return False
     return name not in duckdb_downgraded_canonicals(refresh=refresh_duckdb)

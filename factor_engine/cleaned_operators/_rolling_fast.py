@@ -98,6 +98,45 @@ _linear_weighted_1d_jit = _get_linear_weighted_1d()
 # would be a DIFFERENT definition and must be its own canonical if ever wanted.
 WMA_PARTIAL_POLICY = "RenormalizedPartialWMA_age_slot_anchored"
 
+# R40 #195: the WMA partial policy enters the operator contract / factor
+# identity / backend-parity evidence.  ``wma_partial_policy_digest()`` folds the
+# policy string (and the sharing AGE_WEIGHTED policy it aligns with) into a
+# stable digest that the WMA operators expose on their metadata.  Changing the
+# policy automatically invalidates old cache/materialization identities because
+# the digest is part of the semantic contract.
+_WMA_POLICY_DIGEST_NS = "wma_partial_policy.v1"
+
+
+def wma_partial_policy_digest() -> str:
+    """Stable digest of the WMA partial-warmup policy (R40 #195).
+
+    Includes the WMA policy and the age-weighted sibling policy it is anchored
+    to, so a change to either policy surfaces in factor/cache identity.
+    """
+    import hashlib as _hashlib
+
+    payload = f"{_WMA_POLICY_DIGEST_NS}|{WMA_PARTIAL_POLICY}|{AGE_WEIGHTED_PARTIAL_POLICY}"
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def check_wma_partial_policy(policy: str | None) -> str:
+    """Validate a WMA partial policy against the single source of truth.
+
+    ``None`` (caller did not declare) resolves to the canonical policy — but in
+    production the caller must have declared it (the operator contract carries
+    ``partial_policy_digest``).  An unknown policy string is rejected rather
+    than silently using a different warmup definition.
+    """
+    if policy is None:
+        return WMA_PARTIAL_POLICY
+    if policy != WMA_PARTIAL_POLICY:
+        raise ValueError(
+            f"unknown WMA partial policy {policy!r}; the canonical policy is "
+            f"{WMA_PARTIAL_POLICY!r} (R40 #195 — a different warmup definition "
+            "must be its own canonical, never a silent variant)"
+        )
+    return policy
+
 
 def _linear_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """纯 numpy 实现的线性加权滚动均值（Numba 回退）。

@@ -25,7 +25,9 @@ presence-only / 恒真。
 """
 from __future__ import annotations
 
+import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -309,3 +311,151 @@ class EvidenceTruthEngine:
 
 def evidence_store_path() -> Path:
     return FE_ROOT / "docs" / "evidence" / "r37"
+
+
+# ---------------------------------------------------------------------------
+# R40 #63：证据有效性计算的有界缓存（cache key 绑定版本维度）
+# ---------------------------------------------------------------------------
+
+#: 证据 artifact 的默认路径（validity 核对对象）。
+_PRIMITIVE_VERIFIED_JSON = FE_ROOT / "evidence" / "primitive_verified.json"
+
+
+def _current_head_sha() -> str:
+    try:
+        return current_commit_sha()
+    except Exception:
+        return ""
+
+
+def build_manifest_digest() -> str:
+    """部署构建清单摘要（R40 #63 cache key 维度）。
+
+    优先读 ``evidence/scm_manifest.json``（构建期固化的 build_commit_sha +
+    changed_since_certified）；缺失 → 回退对 runtime/backend 源码树做轻量摘要。
+    返回空串表示无法判定（调用方仍按 key 缓存，但 validity 判定会 fail-closed）。
+    """
+    scm = FE_ROOT / "evidence" / "scm_manifest.json"
+    try:
+        if scm.is_file():
+            data = json.loads(scm.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                payload = json.dumps(
+                    {
+                        "build_commit_sha": data.get("build_commit_sha", ""),
+                        "changed_since_certified": data.get("changed_since_certified", []),
+                    },
+                    sort_keys=True, separators=(",", ":"),
+                )
+                return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    except (OSError, json.JSONDecodeError):
+        pass
+    return ""
+
+
+def execution_tcb_hash_value() -> str:
+    """TCB 组合 hash（懒加载避免 import 环）。"""
+    try:
+        from backend.factor_operator_evidence import execution_tcb_hash
+
+        return execution_tcb_hash()
+    except Exception:
+        return ""
+
+
+def artifact_hash_value(path: Path | None = None) -> str:
+    """证据 artifact 文件的内容摘要（cache key 维度）。"""
+    p = Path(path) if path is not None else _PRIMITIVE_VERIFIED_JSON
+    try:
+        if p.is_file():
+            from backend.evidence_provenance import _source_hash
+
+            return _source_hash(p)
+    except Exception:
+        pass
+    return ""
+
+
+def evidence_validity_version_key(
+    *,
+    head_sha: str | None = None,
+    build_manifest_digest_val: str | None = None,
+    tcb_hash: str | None = None,
+    artifact_hash: str | None = None,
+) -> tuple[str, str, str, str]:
+    """构造证据有效性的版本 key（R40 #63）。
+
+    任一维度变化 → 新 key → 重新计算（版本变化即清缓存）。缺省值来自当前
+    运行态（HEAD / build manifest / TCB / artifact 内容）。
+    """
+    return (
+        head_sha if head_sha is not None else _current_head_sha(),
+        build_manifest_digest_val if build_manifest_digest_val is not None else build_manifest_digest(),
+        tcb_hash if tcb_hash is not None else execution_tcb_hash_value(),
+        artifact_hash if artifact_hash is not None else artifact_hash_value(),
+    )
+
+
+def _evidence_validity_uncached(version_key: tuple[str, str, str, str]) -> bool:
+    """未缓存的证据有效性判定（fail-closed）。
+
+    对比证据 artifact 记录的 provenance 与 version_key：
+      - HEAD 维度：artifact.commit_sha == version_key[0]（非空时）；
+      - build 维度：build_manifest_digest 非空时要求 scm 清单存在且构建 SHA 一致；
+      - TCB 维度：artifact.execution_tcb_hash 若记录，必须 == version_key[2]；
+      - artifact 维度：version_key[3] 非空时，artifact 文件内容摘要必须一致。
+
+    任一不一致 → False。版本 key 的缺失维度（空串）不判 FAIL（调用方未要求该
+    维度绑定）。
+    """
+    head_sha, build_digest, tcb_hash, artifact_hash = version_key
+    try:
+        from backend.evidence_provenance import (
+            _source_hash,
+            load_verified_artifact,
+        )
+
+        data = load_verified_artifact()
+    except Exception:
+        return False
+    prov = data.get("provenance") or {}
+    if not isinstance(prov, dict):
+        return False
+    ok = True
+    if head_sha and prov.get("commit_sha") and prov.get("commit_sha") != head_sha:
+        ok = False
+    if build_digest:
+        # build 维度：scm 清单存在且 build_commit_sha 与当前 HEAD 一致（或与
+        # artifact commit 一致）。
+        scm = FE_ROOT / "evidence" / "scm_manifest.json"
+        try:
+            scm_data = json.loads(scm.read_text(encoding="utf-8")) if scm.is_file() else None
+        except (OSError, json.JSONDecodeError):
+            scm_data = None
+        if not isinstance(scm_data, dict) or not scm_data.get("build_commit_sha"):
+            ok = False
+    if tcb_hash:
+        recorded_tcb = prov.get("execution_tcb_hash")
+        if recorded_tcb and recorded_tcb != tcb_hash:
+            ok = False
+    if artifact_hash:
+        actual = _source_hash(_PRIMITIVE_VERIFIED_JSON) if _PRIMITIVE_VERIFIED_JSON.is_file() else ""
+        if actual and actual != artifact_hash:
+            ok = False
+    return ok
+
+
+@lru_cache(maxsize=16)
+def evidence_validity_cached(version_key: tuple[str, str, str, str]) -> bool:
+    """证据有效性（R40 #63 有界缓存）。
+
+    cache key = ``(HEAD_sha, build_manifest_digest, tcb_hash, artifact_hash)``；
+    任一版本维度变化 → 新 key → 重新计算。旧 key 条目留在有界 LRU 内，不
+    造成无界增长。
+    """
+    return _evidence_validity_uncached(version_key)
+
+
+def invalidate_evidence_validity_cache() -> int:
+    """清空证据有效性缓存（测试 / 显式失效）。返回清理条目数。"""
+    return evidence_validity_cached.cache_clear() or 0

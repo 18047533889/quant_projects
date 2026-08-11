@@ -177,7 +177,9 @@ class TsStateDensity(SeriesOperator):
     """当前值附近历史状态空间的 Epanechnikov 密度（无量纲）。
 
     严格过去窗口 ``R_t = {x_{t-W},...,x_{t-1}}`` 提供状态空间，当前 ``x_t`` 仅作
-    query。尺度用 ``s = 1.4826*MAD(R_t)``、带宽 ``h = bandwidth*s``，输出
+    query。M-140 ReferenceQueryModel：历史参考 ≤t-1（严格过去），当前查询=t，
+    查询被排除在参考之外——``x_t`` 不进入 ``R_t``，因此当前值自身不会抬高其密度。
+    尺度用 ``s = 1.4826*MAD(R_t)``、带宽 ``h = bandwidth*s``，输出
     ``f̂(x_t)·s = (1/N) Σ 0.75(1-u²) I(|u|≤1) / bandwidth``（MAD 单位下的标准化
     密度，无量纲，跨价格/市值/收益序列可比）。高 = 当前处于历史拥挤区；低 =
     历史状态真空。与筹码 ``near_cost_mass``（持仓成本空间）不同：这里测任意变量

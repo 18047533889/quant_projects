@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
 
 _ALPHA = 0.5          # Jeffreys smoothing, fixed (not a search parameter).
 # Deterministic circular-shift offsets for the effective-TE surrogate null.
@@ -47,6 +47,7 @@ def _metadata(
     domain: str,
     unit: str,
     cost: int,
+    relational_specs: list[RelationalParamSpec] | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -54,6 +55,7 @@ def _metadata(
         description=description,
         param_names=params,
         return_type="series",
+        relational_specs=list(relational_specs) if relational_specs else [],
         tags=[
             "information_theory", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -61,6 +63,81 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# M-171: TE feasibility gate (compile-time prune + telemetry accessor)
+# ---------------------------------------------------------------------------
+
+# The bins-scaled transition floor (``max(30, 3*bins², ceil(ratio*bins³))``) is
+# NOT expressible in the restricted relational language (no ``max``/``ceil``
+# calls), so the compile-time specs below prune only the always-necessary
+# conditions; the full floor is enforced at the call boundary by the shared
+# ``_te_feasibility`` gate — the SAME authority the telemetry accessor reads.
+_TE_FEASIBILITY_SPECS = [
+    RelationalParamSpec(
+        "window >= lag + 2",
+        "ts_transfer_entropy requires window >= lag + 2 (window={window}, lag={lag})",
+    )
+]
+_TE_PEAK_FEASIBILITY_SPECS = [
+    RelationalParamSpec(
+        "window >= 12",
+        "transfer-entropy peak requires window >= 12 (largest grid lag 10 + 2; "
+        "window={window})",
+    )
+]
+
+
+def _te_feasibility(
+    *,
+    window: int,
+    bins: int,
+    lag: int,
+    min_cells_ratio: float,
+    min_transitions: int | None,
+) -> tuple[bool, str, int]:
+    """Return ``(feasible, reason, mt)`` for a TE ``(window, bins, lag, ratio)``
+    combination (M-171).  ``window - lag`` usable rows must be enough to produce
+    the transition floor ``mt``, which scales with the joint state space
+    ``bins**3`` and carries a default floor of 30 when ``min_transitions`` is
+    unset.  A guaranteed-NaN combination is rejected at the call boundary.  This
+    single function is the authority for the compile-time RelationalParamSpec
+    (the expressible subset), the runtime raise AND the telemetry accessor; the
+    returned ``mt`` is the exact floor the kernel's sample gate uses, so the
+    kernel never re-derives it.
+    """
+    if window < lag + 2:
+        return False, f"window ({window}) < lag + 2 ({lag + 2})", -1
+    if min_transitions is None:
+        mt = max(30, 3 * bins * bins)
+    else:
+        mt = max(lag + 2, int(min_transitions))
+    mt = max(mt, int(np.ceil(min_cells_ratio * bins * bins * bins)))
+    if window - lag < mt:
+        return False, (
+            f"window-lag ({window - lag}) < min_transitions ({mt}) "
+            f"with bins={bins}, min_cells_ratio={min_cells_ratio}"
+        ), mt
+    return True, "", mt
+
+
+def te_feasibility_failure_reason(
+    *,
+    window: int,
+    bins: int,
+    lag: int,
+    min_cells_ratio: float,
+    min_transitions: int | None,
+) -> str | None:
+    """M-171 telemetry accessor: the reason a TE ``(window, bins, lag, ...)``
+    combination is infeasible (guaranteed-NaN), or ``None`` when feasible.  The
+    failure reason is machine-readable instead of buried in a raise."""
+    ok, reason, _mt = _te_feasibility(
+        window=window, bins=bins, lag=lag,
+        min_cells_ratio=min_cells_ratio, min_transitions=min_transitions,
+    )
+    return None if ok else reason
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -262,11 +339,13 @@ class TsTransferEntropy(SeriesOperator):
         domain="price_volume",
         unit="nats",
         cost=5,
+        relational_specs=_TE_FEASIBILITY_SPECS,
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "lag": ParamSpec(dtype=int, min=1),
+        "min_transitions": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
@@ -289,25 +368,18 @@ class TsTransferEntropy(SeriesOperator):
             raise ValueError("ts_transfer_entropy requires 2 <= bins <= 8")
         if lg < 1:
             raise ValueError("ts_transfer_entropy requires lag >= 1")
-        if w < lg + 2:
-            raise ValueError("ts_transfer_entropy requires window >= lag + 2")
-        # With ``bins`` bins per variable the joint transition space has bins^3
-        # cells; a handful of transitions would be dominated by Jeffreys smoothing
-        # mass.  Default floor scales with the cell count.  Fail closed loudly when
-        # the requested window cannot physically produce enough transitions (the
-        # old default silently returned an all-NaN column for bins>=8).
-        if min_transitions is None:
-            mt = max(30, 3 * nb * nb)
-        else:
-            mt = max(lg + 2, int(min_transitions))
-        # Audit #20: the effective-state-space gate (N >= k * cells) is a hard
-        # feasibility floor — an infeasible (window, bins, lag, k) combination
-        # is rejected at the call boundary rather than emitting a noisy estimate.
-        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
-        if w - lg < mt:
+        # M-171: compile-time-pruned feasibility.  With ``bins`` bins per variable
+        # the joint transition space has bins^3 cells; a handful of transitions
+        # would be dominated by Jeffreys smoothing mass, so the floor scales with
+        # the cell count and the call is rejected at the boundary when the window
+        # cannot physically produce enough transitions.  The shared gate returns
+        # the exact ``mt`` the kernel's sample floor reuses.
+        ok, reason, mt = _te_feasibility(
+            window=w, bins=nb, lag=lg, min_cells_ratio=ratio, min_transitions=min_transitions,
+        )
+        if not ok:
             raise ValueError(
-                f"ts_transfer_entropy window-lag ({w - lg}) < min_transitions ({mt}) "
-                f"with bins={nb}, min_cells_ratio={ratio}; raise window or lower bins "
+                f"ts_transfer_entropy {reason}; raise window or lower bins "
                 "(default window=60 supports bins<=4)"
             )
         return _frame_like(
@@ -439,11 +511,13 @@ class TsEffectiveTransferEntropy(SeriesOperator):
         domain="price_volume",
         unit="nats",
         cost=6,
+        relational_specs=_TE_FEASIBILITY_SPECS,
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "lag": ParamSpec(dtype=int, min=1),
+        "min_transitions": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
@@ -466,17 +540,13 @@ class TsEffectiveTransferEntropy(SeriesOperator):
             raise ValueError("ts_effective_transfer_entropy requires 2 <= bins <= 8")
         if lg < 1:
             raise ValueError("ts_effective_transfer_entropy requires lag >= 1")
-        if w < lg + 2:
-            raise ValueError("ts_effective_transfer_entropy requires window >= lag + 2")
-        if min_transitions is None:
-            mt = max(30, 3 * nb * nb)
-        else:
-            mt = max(lg + 2, int(min_transitions))
-        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
-        if w - lg < mt:
+        # M-171: compile-time-pruned feasibility — see ``_te_feasibility``.
+        ok, reason, mt = _te_feasibility(
+            window=w, bins=nb, lag=lg, min_cells_ratio=ratio, min_transitions=min_transitions,
+        )
+        if not ok:
             raise ValueError(
-                f"ts_effective_transfer_entropy window-lag ({w - lg}) < min_transitions "
-                f"({mt}) with bins={nb}, min_cells_ratio={ratio}; raise window or lower bins"
+                f"ts_effective_transfer_entropy {reason}; raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -812,10 +882,12 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
         domain="price_volume",
         unit="nats",
         cost=7,
+        relational_specs=_TE_PEAK_FEASIBILITY_SPECS,
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_transitions": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
@@ -834,18 +906,14 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
         ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy_peak_strength requires 2 <= bins <= 8")
-        if w < max(_TE_LAGS) + 2:
-            raise ValueError("ts_transfer_entropy_peak_strength requires window >= 12")
-        if min_transitions is None:
-            mt = max(30, 3 * nb * nb)
-        else:
-            mt = max(max(_TE_LAGS) + 2, int(min_transitions))
-        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
-        if w - max(_TE_LAGS) < mt:
+        # M-171: the peak grid's effective lag is ``max(_TE_LAGS)`` (10) — the
+        # shared feasibility gate prunes the guaranteed-NaN combinations.
+        ok, reason, mt = _te_feasibility(
+            window=w, bins=nb, lag=max(_TE_LAGS), min_cells_ratio=ratio, min_transitions=min_transitions,
+        )
+        if not ok:
             raise ValueError(
-                f"ts_transfer_entropy_peak_strength window-lag ({w - max(_TE_LAGS)}) "
-                f"< min_transitions ({mt}) with bins={nb}, min_cells_ratio={ratio}; "
-                "raise window or lower bins"
+                f"ts_transfer_entropy_peak_strength {reason}; raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -879,10 +947,12 @@ class TsTransferEntropyPeakLag(SeriesOperator):
         domain="price_volume",
         unit="ratio",
         cost=7,
+        relational_specs=_TE_PEAK_FEASIBILITY_SPECS,
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_transitions": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
@@ -901,18 +971,13 @@ class TsTransferEntropyPeakLag(SeriesOperator):
         ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy_peak_lag requires 2 <= bins <= 8")
-        if w < max(_TE_LAGS) + 2:
-            raise ValueError("ts_transfer_entropy_peak_lag requires window >= 12")
-        if min_transitions is None:
-            mt = max(30, 3 * nb * nb)
-        else:
-            mt = max(max(_TE_LAGS) + 2, int(min_transitions))
-        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
-        if w - max(_TE_LAGS) < mt:
+        # M-171: shared feasibility gate (effective lag = max(_TE_LAGS) = 10).
+        ok, reason, mt = _te_feasibility(
+            window=w, bins=nb, lag=max(_TE_LAGS), min_cells_ratio=ratio, min_transitions=min_transitions,
+        )
+        if not ok:
             raise ValueError(
-                f"ts_transfer_entropy_peak_lag window-lag ({w - max(_TE_LAGS)}) "
-                f"< min_transitions ({mt}) with bins={nb}, min_cells_ratio={ratio}; "
-                "raise window or lower bins"
+                f"ts_transfer_entropy_peak_lag {reason}; raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -951,10 +1016,12 @@ class TsTransferEntropyPeakExcess(SeriesOperator):
         domain="price_volume",
         unit="nats",
         cost=8,
+        relational_specs=_TE_PEAK_FEASIBILITY_SPECS,
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_transitions": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "n_surrogates": ParamSpec(dtype=int, min=1, default=20, searchable=False, param_role=ParamRole.NUMERICAL),
         "seed": ParamSpec(dtype=int, default=0, searchable=False, param_role=ParamRole.NUMERICAL),
@@ -978,18 +1045,13 @@ class TsTransferEntropyPeakExcess(SeriesOperator):
         ns = max(1, int(n_surrogates))
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy_peak_excess requires 2 <= bins <= 8")
-        if w < max(_TE_LAGS) + 2:
-            raise ValueError("ts_transfer_entropy_peak_excess requires window >= 12")
-        if min_transitions is None:
-            mt = max(30, 3 * nb * nb)
-        else:
-            mt = max(max(_TE_LAGS) + 2, int(min_transitions))
-        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
-        if w - max(_TE_LAGS) < mt:
+        # M-171: shared feasibility gate (effective lag = max(_TE_LAGS) = 10).
+        ok, reason, mt = _te_feasibility(
+            window=w, bins=nb, lag=max(_TE_LAGS), min_cells_ratio=ratio, min_transitions=min_transitions,
+        )
+        if not ok:
             raise ValueError(
-                f"ts_transfer_entropy_peak_excess window-lag ({w - max(_TE_LAGS)}) "
-                f"< min_transitions ({mt}) with bins={nb}, min_cells_ratio={ratio}; "
-                "raise window or lower bins"
+                f"ts_transfer_entropy_peak_excess {reason}; raise window or lower bins"
             )
         return _frame_like(
             target,

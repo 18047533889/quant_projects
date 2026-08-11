@@ -13,7 +13,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations for
+# the canonical rolling-OLS contract.  ``window`` is the alpha horizon (HORIZON,
+# searched); ``lag`` is the regression lag/lead — the economic mechanism, so it
+# is searched; ``retval`` is a string output selector and ``add_intercept`` is
+# boolean governance — neither is a search dimension (M-115/M-162/M-170).
+_TS_REGRESSION_SLOPE_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "lag": ParamSpec(dtype=int, min=0, param_role=ParamRole.ECONOMIC, searchable=True),
+    "retval": ParamSpec(dtype=str, param_role=ParamRole.POLICY, searchable=False),
+    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "add_intercept": ParamSpec(dtype=bool, param_role=ParamRole.POLICY, searchable=False),
+}
 
 
 def _aligned_float_frames(*frames: pd.DataFrame) -> list[pd.DataFrame]:
@@ -182,6 +195,7 @@ class ProductionTSRegressionSlope(SeriesOperator):
             "min_periods",
             "add_intercept",
         ],
+        param_specs=_TS_REGRESSION_SLOPE_PARAM_SPECS,
         tags=["pit_safe", "causal", "rolling_regression", "production_repair"],
     )
 

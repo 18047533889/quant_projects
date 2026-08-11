@@ -22,7 +22,7 @@ be silently assumed session-local.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -31,6 +31,81 @@ import pandas as pd
 from runtime.session_calendar import SessionCalendar
 
 _EPS = 1e-12
+
+
+class MultipleSessionDatesError(ValueError):
+    """R40 #240：``build_session_panel(trade_date=None)`` 收到跨多日数据。"""
+
+
+class DuplicateSlotError(RuntimeError):
+    """R40 #238/#239：官方 slot 出现 >1 次 —— DQ 硬失败（production）。"""
+
+
+class CalendarContractError(RuntimeError):
+    """R40 #239：日历契约违反 —— run 失败（非数值 NaN）。"""
+
+
+class TimezoneContractError(RuntimeError):
+    """R40 #239：时区契约违反 —— run 失败。"""
+
+
+class AxisMismatchError(RuntimeError):
+    """R40 #239：面板轴不一致 —— run 失败。"""
+
+
+@dataclass(frozen=True)
+class SessionDQReport:
+    """R40 #238/#241：会话数据质量报告。
+
+    记录 duplicate / off-grid / missing / timezone / multi-date 统计。production
+    策略：``duplicate_slots > 0`` 或 ``off_grid_ratio`` 超阈值 → hard DQ fail
+    （不得静默变 NaN）。
+    """
+
+    duplicate_slots: int = 0
+    duplicate_slot_examples: tuple[str, ...] = ()
+    off_grid_count: int = 0
+    off_grid_examples: tuple[str, ...] = ()
+    missing_slots: int = 0
+    timezone_errors: int = 0
+    multi_trade_date_input: bool = False
+    n_slots: int = 0
+
+    @property
+    def off_grid_ratio(self) -> float:
+        total = self.off_grid_count + self.n_slots
+        if total <= 0:
+            return 0.0
+        return float(self.off_grid_count) / float(total)
+
+    @property
+    def has_duplicate_official_slot(self) -> bool:
+        return self.duplicate_slots > 0
+
+    def hard_dq_fail(self, *, off_grid_floor: float = 0.05) -> None:
+        """production DQ 门：duplicate 官方 slot > 0 或 off-grid 超阈值 → 抛错。"""
+        if self.has_duplicate_official_slot:
+            raise DuplicateSlotError(
+                f"duplicate official slot(s): {self.duplicate_slots} "
+                f"examples={list(self.duplicate_slot_examples[:5])} — hard DQ fail"
+            )
+        if self.off_grid_ratio > off_grid_floor:
+            raise DuplicateSlotError(
+                f"off-grid bar ratio {self.off_grid_ratio:.3f} exceeds floor "
+                f"{off_grid_floor} (count={self.off_grid_count}) — hard DQ fail"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "duplicate_slots": self.duplicate_slots,
+            "duplicate_slot_examples": list(self.duplicate_slot_examples[:5]),
+            "off_grid_count": self.off_grid_count,
+            "off_grid_examples": list(self.off_grid_examples[:5]),
+            "off_grid_ratio": self.off_grid_ratio,
+            "missing_slots": self.missing_slots,
+            "timezone_errors": self.timezone_errors,
+            "multi_trade_date_input": self.multi_trade_date_input,
+        }
 
 
 def _hhmm_minute(value: str) -> int:
@@ -214,6 +289,7 @@ class SessionPanel:
     observed: np.ndarray        # observed timestamp per slot (NaT if absent)
     is_present: np.ndarray      # an observed bar exists at this slot
     is_duplicate: np.ndarray    # this official slot appeared >1x (DQ fail)
+    dq: SessionDQReport = field(default_factory=SessionDQReport)
 
     @property
     def n_slots(self) -> int:
@@ -313,12 +389,26 @@ def build_session_panel(
     ``timestamps`` may be tz-aware (stored UTC) — they are converted to
     ``session_timezone`` wall-clock first.  A duplicate official slot marks the
     slot DQ-failed; an off-grid bar (lunch recess) is dropped.
+
+    R40 #240：``trade_date=None`` 时不再取第一个 timestamp 的日期——校验输入
+    必须落在**同一个 session-local 交易日**，否则抛
+    :class:`MultipleSessionDatesError`。
+
+    R40 #241：off-grid bars 不再被静默丢弃——记录进
+    :attr:`SessionPanel.dq`（off_grid_count / off_grid_examples / off_grid_ratio）。
     """
     local = _to_session_local(timestamps, source_timezone=source_timezone, session_timezone=session_timezone)
     if trade_date is None:
         dates = session_trade_dates(local, session_timezone)
         if dates.size == 0:
             raise ValueError("cannot build a session panel from empty timestamps")
+        unique = set(dates)
+        if len(unique) > 1:
+            raise MultipleSessionDatesError(
+                f"build_session_panel received data spanning {len(unique)} "
+                f"session-local trade dates: {sorted(str(d) for d in unique)} — "
+                "a SessionPanel is single-date by construction"
+            )
         trade_date = pd.Timestamp(np.datetime64(dates[0], "D"))
     grid = MinuteGrid.from_calendar(calendar, trade_date)
     mods = _minute_of_day(local)
@@ -340,6 +430,25 @@ def build_session_panel(
         present[s] = True
         aligned[s] = v
         observed[s] = t
+    # R40 #238/#241: DQ 报告 —— duplicate / off-grid / missing / multi-date。
+    off_grid_examples = [
+        str(pd.Timestamp(t)) for t in local[~on_grid][:5]
+    ]
+    _day_ts = pd.Timestamp(trade_date)
+    dup_examples = [
+        str(_day_ts + pd.Timedelta(minutes=int(m)))
+        for m in grid.expected_minutes[duplicate]
+    ]
+    dq = SessionDQReport(
+        duplicate_slots=int(duplicate.sum()),
+        duplicate_slot_examples=tuple(dup_examples),
+        off_grid_count=int((~on_grid).sum()),
+        off_grid_examples=tuple(off_grid_examples),
+        missing_slots=int(grid.n_slots - int(present.sum())),
+        timezone_errors=0,
+        multi_trade_date_input=False,
+        n_slots=int(grid.n_slots),
+    )
     return SessionPanel(
         market=market,
         session=str(getattr(calendar, "session", "regular")),
@@ -352,6 +461,7 @@ def build_session_panel(
         observed=observed,
         is_present=present,
         is_duplicate=duplicate,
+        dq=dq,
     )
 
 
@@ -360,8 +470,14 @@ def default_ashare_calendar(*, bar_freq: str = "1min") -> SessionCalendar:
 
 
 __all__ = [
+    "AxisMismatchError",
+    "CalendarContractError",
+    "DuplicateSlotError",
     "MinuteGrid",
+    "MultipleSessionDatesError",
+    "SessionDQReport",
     "SessionPanel",
+    "TimezoneContractError",
     "build_session_panel",
     "declared_width_minutes",
     "default_ashare_calendar",

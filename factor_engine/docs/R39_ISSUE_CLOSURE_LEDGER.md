@@ -4,6 +4,7 @@
 > 审计基线 HEAD：`8e9893b5`；实施期间树持续被并发会话演进，最终以真实 HEAD 为准。
 > 完成判定遵循 §34：只有改动真实执行路径、有单元测试、有 benchmark、有 before/after、有 correctness parity 的 issue 才可标记 `CLOSED`。
 > 实施方式：16 个实现 agent（文件不相交分簇）+ 4 个补刀 agent（PERF-030/027/051/063）。所有新 R39 测试中央串行单进程全绿；既有回归套件全绿（numba 为 R38 缺失依赖，已补装）。
+> **Benchmark 期补充修复（真实 bug）**：PERF-040 默认 batch=64 后，sink `finish()` 的固定 10s join timeout 会把「活着的慢 writer」（一次 flush 写 64 因子 >10s）误判为致命并 abort generation。修复：join timeout 随 batch_size 缩放 `max(10s, batch_size×2s)`，显式 `join_timeout` 可覆盖；真死锁语义（R38 P0-045）保留。`runtime/streaming_result_sink.py` + `tests/r39/test_perf_sink_join_timeout_2026_08.py`（6 测试）。
 
 每项格式：
 ```
@@ -42,10 +43,10 @@ Issue ID → 修改文件 → 实际实现 → 测试 → benchmark → before �
 | R39-P0-PERF-024 | CLOSED — Arrow IPC spool（`ArrowSpoolRef`，uncompressed 单 block），免 Pandas→Parquet→Pandas。tests/r39/test_perf_shard ✓ |
 | R39-P0-PERF-025 | CLOSED — `verify_shards_sorted_nonoverlapping` 运行时证明；CONCAT_ONLY 一次 concat（`shard_concat_sort_count==1`），ORDERED_MERGE 保底。同上 ✓ |
 | R39-P0-PERF-026 | CLOSED — `ShardMergeMode` 数据驱动选择 + `ShardDirectWriteManifest`（DIRECT_DURABLE_APPEND concat_sort_count==0）。同上 ✓ |
-| R39-P1-PERF-027 | CLOSED — `decide_spool_or_keep`（live_headroom/writer_queue_headroom/disk_throughput/merge_lifetime）+`adaptive_spool_threshold`；默认不传 policy 时保持原 512MB。tests/r39/test_perf_spool_policy（补刀 agent，待终验） |
+| R39-P1-PERF-027 | CLOSED — `decide_spool_or_keep`（live_headroom/writer_queue_headroom/disk_throughput/merge_lifetime）+`adaptive_spool_threshold`；默认不传 policy 时保持原 512MB；已接入 `adaptive_batch_scheduler` TASK_SHARD 调用点。tests/r39/test_perf_spool_policy（补刀 agent，28 测试终验 ✓） |
 | R39-P0-PERF-028 | CLOSED — `panel_to_polars_bulk`/`polars_to_panel_bulk`（Arrow CDI，NaN 恢复、dtype 安全门），byte 恒等验证；fallback 保留。tests/r39/test_perf_rep_conversion ✓ |
 | R39-P0-PERF-029 | CLOSED — `AxisIdentityCertificate` 每帧缓存 + 4096 LRU + O(1) staleness guard；fast==slow 50 对随机 parity。tests/r39/test_perf_axis_identity ✓ |
-| R39-P0-PERF-030 | CLOSED — `FactorBlockRef`（axis 共享/单次 Arrow-Parquet 写），matrix block 路径 + batch writer 接线（补刀 agent，待终验） |
+| R39-P0-PERF-030 | CLOSED — `FactorBlockRef`（axis 共享/单次 Arrow-Parquet 写），matrix block 路径 + batch writer 接线。tests/r39/test_perf_factor_block_ref（补刀 agent，16 测试终验 ✓） |
 | R39-P0-PERF-031 | CLOSED — `RepresentationTransitionTracker`（transition_count/bytes），bulk+fallback 双路径记录。tests/r39/test_perf_rep_conversion ✓ |
 | R39-P1-PERF-032 | CLOSED — `TemporaryArrayArena`（shape_bucket+dtype 池化，poison 防双租，with_scratch）；standalone 未接线 hot consumer（诚实）。同上 ✓ |
 
@@ -76,7 +77,7 @@ Issue ID → 修改文件 → 实际实现 → 测试 → benchmark → before �
 | R39-P0-PERF-048 | CLOSED — 双扫移除；`_count_partition_metrics` 正常路径 calls==0；`full_factor_rescan_count==0`（Gate-05）。同上 ✓ |
 | R39-P0-PERF-049 | CLOSED — `PartitionCommitStats` + `factor_partition_stats` catalog 表，watermark 不 read 全因子历史。同上 ✓ |
 | R39-P0-PERF-050 | CLOSED — `CatalogBatchTransaction`（register_many/record_runs_many/update_watermarks_many），N update→1 commit。同上 ✓ |
-| R39-P1-PERF-051 | CLOSED — watermark 从 commit result 直接返回，正常路径 `post_write_watermark_readback_count==0`；仅 deferred/CAS 场景 read-back（补刀 agent，待终验） |
+| R39-P1-PERF-051 | CLOSED — watermark 从 commit result 直接返回，正常路径 `post_write_watermark_readback_count==0`；仅 deferred/CAS/legacy/staging 场景 read-back。tests/r39/test_perf_watermark_readback（补刀 agent，9 测试终验 ✓） |
 | R39-P0-PERF-052 | CLOSED — immutable delta fragments + atomic manifest flip + fsync 命名（generation/seq），legacy data.parquet 可读。同上 ✓ |
 | R39-P1-PERF-053 | CLOSED — orphan tmp 清理改为 generation recovery（`recover_orphan_delta_tmp_files`），不每次 partition write 扫。同上 ✓ |
 | R39-P1-PERF-054 | CLOSED — `PartitionLockManager` generation 内复用 lock 句柄。同上 ✓ |
@@ -93,7 +94,7 @@ Issue ID → 修改文件 → 实际实现 → 测试 → benchmark → before �
 | R39-P0-PERF-060 | CLOSED — matrix block assembly：轴相等直接 column-stack（`matrix_join_count==0`），异轴一次 concat（==1，非 N-way outer merge）；legacy raw parquet 字节级一致。tests/r39/test_perf_matrix ✓ |
 | R39-P0-PERF-061 | CLOSED — opt-in `FACTOR_ENGINE_MATRIX_BLOCK_LAYOUT=1`：year/month/block=NNNN.parquet，manifest factor→{block,column}。同上 ✓ |
 | R39-P0-PERF-062 | CLOSED — block 模式只写 touched block；未触 block COW hardlink；新因子新建 block 不重写已有（新增因子 amplification 0.0）。更新因子仍重写整个 256 列 block（bounded，诚实）。同上 ✓ |
-| R39-P1-PERF-063 | CLOSED — `PartitionObjectRef` inventory（rel_path/content_id/rows/schema_hash），generation 切换精确 materialize，`generation_rglob_discovery_count` 不增（补刀 agent，待终验） |
+| R39-P1-PERF-063 | CLOSED — `PartitionObjectRef` inventory（rel_path/content_id/rows/schema_hash），generation 切换精确 materialize，`generation_rglob_discovery_count` 不增。tests/r39/test_perf_cow_manifest（补刀 agent，11 测试终验 ✓） |
 | R39-P0-PERF-064 | CLOSED — checksum proof（key-order/per-column finite-mask/numeric/schema_hash + read-back），byte-flip 检出；opt-in `FACTOR_ENGINE_MATRIX_CHECKSUM_PROOF=1`。同上 ✓ |
 | R39-P1-PERF-065 | CLOSED — `load_matrix` 接受 factor_ids/time_range/instrument_filter，block manifest→只扫所需 block（spy 证明只开 block=0001）。同上 ✓ |
 | R39-P0-PERF-066 | CLOSED — `materialize_matrix_streaming`+generator adapter 块级消费（engine.run_many dict 边界诚实记录）。同上 ✓ |
@@ -138,22 +139,23 @@ Issue ID → 修改文件 → 实际实现 → 测试 → benchmark → before �
 | Gate-09 | PASS | `ReadOnlyOverlayMap` 共享 base，`dict_entry_copy_count==0`（test_perf_batch_service） |
 | Gate-10 | PASS | `ProjectedColumnFootprint` 真实 footprint（test_perf_read_wave） |
 | Gate-11 | PASS | `RepresentationTransitionTracker` transition_count/bytes 可观测（test_perf_rep_conversion） |
-| Gate-12 | PASS | parity：所有新 R39 测试 + 354 既有回归全绿；matrix legacy 字节级 parity；bulk==reference 恒等 |
+| Gate-12 | PASS | parity：所有新 R39 测试 + 354 既有回归全绿；matrix legacy 字节级 parity；bulk==reference 恒等；§27 同机 before/after：B1 total 129.3s→96.3s（-26%），batch tx 100→2 |
 
 ## §33 工程问题（最终回答）
 
-1. 1000 因子 batch 最慢阶段 — _pending_（benchmark 后填）
-2. 1-day incremental WriteAmplification — _pending_
-3. 历史整分区 rewrite 是否仍存在 — _pending_
-4. 全 factor 目录 metrics rescan — _pending_
-5. materialize_many_fast 1000 因子物理 writer transaction 数 — _pending_
-6. catalog transaction 数 — _pending_
-7. scheduler Future 数 — _pending_
-8. read waves 实际扫描 bytes / 节省重复 scan — _pending_
-9. source→backend→writer representation transition 数 — _pending_
-10. shard spool→reload→concat→sort 重复放大 — _pending_
-11. minute→daily 同源 100 聚合扫描分钟数据次数 — _pending_
-12. matrix 新增 50 因子是否需要重写已有 2000 列 — _pending_
-13. Matrix 1-day 增量是否需要重写整月 — _pending_
-14. DuckDB deadline 10000 queries watchdog thread 数 — _pending_
-15. production optimized 与 reference parity — _pending_
+1. 1000 因子 batch 最慢阶段 — **materialize 写盘**（分区写 + catalog 提交，B1 占 TTDC ~96%），run_many 编译为次慢（含 `compute_field_catalog_hash` 全目录序列化）。§27 QUICK 实测（300 股×252 日×100 因子）：materialize 92.8s vs run_many 3.4s。
+2. 1-day incremental WriteAmplification — delta 模式 `historical_rewrite_bytes==0`（Gate-04，tests/r39/test_perf_storage）；默认非 delta 模式仍整分区重写（如实记录）。B4（300×252×100 全量→+1 天增量）：full_write_bytes=4.28MB，incremental_write_bytes=4.24MB（默认模式整分区重写，写放大 ~441x 逻辑字节）；delta/block 布局下归零。
+3. 历史整分区 rewrite 是否仍存在 — **默认模式仍存在**（legacy data.parquet 整分区 upsert）；opt-in delta（`FACTOR_ENGINE_DELTA_STORAGE=1`）用 immutable delta + generation manifest 消除；matrix block 布局下未触达 block COW hardlink（PERF-062）。
+4. 全 factor 目录 metrics rescan — `_count_partition_metrics` 正常路径 calls==0，`full_factor_rescan_count==0`（Gate-05）；watermark 路径不再全因子历史 scan（PERF-048/049）。
+5. materialize_many_fast 1000 因子物理 writer transaction 数 — `execute_materialize_batch` 单 SQLite 事务批量提交（Gate-03 `batch_write_transaction_count==1<<N`），实际值 << factor_count（QUICK 实测：100 因子 → 2 tx，见 r39_scheduler_overhead.json / r39_scan_amplification.json）。baseline 逐项提交无该聚合（不报告）。
+6. catalog transaction 数 — `CatalogBatchTransaction`（register_many/record_runs_many/update_watermarks_many）N update → 1 commit（PERF-050）；`sqlite_transaction_count` 可观测。
+7. scheduler Future 数 — `MicroBatchTask` 16-128 cheap roots/单 Future（PERF-018）；`future_per_factor` 0.05 vs 旧 1.0。
+8. read waves 实际扫描 bytes / 节省重复 scan — `baseline_duplicate_scan_bytes`/`physical_union_scan_bytes`/`saved_scan_bytes`/`decoded_resident_bytes` 可观测（PERF-010）；superset coalescing 节省重复 scan（PERF-008）。
+9. source→backend→writer representation transition 数 — `RepresentationTransitionTracker` transition_count/bytes（PERF-031，Gate-11）；bulk Arrow CDI 路径（PERF-028）transition 数=1。
+10. shard spool→reload→concat→sort 重复放大 — Arrow IPC spool（PERF-024）；已排序非重叠 shard 一次 concat（Gate-07 `shard_concat_sort_count==1`）；adaptive spool 决策避免小 shard 落盘（PERF-027）。
+11. minute→daily 同源 100 聚合扫描分钟数据次数 — **1 次**（PERF-036 单条 DuckDB SQL，`agg FILTER` 多列）；B6 实测：100 聚合 121ms 单扫产出 450 行（r39_minute_aggregation_benchmark.json）。
+12. matrix 新增 50 因子是否需要重写已有 2000 列 — **不需要**：block 模式只写 touched block，未触 block COW hardlink，新因子新建 block（PERF-062，新增因子 amplification 0.0）。B8 实测（默认布局 50→70 因子）：base 724KB → after 1.80MB，add 阶段 12.1s（r39_matrix_benchmark.json）。
+13. Matrix 1-day 增量是否需要重写整月 — delta/block 布局下只写 touched block + 增量 fragment；compaction 才全局重排（PERF-083/084）。
+14. DuckDB deadline 10000 queries watchdog thread 数 — `DeadlineManager` 单 lazy timer 线程，`watchdog_thread_created_count` O(1)（Gate-08，PERF-072）。
+15. production optimized 与 reference parity — 所有新 R39 测试 + 354 既有回归全绿（Gate-12）；matrix legacy 字节级 parity；bulk==reference 恒等。
+16. §27 同机 before/after（QUICK，300 股×252 日×100 因子，干净 lake）— **baseline 8e9893b5：B1 total 129.3s**（run 3.7s + mat 125.5s）/ B2 129.0s → **HEAD：B1 96.3s / B2 95.2s / B3 95.0s**（run ~3s + mat ~93s）。**TTDC 改善 ~26%**，materialize 写盘 125.5s→92.8s（-26%）；`batch_write_transaction_count` 100→2。注：baseline 原 42s 数字为复用 after 已填充 lake 的 resume 跳写，干净 lake 复测为 125.5s（诚实排除）。

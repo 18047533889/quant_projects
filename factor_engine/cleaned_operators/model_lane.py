@@ -67,7 +67,6 @@ MODEL_LANE_EXPLICIT: dict[str, str] = {
     "ts_garch_persistence": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_garch_vol_surprise": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_gjr_garch_vol_forecast": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_gjr_leverage": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_dmd_dominant_growth_rate": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_dmd_dominant_frequency": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_dmd_level_dominant_growth_rate": "EXPENSIVE_CERTIFIED_ALPHA",
@@ -79,11 +78,6 @@ MODEL_LANE_EXPLICIT: dict[str, str] = {
     "ts_dmd_return_mode_concentration": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_hankel_singular_gap": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_hankel_effective_rank": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_ssa_reconstruction_residual": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_huber_regression_coeff": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_quantile_regression_coeff": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_quantile_regression_slope": "EXPENSIVE_CERTIFIED_ALPHA",
-    "ts_expectile_regression_coeff": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_matrix_profile_discord_score": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_matrix_profile_motif_age": "EXPENSIVE_CERTIFIED_ALPHA",
     "ts_matrix_profile_motif_frequency": "EXPENSIVE_CERTIFIED_ALPHA",
@@ -113,13 +107,17 @@ MODEL_LANE_EXPLICIT: dict[str, str] = {
     "ts_multi_regression_coeff_prior": "FAST_NATIVE_ALPHA",
     "ts_multi_regression_r2_prior": "FAST_NATIVE_ALPHA",
     "ts_regression_slope": "FAST_NATIVE_ALPHA",
-    # --- STATE_CONDITION_EVENT ---
-    "ts_dynamic_knn_state": "STATE_CONDITION_EVENT",
-    "ts_markov_regime_state": "STATE_CONDITION_EVENT",
-    "ts_markov_transition_probability": "STATE_CONDITION_EVENT",
-    "ts_regime_conditional_moment": "STATE_CONDITION_EVENT",
-    "ts_state_space_regime_probability": "STATE_CONDITION_EVENT",
-    "ts_hmm_*": "STATE_CONDITION_EVENT",  # placeholder, removed below if absent
+    # --- STATE_CONDITION_EVENT (live Markov/state dynamics canonicals) ---
+    "ts_markov_committor": "STATE_CONDITION_EVENT",
+    "ts_markov_entropy_production": "STATE_CONDITION_EVENT",
+    "ts_markov_mean_first_passage_time": "STATE_CONDITION_EVENT",
+    "ts_markov_persistence": "STATE_CONDITION_EVENT",
+    "ts_markov_spectral_gap": "STATE_CONDITION_EVENT",
+    "ts_markov_state_entropy": "STATE_CONDITION_EVENT",
+    "ts_markov_stationary_surprisal": "STATE_CONDITION_EVENT",
+    "ts_markov_transition_surprisal": "STATE_CONDITION_EVENT",
+    "ts_two_state_regime_probability": "STATE_CONDITION_EVENT",
+    "ts_regime_duration": "STATE_CONDITION_EVENT",
     # --- MODEL_FEATURE_SCORE (supervised) ---
     "panel_rolling_pcr_forecast": "MODEL_FEATURE_SCORE",
     "panel_rolling_pls_forecast": "MODEL_FEATURE_SCORE",
@@ -135,13 +133,26 @@ MODEL_LANE_EXPLICIT: dict[str, str] = {
     "ts_regression_resid": "DIAGNOSTIC_RESEARCH",
     "ts_regression_r2": "DIAGNOSTIC_RESEARCH",
     "cs_knn_local_linear_residual": "DIAGNOSTIC_RESEARCH",
-    "ts_dynamic_knn_residual": "DIAGNOSTIC_RESEARCH",
-    "ts_kernel_granger_causality": "DIAGNOSTIC_RESEARCH",
-    "ts_kernel_granger_oos": "DIAGNOSTIC_RESEARCH",
     "ts_residualized_hsic": "DIAGNOSTIC_RESEARCH",
-    "ts_hsic_dependence": "DIAGNOSTIC_RESEARCH",
-    "ts_lyapunov_exponent": "DIAGNOSTIC_RESEARCH",
-    "ts_rqa_*": "DIAGNOSTIC_RESEARCH",  # placeholder, removed below if absent
+    # --- M-007: in-sample regression diagnostics are NOT alpha candidates.
+    #     semantic_certification._DIAGNOSTIC_IN_SAMPLE stamps these
+    #     diagnostic_only/in_sample; the old hardcoded alpha lanes contradicted
+    #     that authority.  Moved here (M-007).  M-050: in-sample regression
+    #     coeff/slope must be DIAGNOSTIC_DESCRIPTIVE.  M-081: ts_gjr_leverage
+    #     fits through t → descriptive, not an alpha candidate.  M-094: SSA is
+    #     a self-fit structural residual.  M-051 note: the *_prior / *_forecast_error
+    #     variants of these families are the alpha candidates (FAST lane). ---
+    "ts_huber_regression_coeff": "DIAGNOSTIC_RESEARCH",
+    "ts_quantile_regression_coeff": "DIAGNOSTIC_RESEARCH",
+    "ts_quantile_regression_slope": "DIAGNOSTIC_RESEARCH",
+    "ts_expectile_regression_coeff": "DIAGNOSTIC_RESEARCH",
+    "ts_gjr_leverage": "DIAGNOSTIC_RESEARCH",
+    "ts_ssa_reconstruction_residual": "DIAGNOSTIC_RESEARCH",
+    "ts_mean_reversion_half_life": "DIAGNOSTIC_RESEARCH",
+    "ts_mean_reversion_ou_approx_half_life": "DIAGNOSTIC_RESEARCH",
+    "ts_kernel_granger_score": "DIAGNOSTIC_RESEARCH",
+    "ts_hsic": "DIAGNOSTIC_RESEARCH",
+    "ts_local_lyapunov_exponent": "DIAGNOSTIC_RESEARCH",
 }
 # Drop wildcard placeholders that don't correspond to real canonicals (they are
 # family markers in the dict above; the deterministic fallback covers the rest).
@@ -234,4 +245,28 @@ def model_lane_errors(canonicals) -> list[str]:
         lane = assign_model_lane(c)
         if lane is None:
             errors.append(f"{c}: no model lane assigned")
+    return errors
+
+
+def model_lane_dead_key_errors(canonicals) -> list[str]:
+    """M-006 gate: every ``MODEL_LANE_EXPLICIT`` key must map to a LIVE canonical,
+    a compat alias, or a tombstone — never a dead name.
+
+    Wildcard placeholders (``ts_hmm_*``, ``ts_rqa_*``) were already filtered out
+    of ``_MODEL_LANE_EXPLICIT``; this gate checks the effective dict only.
+    """
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        live = set(OperatorRegistry.list_canonical())
+        aliases = set(getattr(OperatorRegistry, "_aliases", {}).keys())
+    except Exception:
+        return []
+    from cleaned_operators.tombstones import is_tombstoned
+
+    errors: list[str] = []
+    for k in sorted(_MODEL_LANE_EXPLICIT):
+        if k in live or k in aliases or is_tombstoned(k):
+            continue
+        errors.append(f"{k}: MODEL_LANE_EXPLICIT key maps to no live canonical/alias/tombstone (M-006)")
     return errors

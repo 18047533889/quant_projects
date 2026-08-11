@@ -161,6 +161,11 @@ class GlobalResourceGovernor:
         self._max_remote = max_remote_concurrency
         self._max_duckdb = max_duckdb_concurrency
         self._per_principal_active = per_principal_active
+        # R40 #58：remote **discovery**（LIST/HEAD/snapshot/manifest 元数据调用）
+        # 独立并发治理——与普通 remote 数据请求分开（discovery 无 scan bytes，
+        # 但高并发会打爆上游元数据服务）。
+        self._max_remote_discovery = max(4, int(max_remote_concurrency // 2))
+        self._remote_discovery_inflight = 0
         #: R38 P0-026：动态 setter 与 admit() 同锁；cap 收缩到低于当前 reservations
         #: 时**不 kill incumbents**，只阻止新 admission，telemetry 标 over_current_target。
         self._over_current_target = False
@@ -300,6 +305,30 @@ class GlobalResourceGovernor:
             if self._remote_inflight > 0:
                 self._remote_inflight -= 1
 
+    # ---- 远程 discovery 并发（R40 #58：LIST/HEAD/snapshot/manifest 独立治理）----
+
+    def acquire_remote_discovery_slot(self) -> bool:
+        """限制 LIST / HEAD / snapshot / manifest 元数据调用的并发。
+
+        discovery 与一般 remote 数据请求分开治理——批处理反复解析同一数据集时，
+        元数据调用在 execution admission 前发生（R40 #57 两相租约的发现相），
+        必须有独立 slot 上限防打爆上游。
+        """
+        with self._lock:
+            if self._remote_discovery_inflight >= self._max_remote_discovery:
+                return False
+            self._remote_discovery_inflight += 1
+            return True
+
+    def release_remote_discovery_slot(self) -> None:
+        with self._lock:
+            if self._remote_discovery_inflight > 0:
+                self._remote_discovery_inflight -= 1
+
+    def remote_discovery_inflight(self) -> int:
+        with self._lock:
+            return self._remote_discovery_inflight
+
     # ---- DuckDB 并发（R26-P1-016：声明的能力必须执行）----
 
     def acquire_duckdb_slot(self) -> bool:
@@ -375,6 +404,8 @@ class GlobalResourceGovernor:
                 "active": len(self._active),
                 "remote_inflight": self._remote_inflight,
                 "remote_requests_total": self._remote_requests_total,
+                "remote_discovery_inflight": self._remote_discovery_inflight,
+                "max_remote_discovery": self._max_remote_discovery,
                 "over_current_target": self._over_current_target,
             }
 

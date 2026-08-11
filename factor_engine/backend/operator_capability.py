@@ -29,6 +29,16 @@ class UnsupportedOperatorBackendError(RuntimeError):
     """Raised when the requested/automatic backend has no eligible implementation."""
 
 
+class CapabilityInfrastructureError(RuntimeError):
+    """Raised when capability identity computation hits an infrastructure error.
+
+    #213：production capability identity 不允许 repr fallback——typed serializer
+    error（payload 不可序列化/不稳定 hash）是 infrastructure failure，不是可以
+    悄悄降级成 repr 的普通错误。调用方必须把该错误当作 capability 计算失败处理，
+    而不是拿到一个基于 repr 的伪 identity。
+    """
+
+
 _REGISTRY_TO_CAPABILITY: dict[str, BackendName | None] = {
     "pandas_numpy": "pandas_numpy",
     "polars": "polars",
@@ -227,15 +237,21 @@ def _emitter_source_hash() -> str:
 
 
 def _safe_payload_hash(payload: Any) -> str:
-    """对任意 payload 计算稳定 hash；JSON 不可序列化时回退 repr。"""
+    """对任意 payload 计算稳定 hash（#213）。
+
+    production capability identity 不允许 repr fallback：typed serializer error
+    → :class:`CapabilityInfrastructureError`，绝不返回基于 ``repr()`` 的伪 identity。
+    """
     try:
         from backend.evidence_provenance import compute_payload_hash
 
         return compute_payload_hash(payload)
-    except Exception:
-        import hashlib
-
-        return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+    except CapabilityInfrastructureError:
+        raise
+    except Exception as exc:
+        raise CapabilityInfrastructureError(
+            f"capability payload hash failed for {type(payload).__name__!r}: {exc}"
+        ) from exc
 
 
 def _sql_contract(canon: str) -> dict:

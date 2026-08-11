@@ -15,7 +15,16 @@ from typing import Callable, Iterable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+
+# Model-audit Phase 4 (search-space hygiene): explicit ParamSpec for the
+# out-of-history fundamental scoring canonicals.  ``periods`` (how many prior
+# visible reports form the reference sample) is the alpha horizon — HORIZON,
+# searched.  ``period_id`` is the reporting-period identifier panel, not a
+# search scalar (M-115/M-162/M-170).
+_VS_PRIOR_HISTORY_PARAM_SPECS: dict[str, ParamSpec] = {
+    "periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
+}
 from cleaned_operators.fiscal_strict import (
     period_ordinal,
     reject_ytd_growth,
@@ -385,13 +394,14 @@ def _lag_value(order, visible, current, periods: int):
     return np.nan
 
 
-def _register(name: str, params: Iterable[str], fn, description: str, *, tags=()):
+def _register(name: str, params: Iterable[str], fn, description: str, *, tags=(), param_specs: dict[str, ParamSpec] | None = None):
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
         param_names=list(params),
         return_type="series",
+        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
         tags=["fundamental", "period_aware", "pit_safe", "causal", "production_extension", *tags],
     )
     # Round-11 #51: expose the expected reporting-flow grain on the contract.
@@ -803,7 +813,6 @@ _SPECS = [
     ("fin_growth_stability",["x","period_id","growth_periods","window_periods","flow_type"],fin_growth_stability,"Inverse growth-volatility stability score over adjacent fiscal periods (skips fail closed, review R4-23)."),
     ("fin_growth_persistence",["x","period_id","growth_periods","window_periods","flow_type"],fin_growth_persistence,"Fraction of recent *adjacent* fiscal reports with positive growth (review R4-23)."),
     ("fin_std",["x","period_id","periods"],fin_std,"Historical reporting-period standard deviation over the last-N-visible reports; missing report periods are skipped (review R4-23)."),
-    ("fin_mad",["x","period_id","periods"],fin_mad,"Compatibility alias of fin_mean_abs_deviation: mean(|x-mean|), NOT median-based MAD (review R4-28); last-N-visible, missing reports skipped."),
     ("fin_mean_abs_deviation",["x","period_id","periods"],fin_mean_abs_deviation,"Mean absolute deviation mean(|x-mean|) over the last-N-visible reports; missing report periods are skipped (review R4-28 naming)."),
     ("fin_median_abs_deviation",["x","period_id","periods"],fin_median_abs_deviation,"Robust median absolute deviation median(|x-median|) over the last-N-visible reports; missing report periods are skipped (review R4-28)."),
     ("fin_cv",["x","period_id","periods"],fin_cv,"Historical reporting-period coefficient of variation over the last-N-visible reports; missing report periods are skipped."),
@@ -832,7 +841,28 @@ _SPECS = [
 ]
 
 for _name,_params,_fn,_desc in _SPECS:
-    _register(_name,_params,_fn,_desc)
+    _register(
+        _name, _params, _fn, _desc,
+        param_specs=(
+            _VS_PRIOR_HISTORY_PARAM_SPECS
+            if _name in ("fin_zscore_vs_prior_history", "fin_percentile_vs_prior_history")
+            else None
+        ),
+    )
+
+# R40 #146: ``fin_mad`` 是 ``fin_mean_abs_deviation`` 的 deprecated alias —— 两个
+# 名字都注册 canonical 会让 mining 重复搜索同一语义空间。从 canonical 注册移除
+# （保留上方 `fin_mad = fin_mean_abs_deviation` 函数别名），只留 registry alias，
+# 使 ``resolve_canonical("fin_mad") -> "fin_mean_abs_deviation"``（公式解析不受影响）。
+from cleaned_operators.registry import OperatorRegistry as _OperatorRegistry
+
+_OperatorRegistry.register_compat_alias(
+    "fin_mad",
+    "fin_mean_abs_deviation",
+    migration_reason="legacy name for mean absolute deviation; canonical is fin_mean_abs_deviation (R4-28)",
+    deprecated_since="0.11.0",
+    removal_version="1.0",
+)
 
 # New/renamed canonicals (review R4-25 / R4-28) must join the audited
 # fundamental-v2 surface so production governance and the daily/extended

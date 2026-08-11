@@ -6,10 +6,144 @@
 """
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
+
+
+@dataclass(frozen=True)
+class DegeneracyPolicy:
+    """R40 #251：OLS/neutralize/beta/tstat 共享的退化检测策略。
+
+    旧实现只 catch ``var_x == 0.0 or var_x != var_x``（NaN），near-zero 方差
+    （如 1e-30）会得到爆炸的 beta。三档门槛：
+
+    * ``absolute_floor`` — |var| 低于该绝对下界视为退化；
+    * ``relative_floor`` — |var| 低于 ``relative_floor * scale²``（scale 为
+      x 的典型量级）视为退化；
+    * ``condition_number_limit`` — 条件数上限（供矩阵版本使用）。
+    """
+
+    absolute_floor: float = 1e-14
+    relative_floor: float = 1e-12
+    condition_number_limit: float = 1e15
+
+    def variance_is_degenerate(self, var_x: float, scale: float = 1.0) -> bool:
+        if not math.isfinite(float(var_x)):
+            return True
+        v = abs(float(var_x))
+        if v < float(self.absolute_floor):
+            return True
+        s = abs(float(scale))
+        if s > 0.0 and v < float(self.relative_floor) * s * s:
+            return True
+        return False
+
+    def identity_payload(self) -> dict[str, Any]:
+        return {
+            "absolute_floor": self.absolute_floor,
+            "relative_floor": self.relative_floor,
+            "condition_number_limit": self.condition_number_limit,
+        }
+
+
+#: 默认退化策略（production 共享）。
+DEFAULT_DEGENERACY_POLICY = DegeneracyPolicy()
+
+#: 进 semantic/numeric contract 的 canonical numeric algorithm 声明。
+CANONICAL_NUMERIC_ALGORITHMS: dict[str, str] = {
+    "cs_resid_": "pairwise_mean+centered_sum",
+    "cs_regression_": "pairwise_mean+centered_sum",
+    "ts_regression_slope_": "centered_sums",
+    "cs_mean": "pairwise_summation",
+    "cs_sum": "pairwise_summation",
+    "ts_ewm_var": "welford_rolling_variance",
+    "cum_sum": "neumaier_cumulative",
+}
+
+
+def canonical_numeric_algorithm(canonical: str) -> str:
+    """R40 #252：canonical 的数值稳定算法声明（进 numeric contract）。"""
+    return CANONICAL_NUMERIC_ALGORITHMS.get(str(canonical), "naive")
+
+
+def pairwise_sum_(a: Any) -> float:
+    """R40 #252：pairwise summation（跨截面高动态范围 sum 精度）。
+
+    对 1e16 + 小量 这类高动态范围数据，朴素顺序求和会丢失小量；pairwise
+    (递归两两相加) 把误差从 O(n·eps·Σ|x|) 降到 O(log n·eps·Σ|x|)。
+    """
+    arr = np.asarray(a, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    return float(_pairwise_sum_rec(arr))
+
+
+def _pairwise_sum_rec(a: np.ndarray) -> float:
+    n = a.shape[0]
+    if n == 0:
+        return 0.0
+    if n <= 8:
+        return float(a.sum())
+    mid = n // 2
+    return _pairwise_sum_rec(a[:mid]) + _pairwise_sum_rec(a[mid:])
+
+
+def neumaier_cumsum_(a: Any) -> np.ndarray:
+    """R40 #252：Neumaier 补偿累积和（cumsum 精度）。
+
+    Neumaier 算法保留补偿项，比朴素的 ``np.cumsum`` 在大动态范围下更稳定。
+    """
+    arr = np.asarray(a, dtype=float)
+    out = np.full(arr.shape, np.nan, dtype=float)
+    s = 0.0
+    c = 0.0
+    for i in range(arr.shape[0]):
+        if not np.isfinite(arr[i]):
+            out[i] = np.nan
+            continue
+        t = s + arr[i]
+        if abs(s) >= abs(arr[i]):
+            c += (s - t) + arr[i]
+        else:
+            c += (arr[i] - t) + s
+        s = t
+        out[i] = s + c
+    return out
+
+
+def welford_rolling_var_(
+    a: Any, window: int, *, min_periods: int = 2, ddof: int = 1
+) -> np.ndarray:
+    """R40 #252：Welford 在线滚动方差（rolling variance 数值稳定）。
+
+    比 ``np.rolling(var)`` 的两遍算法更稳定；对 1e16 + 小量的序列不会因
+    E[x²]−E[x]² 灾难性抵消而算出负方差。
+    """
+    arr = np.asarray(a, dtype=float)
+    n = arr.shape[0]
+    out = np.full(n, np.nan, dtype=float)
+    if window <= 1:
+        return out
+    # 逐窗口 Welford（窗口滑动：O(n·window)，与 _rolling_apply 同阶但更稳定）。
+    for i in range(window - 1, n):
+        w = arr[i - window + 1 : i + 1]
+        valid = w[np.isfinite(w)]
+        if valid.size < min_periods:
+            continue
+        # Welford 单遍
+        m = valid[0]
+        q = 0.0
+        k = 1
+        for v in valid[1:]:
+            k += 1
+            d = v - m
+            m = m + d / k
+            q = q + d * (v - m)
+        out[i] = float(q / (k - ddof)) if k - ddof > 0 else np.nan
+    return out
 
 
 def _to_array(x: Any) -> np.ndarray:
@@ -169,8 +303,12 @@ def cs_resid_(y, x) -> np.ndarray:
     mx = xv.mean()
     my = yv.mean()
     xc = xv - mx
-    var_x = float((xc * xc).mean())
-    if var_x == 0.0 or var_x != var_x:
+    # R40 #252: cross-sectional variance 用 pairwise summation（高动态范围精度）。
+    var_x = pairwise_sum_(xc * xc) / float(xc.size) if xc.size else 0.0
+    # R40 #251: near-zero 方差（1e-30）也是退化 —— 用 DegeneracyPolicy 统一判定。
+    if DEFAULT_DEGENERACY_POLICY.variance_is_degenerate(
+        var_x, scale=float(np.mean(np.abs(xv))) if xv.size else 1.0
+    ):
         return result
     beta = float((xc * (yv - my)).mean()) / var_x
     alpha = my - beta * mx
@@ -310,8 +448,12 @@ def cs_regression_(y, x, mode: int = 0) -> np.ndarray:
     mx = xv.mean()
     my = yv.mean()
     xc = xv - mx
-    var_x = float((xc * xc).mean())
-    if var_x == 0.0 or var_x != var_x:
+    # R40 #252: cross-sectional variance 用 pairwise summation。
+    var_x = pairwise_sum_(xc * xc) / float(xc.size) if xc.size else 0.0
+    # R40 #251: near-zero 方差也是退化（否则 beta 爆炸）。
+    if DEFAULT_DEGENERACY_POLICY.variance_is_degenerate(
+        var_x, scale=float(np.mean(np.abs(xv))) if xv.size else 1.0
+    ):
         return result
     beta = float((xc * (yv - my)).mean()) / var_x
     alpha = my - beta * mx

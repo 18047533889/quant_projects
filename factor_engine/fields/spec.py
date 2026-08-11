@@ -99,11 +99,26 @@ class FieldSpec:
             # catalog field does not declare it explicitly.  A-share
             # Income/CashFlow statements carry ``flow_ytd`` (fiscal-year-to-date
             # cumulative); StockBalance carries ``balance`` (point-in-time stock).
+            # R40 #131/#132: 完整推导矩阵 —— 拆开 period_duration（annual /
+            # quarter / single_period）与 flow 语义；``flow_annual`` 推导
+            # ``annual_flow``，``flow_quarter`` / ``single_period`` 推导
+            # ``single_period_flow``。带 period_duration 但不带 ``flow`` 的 grain
+            # （如 annual balance sheet）保持 None（不是 flow）。
             raw_grain_set = set(self.grain)
-            if "ytd" in raw_grain_set:
-                object.__setattr__(self, "flow_semantics", "cumulative_ytd_flow")
-            elif "balance" in raw_grain_set:
+            if "balance" in raw_grain_set or "stock" in raw_grain_set:
                 object.__setattr__(self, "flow_semantics", "stock")
+            elif "ytd" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "cumulative_ytd_flow")
+            elif "ttm" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "ttm_flow")
+            elif "annual" in raw_grain_set and "flow" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "annual_flow")
+            elif "quarter" in raw_grain_set and "flow" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "single_period_flow")
+            elif "single_period" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "single_period_flow")
+            elif "flow" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "single_period_flow")
         object.__setattr__(self, "revision_columns", tuple(self.revision_columns))
         object.__setattr__(self, "required_filters", tuple(self.required_filters))
         object.__setattr__(self, "applicability", tuple(self.applicability))
@@ -224,7 +239,11 @@ _SEMANTIC_KIND_NAME_MAP = {
 }
 
 
-def semantic_kind_of_field(spec_or_name) -> str | None:
+def semantic_kind_of_field(
+    spec_or_name,
+    *,
+    production: bool | None = None,
+) -> str | None:
     """Resolve a field's typed-IR semantic kind.
 
     Priority (review #269 — never guess where a kind is declared):
@@ -233,6 +252,12 @@ def semantic_kind_of_field(spec_or_name) -> str | None:
        (:func:`ir.types.semantic_type_of`);
     3. exact-name fallback for raw/research columns (Volume -> NonNegativeActivity,
        UniverseMask -> MaskBool, GroupId -> GroupKey, ...).
+
+    R40 #220: production 模式下 name fallback **禁用** —— 未显式声明
+    ``semantic_kind`` 且 price_basis/flow_semantics 不可证的字段语义是 UNKNOWN
+    （返回 ``None``），由调用方 fail legality；绝不在 production 用名字猜
+    （同形/改名列会静默得到错误语义）。name fallback 只在 research raw-column
+    兼容用。``production=None`` 时按 run mode 自动解析。
     """
     if spec_or_name is None:
         return None
@@ -253,6 +278,13 @@ def semantic_kind_of_field(spec_or_name) -> str | None:
         )
         if kind is not None:
             return kind.value
+    if production is None:
+        from runtime.production_policy import is_production_mode
+
+        production = is_production_mode()
+    if production:
+        # R40 #220: production 拒绝对未声明字段做 name-based 语义猜测。
+        return None
     name = getattr(spec_or_name, "name", spec_or_name)
     low = str(name or "").lower()
     return _SEMANTIC_KIND_NAME_MAP.get(low)

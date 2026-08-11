@@ -23,7 +23,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Sequence
+
+import pandas as pd
 
 from planner.logical_plan import PlanNode
 from planner.plan_hash import contract_is_resolved, plan_cache_key
@@ -44,8 +46,17 @@ class PandasBackend(Backend):
     ``materialized_series`` 外，其余算子均通过 ``cleaned_operators`` 桥接执行。
     """
 
-    def __init__(self) -> None:
-        """初始化 kernel 注册表并批量注册内建与 cleaned 算子。"""
+    def __init__(self, use_modin_pandas: bool | None = None) -> None:
+        """初始化 kernel 注册表并批量注册内建与 cleaned 算子。
+
+        R40 #140: ``use_modin_pandas=True``（``build_backend("pandas_modin")``）
+        在当前 execution context 内启用 modin —— 不再改 process-global
+        ``os.environ``。modin 未安装时 ``pandas_compat`` 自动回退标准 pandas。
+        """
+        if use_modin_pandas is not None:
+            from backend.pandas_compat import set_modin_enabled
+
+            set_modin_enabled(bool(use_modin_pandas))
         self._registry = KernelRegistry()
         self._register_kernels()
 
@@ -229,3 +240,238 @@ class PandasBackend(Backend):
         """
         _ = ctx
         return node.attrs["value"]
+
+
+# ---------------------------------------------------------------------------
+# R40 #62：PandasBackendLiveEvidence —— 对已知参考 canonical 集实跑 Pandas
+# backend，验证输出语义正确性，结果存 versioned evidence。
+# ---------------------------------------------------------------------------
+
+
+def _col(name: str) -> "PlanNode":
+    from planner.logical_plan import PlanNode
+
+    return PlanNode(op="column", attrs={"name": name})
+
+
+def _lit(value: float) -> "PlanNode":
+    from planner.logical_plan import PlanNode
+
+    return PlanNode(op="literal", attrs={"value": value})
+
+
+def _binop(op: str, left: "PlanNode", right: "PlanNode") -> "PlanNode":
+    from planner.logical_plan import PlanNode
+
+    return PlanNode(op=op, inputs=(left, right))
+
+
+def _unop(op: str, child: "PlanNode") -> "PlanNode":
+    from planner.logical_plan import PlanNode
+
+    return PlanNode(op=op, inputs=(child,))
+
+
+def _default_live_input() -> tuple[pd.MultiIndex, dict[str, list[float]]]:
+    """live evidence 的确定性输入（timestamp × instrument 面板）。
+
+    ``close`` 故意含负值（abs/neg/div 等符号语义需要非平凡输入）；
+    ``volume`` 全正（add/ts_delay 区分两列）。
+    """
+    idx = pd.MultiIndex.from_product(
+        [
+            pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+            ["A", "B"],
+        ],
+        names=["timestamp", "instrument"],
+    )
+    return idx, {
+        "close": [10.0, -20.0, 11.0, -21.0, 12.0, 18.0],
+        "volume": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    }
+
+
+#: 已知参考 canonical 集：``canonical -> (plan_builder(data) -> PlanNode, expected)``。
+#: expected 是 6 行面板展平顺序 ``(d1,A),(d1,B),(d2,A),(d2,B),(d3,A),(d3,B)``。
+_REFERENCE_CANONICALS: dict[str, tuple[Any, list[float]]] = {
+    "abs": (
+        lambda data: _unop("abs", _col("close")),
+        [10.0, 20.0, 11.0, 21.0, 12.0, 18.0],
+    ),
+    "neg": (
+        lambda data: _unop("neg", _col("close")),
+        [-10.0, 20.0, -11.0, 21.0, -12.0, -18.0],
+    ),
+    "add": (
+        lambda data: _binop("add", _col("close"), _col("volume")),
+        [11.0, -18.0, 14.0, -17.0, 17.0, 24.0],
+    ),
+    "ts_delay": (
+        lambda data: _binop("ts_delay", _col("close"), _lit(1.0)),
+        [float("nan"), float("nan"), 10.0, -20.0, 11.0, -21.0],
+    ),
+    "ts_mean": (
+        # ts_mean 声明策略 min_periods=1（operator_policy.py:628），滚动窗口含
+        # 当前观测；首行在窗口未满时返回单点均值，不是 NaN（满窗语义是别的算子）。
+        lambda data: _binop("ts_mean", _col("close"), _lit(2.0)),
+        [10.0, -20.0, 10.5, -20.5, 11.5, -1.5],
+    ),
+}
+
+
+class PandasBackendLiveEvidence:
+    """R40 #62：Pandas backend 的 live evidence validator。
+
+    对已知参考 canonical 集在真实 :class:`PandasBackend` 上实跑（不再是 catalog
+    flag 静态判定），把输出与手算参考值比对，结果存 versioned evidence：
+
+        - ``version_sha``   生成证据时的 HEAD（或调用方显式版本）；
+        - ``evidence``      canonical -> {passed, expected, actual, atol}；
+        - ``summary``       {passed, failed, skipped}。
+
+    用于 production capability 认证 / CI：live evidence 失败即该 canonical 在
+    Pandas backend 的 capability 不可信（fail-closed）。
+    """
+
+    def __init__(
+        self,
+        *,
+        backend: "PandasBackend | None" = None,
+        reference_canonicals: dict[str, tuple[Any, list[float]]] | None = None,
+        version_sha: str | None = None,
+        atol: float = 1e-9,
+    ) -> None:
+        self._backend = backend if backend is not None else PandasBackend()
+        self._reference = reference_canonicals or _REFERENCE_CANONICALS
+        self._atol = atol
+        self._version_sha = version_sha or _current_head_sha()
+        self._evidence: dict[str, dict[str, Any]] = {}
+
+    # -- 执行 --
+
+    def _run_plan(self, plan: "PlanNode", data: dict[str, list[float]],
+                  index: pd.MultiIndex) -> list[float]:
+        source = _live_evidence_source(
+            {name: pd.Series(vals, index=index) for name, vals in data.items()}
+        )
+        ctx = ExecutionContext(data_source=source)
+        out = self._backend.execute(plan, ctx)
+        return [float(x) if x is not None else float("nan") for x in out.to_numpy()]
+
+    @staticmethod
+    def _allclose(actual: Sequence[float], expected: Sequence[float], atol: float) -> bool:
+        import numpy as np
+
+        a = np.asarray(actual, dtype=float)
+        e = np.asarray(expected, dtype=float)
+        if a.shape != e.shape:
+            return False
+        return bool(np.allclose(a, e, rtol=1e-7, atol=atol, equal_nan=True))
+
+    def validate_canonical(self, canonical: str) -> dict[str, Any]:
+        """对单个 canonical 跑 live evidence，返回记录（并写入 self._evidence）。"""
+        rec = self._reference.get(canonical)
+        if rec is None:
+            return {"canonical": canonical, "passed": False, "skipped": True,
+                    "reason": "no_reference_case", "version_sha": self._version_sha}
+        builder, expected = rec
+        index, data = _default_live_input()
+        try:
+            plan = builder(data)
+            actual = self._run_plan(plan, data, index)
+        except Exception as exc:  # noqa: BLE001
+            record = {"canonical": canonical, "passed": False, "error": str(exc),
+                      "version_sha": self._version_sha}
+            self._evidence[canonical] = record
+            return record
+        passed = self._allclose(actual, expected, self._atol)
+        record = {
+            "canonical": canonical,
+            "passed": passed,
+            "expected": list(expected),
+            "actual": list(actual),
+            "atol": self._atol,
+            "version_sha": self._version_sha,
+        }
+        self._evidence[canonical] = record
+        return record
+
+    def validate_known_set(self) -> dict[str, Any]:
+        """跑全部参考 canonical 集，返回 summary + 逐条 evidence。"""
+        for canon in self._reference:
+            self.validate_canonical(canon)
+        return self.summary()
+
+    # -- evidence --
+
+    def evidence(self) -> dict[str, dict[str, Any]]:
+        return dict(self._evidence)
+
+    def summary(self) -> dict[str, Any]:
+        passed = sum(1 for r in self._evidence.values() if r.get("passed"))
+        failed = sum(1 for r in self._evidence.values()
+                     if not r.get("passed") and not r.get("skipped"))
+        skipped = sum(1 for r in self._evidence.values() if r.get("skipped"))
+        return {
+            "version_sha": self._version_sha,
+            "passed": passed,
+            "failed": failed,
+            "skipped": skipped,
+            "total": len(self._evidence),
+        }
+
+
+def _current_head_sha() -> str:
+    try:
+        from backend.evidence_provenance import current_commit_sha
+
+        return current_commit_sha()
+    except Exception:
+        return ""
+
+
+def _live_evidence_source(data: dict[str, pd.Series]) -> Any:
+    """构造 live evidence 的 DataSource。
+
+    优先复用 ``tests.helpers.InMemorySeriesSource``（测试/CI 环境）；不可用
+    （production 打包无 tests 树）→ 回退最小内联 DataSource，保证 validator
+    在任意环境可跑。
+    """
+    try:
+        from tests.helpers import InMemorySeriesSource
+
+        return InMemorySeriesSource(data=data)
+    except Exception:
+        from storage.datasource import DataSource as _DataSource
+
+        class _InlineSeriesSource(_DataSource):
+            def __init__(self, d):
+                self.data = d
+
+            def load_column(self, name: str) -> Any:
+                return self.data[name]
+
+            def load_columns(self, names: list[str]) -> dict[str, Any]:
+                return {n: self.data[n] for n in names if n in self.data}
+
+        return _InlineSeriesSource(data=data)
+
+
+#: 进程级 live evidence 单例（production capability 认证消费）。
+_LIVE_EVIDENCE: PandasBackendLiveEvidence | None = None
+
+
+def get_pandas_live_evidence(
+    *, refresh: bool = False,
+) -> PandasBackendLiveEvidence:
+    """进程级 PandasBackendLiveEvidence 单例（惰性构造）。"""
+    global _LIVE_EVIDENCE
+    if _LIVE_EVIDENCE is None or refresh:
+        _LIVE_EVIDENCE = PandasBackendLiveEvidence()
+    return _LIVE_EVIDENCE
+
+
+def reset_pandas_live_evidence() -> None:
+    """测试用：重置 live evidence 单例。"""
+    global _LIVE_EVIDENCE
+    _LIVE_EVIDENCE = None

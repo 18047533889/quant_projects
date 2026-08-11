@@ -18,17 +18,122 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 __all__ = [
     "ModelTimingContract",
     "LabelContract",
+    "TimingKind",
+    "timing_kind_for",
     "MODEL_LIKE_HINTS",
     "is_model_like_name",
     "model_family_of",
     "MODEL_TIMING_CONTRACTS",
     "get_model_timing_contract",
 ]
+
+
+class TimingKind(Enum):
+    """Model-operators audit (M-004): six-class PIT timing ontology.
+
+    Every model-like canonical must classify into exactly one TimingKind; the
+    kind drives the estimation/reference/query/self-inclusion/peer-inclusion/
+    label-maturity/state-update/output-timestamp contract:
+
+    SELF_FIT_DESCRIPTIVE            fit window includes t, output describes the
+                                    in-sample state at t (PCA loading, DMD mode,
+                                    SSA residual, in-sample regression coeff)
+    PRIOR_FIT_PREDICTIVE            fit strictly on <= t-1, output predicts t /
+                                    t+H (prior regression variants, GARCH next
+                                    vol, HAR forecast, AR prior forecast)
+    PRIOR_REFERENCE_CURRENT_QUERY   reference set built on <= t-1, current row
+                                    t is the QUERY and is excluded from the
+                                    reference (matrix profile, state density,
+                                    mahalanobis, signature anomaly, kernel
+                                    granger OOS)
+    SAME_TIME_CROSS_SECTIONAL       as-of time-t cross-section, self-excluded,
+                                    peers at time t (cs_ KNN local / peer ops)
+    RECURSIVE_CAUSAL_FILTER         one-pass causal filter, current observation
+                                    updates the state (Kalman filter family)
+    MATURED_HISTORICAL_OUTCOME      output is an outcome anchored at s that only
+                                    becomes usable once s + horizon <= t (first
+                                    passage hit / matured label statistics)
+    """
+
+    SELF_FIT_DESCRIPTIVE = "self_fit_descriptive"
+    PRIOR_FIT_PREDICTIVE = "prior_fit_predictive"
+    PRIOR_REFERENCE_CURRENT_QUERY = "prior_reference_current_query"
+    SAME_TIME_CROSS_SECTIONAL = "same_time_cross_sectional"
+    RECURSIVE_CAUSAL_FILTER = "recursive_causal_filter"
+    MATURED_HISTORICAL_OUTCOME = "matured_historical_outcome"
+
+
+#: TimingKind overrides keyed by canonical.  The fallback derivation in
+#: :func:`timing_kind_for` cannot distinguish a few families (e.g. a
+#: ``matrix_profile`` with fit_cutoff=0 descriptive is still a reference-query
+#: model, not self-fit).  Explicit override wins.
+_TIMING_KIND_OVERRIDES: dict[str, TimingKind] = {
+    # reference-query: historical subsequence / state reference, current query
+    "ts_matrix_profile_discord_score": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_matrix_profile_motif_age": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_matrix_profile_motif_frequency": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_matrix_profile_neighbor_dispersion": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_matrix_profile_novelty": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_motif_recurrence_count": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_signature_mahalanobis_anomaly": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_state_density": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    "ts_kernel_granger_score": TimingKind.PRIOR_REFERENCE_CURRENT_QUERY,
+    # same-time cross-section: peers at time t, self excluded
+    "cs_knn_local_linear_residual": TimingKind.SAME_TIME_CROSS_SECTIONAL,
+    "cs_knn_distance": TimingKind.SAME_TIME_CROSS_SECTIONAL,
+    "cs_knn_peer_mean_ex_self": TimingKind.SAME_TIME_CROSS_SECTIONAL,
+    # matured historical outcome: anchor s usable only when s + horizon <= t
+    "ts_first_passage_hit_probability": TimingKind.MATURED_HISTORICAL_OUTCOME,
+    "ts_first_passage_bias": TimingKind.MATURED_HISTORICAL_OUTCOME,
+    "ts_first_passage_conditional_time": TimingKind.MATURED_HISTORICAL_OUTCOME,
+    # recursive causal filter
+    "ts_kalman_level": TimingKind.RECURSIVE_CAUSAL_FILTER,
+    "ts_kalman_trend": TimingKind.RECURSIVE_CAUSAL_FILTER,
+    "ts_kalman_beta": TimingKind.RECURSIVE_CAUSAL_FILTER,
+    "ts_kalman_beta_change": TimingKind.RECURSIVE_CAUSAL_FILTER,
+    "ts_kalman_beta_uncertainty": TimingKind.RECURSIVE_CAUSAL_FILTER,
+    "ts_kalman_innovation_z": TimingKind.RECURSIVE_CAUSAL_FILTER,
+}
+
+_TIMING_KIND_FAMILY_HINTS: tuple[tuple[str, TimingKind], ...] = (
+    ("kalman", TimingKind.RECURSIVE_CAUSAL_FILTER),
+    ("matrix_profile", TimingKind.PRIOR_REFERENCE_CURRENT_QUERY),
+    ("first_passage", TimingKind.MATURED_HISTORICAL_OUTCOME),
+    ("signature_mahalanobis", TimingKind.PRIOR_REFERENCE_CURRENT_QUERY),
+)
+
+
+def timing_kind_for(canonical: str) -> TimingKind:
+    """Return the PIT ``TimingKind`` for a model-like canonical (M-004).
+
+    Explicit per-canonical override first, then family-name hints, then a
+    deterministic derivation from the resolved ``ModelTimingContract`` fields.
+    Every model-like canonical resolves to one of the six kinds — never None.
+    """
+    if canonical in _TIMING_KIND_OVERRIDES:
+        return _TIMING_KIND_OVERRIDES[canonical]
+    low = canonical.lower()
+    for fam, kind in _TIMING_KIND_FAMILY_HINTS:
+        if fam in low:
+            return kind
+    c = get_model_timing_contract(canonical)
+    if c is None:
+        return TimingKind.SELF_FIT_DESCRIPTIVE
+    if c.forecast_horizon >= 1 or c.label_horizon is not None:
+        return TimingKind.PRIOR_FIT_PREDICTIVE
+    if c.fit_cutoff_offset >= 1:
+        # a prior fit that scores a coefficient/statistic is still predictive in
+        # the sense its fit is strictly before the scored row
+        return TimingKind.PRIOR_FIT_PREDICTIVE
+    if canonical.startswith("cs_"):
+        return TimingKind.SAME_TIME_CROSS_SECTIONAL
+    return TimingKind.SELF_FIT_DESCRIPTIVE
 
 
 @dataclass(frozen=True)
@@ -74,14 +179,41 @@ MODEL_LIKE_HINTS: tuple[str, ...] = (
     "elastic", "ridge", "huber", "quantile", "expectile", "ar_", "garch", "har_",
     "kalman", "state_space", "markov", "hmm", "dmd", "ssa", "hankel", "granger",
     "hsic", "kernel", "knn", "lyapunov", "rqa", "recurrence", "matrix_profile",
-    "anomaly", "autoencoder", "mixture", "expert", "regime", "state", "transfer_entropy",
+    "anomaly", "autoencoder", "mixture", "expert", "regime", "state",
+    "transfer_entropy", "first_passage", "passage",
 )
 
 
 def is_model_like_name(name: str, category: str = "", source: str = "") -> bool:
+    """Model-like recall filter (M-005: hint is recall-only, not semantics).
+
+    Token-boundary matching: a hint must match an underscore-delimited token
+    (or a token prefix), NOT an arbitrary substring.  Fixes the M-005 false
+    positives where the substring ``"ar_"`` matched ``calendar_day_diff`` /
+    ``dollar_volume`` / ``dollar_volume_zscore`` (the ``"ar"`` inside
+    ``calendar``/``dollar``), which inflated the production-timing gate to 147
+    errors.  ``ts_ar_*`` / ``ts_har_*`` tokens still match ``"ar"``/``"har"``
+    exactly.
+    """
     low = name.lower()
-    if any(h in low for h in MODEL_LIKE_HINTS):
-        return True
+    tokens = low.replace("-", "_").split("_")
+    for hint in MODEL_LIKE_HINTS:
+        h = hint.lower().rstrip("_")  # trailing "_" is a boundary marker (ar_ -> ar)
+        if not h:
+            continue
+        if "_" in h:
+            # multi-token hint (transfer_entropy, matrix_profile, first_passage,
+            # state_space, mean_reversion): already boundary-specific, match as
+            # literal substring of the full name
+            if h in low:
+                return True
+            continue
+        # single-token hint (ar_, har_, pca, knn, ...): token-boundary match so
+        # "ar_" does NOT match the "ar" inside "dollar"/"calendar" (M-005).
+        if any(t == h for t in tokens):
+            return True
+        if any(t.startswith(h) for t in tokens):
+            return True
     cat = (category or "").lower()
     if any(h in cat for h in ("model", "regression", "state", "entropy", "kernel", "spectral", "network")):
         return True
@@ -146,12 +278,48 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_ar_prior_innovation": ModelTimingContract("ar", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_ar_prior_innovation_z": ModelTimingContract("ar", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_ar_prior_coeff": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_ar_coefficient": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
+    # M-040: ts_ar_coefficient fits on the window INCLUDING the current row
+    # (in-sample descriptive).  The strict-prior alpha variant is
+    # ts_ar_prior_coeff.  fit_cutoff=0 descriptive.
+    "ts_ar_coefficient": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     "ts_ar_coeff_stability": ModelTimingContract("ar", fit_cutoff_offset=1, state_filtering="none"),
     "ts_ar_fitted_value": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     "ts_ar_in_sample_resid": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     "ts_ar_forecast": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     "ts_ar_innovation": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_ar_innovation_z": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
+    # --- GJR leverage: fits the full window INCLUDING the current row (in-sample
+    #     descriptive, M-081).  NOT a strict-prior alpha candidate — authored
+    #     explicit fit_cutoff=0 descriptive so it cannot be mistaken for one. ---
+    "ts_gjr_leverage": ModelTimingContract("garch", fit_cutoff_offset=0, state_filtering="none"),
+    # --- Regression family: prior variants fit strictly through t-1 (PRIOR_FIT_PREDICTIVE);
+    #     in-sample coeff/slope variants are descriptive (SELF_FIT_DESCRIPTIVE).  Authored
+    #     per M-051 (every prior/forecast-error variant explicit, no generated defaults). ---
+    "ts_multi_regression_coeff_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_multi_regression_r2_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_multi_regression_adjusted_r2_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_multi_regression_coeff_stability": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_multi_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_multi_regression_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_huber_regression_coeff_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_huber_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_huber_regression_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_huber_regression_predictive_resid": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_ridge_regression_coeff_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_ridge_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_ridge_regression_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_ridge_regression_predictive_resid": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_quantile_regression_coeff_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_quantile_beta_spread_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_expectile_regression_coeff_prior": ModelTimingContract("regression", fit_cutoff_offset=1, state_filtering="none"),
+    "ts_expectile_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_regression_slope": ModelTimingContract("regression", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_regression_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_poly2_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_poly2_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    "ts_mean_reversion_half_life": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_mean_reversion_ou_approx_half_life": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),
     # --- Kalman: causal one-pass filter; missing obs are predict-only ---
     "ts_kalman_level": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
     "ts_kalman_trend": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
@@ -159,15 +327,27 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_kalman_beta_change": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
     "ts_kalman_beta_uncertainty": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
     "ts_kalman_innovation_z": ModelTimingContract("kalman", fit_cutoff_offset=0, state_filtering="filter"),
+    # --- Markov / regime state dynamics: edges/P/D1/D2 strictly on <= t-1,
+    #     current value only selects the current state (M-122 PRIOR_REFERENCE_CURRENT_QUERY). ---
+    "ts_markov_committor": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_entropy_production": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_mean_first_passage_time": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_persistence": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_spectral_gap": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_state_entropy": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_stationary_surprisal": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_markov_transition_surprisal": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_regime_duration": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
+    "ts_two_state_regime_probability": ModelTimingContract("state", fit_cutoff_offset=0, state_filtering="none"),
     # --- GARCH: fit on seg[:-1]; current shock excluded from own denominator ---
     "ts_garch_standardized_shock": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
     "ts_garch_next_vol_forecast": ModelTimingContract("garch", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_garch_persistence": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
     "ts_garch_vol_surprise": ModelTimingContract("garch", fit_cutoff_offset=1, state_filtering="none"),
     "ts_gjr_garch_vol_forecast": ModelTimingContract("garch", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
-    "ts_har_rv_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    # ts_har_rv_forecast / ts_har_rv_innovation_z are compat aliases (M-088);
+    # the alias targets carry their own explicit contracts.
     "ts_har_rv_forecast_error_z": ModelTimingContract("har", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_har_rv_innovation_z": ModelTimingContract("har", fit_cutoff_offset=1, state_filtering="none"),
     "ts_har_rv_next_vol_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_har_rv_next_var_forecast": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_har_from_return_next_vol": ModelTimingContract("har", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
@@ -185,6 +365,9 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_hankel_singular_gap": ModelTimingContract("hankel", fit_cutoff_offset=0, state_filtering="none"),
     "ts_hankel_effective_rank": ModelTimingContract("hankel", fit_cutoff_offset=0, state_filtering="none"),
     "ts_ssa_reconstruction_residual": ModelTimingContract("ssa", fit_cutoff_offset=0, state_filtering="none"),
+    # M-095: prior SSA reconstruction error — fit the low-rank subspace strictly
+    # on <= t-1, then score the current segment as the query (PRIOR_REFERENCE_CURRENT_QUERY).
+    "ts_ssa_prior_reconstruction_error": ModelTimingContract("ssa", fit_cutoff_offset=1, state_filtering="none"),
     # --- Matrix profile / sequence anomaly: query vs HISTORICAL subsequences only ---
     "ts_matrix_profile_discord_score": ModelTimingContract("matrix_profile", fit_cutoff_offset=0, state_filtering="none"),
     "ts_matrix_profile_motif_age": ModelTimingContract("matrix_profile", fit_cutoff_offset=0, state_filtering="none"),
@@ -198,13 +381,13 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_path_signature_depth2_norm": ModelTimingContract("signature", fit_cutoff_offset=0, state_filtering="none"),
     "ts_path_leadlag_area": ModelTimingContract("signature", fit_cutoff_offset=0, state_filtering="none"),
     # --- Kernel Granger / HSIC: blocked training/test split ---
-    "ts_kernel_granger_causality": ModelTimingContract("kernel", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_kernel_granger_oos": ModelTimingContract("kernel", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_residualized_hsic": ModelTimingContract("hsic", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_hsic_dependence": ModelTimingContract("hsic", fit_cutoff_offset=1, state_filtering="none"),
-    # --- Dynamic KNN / local models: as-of membership + historical scaler ---
-    "cs_knn_local_linear_residual": ModelTimingContract("knn", fit_cutoff_offset=1, state_filtering="none"),
-    "ts_dynamic_knn_state": ModelTimingContract("knn", fit_cutoff_offset=1, state_filtering="none"),
+    # --- Dynamic KNN / local models: same-time cross-section (M-110).  The
+    #     kernel fits a date-t peer cross-section (self excluded, peer target_t
+    #     used for the fit) — NOT fit-through-t-1.  fit_cutoff=0 means "the
+    #     current time slice may be used", with self-exclusion enforced by the
+    #     kernel; TimingKind is SAME_TIME_CROSS_SECTIONAL. ---
+    "cs_knn_local_linear_residual": ModelTimingContract("knn", fit_cutoff_offset=0, state_filtering="none"),
 }
 
 
@@ -269,19 +452,38 @@ def model_timing_contract_is_explicit(canonical: str) -> bool:
 
 
 def model_timing_production_errors(canonicals) -> list[str]:
-    """Production gate: every model-like production canonical needs an explicit
-    reviewed ``ModelTimingContract``.
+    """Production gate (M-002): every DIRECT-PRODUCTION model-like canonical
+    needs an explicit reviewed ``ModelTimingContract``.
 
-    Auto-generated contracts are research hints only; a model-like canonical with
-    no explicit contract is NOT production-admissible (R34 P0-025).
+    ``direct_production_model_like`` = a model-like canonical whose resolved
+    lane is a production lane (FAST_NATIVE_ALPHA / EXPENSIVE_CERTIFIED_ALPHA /
+    MODEL_FEATURE_SCORE / STATE_CONDITION_EVENT).  Diagnostic / research /
+    tombstone lanes are not production-admissible regardless of timing, so a
+    generated contract is an acceptable research hint for them (R34 P0-025).
+
+    This is the audit's ``for canonical in actual_registry: if
+    direct_production_model_like(canonical): assert
+    model_timing_contract_is_explicit(canonical)``.  Auto-generated contracts
+    are research hints only and do NOT admit production.
     """
     errors: list[str] = []
     for canonical in sorted(canonicals):
         if not is_model_like_name(canonical):
             continue
+        # lazy import avoids a circular dependency (model_lane imports this module)
+        try:
+            from cleaned_operators.model_lane import assign_model_lane
+
+            lane = assign_model_lane(canonical)
+        except Exception:
+            lane = None
+        if lane not in ("FAST_NATIVE_ALPHA", "EXPENSIVE_CERTIFIED_ALPHA",
+                        "MODEL_FEATURE_SCORE", "STATE_CONDITION_EVENT"):
+            continue  # diagnostic/research/tombstone: not production-admissible
         if not model_timing_contract_is_explicit(canonical):
             errors.append(
-                f"{canonical}: model-like but no explicit reviewed ModelTimingContract "
-                "(auto-generated timing is a research hint only, R34 P0-025)"
+                f"{canonical}: direct-production model-like but no explicit reviewed "
+                f"ModelTimingContract (auto-generated timing is a research hint only, "
+                f"M-002 / R34 P0-025)"
             )
     return errors
