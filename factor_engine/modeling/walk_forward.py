@@ -24,6 +24,7 @@ __all__ = [
     "make_walk_forward_splits",
     "check_fold_order",
     "purge_overlap",
+    "purge_before_boundary",
     "apply_embargo",
     "purge_and_embargo",
     "nested_splits",
@@ -104,14 +105,17 @@ def make_walk_forward_splits(
 
     Each fold: training = last ``train_lookback_bars`` dates before validation
     (rolling) or all dates from the start (expanding); validation = the next
-    ``validation_bars`` dates; test = next ``test_bars`` dates.  Step forward by
-    ``step_bars``.  A fold is skipped when its training window fails the
-    ``min_train_dates`` / ``min_train_stocks`` / ``min_train_obs`` guards.
+    ``validation_bars`` dates; test = next ``test_bars`` dates.  Fold emission
+    advances by ``retrain_every_bars`` (the §3.4 retrain cadence) when set
+    (``> 0``), else by ``step_bars`` — one fold is emitted per retrain point.
+    A fold is skipped when its training window fails the ``min_train_dates`` /
+    ``min_train_stocks`` / ``min_train_obs`` guards.
     """
     col = _date_col_of(ds, date_col)
     dates = np.sort(ds.frame[col].unique())
     n = len(dates)
     folds: list[WalkForwardFold] = []
+    stride = spec.retrain_every_bars if spec.retrain_every_bars > 0 else spec.step_bars
 
     def _slice(start_pos: int | None, end_pos: int | None) -> PanelDataset:
         if start_pos is None:
@@ -144,19 +148,19 @@ def make_walk_forward_splits(
         if test_end_pos >= n:
             break
         if train_start_pos < 0:
-            pos += spec.step_bars
+            pos += stride
             continue
 
         train_ds = _slice(train_start_pos, train_end_pos)
         tele = train_ds.telemetry()
         if tele["n_unique_dates"] < spec.min_train_dates:
-            pos += spec.step_bars
+            pos += stride
             continue
         if tele["median_stocks_per_date"] < spec.min_train_stocks:
-            pos += spec.step_bars
+            pos += stride
             continue
         if tele["raw_obs"] < spec.min_train_obs:
-            pos += spec.step_bars
+            pos += stride
             continue
 
         val_ds = _slice(val_start_pos, val_end_pos) if val_start_pos is not None else None
@@ -176,7 +180,7 @@ def make_walk_forward_splits(
             )
         )
         fold_id += 1
-        pos += spec.step_bars
+        pos += stride
     return folds
 
 
@@ -248,6 +252,34 @@ def apply_embargo(
     return _filter_by_dates(train_ds, None, dates[-embargo_bars - 1], col)
 
 
+def purge_before_boundary(
+    train_ds: PanelDataset,
+    boundary: Any,
+    label_contract: LabelContract,
+    *,
+    date_col: str = "date",
+) -> PanelDataset:
+    """Purge training rows whose label interval ``[t, t+H]`` overlaps a held-out
+    evaluation boundary (the start of the test window when there is no
+    validation window).
+
+    Keeps rows where ``date + horizon_bars < boundary`` (strict).  This closes
+    the §9 gap where ``validation_ds is None``: without a validation window the
+    label of a late training row (e.g. ``VWAP_{t+20}/VWAP_t`` with the test
+    window starting at ``t+5``) would leak test-period information into the fit.
+    """
+    if boundary is None or train_ds.n_rows == 0:
+        return train_ds
+    col = _date_col_of(train_ds, date_col)
+    dates = np.sort(train_ds.frame[col].unique())
+    p = int(pd.Index(dates).searchsorted(boundary, side="left"))
+    horizon = int(getattr(label_contract, "horizon_bars", 0))
+    cutoff_pos = p - horizon - 1
+    if cutoff_pos < 0:
+        return _empty_like(train_ds)
+    return _filter_by_dates(train_ds, None, dates[cutoff_pos], col)
+
+
 def purge_and_embargo(
     train_ds: PanelDataset,
     validation_ds: PanelDataset | None,
@@ -256,10 +288,18 @@ def purge_and_embargo(
     *,
     date_col: str = "date",
 ) -> PanelDataset:
-    """Combine §9 purge and §10 embargo.  ``spec`` supplies the embargo; when
-    absent, ``label_contract.embargo_bars`` is used."""
+    """Combine §9 purge and §10 embargo.  ``spec`` supplies the embargo and the
+    purge policy; when absent, ``label_contract.embargo_bars`` is used.
+
+    ``purge_policy="label_interval"`` (default) purges training rows whose label
+    interval ``[t, t+H]`` overlaps the validation window.  ``purge_policy="purge_bars"``
+    purges a fixed ``embargo_bars``-bar buffer off the training tail regardless
+    of label horizon.
+    """
     if spec is not None:
         embargo = spec.embargo_bars
+        if spec.purge_policy == "purge_bars":
+            return apply_embargo(train_ds, embargo, date_col=date_col)
     elif label_contract is not None:
         embargo = int(getattr(label_contract, "embargo_bars", 0))
     else:

@@ -31,12 +31,23 @@ __all__ = [
     "LearnerSpec",
     "FrozenModel",
     "BaseLearner",
+    "ModelConvergenceError",
     "LEARNER_REGISTRY",
     "register_learner",
     "get_learner",
     "learner_param_policy",
     "default_sample_contracts",
 ]
+
+
+class ModelConvergenceError(ValueError):
+    """Raised when an iterative learner exhausts ``max_iter`` without converging.
+
+    A non-converged iterate is NEVER returned as a frozen model — the fit fails
+    closed so callers cannot silently consume a degraded artifact.  Subclasses
+    :class:`ValueError` so callers that already treat fit failures as value
+    errors keep working.
+    """
 
 
 @dataclass(frozen=True)
@@ -64,11 +75,41 @@ class FrozenModel:
         return learner.predict(self, X)
 
 
+class _ContractFamilyDescriptor:
+    """Dual-context accessor for :attr:`BaseLearner.contract_family`.
+
+    ``modeling.sample_policy.resolve_sample_contract`` reads the attribute with
+    ``getattr(learner, "contract_family", None)`` and treats the value as a
+    *string key* in an ``or`` chain (``sample_contract_family or
+    contract_family or family``).  A plain method or ``@property`` would surface
+    as a truthy bound-method / descriptor object at class level and hijack the
+    chain.  This descriptor returns:
+
+    * the resolved key string on an **instance** (``learner.contract_family``);
+    * ``""`` on **class** access — falsy, so ``resolve_sample_contract`` falls
+      through to the bare ``family`` key for learners that declare no explicit
+      ``sample_contract_family`` (preserving the legacy fallback).
+    """
+
+    def __get__(self, obj: Any, objtype: Any = None) -> str:
+        if obj is None:  # class-level access via ``getattr(cls, ...)``
+            return ""
+        return obj.sample_contract_family or obj.family
+
+
 class BaseLearner(ABC):
-    """Pooled-panel predictive learner interface."""
+    """Pooled-panel predictive learner interface.
+
+    ``sample_contract_family`` names the §5 default contract this learner is
+    bound to (``"linear"`` for pcr/pls/elastic_net, ``"regime"``, ``"moe"``).
+    The trainer resolves ``default_sample_contracts().get(learner.sample_contract_family)``
+    — the explicit declaration fixes the bug where ``family`` keys
+    (pcr/pls/elastic_net) silently missed the linear contract.
+    """
 
     name: str = ""
     family: str = ""
+    sample_contract_family: str = ""
     execution_class: ModelExecutionClass = ModelExecutionClass.PREDICTIVE_SUPERVISED
 
     def __init__(self, spec: LearnerSpec) -> None:
@@ -106,24 +147,87 @@ class BaseLearner(ABC):
     def validate_params(self) -> None:
         """Reject out-of-domain hyperparameters at call boundary (fail closed)."""
 
+    contract_family = _ContractFamilyDescriptor()
+
+    def effective_parameter_count(
+        self,
+        hyperparams: dict[str, Any] | None = None,
+        n_features: int = 0,
+        *,
+        n_rows: int | None = None,
+        **extra: Any,
+    ) -> int:
+        """True free-parameter count of the fitted model, used for the §5
+        ``obs/parameter`` gate.
+
+        ``len(hyperparams)`` is NOT a valid proxy (an ElasticNet with 50
+        features and ``{alpha, l1_ratio}`` fits ~51 coefficients).  Each learner
+        overrides this with its real complexity.
+
+        The positional ``(hyperparams, n_features)`` call remains accepted for
+        the trainer's pre-fit adequacy gate; ``n_rows`` and ``extra`` are
+        keyword-only refinements that let callers pass the observed panel size
+        and the frozen model's fitted structure (e.g. ``coef`` for ElasticNet).
+
+        Default (conservative) estimate: a saturated linear model
+        ``n_features + 1``, capped at ~1 parameter per 10 training rows when
+        ``n_rows`` is supplied.
+        """
+        nf = max(1, int(n_features) or 1)
+        if n_rows:
+            return min(nf + 1, max(1, int(n_rows) // 10))
+        return nf + 1
+
     # -- sample-adequacy -----------------------------------------------------
     def check_adequacy(self, telemetry: dict[str, Any], free_parameters: int) -> tuple[bool, list[str]]:
-        """Gate a training run against the learner's SampleAdequacyContract."""
+        """Gate a training run against the learner's SampleAdequacyContract.
+
+        Every contract field with a measured telemetry value is enforced:
+        raw/effective obs, unique dates/stocks, obs-per-parameter,
+        cross-section peers, missing fraction and date coverage.  A field that
+        CAN be measured but is not supplied (e.g. missing_fraction) is reported
+        as a failure rather than silently skipped, so the gate never degrades.
+        """
         contract = self.spec.sample_contract
         if contract is None:
             return True, []
         from modeling.contracts import sample_adequacy_met
 
-        return sample_adequacy_met(
+        raw = int(telemetry.get("raw_obs", 0))
+        effective = int(telemetry.get("finite_obs", telemetry.get("effective_obs", 0)))
+        missing_fraction = None
+        if raw:
+            missing_fraction = 1.0 - effective / raw
+        failures: list[str] = []
+        # A contract field the telemetry CAN supply must be supplied; a learner
+        # that cannot measure a REQUIRED field must fail closed (never skip).
+        unmeasured: list[str] = []
+        if contract.max_missing_fraction is not None and missing_fraction is None:
+            unmeasured.append("missing_fraction")
+        if contract.min_date_coverage is not None and telemetry.get("date_coverage") is None:
+            unmeasured.append("date_coverage")
+        if contract.min_cross_section_peers is not None and telemetry.get("median_stocks_per_date") is None:
+            unmeasured.append("cross_section_peers")
+        if unmeasured:
+            failures.append(
+                "cannot measure required adequacy fields: " + ", ".join(unmeasured)
+            )
+
+        met, field_failures = sample_adequacy_met(
             contract=contract,
-            raw_obs=int(telemetry.get("raw_obs", 0)),
-            effective_obs=int(telemetry.get("finite_obs", 0)),
+            raw_obs=raw,
+            effective_obs=effective,
             unique_dates=int(telemetry.get("n_unique_dates", 0)),
             unique_stocks=int(telemetry.get("n_unique_stocks", 0)),
             free_parameter_count=free_parameters,
-            expert_obs=None,
-            regime_obs=None,
+            regime_obs=telemetry.get("regime_obs"),
+            expert_obs=telemetry.get("expert_obs"),
+            state_transitions=telemetry.get("state_transitions"),
+            cross_section_peers=telemetry.get("median_stocks_per_date"),
+            missing_fraction=missing_fraction,
+            date_coverage=telemetry.get("date_coverage"),
         )
+        return (met and not failures), field_failures + failures
 
 
 # --------------------------------------------------------------------------- #
@@ -185,4 +289,14 @@ def default_sample_contracts() -> dict[str, SampleAdequacyContract]:
         max_missing_fraction=0.30,
         min_date_coverage=0.5,
     )
-    return {"linear": linear, "regime": regime, "moe": moe}
+    # Canonical family names map onto the three contract tiers.  The trainer
+    # resolves via ``learner.sample_contract_family`` (explicit declaration),
+    # so PCR/PLS/ENet all land on the linear contract — never None.
+    return {
+        "linear": linear,
+        "pcr": linear,
+        "pls": linear,
+        "elastic_net": linear,
+        "regime": regime,
+        "moe": moe,
+    }

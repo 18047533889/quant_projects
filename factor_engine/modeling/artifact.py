@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec
 
@@ -42,6 +43,21 @@ class ModelArtifactManifest:
     validation_start: str | None = None
     validation_end: str | None = None
 
+    #: End of the data window used for HYPERPARAMETER SELECTION (the original
+    #: train window).  Distinct from ``final_fit_end`` so a ``train_plus_validation``
+    #: refit can never present itself as available before its real data.
+    selection_train_end: str | None = None
+    #: Data window used for the FINAL model fit.  ``final_fit_end`` is
+    #: ``train_end`` when ``retrain_policy="train_only"`` and ``validation_end``
+    #: when ``"train_plus_validation"``.  ``training_cutoff == final_fit_end`` and
+    #: ``available_at >= final_fit_end`` — an artifact is never loadable before
+    #: the last observation it actually saw (§50 / availability lookahead guard).
+    final_fit_start: str | None = None
+    final_fit_end: str | None = None
+    #: True when the FINAL fit was refit on train+validation (i.e. the artifact
+    #: has seen every validation observation up to ``final_fit_end``).
+    refit_used_validation: bool = False
+
     decision_clock_id: str = "AFTER_CLOSE_TO_NEXT_VWAP"
     label_contract_id: str = "vwap_to_vwap"
     feature_schema_hash: str = ""
@@ -62,6 +78,34 @@ class ModelArtifactManifest:
     #: Training cutoff date — artifacts are only loadable at/after this.
     training_cutoff: str = ""
 
+    def __post_init__(self) -> None:
+        if self.final_fit_end is None:
+            object.__setattr__(self, "final_fit_end", self.train_end)
+        if self.final_fit_start is None:
+            object.__setattr__(self, "final_fit_start", self.train_start)
+        # Fail-closed invariants: an artifact can never claim to be available
+        # before the last observation used by its FINAL fit.
+        if self.final_fit_start and self.final_fit_end and self.final_fit_start > self.final_fit_end:
+            raise ValueError(
+                f"final_fit_start {self.final_fit_start} > final_fit_end "
+                f"{self.final_fit_end} — invalid final-fit window"
+            )
+        if self.training_cutoff and self.training_cutoff < self.final_fit_end:
+            raise ValueError(
+                f"training_cutoff {self.training_cutoff} < final_fit_end "
+                f"{self.final_fit_end} — Artifact Availability Lookahead (forbidden)"
+            )
+        if self.available_at and self.available_at < self.final_fit_end:
+            raise ValueError(
+                f"available_at {self.available_at} < final_fit_end {self.final_fit_end} — "
+                "an artifact cannot be loadable before its final fit data"
+            )
+        if self.selection_train_end is not None and self.selection_train_end > self.final_fit_end:
+            raise ValueError(
+                f"selection_train_end {self.selection_train_end} > final_fit_end "
+                f"{self.final_fit_end} — selection cannot extend past the final fit"
+            )
+
     def lineage_hash(self) -> str:
         payload = {
             "model_name": self.model_name,
@@ -70,6 +114,12 @@ class ModelArtifactManifest:
             "train_end": self.train_end,
             "validation_start": self.validation_start,
             "validation_end": self.validation_end,
+            "selection_train_end": self.selection_train_end,
+            "final_fit_start": self.final_fit_start,
+            "final_fit_end": self.final_fit_end,
+            "refit_used_validation": self.refit_used_validation,
+            "available_at": self.available_at,
+            "training_cutoff": self.training_cutoff,
             "decision_clock_id": self.decision_clock_id,
             "label_contract_id": self.label_contract_id,
             "feature_schema_hash": self.feature_schema_hash,
@@ -221,14 +271,21 @@ class ModelArtifact:
 
     def is_legal_asof(self, asof: Any, training_cutoff: Any = None) -> bool:
         """§50 — an artifact is only legal when it existed at/after its
-        training cutoff and its ``available_at`` is not after ``asof``."""
-        if training_cutoff is not None and self.manifest.training_cutoff:
-            if training_cutoff < self.manifest.training_cutoff:
+        training cutoff and its ``available_at`` is not after ``asof``.
+
+        ``asof`` / ``training_cutoff`` may be date strings, ``Timestamp`` or
+        comparable scalars; mixed str/Timestamp comparisons are normalised so
+        the check is robust to caller convention."""
+        avail = self.manifest.available_at
+        cutoff = self.manifest.training_cutoff
+        if training_cutoff is not None and cutoff:
+            if _cmp_less(training_cutoff, cutoff):
                 return False
-        if self.manifest.available_at and asof is not None:
-            if asof < self.manifest.available_at:
+        if avail and asof is not None:
+            if _cmp_less(asof, avail):
                 return False
         return True
+
 
     # -- scoring (§22: prediction must never fit) -----------------------------
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -307,3 +364,14 @@ class ModelArtifact:
                 LearnerSpec(data["learner_spec"]["learner_name"], data["learner_spec"]["family"])
             )
         return cls.from_dict(data, learner)
+
+
+def _cmp_less(a: Any, b: Any) -> bool:
+    """``a < b`` with str/Timestamp normalisation."""
+    try:
+        return bool(a < b)
+    except TypeError:
+        try:
+            return bool(pd.Timestamp(a) < pd.Timestamp(b))
+        except Exception:
+            raise TypeError(f"cannot compare asof values {a!r} < {b!r}")

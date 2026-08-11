@@ -406,7 +406,7 @@ def hyperparam_poison(
     train_mask = ords <= 5
     val_mask = (ords >= 6) & (ords <= 8)
     future_mask = ords >= 9
-    grid = [{"n_components": 2}, {"n_components": 3}, {"n_components": 4}]
+    grid = [{"n_components": 2}, {"n_components": 3}]
 
     def _splits(frame: pd.DataFrame):
         tr = PanelDataset(

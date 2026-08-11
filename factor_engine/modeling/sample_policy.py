@@ -30,12 +30,21 @@ __all__ = [
     "measure_train_telemetry",
     "adequacy_report",
     "telemetry_summary",
+    "resolve_sample_contract",
+    "adequacy_failures",
 ]
 
 
 @dataclass
 class SampleTelemetry:
-    """§5.1 chain telemetry — every count is a narrowing of the previous one."""
+    """§5.1 chain telemetry — every count is a narrowing of the previous one.
+
+    The regime/MoE specific fields (``regime_obs`` / ``expert_obs`` /
+    ``state_transitions`` / ``cross_section_peers``) default to ``None`` —
+    meaning "not measured" — and are filled in by the regime/MoE telemetry
+    wiring.  Under :func:`~modeling.contracts.sample_adequacy_met` a ``None``
+    for a contract-required field FAILS closed rather than silently passing.
+    """
 
     raw_obs: int = 0
     finite_obs: int = 0
@@ -49,6 +58,11 @@ class SampleTelemetry:
     unique_stocks: int = 0
     date_coverage: float = 0.0
     missing_fraction: float = 0.0
+    # regime / MoE specific telemetry — None == not measured (fail closed).
+    regime_obs: int | None = None
+    expert_obs: int | None = None
+    state_transitions: int | None = None
+    cross_section_peers: int | None = None
 
 
 def _is_datetime_like(dates: pd.Series) -> bool:
@@ -175,21 +189,150 @@ def measure_train_telemetry(
     )
 
 
+def _int_or_none(value: Any) -> int | None:
+    """Coerce a telemetry scalar to ``int``, preserving ``None`` (not measured)."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    """Coerce a telemetry scalar to ``float``, preserving ``None`` (not measured)."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def resolve_sample_contract(learner: Any) -> SampleAdequacyContract | None:
+    """Resolve the §5 default :class:`SampleAdequacyContract` for a learner.
+
+    ``learner`` may be a learner class or an instance (class attributes take
+    priority via ``getattr``).  Resolution order:
+
+    * ``sample_contract_family`` — the learner's explicit §5 declaration
+      (``"linear"`` for pcr/pls/elastic_net, ``"regime"``, ``"moe"``);
+    * ``contract_family`` — legacy alias if any learner declares it;
+    * ``family`` — bare family key (``"pcr"`` etc.).
+
+    Returns ``None`` when the learner declares no usable family key — meaning
+    "no adequacy gate" — never a mismatched contract.
+    """
+    key = (
+        _family_key(learner, "sample_contract_family")
+        or _family_key(learner, "contract_family")
+        or _family_key(learner, "family")
+    )
+    if not key:
+        return None
+    from modeling.learners.base import default_sample_contracts
+
+    return default_sample_contracts().get(key)
+
+
+def _family_key(learner: Any, attr: str) -> str:
+    """Read a family-key attribute, tolerating the class-vs-instance split.
+
+    ``contract_family`` is a *property* on :class:`BaseLearner` — ``getattr``
+    on the CLASS returns the descriptor object (truthy, non-string), which would
+    poison the lookup.  Only string values are accepted here; ``None`` on a
+    property is the signal to try the next key."""
+    value = getattr(learner, attr, None)
+    return value if isinstance(value, str) else ""
+
+
+def adequacy_failures(
+    contract: SampleAdequacyContract,
+    telemetry: SampleTelemetry | dict[str, Any],
+    free_parameters: int,
+) -> list[str]:
+    """Gate ``telemetry`` against ``contract`` and return the failure list.
+
+    ``telemetry`` may be a :class:`SampleTelemetry` or a ``dict`` with the same
+    keys (dataset-style keys ``n_unique_dates`` / ``n_unique_stocks`` /
+    ``median_stocks_per_date`` are also accepted).
+
+    Every :class:`SampleTelemetry` field is fed to
+    :func:`~modeling.contracts.sample_adequacy_met` for real: raw/effective obs,
+    unique dates/stocks, regime obs, expert obs, state transitions,
+    cross-section peers, missing fraction and date coverage are all passed
+    through (never stubbed to ``None``).  A required-but-unmeasured field then
+    FAILS closed under the three-state rule instead of silently passing.
+    ``obs_per_parameter`` is derived by ``sample_adequacy_met`` from
+    ``effective_obs`` and ``free_parameters``.
+
+    ``free_parameters`` is the learner's ``effective_parameter_count`` (the
+    true number of free parameters the fit estimates).
+    """
+    if isinstance(telemetry, SampleTelemetry):
+        t = telemetry
+    else:
+        t = SampleTelemetry(
+            raw_obs=_int_or_none(telemetry.get("raw_obs")) or 0,
+            finite_obs=_int_or_none(telemetry.get("finite_obs")) or 0,
+            mature_label_obs=_int_or_none(telemetry.get("mature_label_obs")) or 0,
+            post_purge_obs=_int_or_none(telemetry.get("post_purge_obs")) or 0,
+            post_regime_obs=_int_or_none(telemetry.get("post_regime_obs")) or 0,
+            effective_obs=_int_or_none(
+                telemetry.get("effective_obs", telemetry.get("finite_obs"))
+            )
+            or 0,
+            free_parameter_count=_int_or_none(
+                telemetry.get("free_parameter_count", free_parameters)
+            )
+            or free_parameters,
+            obs_per_parameter=float(telemetry.get("obs_per_parameter", 0.0) or 0.0),
+            unique_dates=_int_or_none(
+                telemetry.get("unique_dates", telemetry.get("n_unique_dates"))
+            )
+            or 0,
+            unique_stocks=_int_or_none(
+                telemetry.get("unique_stocks", telemetry.get("n_unique_stocks"))
+            )
+            or 0,
+            # Optional measurements absent from the dict mean "not measured"
+            # (None) so a contract-required field FAILS closed, never defaults
+            # to a silent 0.0 pass.
+            date_coverage=_float_or_none(telemetry.get("date_coverage")),
+            missing_fraction=_float_or_none(telemetry.get("missing_fraction")),
+            regime_obs=_int_or_none(telemetry.get("regime_obs")),
+            expert_obs=_int_or_none(telemetry.get("expert_obs")),
+            state_transitions=_int_or_none(telemetry.get("state_transitions")),
+            cross_section_peers=_int_or_none(
+                telemetry.get(
+                    "cross_section_peers", telemetry.get("median_stocks_per_date")
+                )
+            ),
+        )
+    _, failures = sample_adequacy_met(
+        contract=contract,
+        raw_obs=t.raw_obs,
+        effective_obs=t.effective_obs,
+        unique_dates=t.unique_dates,
+        unique_stocks=t.unique_stocks,
+        free_parameter_count=free_parameters,
+        regime_obs=t.regime_obs,
+        expert_obs=t.expert_obs,
+        state_transitions=t.state_transitions,
+        cross_section_peers=t.cross_section_peers,
+        missing_fraction=t.missing_fraction,
+        date_coverage=t.date_coverage,
+    )
+    return failures
+
+
 def adequacy_report(
     contract: SampleAdequacyContract,
     telemetry: SampleTelemetry,
 ) -> tuple[bool, list[str]]:
     """Gate the measured telemetry against a :class:`SampleAdequacyContract`."""
-    return sample_adequacy_met(
-        contract=contract,
-        raw_obs=telemetry.raw_obs,
-        effective_obs=telemetry.effective_obs,
-        unique_dates=telemetry.unique_dates,
-        unique_stocks=telemetry.unique_stocks,
-        free_parameter_count=telemetry.free_parameter_count,
-        missing_fraction=telemetry.missing_fraction,
-        date_coverage=telemetry.date_coverage,
-    )
+    failures = adequacy_failures(contract, telemetry, telemetry.free_parameter_count)
+    return (not failures), failures
 
 
 def telemetry_summary(telemetry: SampleTelemetry) -> dict[str, Any]:

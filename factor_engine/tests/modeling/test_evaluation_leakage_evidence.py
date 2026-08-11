@@ -160,6 +160,15 @@ def _wf_spec():
     }
 
 
+def _lenient_contract():
+    from modeling.contracts import SampleAdequacyContract
+
+    return SampleAdequacyContract(
+        min_raw_obs=30, min_effective_obs=15, min_unique_dates=2,
+        min_unique_stocks=5, min_obs_per_parameter=2,
+    )
+
+
 def test_run_walk_forward_evidence_min_folds_2():
     ds = synthetic_panel(n_dates=12, n_stocks=20, n_features=3, seed=7)
     lc = LabelContract(label_name="y", horizon_bars=1)
@@ -174,6 +183,10 @@ def test_run_walk_forward_evidence_min_folds_2():
         model_version="1.0",
         random_seed=0,
         min_folds=2,
+        # synthetic panel is below the production 50k-obs floor — relax the
+        # adequacy contract for the demo, as the production runner would for a
+        # real DataAccess panel.
+        sample_contract=_lenient_contract(),
     )
     assert isinstance(evidence, WalkForwardEvidence)
     assert len(evidence.folds) >= 2
@@ -206,7 +219,9 @@ def test_run_walk_forward_evidence_to_parquet(tmp_path):
         _wf_spec(),
         label_contract=lc,
         decision_clock=ashare_decision_clock(),
+        hyperparam_grid=[{"n_components": 2}],
         min_folds=2,
+        sample_contract=_lenient_contract(),
     )
     out = tmp_path / "wf.parquet"
     evidence.to_parquet(str(out))

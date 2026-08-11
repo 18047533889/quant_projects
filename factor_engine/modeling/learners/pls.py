@@ -7,6 +7,8 @@ observed rank).  Train-only centering/scaling — frozen for predict.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec, register_learner
@@ -18,6 +20,7 @@ __all__ = ["PLSLearner"]
 class PLSLearner(BaseLearner):
     name = "predictive_pls"
     family = "pls"
+    sample_contract_family = "linear"
 
     def __init__(self, spec: LearnerSpec) -> None:
         super().__init__(spec)
@@ -30,57 +33,94 @@ class PLSLearner(BaseLearner):
         if nc < 1:
             raise ValueError("pls n_components must be >= 1")
 
-    def fit(self, X: np.ndarray, y: np.ndarray, *, weights: np.ndarray | None = None) -> FrozenModel:
+    def effective_parameter_count(
+        self,
+        hyperparams: dict[str, Any] | None = None,
+        n_features: int = 0,
+        *,
+        n_rows: int | None = None,
+        **extra: Any,
+    ) -> int:
+        """PLS latent-model complexity: ``k * (d + 1) + k``.
+
+        ``k`` latent directions, each spanning the ``d`` features plus one latent
+        score axis (``k*(d+1)``), plus the ``k`` y-loadings ``q`` that map the
+        latent scores onto the response.  The PCA-style projection (weights W and
+        loadings P) is part of the latent mapping and counted above; the number
+        of ``n_components`` is capped by the feature dimension.
+        """
+        k = int((hyperparams or {}).get("n_components", self.n_components))
+        k = max(1, min(k, max(1, int(n_features))))
+        return k * (int(n_features) + 1) + k
+
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        weights: np.ndarray | None = None,
+        aux: dict[str, np.ndarray | None] | None = None,
+    ) -> FrozenModel:
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64).ravel()
         if X.ndim != 2 or len(X) < 2:
             raise ValueError("pls fit needs a 2-D feature matrix with >= 2 rows")
         n, d = X.shape
+        # Fail closed: never silently fit fewer components than requested.
+        k_max = min(n, d)
+        if self.n_components > k_max:
+            raise ValueError(
+                f"pls n_components={self.n_components} exceeds min(n_rows={n}, "
+                f"n_features={d})={k_max} — reject (fail closed), no silent downgrade"
+            )
         mx = X.mean(axis=0)
         my = float(y.mean())
         sx = X.std(axis=0)
         sx[sx == 0] = 1.0
         Xs = (X - mx) / sx
-        ys = (y - my) / (y.std() if y.std() > 0 else 1.0)
+        sy = y.std()
+        ys = (y - my) / (sy if sy > 0 else 1.0)
 
-        # NIPALS deflation
+        # NIPALS deflation (sklearn-compatible PLS1).
         W: list[np.ndarray] = []
-        T: list[np.ndarray] = []
         P: list[np.ndarray] = []
+        Q: list[float] = []
         xr = Xs.copy()
         yr = ys.copy()
-        rank = min(self.n_components, d, n)
-        for _ in range(rank):
+        for _ in range(self.n_components):
             xw = xr.T @ yr
-            norm = np.linalg.norm(xw)
+            norm = float(np.linalg.norm(xw))
             if norm < 1e-12:
-                break
+                raise ValueError(
+                    "pls fit failed: zero norm weight (feature/label covariance "
+                    "collapsed) — fail closed rather than silently reducing components"
+                )
             w = xw / norm
             t = xr @ w
             tt = float(t @ t)
             if tt < 1e-12:
-                break
+                raise ValueError("pls fit failed: zero-variance score — fail closed")
             p = (xr.T @ t) / tt
             q = float(yr @ t) / tt
             xr = xr - np.outer(t, p)
             yr = yr - t * q
             W.append(w)
-            T.append(t)
             P.append(p)
+            Q.append(q)
         Wm = np.column_stack(W) if W else np.zeros((d, 0))
-        Tm = np.column_stack(T) if T else np.zeros((n, 0))
         Pm = np.column_stack(P) if P else np.zeros((d, 0))
-        # regression coefficients in standardized space: b = W (P'W)^-1 q'
-        WtP = Wm.T @ Pm
+        q_vec = np.asarray(Q, dtype=np.float64)
+
+        # PLS regression coefficients in standardized space:
+        #     T = X R,  R = W (P^T W)^{-1}  =>  b = R q = W (P^T W)^{-1} q
+        # NB: (P^T W) — NOT (W^T P).  They differ for multi-component PLS.
+        PtW = Pm.T @ Wm
         try:
-            WtP_inv = np.linalg.inv(WtP)
+            b_std = Wm @ np.linalg.solve(PtW, q_vec)
         except np.linalg.LinAlgError:
-            WtP_inv = np.linalg.pinv(WtP)
-        q_vec = (ys @ Tm) / np.einsum("ij,ij->j", Tm, Tm) if Tm.shape[1] else np.zeros(0)
-        b_std = Wm @ (WtP_inv @ q_vec)
-        # back to original scale: y = my + b_std' * ((X-mx)/sx) * sy
-        sy = y.std() if y.std() > 0 else 1.0
-        coef = b_std * sy / sx
+            b_std = Wm @ (np.linalg.pinv(PtW) @ q_vec)
+        # back to original scale: y = my + sy * b_std' * ((X - mx)/sx)
+        coef = (b_std * sy) / sx
         intercept = my - float(coef @ mx)
         return FrozenModel(
             learner_name=self.name,

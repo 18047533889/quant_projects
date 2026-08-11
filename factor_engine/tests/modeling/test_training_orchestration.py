@@ -84,6 +84,7 @@ def test_make_walk_forward_splits_date_authoritative():
         validation_bars=2,
         test_bars=2,
         step_bars=1,
+        retrain_every_bars=1,
         min_train_dates=3,
         min_train_stocks=3,
         min_train_obs=20,
@@ -191,11 +192,13 @@ def test_nested_splits():
     ds = make_panel(n_dates=12, n_stocks=8)
     outer = WalkForwardSpec(
         train_lookback_bars=4, validation_bars=2, test_bars=2, step_bars=2,
-        min_train_dates=4, min_train_stocks=3, min_train_obs=20,
+        retrain_every_bars=2, min_train_dates=4, min_train_stocks=3,
+        min_train_obs=20,
     )
     inner = WalkForwardSpec(
         train_lookback_bars=3, validation_bars=1, test_bars=1, step_bars=1,
-        min_train_dates=3, min_train_stocks=3, min_train_obs=10,
+        retrain_every_bars=1, min_train_dates=3, min_train_stocks=3,
+        min_train_obs=10,
     )
     out = nested_splits(ds, outer, inner)
     assert out

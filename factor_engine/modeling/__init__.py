@@ -33,6 +33,13 @@ from modeling.contracts import (
     SampleAdequacyContract,
     TimingKind,
 )
+from modeling.model_semantic_registry import (
+    KNOWN_NOT_CLOSED_CANONICALS,
+    MODEL_SEMANTIC_REGISTRY,
+    PRODUCTION_LANES,
+    ModelSemanticEntry,
+    ModelSemanticRegistry,
+)
 
 __all__ = [
     "AFTER_CLOSE_TO_NEXT_VWAP",
@@ -47,4 +54,9 @@ __all__ = [
     "RichModelTiming",
     "SampleAdequacyContract",
     "TimingKind",
+    "MODEL_SEMANTIC_REGISTRY",
+    "ModelSemanticEntry",
+    "ModelSemanticRegistry",
+    "PRODUCTION_LANES",
+    "KNOWN_NOT_CLOSED_CANONICALS",
 ]

@@ -19,6 +19,8 @@ the trainer passes the same series as ``aux["regime_state"]`` at fit.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec, register_learner
@@ -52,6 +54,28 @@ def _bin_centers(boundaries: np.ndarray) -> np.ndarray:
 class MixtureOfExpertsLearner(BaseLearner):
     name = "predictive_mixture_of_experts"
     family = "moe"
+    sample_contract_family = "moe"
+
+    def effective_parameter_count(
+        self,
+        hyperparams: dict[str, Any] | None = None,
+        n_features: int = 0,
+        *,
+        n_rows: int | None = None,
+        **extra: Any,
+    ) -> int:
+        """MoE complexity: per-expert intercept-OLS on d features
+        (``n_experts * (d + 1)``) plus the ``(n_experts - 1)`` gate boundaries.
+
+        The softmax gate is distance-based (inverse-distance to the fixed expert
+        centers) and has no additional learned weights, so the only gate
+        parameters are the quantile boundaries.  The explicit ``single_best``
+        fallback degrades to a single pooled intercept-OLS (``d + 1``).
+        """
+        if extra.get("fallback") == "single_best":
+            return max(1, int(n_features) + 1)
+        e = int((hyperparams or {}).get("n_experts", self.n_experts))
+        return max(1, e * (max(1, int(n_features)) + 1) + max(0, e - 1))
 
     def __init__(self, spec: LearnerSpec) -> None:
         super().__init__(spec)
@@ -88,6 +112,29 @@ class MixtureOfExpertsLearner(BaseLearner):
         gate = np.asarray(aux["regime_state"], dtype=np.float64).ravel()
         if len(gate) != len(y):
             raise ValueError("moe fit: regime_state and y row counts differ")
+
+        # Optional per-row date support: when the trainer supplies ``aux["date"]``
+        # the pooled-panel independence structure is verified fail closed — an
+        # expert sample spanning fewer unique dates than the contract floor is
+        # rejected (a handful of dates is not an adequate pooled panel).
+        dates = aux.get("date")
+        n_unique_dates: int | None = None
+        if dates is not None:
+            dates = np.asarray(dates)
+            if len(dates) != len(y):
+                raise ValueError("moe fit: date aux and y row counts differ")
+            n_unique_dates = int(len(np.unique(dates)))
+            contract = self.spec.sample_contract
+            if (
+                contract is not None
+                and contract.min_unique_dates is not None
+                and n_unique_dates < contract.min_unique_dates
+            ):
+                raise ValueError(
+                    "moe learner fails closed: unique dates "
+                    f"{n_unique_dates} < contract min_unique_dates="
+                    f"{contract.min_unique_dates}"
+                )
 
         # Fail closed on constant / zero-variance features (never NaN silently).
         std = X.std(axis=0)
@@ -180,6 +227,8 @@ class MixtureOfExpertsLearner(BaseLearner):
                     {"expert": e, "reason": r} for e, r in failures
                 ],
             }
+            if dates is not None:
+                metadata["n_unique_dates"] = n_unique_dates
             return FrozenModel(
                 learner_name=self.name,
                 family=self.family,
@@ -220,6 +269,12 @@ class MixtureOfExpertsLearner(BaseLearner):
             "gate_entropy": gate_entropy,
             "dominant_expert_ratio": float(occ.max()) if occ.size else 0.0,
         }
+        if dates is not None:
+            metadata["n_unique_dates"] = n_unique_dates
+            metadata["per_expert_unique_dates"] = [
+                int(len(np.unique(dates[expert_idx == e])))
+                for e in range(self.n_experts)
+            ]
         return FrozenModel(
             learner_name=self.name,
             family=self.family,

@@ -20,6 +20,8 @@ regime boundaries.  ``support_report`` feeds the
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec, register_learner
@@ -51,6 +53,20 @@ def _bin_centers(boundaries: np.ndarray) -> np.ndarray:
 class RegimeLearner(BaseLearner):
     name = "predictive_regime"
     family = "regime"
+    sample_contract_family = "regime"
+
+    def effective_parameter_count(
+        self,
+        hyperparams: dict[str, Any] | None = None,
+        n_features: int = 0,
+        *,
+        n_rows: int | None = None,
+        **extra: Any,
+    ) -> int:
+        """Regime complexity: per-regime intercept-OLS on d features
+        (``n_regimes * (d+1)``) plus ``(n_regimes - 1)`` quantile boundaries."""
+        r = int((hyperparams or {}).get("n_regimes", self.n_regimes))
+        return max(1, r * (max(1, int(n_features)) + 1) + max(0, r - 1))
 
     def __init__(self, spec: LearnerSpec) -> None:
         super().__init__(spec)
@@ -89,6 +105,30 @@ class RegimeLearner(BaseLearner):
         gate = np.asarray(aux["regime_state"], dtype=np.float64).ravel()
         if len(gate) != len(y):
             raise ValueError("regime fit: regime_state and y row counts differ")
+
+        # Optional per-row date support: when the trainer supplies ``aux["date"]``
+        # the sample's independence structure is verified fail closed — a regime
+        # sample that spans fewer unique dates than the contract floor is
+        # rejected (cross-sectional pooling across too few dates is not an
+        # adequate pooled-panel sample).
+        dates = aux.get("date")
+        n_unique_dates: int | None = None
+        if dates is not None:
+            dates = np.asarray(dates)
+            if len(dates) != len(y):
+                raise ValueError("regime fit: date aux and y row counts differ")
+            n_unique_dates = int(len(np.unique(dates)))
+            contract = self.spec.sample_contract
+            if (
+                contract is not None
+                and contract.min_unique_dates is not None
+                and n_unique_dates < contract.min_unique_dates
+            ):
+                raise ValueError(
+                    "regime learner fails closed: unique dates "
+                    f"{n_unique_dates} < contract min_unique_dates="
+                    f"{contract.min_unique_dates}"
+                )
 
         # Fail closed on constant / zero-variance features (never NaN silently).
         std = X.std(axis=0)
@@ -176,6 +216,12 @@ class RegimeLearner(BaseLearner):
             },
             "gate_entropy": gate_entropy,
         }
+        if dates is not None:
+            metadata["n_unique_dates"] = n_unique_dates
+            metadata["per_regime_unique_dates"] = [
+                int(len(np.unique(dates[regime_idx == r])))
+                for r in range(self.n_regimes)
+            ]
         return FrozenModel(
             learner_name=self.name,
             family=self.family,

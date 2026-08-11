@@ -26,6 +26,7 @@ __all__ = ["PCRLearner"]
 class PCRLearner(BaseLearner):
     name = "predictive_pcr"
     family = "pcr"
+    sample_contract_family = "linear"
 
     def __init__(self, spec: LearnerSpec) -> None:
         super().__init__(spec)
@@ -41,13 +42,47 @@ class PCRLearner(BaseLearner):
         if nc < 1:
             raise ValueError("pcr n_components must be >= 1")
 
-    def fit(self, X: np.ndarray, y: np.ndarray, *, weights: np.ndarray | None = None) -> FrozenModel:
+    def effective_parameter_count(
+        self,
+        hyperparams: dict[str, Any] | None = None,
+        n_features: int = 0,
+        *,
+        n_rows: int | None = None,
+        **extra: Any,
+    ) -> int:
+        """PCR complexity: ``k`` OLS betas on the ``k`` retained PCA scores + 1
+        intercept.
+
+        The PCA projection itself is unsupervised — it is not a free parameter
+        of the y-mapping and is reported separately as ``pca_complexity`` in the
+        fit metadata (``d * k``).  Only the supervised OLS on the scores counts.
+        """
+        k = int((hyperparams or {}).get("n_components", self.n_components))
+        k = max(1, min(k, max(1, int(n_features))))
+        return k + 1
+
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        weights: np.ndarray | None = None,
+        aux: dict[str, np.ndarray | None] | None = None,
+    ) -> FrozenModel:
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         if X.ndim != 2 or len(X) < 2:
             raise ValueError("pcr fit needs a 2-D feature matrix with >= 2 rows")
         n, d = X.shape
-        k = min(self.n_components, d)
+        # Fail closed on a requested component count the data cannot support —
+        # n_components=5 / 10 / 20 must NEVER silently become the same model.
+        k_max = min(n, d)
+        if self.n_components > k_max:
+            raise ValueError(
+                f"pcr n_components={self.n_components} exceeds min(n_rows={n}, "
+                f"n_features={d})={k_max} — reject (fail closed), no silent downgrade"
+            )
+        k = self.n_components
         # train-only center
         center = X.mean(axis=0)
         Xc = X - center
@@ -74,6 +109,10 @@ class PCRLearner(BaseLearner):
                 "n_features": d,
                 "n_components_used": k,
                 "variance_explained": variance_explained,
+                # PCA projection complexity — d×k loadings.  Unsupervised, so it
+                # is NOT counted in effective_parameter_count, but recorded here
+                # for the observability hard gates.
+                "pca_complexity": int(d * k),
             },
         )
 

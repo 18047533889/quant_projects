@@ -13,6 +13,7 @@ date belong to one split.
 """
 from __future__ import annotations
 
+import datetime as _dt
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,6 +30,16 @@ class PanelDataset:
     ``frame`` has one row per ``(stock, date)`` observation with columns for
     features, the label, and ``date_col`` / ``stock_col``.  ``label_col`` may
     be ``None`` when scoring (features only).
+
+    Enterprise data constraints (§4):
+
+    * ``stock_col`` is REQUIRED — a pooled panel without an instrument id
+      cannot be audited, PIT-filtered or de-duplicated;
+    * ``(stock, date)`` must be UNIQUE — a duplicated ``(stock, date)`` row
+      would otherwise be counted as an independent training observation
+      (inflating ``raw_obs``/weights/loss).  Production defaults to
+      ``duplicate_policy="error"``; pass ``duplicate_policy="aggregate"`` to
+      explicitly dedupe keeping the first occurrence per ``(stock, date)``.
     """
 
     frame: pd.DataFrame
@@ -36,8 +47,18 @@ class PanelDataset:
     stock_col: str = "stock"
     feature_cols: list[str] = field(default_factory=list)
     label_col: str | None = None
+    duplicate_policy: str = "error"  # "error" | "aggregate"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.frame, pd.DataFrame):
+            raise TypeError("PanelDataset.frame must be a pandas DataFrame")
+        if self.date_col not in self.frame.columns:
+            raise ValueError(f"date column {self.date_col!r} missing from frame")
+        if self.stock_col not in self.frame.columns:
+            raise ValueError(
+                f"stock column {self.stock_col!r} missing from frame — a pooled "
+                "panel requires an instrument id (audit/PIT/dedup are impossible without it)"
+            )
         if not self.feature_cols:
             self.feature_cols = [
                 c for c in self.frame.columns if c not in (self.date_col, self.stock_col, self.label_col)
@@ -47,8 +68,24 @@ class PanelDataset:
             raise ValueError(f"feature columns missing from frame: {missing}")
         if self.label_col is not None and self.label_col not in self.frame.columns:
             raise ValueError(f"label column {self.label_col!r} missing from frame")
-        if self.date_col not in self.frame.columns:
-            raise ValueError(f"date column {self.date_col!r} missing from frame")
+        if self.duplicate_policy not in ("error", "aggregate"):
+            raise ValueError(
+                f"duplicate_policy must be 'error' or 'aggregate', got {self.duplicate_policy!r}"
+            )
+        # (stock, date) uniqueness — duplicated rows would double-count samples.
+        n_dups = int(
+            self.frame.duplicated(subset=[self.date_col, self.stock_col]).sum()
+        )
+        if n_dups:
+            if self.duplicate_policy == "error":
+                raise ValueError(
+                    f"PanelDataset has {n_dups} duplicated (date, stock) rows — "
+                    "each (stock, date) must be a unique observation; pass "
+                    "duplicate_policy='aggregate' to dedupe explicitly"
+                )
+            self.frame = self.frame.drop_duplicates(
+                subset=[self.date_col, self.stock_col], keep="first"
+            ).reset_index(drop=True)
 
     # -- construction --------------------------------------------------------
     @classmethod
@@ -60,6 +97,7 @@ class PanelDataset:
         stock_col: str = "stock",
         feature_cols: list[str] | None = None,
         label_col: str | None = None,
+        duplicate_policy: str = "error",
     ) -> "PanelDataset":
         return cls(
             frame=frame,
@@ -67,6 +105,7 @@ class PanelDataset:
             stock_col=stock_col,
             feature_cols=list(feature_cols) if feature_cols is not None else [],
             label_col=label_col,
+            duplicate_policy=duplicate_policy,
         )
 
     # -- slicing -------------------------------------------------------------
@@ -136,6 +175,7 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
             "min_stocks_per_date": 0, "cross_sectional_coverage": 0.0,
             "label_coverage": 0.0, "effective_date_count": 0,
             "raw_obs": 0, "finite_obs": 0,
+            "missing_fraction": 0.0, "date_coverage": 0.0,
         }
     f = ds.frame
     n_stock_date = len(f)
@@ -150,6 +190,7 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
         label_coverage = float(f[ds.label_col].notna().mean())
     _, y, _, _, finite = ds.as_matrix()
     finite_obs = int(finite.sum()) if y is not None else int(np.isfinite(f[ds.feature_cols].to_numpy()).all(axis=1).sum())
+    missing_fraction = (1.0 - finite_obs / n_stock_date) if n_stock_date else 0.0
     return {
         "n_stock_date_obs": int(n_stock_date),
         "n_unique_dates": n_dates,
@@ -162,4 +203,44 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
         "effective_date_count": int(n_dates),
         "raw_obs": int(n_stock_date),
         "finite_obs": finite_obs,
+        "missing_fraction": float(missing_fraction),
+        "date_coverage": float(_panel_date_coverage(f, ds.date_col)),
     }
+
+
+def _panel_date_coverage(f: pd.DataFrame, date_col: str) -> float:
+    """Fraction of the calendar span covered by unique dates.
+
+    ``1.0`` when the date column carries no calendar notion (e.g. integer bar
+    ordinals) — there is no missing-trading-day concept to measure — and for
+    any real datetime column the fraction of the calendar span covered by the
+    unique trade dates in the panel (bounded in ``[0, 1]``).
+    """
+    if len(f) == 0:
+        return 0.0
+    dates = f[date_col]
+    try:
+        is_dt = pd.api.types.is_datetime64_any_dtype(dates)
+    except Exception:
+        is_dt = False
+    if not is_dt:
+        sample = dates.iloc[0] if len(dates) else None
+        if not isinstance(sample, (pd.Timestamp, _dt.datetime, _dt.date, _dt.time)):
+            return 1.0
+        try:
+            dts = pd.to_datetime(dates, errors="coerce")
+        except Exception:
+            return 1.0
+        if dts.isna().all():
+            return 1.0
+        dates = dts
+    n_unique = int(dates.nunique())
+    if n_unique == 0:
+        return 0.0
+    try:
+        span_days = (dates.max() - dates.min()).days + 1
+    except Exception:
+        return 1.0
+    if span_days <= 0:
+        return 1.0
+    return float(n_unique) / float(span_days)

@@ -1,9 +1,9 @@
 # Model Layer Major Redesign — Architecture Migration Report
 
-- git_sha: `6932ffd69af5f2dad742743875daaeed538a8792`
-- generated: 2026-08-11T20:44:01+0800
-- total canonicals classified: 5
-- model-like canonicals: 5
+- git_sha: `4b1577fce14c097fba48619885b38d6c596242eb`
+- generated: 2026-08-11T23:29:29+0800
+- total canonicals classified: 1483
+- model-like canonicals: 233
 - legacy local predictive (research-only, default_searchable=False): 5
 - artifact-backed predictive learners (ModelRegistry): 5
 
@@ -25,6 +25,10 @@
 - Phase D (predictive Regime / MoE): `modeling/learners/regime.py`, `modeling/learners/mixture_of_experts.py` — §6 support contracts, fail-closed.
 - Phase E (Factor DSL as-of artifact score): `modeling/dsl_bridge.py` provides `score_asof`/`ArtifactResolver` (§49/§50/§51); wiring into the DSL compiler remains pending (concurrent session owns `api/mining_integration.py`).
 - Phase F (historical walk-forward regeneration): `modeling/evidence.py` + `run_walk_forward_evidence` produce per-fold as-of artifacts.
+
+## Single semantic authority (§52)
+
+`ModelSemanticRegistry` (modeling/model_semantic_registry.py) is the additive single authority: execution_class / semantic_role / timing / searchability / sample contract / stateful contract / typed inputs / unit / production certification for one canonical.  `consistency_errors()` folds the live operator authorities and surfaces every disagreement (legacy research_only vs production lane; checkpoint_supported=True without a StatefulCheckpointRegistry entry; timing-vs-contract contradictions).  See MODEL_SEMANTIC_CONSISTENCY.json.
 
 ## Design principles (§85)
 

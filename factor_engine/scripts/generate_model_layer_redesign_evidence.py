@@ -194,6 +194,7 @@ def main() -> int:
         from modeling.predictor import Predictor
         from modeling.evaluation import evaluate_predictions
         from modeling.learners import PCRLearner
+        from modeling.contracts import SampleAdequacyContract
 
         from modeling.walk_forward import WalkForwardSpec
         small = WalkForwardSpec(
@@ -203,6 +204,14 @@ def main() -> int:
         )
         folds = make_walk_forward_splits(panel, small)
         predictor = Predictor()
+        # This is a SYNTHETIC demo panel — below the production sample floors the
+        # linear contract enforces (50k raw obs / 252 dates / 30 stocks).  Pass an
+        # explicitly-relaxed contract so the walk-forward machinery is exercised;
+        # production runs get the strict floors by default (fail closed).
+        demo_contract = SampleAdequacyContract(
+            min_raw_obs=400, min_effective_obs=200, min_unique_dates=8,
+            min_unique_stocks=10, min_obs_per_parameter=10,
+        )
         all_pred, all_y, all_dates = [], [], []
         for fold in folds[:3]:
             wf_rows.append({
@@ -219,6 +228,7 @@ def main() -> int:
                 label_contract=label, decision_clock=clock,
                 feature_schema_hash="h", universe_hash="u", data_source_hash="d",
                 model_version="1.0", fit_code_commit=sha, random_seed=0,
+                sample_contract=demo_contract,
             )
             art = res.artifact
             if art is None:
@@ -279,6 +289,35 @@ def main() -> int:
     }
     _write_json("MODEL_PIT_TEST_RESULTS.json", pit_results)
 
+    # ---- 6b. semantic-consistency report (§52) ------------------------------
+    try:
+        from modeling.model_semantic_registry import (
+            KNOWN_NOT_CLOSED_CANONICALS,
+            ModelSemanticRegistry,
+        )
+        from cleaned_operators.model_timing import is_model_like_name
+
+        sem_reg = ModelSemanticRegistry()
+        model_like = [c for c in canons if is_model_like_name(c)]
+        errs = sem_reg.consistency_errors(model_like)
+        unexpected = [
+            e for e in errs
+            if e.split(":", 1)[0].strip() not in KNOWN_NOT_CLOSED_CANONICALS
+        ]
+        sem_consistency = {
+            "git_sha": sha,
+            "generated_at": now,
+            "n_model_like_canonicals": len(model_like),
+            "n_consistency_errors": len(errs),
+            "n_unexpected_errors": len(unexpected),
+            "known_not_closed_canonicals": sorted(KNOWN_NOT_CLOSED_CANONICALS),
+            "unexpected_errors": unexpected[:50],
+            "all_errors": errs[:100],
+        }
+    except Exception as exc:
+        sem_consistency = {"error": f"{type(exc).__name__}: {exc}"}
+    _write_json("MODEL_SEMANTIC_CONSISTENCY.json", sem_consistency)
+
     # ---- 7. hard gates (§64) -----------------------------------------------
     try:
         from modeling.evidence import report_hard_gate_set
@@ -332,6 +371,16 @@ def main() -> int:
         "remains pending (concurrent session owns `api/mining_integration.py`).",
         "- Phase F (historical walk-forward regeneration): `modeling/evidence.py` + "
         "`run_walk_forward_evidence` produce per-fold as-of artifacts.",
+        "",
+        "## Single semantic authority (§52)",
+        "",
+        "`ModelSemanticRegistry` (modeling/model_semantic_registry.py) is the additive "
+        "single authority: execution_class / semantic_role / timing / searchability / "
+        "sample contract / stateful contract / typed inputs / unit / production "
+        "certification for one canonical.  `consistency_errors()` folds the live "
+        "operator authorities and surfaces every disagreement (legacy research_only vs "
+        "production lane; checkpoint_supported=True without a StatefulCheckpointRegistry "
+        "entry; timing-vs-contract contradictions).  See MODEL_SEMANTIC_CONSISTENCY.json.",
         "",
         "## Design principles (§85)",
         "",

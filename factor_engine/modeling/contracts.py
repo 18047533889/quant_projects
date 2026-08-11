@@ -173,7 +173,22 @@ def sample_adequacy_met(
     """Check a :class:`SampleAdequacyContract` against measured telemetry.
 
     Returns ``(met, failures)`` where ``failures`` lists each unmet constraint
-    (empty when met).  ``obs_per_parameter = effective_obs / max(1, free_params)``.
+    (empty when met).
+
+    ``obs_per_parameter = effective_obs / max(1, free_parameter_count)`` where
+    ``free_parameter_count`` is the learner's ``effective_parameter_count``
+    (modelling.diagnostics) — the number of free parameters the fit actually
+    estimates, never ``len(hyperparams)``.
+
+    Optional contract fields (``min_regime_obs``, ``min_expert_obs``,
+    ``min_state_transitions``, ``min_cross_section_peers``,
+    ``max_missing_fraction``, ``min_date_coverage``) are three-state:
+
+    * contract field ``None`` (not required)           -> skipped, OK;
+    * contract requires + telemetry supplied           -> compared normally;
+    * contract requires + telemetry ``None``           -> FAIL with
+      ``"<field> required but telemetry not supplied"`` so a required-but-
+      unmeasured field can NEVER silently pass the gate.
     """
     failures: list[str] = []
     if raw_obs < contract.min_raw_obs:
@@ -187,29 +202,41 @@ def sample_adequacy_met(
     opp = effective_obs / max(1, free_parameter_count)
     if opp < contract.min_obs_per_parameter:
         failures.append(f"obs/param {opp:.2f} < {contract.min_obs_per_parameter}")
-    if contract.min_regime_obs is not None and regime_obs is not None:
-        if regime_obs < contract.min_regime_obs:
+    if contract.min_regime_obs is not None:
+        if regime_obs is None:
+            failures.append("regime_obs required but telemetry not supplied")
+        elif regime_obs < contract.min_regime_obs:
             failures.append(f"regime_obs {regime_obs} < {contract.min_regime_obs}")
-    if contract.min_expert_obs is not None and expert_obs is not None:
-        if expert_obs < contract.min_expert_obs:
+    if contract.min_expert_obs is not None:
+        if expert_obs is None:
+            failures.append("expert_obs required but telemetry not supplied")
+        elif expert_obs < contract.min_expert_obs:
             failures.append(f"expert_obs {expert_obs} < {contract.min_expert_obs}")
-    if contract.min_state_transitions is not None and state_transitions is not None:
-        if state_transitions < contract.min_state_transitions:
+    if contract.min_state_transitions is not None:
+        if state_transitions is None:
+            failures.append("state_transitions required but telemetry not supplied")
+        elif state_transitions < contract.min_state_transitions:
             failures.append(
                 f"state_transitions {state_transitions} < {contract.min_state_transitions}"
             )
-    if contract.min_cross_section_peers is not None and cross_section_peers is not None:
-        if cross_section_peers < contract.min_cross_section_peers:
+    if contract.min_cross_section_peers is not None:
+        if cross_section_peers is None:
+            failures.append("cross_section_peers required but telemetry not supplied")
+        elif cross_section_peers < contract.min_cross_section_peers:
             failures.append(
                 f"cross_section_peers {cross_section_peers} < {contract.min_cross_section_peers}"
             )
-    if contract.max_missing_fraction is not None and missing_fraction is not None:
-        if missing_fraction > contract.max_missing_fraction:
+    if contract.max_missing_fraction is not None:
+        if missing_fraction is None:
+            failures.append("missing_fraction required but telemetry not supplied")
+        elif missing_fraction > contract.max_missing_fraction:
             failures.append(
                 f"missing_fraction {missing_fraction:.3f} > {contract.max_missing_fraction}"
             )
-    if contract.min_date_coverage is not None and date_coverage is not None:
-        if date_coverage < contract.min_date_coverage:
+    if contract.min_date_coverage is not None:
+        if date_coverage is None:
+            failures.append("date_coverage required but telemetry not supplied")
+        elif date_coverage < contract.min_date_coverage:
             failures.append(f"date_coverage {date_coverage:.3f} < {contract.min_date_coverage}")
     return (not failures), failures
 
