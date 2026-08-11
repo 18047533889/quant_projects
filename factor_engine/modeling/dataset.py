@@ -20,7 +20,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-__all__ = ["PanelDataset", "panel_telemetry"]
+__all__ = ["FeatureSchema", "PanelDataset", "panel_telemetry"]
+
+
+@dataclass(frozen=True)
+class FeatureSchema:
+    """Explicit ordered feature contract required by production datasets."""
+
+    columns: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.columns or len(set(self.columns)) != len(self.columns):
+            raise ValueError("FeatureSchema columns must be non-empty and unique")
 
 
 @dataclass
@@ -48,6 +59,8 @@ class PanelDataset:
     feature_cols: list[str] = field(default_factory=list)
     label_col: str | None = None
     duplicate_policy: str = "error"  # "error" | "aggregate"
+    feature_schema: FeatureSchema | None = None
+    run_mode: str = "production"
 
     def __post_init__(self) -> None:
         if not isinstance(self.frame, pd.DataFrame):
@@ -59,7 +72,16 @@ class PanelDataset:
                 f"stock column {self.stock_col!r} missing from frame — a pooled "
                 "panel requires an instrument id (audit/PIT/dedup are impossible without it)"
             )
-        if not self.feature_cols:
+        if self.run_mode not in {"production", "research"}:
+            raise ValueError("run_mode must be 'production' or 'research'")
+        if self.run_mode == "production" and self.feature_schema is None and not self.feature_cols:
+            raise ValueError("production PanelDataset requires explicit feature_schema")
+        if self.feature_schema is not None:
+            schema_cols = list(self.feature_schema.columns)
+            if self.feature_cols and self.feature_cols != schema_cols:
+                raise ValueError("feature_cols differ from explicit feature_schema")
+            self.feature_cols = schema_cols
+        elif not self.feature_cols:
             self.feature_cols = [
                 c for c in self.frame.columns if c not in (self.date_col, self.stock_col, self.label_col)
             ]
@@ -186,8 +208,13 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
     min_per_date = int(per_date.min())
     coverage = median_per_date / max(1, n_stocks)
     label_coverage = 1.0
+    label_nan_count = 0
+    label_inf_count = 0
     if ds.label_col is not None:
-        label_coverage = float(f[ds.label_col].notna().mean())
+        labels = f[ds.label_col].to_numpy(dtype=np.float64)
+        label_nan_count = int(np.isnan(labels).sum())
+        label_inf_count = int(np.isinf(labels).sum())
+        label_coverage = float(np.isfinite(labels).mean())
     _, y, _, _, finite = ds.as_matrix()
     finite_obs = int(finite.sum()) if y is not None else int(np.isfinite(f[ds.feature_cols].to_numpy()).all(axis=1).sum())
     missing_fraction = (1.0 - finite_obs / n_stock_date) if n_stock_date else 0.0
@@ -200,6 +227,8 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
         "min_stocks_per_date": min_per_date,
         "cross_sectional_coverage": float(coverage),
         "label_coverage": label_coverage,
+        "label_nan_count": label_nan_count,
+        "label_inf_count": label_inf_count,
         "effective_date_count": int(n_dates),
         "raw_obs": int(n_stock_date),
         "finite_obs": finite_obs,

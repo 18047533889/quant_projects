@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from dataclasses import asdict, dataclass
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,8 @@ from modeling.dataset import PanelDataset
 from market.exchange_session_calendar import ExchangeSessionCalendar
 
 __all__ = [
+    "SampleWeightPolicy",
+    "sample_weights",
     "SampleTelemetry",
     "measure_train_telemetry",
     "adequacy_report",
@@ -34,6 +37,51 @@ __all__ = [
     "resolve_sample_contract",
     "adequacy_failures",
 ]
+
+
+class SampleWeightPolicy(str, Enum):
+    """Auditable weighting policies for pooled panel observations."""
+
+    EQUAL_ROW = "equal_row"
+    EQUAL_DATE = "equal_date"
+    EQUAL_DATE_THEN_STOCK = "equal_date_then_stock"
+    TIME_DECAY_EQUAL_DATE = "time_decay_equal_date"
+
+
+def sample_weights(
+    ds: PanelDataset,
+    policy: SampleWeightPolicy | str,
+    *,
+    half_life_dates: float | None = None,
+) -> np.ndarray:
+    """Return positive weights with mean one, aligned to ``ds.frame``.
+
+    Date-balanced policies give every date equal aggregate mass.  The
+    ``EQUAL_DATE_THEN_STOCK`` spelling makes the within-date equal-stock rule
+    explicit; with unique ``(date, stock)`` panel rows it is mathematically the
+    same as ``EQUAL_DATE``.  Time decay is applied to date masses, never rows.
+    """
+    policy = SampleWeightPolicy(policy)
+    n = ds.n_rows
+    if n == 0:
+        return np.empty(0, dtype=np.float64)
+    if policy is SampleWeightPolicy.EQUAL_ROW:
+        return np.ones(n, dtype=np.float64)
+
+    dates = ds.frame[ds.date_col]
+    counts = dates.groupby(dates, observed=True).transform("size").to_numpy(dtype=float)
+    weights = 1.0 / counts
+    if policy is SampleWeightPolicy.TIME_DECAY_EQUAL_DATE:
+        if half_life_dates is None or not np.isfinite(half_life_dates) or half_life_dates <= 0:
+            raise ValueError("TIME_DECAY_EQUAL_DATE requires positive half_life_dates")
+        ordered = pd.Index(dates.drop_duplicates()).sort_values()
+        rank = {date: i for i, date in enumerate(ordered)}
+        age = np.array([len(ordered) - 1 - rank[date] for date in dates], dtype=float)
+        weights *= np.exp2(-age / float(half_life_dates))
+    mean = float(weights.mean())
+    if not np.isfinite(mean) or mean <= 0:
+        raise ValueError("sample weight policy produced invalid weights")
+    return weights / mean
 
 
 @dataclass

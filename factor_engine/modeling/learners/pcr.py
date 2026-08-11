@@ -69,6 +69,8 @@ class PCRLearner(BaseLearner):
         weights: np.ndarray | None = None,
         aux: dict[str, np.ndarray | None] | None = None,
     ) -> FrozenModel:
+        if weights is not None:
+            raise NotImplementedError("PCR does not support sample weights")
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         if X.ndim != 2 or len(X) < 2:

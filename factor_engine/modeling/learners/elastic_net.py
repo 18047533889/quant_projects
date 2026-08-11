@@ -103,13 +103,13 @@ class ElasticNetLearner(BaseLearner):
         weights: np.ndarray | None = None,
         aux: dict[str, np.ndarray | None] | None = None,
     ) -> FrozenModel:
+        if weights is not None:
+            raise NotImplementedError("ElasticNet does not support sample weights")
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64).ravel()
         if X.ndim != 2 or len(X) < 2:
             raise ValueError("enet fit needs a 2-D feature matrix with >= 2 rows")
         n, d = X.shape
-        if weights is not None:
-            raise ValueError("enet learner does not support per-row weights (fail closed)")
         mx = X.mean(axis=0)
         my = float(y.mean())
         sx = X.std(axis=0)

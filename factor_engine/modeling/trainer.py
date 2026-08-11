@@ -222,6 +222,8 @@ def _extract_matrices(
     preprocessing: FrozenPreprocessing,
     aux_col: str | None,
     decay_half_life_bars: int | None = None,
+    sample_weight_policy: str | None = None,
+    sample_weight_half_life_dates: float | None = None,
 ):
     """Return ``(X_tr, y_tr, aux, weights)`` aligned to the finite-label rows.
 
@@ -234,6 +236,13 @@ def _extract_matrices(
     X_full, y_full, _, _, _ = ds.as_matrix()
     X_all = preprocessing.transform(X_full)
     transformed_finite = np.isfinite(X_all).all(axis=1)
+    from modeling.sample_policy import sample_weights
+
+    weights_all = (
+        None
+        if sample_weight_policy is None
+        else sample_weights(ds, sample_weight_policy, half_life_dates=sample_weight_half_life_dates)
+    )
     aux_arr = None
     if aux_col is not None:
         if aux_col not in ds.frame.columns:
@@ -255,11 +264,13 @@ def _extract_matrices(
         y_tr = y_full[ok]
         if aux_arr is not None:
             aux_arr = aux_arr[ok]
+        weights = None if weights_all is None else weights_all[ok]
     else:
         ok = transformed_finite
         X_tr, y_tr = X_all[ok], None
         if aux_arr is not None:
             aux_arr = aux_arr[ok]
+        weights = None if weights_all is None else weights_all[ok]
     aux = {"regime_state": aux_arr} if aux_arr is not None else None
     return X_tr, y_tr, aux, weights
 
@@ -285,6 +296,8 @@ def train_model(
     evaluation_boundary: Any = None,
     decay_half_life_bars: int | None = None,
     cancel_token: Any | None = None,
+    sample_weight_policy: str | None = None,
+    sample_weight_half_life_dates: float | None = None,
 ) -> TrainResult:
     """Run one validation-backed training fold and fail closed on leakage."""
     _raise_if_cancelled(cancel_token)
@@ -331,7 +344,7 @@ def train_model(
 
     # 3. training matrices.
     X_tr, y_tr, aux, weights = _extract_matrices(
-        train_ds, preprocessing, aux_col, decay_half_life_bars
+        train_ds, preprocessing, aux_col, decay_half_life_bars, sample_weight_policy, sample_weight_half_life_dates
     )
     if y_tr is None:
         raise ValueError("train_model requires a labelled training panel")
@@ -438,7 +451,7 @@ def train_model(
     else:
         refit_ds = train_ds
     X_fit, y_fit, aux_fit, weights_fit = _extract_matrices(
-        refit_ds, preprocessing, aux_col, decay_half_life_bars
+        refit_ds, preprocessing, aux_col, decay_half_life_bars, sample_weight_policy, sample_weight_half_life_dates
     )
     best_spec = LearnerSpec(
         learner_name=learner_cls.name,
