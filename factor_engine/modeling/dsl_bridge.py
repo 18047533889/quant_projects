@@ -264,6 +264,9 @@ class ArtifactResolver:
         *,
         context: ModelArtifactResolutionContext | None = None,
     ) -> ArtifactResolutionResult:
+        """Resolve artifact for production scoring with active deployment and certification filters."""
+        if asof is None:
+            raise ValueError("resolve_result requires a non-null asof timestamp")
         requested_asof = parse_catalog_timestamp(asof)
         requested_cutoff = (
             parse_catalog_timestamp(training_cutoff)
@@ -280,6 +283,11 @@ class ArtifactResolver:
                 project=ctx.project,
                 market=ctx.market,
             ):
+                # Filter by deployment state and certification
+                if record.promotion_state != "ACTIVE":
+                    continue
+                if not record.certification_hash:
+                    continue
                 if record.training_cutoff_timestamp > requested_asof:
                     continue
                 if record.available_at_timestamp > requested_asof:
@@ -568,6 +576,8 @@ def _score_block(
     training_cutoff: Any = None,
     context: ModelArtifactResolutionContext | None = None,
 ) -> ModelScoreBlock:
+    if asof is None:
+        raise ValueError("production scoring requires a non-null asof timestamp")
     result = resolver.resolve_result(
         ir.model_name,
         asof,

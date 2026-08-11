@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
-from modeling.contracts import DecisionClock, LabelContract, SampleAdequacyContract
+from modeling.contracts import DecisionClock, LabelContract, ParameterSearchPolicy, SampleAdequacyContract
 from modeling.dataset import PanelDataset
 from modeling.hyperparams import validate_search_grid
 from modeling.learners.base import LearnerSpec, default_sample_contracts
@@ -235,13 +235,16 @@ def _extract_matrices(
     sample_weight_policy: str | None = None,
     sample_weight_half_life_dates: float | None = None,
 ):
-    """Return ``(X_tr, y_tr, aux, weights)`` aligned to the finite-label rows.
+    """Return ``(X_tr, y_tr, aux, weights)`` aligned to the finite-feature-and-label rows.
 
     ``weights`` is a per-row decay vector (§3.4 / §73) when
     ``decay_half_life_bars`` is requested, else ``None`` — it is aligned to the
     exact rows returned (the finite-label mask), so it is safe to pass straight
     to ``learner.fit(..., weights=...)``.  Learners that do not consume per-row
     weights ignore it; those that cannot (elastic_net) reject it fail-closed.
+
+    Weights are aligned to the full cohort (finite features AND finite labels)
+    so no declared weight is silently ignored.
     """
     X_full, y_full, _, _, _ = ds.as_matrix()
     X_all = preprocessing.transform(X_full)
@@ -258,16 +261,6 @@ def _extract_matrices(
         if aux_col not in ds.frame.columns:
             raise ValueError(f"aux_col {aux_col!r} missing from panel")
         aux_arr = ds.frame[aux_col].to_numpy(dtype=np.float64)
-    weights = None
-    if decay_half_life_bars is not None and decay_half_life_bars > 0:
-        from modeling.walk_forward import decay_weights
-
-        w_all = decay_weights(ds, decay_half_life_bars, date_col=ds.date_col)
-        if y_full is not None:
-            ok_y = np.isfinite(y_full)
-            weights = w_all[ok_y]
-        else:
-            weights = w_all
     if y_full is not None:
         ok = np.isfinite(y_full) & transformed_finite
         X_tr = X_all[ok]
@@ -328,7 +321,10 @@ def train_model(
 
     The §19 one-fold loop with trainer governance contracts, parameter validation,
     and fit exception handling.  Raises ``ValueError`` when every hyperparameter
-    candidate fails its sample-adequacy contract or validation."""
+    candidate fails its sample-adequacy contract or validation.
+
+    Hyperparameter grids are validated against ParameterSearchPolicy to ensure
+    only reviewed values are exposed during training."""
     _raise_if_cancelled(cancel_token)
     if validation_ds is not None and validation_ds.n_rows == 0:
         validation_ds = None
@@ -386,6 +382,7 @@ def train_model(
 
     # The caller may choose a reviewed subset, but never an ad-hoc value.  The
     # default exposure budget is exactly that reviewed subset's size.
+    # validate_search_grid enforces ParameterSearchPolicy for the learner family.
     hyperparam_grid = validate_search_grid(learner_cls.family, hyperparam_grid)
     governance_contract = governance_contract or GovernanceContract(
         version="trainer-governance-v1", family_budget=len(hyperparam_grid)
@@ -395,7 +392,21 @@ def train_model(
         _assert_declared_feature_availability(decision_clock, train_ds.feature_cols)
 
     # 4. search the approved grid, fail closed on adequacy.
-    telemetry = train_ds.telemetry()
+    # Record the ACTUAL fit cohort (finite features AND labels after preprocessing),
+    # not the raw telemetry.
+    actual_fit_cohort_mask = (
+        np.isfinite(train_ds.frame[train_ds.label_col].to_numpy()) &
+        np.isfinite(X_tr).all(axis=1)
+    )
+    actual_fit_dates = train_ds.frame[train_ds.date_col].to_numpy()[actual_fit_cohort_mask]
+    actual_fit_stocks = train_ds.frame[train_ds.stock_col].to_numpy()[actual_fit_cohort_mask]
+    telemetry = {
+        "n_rows": len(X_tr),
+        "n_features": X_tr.shape[1],
+        "n_unique_dates": len(pd.unique(actual_fit_dates)),
+        "n_unique_stocks": len(pd.unique(actual_fit_stocks)),
+        "n_actual_fit_rows": int(actual_fit_cohort_mask.sum()),
+    }
     validation_scores: list[dict[str, Any]] = []
     for candidate in hyperparam_grid:
         _raise_if_cancelled(cancel_token)
@@ -439,7 +450,7 @@ def train_model(
                 {"candidate_id": identity, "hyperparams": dict(candidate), "rank_ic": float("nan"),
                  "icir": float("nan"), "mse": float("nan"), "reason": f"fit: {exc}"}
             )
-            continue
+            raise
         if validation_ds is not None:
             ev = _evaluate_validation(learner, frozen, validation_ds, preprocessing)
         else:

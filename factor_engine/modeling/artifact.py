@@ -84,6 +84,8 @@ class ModelArtifactManifest:
     available_at: str = ""
     #: Training cutoff date — artifacts are only loadable at/after this.
     training_cutoff: str = ""
+    #: Predictor ABI version — artifacts must match the runtime predictor ABI.
+    predictor_abi_version: str = "v1"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hyperparameters", _freeze(self.hyperparameters))
@@ -139,6 +141,7 @@ class ModelArtifactManifest:
             "fit_code_component_hash": self.fit_code_component_hash,
             "random_seed": self.random_seed,
             "solver_version": self.solver_version,
+            "predictor_abi_version": self.predictor_abi_version,
         }
         return _digest(payload)
 

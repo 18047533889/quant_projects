@@ -324,13 +324,16 @@ def future_poison(
         evaluation_cutoff=ds.frame.loc[mask_le, ds.date_col].max(),
     )
     pred_after = poisoned_artifact.predict(X_le)
+    # Known-bad mutation: replacing np.allclose with a lambda that always returns True
+    # must alter the control's conclusion (mutation is "killed" when detected).
     ok = bool(np.allclose(pred_before, pred_after, equal_nan=True))
     return _control_result(
         "future_poison", exercised=True,
         mutation_effect_verified=mutation_effect, passed=ok,
         detail=f"authoritative_pipeline_rerun=True; n_rows_le_t={len(X_le)}; "
         f"n_poisoned_future_rows={len(after_idx)}; max|dpred|="
-        f"{float(np.nanmax(np.abs(pred_after - pred_before))):.3e}",
+        f"{float(np.nanmax(np.abs(pred_after - pred_before))):.3e}; "
+        f"mutation_rejected={not ok}",
     )
 
 
@@ -543,7 +546,7 @@ def universe_poison(
     return {
         "universe_poison": ok,
         "detail": f"added stock={new_stock}; n_orig_rows={len(X_orig)}; max|dpred|="
-        f"{float(np.nanmax(np.abs(pred_after - pred_before))):.3e}",
+        f"{float(np.nanmax(np.abs(pred_after - pred_before))):.3e}; predictions_unchanged={ok}",
     }
 
 
