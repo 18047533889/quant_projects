@@ -1,7 +1,7 @@
 # Model Layer Major Redesign — Architecture Migration Report
 
-- git_sha: `4b1577fce14c097fba48619885b38d6c596242eb`
-- generated: 2026-08-11T23:29:29+0800
+- git_sha: `90cc2539bf2cb42d7149a8f0858d19ef58234dae`
+- generated: 2026-08-11T23:31:42+0800
 - total canonicals classified: 1483
 - model-like canonicals: 233
 - legacy local predictive (research-only, default_searchable=False): 5
