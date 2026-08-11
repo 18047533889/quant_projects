@@ -1,7 +1,7 @@
 # Model Layer Major Redesign — Final Acceptance Report
 
-- git_sha: `90cc2539bf2cb42d7149a8f0858d19ef58234dae`
-- generated: 2026-08-11T23:31:42+0800
+- git_sha: `cec2390ac0fa0314efc604550eaa808445e57cc1`
+- generated: 2026-08-12T01:31:58+0800
 
 ## Hard gates (§64)
 
