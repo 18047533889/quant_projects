@@ -142,13 +142,23 @@ def test_materialize_sharded_selects_subset(tmp_path, monkeypatch):
 
     written: list[str] = []
 
-    def _fake_execute(engine, factor, output, **kwargs):
-        written.append(kwargs.get("factor_id") or factor.name)
-        return {"materialization": {"factor_id": kwargs.get("factor_id"), "rows_written": 6}}
+    # R39-PERF-068：materialize_sharded 走 materialize_many_fast 流式 sink，
+    # 写路径是 execute_materialize_batch（不再逐因子 execute_materialize）。
+    # 测试 patch 批量写入口，记录本 shard 实际写到的 factor_ids。
+    def _fake_batch(engine, items, generation=None, shared_options=None):
+        for it in items:
+            written.append(it.factor_id)
+        return {
+            "counters": {"batch_write_transaction_count": 1},
+            "materializations": {
+                it.factor.name: {"factor_id": it.factor_id, "rows_written": 6}
+                for it in items
+            },
+        }
 
     monkeypatch.setattr(
-        "runtime.materialize_service.execute_materialize",
-        _fake_execute,
+        "runtime.materialize_batch.execute_materialize_batch",
+        _fake_batch,
     )
     out = eng.materialize_sharded(
         factors,

@@ -4,7 +4,10 @@
 > 审计基线 HEAD：`8e9893b5`；实施期间树持续被并发会话演进，最终以真实 HEAD 为准。
 > 完成判定遵循 §34：只有改动真实执行路径、有单元测试、有 benchmark、有 before/after、有 correctness parity 的 issue 才可标记 `CLOSED`。
 > 实施方式：16 个实现 agent（文件不相交分簇）+ 4 个补刀 agent（PERF-030/027/051/063）。所有新 R39 测试中央串行单进程全绿；既有回归套件全绿（numba 为 R38 缺失依赖，已补装）。
-> **Benchmark 期补充修复（真实 bug）**：PERF-040 默认 batch=64 后，sink `finish()` 的固定 10s join timeout 会把「活着的慢 writer」（一次 flush 写 64 因子 >10s）误判为致命并 abort generation。修复：join timeout 随 batch_size 缩放 `max(10s, batch_size×2s)`，显式 `join_timeout` 可覆盖；真死锁语义（R38 P0-045）保留。`runtime/streaming_result_sink.py` + `tests/r39/test_perf_sink_join_timeout_2026_08.py`（6 测试）。
+> **Benchmark 期补充修复（真实 bug）**：PERF-040 默认 batch=64 后，sink `finish()` 的固定 10s join timeout 会把「活着的慢 writer」（一次 flush 写 64 因子 >10s）误判为致命并 abort generation。修复：join timeout 随 batch_size 缩放 `max(10s, batch_size×2s)`，finish 时按队列剩余动态放宽（`_join_timeout_for_finish`），显式 `join_timeout` 可覆盖；真死锁语义（R38 P0-045）保留。`runtime/streaming_result_sink.py` + `tests/r39/test_perf_sink_join_timeout_2026_08.py`（8 测试）。
+> **回归期修复（R40 交叉 bug）**：`TypedDataSourceOptions` 的 `read_auto/snapshot_only/normalize_timestamp` 缺省 `False` 经 `to_dict()` 泄漏进所有 source 类型，非 data_access 类型（parquet_kline）被 `_ensure_no_extra_options` 误拒。修复：缺省改 `None`（显式 False 仍透传）。`runtime/config.py`。
+> **回归期测试适配（PERF-068 行为变化）**：`materialize_sharded` 现走 `execute_materialize_batch`，`test_materialize_sharded_selects_subset` 改 patch 批量写入口。
+> **基准 before/after 诚实说明**：baseline 首次测得 42s 系复用 after 已填充 lake 的 resume 跳写；干净 lake 复测 125.5s。R39 前 `materialize_many_fast` 100 因子在固定 10s join 下必然 writer-alive-abort（无法完成该 workload），修复后才可落值——即 R39 之前该规模**不可用**。
 
 每项格式：
 ```

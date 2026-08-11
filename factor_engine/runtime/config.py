@@ -255,9 +255,13 @@ class TypedDataSourceOptions:
     joins: dict[str, str] | None = None
     aliases: dict[str, str] | None = None
     max_files: int | None = None
-    read_auto: bool = False
-    snapshot_only: bool = False
-    normalize_timestamp: bool = False
+    # DA-only 选项缺省必须是 None（to_dict 跳过 None）：若默认 False，to_dict()
+    # 会把这三个键泄漏进所有 source 类型配置，非 data_access 类型（如
+    # parquet_kline）在 build_data_source 的 _ensure_no_extra_options 被误拒。
+    # 显式配置为 False 时仍按 False 透传（data_access 分支 pop 后原样处理）。
+    read_auto: bool | None = None
+    snapshot_only: bool | None = None
+    normalize_timestamp: bool | None = None
     join_policy: str | None = None
     usage: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
