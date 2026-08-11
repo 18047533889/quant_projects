@@ -136,37 +136,86 @@ def parameter_stability_report(
     }
 
 
+def _shuffle_indices(
+    n: int,
+    rng: np.random.Generator,
+    *,
+    mode: str,
+    dates: np.ndarray | None = None,
+    block_size: int | None = None,
+) -> np.ndarray:
+    if mode == "global":
+        return rng.permutation(n)
+    if mode == "within_date":
+        if dates is None or len(dates) != n:
+            raise ValueError("within_date shuffle requires one date per row")
+        out = np.arange(n)
+        for date in np.unique(dates):
+            loc = np.flatnonzero(dates == date)
+            out[loc] = rng.permutation(loc)
+        return out
+    if mode == "block":
+        if block_size is None or block_size < 1:
+            raise ValueError("block shuffle requires block_size >= 1")
+        blocks = [np.arange(i, min(i + block_size, n)) for i in range(0, n, block_size)]
+        order = rng.permutation(len(blocks))
+        return np.concatenate([blocks[i] for i in order])
+    raise ValueError("shuffle mode must be 'global', 'within_date', or 'block'")
+
+
 def feature_ablation(
     artifact: Any,
     X: np.ndarray,
     y: np.ndarray,
     eval_fn: Callable[[np.ndarray, np.ndarray], float],
+    *,
+    dates: np.ndarray | None = None,
+    shuffle_mode: str = "global",
+    block_size: int | None = None,
+    retrain_without_feature_fn: Callable[[int], Any] | None = None,
 ) -> dict[str, Any]:
-    """§25.3 — baseline metric then drop-one / shuffle-one feature deltas.
+    """Separate frozen-model occlusion/permutation from retrained ablation.
 
-    ``eval_fn(pred, y) -> float`` (higher better).  Deltas are
-    ``baseline - perturbed`` so a positive delta means the feature carries
-    signal.
+    Occlusion and permutation perturb an already-frozen artifact and are not
+    called ablation.  True feature ablation requires ``retrain_without_feature_fn``
+    to rebuild the production training path without feature ``j``.
     """
     X = np.asarray(X, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64).ravel()
+    if X.ndim != 2 or len(X) != len(y):
+        raise ValueError("X must be 2-D and aligned with y")
+    dates_arr = None if dates is None else np.asarray(dates)
     d = X.shape[1]
     baseline = float(eval_fn(artifact.predict(X), y))
-    drops: dict[str, float] = {}
-    shuffles: dict[str, float] = {}
+    occlusion: dict[str, float] = {}
+    permutation: dict[str, float] = {}
+    retrained: dict[str, float] = {}
     rng = np.random.default_rng(0)
     for j in range(d):
         Xd = X.copy()
         Xd[:, j] = np.nanmean(X[:, j])
-        drops[f"drop_{j}"] = float(baseline - eval_fn(artifact.predict(Xd), y))
+        occlusion[str(j)] = float(baseline - eval_fn(artifact.predict(Xd), y))
         Xs = X.copy()
-        rng.shuffle(Xs[:, j])
-        shuffles[f"shuffle_{j}"] = float(baseline - eval_fn(artifact.predict(Xs), y))
+        indices = _shuffle_indices(
+            len(X), rng, mode=shuffle_mode, dates=dates_arr, block_size=block_size
+        )
+        Xs[:, j] = X[indices, j]
+        permutation[str(j)] = float(baseline - eval_fn(artifact.predict(Xs), y))
+        if retrain_without_feature_fn is not None:
+            rebuilt = retrain_without_feature_fn(j)
+            X_without = np.delete(X, j, axis=1)
+            retrained[str(j)] = float(
+                baseline - eval_fn(rebuilt.predict(X_without), y)
+            )
     return {
         "baseline": baseline,
         "n_features": d,
-        "drops": drops,
-        "shuffles": shuffles,
+        "occlusion": occlusion,
+        "permutation": permutation,
+        "retrained_feature_ablation": retrained,
+        "retrained": retrain_without_feature_fn is not None,
+        "shuffle_mode": shuffle_mode,
+        "block_size": block_size,
     }
 
 
@@ -176,35 +225,83 @@ def label_shuffle_control(
     y: np.ndarray,
     eval_fn: Callable[[np.ndarray, np.ndarray], float],
     n_shuffles: int = 5,
+    *,
+    X_oos: np.ndarray | None = None,
+    y_oos: np.ndarray | None = None,
+    dates: np.ndarray | None = None,
+    shuffle_mode: str = "global",
+    block_size: int | None = None,
+    split_index: int | None = None,
 ) -> dict[str, Any]:
-    """§25.4 — refit on shuffled labels; flag when baseline >> shuffle.
+    """Strict OOS shuffled-label null control.
 
-    ``learner_factory(seed)`` returns an UNFITTED learner.  A legitimately
-    informative model should beat shuffled-label baselines; if the baseline
-    stays high while shuffled scores are ~0 the pipeline is leaking the label.
+    Both the real-label and shuffled-label learners fit only on the training
+    partition and are evaluated only on untouched OOS labels.  ``within_date``
+    preserves cross-sectional date structure; ``block`` preserves rows inside
+    contiguous temporal blocks while permuting the blocks.
     """
     X = np.asarray(X, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64).ravel()
+    if X.ndim != 2 or len(X) != len(y):
+        raise ValueError("X must be 2-D and aligned with y")
+    train_dates = None if dates is None else np.asarray(dates)
+    if X_oos is None or y_oos is None:
+        cut = int(split_index) if split_index is not None else int(len(X) * 0.7)
+        if cut <= 0 or cut >= len(X):
+            return {
+                "status": "INVALID_FIXTURE", "exercised": False,
+                "mutation_effect_verified": False, "pass": False,
+                "detail": "strict OOS control requires non-empty train and OOS partitions",
+            }
+        X, X_oos = X[:cut], X[cut:]
+        y, y_oos = y[:cut], y[cut:]
+        if train_dates is not None:
+            train_dates = train_dates[:cut]
+    else:
+        X_oos = np.asarray(X_oos, dtype=np.float64)
+        y_oos = np.asarray(y_oos, dtype=np.float64).ravel()
+    if n_shuffles < 1 or len(X) < 2 or len(X_oos) == 0:
+        return {
+            "status": "INVALID_FIXTURE", "exercised": False,
+            "mutation_effect_verified": False, "pass": False,
+            "detail": "strict OOS control requires shuffles and non-empty partitions",
+        }
+
     base_learner = learner_factory(0)
     frozen = base_learner.fit(X, y)
-    baseline = float(eval_fn(base_learner.predict(frozen, X), y))
+    baseline = float(eval_fn(base_learner.predict(frozen, X_oos), y_oos))
     rng = np.random.default_rng(123)
     shuffled: list[float] = []
+    effects: list[bool] = []
     for i in range(n_shuffles):
-        ys = y.copy()
-        rng.shuffle(ys)
+        indices = _shuffle_indices(
+            len(y), rng, mode=shuffle_mode, dates=train_dates, block_size=block_size
+        )
+        ys = y[indices]
+        effects.append(not np.array_equal(ys, y, equal_nan=True))
         lr = learner_factory(100 + i)
         fr = lr.fit(X, ys)
-        shuffled.append(float(eval_fn(lr.predict(fr, X), y)))
+        shuffled.append(float(eval_fn(lr.predict(fr, X_oos), y_oos)))
     mean_s = float(np.mean(shuffled))
     std_s = float(np.std(shuffled))
-    leakage_suspected = bool(baseline > mean_s + 2.0 * std_s + 1e-9)
+    mutation_effect = bool(all(effects))
+    null_rejected = bool(baseline > mean_s + 2.0 * std_s + 1e-9)
+    status = "PASS" if mutation_effect and null_rejected else (
+        "NOT_RUN" if not mutation_effect else "FAIL"
+    )
     return {
         "baseline_score": baseline,
         "shuffled_scores": shuffled,
         "shuffled_mean": mean_s,
         "shuffled_std": std_s,
-        "leakage_suspected": leakage_suspected,
+        "leakage_suspected": not null_rejected,
+        "exercised": True,
+        "mutation_effect_verified": mutation_effect,
+        "pass": status == "PASS",
+        "status": status,
+        "evaluation_scope": "strict_oos",
+        "shuffle_mode": shuffle_mode,
+        "block_size": block_size,
     }
 
 

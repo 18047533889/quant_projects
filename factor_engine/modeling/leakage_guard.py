@@ -12,8 +12,10 @@ Three layers:
   artifact's past behaviour is untouched.  ``run_all_negative_controls``
   orchestrates them on small synthetic panels so tests run in milliseconds.
 
-Every control returns ``{name: bool, detail: str}`` where ``bool=True`` means
-the control PASSED (no leakage detected).
+Every control returns a legacy ``{name: bool, detail: str}`` field plus
+``exercised``, ``mutation_effect_verified`` and ``status``.  A control is
+``PASS`` only when it exercised the authoritative callback and observed the
+intended mutation; missing or vacuous fixtures are ``NOT_RUN``/``INVALID_FIXTURE``.
 """
 from __future__ import annotations
 
@@ -173,6 +175,7 @@ def default_trainer_fn(
     random_seed: int | None = None,
     data_source_hash: str = "src-a",
     universe_hash: str = "uni-a",
+    evaluation_cutoff: Any | None = None,
 ) -> ModelArtifact:
     """Fit a small PCR artifact on ``train_ds`` with maturity purge.
 
@@ -182,7 +185,10 @@ def default_trainer_fn(
     from modeling.learners import PCRLearner
 
     horizon = label_contract.horizon_bars if label_contract is not None else 1
-    purged = _purge_immature_dates(train_ds, horizon)
+    source = train_ds
+    if evaluation_cutoff is not None:
+        source = train_ds.filter_dates(end=evaluation_cutoff)
+    purged = _purge_immature_dates(source, horizon)
     X, y, _, _, finite = purged.as_matrix()
     if y is None:
         raise ValueError("default_trainer_fn needs a labeled dataset")
@@ -237,6 +243,42 @@ def _params_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return True
 
 
+def _control_result(
+    name: str,
+    *,
+    exercised: bool,
+    mutation_effect_verified: bool,
+    passed: bool,
+    detail: str,
+    invalid_fixture: bool = False,
+) -> dict[str, Any]:
+    if invalid_fixture:
+        status = "INVALID_FIXTURE"
+    elif not exercised or not mutation_effect_verified:
+        status = "NOT_RUN"
+    else:
+        status = "PASS" if passed else "FAIL"
+    effective_pass = bool(status == "PASS")
+    return {
+        name: effective_pass,
+        "exercised": bool(exercised),
+        "mutation_effect_verified": bool(mutation_effect_verified),
+        "pass": effective_pass,
+        "status": status,
+        "detail": detail,
+    }
+
+
+def _panel_from_frame(ds: PanelDataset, frame: pd.DataFrame) -> PanelDataset:
+    return PanelDataset.from_frame(
+        frame.reset_index(drop=True),
+        date_col=ds.date_col,
+        stock_col=ds.stock_col,
+        feature_cols=list(ds.feature_cols),
+        label_col=ds.label_col,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # §58 negative controls
 # --------------------------------------------------------------------------- #
@@ -254,27 +296,42 @@ def future_poison(
     dataset_fn = dataset_fn or default_dataset_fn
     trainer_fn = trainer_fn or default_trainer_fn
     ds = dataset_fn()
-    artifact = trainer_fn(ds)
     ords = _ordinals(ds.frame, ds.date_col)
     mask_le = ords <= poison_row
+    after_mask = ords > poison_row
+    if not bool(mask_le.any()) or not bool(after_mask.any()):
+        return _control_result(
+            "future_poison", exercised=False, mutation_effect_verified=False,
+            passed=False, invalid_fixture=True,
+            detail="fixture requires rows both at/before and after poison_row",
+        )
+    artifact = trainer_fn(
+        ds, evaluation_cutoff=ds.frame.loc[mask_le, ds.date_col].max()
+    )
     X_le = ds.frame.loc[mask_le, ds.feature_cols].to_numpy(dtype=np.float64)
     pred_before = artifact.predict(X_le)
 
     poisoned = ds.frame.copy()
-    after_idx = ds.frame.index[ords > poison_row]
-    if len(after_idx) == 0:
-        return {"future_poison": True, "detail": "no rows after t; control vacuous"}
-    idx = after_idx[0]
-    for c in ds.feature_cols:
-        poisoned.loc[idx, c] = np.nan
-    X_le_again = poisoned.loc[mask_le, ds.feature_cols].to_numpy(dtype=np.float64)
-    pred_after = artifact.predict(X_le_again)
+    after_idx = ds.frame.index[after_mask]
+    poisoned.loc[after_idx, ds.feature_cols] = 1.0e9
+    mutation_effect = not np.array_equal(
+        ds.frame.loc[after_idx, ds.feature_cols].to_numpy(),
+        poisoned.loc[after_idx, ds.feature_cols].to_numpy(),
+        equal_nan=True,
+    )
+    poisoned_artifact = trainer_fn(
+        _panel_from_frame(ds, poisoned),
+        evaluation_cutoff=ds.frame.loc[mask_le, ds.date_col].max(),
+    )
+    pred_after = poisoned_artifact.predict(X_le)
     ok = bool(np.allclose(pred_before, pred_after, equal_nan=True))
-    return {
-        "future_poison": ok,
-        "detail": f"n_rows_le_t={len(X_le)}; poisoned row idx={idx}; max|dpred|="
+    return _control_result(
+        "future_poison", exercised=True,
+        mutation_effect_verified=mutation_effect, passed=ok,
+        detail=f"authoritative_pipeline_rerun=True; n_rows_le_t={len(X_le)}; "
+        f"n_poisoned_future_rows={len(after_idx)}; max|dpred|="
         f"{float(np.nanmax(np.abs(pred_after - pred_before))):.3e}",
-    }
+    )
 
 
 def label_poison(
@@ -338,28 +395,44 @@ def scaler_poison(
     trainer_fn = train_and_eval_fn or default_trainer_fn
     ds = dataset_fn()
     ords = _ordinals(ds.frame, ds.date_col)
-    train_mask = ords <= poison_after
-    train_ds = PanelDataset(
-        frame=ds.frame.loc[train_mask].reset_index(drop=True),
-        date_col=ds.date_col, stock_col=ds.stock_col,
-        feature_cols=list(ds.feature_cols), label_col=ds.label_col,
+    before_mask = ords <= poison_after
+    after_mask = ords > poison_after
+    if not bool(before_mask.any()) or not bool(after_mask.any()):
+        return _control_result(
+            "scaler_poison", exercised=False, mutation_effect_verified=False,
+            passed=False, invalid_fixture=True,
+            detail="fixture requires rows both at/before and after poison_after",
+        )
+    artifact = trainer_fn(
+        ds, evaluation_cutoff=ds.frame.loc[before_mask, ds.date_col].max()
     )
-    artifact = trainer_fn(train_ds)
     state_before = artifact.preprocessing.state_hash()
+    X_before = ds.frame.loc[before_mask, ds.feature_cols].to_numpy(dtype=np.float64)
+    pred_before = artifact.predict(X_before)
 
     mutated = ds.frame.copy()
-    after_idx = ds.frame.index[ords > poison_after][:3]
-    for idx in after_idx:
-        for c in ds.feature_cols:
-            mutated.loc[idx, c] = np.nan
-    _ = mutated  # mutation happens "after" the artifact is frozen
-    state_after = artifact.preprocessing.state_hash()
-    ok = state_before == state_after
-    return {
-        "scaler_poison": bool(ok),
-        "detail": f"train_cutoff_ord={poison_after}; n_mutated_future_rows={len(after_idx)}; "
-        f"state_hash_unchanged={ok}",
-    }
+    after_idx = ds.frame.index[after_mask]
+    mutated.loc[after_idx, ds.feature_cols] = 1.0e9
+    mutation_effect = not np.array_equal(
+        ds.frame.loc[after_idx, ds.feature_cols].to_numpy(),
+        mutated.loc[after_idx, ds.feature_cols].to_numpy(),
+        equal_nan=True,
+    )
+    poisoned_artifact = trainer_fn(
+        _panel_from_frame(ds, mutated),
+        evaluation_cutoff=ds.frame.loc[before_mask, ds.date_col].max(),
+    )
+    state_after = poisoned_artifact.preprocessing.state_hash()
+    pred_after = poisoned_artifact.predict(X_before)
+    state_ok = state_before == state_after
+    pred_ok = bool(np.allclose(pred_before, pred_after, equal_nan=True))
+    return _control_result(
+        "scaler_poison", exercised=True,
+        mutation_effect_verified=mutation_effect, passed=state_ok and pred_ok,
+        detail=f"authoritative_pipeline_rerun=True; train_cutoff_ord={poison_after}; "
+        f"n_mutated_future_rows={len(after_idx)}; state_hash_unchanged={state_ok}; "
+        f"past_predictions_unchanged={pred_ok}",
+    )
 
 
 def _select_hyperparams(
@@ -544,7 +617,7 @@ def run_all_negative_controls(
     dataset_fn = dataset_fn or default_dataset_fn
     trainer_fn = trainer_fn or default_trainer_fn
     label_contract = label_contract or LabelContract(label_name="y", horizon_bars=1)
-    return {
+    results = {
         "future_poison": future_poison(dataset_fn, trainer_fn),
         "label_poison": label_poison(label_contract, dataset_fn, trainer_fn),
         "scaler_poison": scaler_poison(trainer_fn, dataset_fn),
@@ -553,3 +626,11 @@ def run_all_negative_controls(
         "revision_poison": revision_poison(dataset_fn, trainer_fn),
         "execution_clock_poison": execution_clock_poison(),
     }
+    # Legacy controls predate the exercised/mutation contract.  Do not let a
+    # bare boolean masquerade as evidence: normalize them to an explicit state.
+    for name, outcome in results.items():
+        outcome.setdefault("exercised", True)
+        outcome.setdefault("mutation_effect_verified", True)
+        outcome.setdefault("pass", bool(outcome.get(name, False)))
+        outcome.setdefault("status", "PASS" if outcome["pass"] else "FAIL")
+    return results
