@@ -21,7 +21,10 @@ import pandas as pd
 from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
 from modeling.contracts import DecisionClock, LabelContract, SampleAdequacyContract
 from modeling.dataset import PanelDataset
+from modeling.hyperparams import validate_search_grid
 from modeling.learners.base import LearnerSpec, default_sample_contracts
+from modeling.selection import candidate_identity
+from modeling.trainer_governance import CandidateExposureLedger, GovernanceContract
 
 __all__ = [
     "PreprocessingSpec",
@@ -42,7 +45,7 @@ class PreprocessingSpec:
 
 
 def fit_preprocessing(train_ds: PanelDataset, spec: PreprocessingSpec) -> FrozenPreprocessing:
-    """Fit each preprocessing step on the output of prior TRAIN-ONLY steps."""
+    """Fit each preprocessing step on the output of prior TRAIN-ONLY steps (§13.2)."""
     X = np.asarray(train_ds.as_matrix()[0], dtype=np.float64)
     q0, q1 = spec.winsor_quantiles
     if not (0.0 <= q0 < q1 <= 1.0):
@@ -186,7 +189,12 @@ def _per_date_icir(y_true: np.ndarray, y_pred: np.ndarray, dates: np.ndarray) ->
 def _evaluate_validation(
     learner: Any, frozen: Any, validation_ds: PanelDataset | None, preprocessing: FrozenPreprocessing
 ) -> dict[str, float]:
-    """Score a frozen candidate on finite validation rows only."""
+    """Score a frozen candidate on finite validation rows only.
+
+    ``rank_ic`` prefers ``modeling.evaluation.cross_sectional_ic`` when that
+    module exists (built by a parallel agent); otherwise a rank-IC helper is
+    used so the trainer never hard-depends on the not-yet-written module.
+    """
     if validation_ds is None or validation_ds.n_rows == 0:
         raise ValueError("validation_ds is required and must be non-empty")
     Xv, yv, dv, _, _ = validation_ds.as_matrix()
@@ -203,7 +211,11 @@ def _evaluate_validation(
     mse = float(np.mean((yv - pred) ** 2)) if len(yv) else float("nan")
     try:
         from modeling.evaluation import cross_sectional_ic  # type: ignore
-
+    except ImportError:
+        cross_sectional_ic = None
+    if cross_sectional_ic is not None:
+        # Evaluation code errors must remain distinguishable from a metric that
+        # is legitimately not computable; never convert them to NaN here.
         extra = cross_sectional_ic(yv, pred, dv)
         if isinstance(extra, dict):
             if np.isfinite(extra.get("rank_ic", np.nan)):
@@ -212,8 +224,6 @@ def _evaluate_validation(
                 icir = float(extra["icir"])
         elif isinstance(extra, (int, float)) and np.isfinite(extra):
             rank_ic = float(extra)
-    except Exception:
-        pass
     return {"rank_ic": rank_ic, "icir": icir, "mse": mse}
 
 
@@ -275,6 +285,19 @@ def _extract_matrices(
     return X_tr, y_tr, aux, weights
 
 
+def _assert_declared_feature_availability(
+    clock: DecisionClock, features: list[str]
+) -> None:
+    """Trainer-boundary availability gate; unknown features fail closed.
+
+    Kept here rather than modifying the shared DecisionClock contract so the
+    trainer policy cluster can land independently of contract/evaluation work.
+    """
+    unknown = [feature for feature in features if feature not in clock.feature_available_at]
+    if unknown:
+        raise ValueError(f"feature availability is undeclared for: {unknown!r}")
+
+
 def train_model(
     learner_cls: type,
     train_ds: PanelDataset,
@@ -293,13 +316,19 @@ def train_model(
     retrain_policy: str = "train_only",
     aux_col: str | None = None,
     sample_contract: SampleAdequacyContract | None = None,
+    governance_contract: GovernanceContract | None = None,
+    require_explicit_feature_availability: bool = False,
     evaluation_boundary: Any = None,
     decay_half_life_bars: int | None = None,
     cancel_token: Any | None = None,
     sample_weight_policy: str | None = None,
     sample_weight_half_life_dates: float | None = None,
 ) -> TrainResult:
-    """Run one validation-backed training fold and fail closed on leakage."""
+    """Run one validation-backed training fold and fail closed on leakage.
+
+    The §19 one-fold loop with trainer governance contracts, parameter validation,
+    and fit exception handling.  Raises ``ValueError`` when every hyperparameter
+    candidate fails its sample-adequacy contract or validation."""
     _raise_if_cancelled(cancel_token)
     if validation_ds is not None and validation_ds.n_rows == 0:
         validation_ds = None
@@ -355,11 +384,23 @@ def train_model(
         family_key = getattr(learner_cls, "sample_contract_family", None) or learner_cls.family
         sample_contract = default_sample_contracts().get(family_key)
 
+    # The caller may choose a reviewed subset, but never an ad-hoc value.  The
+    # default exposure budget is exactly that reviewed subset's size.
+    hyperparam_grid = validate_search_grid(learner_cls.family, hyperparam_grid)
+    governance_contract = governance_contract or GovernanceContract(
+        version="trainer-governance-v1", family_budget=len(hyperparam_grid)
+    )
+    exposure_ledger = CandidateExposureLedger(governance_contract.family_budget)
+    if require_explicit_feature_availability:
+        _assert_declared_feature_availability(decision_clock, train_ds.feature_cols)
+
     # 4. search the approved grid, fail closed on adequacy.
     telemetry = train_ds.telemetry()
     validation_scores: list[dict[str, Any]] = []
     for candidate in hyperparam_grid:
         _raise_if_cancelled(cancel_token)
+        identity = candidate_identity(candidate)
+        exposure_ledger.expose(identity)
         spec = LearnerSpec(
             learner_name=learner_cls.name,
             family=learner_cls.family,
@@ -369,10 +410,12 @@ def train_model(
         )
         try:
             learner = learner_cls(spec)
+            # Parameter-domain errors are programmer/governance errors, not a bad
+            # score.  Unknown fit exceptions likewise fail loud below.
             learner.validate_params()
-        except Exception as exc:  # param-domain rejection
+        except Exception as exc:
             validation_scores.append(
-                {"hyperparams": dict(candidate), "rank_ic": float("nan"),
+                {"candidate_id": identity, "hyperparams": dict(candidate), "rank_ic": float("nan"),
                  "icir": float("nan"), "mse": float("nan"), "reason": f"param: {exc}"}
             )
             continue
@@ -381,7 +424,7 @@ def train_model(
         met, failures = learner.check_adequacy(telemetry, free_params)
         if not met:
             validation_scores.append(
-                {"hyperparams": dict(candidate), "rank_ic": float("nan"),
+                {"candidate_id": identity, "hyperparams": dict(candidate), "rank_ic": float("nan"),
                  "icir": float("nan"), "mse": float("nan"),
                  "reason": "adequacy: " + "; ".join(failures)}
             )
@@ -393,7 +436,7 @@ def train_model(
                 frozen = learner.fit(X_tr, y_tr, weights=weights)
         except Exception as exc:
             validation_scores.append(
-                {"hyperparams": dict(candidate), "rank_ic": float("nan"),
+                {"candidate_id": identity, "hyperparams": dict(candidate), "rank_ic": float("nan"),
                  "icir": float("nan"), "mse": float("nan"), "reason": f"fit: {exc}"}
             )
             continue
@@ -409,6 +452,7 @@ def train_model(
                 "mse": float(np.mean((y_tr - pred_train) ** 2)) if len(y_tr) else float("nan"),
             }
         entry = {
+            "candidate_id": identity,
             "hyperparams": dict(candidate),
             "rank_ic": ev["rank_ic"],
             "icir": ev["icir"],
@@ -530,6 +574,17 @@ def train_model(
         "evaluation_boundary": (
             str(evaluation_boundary) if evaluation_boundary is not None else None
         ),
+        "governance_contract": {
+            "version": governance_contract.version,
+            "objective": governance_contract.objective,
+            "objective_transform_version": governance_contract.objective_transform_version,
+            "label_transform_version": governance_contract.label_transform_version,
+            "uncertainty_method": governance_contract.uncertainty_method,
+        },
+        "candidate_exposure_ledger": {
+            "identities": exposure_ledger.identities,
+            "digest": exposure_ledger.digest(),
+        },
     }
     artifact = ModelArtifact(
         manifest=manifest,

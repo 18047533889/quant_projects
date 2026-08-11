@@ -8,13 +8,19 @@ does not over-trust a fragile optimum.
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["select_best_validation", "neighborhood_stability"]
+__all__ = ["select_best_validation", "neighborhood_stability", "candidate_identity"]
 
 _COMPLEXITY_PARAMS = ("n_components", "n_regimes", "n_experts")
+
+
+def candidate_identity(hyperparams: dict[str, Any]) -> str:
+    """Canonical candidate identity for audit, deduplication, and tie breaks."""
+    return json.dumps(hyperparams, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def select_best_validation(
@@ -38,11 +44,15 @@ def select_best_validation(
         v = entry.get(objective)
         return float(v) if isinstance(v, (int, float)) else float("nan")
 
-    scored: list[tuple[float, dict[str, Any]]] = []
+    scored: list[tuple[float, str, dict[str, Any]]] = []
     for entry in validation_scores:
         v = _score(entry)
         if np.isfinite(v):
-            scored.append((v, entry))
+            identity = str(
+                entry.get("candidate_id")
+                or candidate_identity(entry.get("hyperparams", {}))
+            )
+            scored.append((v, identity, entry))
     if not scored:
         return (
             None,
@@ -54,16 +64,20 @@ def select_best_validation(
         )
 
     maximize = objective not in ("mse", "rmse")
-    scored.sort(key=lambda t: t[0], reverse=maximize)
-    best_score, best_entry = scored[0]
+    # Canonical identity is the final ascending tie-break for both objective
+    # directions, so input/grid iteration order cannot change the winner.
+    scored.sort(key=lambda t: ((-t[0] if maximize else t[0]), t[1]))
+    best_score, best_identity, best_entry = scored[0]
     diagnostics = {
         "objective": objective,
         "n_candidates": len(validation_scores),
         "n_evaluated": len(scored),
         "best_score": best_score,
         "best_hyperparams": best_entry.get("hyperparams"),
+        "best_candidate_id": best_identity,
         "ranked": [
-            {"hyperparams": s.get("hyperparams"), objective: v} for v, s in scored
+            {"candidate_id": identity, "hyperparams": s.get("hyperparams"), objective: v}
+            for v, identity, s in scored
         ],
     }
     return best_entry.get("hyperparams"), diagnostics
