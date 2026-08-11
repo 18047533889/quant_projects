@@ -30,6 +30,9 @@ TASK_CROSS_SECTION = "CROSS_SECTION"
 TASK_STATEFUL = "STATEFUL"
 TASK_ROOT = "ROOT"
 TASK_WRITE = "WRITE"
+#: R38 P0-001（§4）：真实 shard 子任务 / merge barrier 任务。
+TASK_SHARD = "SHARD"
+TASK_MERGE = "MERGE"
 
 #: 真正产生 IO/计算工作的 task 类型（其余为规划视图，见 ``executable``）。
 _EXECUTABLE_TASK_TYPES = frozenset({
@@ -37,6 +40,8 @@ _EXECUTABLE_TASK_TYPES = frozenset({
     TASK_CSE_SHARED,
     TASK_ROOT,
     TASK_WRITE,
+    TASK_SHARD,
+    TASK_MERGE,
 })
 
 #: 规划视图（barrier 分割产物）：真实计算发生在 ROOT 内部，这些 stage 只承载
@@ -255,6 +260,10 @@ class PhysicalFactorTask:
     time_range: tuple[str, str] | None = None
     instrument_scope: tuple[str, ...] | None = None
     executable: bool = True  # False = barrier 规划视图（不占真实 resource lease）
+    # R38 P0-001（§4）：真实 shard 执行元数据。shard 子任务携带 descriptor；
+    # merge 任务携带 ShardExecutionPlan（含 merge barrier 与 merge contract）。
+    shard_descriptor: Any = None
+    shard_plan: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -277,7 +286,12 @@ class PhysicalFactorTask:
             "source_scan_spec": self.source_scan_spec.to_dict() if self.source_scan_spec else None,
             "required_columns": list(self.required_columns),
             "time_range": list(self.time_range) if self.time_range else None,
+            "instrument_scope": list(self.instrument_scope) if self.instrument_scope else None,
             "executable": self.executable,
+            "shard_descriptor": (
+                self.shard_descriptor.to_dict() if self.shard_descriptor is not None else None
+            ),
+            "shard_plan": self.shard_plan.to_dict() if self.shard_plan is not None else None,
         }
 
 

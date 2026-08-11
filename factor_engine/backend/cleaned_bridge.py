@@ -399,6 +399,39 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         # validator rejects.  ``semantic_attrs`` already carries field metadata
         # separately; ``dtype`` is the one inference key that leaked into attrs.
         kw.pop("dtype", None)
+
+        # R37-P0-009：production 执行前参数域 membership 门。production +
+        # uncertified 参数点 => fail closed（ParameterDomainError）；research =>
+        # allow + telemetry。只对已进入参数域认证的算子做 membership——未覆盖算子
+        # 不阻塞（R37 §4 诚实覆盖：认证多少断言多少）。
+        try:
+            from runtime.parameter_domain_store import (
+                assert_parameter_point_certified,
+                get_parameter_domain_store,
+            )
+
+            _params = {k: v for k, v in kw.items() if not isinstance(
+                v, (pd.Series, pd.DataFrame))}
+            if _params:
+                store = get_parameter_domain_store()
+                assert_parameter_point_certified(
+                    canonical, _params, backend=backend, store=store,
+                )
+        except Exception as exc:
+            from runtime.exceptions import ParameterDomainError
+
+            if isinstance(exc, ParameterDomainError):
+                raise
+            # store 未加载 / 未覆盖 => research 降级（不阻塞），但记录 telemetry
+            try:
+                from runtime.resource_telemetry import record_resource_telemetry
+
+                record_resource_telemetry({
+                    "param_domain_membership_skipped": canonical,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                })
+            except Exception:
+                pass
         call_args, template, template_panel = _prepare_call_args(
             evaluated, ctx, backend=backend,
             broadcast_scalars=canonical in {"maximum", "minimum"},

@@ -71,9 +71,15 @@ class DataReadSession:
             raise RuntimeError("DataReadSession 已关闭，无法再次进入")
         # 1) 绑定请求级执行上下文（整个 job）。
         self._token = _execution_ctx_var.set(self._ctx)
-        # 2) 注入 resolution 缓存（退出时恢复原值）。
-        self._prev_cache = getattr(self._store, "_resolution_cache", None)
-        self._store._resolution_cache = self._resolution_cache
+        # 2) R38 P0-050：resolution 缓存放 **ContextVar**（request-scoped），不再
+        #    修改 Store 全局属性——并发 session A/B overlap 时 A exit 不会清掉
+        #    B 的 cache。Store ``_resolution_cache`` 仅作向后兼容显示。
+        from data_access.runtime.read_session_context import (
+            reset_resolution_cache,
+            set_resolution_cache,
+        )
+
+        self._cache_token = set_resolution_cache(self._resolution_cache)
         # 3) job 级冻结 calendar 世界（PIT 语义跨因子稳定）。
         try:
             self._store.lock_calendars()
@@ -86,8 +92,16 @@ class DataReadSession:
         if self._token is not None:
             _execution_ctx_var.reset(self._token)
             self._token = None
-        if self._prev_cache is not None or hasattr(self._store, "_resolution_cache"):
-            self._store._resolution_cache = self._prev_cache
+        try:
+            from data_access.runtime.read_session_context import (
+                reset_resolution_cache,
+            )
+
+            if getattr(self, "_cache_token", None) is not None:
+                reset_resolution_cache(self._cache_token)
+                self._cache_token = None
+        except Exception:
+            pass
         self._closed = True
 
     # ---- 便捷代理（resolution 缓存自动生效）----

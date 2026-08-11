@@ -144,6 +144,16 @@ class BoundedResultQueue:
             self._closed = True
             self._lock.notify_all()
 
+    def set_target_bytes(self, new_target: int) -> None:
+        """R38 P0-043（§17）：弹性缩容/放宽队列字节目标。
+
+        缩容时不丢已有 items；producer 在 ``current + item.bytes > max_bytes``
+        时阻塞等待消费降到新 target 以下；恢复后（target 变大）自动放宽。
+        """
+        with self._lock:
+            self.max_bytes = max(1, int(new_target))
+            self._lock.notify_all()
+
     def drain(self) -> list[ResultItem]:
         """取出全部剩余结果（run 结束收尾）。"""
         with self._lock:
@@ -303,6 +313,17 @@ class StreamingResultSink:
             return 0.0
         return max(q.backpressure_ratio for q in self._worker_queues)
 
+    def set_target_bytes(self, total: int) -> None:
+        """R38 P0-043/044（§17）：弹性调整 sink 总字节目标。
+
+        ``total`` 是全部 worker 共享的总额（P0-044：不是每 worker 各拿 full
+        budget）——按 worker 数均分到各队列。缩容不丢已有 items。
+        """
+        total = max(1, int(total))
+        per = max(1, total // max(1, len(self._worker_queues)))
+        for q in self._worker_queues:
+            q.set_target_bytes(per)
+
     def submit(self, name: str, value: Any, **meta: Any) -> bool:
         """R33-P0-049：提交结果。writer 已 FAILED 时拒绝新提交（fatal 传播）。"""
         if self._fatal_error is not None:
@@ -324,7 +345,23 @@ class StreamingResultSink:
             q.close()
         for t in self._threads:
             t.join(timeout=10.0)
-        # 补写剩余 item（join 后队列中仍可能残留）。
+        # R38 P0-045（§17）：join 超时后 writer 线程仍 alive → **fatal**（abort
+        # generation），**不** main 线程并发 drain 补写（避免并发消费/写竞态）。
+        alive = [t for t in self._threads if t.is_alive()]
+        if alive:
+            self._set_fatal(
+                RuntimeError(
+                    f"writer thread(s) alive after join(timeout=10): "
+                    f"{len(alive)} alive — abort generation, no manual drain write "
+                    "(R38-P0-045: live writer after join is fatal)"
+                )
+            )
+            self._drained = False
+            raise RuntimeError(
+                "StreamingResultSink.finish: writer thread alive after join — "
+                "generation aborted (R38-P0-045)"
+            )
+        # join 成功后队列中残留 item 由 main 补写（此时无并发 writer）。
         remaining: list[ResultItem] = []
         for q in self._worker_queues:
             remaining.extend(q.drain())

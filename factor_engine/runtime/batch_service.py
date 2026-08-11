@@ -98,12 +98,40 @@ def _materialize_shared_subplan(
         # governed 路径；两者都不可用才允许 raw（研究降级），production 直接拒绝。
         store = getattr(ctx, "shared_buffers", None)
         if store is not None:
-            store.put(sid, value)
-            return
+            # R38 P0-029（§12）：put 不再返回裸 bool——必须处理 REFUSED/RECOMPUTE。
+            res = store.put(sid, value)
+            if res.status in ("MEMORY", "SPILLED"):
+                return
+            # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref
+            # KeyError —— production 必须 fail-closed，不能 return 成功。
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode(getattr(ctx, "run_mode", None)):
+                raise RuntimeError(
+                    f"governed buffer put for CSE sid={sid} returned "
+                    f"{res.status}: {res.reason} (R38-P0-029: put refusal must "
+                    "not be silently ignored in production)"
+                )
+            # research：显式降级走 expression_cache，并记录 telemetry。
+            runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+            runtime["cse_buffer_put_refused"] = runtime.get("cse_buffer_put_refused", 0) + 1
+            ctx.runtime_stats = runtime  # type: ignore[attr-defined]
         cache = getattr(ctx, "expression_cache", None)
         if cache is not None and getattr(cache, "set", None) is not None:
             cache.set(sid, value)
             return
+        # R37-P0-035：raw dict 写入只在 research 降级路径允许；production 下
+        # store/ExpressionCache 都不可用 = 治理缺失，必须 fail-closed（§31.3：
+        # 不允许 raw dict 绕过资源账本）。
+        from runtime.production_policy import is_production_mode
+
+        if is_production_mode(getattr(ctx, "run_mode", None)):
+            raise RuntimeError(
+                "R37-P0-035 fail-closed: no governed buffer store available in "
+                f"production for CSE sid={sid}; raw shared_result_cache write is "
+                "governance bypass"
+            )
+        # research 降级：显式 warning 语义的 raw 写入（telemetry 已在上面累计）。
         ctx.shared_result_cache[sid] = value
 
 
@@ -736,6 +764,17 @@ def _execute_run_many_scheduler(
         da_env = get_host_coordinator().apply_da_envelope()
         runtime = dict(ctx.runtime_stats or {})
         runtime["host_coordinator_da_envelope"] = da_env
+        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    # R38 P0-011（§7）：进程级固定 cadence 控制循环（幂等）——scheduler 只读
+    # last_decision，绝不自行 tick controller（stable/cooldown 与 loop 次数解耦）。
+    try:
+        from runtime.resource_autopilot_service import start_resource_autopilot
+
+        autopilot = start_resource_autopilot()
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["resource_autopilot"] = autopilot.summary()
         ctx.runtime_stats = runtime  # type: ignore[attr-defined]
     except Exception:
         pass

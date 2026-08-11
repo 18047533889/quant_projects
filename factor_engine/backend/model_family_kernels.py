@@ -58,7 +58,12 @@ def _digest_panel(x: np.ndarray) -> str:
 @dataclass
 class PCABlock:
     """One standardized SVD PCA fit + derived outputs, evaluated for a rolling
-    window.  Consumed by panel_rolling_pca_* canonicals sharing the fit."""
+    window.  Consumed by panel_rolling_pca_* canonicals sharing the fit.
+
+    R38 P0-060（§23）：fit 与 commonality 走唯一 authoritative ``PCAState``——
+    ``commonality`` 返回 canonical 公式 ``1 - Var(resid_i)/Var(ret_i)``（per-stock
+    训练窗方差分解，不再用 reconstruction ratio）。
+    """
 
     loadings: np.ndarray            # (k, n_active)
     explained: np.ndarray           # (k,)
@@ -66,6 +71,9 @@ class PCABlock:
     mu: np.ndarray
     sd: np.ndarray
     k: int
+    #: R38 P0-060：训练窗 per-stock 方差分解（canonical commonality 的分子/分母）。
+    var_resid: np.ndarray | None = None
+    var_ret: np.ndarray | None = None
 
     # ---- derived outputs ----
     def resid(self, row: np.ndarray, n_components: int) -> np.ndarray:
@@ -84,45 +92,50 @@ class PCABlock:
         return out
 
     def commonality(self, row: np.ndarray, n_components: int) -> np.ndarray:
+        """Canonical commonality ``1 - Var(resid_i)/Var(ret_i)``（per-stock）。
+
+        该值是**模型属性**（训练窗方差分解，与 canonical ``_pca_commonality`` 同
+        公式）；``row`` 只决定输出长度与 NaN mask（inactive 恒 NaN）。
+        """
         out = np.full(len(row), np.nan)
-        active = self.active
-        row_a = row[active]
-        cur_valid = np.isfinite(row_a)
-        z = np.where(cur_valid, (row_a - self.mu) / self.sd, 0.0)
-        k = int(min(self.k, n_components))
-        if k < 1:
+        if self.var_resid is None or self.var_ret is None:
             return out
-        score = self.loadings[:k] @ z
-        recon = self.mu + self.sd * (self.loadings[:k].T @ score)
-        out[active] = recon / np.where(np.abs(row_a) > 1e-12, row_a, np.nan)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(
+                np.asarray(self.var_ret) > 1e-12,
+                1.0 - np.asarray(self.var_resid) / np.asarray(self.var_ret),
+                np.nan,
+            )
+        out[self.active] = ratio
         return out
 
 
 def fit_pca_block(X: np.ndarray, n_components: int, *, min_obs: int = 2) -> PCABlock | None:
-    """Standardized SVD PCA on a training window, returning a shared block."""
-    n, d = X.shape
-    finite = np.isfinite(X).sum(axis=0)
-    active = finite >= min_obs
-    n_active = int(active.sum())
-    if n_active < 2:
+    """Standardized SVD PCA on a training window, returning a shared block.
+
+    R38 P0-060（§23）：fit 走唯一 authoritative ``PCAState``（coverage-gated
+    active + 标准化 SVD），与 canonical ``panel_model._pca_svd`` 逐位一致。
+    """
+    from cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
+
+    state = PCAState.from_window(X, n_components, absolute_min_obs=int(min_obs))
+    if state is None:
         return None
-    sub = X[:, active]
-    mu = np.nanmean(sub, axis=0)
-    sd = np.nanstd(sub, axis=0)
-    sd = np.where(sd > 1e-12, sd, 1.0)
-    Xc = np.where(np.isfinite(sub), sub, mu)
-    Xs = (Xc - mu) / sd
-    k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
-    if k < 1:
-        return None
-    _, s, Vt = np.linalg.svd(Xs, full_matrices=False)
+    fit = state.to_dict()
+    # 训练窗 per-stock 方差分解（canonical commonality 公式）。
+    ratio = pca_commonality(X, fit)
+    var_ret = np.nanvar(X[:, fit["active"]], axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        var_resid = np.where(var_ret > 1e-12, var_ret * (1.0 - ratio[fit["active"]]), np.nan)
     return PCABlock(
-        loadings=Vt[:k],
-        explained=s[:k] ** 2 / max(float(np.sum(s * s)), 1e-12),
-        active=active,
-        mu=mu,
-        sd=sd,
-        k=k,
+        loadings=fit["loadings"],
+        explained=fit["explained"],
+        active=fit["active"],
+        mu=fit["mu"],
+        sd=fit["sd"],
+        k=fit["k"],
+        var_resid=var_resid,
+        var_ret=var_ret,
     )
 
 

@@ -122,18 +122,25 @@ def _median_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> 
 
 
 def _rank_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> np.ndarray:
-    """ts_rank：窗口内当前值分位（含当前），(rank+1)/n，tie 平均。"""
+    """ts_rank：pandas ``rolling.rank(pct=True)`` 语义。
+
+    avg-tie 的 1-based rank ÷ count：值 v 的 rank = lower + (tie+1)/2
+    （lower = 严格小于 v 的数量，tie = 等于 v 的数量），pct = rank / n。
+    （R37 audit 修正：此前用 (lower+tie/2)/n，对 tie=1 少 0.5/n。）
+    """
     out = np.full_like(a, np.nan)
     for i in range(len(a)):
+        cur = a[i]
+        # 当前值 NaN => 输出 NaN（pandas rolling.rank 语义）
+        if not np.isfinite(cur):
+            continue
         seg, n = _valid_in(a, max(0, i - window + 1), i)
         if n < min_periods:
             continue
         vals = seg[np.isfinite(seg)]
-        cur = a[i]
-        # 含当前值的分位：(< cur 的数量 + tie 折半) / n
         lower = np.sum(vals < cur)
         tie = np.sum(vals == cur)
-        out[i] = (lower + tie / 2.0) / n
+        out[i] = (lower + (tie + 1) / 2.0) / n
     return out
 
 
@@ -270,13 +277,20 @@ _PANEL_REFS = {
 }
 
 # 参数矩阵：valid 值 + invalid 值（P0-008）
-_WINDOW_VALUES: list[tuple[int, bool]] = [
+# valid：边界 1、小、default、大、extreme-but-valid（500 > N_DAY —— 截断到全序列，
+# pandas/numpy rolling 语义合法，oracle 需匹配）。
+# invalid：0、负、fractional int、NaN、Inf —— kernel 必须拒绝。
+# wrong-type 字符串 "20"：binder 契约内行为——声明 numeric 的算子（ParamSpec
+# dtype=int）绑定为 20；未声明的被拒。不做硬 invalid（R19-005 设计）。
+_WINDOW_VALUES: list[tuple[object, bool]] = [
     (1, True), (2, True), (5, True), (20, True), (60, True), (120, True), (252, True),
-    (0, False), (-5, False), (500, False),  # 0/负 = 非法；500 > N_DAY = 超出数据
+    (500, True),  # extreme-but-valid
+    (0, False), (-5, False), (3.5, False), (float("nan"), False),
+    (float("inf"), False),
 ]
-_LAG_VALUES: list[tuple[int, bool]] = [
+_LAG_VALUES: list[tuple[object, bool]] = [
     (1, True), (2, True), (5, True), (10, True),
-    (0, False), (-1, False),
+    (0, False), (-1, False), (2.5, False),
 ]
 
 

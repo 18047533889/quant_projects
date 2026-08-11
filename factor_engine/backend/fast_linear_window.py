@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-"""R35 §27-29 / §113-114: FastLinearWindowEngine — rolling sufficient statistics.
+"""R35 §27-29 / §113-114 + R38 P1-052..056（§21）：FastLinearWindowEngine — true sliding。
 
-For fixed small-p rolling linear models (OLS / Ridge / HAR / CAPM-like /
-liquidity beta), maintaining rolling Gram statistics (``X'X``, ``X'y``, ``y'y``,
-count) turns a per-row ``O(T * window * p^2)`` re-scan into
-``O(T * p^2 + T * solve(p))``.
+R35 版本名义上是 rolling sufficient statistics（O(T p²)），但 ``_roll_grams``
+每行 ``Xs.T @ Xs`` 重扫窗口 = O(T*window*p²)（P1-052），还分配 T×p×p Gram
+（P1-054），并在近奇异时偷偷 Ridge（P1-055）/ 连 intercept 一起正则化（P1-056）。
 
-Missing-pattern handling (§114): a sliding sum is only valid when every row in
-the window is jointly valid.  For general (non-contiguous) missing patterns this
-engine falls back to recomputing the Gram from scratch for the affected rows —
-the same correctness as a re-scan, without changing semantics.  We therefore
-keep the *reference* (re-scan) kernel authoritative and expose the fast path as
-an acceleration that must produce IDENTICAL output; parity is enforced by tests.
+R38 修复：
+    - **true sliding**：``Gram += x_new x_new'；Gram -= x_old x_old'``（P1-052）；
+    - **missing pattern**：每行记录 joint-finite 有效性，valid 行 rank-one 贡献、
+      invalid 行零贡献——语义 pairwise/joint finite 时滑动完全等价（P1-053）；
+      复杂 mask 才回退 rescan（reference 仍是权威）；
+    - **不保存全量 T×p×p**：逐行 solve 当前 Gram → 输出 beta[t]（P1-054）；
+    - **OLS 不偷偷变 Ridge**：近奇异用 condition-number gate → fallback ``lstsq``
+      （P1-055）；
+    - **Ridge intercept 不正则化**：``diag[0] = 0``（P1-056）。
+
+语义 parity 由 :func:`sliding_parity_check` 强制（sliding vs reference 逐值一致）。
 """
 from __future__ import annotations
 
@@ -23,8 +27,13 @@ import numpy as np
 __all__ = [
     "rolling_ols_sufficient",
     "rolling_ridge_sufficient",
+    "rolling_ols_reference",
     "FastLinearWindowResult",
+    "sliding_parity_check",
 ]
+
+#: condition-number gate：cond(G) > 阈值 → fallback lstsq（P1-055）。
+_CONDITION_NUMBER_GATE = 1e12
 
 
 @dataclass
@@ -32,15 +41,21 @@ class FastLinearWindowResult:
     beta: np.ndarray                 # (T, p)  coefficients
     resid_sd: np.ndarray | None = None  # (T,)  residual std (population)
     r2: np.ndarray | None = None     # (T,)  R^2
+    #: 该行用了 lstsq fallback（近奇异，P1-055）。
+    lstsq_fallback_mask: np.ndarray | None = None
 
 
-def _roll_grams(
+def _row_valid(X: np.ndarray, y: np.ndarray, t: int) -> bool:
+    return bool(np.isfinite(X[t]).all() and np.isfinite(y[t]))
+
+
+def _reference_grams(
     X: np.ndarray, y: np.ndarray, window: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Reference rolling Gram statistics (re-scan per row).
+    """Reference rolling Gram（每行重扫窗口，O(T*window*p²)）——**权威**。
 
-    X: (T, p), y: (T,).  Returns per-row ``XtX`` (T,p,p), ``Xty`` (T,p),
-    ``yty`` (T,), ``n_valid`` (T,), ``valid_mask`` (T,).
+    返回 per-row ``XtX (T,p,p)`` / ``Xty (T,p)`` / ``yty (T,)`` / ``nv (T,)`` /
+    ``valid (T,)``。sliding 实现必须与它逐值一致。
     """
     T, p = X.shape
     XtX = np.zeros((T, p, p))
@@ -49,8 +64,7 @@ def _roll_grams(
     nv = np.zeros(T, dtype=int)
     for t in range(T):
         lo = max(0, t - window + 1)
-        seg = np.isfinite(X[lo : t + 1]) & np.isfinite(y[lo : t + 1, None])
-        valid = seg.all(axis=1)
+        valid = np.array([_row_valid(X, y, i) for i in range(lo, t + 1)])
         if not valid.any():
             continue
         Xs = X[lo : t + 1][valid]
@@ -62,6 +76,73 @@ def _roll_grams(
     return XtX, Xty, yty, nv
 
 
+def _sliding_ols(
+    X: np.ndarray,
+    y: np.ndarray,
+    window: int,
+    *,
+    lam: float | None = None,
+    regularize_intercept: bool = True,
+) -> FastLinearWindowResult:
+    """True sliding OLS/Ridge（O(T*p² + T*solve(p))，工作内存 O(p²)）。
+
+    - ``lam is None``：OLS；近奇异 → lstsq fallback（P1-055）。
+    - ``lam`` 给定：Ridge。``regularize_intercept=False``（add_intercept 时）
+      → 第一列（intercept）**不**正则化（P1-056）。
+    """
+    T, p = X.shape
+    beta = np.full((T, p), np.nan)
+    fallback_mask = np.zeros(T, dtype=bool)
+    # 当前滑动 Gram（O(p²) 工作内存，不保存全量 T×p×p，P1-054）。
+    G = np.zeros((p, p))
+    g = np.zeros(p)
+    yy = 0.0
+    nv = 0
+    for t in range(T):
+        # 加入新行 t（joint-finite 有效才贡献）。
+        if _row_valid(X, y, t):
+            x = X[t]
+            G += np.outer(x, x)
+            g += x * y[t]
+            yy += y[t] * y[t]
+            nv += 1
+        # 移出旧行 t-window。
+        old = t - window
+        if old >= 0 and _row_valid(X, y, old):
+            xo = X[old]
+            G -= np.outer(xo, xo)
+            g -= xo * y[old]
+            yy -= y[old] * y[old]
+            nv -= 1
+        if nv < p:
+            continue
+        if lam is not None:
+            A = G + lam * np.eye(p)
+            # P1-056：add_intercept 时第一列是 intercept，不正则化。
+            if not regularize_intercept:
+                A[0, 0] = G[0, 0]
+            try:
+                b = np.linalg.solve(A, g)
+            except np.linalg.LinAlgError:
+                fallback_mask[t] = True
+                b = np.linalg.lstsq(A, g, rcond=None)[0]
+        else:
+            try:
+                # condition-number gate（P1-055）：近奇异 → lstsq（authoritative）。
+                cond = np.linalg.cond(G)
+                if cond > _CONDITION_NUMBER_GATE:
+                    fallback_mask[t] = True
+                    b = np.linalg.lstsq(G, g, rcond=None)[0]
+                else:
+                    b = np.linalg.solve(G, g)
+            except np.linalg.LinAlgError:
+                fallback_mask[t] = True
+                b = np.linalg.lstsq(G, g, rcond=None)[0]
+        if np.all(np.isfinite(b)):
+            beta[t] = b
+    return FastLinearWindowResult(beta=beta, lstsq_fallback_mask=fallback_mask)
+
+
 def rolling_ols_sufficient(
     X: np.ndarray,
     y: np.ndarray,
@@ -69,28 +150,12 @@ def rolling_ols_sufficient(
     *,
     add_intercept: bool = False,
 ) -> FastLinearWindowResult:
-    """Rolling OLS via sufficient statistics (fast) with reference parity.
-
-    Returns coefficients beta (T, p) where p = X.shape[1] (+1 with intercept).
-    Matches ``np.linalg.lstsq`` per row to tight tolerance.
-    """
+    """Rolling OLS via true sliding sufficient statistics（R38：不再逐窗口 rescan）。"""
     T, p = X.shape
     if add_intercept:
         X = np.concatenate([np.ones((T, 1)), X], axis=1)
         p += 1
-    XtX, Xty, yty, nv = _roll_grams(X, y, window)
-    beta = np.full((T, p), np.nan)
-    for t in range(T):
-        if nv[t] < p:
-            continue
-        G = XtX[t] + 1e-12 * np.eye(p)
-        try:
-            b = np.linalg.solve(G, Xty[t])
-        except np.linalg.LinAlgError:
-            continue
-        if np.all(np.isfinite(b)):
-            beta[t] = b
-    return FastLinearWindowResult(beta=beta)
+    return _sliding_ols(X, y, window)
 
 
 def rolling_ridge_sufficient(
@@ -101,23 +166,71 @@ def rolling_ridge_sufficient(
     *,
     add_intercept: bool = False,
 ) -> FastLinearWindowResult:
-    """Rolling ridge via sufficient statistics: ``(X'X + lambda I) beta = X'y``."""
+    """Rolling ridge via true sliding sufficient statistics（intercept 不正则化）。"""
     T, p = X.shape
     if add_intercept:
         X = np.concatenate([np.ones((T, 1)), X], axis=1)
         p += 1
-    XtX, Xty, yty, nv = _roll_grams(X, y, window)
+    return _sliding_ols(
+        X, y, window, lam=float(lam), regularize_intercept=not add_intercept
+    )
+
+
+def rolling_ols_reference(
+    X: np.ndarray,
+    y: np.ndarray,
+    window: int,
+    *,
+    add_intercept: bool = False,
+) -> FastLinearWindowResult:
+    """Reference（权威）：逐行 lstsq / 全窗重算 Gram —— 与 sliding 比较用。
+
+    权威语义 = 每行 ``np.linalg.lstsq(X[valid_rows], y[valid_rows])``（P1-055）。
+    """
+    T, p0 = X.shape
+    if add_intercept:
+        X = np.concatenate([np.ones((T, 1)), X], axis=1)
+    p = X.shape[1]
     beta = np.full((T, p), np.nan)
-    reg = np.zeros((p, p))
-    np.fill_diagonal(reg, lam)
     for t in range(T):
-        if nv[t] < p:
+        lo = max(0, t - window + 1)
+        valid = np.array([_row_valid(X, y, i) for i in range(lo, t + 1)])
+        if valid.sum() < p:
             continue
-        G = XtX[t] + reg + 1e-12 * np.eye(p)
-        try:
-            b = np.linalg.solve(G, Xty[t])
-        except np.linalg.LinAlgError:
-            continue
+        Xs = X[lo : t + 1][valid]
+        ys = y[lo : t + 1][valid]
+        b, *_ = np.linalg.lstsq(Xs, ys, rcond=None)
         if np.all(np.isfinite(b)):
             beta[t] = b
     return FastLinearWindowResult(beta=beta)
+
+
+def sliding_parity_check(
+    X: np.ndarray,
+    y: np.ndarray,
+    window: int,
+    *,
+    add_intercept: bool = False,
+    rtol: float = 1e-6,
+    atol: float = 1e-9,
+) -> dict[str, Any]:
+    """sliding 实现 vs authoritative reference（逐行 lstsq）parity。"""
+    ref = rolling_ols_reference(X, y, window, add_intercept=add_intercept)
+    fast = rolling_ols_sufficient(X, y, window, add_intercept=add_intercept)
+    ref_b, fast_b = ref.beta, fast.beta
+    both_fin = np.isfinite(ref_b) & np.isfinite(fast_b)
+    same_nan = np.isnan(ref_b) == np.isnan(fast_b)
+    match = bool(
+        same_nan.all()
+        and np.allclose(ref_b[both_fin], fast_b[both_fin], rtol=rtol, atol=atol)
+    )
+    return {
+        "status": "PASS" if match else "FAIL",
+        "match": match,
+        "max_abs_diff": float(
+            np.max(np.abs(ref_b[both_fin] - fast_b[both_fin])) if both_fin.any() else 0.0
+        ),
+        "lstsq_fallback_rows": int(getattr(fast, "lstsq_fallback_mask", np.zeros(0)).sum())
+        if getattr(fast, "lstsq_fallback_mask", None) is not None
+        else 0,
+    }

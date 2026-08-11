@@ -255,15 +255,30 @@ class EvidenceTruthEngine:
             commit_sha=self.commit_sha,
         )
 
+    #: 内容组件 hash（源码/树内容变化会改变它）——用于比较 evidence 是否与当前
+    #: 代码一致。commit_sha / dirty_tree_hash 是「绑定字段」而非「内容字段」：
+    #: dirty_tree_hash 会因写入 evidence JSON 本身而改变（evidence 属于 FE_ROOT 的
+    #: *.json），若把它纳入比较会恒 FAIL（R37 收敛修正）。
+    _CONTENT_HASH_KEYS = frozenset({
+        "operator_registry_hash", "operator_surface_hash", "operator_semantic_hash",
+        "field_catalog_hash", "dataaccess_contract_hash", "planner_hash",
+        "backend_hash", "runtime_hash", "test_source_hash", "golden_source_hash",
+        "dependency_lock_hash",
+    })
+
     def component_hash_gate(self, gate_id: str, stored: dict[str, str]) -> GateResult:
-        """component hash mismatch => FAIL：证据记录的组件 hash 必须等于当前值。"""
+        """component hash mismatch => FAIL：证据记录的内容组件 hash 必须等于当前值。
+
+        只比较内容 hash（源码/树内容），排除 commit_sha / dirty_tree_hash 绑定字段。
+        """
         cases = [
             (k, stored.get(k) == self.component_hashes.get(k))
-            for k in self.component_hashes
-            if k in stored
+            for k in self._CONTENT_HASH_KEYS
+            if stored.get(k)
         ]
         if not cases:
-            return GateResult.not_run(gate_id, "no component hashes recorded", self.commit_sha)
+            return GateResult.not_run(gate_id, "no content component hashes recorded",
+                                      self.commit_sha)
         return GateResult.from_cases(
             gate_id, [ok for _, ok in cases],
             case_ids=[k for k, _ in cases],

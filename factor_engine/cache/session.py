@@ -30,6 +30,9 @@ class ExecutionCacheSession:
     execution_id: str = "session"
     # R36 P0-022：governor 层注册失败时 fail-closed（production）/ warning（research）。
     strict: bool | None = None
+    # R38 P0-039（§15）：run_mode 从 Engine execution context 显式传入，不再只看
+    # 环境变量（env 没设时 config/ExecutionContext 可能已是 production）。
+    run_mode: str | None = None
 
     def __post_init__(self) -> None:
         """初始化默认 dict 与 ``ExpressionCache`` / ``PanelCache`` / ``BufferStore``。"""
@@ -40,7 +43,12 @@ class ExecutionCacheSession:
         if self.stats is None:
             self.stats = CacheHitStats()
         if self.strict is None:
-            self.strict = os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production"
+            from runtime.production_policy import is_production_mode
+
+            self.strict = bool(
+                is_production_mode(self.run_mode)
+                or os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production"
+            )
         # 审计 #334：session 层名带 execution_id，不同 session 不再互踩记账；
         # 同一 execution_id 重复注册时后者覆盖（可接受）。
         self._l0_layer = f"{self.execution_id}:l0_cse"
@@ -58,10 +66,14 @@ class ExecutionCacheSession:
         )
         # R36 P0-021（§104/105）：CSE 共享缓冲的 governed 写入通道——取代 raw
         # ``shared_result_cache[sid]=value`` 作为唯一权威写入路径。
+        # R38 P0-032（§13）：挂真实 SpillStore，spill() 是真 spill 不是 drop。
         from runtime.buffer_store import GovernedBufferStore
+        from runtime.spill_store import SpillStore
 
         self._buffer_store = GovernedBufferStore(
-            self.shared_result_cache, budget_bytes=self.cse_budget_bytes
+            self.shared_result_cache,
+            budget_bytes=self.cse_budget_bytes,
+            spill_store=SpillStore(),
         )
         # Phase 5 R6：把 CSE / panel 两层注册到全局 MemoryGovernor 的 evict hooks，
         # RSS 高压档时由 governor 主动逐出。
@@ -97,20 +109,59 @@ class ExecutionCacheSession:
         R36 P0-023（§108）：unregister_layer 只移除 governor accounting；必须同时
         **清空 backing dict 的真实引用**（``shared_result_cache`` / ``panel_cache``），
         否则「实际内存仍在、账面已经没了」。
+
+        R37-P0-037（§37.3）：unregister 失败不再 ``except: pass`` 静默吞掉——
+        production 下「以为已释放、实际 governor 还记着」会造成 accounting drift，
+        必须 fail-closed；research 降级 warning + telemetry。release 后做
+        accounting reconciliation（declared vs actual），不一致必须告警。
         """
+        import logging
+
+        log = logging.getLogger(__name__)
         try:
             from runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
             gov.unregister_layer(self._l0_layer)
             gov.unregister_layer(self._l1_layer)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            if self.strict:
+                raise RuntimeError(
+                    "ExecutionCacheSession: 无法释放 governor evict layer "
+                    f"（R37-P0-037 fail-closed）——{type(exc).__name__}: {exc}"
+                ) from exc
+            log.warning(
+                "cache session unregister governor layer 失败（research 降级）: %s", exc)
         # §108：backing refs 与 accounting 一起释放。
         if self.shared_result_cache is not None:
             self.shared_result_cache.clear()
         if self.panel_cache is not None:
             self.panel_cache.clear()
+        # R37-P0-037 reconciliation：declared cache bytes vs actual retained refs。
+        # 不一致必须告警；production 超阈值应 fail。
+        try:
+            declared = 0
+            if self.stats is not None:
+                declared = getattr(self.stats, "approx_bytes", None) or declared
+            actual = (self.shared_result_cache is not None and
+                      self._estimate_dict_bytes(self.shared_result_cache)) or 0
+            if declared > 0 and actual > declared * 1.5:
+                msg = (f"cache accounting drift: declared={declared} actual={actual} "
+                       f"(session={self.execution_id})")
+                if self.strict:
+                    raise RuntimeError(f"R37-P0-037 {msg}")
+                log.warning("R37-P0-037 %s", msg)
+        except Exception:
+            raise
+
+    @staticmethod
+    def _estimate_dict_bytes(d: dict[Any, Any]) -> int:
+        try:
+            from runtime.resource_governor import estimate_object_bytes
+
+            return max(0, int(estimate_object_bytes(d)))
+        except Exception:
+            return 0
 
     @property
     def expression_cache(self) -> ExpressionCache:

@@ -157,11 +157,12 @@ def test_p99_memory_model_rises_on_underprediction():
 
     store = ResourceCalibrationStore()
     key = ResourceShapeKey("ts_mean", "duckdb", rows_bucket=2, instruments_bucket=2, window_bucket=1)
+    # R38 P0-008：P99 模型只接收**可信归因**观测（isolated），预测值不作为真实值。
     for _ in range(10):
-        store.record(key, elapsed_ms=50, peak_mem=1000)
+        store.record(key, elapsed_ms=50, peak_mem=1000, attribution_quality="isolated", peak_is_trusted=True)
     p1 = store.predict(key)
     for _ in range(3):
-        store.record(key, elapsed_ms=10, peak_mem=500000)
+        store.record(key, elapsed_ms=10, peak_mem=500000, attribution_quality="isolated", peak_is_trusted=True)
     p2 = store.predict(key)
     assert p1["memory_p99"] <= 1000
     assert p2["memory_p99"] > 1000
@@ -173,8 +174,9 @@ def test_calibration_persists_and_restores(tmp_path):
 
     key = ResourceShapeKey("ts_mean", "polars", rows_bucket=1, instruments_bucket=1, window_bucket=0)
     store = ResourceCalibrationStore()
-    store.record(key, elapsed_ms=5, peak_mem=777)
-    store.record(key, elapsed_ms=5, peak_mem=888)
+    # R38 P0-008：可信归因观测才会进入 memory_obs / sample_count。
+    store.record(key, elapsed_ms=5, peak_mem=777, attribution_quality="isolated", peak_is_trusted=True)
+    store.record(key, elapsed_ms=5, peak_mem=888, attribution_quality="isolated", peak_is_trusted=True)
     path = str(tmp_path / "cal.parquet")
     store.save(path)
     store2 = ResourceCalibrationStore(path=path)
@@ -222,13 +224,14 @@ def test_sink_backpressure_reduces_compute_admission():
 
 
 def test_governed_buffer_store_rejects_over_budget_and_reconciles():
-    from runtime.buffer_store import GovernedBufferStore
+    from runtime.buffer_store import GovernedBufferStore, STATUS_MEMORY
 
     store = GovernedBufferStore({}, budget_bytes=100)
-    assert store.put("a", "x" * 40, bytes_=40) is True
+    # R38 P0-029：put 返回 BufferPutResult（不再裸 bool）。
+    assert store.put("a", "x" * 40, bytes_=40).status == STATUS_MEMORY
     # 超过预算：先冷淘汰 a，再放 b —— 记 refused 不静默。
-    store.put("b", "y" * 1000, bytes_=1000)
-    assert store.get("a") is None or store.summary()["refused"] > 0
+    res = store.put("b", "y" * 1000, bytes_=1000)
+    assert res.status in ("RECOMPUTE", "REFUSED") or store.summary()["refused"] > 0
     rec = store.reconciliation()
     assert "accounted_bytes" in rec and "drift_bytes" in rec
 

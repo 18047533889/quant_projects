@@ -1,0 +1,20 @@
+{
+  "generated_by": "scripts/build_r37_issue_closure.py",
+  "final_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "total_issues": 9,
+  "closed": 6,
+  "already_closed_by_concurrent": 2,
+  "partial": 0,
+  "remaining_not_run": 9,
+  "remaining_reasons": [
+    "MissingValueContract/NumericalPolicy/units/FactorIdentity 部分已存在，完整需跨后端 fixture",
+    "P1 优化项（SourceCSE/region routing/disk pressure/unit metadata/FactorLake/observability）优先级在 P0 之后",
+    "PSI 预测式 admission / backend 线程 token 对齐需真实 co-tenancy 负载 + 多后端环境",
+    "QoS/cancellation/failure-taxonomy 矩阵 / capability handshake 需 service + DA 集成环境",
+    "Unified QueryGraph / PreparedBatchReadSession 需 DataAccess fixture + R33 完整落地；本机不配置真实 parquet/registry",
+    "backend/optimizer/batch differential 需多后端 + optimizer 变异注入",
+    "full model contract / FastLinearWindowEngine 已在 R35 部分实现；剩余需模型 family 真实数据",
+    "revision 类型传播 / checkpoint fingerprint / stateful 四路等价需真实 checkpoint fixture + R33",
+    "streaming materialization atomicity / writer failure injection 需真实 DataAccess generation fixture"
+  ]
+}

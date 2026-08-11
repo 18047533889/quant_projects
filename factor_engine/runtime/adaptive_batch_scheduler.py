@@ -26,7 +26,9 @@ from typing import Any, Callable, Sequence
 from planner.dag_cost_model import task_priority
 from planner.physical_factor_dag import (
     TASK_CSE_SHARED,
+    TASK_MERGE,
     TASK_ROOT,
+    TASK_SHARD,
     TASK_SOURCE_SCAN,
     PhysicalFactorDAG,
     PhysicalFactorTask,
@@ -114,9 +116,11 @@ def _dispatch(
 
 
 #: 错误分类（R31-006）：只有 transient 类自动 retry；确定性 / 语义类禁止 retry。
+#: R38 P0-004（§5）：OOM 是独立类别——same shape 不可重试，smaller shape 可重试。
 ERROR_TRANSIENT = "transient"
 ERROR_PERMANENT = "permanent"
 ERROR_UNKNOWN = "unknown"
+ERROR_OOM = "oom"
 
 _TRANSIENT_EXC_TYPES: tuple[type[BaseException], ...] = (
     TimeoutError,
@@ -137,11 +141,13 @@ _PERMANENT_MARKERS = (
 
 
 def classify_error(exc: BaseException) -> str:
-    """R31-006：错误分类——transient 自动 retry；permanent 禁止 retry。
+    """R31-006 + R38-P0-004：错误分类——transient 自动 retry；permanent 禁止 retry。
 
     - ``OSError/TimeoutError/ConnectionError`` 及显式 transient 标记 → transient
     - PIT violation / semantic violation / invalid param / unsupported op /
       schema mismatch / deterministic numeric / DQ error → permanent
+    - OOM（MemoryError / DuckDB OutOfMemory / Arrow / …）→ ``ERROR_OOM``：
+      进入 smaller-shape replan 路径（same shape 禁止重试，R38-P0-005）。
     - 其余 → unknown（保守单次 retry）
     """
     name = type(exc).__name__.lower()
@@ -150,10 +156,19 @@ def classify_error(exc: BaseException) -> str:
         return ERROR_PERMANENT
     if isinstance(exc, _TRANSIENT_EXC_TYPES) or "transient" in msg:
         return ERROR_TRANSIENT
-    if "oom" in msg or "out of memory" in msg or name in {"memoryerror"}:
-        # OOM 不算 transient：原尺寸重跑只会再 OOM（R31-006 要求降 shard/并发）。
-        return ERROR_PERMANENT
+    if _is_oom(exc):
+        return ERROR_OOM
     return ERROR_UNKNOWN
+
+
+def _is_oom(exc: BaseException) -> bool:
+    try:
+        from runtime.resource_errors import is_oom_error
+
+        return is_oom_error(exc)
+    except Exception:
+        name = type(exc).__name__.lower()
+        return name == "memoryerror" or "oom" in str(exc).lower() or "out of memory" in str(exc).lower()
 
 
 def _dispatch_fusion(
@@ -275,6 +290,23 @@ class AdaptiveBatchScheduler:
         }
         # R36 P0-002：最近一次 ResourceDecision（broker 建议值，admission 消费）。
         self._last_decision: Any | None = None
+        # R38 P0-001/004（§4/§5）：真实 shard 执行状态。
+        self._shard_executor: Any | None = None
+        #: merge_task_id -> {shard_id: partial_result|SpooledShard}
+        self._shard_partials: dict[str, dict[str, Any]] = {}
+        #: 已失败（OOM）的 shape 签名——same shape 禁止重试（R38_P0_ZERO_SAME_SHAPE_OOM_RETRY）。
+        self._failed_shapes: set[str] = set()
+        #: task_id -> 该 task 对应的分片 shape 签名（OOM 时定位失败 shape）。
+        self._shard_shape_of: dict[str, str] = {}
+        #: original_root_id -> 原始 ROOT task（shard 替换后保留，OOM replan 用）。
+        self._shard_original_task: dict[str, Any] = {}
+        self._oom_replans = 0
+        self._preshards = 0
+        # R38 P0-041（§16）：read-wave JIT repartition 状态。
+        self._last_wave_budget: int | None = None
+        self._wave_covered_tasks: set[str] = set()
+        # R38 P0-007：task 提交时刻（dispatch 时记录，完成时算真实 duration）。
+        self._task_started_at: dict[str, float] = {}
 
     def cancel(self) -> None:
         """请求取消：后续 admission 一律拒绝；run 在无在跑任务时提前结束。"""
@@ -416,6 +448,9 @@ class AdaptiveBatchScheduler:
             return None, None
         contract = task.resource_contract
         fn = _dispatch
+        if task.task_type in (TASK_SHARD, TASK_MERGE):
+            # R38 P0-001：shard 子任务 / merge barrier 任务走真实分片执行器。
+            fn = self._dispatch_shard_or_merge
         if contract is None:
             self._explain(f"task={task.task_id}: no contract, admit (vacuous)")
             return (
@@ -446,7 +481,48 @@ class AdaptiveBatchScheduler:
             fn, task, backend, ctx, execute_root, materialize_shared,
             prefer="thread",
         )
+        # R38 P0-007：记录 dispatch 时刻（真实 duration 的起点）。
+        import time
+
+        self._task_started_at[task.task_id] = time.monotonic() * 1000.0
         return future, lease
+
+    def _shard_executor(self) -> Any:
+        """惰性创建真实 shard 执行器（spool 目录按 run 隔离）。"""
+        if self._shard_executor is None:
+            import tempfile
+
+            from runtime.shard_executor import ShardExecutor
+
+            self._shard_executor = ShardExecutor(
+                spool_dir=tempfile.mkdtemp(prefix="fe_r38_spool_")
+            )
+        return self._shard_executor
+
+    def _dispatch_shard_or_merge(
+        self,
+        task: PhysicalFactorTask,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any],
+        materialize_shared: Callable[[str, Any], Any],
+    ) -> tuple[str, Any]:
+        """R38 P0-001：shard 子任务真实执行 + merge barrier。
+
+        模块级 ``_dispatch`` 只处理 CSE_SHARED / ROOT；这里补 SHARD / MERGE。
+        """
+        if task.task_type == TASK_SHARD:
+            result = self._shard_executor().execute_shard(
+                backend, task.node_ref, ctx, task.shard_descriptor
+            )
+            return task.task_id, result
+        if task.task_type == TASK_MERGE:
+            partials = self._shard_partials.pop(task.task_id, {})
+            merged = self._shard_executor().execute_merge(
+                backend, ctx, task.shard_plan, partials
+            )
+            return task.task_id, merged
+        return _dispatch(task, backend, ctx, execute_root, materialize_shared)
 
     def _dynamic_concurrency_limit(self, sink: StreamingResultSink | None) -> int:
         """R33-P0-038 + R36 P0-001/002/012：显式并发上限。
@@ -561,9 +637,70 @@ class AdaptiveBatchScheduler:
                     remaining.discard(t)
                     self._done += 1
                     self._record_timing(t, task)
+                    # R38 P0-041：wave 已覆盖 → 后续重排不再重建该 task 的 wave。
+                    self._wave_covered_tasks.add(t)
                     committed_count += 1
         self._wave_summary = executor.summary()
         return committed_count
+
+    def _maybe_repartition_waves(
+        self,
+        plan: SchedulerPlan,
+        dag: PhysicalFactorDAG,
+        committed: set[str],
+    ) -> None:
+        """R38 P0-041（§16）：运行中 wave 预算显著缩小时，对**未执行** SOURCE_SCAN
+        重排 wave（JIT repartition）。
+
+        - 预算缩小 >40% 且有未执行 source scan 才重排（避免频繁重建）；
+        - 只对未执行 source tasks 重排（已执行 wave 的 ref 保留，不再重复扫）；
+        - 新 wave 的 wave_id 重新编号（避免与已执行 wave id 冲突被跳过）。
+        """
+        decision = getattr(self, "_last_decision", None)
+        if decision is None:
+            return
+        budget = max(1, int(decision.read_wave_bytes))
+        last = getattr(self, "_last_wave_budget", budget)
+        if budget >= last * 0.6:
+            self._last_wave_budget = budget
+            return
+        unexecuted = [
+            t
+            for t in dag.tasks.values()
+            if t.task_type == TASK_SOURCE_SCAN
+            and t.task_id not in committed
+            and t.task_id not in getattr(self, "_wave_covered_tasks", set())
+        ]
+        if not unexecuted:
+            self._last_wave_budget = budget
+            return
+        from types import SimpleNamespace
+
+        from planner.read_wave_planner import build_waves_from_dag
+
+        sub = SimpleNamespace(tasks={t.task_id: t for t in unexecuted})
+        new_waves = build_waves_from_dag(sub, wave_memory_budget=budget)
+        if not new_waves.waves:
+            self._last_wave_budget = budget
+            return
+        # 重新编号（避免与已执行 wave id 冲突）。
+        base = max(getattr(self, "_wave_refs", {}).keys(), default=-1) + 1
+        from dataclasses import replace
+
+        renumbered = [
+            replace(w, wave_id=base + i) for i, w in enumerate(new_waves.waves)
+        ]
+        new_waves.waves = renumbered
+        plan.read_waves = new_waves
+        self._last_wave_budget = budget
+        self._wave_summary["events"].append(
+            f"repartition:{len(new_waves.waves)}waves@{budget}"
+        )
+        self._explain(
+            f"R38_DYNAMIC_READ_WAVE_SHRINK: wave budget {last}->{budget}, "
+            f"repartitioned {len(unexecuted)} unexecuted source tasks into "
+            f"{len(new_waves.waves)} waves"
+        )
 
     def _admit_virtual(
         self,
@@ -676,6 +813,19 @@ class AdaptiveBatchScheduler:
             # R36 P0-010：dynamic read wave（§35/36）——运行中不拆已执行 wave，
             # 只影响后续 plan / 新 wave。
             self.wave_memory_budget = int(decision.read_wave_bytes)
+            # R38 P0-043（§17）：sink 队列预算随压力弹性调整（缩容不丢 item，
+            # producer 阻塞等消费降到新 target 以下）。
+            if sink is not None:
+                try:
+                    sink.set_target_bytes(int(decision.result_queue_bytes))
+                except Exception:
+                    pass
+            # R38 P0-041（§16）：wave 预算显著缩小时，对未执行 SOURCE_SCAN 重排
+            # wave（运行中压力变大 → 已生成的 read waves 重新拆小）。
+            try:
+                self._maybe_repartition_waves(plan, dag, committed)
+            except Exception:
+                pass
             # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
             wave_scan_done += self._execute_read_waves(
                 plan, dag, committed, remaining, ctx,
@@ -732,6 +882,9 @@ class AdaptiveBatchScheduler:
                 )
             # 2) admission：predecessor 全 committed 的 executable task，按 priority
             #    排序主导（R33-P0-039）。显式并发上限（R33-P0-038）。
+            # 2.0) R38 P1-065：P99 已超 SafeEnvelope 的 ready ROOT 在首次 admission
+            #     前就真实 pre-shard（不等 200 轮 no-progress）。
+            self._maybe_preshard_oversized(dag, remaining)
             concurrency_limit = self._dynamic_concurrency_limit(sink)
             ready: list[tuple[float, str]] = []
             for tid in remaining:
@@ -782,9 +935,17 @@ class AdaptiveBatchScheduler:
                 except Exception as exc:  # noqa: BLE001
                     _release_lease(lease)
                     kind = classify_error(exc)
+                    # R38 P0-004/005（§5）：OOM → smaller-shape replan，然后重试。
+                    if kind == ERROR_OOM:
+                        if self._handle_oom(key, exc, dag, remaining):
+                            continue
+                        self._explain(
+                            f"task={key}: OOM_NOT_REPLANNABLE {type(exc).__name__}: {exc}"
+                        )
+                        raise
                     retries = self._retries_remaining.get(key, 1)
                     # R31-006：只有 transient（或未知=保守单次）自动 retry；
-                    # permanent（PIT/semantic/参数/不支持算子/确定性错误/OOM）不重跑。
+                    # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
                     if retries > 0 and kind in {ERROR_TRANSIENT, ERROR_UNKNOWN}:
                         self._retries_remaining[key] = retries - 1
                         self._explain(
@@ -817,7 +978,7 @@ class AdaptiveBatchScheduler:
                         committed.add(_tid)
                         real_done += 1
                         self._record_timing(_tid, dag.tasks[_tid])
-                        self._record_task_calibration(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(_tid, dag.tasks[_tid], _res)
                         _res = results_by_root.get(_tid)
                         if dag.tasks[_tid].task_type == TASK_ROOT:
                             if sink is not None:
@@ -831,16 +992,34 @@ class AdaptiveBatchScheduler:
                 committed.add(key)
                 real_done += 1
                 self._record_timing(key, dag.tasks[key])
-                self._record_task_calibration(key, dag.tasks[key])
-                if dag.tasks[key].task_type == TASK_ROOT:
+                self._record_task_calibration(key, dag.tasks[key], result)
+                task_type = dag.tasks[key].task_type
+                if task_type == TASK_SHARD:
+                    # R38 P0-001：shard 子任务完成 → 结果写入 merge 的 partials
+                    #（大结果 spool 到磁盘，merge 前不全部常驻内存，§P0-003）。
+                    merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
+                    stored = self._shard_executor().spool_or_keep(result)
+                    self._shard_partials.setdefault(merge_id, {})[key] = stored
+                    continue
+                # R38 P0-001：MERGE 任务结果 = 因子最终结果（同 ROOT 处理）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
                     if sink is not None:
-                        sink.submit(dag.tasks[key].factor_name, result)
+                        if not sink.submit(dag.tasks[key].factor_name, result):
+                            self._explain(
+                                f"sink.submit FALSE for {dag.tasks[key].factor_name} "
+                                f"— writer fatal / queue closed; abort generation"
+                            )
+                            raise RuntimeError(
+                                f"sink.submit returned False for "
+                                f"{dag.tasks[key].factor_name} (R38-P0-046: writer "
+                                "failure must abort the generation)"
+                            )
                     if result_handler is not None:
                         result_handler(dag.tasks[key].factor_name, result)
                     else:
                         self._results[dag.tasks[key].factor_name] = result
                 # 释放已消费的 CSE sid（引用计数归零立即释放）。
-                if dag.tasks[key].task_type == TASK_ROOT:
+                if task_type in (TASK_ROOT, TASK_MERGE):
                     self._release_consumed(dag, key, ctx)
             # 4) R36 P0-003：动态 CPU 由 ResourceController 双向控制（每 tick 在
             #    顶部决策里 fast down / slow up）——不再一次性写死 0.6。
@@ -956,7 +1135,7 @@ class AdaptiveBatchScheduler:
                 result = execute_root(task)
                 committed.add(tid)
                 self._record_timing(tid, task)
-                self._record_task_calibration(tid, task)
+                self._record_task_calibration(tid, task, result)
                 if sink is not None:
                     sink.submit(task.factor_name, result)
                 if result_handler is not None:
@@ -1029,78 +1208,391 @@ class AdaptiveBatchScheduler:
     def _record_timing(self, tid: str, task: PhysicalFactorTask) -> None:
         import time
 
+        now_ms = time.monotonic() * 1000.0
+        started = self._task_started_at.pop(tid, now_ms)
         self._task_timing[tid] = {
             "op": task.op,
             "task_type": task.task_type,
             "factor_name": task.factor_name,
-            "finished_at_ms": round(time.monotonic() * 1000, 3),
+            # R38 P0-007：started_at（dispatch 时）+ finished_at（完成时）→
+            # elapsed_ms 是真实 duration。
+            "started_at_ms": round(started, 3),
+            "finished_at_ms": round(now_ms, 3),
+            "elapsed_ms": round(max(0.0, now_ms - started), 3),
             "preferred_backend": task.preferred_backend,
         }
 
     def _auto_shard_replan(self, dag: PhysicalFactorDAG, remaining: set[str]) -> int:
-        """R36 P0-020（§100）：ready task 始终无法 admission 且 shardable 时，
-        先 replan smaller shard，再失败。返回 replan 的 task 数。
+        """R38 P0-001（§4）：ready task 无法 admission 且 shardable → **真实**替换成
+        shard children + merge barrier（不再是只改 peak_memory 数字的伪 sharding）。
+
+        返回真实 replan 的 task 数。切片信息（time_range / instrument_universe）
+        不足时无法构造真实切片 → 返回 0（后续 STUCK 诚实失败）。
         """
         if not getattr(self, "_shard_replanned", None):
             self._shard_replanned: set[str] = set()
         try:
-            from dataclasses import replace as _replace
-
             from runtime.auto_shard_planner import AutoShardPlanner
 
-            planner = AutoShardPlanner()
             env = self.broker.resource_envelope()
             safe = max(1, int(env.safe_memory_bytes))
             candidates = [
                 dag.tasks[t]
                 for t in remaining
-                if t in dag.tasks and dag.tasks[t].executable
-                and t not in self._shard_replanned
+                if t in dag.tasks and dag.tasks[t].task_type == TASK_ROOT
+                and dag.tasks[t].executable and t not in self._shard_replanned
             ]
-            if not candidates:
-                return 0
-            plans = planner.plan_for_tasks(candidates, safe_envelope_bytes=safe)
+            planner = AutoShardPlanner()
             n = 0
-            for tid, plan in plans.items():
-                task = dag.tasks[tid]
-                contract = getattr(task, "resource_contract", None)
-                if contract is None:
+            for task in candidates:
+                tid = task.task_id
+                plan = planner.build_shard_execution_plan(
+                    task,
+                    safe_envelope_bytes=safe,
+                    time_range=task.time_range,
+                    instrument_universe=list(task.instrument_scope)
+                    if task.instrument_scope else None,
+                    lookback_bars=self._lookback_bars(task),
+                )
+                if plan is None:
                     continue
-                new_contract = _replace(
-                    contract,
-                    peak_memory_bytes=plan.per_shard_peak_bytes,
-                    output_bytes=plan.per_shard_peak_bytes,
-                    estimate_basis=f"auto-shard:{plan.dimension}",
-                )
-                dag.tasks[tid] = rebase_task(
-                    task, resource_contract=new_contract
-                )
+                if not self._replace_with_shard_plan(dag, tid, plan):
+                    continue
                 self._shard_replanned.add(tid)
+                for sid in plan.shard_task_ids:
+                    remaining.add(sid)
+                remaining.add(plan.merge_task_id)
                 n += 1
             return n
         except Exception:
             return 0
 
-    def _record_task_calibration(self, tid: str, task: PhysicalFactorTask) -> None:
-        """R36 P0-005/006：task 完成后把真实 elapsed/output 记入 calibration store。
+    def _lookback_bars(self, task: PhysicalFactorTask) -> int:
+        """估算 time-shard warmup 需要的 lookback 交易日（rolling 覆盖窗口）。"""
+        try:
+            from runtime.resource_shape import ResourceShapeKey
 
-        peak 内存为当前契约估计（per-task 精确 PSS attribution 需要 isolated
-        calibration / concurrent marginal model，§171——第一版如实标记 basis）。
+            shape = ResourceShapeKey.from_task(task)
+            # window_bucket 中点近似（保守 ×2 覆盖 lookback）。
+            midpoints = {0: 5, 1: 20, 2: 60, 3: 120, 4: 252, 5: 500}
+            return max(20, int(midpoints.get(shape.window_bucket, 60)) * 2)
+        except Exception:
+            return 60
+
+    def _replace_with_shard_plan(
+        self, dag: PhysicalFactorDAG, original_task_id: str, plan: Any
+    ) -> bool:
+        """把 ROOT task 替换成 shard children + MERGE barrier（真实 DAG 改造，§4）。
+
+        - shard 子任务：task_type=SHARD，carry shard_descriptor + 每片契约；
+        - MERGE 任务：task_type=MERGE，carry ShardExecutionPlan（merge barrier +
+          merge contract），inputs = 全部 shard id，consumers = 原 task consumers。
+        - 原 task 的 predecessor/consumer 引用全部重定向到 MERGE。
+        """
+        from dataclasses import replace as _replace
+
+        from runtime.shard_execution_plan import shape_signature
+
+        # 已被替换过（OOM 后第二次 replan）时，原 ROOT 从 preserved dict 取。
+        orig = self._shard_original_task.get(original_task_id) or dag.tasks.get(original_task_id)
+        if orig is None or orig.task_type != TASK_ROOT:
+            return False
+        contract = orig.resource_contract
+        shard_contract = (
+            _replace(
+                contract,
+                peak_memory_bytes=plan.per_shard_peak_bytes,
+                output_bytes=plan.per_shard_peak_bytes,
+                estimate_basis=f"shard:{plan.dimension}",
+            )
+            if contract is not None
+            else None
+        )
+        merge_contract = (
+            _replace(
+                contract,
+                peak_memory_bytes=plan.original_peak_bytes,
+                output_bytes=plan.original_peak_bytes,
+                estimate_basis="shard-merge",
+            )
+            if contract is not None
+            else contract
+        )
+        # 移除旧 task 及其已存在的 shard/merge（幂等重建）。
+        old_ids = [
+            tid
+            for tid in list(dag.tasks)
+            if tid == original_task_id
+            or tid.startswith(original_task_id + ":shard:")
+            or tid == f"{original_task_id}:merge"
+        ]
+        for tid in old_ids:
+            dag.tasks.pop(tid, None)
+        consumers = orig.consumers
+        # shard/merge 需要可执行 PlanNode（ROOT 的 node_ref 可能是 FactorPlan）。
+        node = getattr(orig.node_ref, "root", None) or orig.node_ref
+        shard_ids: list[str] = []
+        for descriptor in plan.shards:
+            sid = descriptor.shard_id
+            shard_ids.append(sid)
+            dag.tasks[sid] = rebase_task(
+                orig,
+                task_id=sid,
+                task_type=TASK_SHARD,
+                op="shard",
+                node_ref=node,
+                factor_name=orig.factor_name,
+                resource_contract=shard_contract,
+                inputs=orig.inputs,
+                consumers=(plan.merge_task_id,),
+                shard_descriptor=descriptor,
+                shard_plan=None,
+            )
+        merge_id = plan.merge_task_id
+        dag.tasks[merge_id] = rebase_task(
+            orig,
+            task_id=merge_id,
+            task_type=TASK_MERGE,
+            op="shard_merge",
+            node_ref=node,
+            factor_name=orig.factor_name,
+            resource_contract=merge_contract,
+            inputs=tuple(shard_ids),
+            consumers=consumers,
+            shard_descriptor=None,
+            shard_plan=plan,
+        )
+        # roots 与全图引用重定向（predecessor.consumers / 其它 task 的 inputs）。
+        dag.roots = tuple(merge_id if r == original_task_id else r for r in dag.roots)
+        for tid in list(dag.tasks):
+            t = dag.tasks[tid]
+            new_inputs = tuple(
+                merge_id if i == original_task_id else i for i in t.inputs
+            )
+            new_consumers = tuple(
+                merge_id if c == original_task_id else c for c in t.consumers
+            )
+            if new_inputs != t.inputs or new_consumers != t.consumers:
+                dag.tasks[tid] = rebase_task(
+                    t, inputs=new_inputs, consumers=new_consumers
+                )
+        self._shard_original_task[original_task_id] = orig
+        sig = shape_signature(
+            task_id=original_task_id,
+            dimension=plan.dimension,
+            shard_count=len(plan.shards),
+            per_shard_peak_bytes=plan.per_shard_peak_bytes,
+        )
+        self._shard_shape_of[merge_id] = sig
+        self._explain(
+            f"R38_REAL_AUTOSHARD: {original_task_id} -> {len(plan.shards)} "
+            f"{plan.dimension} shards + merge (sig {sig[:8]})"
+        )
+        return True
+
+    def _maybe_preshard_oversized(
+        self, dag: PhysicalFactorDAG, remaining: set[str]
+    ) -> int:
+        """R38 P1-065（§§47 优先级第一组）：ready ROOT 的 P99 已超 SafeEnvelope
+        时，在第一次 admission 前就 pre-shard —— 不等 200 轮 no-progress。"""
+        if not getattr(self, "_shard_replanned", None):
+            self._shard_replanned: set[str] = set()
+        try:
+            from runtime.auto_shard_planner import AutoShardPlanner
+
+            env = self.broker.resource_envelope()
+            safe = max(1, int(env.safe_memory_bytes))
+            n = 0
+            for tid in list(remaining):
+                if tid in self._shard_replanned:
+                    continue
+                task = dag.tasks.get(tid)
+                if task is None or task.task_type != TASK_ROOT or not task.executable:
+                    continue
+                if not all(p not in remaining for p in task.inputs):
+                    continue
+                contract = task.resource_contract
+                peak = int(getattr(contract, "peak_memory_bytes", 0) or 0)
+                if peak <= safe:
+                    continue
+                if not getattr(contract, "shardable", False):
+                    continue
+                planner = AutoShardPlanner()
+                plan = planner.build_shard_execution_plan(
+                    task,
+                    safe_envelope_bytes=safe,
+                    time_range=task.time_range,
+                    instrument_universe=list(task.instrument_scope)
+                    if task.instrument_scope else None,
+                    lookback_bars=self._lookback_bars(task),
+                )
+                if plan is None:
+                    continue
+                if not self._replace_with_shard_plan(dag, tid, plan):
+                    continue
+                self._shard_replanned.add(tid)
+                remaining.discard(tid)
+                for sid in plan.shard_task_ids:
+                    remaining.add(sid)
+                remaining.add(plan.merge_task_id)
+                n += 1
+            if n:
+                self._preshards += n
+            return n
+        except Exception:
+            return 0
+
+    def _handle_oom(
+        self,
+        key: str,
+        exc: BaseException,
+        dag: PhysicalFactorDAG,
+        remaining: set[str],
+    ) -> bool:
+        """R38 P0-005（§5）：OOM → smaller-shape replan → 重试（same shape 禁止）。
+
+        流程：标记 shape underpredicted → calibration record(oom=True) → 降并发/
+        wave/block → replan_after_oom → 确保 new_shape_signature != failed → 重建
+        DAG → 重新调度 shard。返回是否已 replan（False → 上层如实 raise）。
         """
         try:
             from runtime.resource_calibration_store import global_calibration_store
             from runtime.resource_shape import ResourceShapeKey
+            from runtime.shard_execution_plan import shape_signature
+
+            # 1) 定位 original root task 与失败 shape。
+            orig_tid = key
+            plan = None
+            merge_task = None
+            if key.endswith(":merge"):
+                merge_task = dag.tasks.get(key)
+                if merge_task is not None and merge_task.shard_plan is not None:
+                    plan = merge_task.shard_plan
+                    orig_tid = plan.original_task_id
+            elif ":shard:" in key:
+                merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
+                m = dag.tasks.get(merge_id)
+                if m is not None and m.shard_plan is not None:
+                    plan = m.shard_plan
+                    orig_tid = plan.original_task_id
+            failed_sig = self._shard_shape_of.get(orig_tid) or f"full:{orig_tid}"
+            # 2) same-shape 禁止重试。
+            if failed_sig in self._failed_shapes:
+                self._explain(
+                    f"OOM_REPLAN_REFUSED: {orig_tid} shape {failed_sig[:8]} already "
+                    "failed — same shape never retried (R38_P0_ZERO_SAME_SHAPE_OOM_RETRY)"
+                )
+                return False
+            self._failed_shapes.add(failed_sig)
+            # 3) calibration 标记 OOM（尾部立即上调，不被均值稀释）。
+            orig_task = self._shard_original_task.get(orig_tid) or dag.tasks.get(orig_tid)
+            if orig_task is not None:
+                try:
+                    global_calibration_store().record(
+                        ResourceShapeKey.from_task(orig_task),
+                        elapsed_ms=0.0,
+                        peak_mem=0,
+                        oom=True,
+                    )
+                except Exception:
+                    pass
+            # 4) 降低并发 / wave / block（让后续小 shard 更容易 admission）。
+            try:
+                self.broker._cpu.set_soft_budget(
+                    max(1, self.broker._cpu.soft_budget // 2)
+                )
+            except Exception:
+                pass
+            # 5) replan smaller（更多 shard → 更小 per-shard）。SafeEnvelope 用
+            #    失败计划自己的 envelope（OOM 时点的资源约束，不随 live 波动）。
+            from runtime.auto_shard_planner import AutoShardPlanner
+
+            min_shards = 4 if plan is None else len(plan.shards) + 2
+            planner = AutoShardPlanner(min_shards=min_shards)
+            time_range = (
+                plan.time_range
+                if plan is not None
+                else (orig_task.time_range if orig_task is not None else None)
+            )
+            universe = (
+                plan.instrument_universe
+                if plan is not None
+                else (orig_task.instrument_scope if orig_task is not None else None)
+            )
+            safe = int(
+                plan.safe_envelope_bytes
+                if plan is not None and plan.safe_envelope_bytes
+                else (self.broker.resource_envelope().safe_memory_bytes or 0)
+            )
+            safe = max(1, safe)
+            new_plan = planner.build_shard_execution_plan(
+                orig_task,
+                safe_envelope_bytes=safe,
+                time_range=time_range,
+                instrument_universe=list(universe) if universe else None,
+                lookback_bars=self._lookback_bars(orig_task),
+                failed_signature=failed_sig,
+            )
+            if new_plan is None:
+                return False
+            new_sig = shape_signature(
+                task_id=orig_tid,
+                dimension=new_plan.dimension,
+                shard_count=len(new_plan.shards),
+                per_shard_peak_bytes=new_plan.per_shard_peak_bytes,
+            )
+            if new_sig == failed_sig:
+                return False
+            # 6) 重建 DAG 并重新调度。
+            if not self._replace_with_shard_plan(dag, orig_tid, new_plan):
+                return False
+            for sid in new_plan.shard_task_ids:
+                remaining.add(sid)
+            remaining.add(new_plan.merge_task_id)
+            self._oom_replans += 1
+            self._explain(
+                f"OOM_REPLAN: {key} -> {len(new_plan.shards)} smaller shards "
+                f"(sig {new_sig[:8]} != {failed_sig[:8]})"
+            )
+            return True
+        except Exception:
+            return False
+
+    def _record_task_calibration(
+        self, tid: str, task: PhysicalFactorTask, result: Any = None
+    ) -> None:
+        """R36 P0-005/006 + R38 P0-007/008/009：calibration 只接收真实观测。
+
+        - ``elapsed_ms``：真实 duration（finished - started，dispatch 时刻起）；
+        - ``output_bytes``：``estimate_object_bytes(result)``（真实输出，不再用
+          contract 预测值）；
+        - ``peak_mem``：本版本无 isolated per-task PSS（§171），如实标记
+          ``attribution_quality="unattributed"`` → 不进入 P99 主模型（避免「拿
+          预测当真实」的污染闭环）；predicted 值仅作诊断。
+        """
+        try:
+            from runtime.resource_calibration_store import global_calibration_store
+            from runtime.resource_shape import ResourceShapeKey
+            from runtime.task_run_observation import estimate_output_bytes
 
             contract = getattr(task, "resource_contract", None)
-            peak = int(contract.peak_memory_bytes) if contract is not None else 0
-            out = int(contract.output_bytes) if contract is not None else 0
-            elapsed = self._task_timing.get(tid, {}).get("finished_at_ms", 0.0)
+            predicted_peak = int(contract.peak_memory_bytes) if contract is not None else 0
+            timing = self._task_timing.get(tid, {})
+            elapsed = float(timing.get("elapsed_ms", 0.0))
+            if elapsed <= 0:
+                # 无 dispatch 起点（virtual/wave）→ 真实 duration 不可得，跳过。
+                elapsed = 0.0
+            out = estimate_output_bytes(result) if result is not None else 0
+            spill = int(contract.spill_bytes) if contract is not None else 0
             global_calibration_store().record(
                 ResourceShapeKey.from_task(task),
-                elapsed_ms=float(elapsed),
-                peak_mem=peak,
+                elapsed_ms=elapsed,
+                # R38 P0-008：unattributed → 峰值不进入 P99 主模型。
+                peak_mem=predicted_peak,
+                attribution_quality="unattributed",
+                peak_is_trusted=False,
                 output_bytes=out,
-                spill_bytes=int(contract.spill_bytes) if contract is not None else 0,
+                spill_bytes=spill,
             )
         except Exception:
             pass  # calibration 是性能数据，不因失败影响正确执行

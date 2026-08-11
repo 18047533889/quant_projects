@@ -875,19 +875,52 @@ class ResourceBroker:
         job_memory_lease_bytes: int | None = None,
         sink_backpressure: float = 0.0,
     ) -> Any:
-        """R36 P0-002：一个 control tick 的完整 ResourceDecision。
+        """R36 P0-002 + R38 P0-011/013：ResourceDecision 消费。
 
-        scheduler 在每次 admission 前消费：``target_concurrency`` 是最新硬目标
-        （§4：``hard_target = min(user_max_concurrency, target_concurrency)``），
-        ``read_wave_bytes`` / ``factor_block_bytes`` / ``result_queue_bytes`` 是
-        动态 budgets（§35/38/49）。同一 tick 只采样一次（斜率不被稀释）。
+        R38：ResourceAutopilotService 激活时（进程级 fixed-cadence 控制循环），
+        **只读**最新 snapshot —— scheduler 绝不自己 tick controller（否则 stable/
+        cooldown 由 loop 次数决定，多个 scheduler 高频 tick 会失控）。snapshot 太旧
+        → conservative fallback（§P0-012）。服务未激活（研究/standalone）才做
+        one-off tick。
         """
+        try:
+            from runtime.resource_autopilot_service import get_resource_autopilot
+
+            autopilot = get_resource_autopilot()
+            if autopilot is not None and autopilot.started and autopilot.last_decision() is not None:
+                snap = autopilot.last_decision()
+                if not snap.is_stale:
+                    return snap.decision
+                # 太旧 → conservative fallback（不自行 tick）。
+                return self._resource_controller().last_decision() or self._conservative_decision()
+        except Exception:
+            pass
         snap = self._refresh(force=True)
         return self._resource_controller().tick(
             self._signals_from_snapshot(snap),
             self._envelope_from_snapshot(snap),
             job_memory_lease_bytes=job_memory_lease_bytes,
             sink_backpressure=sink_backpressure,
+        )
+
+    def _conservative_decision(self) -> Any:
+        """decision 过期时的保守回退（§P0-012：不自行创建第二套 decision）。"""
+        from runtime.resource_autopilot import ResourceDecision
+
+        env = self.resource_envelope()
+        return ResourceDecision(
+            target_concurrency=1,
+            target_cpu_tokens=max(1, self.hard_cpu_slots // 4),
+            read_wave_bytes=256 * 1024**2,
+            factor_block_bytes=64 * 1024**2,
+            result_queue_bytes=128 * 1024**2,
+            io_concurrency=1,
+            remote_concurrency=1,
+            cache_budget_bytes=128 * 1024**2,
+            spill_budget_bytes=0,
+            pressure_state="NORMAL",
+            memory_constrained=True,
+            reasons=("stale_decision_conservative_fallback",),
         )
 
     def resource_controller_summary(self) -> dict[str, Any]:

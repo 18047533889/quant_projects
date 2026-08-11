@@ -223,24 +223,33 @@ class ResourceController:
                     reasons.append("stable_recovery_add_1")
         self._last_stage = stage
 
-        # 7) 派生动态 budgets（§35..39/49）——全部从 Safe Envelope 来。
+        # 7) 派生动态 budgets（§35..39/49）——R38 P0-014：从**同一个 SafeEnvelope**
+        #    经 MemoryBudgetAllocator 统一分配，保证 sum(活预算)+emergency ≤ safe
+        #    （不再各预算独立 clamp 导致总和超 safe）。
+        from runtime.memory_budget_allocator import MemoryBudgetAllocator
+
         safe = max(0, envelope.safe_memory_bytes)
         hard = max(1, envelope.hard_memory_bytes)
-        wave = _clamp(int(safe * WAVE_FRACTION), WAVE_ABS_MIN, WAVE_ABS_MAX)
-        block = _clamp(int(safe * BLOCK_FRACTION), BLOCK_ABS_MIN, BLOCK_ABS_MAX)
-        sink_q = _clamp(int(safe * SINK_FRACTION), SINK_ABS_MIN, SINK_ABS_MAX)
+        active_live = 0
+        if job_memory_lease_bytes:
+            active_live = max(0, int(job_memory_lease_bytes) - max(0, safe))
+        alloc = MemoryBudgetAllocator().allocate(
+            safe,
+            pressure_stage=stage,
+            active_live_bytes=active_live,
+            spill_free_bytes=max(0, envelope.spill_free_bytes),
+            spill_reserve_bytes=max(
+                int(getattr(envelope, "spill_reserve_bytes", 0) or 0),
+                int(max(1, hard) * SPILL_FRACTION),
+            ),
+        )
+        wave = alloc.read_wave_bytes
+        block = alloc.factor_block_bytes
+        sink_q = alloc.result_queue_bytes
         if job_memory_lease_bytes:
             sink_q = min(sink_q, max(SINK_ABS_MIN, int(job_memory_lease_bytes * SINK_JOB_LEASE_FRACTION)))
-        cache_budget = int(hard * CACHE_FRACTION)
-        spill_budget = int(hard * SPILL_FRACTION)
-
-        # 压力档位下调 budgets（§66：reduce wave / reduce block）。
-        if stage in {STAGE_PRESSURE_2, STAGE_PRESSURE_3}:
-            wave = _clamp(int(wave * 0.5), WAVE_ABS_MIN, WAVE_ABS_MAX)
-            block = _clamp(int(block * 0.5), BLOCK_ABS_MIN, BLOCK_ABS_MAX)
-        if stage in {STAGE_PRESSURE_3, STAGE_PRESSURE_4, STAGE_CRITICAL}:
-            cache_budget = int(cache_budget * 0.5)
-            spill_budget = int(spill_budget * 0.5)
+        cache_budget = alloc.cache_bytes
+        spill_budget = alloc.spill_bytes
 
         # R36 §244/245：低内存自动进入 memory-constrained mode（explain 标签）。
         memory_constrained = (

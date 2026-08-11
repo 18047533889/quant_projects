@@ -1,0 +1,259 @@
+{
+  "generated_by": "scripts/audit_r37_hard_gates.py",
+  "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "passed": 14,
+  "not_run": 0,
+  "failed": 0,
+  "total": 14,
+  "production_ready": true,
+  "gates": {
+    "R37_CURRENT_HEAD_BOUND": {
+      "gate_id": "R37_CURRENT_HEAD_BOUND",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_EVIDENCE_TRUTH_PASS": {
+      "gate_id": "R37_EVIDENCE_TRUTH_PASS",
+      "status": "PASS",
+      "executed_cases": 13,
+      "failed_cases": 0,
+      "passed_cases": 13,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r37/R37_EVIDENCE_TRUTH_GATES.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "evidence_truth_gates": 8,
+        "negative_controls": 5
+      }
+    },
+    "R37_PARAMETER_DOMAIN_CERTIFIED": {
+      "gate_id": "R37_PARAMETER_DOMAIN_CERTIFIED",
+      "status": "PASS",
+      "executed_cases": 84,
+      "failed_cases": 0,
+      "passed_cases": 84,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r37/R37_PARAMETER_DOMAIN_STORE.json"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "certified_point_count": 84,
+        "operators": 15
+      }
+    },
+    "R37_INVALID_PARAM_REJECTION_ZERO": {
+      "gate_id": "R37_INVALID_PARAM_REJECTION_ZERO",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "passed_cases": 2,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "invalid_rejected": 57,
+        "invalid_accepted": 0
+      }
+    },
+    "R37_PER_CANONICAL_LEDGER_PRODUCED": {
+      "gate_id": "R37_PER_CANONICAL_LEDGER_PRODUCED",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "docs/evidence/r37/R37_OPERATOR_CORRECTNESS_LEDGER.parquet"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "rows": 1391
+      }
+    },
+    "R37_ALL_PRODUCTION_CANONICALS_IN_LEDGER": {
+      "gate_id": "R37_ALL_PRODUCTION_CANONICALS_IN_LEDGER",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "production_targets": 1391,
+        "in_ledger": 1391,
+        "missing": []
+      }
+    },
+    "R37_EXACT_CALL_CERTIFICATION_CONSUMED": {
+      "gate_id": "R37_EXACT_CALL_CERTIFICATION_CONSUMED",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [
+        "backend/cleaned_bridge.py"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_PROPERTY_MUTATION_KILLED": {
+      "gate_id": "R37_PROPERTY_MUTATION_KILLED",
+      "status": "PASS",
+      "executed_cases": 5,
+      "failed_cases": 0,
+      "passed_cases": 5,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "mutation_controls": [
+          "nc_freshness_old_sha_red",
+          "nc_semantic_tsmean_to_tssum",
+          "nc_pit_future_shift_rejected",
+          "nc_literal_true_gate_caught",
+          "nc_deleted_cases_not_run"
+        ]
+      }
+    },
+    "R37_DATA_KNOWLEDGE_IDENTITY_PASS": {
+      "gate_id": "R37_DATA_KNOWLEDGE_IDENTITY_PASS",
+      "status": "PASS",
+      "executed_cases": 3,
+      "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_UNIVERSE_PIT_PASS": {
+      "gate_id": "R37_UNIVERSE_PIT_PASS",
+      "status": "PASS",
+      "executed_cases": 3,
+      "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_PRICE_BASIS_IDENTITY_PASS": {
+      "gate_id": "R37_PRICE_BASIS_IDENTITY_PASS",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "passed_cases": 2,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_CURRENT_HEAD_SHA_CONSISTENT": {
+      "gate_id": "R37_CURRENT_HEAD_SHA_CONSISTENT",
+      "status": "PASS",
+      "executed_cases": 1,
+      "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
+      "evidence_files": [],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {
+        "code_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+        "evidence_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23"
+      }
+    },
+    "R37_NO_RAW_BUFFER_GOVERNANCE_BYPASS": {
+      "gate_id": "R37_NO_RAW_BUFFER_GOVERNANCE_BYPASS",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "passed_cases": 2,
+      "case_ids": [],
+      "evidence_files": [
+        "runtime/batch_service.py"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    },
+    "R37_CACHE_UNREGISTER_FAIL_CLOSED": {
+      "gate_id": "R37_CACHE_UNREGISTER_FAIL_CLOSED",
+      "status": "PASS",
+      "executed_cases": 2,
+      "failed_cases": 0,
+      "passed_cases": 2,
+      "case_ids": [],
+      "evidence_files": [
+        "cache/session.py"
+      ],
+      "evidence_hashes": [],
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
+      "details": {}
+    }
+  }
+}

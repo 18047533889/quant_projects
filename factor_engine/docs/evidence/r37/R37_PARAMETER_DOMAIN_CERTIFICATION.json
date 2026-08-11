@@ -44,6 +44,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_mean": [
@@ -53,6 +54,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_median": [
@@ -62,6 +64,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_min": [
@@ -71,6 +74,17 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
+      "window=60"
+    ],
+    "ts_rank": [
+      "window=1",
+      "window=120",
+      "window=2",
+      "window=20",
+      "window=252",
+      "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_std": [
@@ -80,6 +94,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_sum": [
@@ -89,6 +104,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_var": [
@@ -98,6 +114,7 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ],
     "ts_zscore": [
@@ -107,24 +124,15 @@
       "window=20",
       "window=252",
       "window=5",
+      "window=500",
       "window=60"
     ]
   },
   "operators_tested": 17,
-  "certified_point_count": 68,
-  "invalid_rejection_passed": 26,
-  "invalid_rejection_failed": 9,
-  "invalid_rejection_failures": [
-    "ts_max window=500",
-    "ts_mean window=500",
-    "ts_median window=500",
-    "ts_min window=500",
-    "ts_rank window=500",
-    "ts_std window=500",
-    "ts_sum window=500",
-    "ts_var window=500",
-    "ts_zscore window=500"
-  ],
+  "certified_point_count": 84,
+  "invalid_rejection_passed": 57,
+  "invalid_rejection_failed": 0,
+  "invalid_rejection_failures": [],
   "exact_call_is_certified_example": {
     "c_demean": true,
     "cs_demean": true,
@@ -136,6 +144,7 @@
     "ts_mean": true,
     "ts_median": true,
     "ts_min": true,
+    "ts_rank": true,
     "ts_std": true,
     "ts_sum": true,
     "ts_var": true,

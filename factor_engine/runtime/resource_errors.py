@@ -55,6 +55,81 @@ class OutOfMemory(ResourceGovernanceError):
     """检测到 OOM 压力或内存分配失败。禁止 fallback。"""
 
 
+class ResourceUnderpredictionError(OutOfMemory):
+    """资源预测低估：真实执行需要比 contract 预测更多的资源（R38-P0-004）。
+
+    这是 OOM 的正确分类：不属于普通 transient，也不属于「不可重试 permanent」；
+    它是「same shape 不可重试、smaller shape 可以重试」。
+    """
+
+
+class OOMReplanRequired(ResourceUnderpredictionError):
+    """OOM 后必须 smaller-shape replan（同一 shape 禁止重试，R38-P0-005）。
+
+    携带 ``failed_shape_signature``：重试新 shape 的签名必须与之不同。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failed_shape_signature: str = "",
+        source: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.failed_shape_signature = failed_shape_signature
+        self.source = source
+
+
+#: 各后端 OOM 特征串 → 归一成 OOMReplanRequired（R38-P0-006）。
+OOM_MARKERS: tuple[str, ...] = (
+    "out of memory",
+    "outofmemory",
+    "oom",
+    "memoryerror",
+    "allocation failed",
+    "allocator out of memory",
+    "bad_alloc",
+    "cannot allocate memory",
+    "arrowmemoryerror",
+    "insufficient memory",
+    "failed to allocate",
+)
+
+
+def is_oom_error(exc: BaseException) -> bool:
+    """识别 DuckDB OutOfMemoryException / Arrow / Polars / Python MemoryError。
+
+    只认 OOM 特征，**不**把 semantic / schema / PIT / DQ 错误误判为资源错误
+    重试（R38-P0-006）。
+    """
+    name = type(exc).__name__.lower()
+    if name == "memoryerror" or isinstance(exc, MemoryError):
+        return True
+    msg = str(exc).lower()
+    return any(m in msg for m in OOM_MARKERS)
+
+
+def to_oom_replan_required(
+    exc: BaseException,
+    *,
+    failed_shape_signature: str = "",
+    source: str = "",
+) -> OOMReplanRequired:
+    """把后端 OOM 归一成 OOMReplanRequired。"""
+    if isinstance(exc, OOMReplanRequired):
+        if exc.failed_shape_signature:
+            return exc
+        return OOMReplanRequired(
+            str(exc), failed_shape_signature=failed_shape_signature, source=source
+        )
+    return OOMReplanRequired(
+        f"OOM normalized from {type(exc).__name__}: {exc}",
+        failed_shape_signature=failed_shape_signature,
+        source=source or type(exc).__name__,
+    )
+
+
 class SemanticContractError(ResourceGovernanceError):
     """语义契约违约（单位/口径/join fan-out/字段歧义）。禁止 fallback。"""
 

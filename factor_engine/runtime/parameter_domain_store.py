@@ -99,10 +99,11 @@ class ParameterDomainCertificationStore:
                 source=source, details=details or {},
             )
 
-    def load_json(self, path: Path) -> int:
+    def load_json(self, path: Path | str) -> int:
         """从 audit 输出的 JSON 加载认证点。返回加载数量。"""
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            p = Path(path)
+            data = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return 0
         points = data.get("certified_points") or data.get("points") or []

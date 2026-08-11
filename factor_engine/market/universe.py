@@ -102,6 +102,63 @@ class MaskComponentSpec:
     predicate: str = "!=0"
 
 
+@dataclass(frozen=True)
+class UniverseMembership:
+    """R37-P0-012：PIT universe 成员身份。
+
+    禁止把 ``Universe="CSI300"`` 直接等价成今天的一张静态成员列表去回算历史。
+    本对象把成员关系绑到 ``valid_time``（成分有效期）与 ``knowledge_time``
+    （成分名单获知时点）两个时点：
+
+    - 成分加入前（decision_time < valid_time）不能出现；
+    - 成分退出后不能被今天成员表重写过去；
+    - ``membership_hash`` 进 FactorSemanticIdentity / DataKnowledgeIdentity，
+      same expr + different universe => 不同 cache/checkpoint identity。
+    """
+
+    universe: str
+    instrument: str = ""
+    valid_time: str = ""        # 成分在该日/时段内有效
+    knowledge_time: str = ""    # 名单在什么时点才被知道（PIT 可及）
+    membership_hash: str = ""
+
+    def effective_at(self, decision_time: str) -> bool:
+        """decision_time 时该成分是否**已知且有效**。
+
+        硬规则：decision_time 必须 >= knowledge_time 且 >= valid_time ——
+        名单未公布前（future knowledge）或成分尚未生效前都不可用。
+        """
+        if not self.valid_time and not self.knowledge_time:
+            return True  # 无时点信息 = 旧行为（静态），不判无效
+        for t in (self.valid_time, self.knowledge_time):
+            if t and decision_time < t:
+                return False
+        return True
+
+    def identity_key(self) -> str:
+        """成员级 identity（进 membership hash）。"""
+        return f"{self.universe}|{self.instrument}|{self.valid_time}|{self.knowledge_time}"
+
+
+def universe_membership_identity(universe: str, members: tuple[str, ...],
+                                 *, as_of: str = "", version: str = "") -> str:
+    """R37-P0-012：把命名 universe + 成员列表 + as_of 折叠成 membership hash。
+
+    不同 as_of / 成员列表 => 不同 hash => 不同 cache/checkpoint 身份。
+    ``version`` 可带名单 revision 号（成分修正触发受影响的日重算）。
+    """
+    import hashlib
+
+    payload = {
+        "universe": universe,
+        "members": tuple(sorted(members)),
+        "as_of": as_of,
+        "version": version,
+    }
+    raw = ",".join(f"{k}={v}" for k, v in sorted(payload.items(), key=lambda x: x[0]))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 def apply_mask_predicate(arr: Any, predicate: str) -> np.ndarray:
     """Evaluate a declared mask predicate on a component array.
 
@@ -441,10 +498,12 @@ __all__ = [
     "UniverseContractError",
     "UniverseCoverageMetrics",
     "UniverseMaskContract",
+    "UniverseMembership",
     "apply_mask_predicate",
     "apply_universe_mask",
     "apply_universe_mask_to_panel",
     "coverage_metrics",
     "is_market_eligible",
     "universe_mask_contract",
+    "universe_membership_identity",
 ]

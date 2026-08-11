@@ -39,6 +39,36 @@ PRICE_BASIS_OFFICIAL_REFERENCE_PRE_CLOSE = "OFFICIAL_REFERENCE_PRE_CLOSE"
 PRICE_BASIS_RETURN = "RETURN"
 PRICE_BASIS_EITHER = "EITHER"
 
+
+class PriceBasis:
+    """R37-P0-014：price basis 语义 identity（不同 basis 不共 cache/CSE/checkpoint）。
+
+    与既有字符串词汇表对齐；``canonical`` 返回规范化字符串，进入
+    ``FactorSemanticIdentity.price_basis`` / ``DataKnowledgeIdentity``。
+    """
+
+    RAW = "RAW"                      # 未调整原始价格
+    CONTINUOUS = "CONTINUOUS"        # 连续复权（前复权/后复权统一视为 continuous）
+    FORWARD_ADJUSTED = "FORWARD_ADJUSTED"   # 前复权
+    BACKWARD_ADJUSTED = "BACKWARD_ADJUSTED"  # 后复权
+    TOTAL_RETURN = "TOTAL_RETURN"    # 全收益（含再投资）
+    RAW_OFFICIAL_LIMIT = "RAW_OFFICIAL_LIMIT"
+    OFFICIAL_REFERENCE_PRE_CLOSE = "OFFICIAL_REFERENCE_PRE_CLOSE"
+    RETURN = "RETURN"
+    EITHER = "EITHER"
+
+    _KNOWN = frozenset({
+        RAW, CONTINUOUS, FORWARD_ADJUSTED, BACKWARD_ADJUSTED, TOTAL_RETURN,
+        RAW_OFFICIAL_LIMIT, OFFICIAL_REFERENCE_PRE_CLOSE, RETURN, EITHER,
+    })
+
+    @classmethod
+    def canonical(cls, value: str | None) -> str:
+        """规范化为标准值；未知值保留原样（向后兼容），但空值归一化为 RAW。"""
+        if not value:
+            return cls.RAW
+        return value if value in cls._KNOWN else value
+
 # reporting-flow semantics vocabulary
 FLOW_SEMANTICS_STOCK = "stock"
 FLOW_SEMANTICS_SINGLE_PERIOD = "single_period_flow"

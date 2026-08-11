@@ -1,6 +1,6 @@
 {
   "generated_by": "scripts/audit_r34_hard_gates.py",
-  "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+  "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
   "passed": 13,
   "not_run": 32,
   "failed": 5,
@@ -12,11 +12,16 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [
         "docs/evidence/r34/R34_HEAD.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_CLEAN_TREE_CERTIFICATION": {
@@ -24,11 +29,16 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [
         "docs/evidence/r34/R34_EVIDENCE_TRUTH_GATES.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_ALL_ARTIFACTS_CURRENT_HEAD": {
@@ -36,9 +46,14 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_ZERO_HARDCODED_TRUE_GATES": {
@@ -46,9 +61,14 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_ZERO_PRESENCE_ONLY_HARD_GATES": {
@@ -56,9 +76,14 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_ZERO_SOURCE_STRING_ONLY_HARD_GATES": {
@@ -66,9 +91,14 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_AUDIT_NEGATIVE_CONTROL_PASS": {
@@ -76,9 +106,14 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_ALL_PRODUCTION_CANONICALS_TYPED_SIGNATURE": {
@@ -86,9 +121,14 @@
       "status": "FAIL",
       "executed_cases": 4,
       "failed_cases": 1,
+      "passed_cases": 3,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "missing_typed": [
           "ADX",
@@ -110,9 +150,14 @@
       "status": "FAIL",
       "executed_cases": 1,
       "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "undeclared_count": 1361,
         "sample": [
@@ -134,9 +179,14 @@
       "status": "FAIL",
       "executed_cases": 1,
       "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "incomplete_count": 1362,
         "sample": [
@@ -158,9 +208,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "本机独立 oracle 已覆盖核心滚动/截面族（见 R34_PARAMETER_DOMAIN_COVERAGE）；全 production canonical 独立 golden 目录为后续轮"
       }
@@ -170,9 +225,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "prefix-causality 已由既有证据层覆盖；R34 全量 temporal 独立重证留后续"
       }
@@ -182,11 +242,16 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [
         "docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "certified_ops": 11,
         "not_certified": {}
@@ -197,9 +262,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "核心 7 个 rolling 算子已认证 window∈{1..252}；全 production 算子的 certified⊇production 映射为后续轮"
       }
@@ -209,9 +279,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "非法参数拒绝（window=0/min_periods>window/ddof=2）专项测试留后续"
       }
@@ -221,9 +296,14 @@
       "status": "FAIL",
       "executed_cases": 1,
       "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "model_like_without_explicit": [
           "calendar_day_diff: model-like but no explicit reviewed ModelTimingContract (auto-generated timing is a research hint only, R34 P0-025)",
@@ -245,9 +325,14 @@
       "status": "FAIL",
       "executed_cases": 1,
       "failed_cases": 1,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "errors": [
           "calendar_day_diff: model-like but no explicit reviewed ModelTimingContract (auto-generated timing is a research hint only, R34 P0-025)",
@@ -268,9 +353,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "future-perturbation 测试套留后续"
       }
@@ -280,9 +370,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "multi-horizon label maturity 测试套留后续"
       }
@@ -292,9 +387,14 @@
       "status": "PASS",
       "executed_cases": 3,
       "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "scan": [
           {
@@ -320,9 +420,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "chunk/checkpoint parity 测试套留后续（detect_stateful_behavior 已提供行为检测）"
       }
@@ -332,9 +437,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "checkpoint restore parity 留后续"
       }
@@ -344,9 +454,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "incremental append parity 留后续"
       }
@@ -356,9 +471,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "DA 历史修正 parity 依赖真实 DA fixture，留后续"
       }
@@ -368,9 +488,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "Polars/DuckDB 参数域 parity 需重跑后端差分，留后续"
       }
@@ -380,9 +505,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "execution-variant 认证留后续"
       }
@@ -392,11 +522,16 @@
       "status": "PASS",
       "executed_cases": 1,
       "failed_cases": 0,
+      "passed_cases": 1,
+      "case_ids": [],
       "evidence_files": [
         "docs/evidence/r34/R34_PARAMETER_DOMAIN_COVERAGE.json"
       ],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_POLARS_CERTIFIED_REGION_PARITY_PASS": {
@@ -404,9 +539,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "Polars parity 重跑留后续"
       }
@@ -416,9 +556,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "DuckDB parity 重跑留后续"
       }
@@ -428,9 +573,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "三后端 null/nan/inf mask 对比留后续"
       }
@@ -440,9 +590,14 @@
       "status": "PASS",
       "executed_cases": 3,
       "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "factor_cases": 3
       }
@@ -452,9 +607,14 @@
       "status": "PASS",
       "executed_cases": 3,
       "failed_cases": 0,
+      "passed_cases": 3,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {}
     },
     "R34_DUPLICATE_FACTOR_ISOLATION": {
@@ -462,9 +622,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "重复因子隔离测试留后续"
       }
@@ -474,9 +639,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "CSE snapshot 隔离留后续"
       }
@@ -486,9 +656,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "cache poisoning 测试留后续"
       }
@@ -498,9 +673,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "worker 数数值 parity 留后续"
       }
@@ -510,9 +690,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "需要真实 DataAccess parquet/registry fixture，本机未配置，留后续"
       }
@@ -522,9 +707,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "财报 restatement PIT golden 需真实 DA fixture"
       }
@@ -534,9 +724,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "index announce/effective golden 需真实 DA fixture"
       }
@@ -546,9 +741,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "holder snapshot golden 需真实 DA fixture"
       }
@@ -558,9 +758,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "event effective golden 需真实 DA fixture"
       }
@@ -570,9 +775,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "minute session golden 需真实 DA fixture"
       }
@@ -582,11 +792,16 @@
       "status": "PASS",
       "executed_cases": 4,
       "failed_cases": 0,
+      "passed_cases": 4,
+      "case_ids": [],
       "evidence_files": [
         "runtime/production_policy.py"
       ],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "note": "production 恒原子两阶段，env escape hatch 已删除（P0-039）"
       }
@@ -596,9 +811,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "R33 FactorBlock DQ 向量化留 R33 轮"
       }
@@ -608,9 +828,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "read-after-write 测试留后续"
       }
@@ -620,9 +845,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "partial generation visibility 测试留后续"
       }
@@ -632,9 +862,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "write failure injection 留后续"
       }
@@ -644,9 +879,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "R33 尚未执行完毕，fast-plan eligibility 门留 R33"
       }
@@ -656,9 +896,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "R33 optimized==reference 留 R33"
       }
@@ -668,9 +913,14 @@
       "status": "NOT_RUN",
       "executed_cases": 0,
       "failed_cases": 0,
+      "passed_cases": 0,
+      "case_ids": [],
       "evidence_files": [],
       "evidence_hashes": [],
-      "commit_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+      "commit_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+      "component_hashes": {},
+      "fixture_hashes": {},
+      "generated_at": "",
       "details": {
         "reason": "R33 perf bench 留 R33"
       }

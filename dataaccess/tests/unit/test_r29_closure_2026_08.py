@@ -661,13 +661,18 @@ def test_anchor_relation_register_drop(tmp_path):
 # ===========================================================================
 
 def test_data_read_session_resolution_reuse(tmp_path):
-    """R29-18：DataReadSession 注入 store._resolution_cache——同一 (dataset, params,
-    time_range) 二次 prepare 命中缓存，跳过重新 glob/stat。"""
+    """R29-18 + R38 P0-050：DataReadSession 的 resolution 缓存走 **ContextVar**
+    （request-scoped），不再注入 store._resolution_cache 全局属性——同一
+    (dataset, params, time_range) 二次 prepare 命中缓存，跳过重新 glob/stat；
+    Store 全局字段不被 session 覆盖（并发安全）。"""
     from data_access.read.read_session import DataReadSession
+    from data_access.runtime.read_session_context import get_resolution_cache
 
     store, root = _static_store(tmp_path)
     with DataReadSession(store) as s:
-        assert store._resolution_cache is s._resolution_cache
+        # R38 P0-050：权威缓存来自 ContextVar；Store 全局属性不被覆盖。
+        assert store._resolution_cache is None
+        assert get_resolution_cache() is s._resolution_cache
         h1 = s.read("ds")
         h1.to_arrow()
         key = ("ds", "p:3f1aed73ea7c23c5" if False else None, "None", "None")
@@ -677,6 +682,7 @@ def test_data_read_session_resolution_reuse(tmp_path):
         assert h2.to_arrow().num_rows == 3
     # 退出后恢复（普通读不缓存）
     assert store._resolution_cache is None
+    assert get_resolution_cache() is None
 
 
 # ===========================================================================

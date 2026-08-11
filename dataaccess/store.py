@@ -242,6 +242,8 @@ class DataAccessStore:
         # (dataset, params_fingerprint, time_range, instrument_filter)；命中跳过
         # glob 重解析 / 文件 stat / 镜像检查——FactorEngine 对同一批因子重复读同一
         # dataset 时 prepare ONCE。None = 未启用（普通读不缓存）。仅读场景使用。
+        # R38 P0-050：真实缓存走 ContextVar（request-scoped）；本属性仅保留为
+        # 向后兼容显示（不再作为并发读取的权威来源）。
         self._resolution_cache: dict | None = None
         self._registry_hash = _compute_registry_hash(registry)
         # #46 注入的市场交易日历（{market: MarketCalendar}），session availability 用
@@ -1432,6 +1434,25 @@ class DataAccessStore:
             )
             return None
 
+    def _current_resolution_cache(self) -> dict | None:
+        """R38 P0-050：resolution cache 权威来源 = ContextVar（request-scoped）。
+
+        并发 DataReadSession A/B overlap 时，A exit 不会清掉 B 的 cache（B 的
+        读取走 B 自己的 ContextVar）。Store 全局 ``_resolution_cache`` 仅作
+        向后兼容显示，不再是并发读取的权威。
+        """
+        try:
+            from data_access.runtime.read_session_context import (
+                get_resolution_cache,
+            )
+
+            ctx_cache = get_resolution_cache()
+            if ctx_cache is not None:
+                return ctx_cache
+        except Exception:
+            pass
+        return self._resolution_cache
+
     def prepare_read(
         self,
         dataset: str,
@@ -1506,7 +1527,8 @@ class DataAccessStore:
 
         # R29-P0 #205：job 级 resolution 缓存（只对默认解析生效；physical_scope
         # 精确对象集不缓存）。提前初始化避免 Verified 分支引用未定义局部变量。
-        _cache = getattr(self, "_resolution_cache", None)
+        # R38 P0-050：权威缓存来自 ContextVar（request-scoped），不再改 Store 全局。
+        _cache = self._current_resolution_cache()
         _hit = None
         if physical_scope is not None:
             if isinstance(physical_scope, VerifiedPhysicalScope):
@@ -1556,7 +1578,7 @@ class DataAccessStore:
             # stat/镜像检查（FactorEngine 对同一批因子重复读同一 dataset 时
             # prepare ONCE）。只对无 physical_scope 的默认解析生效；Verified scope
             # 已是精确对象集，无需缓存。
-            _cache = getattr(self, "_resolution_cache", None)
+            _cache = self._current_resolution_cache()
             _ckey = None
             _hit = None
             if _cache is not None:

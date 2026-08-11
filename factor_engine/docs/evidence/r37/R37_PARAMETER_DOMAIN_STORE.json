@@ -380,6 +380,27 @@
       }
     },
     {
+      "canonical": "ts_max",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_mean",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -524,6 +545,27 @@
       "source": "independent_numpy_oracle",
       "details": {
         "window": 252
+      }
+    },
+    {
+      "canonical": "ts_mean",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
       }
     },
     {
@@ -674,6 +716,27 @@
       }
     },
     {
+      "canonical": "ts_median",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_min",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -821,6 +884,195 @@
       }
     },
     {
+      "canonical": "ts_min",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          1
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 1
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          2
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 2
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          5
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 5
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          20
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 20
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          60
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 60
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          120
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 120
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          252
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 252
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_std",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -968,6 +1220,27 @@
       }
     },
     {
+      "canonical": "ts_std",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_sum",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -1115,6 +1388,27 @@
       }
     },
     {
+      "canonical": "ts_sum",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_var",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -1262,6 +1556,27 @@
       }
     },
     {
+      "canonical": "ts_var",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
+      }
+    },
+    {
       "canonical": "ts_zscore",
       "semantic_version": "",
       "backend": "pandas_numpy",
@@ -1406,6 +1721,27 @@
       "source": "independent_numpy_oracle",
       "details": {
         "window": 252
+      }
+    },
+    {
+      "canonical": "ts_zscore",
+      "semantic_version": "",
+      "backend": "pandas_numpy",
+      "execution_variant": "reference",
+      "source_context": "",
+      "parameter_point": [
+        [
+          "window",
+          500
+        ]
+      ],
+      "dtype": "float64",
+      "grain": "daily",
+      "passed": true,
+      "evidence_hash": "",
+      "source": "independent_numpy_oracle",
+      "details": {
+        "window": 500
       }
     }
   ]

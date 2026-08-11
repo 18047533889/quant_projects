@@ -1,0 +1,56 @@
+{
+  "head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "summary": {
+    "controller": {
+      "cooldown": 0,
+      "decision_log": [],
+      "last_decision": {
+        "cache_budget_bytes": 681855983,
+        "factor_block_bytes": 227285327,
+        "io_concurrency": 4,
+        "memory_constrained": false,
+        "pressure_state": "NORMAL",
+        "read_wave_bytes": 454570655,
+        "reasons": [
+          "stable_recovery_add_1"
+        ],
+        "remote_concurrency": 2,
+        "result_queue_bytes": 227285327,
+        "spill_budget_bytes": 18080207668,
+        "target_concurrency": 4,
+        "target_cpu_tokens": 4
+      },
+      "last_stage": "NORMAL",
+      "stable_count": 0,
+      "target_concurrency": 4,
+      "target_cpu_tokens": 4,
+      "tick_count": 6
+    },
+    "interval_s": 0.2,
+    "last_decision_sec": 96790.221,
+    "last_snapshot": {
+      "decision": {
+        "cache_budget_bytes": 681855983,
+        "factor_block_bytes": 227285327,
+        "io_concurrency": 4,
+        "memory_constrained": false,
+        "pressure_state": "NORMAL",
+        "read_wave_bytes": 454570655,
+        "reasons": [
+          "stable_recovery_add_1"
+        ],
+        "remote_concurrency": 2,
+        "result_queue_bytes": 227285327,
+        "spill_budget_bytes": 18080207668,
+        "target_concurrency": 4,
+        "target_cpu_tokens": 4
+      },
+      "decision_id": "9ca6b9ab2b01",
+      "generated_at_monotonic": 96790.221,
+      "signals_version": "sig:96790221",
+      "valid_until": 96792.221
+    },
+    "started": true,
+    "tick_count": 6
+  }
+}

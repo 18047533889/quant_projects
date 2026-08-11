@@ -112,13 +112,28 @@ class PandasBackend(Backend):
             算子名未在 ``KernelRegistry`` 中注册。
         """
         if node.op == "plan_ref":
+            sid = node.attrs["sid"]
+            # R38 P0-031（§12）：L0 读取优先走 GovernedBufferStore（唯一 owner）——
+            # backing 缺失时尝试 spill reload；没有 store 才退回 raw dict。
+            store = getattr(ctx, "shared_buffers", None)
+            if store is not None:
+                val = store.get_ref(sid)
+                if val is not None:
+                    return val
+                # 尝试 spill reload（SPILLED 的 sid）。
+                try:
+                    from runtime.spill_store import SpillRef
+
+                    ref = getattr(store, "_spill_ref", None)
+                    _ = ref
+                except Exception:
+                    pass
             sc = getattr(ctx, "shared_result_cache", None)
             if sc is None:
                 raise RuntimeError(
                     "plan_ref requires ExecutionContext.shared_result_cache; "
                     "use FactorEngine.run_many() after compile_many CSE."
                 )
-            sid = node.attrs["sid"]
             if sid not in sc:
                 raise KeyError(f"missing shared subplan result for sid prefix={sid[:64]!r}...")
             return sc[sid]

@@ -140,62 +140,18 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
 def _pca_svd(X: np.ndarray, n_components: int):
     """Standardised SVD PCA; returns the model in the *active sub-space* only.
 
-    Missing values are handled per column: the mean / std are estimated from
-    each column's finite rows and any still-missing entry is imputed with that
-    column mean before the SVD (suspended / halted instruments keep a neutral
-    contribution instead of poisoning the factor space).  Columns with zero
-    variance are kept with unit scale so the SVD is never singular.
-
-    Audit M01: a column whose finite coverage is below 2 rows is INACTIVE and is
-    dropped from the fit (``np.nanmean`` on an all-NaN column would otherwise
-    leak NaN into the SVD).  Audit M07: ``n_components`` is capped below the fit
-    rank (``min(n_features, n_observations) - 1``) so the reconstruction error
-    is never trivially zero from a full-rank fit.
-    Audit P0-14: the returned model is *active-space only* — ``mu``/``sd`` have
-    length ``n_active``, ``loadings`` has shape ``(k, n_active)`` with
-    ``k = actual_k``, and the boolean ``active`` mask plus ``k`` let callers map
-    back to the full universe.  Inactive columns never carry NaN into the shared
-    matrix products, so one suspended stock can no longer poison the component
-    scores / reconstruction of every other stock.
+    R38 P0-060（§23）：唯一 authoritative 数学在 ``pca_state`` 模块——canonical
+    与 shared ``PCABlock`` 共用同一 fit（coverage-gated active / 标准化 SVD /
+    rank cap / missing imputation），不再在 backend 复制第二套。
     """
-    n, d = X.shape
-    window = max(1, int(n))
-    finite_count = np.sum(np.isfinite(X), axis=0)
-    # R10-P0-007: coverage-gated active set.  A stock whose finite coverage
-    # inside the window falls below the ratio is INACTIVE — it no longer
-    # dilutes the covariance with mean-imputed rows.  Fail-closed: an inactive
-    # stock's output cell stays NaN (never imputed into the projection).
-    min_obs = max(_ABSOLUTE_MIN_OBS, int(np.ceil(window * _MIN_COVERAGE_RATIO)))
-    active = finite_count >= min_obs
-    n_active = int(active.sum())
-    if n_active < 2:
-        return None
-    sub = X[:, active]
-    mu_sub = np.nanmean(sub, axis=0)
-    sd_sub = np.nanstd(sub, axis=0)
-    sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
-    Xc = np.where(np.isfinite(sub), sub, mu_sub)
-    Xs = (Xc - mu_sub) / sd_sub
-    k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
-    if k < 1:
-        return None
-    U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
-    total_var = float(np.sum(s * s))
-    explained = s[:k] ** 2 / max(total_var, _EPS)
-    # R10-P0-007 telemetry: breadth + per-active-stock coverage percentiles,
-    # for the validity gate / search pruning to consume.
-    coverage = finite_count[active].astype(float) / float(window)
-    return {
-        "active": active,
-        "k": k,
-        "mu": mu_sub,
-        "sd": sd_sub,
-        "loadings": Vt[:k],
-        "explained": explained,
-        "active_breadth": int(n_active),
-        "median_coverage": float(np.median(coverage)),
-        "min_coverage": float(coverage.min()),
-    }
+    from cleaned_operators.cross_section.pca_state import PCAState
+
+    state = PCAState.from_window(
+        X, n_components,
+        min_coverage_ratio=_MIN_COVERAGE_RATIO,
+        absolute_min_obs=_ABSOLUTE_MIN_OBS,
+    )
+    return state.to_dict() if state is not None else None
 
 
 def _pca_transform(pca, row: np.ndarray) -> np.ndarray:
@@ -315,32 +271,19 @@ _mk(
 def _pca_commonality(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
     """Per-stock commonality ``1 - Var(resid_i)/Var(ret_i)`` over the training window.
 
-    Unlike the previous implementation this returns a *per-stock* value (each
-    instrument's own time-series variance decomposition) instead of one scalar
-    broadcast to every column.
+    R38 P0-060（§23）：唯一公式在 ``pca_state.pca_commonality``——canonical 与
+    shared ``PCABlock.commonality`` 共用，不再两套数学漂移。
     """
-    pca = _pca_svd(X, min(int(n_components), X.shape[1]))
-    if pca is None:
+    from cleaned_operators.cross_section.pca_state import PCAState, pca_commonality
+
+    state = PCAState.from_window(
+        X, min(int(n_components), X.shape[1]),
+        min_coverage_ratio=_MIN_COVERAGE_RATIO,
+        absolute_min_obs=_ABSOLUTE_MIN_OBS,
+    )
+    if state is None:
         return np.full(len(cur), np.nan)
-    # P0-14: work only in the active sub-space so an inactive column's NaN never
-    # leaks into the shared variance decomposition.  R10-P0-006 (same class):
-    # a single stock with a missing training row must not NaN the shared
-    # components — its training gap is imputed with its own training mean
-    # (``z -> 0``) before the matrix product; the residual for that cell stays
-    # NaN and its column's variance uses only its finite rows (``nanvar``).
-    Xa = X[:, pca["active"]]
-    Xa_imp = np.where(np.isfinite(Xa), Xa, pca["mu"][None, :])
-    z = (Xa_imp - pca["mu"]) / pca["sd"]      # (n_rows, n_active)
-    score = pca["loadings"] @ z.T             # (k, n_rows)
-    recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T  # (n_rows, n_active)
-    resid = Xa - recon
-    var_resid = np.nanvar(resid, axis=0)
-    var_ret = np.nanvar(Xa, axis=0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ratio_active = np.where(var_ret > _EPS, 1.0 - var_resid / var_ret, np.nan)
-    out = np.full(X.shape[1], np.nan)
-    out[pca["active"]] = ratio_active
-    return out
+    return pca_commonality(X, state.to_dict())
 
 
 _mk(

@@ -37,6 +37,11 @@ CORRECTION_MIN = 1.0
 CORRECTION_MAX = 2.5
 _UNDERPREDICT_STREAK_TRIGGER = 3
 _OVERPREDICT_STREAK_TRIGGER = 5
+#: R38 P0-010（§6）：calibration schema 版本。R36 时代用「预测值当真实值」污染了
+#: memory_obs —— 升版后旧 schema 数据不进入新 P99（只作历史诊断）。
+CALIBRATION_SCHEMA_VERSION = 2
+#: 本实现写入的 ``calibration_source_version``（记录在每行）。
+CALIBRATION_SOURCE_VERSION = f"fe-r38-schema-v{CALIBRATION_SCHEMA_VERSION}"
 
 
 @dataclass
@@ -65,21 +70,38 @@ class ShapeCalibration:
         spill_bytes: int = 0,
         near_oom: bool = False,
         oom: bool = False,
+        attribution_quality: str = "unattributed",
+        peak_is_trusted: bool | None = None,
     ) -> None:
-        """记录一次真实观测，并做 P99 预测的 correction 反馈（P0-006）。"""
+        """记录一次观测并做 P99 correction 反馈（P0-006）。
+
+        R38 P0-008（§6）：``peak_mem`` 只有在 ``attribution_quality`` 可信时
+        （isolated / low-concurrency / concurrent-marginal）才进入 ``memory_obs``
+        与 P99 主模型；``unattributed``（拿预测值当真实值）只记录 elapsed/output，
+        峰值内存被拒——避免「模型学自己的预测」的污染闭环。
+        """
         # P0-006：prediction_error = actual / predicted——用**加入本次之前的** P99
         # 比较，否则本次样本会成为自己的尾部，ratio 恒≈1，低估永远不触发。
         predicted_before = self.predict_memory_p99()
 
-        self.memory_obs.append(float(peak_mem))
+        from runtime.task_run_observation import P99_TRUSTED_ATTRIBUTION
+
+        trusted = (
+            peak_is_trusted
+            if peak_is_trusted is not None
+            else attribution_quality in P99_TRUSTED_ATTRIBUTION
+        )
+        # R38 P0-008：可信观测才进内存分布（不被预测值污染）。
+        if trusted:
+            self.memory_obs.append(float(peak_mem))
+            self.max_obs = max(self.max_obs, int(peak_mem))
         self.elapsed_obs.append(float(elapsed_ms))
         self.output_obs.append(float(output_bytes))
         self.spill_obs.append(float(spill_bytes))
-        self.max_obs = max(self.max_obs, int(peak_mem))
         self.updated_at_ms = time.monotonic() * 1000.0
         self._cap_samples()
 
-        # OOM 不能等均值稀释（§211）：立即提高 tail safety。
+        # OOM 不能等均值稀释（§211）：立即提高 tail safety（与 attribution 无关）。
         if oom:
             self.oom_events += 1
             self.correction_factor = min(CORRECTION_MAX, self.correction_factor * 1.30)
@@ -91,7 +113,8 @@ class ShapeCalibration:
             self.correction_factor = min(CORRECTION_MAX, self.correction_factor * 1.15)
 
         # prediction_error 反馈：低估 streak → 提高；长期高估 → 慢慢下调（§12/283）。
-        if predicted_before is not None and predicted_before > 0:
+        # 只有可信观测参与低估判定（预测值对比预测值没有意义）。
+        if trusted and predicted_before is not None and predicted_before > 0:
             ratio = peak_mem / predicted_before
             if ratio > 1.0:
                 self.underpredict_streak += 1
@@ -154,7 +177,13 @@ class ShapeCalibration:
             return {
                 "memory_p50": None, "memory_p90": None, "memory_p95": None,
                 "memory_p99": None, "max_observed": self.max_obs,
-                "sample_count": 0, "correction_factor": self.correction_factor,
+                "sample_count": 0,
+                "elapsed_sample_count": len(self.elapsed_obs),
+                "output_sample_count": len(self.output_obs),
+                "elapsed_p50": self._weighted_quantile(self.elapsed_obs, 0.50) if self.elapsed_obs else None,
+                "correction_factor": self.correction_factor,
+                "oom_events": self.oom_events,
+                "near_oom_events": self.near_oom_events,
             }
         return {
             "memory_p50": self._weighted_quantile(self.memory_obs, 0.50),
@@ -163,6 +192,11 @@ class ShapeCalibration:
             "memory_p99": self.predict_memory_p99(),
             "max_observed": self.max_obs,
             "sample_count": len(self.memory_obs),
+            # R38 P0-008：elapsed/output 与 memory 分离统计——unattributed 观测
+            # 不进入 memory P99，但仍贡献真实的 duration/output 分布。
+            "elapsed_sample_count": len(self.elapsed_obs),
+            "output_sample_count": len(self.output_obs),
+            "elapsed_p50": self._weighted_quantile(self.elapsed_obs, 0.50) if self.elapsed_obs else None,
             "correction_factor": round(self.correction_factor, 3),
             "oom_events": self.oom_events,
             "near_oom_events": self.near_oom_events,
@@ -205,8 +239,11 @@ class ResourceCalibrationStore:
         spill_bytes: int = 0,
         near_oom: bool = False,
         oom: bool = False,
+        attribution_quality: str = "unattributed",
+        peak_is_trusted: bool | None = None,
     ) -> None:
-        """记录一次真实任务观测（§11）。"""
+        """记录一次真实任务观测（§11）。R38 P0-008：峰值内存只在 attribution
+        可信时进入 P99 主模型。"""
         with self._lock:
             sk = self._shape_key_tuple(key)
             cal = self._shapes.get(sk)
@@ -220,6 +257,8 @@ class ResourceCalibrationStore:
                 spill_bytes=spill_bytes,
                 near_oom=near_oom,
                 oom=oom,
+                attribution_quality=attribution_quality,
+                peak_is_trusted=peak_is_trusted,
             )
 
     def predict(self, key: ResourceShapeKey) -> dict[str, float | int | None] | None:
@@ -254,6 +293,8 @@ class ResourceCalibrationStore:
         with self._lock:
             for cal in self._shapes.values():
                 rows.append({
+                    "schema_version": CALIBRATION_SCHEMA_VERSION,
+                    "calibration_source_version": CALIBRATION_SOURCE_VERSION,
                     "hardware_fingerprint": json.dumps(self._hw, sort_keys=True),
                     "shape_key": json.dumps(cal.shape_key.to_dict(), sort_keys=True),
                     "max_observed": cal.max_obs,
@@ -306,6 +347,11 @@ class ResourceCalibrationStore:
                 continue
             if hw != self._hw:
                 continue  # 不同硬件不共享 calibration（§34）
+            # R38 P0-010：旧 schema（R36 预测值污染时代）的数据不进入新 P99，
+            # 只保留作历史诊断（跳过，不加载进主 store）。
+            row_schema = int(row.get("schema_version", 0) or 0)
+            if row_schema < CALIBRATION_SCHEMA_VERSION:
+                continue
             skt = (tuple(sorted(hw.items())), tuple(sorted(sk.to_dict().items())))
             cal = self._shapes.get(skt)
             if cal is None:

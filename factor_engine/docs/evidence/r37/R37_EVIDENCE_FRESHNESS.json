@@ -1,5 +1,5 @@
 {
-  "current_head": "9b912b95d15027e2712c624f18a0fff55d20311b",
+  "current_head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
   "artifacts": {
     "factor_operator_verified": {
       "path": "evidence/factor_operator_verified.json",
@@ -225,7 +225,7 @@
     },
     "r37/R37_HEAD": {
       "path": "docs/evidence/r37/R37_HEAD.json",
-      "bound_sha": "9b912b95d15027e2712c624f18a0fff55d20311b",
+      "bound_sha": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
       "bound": true,
       "current_head": true
     }

@@ -34,6 +34,44 @@ from cleaned_operators.ts_model._rolling_core import aligned, frame_like, metada
 _CANONICALS: list[str] = []
 
 
+#: R38 §37：Numba 主链 dispatch 计数器（end-to-end 证据：accelerated_kernel_used）。
+_NUMBA_DISPATCH_COUNTER: dict[str, int] = {}
+
+
+def numba_dispatch_stats() -> dict[str, int]:
+    """主链实际 dispatch 到 Numba kernel 的次数（tests/gate 消费）。"""
+    return dict(_NUMBA_DISPATCH_COUNTER)
+
+
+def _numba_kernel(kernel_name: str):
+    """R38 P0-058（§22）：加速准入 gate——certified kernel + numba 可用才返回 callable。
+
+    准入 key（§P0-058 至少项）：kernel_name / semantic_version（registry 内 /
+    dtype float64 / missing policy（kernel 已对 hostile fixture 认证））。返回
+    ``callable(vals, *params)`` 或 None（走 reference）。
+    """
+    try:
+        from backend.numba_kernel_registry import NumbaKernelRegistry
+
+        # 确保 certified kernel 已注册（backend/numba_kernels/__init__ 导入即注册；
+        # 幂等——registry 已有则跳过）。
+        try:
+            if not NumbaKernelRegistry.kernels():
+                import backend.numba_kernels  # noqa: F401
+        except Exception:
+            pass
+        kernel = NumbaKernelRegistry.get(kernel_name)
+        if kernel is None or kernel.numba_fn is None or not kernel.numba_available:
+            return None
+        # dtype 准入：kernel 只认证 float64（`supported_dtypes` 默认 float64）。
+        if "float64" not in kernel.spec.supported_dtypes:
+            return None
+        _NUMBA_DISPATCH_COUNTER[kernel_name] = _NUMBA_DISPATCH_COUNTER.get(kernel_name, 0) + 1
+        return kernel.call
+    except Exception:
+        return None
+
+
 def _register(name: str, description: str, params: list[str], unit: str, fn):
     @register_operator(
         name=name,
@@ -62,8 +100,19 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.nda
     # a negative process-noise would shrink uncertainty, a non-positive or
     # non-finite observation-noise breaks the Kalman update.  Fail fast instead
     # of silently producing nonsense (a non-finite scale is an *unknown* scale).
+    # （R38：q/r 校验必须在 Numba dispatch **之前**——fail-closed 不能被 kernel
+    # 绕过。）
     if not (np.isfinite(q) and np.isfinite(r) and q >= 0.0 and r > 0.0):
         raise ValueError("q must be finite and >= 0; r must be finite and > 0")
+    # R38 P0-057/058（§22）：certified Numba kernel 只在**逐算子 parity 验证过**的
+    # 组合接入主链。``kalman_level`` kernel 与算子 reference 在 hostile fixture
+    # （NaN gaps / 有限段）上逐值一致（diff=0.0）——``out_stat == "level"`` 时
+    # dispatch；其余 out_stat（innovation_z / p）与 trend/beta kernel 有语义漂移，
+    # 保持 reference（honest，不改结果）。
+    if out_stat == "level":
+        kernel = _numba_kernel("kalman_level")
+        if kernel is not None:
+            return kernel(vals, float(q), float(r))
     n = len(vals)
     mu = np.full(n, np.nan, dtype=float)
     p = np.full(n, np.nan, dtype=float)

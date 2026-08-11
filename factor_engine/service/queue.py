@@ -41,6 +41,38 @@ def _get_service_broker() -> Any | None:
     return _service_broker_ctx_var.get()
 
 
+#: QoS lane（R38 P0-028：压力升高时 BACKGROUND 停新 admission、STANDARD 收缩、
+#: CRITICAL 保底）。
+QOS_CRITICAL = "CRITICAL"
+QOS_STANDARD = "STANDARD"
+QOS_BACKGROUND = "BACKGROUND"
+_QOS_ORDER = (QOS_CRITICAL, QOS_STANDARD, QOS_BACKGROUND)
+
+
+@dataclass
+class JobResourceEstimate:
+    """R38 P0-027（§11）：job 的资源估计 → HostCoordinator JobLease admission。
+
+    编译后 / enqueue 前提供；实际 worker 启动前申请 JobLease（不再只靠固定
+    ``max_running`` 数并发）。
+    """
+
+    priority: str = QOS_STANDARD
+    memory_p99: int = 0
+    cpu_budget: int = 1
+    io_class: str = "best_effort"
+    estimated_runtime_s: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "priority": self.priority,
+            "memory_p99": self.memory_p99,
+            "cpu_budget": self.cpu_budget,
+            "io_class": self.io_class,
+            "estimated_runtime_s": self.estimated_runtime_s,
+        }
+
+
 @dataclass
 class QueueSnapshot:
     queued: int
@@ -88,6 +120,10 @@ class BoundedJobQueue:
         self._queue_put_times: dict[str, float] = {}
         self.jobs_submitted_total = 0
         self.jobs_rejected_total = 0
+        # R38 P0-027（§11）：job 资源估计 + 实际 JobLease（worker 启动前申请）。
+        self._job_estimates: dict[str, JobResourceEstimate] = {}
+        self._job_leases: dict[str, Any] = {}
+        self.jobs_lease_rejected_total = 0
         # R36 P0-016/§57：service 用 HostResourceCoordinator 的 broker——job
         # admission + task admission 与 FE 内部 scheduler / DA 共享同一资源权威
         # （不再各自建独立 broker）。
@@ -153,7 +189,13 @@ class BoundedJobQueue:
         est_wait = float(os.environ.get("FACTOR_ENGINE_SERVICE_RETRY_AFTER", "10"))
         return max(1, int(est_wait))
 
-    def submit(self, job: JobRecord, *, run_fn: Callable[[JobRecord], None]) -> None:
+    def submit(
+        self,
+        job: JobRecord,
+        *,
+        run_fn: Callable[[JobRecord], None],
+        estimate: JobResourceEstimate | None = None,
+    ) -> None:
         if self._state != "accepting":
             raise ServiceError(
                 "JOB_REJECTED", "service is shutting down; not accepting new jobs",
@@ -164,6 +206,24 @@ class BoundedJobQueue:
             running_now = len(self._running)
             queued_now = self._pending.qsize()
             per_p = self._per_principal.get(principal, 0)
+        # R38 P0-028（§11）：QoS lane 接资源 controller——压力升高时 BACKGROUND
+        # 停止新 admission，STANDARD 收缩，CRITICAL 保底（不能只靠 FIFO）。
+        lane = (estimate.priority if estimate is not None else QOS_STANDARD)
+        if self.broker is not None:
+            try:
+                stage = self.broker.pressure_stage()
+                if lane == QOS_BACKGROUND and stage in {"PRESSURE_2", "PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
+                    self.jobs_rejected_total += 1
+                    raise ServiceError(
+                        "JOB_QOS_DEFERRED",
+                        f"BACKGROUND lane paused under pressure_stage={stage} (R38-P0-028)",
+                        status=429,
+                        extra={"Retry-After": str(self._retry_after())},
+                    )
+            except ServiceError:
+                raise
+            except Exception:
+                pass
         if running_now + queued_now >= self.max_queue + self.max_running:
             self.jobs_rejected_total += 1
             raise ServiceError(
@@ -183,6 +243,8 @@ class BoundedJobQueue:
         with self._lock:
             self._per_principal[principal] = self._per_principal.get(principal, 0) + 1
             self._queue_put_times[job.run_id] = time.monotonic()
+            if estimate is not None:
+                self._job_estimates[job.run_id] = estimate
         # R32-P0-020: 检查与 put 必须原子 —— 用 put_nowait，绝不阻塞请求线程。
         # 失败时 rollback per-principal counter。
         job.status = JobStatus.QUEUED
@@ -195,6 +257,7 @@ class BoundedJobQueue:
                     0, self._per_principal.get(principal, 0) - 1
                 )
                 self._queue_put_times.pop(job.run_id, None)
+                self._job_estimates.pop(job.run_id, None)
             self.jobs_rejected_total += 1
             raise ServiceError(
                 "JOB_QUEUE_FULL",
@@ -249,6 +312,19 @@ class BoundedJobQueue:
         # R36 P0-018（§58）：ContextVar——每个 worker 线程自己的 job 执行期间
         # 可见 shared broker；互不覆盖，A restore 不会影响 B 仍在运行的任务。
         token = _service_broker_ctx_var.set(self.broker)
+        # R38 P0-027（§11）：worker 启动前真正申请 JobLease（不再只靠固定
+        # max_running 数并发）。HostCoordinator 拒绝 → job FAILED，不执行。
+        job_lease = self._request_job_lease(job)
+        if job_lease is None and self.coordinator is not None:
+            _service_broker_ctx_var.reset(token)
+            with self._lock:
+                self._running.pop(job.run_id, None)
+                self._queue_put_times.pop(job.run_id, None)
+                principal = job.owner_principal or job.requested_by or "anonymous"
+                self._per_principal[principal] = max(0, self._per_principal.get(principal, 0) - 1)
+            self.jobs_lease_rejected_total += 1
+            self._mark_resource_rejected(job)
+            return
         try:
             run_fn(job)
         except BaseException:  # noqa: BLE001
@@ -259,11 +335,53 @@ class BoundedJobQueue:
             self._mark_unexpected_failure(job)
         finally:
             _service_broker_ctx_var.reset(token)
+            if job_lease is not None:
+                try:
+                    job_lease.release()
+                except Exception:
+                    pass
             with self._lock:
                 self._running.pop(job.run_id, None)
                 self._queue_put_times.pop(job.run_id, None)
+                self._job_estimates.pop(job.run_id, None)
+                self._job_leases.pop(job.run_id, None)
                 principal = job.owner_principal or job.requested_by or "anonymous"
                 self._per_principal[principal] = max(0, self._per_principal.get(principal, 0) - 1)
+
+    def _request_job_lease(self, job: JobRecord) -> Any | None:
+        """按 JobResourceEstimate 向 HostCoordinator 申请 JobLease。"""
+        if self.coordinator is None:
+            return None
+        estimate = self._job_estimates.get(job.run_id)
+        memory = max(0, int(estimate.memory_p99) if estimate is not None else 0)
+        cpu = max(1, int(estimate.cpu_budget) if estimate is not None else 1)
+        if memory <= 0:
+            # 无显式估计：用 coordinator envelope 的合理默认（safe 的 25%）。
+            try:
+                env = self.coordinator.envelope()
+                memory = max(1, int(env.safe_memory_bytes * 0.25))
+            except Exception:
+                memory = 1
+        lease = self.coordinator.request_job_lease(
+            owner=f"job:{job.run_id}", memory_bytes=memory, cpu_tokens=cpu,
+        )
+        if lease is not None:
+            with self._lock:
+                self._job_leases[job.run_id] = lease
+        return lease
+
+    def _mark_resource_rejected(self, job: JobRecord) -> None:
+        """HostCoordinator JobLease 拒绝 → job FAILED（资源不可用，不静默）。"""
+        if job.is_terminal or not self._store:
+            return
+        job.status = JobStatus.FAILED
+        job.error_code = "JOB_RESOURCE_LEASE_REJECTED"
+        job.error = "host resource lease rejected (memory/cpu over committed); job not started"
+        job.finished_at = _utc_now()
+        try:
+            self._store.update(job)
+        except Exception:
+            pass
 
     def _heartbeat_monitor(self) -> None:
         while self._state != "stopped":

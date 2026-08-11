@@ -627,9 +627,9 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_expectile", "tau"): 0.1,
     ("ts_expectile_beta", "tau"): 0.1,
     ("ts_conditional_transfer_entropy", "bins"): 3,
-    ("cs_knn_local_linear_residual", "k"): 5,
-    ("cs_knn_local_gradient_norm", "k"): 5,
-    ("cs_knn_tangent_residual", "k"): 5,
+    ("cs_knn_local_linear_residual", "k"): 20,
+    ("cs_knn_local_gradient_norm", "k"): 20,
+    ("cs_knn_tangent_residual", "k"): 20,
     ("ts_feature_subspace_rotation", "window"): 120,
     ("ts_feature_subspace_rotation", "recent_window"): 30,
     ("ts_feature_subspace_rotation", "prior_window"): 90,
@@ -798,6 +798,11 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_ordinal_irreversibility", "window"): 40,
     ("ts_rolling_sr_gaussian_mean_shift_score", "side"): "up",
     ("ts_transfer_entropy_peak_excess", "bins"): 3,
+    # R16 evidence regen fixes: ``power.y`` is a scalar exponent (the ``y``
+    # panel key would feed a DataFrame and crash float()); ``min_events`` is a
+    # count and must NOT hit the generic ``min_`` threshold fallback (0.01).
+    ("power", "y"): 2.0,
+    ("session_event_recovery_score", "min_events"): 3,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -1204,6 +1209,25 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
     )
     for _cond_name in ("set_condition", "reset_condition", "update_condition"):
         panels[_cond_name] = condition.astype(float)
+    # R16 evidence regen: A-share / corporate-action typed inputs must be real
+    # boolean/event flags, NOT the generic continuous price fallback (~60.4)
+    # which violates TradableBool / EventBool / ConditionBool contracts.
+    panels["valid_trade"] = pd.DataFrame(
+        np.repeat((np.arange(rows)[:, None] % 23 != 0).astype(float), columns, axis=1),
+        index=dates,
+        columns=assets,
+    )
+    panels["is_suspend"] = pd.DataFrame(
+        np.repeat((np.arange(rows)[:, None] % 31 == 0).astype(float), columns, axis=1),
+        index=dates,
+        columns=assets,
+    )
+    for _flag in ("limit_up_event", "limit_down_event", "up_event", "down_event", "known_status"):
+        panels[_flag] = pd.DataFrame(
+            np.repeat((np.arange(rows)[:, None] % (37 + len(panels)) == 0).astype(float), columns, axis=1),
+            index=dates,
+            columns=assets,
+        )
     for name in sorted(_PANEL_PARAMETERS):
         if name in panels:
             continue

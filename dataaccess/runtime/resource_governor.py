@@ -28,6 +28,59 @@ from data_access.core.exceptions import ResourceAdmissionError
 logger = logging.getLogger("data_access.resource_governor")
 
 
+def _auto_bound_standalone_memory() -> bool:
+    """R38 P0-025：DA standalone 是否自动从 host/cgroup/RLIMIT 派生 safe cap。
+
+    ``DATA_ACCESS_AUTO_BOUND_MEMORY`` 显式开启（production standalone 部署）；
+    默认关闭保持既有测试语义（None = 由上层 coordinator 注入）。
+    """
+    import os
+
+    return os.environ.get("DATA_ACCESS_AUTO_BOUND_MEMORY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _default_safe_memory_bytes() -> int:
+    """探测 host RAM / cgroup memory.max / RLIMIT，取最严格并 ×0.5（保守 safe cap）。"""
+    import os
+
+    candidates: list[int] = []
+    # cgroup v2 memory.max
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                raw = fh.read().strip()
+            if raw and raw not in {"max", "0"}:
+                candidates.append(int(raw))
+        except (OSError, ValueError):
+            pass
+    # RLIMIT_AS
+    try:
+        import resource
+
+        soft, _hard = resource.getrlimit(resource.RLIMIT_AS)
+        if soft not in (resource.RLIM_INFINITY, -1) and soft > 0:
+            candidates.append(int(soft))
+    except Exception:
+        pass
+    # host RAM
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    candidates.append(int(line.split()[1]) * 1024)
+                    break
+    except OSError:
+        pass
+    if not candidates:
+        # 无法探测 → 保守固定 4GB safe cap（fail-closed，不是无限）。
+        return 4 * 1024**3
+    return max(0, int(min(candidates) * 0.5))
+
+
 @dataclass
 class ResourceReservation:
     """一个查询/操作持有的一段全局资源。"""
@@ -60,11 +113,20 @@ class GlobalResourceGovernor:
         per_principal_active: int | None = None,
     ) -> None:
         self._max_active_queries = max_active_queries
+        # R38 P0-025（§10）：DA standalone（无 FE coordinator）时，production 不能
+        # ``None`` ≈ 无限——检测 host/cgroup/RLIMIT → 保守 safe cap。
+        if max_total_reserved_memory is None and _auto_bound_standalone_memory():
+            max_total_reserved_memory = _default_safe_memory_bytes()
+        if max_total_scan_bytes_inflight is None and _auto_bound_standalone_memory():
+            max_total_scan_bytes_inflight = max(0, int(max_total_reserved_memory * 0.5))
         self._max_memory = max_total_reserved_memory
         self._max_scan = max_total_scan_bytes_inflight
         self._max_remote = max_remote_concurrency
         self._max_duckdb = max_duckdb_concurrency
         self._per_principal_active = per_principal_active
+        #: R38 P0-026：动态 setter 与 admit() 同锁；cap 收缩到低于当前 reservations
+        #: 时**不 kill incumbents**，只阻止新 admission，telemetry 标 over_current_target。
+        self._over_current_target = False
 
         self._lock = threading.Lock()
         self._active: dict[str, ResourceReservation] = {}
@@ -147,14 +209,24 @@ class GlobalResourceGovernor:
     def set_max_total_reserved_memory(self, memory_bytes: int) -> None:
         """FE HostResourceCoordinator 注入 Safe Envelope（§54：DA 不独立决定全局内存）。
 
-        独立 DataAccess service 运行时，生产默认应从 hard/live resource envelope
-        自动派生，而不是 ``None``（无限）。由协调器在每次 batch run 前调用。
+        R38 P0-026（§10）：与 ``admit()`` **同一把锁**。cap 收缩到低于当前
+        reservations 时：不 kill incumbents；新 admission 被 ``admit`` 阻止；
+        telemetry 标 ``over_current_target``（incumbents release 后恢复）。
         """
-        self._max_memory = max(0, int(memory_bytes)) if memory_bytes is not None else None
+        with self._lock:
+            self._max_memory = max(0, int(memory_bytes)) if memory_bytes is not None else None
+            used = sum(r.estimated_memory for r in self._active.values())
+            self._over_current_target = (
+                self._max_memory is not None and used > self._max_memory
+            )
 
     def set_max_total_scan_bytes_inflight(self, scan_bytes: int) -> None:
-        """协调器注入 scan inflight 上限（§56：scan bytes inflight 成为 host lease 一部分）。"""
-        self._max_scan = max(0, int(scan_bytes)) if scan_bytes is not None else None
+        """协调器注入 scan inflight 上限（§56：scan bytes inflight 成为 host lease 一部分）。
+
+        R38 P0-026：与 ``admit()`` 同锁。
+        """
+        with self._lock:
+            self._max_scan = max(0, int(scan_bytes)) if scan_bytes is not None else None
 
     # ---- 远程并发 ----
 
@@ -202,6 +274,11 @@ class GlobalResourceGovernor:
     def release(self, query_id: str) -> None:
         with self._lock:
             self._active.pop(query_id, None)
+            # R38 P0-026：incumbent release 后重算 over_current_target。
+            used = sum(r.estimated_memory for r in self._active.values())
+            self._over_current_target = (
+                self._max_memory is not None and used > self._max_memory
+            )
 
     # ---- 状态 ----
 
@@ -224,6 +301,7 @@ class GlobalResourceGovernor:
                 "active": len(self._active),
                 "remote_inflight": self._remote_inflight,
                 "remote_requests_total": self._remote_requests_total,
+                "over_current_target": self._over_current_target,
             }
 
 
