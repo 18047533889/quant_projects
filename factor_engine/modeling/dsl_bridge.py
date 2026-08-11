@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
@@ -22,6 +24,11 @@ from modeling.model_catalog import (
 __all__ = [
     "ArtifactStore",
     "ArtifactResolver",
+    "ScoringContext",
+    "Deployment",
+    "DeploymentState",
+    "FrozenPredictor",
+    "FrozenScorer",
     "ModelArtifactResolutionContext",
     "ModelScoreExpr",
     "TypedModelScoreIR",
@@ -31,11 +38,10 @@ __all__ = [
     "ModelScoreBlock",
     "ModelScoreResolutionStatus",
     "NoLegalArtifactError",
-    "FrozenScorer",
-    "model_score",
-    "lower_model_score",
     "score_asof",
     "replay_historical_scores",
+    "model_score",
+    "lower_model_score",
     "ModelScoreOperatorStub",
     "identity_of",
     "configure_default_resolver",
@@ -65,10 +71,12 @@ class ArtifactStore:
         return os.path.join(self.base_dir, f"{artifact_id}.json")
 
     def put(self, artifact: ModelArtifact) -> str:
+        """Atomically persist an artifact and make the rename durable."""
+        if not self.base_dir:
+            raise ValueError("ArtifactStore.base_dir must be set before put()")
+        os.makedirs(self.base_dir, exist_ok=True)
         path = self.path_for(artifact.artifact_id)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(artifact.to_dict(), fh, indent=1, default=_json_default)
+        artifact.save(path)
         return artifact.artifact_id
 
     def get(self, artifact_id: str) -> ModelArtifact | None:
@@ -95,6 +103,99 @@ class ArtifactStore:
         return sorted(
             fname[:-5] for fname in os.listdir(self.base_dir) if fname.endswith(".json")
         )
+
+    def _catalog_path(self) -> str:
+        if not self.base_dir:
+            raise ValueError("ArtifactStore.base_dir must be set")
+        return os.path.join(self.base_dir, "deployments.json")
+
+    def save_deployments(self, deployments: dict[str, list["Deployment"]]) -> None:
+        """Durably persist deployment metadata without serialising predictors."""
+        if not self.base_dir:
+            raise ValueError("ArtifactStore.base_dir must be set")
+        os.makedirs(self.base_dir, exist_ok=True)
+        rows = [
+            {
+                "artifact_id": deployment.artifact.artifact_id,
+                "state": deployment.state,
+                "activation_at": deployment.activation_at,
+                "retired_at": deployment.retired_at,
+                "revoked_at": deployment.revoked_at,
+                "canary_fraction": deployment.canary_fraction,
+            }
+            for model_deployments in deployments.values()
+            for deployment in model_deployments
+        ]
+        target = self._catalog_path()
+        fd, temporary = tempfile.mkstemp(prefix=".deployments-", suffix=".tmp", dir=self.base_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(rows, fh, indent=1, default=_json_default)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temporary, target)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def load_deployments(self) -> dict[str, list["Deployment"]]:
+        path = self._catalog_path()
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r", encoding="utf-8") as fh:
+            rows = json.load(fh)
+        deployments: dict[str, list[Deployment]] = {}
+        for row in rows:
+            artifact = self.get(row["artifact_id"])
+            if artifact is None:
+                raise LookupError(f"deployment artifact {row['artifact_id']!r} is missing")
+            deployment = Deployment(
+                artifact=artifact,
+                state=row["state"],
+                activation_at=row.get("activation_at"),
+                retired_at=row.get("retired_at"),
+                revoked_at=row.get("revoked_at"),
+                canary_fraction=float(row.get("canary_fraction", 0.0)),
+            )
+            deployments.setdefault(artifact.model_name, []).append(deployment)
+        return deployments
+
+
+@dataclass(frozen=True)
+class ScoringContext:
+    """Request-scoped production scoring authority."""
+
+    asof: Any
+    clock_id: str
+    schema_hash: str
+    production: bool = True
+    max_stale_age_seconds: float | None = None
+
+
+class DeploymentState:
+    ACTIVE = "ACTIVE"
+    CANARY = "CANARY"
+    RETIRED = "RETIRED"
+    REVOKED = "REVOKED"
+
+
+@dataclass(frozen=True)
+class Deployment:
+    artifact: ModelArtifact
+    state: str = DeploymentState.CANARY
+    activation_at: Any = None
+    retired_at: Any = None
+    revoked_at: Any = None
+    canary_fraction: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.state not in {
+            DeploymentState.ACTIVE, DeploymentState.CANARY,
+            DeploymentState.RETIRED, DeploymentState.REVOKED,
+        }:
+            raise ValueError(f"invalid deployment state {self.state!r}")
+        if not 0.0 <= self.canary_fraction <= 1.0:
+            raise ValueError("canary_fraction must be in [0, 1]")
 
 
 @dataclass(frozen=True)
@@ -125,16 +226,12 @@ class ArtifactResolutionResult:
 
 @dataclass
 class ArtifactResolver:
-    """Resolve the latest artifact legal for a request-scoped as-of context.
-
-    A durable ``ModelArtifactCatalog`` is authoritative when configured.  The
-    in-memory registry remains as a compatibility path for existing tests and
-    local research callers.
-    """
+    """Resolve the latest artifact legal for a request-scoped as-of context."""
 
     store: ArtifactStore
     catalog: ModelArtifactCatalog | None = None
     registry: dict[str, list[ModelArtifact]] = field(default_factory=dict)
+    deployments: dict[str, list[Deployment]] = field(default_factory=dict)
 
     def register(
         self,
@@ -210,7 +307,7 @@ class ArtifactResolver:
                 ModelScoreResolutionStatus.RESOLVED, artifact, record
             )
 
-        legal: list[ModelArtifact] = []
+        legal_artifacts: list[ModelArtifact] = []
         for artifact in self.registry.get(model_name, []):
             m = artifact.manifest
             cutoff = parse_catalog_timestamp(m.training_cutoff)
@@ -219,11 +316,11 @@ class ArtifactResolver:
                 continue
             if requested_cutoff is not None and cutoff > requested_cutoff:
                 continue
-            legal.append(artifact)
-        if not legal:
+            legal_artifacts.append(artifact)
+        if not legal_artifacts:
             return ArtifactResolutionResult(ModelScoreResolutionStatus.NO_LEGAL_ARTIFACT)
         artifact = max(
-            legal,
+            legal_artifacts,
             key=lambda a: (
                 parse_catalog_timestamp(a.manifest.training_cutoff),
                 parse_catalog_timestamp(a.manifest.available_at),
@@ -233,6 +330,29 @@ class ArtifactResolver:
         )
         return ArtifactResolutionResult(ModelScoreResolutionStatus.RESOLVED, artifact)
 
+    def deploy(
+        self,
+        artifact: ModelArtifact,
+        *,
+        state: str = DeploymentState.CANARY,
+        activation_at: Any = None,
+        retired_at: Any = None,
+        revoked_at: Any = None,
+        canary_fraction: float = 0.0,
+    ) -> Deployment:
+        deployment = Deployment(
+            artifact, state, activation_at, retired_at, revoked_at, canary_fraction
+        )
+        self.deployments.setdefault(artifact.model_name, []).append(deployment)
+        if self.store.base_dir:
+            self.store.put(artifact)
+            self.store.save_deployments(self.deployments)
+        return deployment
+
+    def recover(self) -> None:
+        """Recover persisted deployments after process restart."""
+        self.deployments = self.store.load_deployments()
+
     def resolve(
         self,
         model_name: str,
@@ -240,18 +360,54 @@ class ArtifactResolver:
         training_cutoff: Any = None,
         *,
         context: ModelArtifactResolutionContext | None = None,
+        production: bool = False,
+        max_stale_age_seconds: float | None = None,
     ) -> ModelArtifact | None:
+        if production:
+            candidates: list[tuple[Any, ModelArtifact]] = []
+            for deployment in self.deployments.get(model_name, []):
+                if deployment.state != DeploymentState.ACTIVE:
+                    continue
+                if deployment.activation_at is None or deployment.activation_at > asof:
+                    continue
+                if deployment.retired_at is not None and asof >= deployment.retired_at:
+                    continue
+                if deployment.revoked_at is not None and asof >= deployment.revoked_at:
+                    continue
+                artifact = deployment.artifact
+                if not artifact.manifest.certification_hash:
+                    continue
+                if not artifact.is_legal_asof(asof, training_cutoff):
+                    continue
+                if max_stale_age_seconds is not None:
+                    age = _age_seconds(asof, artifact.manifest.available_at)
+                    if age > max_stale_age_seconds:
+                        continue
+                candidates.append((deployment.activation_at, artifact))
+            if not candidates:
+                return None
+            return max(candidates, key=lambda item: (item[0], item[1].artifact_id))[1]
+
         return self.resolve_result(
             model_name, asof, training_cutoff, context=context
         ).artifact
 
 
-class FrozenScorer:
-    """Fit-free production scoring object.
+def _age_seconds(asof: Any, available_at: Any) -> float:
+    def _dt(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
-    This type deliberately exposes only ``score``.  Training objects and their
-    mutable ``fit`` surface never appear in the scoring API.
-    """
+    return (_dt(asof) - _dt(available_at)).total_seconds()
+
+
+class FrozenScorer:
+    """Fit-free production scoring object."""
 
     __slots__ = ("_artifact",)
 
@@ -263,6 +419,27 @@ class FrozenScorer:
         return self._artifact.artifact_id
 
     def score(self, features: np.ndarray) -> np.ndarray:
+        return self._artifact.predict(np.asarray(features, dtype=np.float64))
+
+
+class FrozenPredictor:
+    """Immutable production predictor; deliberately has no ``fit`` method."""
+
+    __slots__ = ("_artifact",)
+
+    def __init__(self, artifact: ModelArtifact) -> None:
+        self._artifact = artifact
+
+    def predict(self, features: np.ndarray, context: ScoringContext) -> np.ndarray:
+        manifest = self._artifact.manifest
+        if context.asof is None or not context.clock_id or not context.schema_hash:
+            raise ValueError("production ScoringContext requires asof, clock_id, and schema_hash")
+        if context.clock_id != manifest.decision_clock_id:
+            raise ValueError("CLOCK_MISMATCH")
+        if context.schema_hash != manifest.feature_schema_hash:
+            raise ValueError("SCHEMA_MISMATCH")
+        if not self._artifact.is_legal_asof(context.asof):
+            raise ValueError("ARTIFACT_NOT_AVAILABLE_ASOF")
         return self._artifact.predict(np.asarray(features, dtype=np.float64))
 
 
@@ -438,10 +615,27 @@ def score_asof(
     training_cutoff: Any = None,
     resolver: ArtifactResolver | None = None,
     context: ModelArtifactResolutionContext | None = None,
+    scoring_context: ScoringContext | None = None,
 ) -> np.ndarray:
     res = resolver if resolver is not None else _default_resolver
     if res is None:
         raise LookupError("no ArtifactResolver configured for score_asof")
+
+    if scoring_context is not None and scoring_context.production:
+        artifact = res.resolve(
+            model_name, asof, training_cutoff,
+            production=True,
+            max_stale_age_seconds=scoring_context.max_stale_age_seconds,
+        )
+        if artifact is None:
+            raise LookupError(
+                f"no legal as-of artifact for model {model_name!r} at {asof!r}"
+            )
+        return FrozenPredictor(artifact).predict(
+            np.asarray(features, dtype=np.float64),
+            scoring_context,
+        )
+
     ir = lower_model_score(model_score(model_name))
     return _score_block(
         ir,
@@ -467,5 +661,4 @@ def replay_historical_scores(
     return out
 
 
-# Compatibility alias for callers that imported the documented stub name.
 ModelScoreOperatorStub = ModelScoreExpr
