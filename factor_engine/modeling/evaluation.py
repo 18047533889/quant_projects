@@ -1,121 +1,151 @@
 # -*- coding: utf-8 -*-
-"""Prediction evaluation (§26 / §27 / §72 / §75).
-
-Provides per-date rank IC, the pooled :class:`EvaluationReport` (§26), grouped
-(§72) and block-aware (§75) IC variants.  Every metric is NaN-safe: missing
-predictions / labels never raise; they are excluded pairwise.
-"""
+"""Prediction evaluation with explicit OOS and cross-sectional conventions."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, rankdata, spearmanr
 
 __all__ = [
-    "per_date_rank_ic",
-    "ic_series",
-    "block_aware_ic",
-    "cross_sectional_ic",
-    "evaluate_predictions",
-    "EvaluationReport",
+    "EvaluationContractError", "ICMetricConvention", "MetricValue",
+    "per_date_rank_ic", "ic_series", "block_aware_ic", "cross_sectional_ic",
+    "evaluate_predictions", "EvaluationReport",
 ]
 
 
-def per_date_rank_ic(
-    pred: np.ndarray, y: np.ndarray, dates
-) -> tuple[list, np.ndarray]:
-    """§27 — Spearman rank IC per date across stocks.
+class EvaluationContractError(ValueError):
+    """Evaluation input violates an auditable metric contract."""
 
-    Returns ``(dates_sorted, ics)``.  Dates with fewer than 3 finite pairs are
-    dropped (a cross-sectional rank correlation is meaningless below 3).
-    """
-    pred = np.asarray(pred, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    dates = np.asarray(dates).ravel()
-    if len(pred) != len(y) or len(y) != len(dates):
-        raise ValueError("pred, y, dates must be row-aligned")
 
-    df = pd.DataFrame({"pred": pred, "y": y, "date": dates})
-    df = df[np.isfinite(df["pred"]) & np.isfinite(df["y"])]
-    if df.empty:
-        return [], np.array([], dtype=np.float64)
+@dataclass(frozen=True)
+class ICMetricConvention:
+    correlation: str = "spearman"
+    aggregation: str = "daily_cross_sectional"
+    std_ddof: int = 1
+    min_pairs_per_date: int = 3
 
-    out_dates: list = []
-    ics: list[float] = []
-    for d, sub in df.groupby("date", observed=True):
-        p = sub["pred"].to_numpy(dtype=np.float64)
-        yy = sub["y"].to_numpy(dtype=np.float64)
-        if len(p) < 3:
+    def __post_init__(self) -> None:
+        if self.correlation != "spearman" or self.aggregation != "daily_cross_sectional":
+            raise EvaluationContractError("IC must be daily cross-sectional Spearman")
+        if self.std_ddof != 1:
+            raise EvaluationContractError("daily IC standard deviation must use ddof=1")
+        if self.min_pairs_per_date < 3:
+            raise EvaluationContractError("min_pairs_per_date must be >= 3")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "correlation": self.correlation, "aggregation": self.aggregation,
+            "std_ddof": self.std_ddof, "min_pairs_per_date": self.min_pairs_per_date,
+        }
+
+
+DEFAULT_IC_CONVENTION = ICMetricConvention()
+
+
+@dataclass(frozen=True)
+class MetricValue:
+    value: float = float("nan")
+    status: str = "undefined"
+    reason: str | None = None
+    n_obs: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"value": self.value, "status": self.status, "reason": self.reason, "n_obs": self.n_obs}
+
+
+def _array(name: str, values: Any, n: int | None = None) -> np.ndarray:
+    out = np.asarray(values).ravel()
+    if n is not None and len(out) != n:
+        raise EvaluationContractError(f"{name} must be row-aligned; expected {n}, got {len(out)}")
+    return out
+
+
+def _weights(values: Any, n: int) -> np.ndarray | None:
+    if values is None:
+        return None
+    out = _array("weights", values, n).astype(np.float64)
+    if not np.isfinite(out).all() or np.any(out < 0) or not np.any(out > 0):
+        raise EvaluationContractError("weights must be finite, non-negative, and contain positive mass")
+    return out
+
+
+def _weighted_corr(x: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
+    w = w / w.sum()
+    xm, ym = float(np.sum(w * x)), float(np.sum(w * y))
+    vx, vy = float(np.sum(w * (x - xm) ** 2)), float(np.sum(w * (y - ym) ** 2))
+    if vx <= 0 or vy <= 0:
+        return float("nan")
+    return float(np.sum(w * (x - xm) * (y - ym)) / np.sqrt(vx * vy))
+
+
+def per_date_rank_ic(pred, y, dates, *, weights=None, convention=DEFAULT_IC_CONVENTION):
+    """Return dates and Spearman ICs for valid daily cross-sections."""
+    pred = _array("pred", pred).astype(np.float64)
+    y, dates = _array("y", y, len(pred)).astype(np.float64), _array("dates", dates, len(pred))
+    w = _weights(weights, len(pred))
+    data = {"pred": pred, "y": y, "date": dates}
+    if w is not None:
+        data["weight"] = w
+    frame = pd.DataFrame(data)
+    frame = frame[np.isfinite(frame.pred) & np.isfinite(frame.y)]
+    out_dates, out = [], []
+    for date, sub in frame.groupby("date", observed=True, sort=True):
+        p, yy = sub.pred.to_numpy(), sub.y.to_numpy()
+        if len(p) < convention.min_pairs_per_date or np.ptp(p) == 0 or np.ptp(yy) == 0:
             continue
-        # All-equal pred or y -> spearmanr returns NaN; skip (not evidence).
-        if p.min() == p.max() or yy.min() == yy.max():
-            continue
-        rho, _ = spearmanr(p, yy)
-        if not np.isfinite(rho):
-            continue
-        out_dates.append(d)
-        ics.append(float(rho))
-    return out_dates, np.asarray(ics, dtype=np.float64)
+        if w is None:
+            rho = spearmanr(p, yy)[0]
+        else:
+            sw = sub.weight.to_numpy()
+            positive = sw > 0
+            if positive.sum() < convention.min_pairs_per_date:
+                continue
+            rho = _weighted_corr(rankdata(p[positive]), rankdata(yy[positive]), sw[positive])
+        if np.isfinite(rho):
+            out_dates.append(date)
+            out.append(float(rho))
+    return out_dates, np.asarray(out, dtype=np.float64)
 
 
-def ic_series(
-    pred: np.ndarray, y: np.ndarray, dates
-) -> tuple[list, np.ndarray]:
-    """Convenience alias of :func:`per_date_rank_ic`."""
-    return per_date_rank_ic(pred, y, dates)
+def ic_series(pred, y, dates, **kwargs):
+    return per_date_rank_ic(pred, y, dates, **kwargs)
 
 
-def cross_sectional_ic(
-    y_true: np.ndarray, y_pred: np.ndarray, dates
-) -> dict[str, float]:
-    """Cross-sectional IC bundle consumed by the trainer's validation scorer.
-
-    Argument order is ``(y_true, y_pred, dates)`` (the trainer calls it with
-    ``cross_sectional_ic(yv, pred, dv)``).  Returns a dict with ``rank_ic``
-    (pooled Spearman) and ``icir`` (mean/std of per-date IC), both NaN-safe.
-    """
-    d, ics = per_date_rank_ic(y_pred, y_true, dates)
-    rank_ic = _pooled_rank_ic(y_pred, y_true)
-    if len(ics) >= 2:
-        sd = float(np.std(ics))
-        icir = float(np.mean(ics) / sd) if sd > 1e-12 else 0.0
-    else:
-        icir = float("nan")
-    return {"rank_ic": rank_ic, "icir": icir, "n_dates": len(d)}
+def cross_sectional_ic(y_true, y_pred, dates, *, weights=None, convention=DEFAULT_IC_CONVENTION):
+    daily_dates, ics = per_date_rank_ic(y_pred, y_true, dates, weights=weights, convention=convention)
+    mean_ic = float(np.mean(ics)) if len(ics) else float("nan")
+    sd = float(np.std(ics, ddof=convention.std_ddof)) if len(ics) >= 2 else float("nan")
+    icir = mean_ic / sd if np.isfinite(sd) and sd > 1e-12 else float("nan")
+    return {"rank_ic": mean_ic, "mean_daily_rank_ic": mean_ic, "icir": icir,
+            "daily_rank_ic_ir": icir, "n_dates": len(daily_dates)}
 
 
-def block_aware_ic(
-    pred: np.ndarray, y: np.ndarray, dates, *, overlap_horizon: int
-) -> tuple[list, np.ndarray]:
-    """§75 — block-aware IC.
-
-    Per-date ICs are averaged within non-overlapping blocks of
-    ``overlap_horizon`` consecutive dates.  With overlapping forward labels
-    (horizon H) consecutive dates are NOT independent evidence; a block of size
-    H treats each H-window as one observation, so the block count is the honest
-    independent sample count.
-    """
+def block_aware_ic(pred, y, dates, *, overlap_horizon: int, calendar_sessions=None, weights=None):
+    """Aggregate daily IC by actual calendar-session position."""
     if overlap_horizon < 1:
-        raise ValueError("overlap_horizon must be >= 1")
-    dates, ics = per_date_rank_ic(pred, y, dates)
-    if len(dates) == 0:
+        raise EvaluationContractError("overlap_horizon must be >= 1")
+    valid_dates, ics = per_date_rank_ic(pred, y, dates, weights=weights)
+    if not valid_dates:
         return [], np.array([], dtype=np.float64)
-    block_dates: list = []
-    block_ics: list[float] = []
-    for i in range(0, len(dates), overlap_horizon):
-        chunk = ics[i : i + overlap_horizon]
-        block_dates.append(dates[i])
-        block_ics.append(float(np.mean(chunk)))
-    return block_dates, np.asarray(block_ics, dtype=np.float64)
+    sessions = list(calendar_sessions) if calendar_sessions is not None else sorted(set(_array("dates", dates)))
+    if len(sessions) != len(set(sessions)):
+        raise EvaluationContractError("calendar_sessions must be unique")
+    positions = {date: pos for pos, date in enumerate(sessions)}
+    if any(date not in positions for date in valid_dates):
+        raise EvaluationContractError("IC date absent from calendar snapshot")
+    blocks: dict[int, list[tuple[Any, float]]] = {}
+    for date, ic in zip(valid_dates, ics):
+        blocks.setdefault(positions[date] // overlap_horizon, []).append((date, float(ic)))
+    ordered = sorted(blocks.items())
+    return ([values[0][0] for _, values in ordered],
+            np.asarray([np.mean([ic for _, ic in values]) for _, values in ordered]))
 
 
 @dataclass
 class EvaluationReport:
-    """§26 evaluation metrics.  All fields default to NaN-safe placeholders."""
-
     mse: float = float("nan")
     mae: float = float("nan")
     rank_ic: float = float("nan")
@@ -126,197 +156,158 @@ class EvaluationReport:
     turnover: float = float("nan")
     coverage: float = 0.0
     subperiod_stability: float = float("nan")
+    mean_daily_rank_ic: float = float("nan")
+    daily_rank_ic_ir: float = float("nan")
+    pooled_rank_correlation: float = float("nan")
     year_by_year: dict[str, float] = field(default_factory=dict)
+    rolling_oos_ic: list[dict[str, Any]] = field(default_factory=list)
     bull_bear: dict[str, float] | None = None
     large_small_cap: dict[str, float] | None = None
     liquidity_bucket: dict[str, float] | None = None
+    coverage_layers: dict[str, float] = field(default_factory=dict)
+    portfolio_support: dict[str, Any] = field(default_factory=dict)
+    metric_values: dict[str, MetricValue] = field(default_factory=dict)
+    metric_convention: dict[str, Any] = field(default_factory=dict)
+    evaluation_version: str = "r41-v1"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "mse": self.mse,
-            "mae": self.mae,
-            "rank_ic": self.rank_ic,
-            "pearson_ic": self.pearson_ic,
-            "icir": self.icir,
-            "ic_positive_ratio": self.ic_positive_ratio,
-            "long_short_spread": self.long_short_spread,
-            "turnover": self.turnover,
-            "coverage": self.coverage,
-            "subperiod_stability": self.subperiod_stability,
-            "year_by_year": self.year_by_year,
-            "bull_bear": self.bull_bear,
-            "large_small_cap": self.large_small_cap,
-            "liquidity_bucket": self.liquidity_bucket,
-        }
+        out = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "metric_values"}
+        out["metric_values"] = {name: value.to_dict() for name, value in self.metric_values.items()}
+        return out
 
 
-def _pooled_rank_ic(pred: np.ndarray, y: np.ndarray) -> float:
+def _pooled_rank_ic(pred, y):
     mask = np.isfinite(pred) & np.isfinite(y)
-    if mask.sum() < 3:
+    if mask.sum() < 3 or np.ptp(pred[mask]) == 0 or np.ptp(y[mask]) == 0:
         return float("nan")
-    p, yy = pred[mask], y[mask]
-    if p.min() == p.max() or yy.min() == yy.max():
-        return float("nan")
-    rho, _ = spearmanr(p, yy)
-    return float(rho)
+    return float(spearmanr(pred[mask], y[mask])[0])
 
 
-def _long_short_spread(df: pd.DataFrame, top: float = 0.1) -> float:
-    """Per-date top-decile vs bottom-decile mean label, averaged over dates."""
-    spreads: list[float] = []
-    for _, sub in df.groupby("date", observed=True):
-        sub = sub[np.isfinite(sub["pred"]) & np.isfinite(sub["y"])]
+def _portfolio_metrics(frame: pd.DataFrame, top=0.1):
+    spreads, top_sets = [], []
+    skipped = {"insufficient_finite_pairs": 0}
+    for date, sub in frame.groupby("date", observed=True, sort=True):
+        sub = sub[np.isfinite(sub.pred) & np.isfinite(sub.y)]
         if len(sub) < 10:
+            skipped["insufficient_finite_pairs"] += 1
             continue
-        order = np.argsort(sub["pred"].to_numpy(dtype=np.float64))
-        k = max(1, int(round(len(sub) * top)))
-        top_idx = order[-k:]
-        bot_idx = order[:k]
-        yv = sub["y"].to_numpy(dtype=np.float64)
-        spreads.append(float(yv[top_idx].mean() - yv[bot_idx].mean()))
-    return float(np.mean(spreads)) if spreads else float("nan")
+        ranked = sub.sort_values(["pred", "security_id"], kind="mergesort")
+        k = max(1, int(round(len(ranked) * top)))
+        top_rows, bottom_rows = ranked.iloc[-k:], ranked.iloc[:k]
+        spreads.append(float(top_rows.y.mean() - bottom_rows.y.mean()))
+        top_sets.append((date, set(top_rows.security_id)))
+    turnovers = []
+    for (_, previous), (_, current) in zip(top_sets, top_sets[1:]):
+        union = previous | current
+        turnovers.append(1.0 - len(previous & current) / len(union) if union else 0.0)
+    support = {"n_valid_dates": len(spreads), "skipped_dates_by_reason": skipped}
+    return (float(np.mean(spreads)) if spreads else float("nan"),
+            float(np.mean(turnovers)) if turnovers else float("nan"), support)
 
 
-def _turnover(df: pd.DataFrame, top: float = 0.1) -> float:
-    """Mean 1 - overlap of top-decile membership between consecutive dates."""
-    per_date = {}
-    for d, sub in df.groupby("date", observed=True):
-        sub = sub[np.isfinite(sub["pred"])]
-        if len(sub) < 10:
-            continue
-        order = np.argsort(sub["pred"].to_numpy(dtype=np.float64))
-        k = max(1, int(round(len(sub) * top)))
-        per_date[d] = set(order[-k:].tolist())
-    dates = sorted(per_date)
-    if len(dates) < 2:
-        return 0.0
-    tov: list[float] = []
-    for a, b in zip(dates, dates[1:]):
-        s_a, s_b = per_date[a], per_date[b]
-        inter = len(s_a & s_b)
-        union = len(s_a | s_b)
-        tov.append(1.0 - (inter / union if union else 1.0))
-    return float(np.mean(tov)) if tov else 0.0
-
-
-def _grouped_mean_ic(pred: np.ndarray, y: np.ndarray, dates, labels) -> dict[str, float] | None:
-    """§72 — mean per-date rank IC within each group of ``labels``."""
-    pred = np.asarray(pred, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    dates = np.asarray(dates).ravel()
-    labels = np.asarray(labels).ravel()
-    if len(labels) != len(pred):
-        return None
-    df = pd.DataFrame({"pred": pred, "y": y, "date": dates, "g": labels})
-    out: dict[str, float] = {}
-    for g, sub in df.groupby("g", observed=True):
-        ds_, ics = per_date_rank_ic(
-            sub["pred"].to_numpy(), sub["y"].to_numpy(), sub["date"].to_numpy()
-        )
+def _grouped_mean_ic(pred, y, dates, labels, asof, name):
+    labels, asof = _array(name, labels, len(pred)), _array(f"{name}_asof_dates", asof, len(pred))
+    try:
+        anchor = pd.to_datetime(pd.Series(dates), errors="raise")
+        known = pd.to_datetime(pd.Series(asof), errors="raise")
+    except Exception as exc:
+        raise EvaluationContractError(f"{name} PIT timestamps are invalid") from exc
+    if pd.isna(labels).any() or known.isna().any() or (known > anchor).any():
+        raise EvaluationContractError(f"{name} contains missing or future-known labels")
+    frame = pd.DataFrame({"pred": pred, "y": y, "date": dates, "group": labels})
+    out = {}
+    for group, sub in frame.groupby("group", observed=True, sort=True):
+        _, ics = per_date_rank_ic(sub.pred, sub.y, sub.date)
         if len(ics):
-            out[str(g)] = float(np.nanmean(ics))
+            out[str(group)] = float(np.mean(ics))
     return out or None
 
 
-def _year_by_year(pred: np.ndarray, y: np.ndarray, dates) -> dict[str, float]:
-    """Mean per-date IC per calendar year of the anchor date."""
-    pred = np.asarray(pred, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    dates = np.asarray(dates).ravel()
+def _year_by_year(pred, y, dates):
     try:
-        years = pd.to_datetime(pd.Series(dates)).dt.year.to_numpy()
-    except Exception:
-        return {}
-    df = pd.DataFrame({"pred": pred, "y": y, "date": dates, "yr": years})
-    out: dict[str, float] = {}
-    for yr, sub in df.groupby("yr", observed=True):
-        ds_, ics = per_date_rank_ic(
-            sub["pred"].to_numpy(), sub["y"].to_numpy(), sub["date"].to_numpy()
-        )
+        parsed = pd.to_datetime(pd.Series(dates), errors="raise")
+    except Exception as exc:
+        raise EvaluationContractError("dates must be valid calendar timestamps") from exc
+    if parsed.isna().any():
+        raise EvaluationContractError("dates must not contain missing timestamps")
+    frame = pd.DataFrame({"pred": pred, "y": y, "date": dates, "year": parsed.dt.year})
+    out = {}
+    for year, sub in frame.groupby("year", observed=True, sort=True):
+        _, ics = per_date_rank_ic(sub.pred, sub.y, sub.date)
         if len(ics):
-            out[str(yr)] = float(np.nanmean(ics))
+            out[str(year)] = float(np.mean(ics))
     return out
 
 
-def evaluate_predictions(
-    pred: np.ndarray,
-    y: np.ndarray,
-    dates,
-    *,
-    date_col: str | None = None,
-    stock_col: str | None = None,
-    extra: dict[str, np.ndarray] | None = None,
-) -> EvaluationReport:
-    """§26 / §27 / §72 — compute the full evaluation report.
-
-    ``pred``, ``y``, ``dates`` are row-aligned arrays.  ``date_col`` /
-    ``stock_col`` are accepted for interface symmetry (the dates are already
-    passed as an array).  ``extra`` may carry ``regime_labels``,
-    ``cap_labels``, ``liquidity_labels`` arrays (row-aligned) for the §72
-    grouped metrics; without them those fields stay ``None``.
-    """
-    pred = np.asarray(pred, dtype=np.float64).ravel()
-    y = np.asarray(y, dtype=np.float64).ravel()
-    dates = np.asarray(dates).ravel()
-    if not (len(pred) == len(y) == len(dates)):
-        raise ValueError("pred, y, dates must be row-aligned")
-
-    mask = np.isfinite(pred) & np.isfinite(y)
-    n_pairs = int(mask.sum())
-
-    mse = float(np.mean((pred[mask] - y[mask]) ** 2)) if n_pairs else float("nan")
-    mae = float(np.mean(np.abs(pred[mask] - y[mask]))) if n_pairs else float("nan")
-
-    pearson_ic = float("nan")
-    if n_pairs >= 3:
-        pr, _ = pearsonr(pred[mask], y[mask])
-        pearson_ic = float(pr)
-
-    rank_ic = _pooled_rank_ic(pred, y)
-
-    dates_sorted, ics = per_date_rank_ic(pred, y, dates)
-    icir = float("nan")
-    ic_pos = float("nan")
-    if len(ics) >= 2:
-        sd = float(np.std(ics))
-        icir = float(np.mean(ics) / sd) if sd > 1e-12 else 0.0
-        ic_pos = float(np.mean(ics > 0)) if len(ics) else float("nan")
-    elif len(ics) == 1:
-        ic_pos = float(ics[0] > 0)
-
-    df = pd.DataFrame({"pred": pred, "y": y, "date": dates})
-    ls_spread = _long_short_spread(df)
-    tov = _turnover(df)
-    coverage = float(np.isfinite(pred).mean()) if len(pred) else 0.0
-    subperiod_stability = float(np.std(ics)) if len(ics) >= 2 else float("nan")
-
-    yby = _year_by_year(pred, y, dates)
-
+def evaluate_predictions(pred, y, dates, security_ids=None, *, date_col=None, stock_col=None,
+                         weights=None, eligible=None, extra: Mapping[str, np.ndarray] | None = None,
+                         convention=DEFAULT_IC_CONVENTION):
+    """Compute OOS metrics; stable security identity is required for portfolio metrics."""
+    del date_col, stock_col
+    pred = _array("pred", pred).astype(np.float64)
+    y, dates = _array("y", y, len(pred)).astype(np.float64), _array("dates", dates, len(pred))
+    w = _weights(weights, len(pred))
+    ids = None if security_ids is None else _array("security_ids", security_ids, len(pred))
+    if ids is not None:
+        identity = pd.DataFrame({"date": dates, "security_id": ids})
+        if identity.security_id.isna().any() or identity.duplicated().any():
+            raise EvaluationContractError("security_ids must be non-missing and unique within each date")
+    finite = np.isfinite(pred) & np.isfinite(y)
+    metric_w = np.ones(len(pred)) if w is None else w
+    mse = float(np.average((pred[finite] - y[finite]) ** 2, weights=metric_w[finite])) if metric_w[finite].sum() else float("nan")
+    mae = float(np.average(np.abs(pred[finite] - y[finite]), weights=metric_w[finite])) if metric_w[finite].sum() else float("nan")
+    pearson = float("nan")
+    if finite.sum() >= 3 and np.ptp(pred[finite]) > 0 and np.ptp(y[finite]) > 0:
+        pearson = float(pearsonr(pred[finite], y[finite])[0]) if w is None else _weighted_corr(pred[finite], y[finite], w[finite])
+    daily_dates, ics = per_date_rank_ic(pred, y, dates, weights=w, convention=convention)
+    mean_daily = float(np.mean(ics)) if len(ics) else float("nan")
+    sd = float(np.std(ics, ddof=1)) if len(ics) >= 2 else float("nan")
+    daily_ir = mean_daily / sd if np.isfinite(sd) and sd > 1e-12 else float("nan")
+    spread = turnover = float("nan")
+    support = {"n_valid_dates": 0, "skipped_dates_by_reason": {"missing_security_ids": 1}}
+    if ids is not None:
+        spread, turnover, support = _portfolio_metrics(pd.DataFrame(
+            {"pred": pred, "y": y, "date": dates, "security_id": ids}))
+    if eligible is None:
+        eligible_mask = np.ones(len(pred), dtype=bool)
+    else:
+        eligible_mask = _array("eligible", eligible, len(pred))
+        if eligible_mask.dtype != np.bool_:
+            raise EvaluationContractError("eligible must be a boolean mask")
+    n_eligible = int(eligible_mask.sum())
+    coverage = float((eligible_mask & np.isfinite(pred)).sum() / n_eligible) if n_eligible else 0.0
     report = EvaluationReport(
-        mse=mse,
-        mae=mae,
-        rank_ic=rank_ic,
-        pearson_ic=pearson_ic,
-        icir=icir,
-        ic_positive_ratio=ic_pos,
-        long_short_spread=ls_spread,
-        turnover=tov,
-        coverage=coverage,
-        subperiod_stability=subperiod_stability,
-        year_by_year=yby,
+        mse=mse, mae=mae, rank_ic=mean_daily, pearson_ic=pearson, icir=daily_ir,
+        ic_positive_ratio=float(np.mean(ics > 0)) if len(ics) else float("nan"),
+        long_short_spread=spread, turnover=turnover, coverage=coverage,
+        subperiod_stability=sd, mean_daily_rank_ic=mean_daily, daily_rank_ic_ir=daily_ir,
+        pooled_rank_correlation=_pooled_rank_ic(pred, y), year_by_year=_year_by_year(pred, y, dates),
+        rolling_oos_ic=[{"date": str(date), "rank_ic": float(ic)} for date, ic in zip(daily_dates, ics)],
+        coverage_layers={
+            "eligible": float(n_eligible / len(pred)) if len(pred) else 0.0,
+            "feature_available": float(n_eligible / len(pred)) if len(pred) else 0.0,
+            "scored": coverage,
+            "label_mature": float((eligible_mask & np.isfinite(y)).sum() / n_eligible) if n_eligible else 0.0,
+            "evaluated": float((eligible_mask & finite).sum() / n_eligible) if n_eligible else 0.0,
+        },
+        portfolio_support=support,
+        metric_values={
+            "daily_rank_ic_ir": MetricValue(daily_ir, "defined" if np.isfinite(daily_ir) else "undefined",
+                None if np.isfinite(daily_ir) else "fewer than two non-constant daily cross-sections", len(ics)),
+            "turnover": MetricValue(turnover, "defined" if np.isfinite(turnover) else "unavailable",
+                None if np.isfinite(turnover) else "stable security_ids and at least two investable dates required",
+                max(0, support["n_valid_dates"] - 1)),
+        },
+        metric_convention=convention.to_dict(),
     )
-
     if extra:
-        if extra.get("regime_labels") is not None:
-            report.bull_bear = _grouped_mean_ic(
-                pred, y, dates, extra["regime_labels"]
-            )
-        if extra.get("cap_labels") is not None:
-            report.large_small_cap = _grouped_mean_ic(
-                pred, y, dates, extra["cap_labels"]
-            )
-        if extra.get("liquidity_labels") is not None:
-            report.liquidity_bucket = _grouped_mean_ic(
-                pred, y, dates, extra["liquidity_labels"]
-            )
+        for labels_key, asof_key, attr in (
+            ("regime_labels", "regime_label_asof_dates", "bull_bear"),
+            ("cap_labels", "cap_label_asof_dates", "large_small_cap"),
+            ("liquidity_labels", "liquidity_label_asof_dates", "liquidity_bucket"),
+        ):
+            if extra.get(labels_key) is not None:
+                if extra.get(asof_key) is None:
+                    raise EvaluationContractError(f"{labels_key} requires {asof_key} PIT evidence")
+                setattr(report, attr, _grouped_mean_ic(pred, y, dates, extra[labels_key], extra[asof_key], labels_key))
     return report

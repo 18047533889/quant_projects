@@ -13,9 +13,9 @@ R40 实现簇导出的可复用 ``check_*`` / ``validate_*`` 函数；基础设�
 
 用法::
 
-    python scripts/audit_r40_hard_gates.py [--json]
+    python scripts/audit_r40_hard_gates.py [--json] [--mode research|production]
 
-返回码 = FAIL 门数量（0 = 全部 PASS / NOT_RUN 不算失败）。
+research 返回码 = FAIL 门数量；production 要求所有门 PASS，FAIL / NOT_RUN 均非零。
 """
 from __future__ import annotations
 
@@ -335,6 +335,7 @@ def gate_evidence_completeness() -> GateResult:
         check_evidence_axis_completeness,
         check_evidence_cross_product_completeness,
         load_store_points,
+        production_evidence_requirements,
     )
 
     FE_ROOT = Path(__file__).resolve().parents[1]
@@ -345,7 +346,12 @@ def gate_evidence_completeness() -> GateResult:
             None, f"evidence file missing/empty at {path} (R16 证据重生待运行)"
         )
     axis = check_evidence_axis_completeness(points)
-    cross = check_evidence_cross_product_completeness(points)
+    required_canonicals, required_by_canonical = production_evidence_requirements()
+    cross = check_evidence_cross_product_completeness(
+        points,
+        required_canonicals=required_canonicals,
+        required_by_canonical=required_by_canonical,
+    )
     if axis["complete"] and cross["all_complete"]:
         return GateResult(
             True,
@@ -380,6 +386,14 @@ GATES: list[tuple[str, Callable[[], GateResult]]] = [
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv[1:])
     as_json = "--json" in argv
+    mode = "research"
+    if "--mode" in argv:
+        try:
+            mode = argv[argv.index("--mode") + 1]
+        except IndexError as exc:
+            raise SystemExit("--mode requires research or production") from exc
+    if mode not in {"research", "production"}:
+        raise SystemExit("--mode must be research or production")
     results: list[tuple[str, GateResult]] = []
     for name, fn in GATES:
         _run(name, fn, results)
@@ -390,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             json.dumps(
                 {
+                    "mode": mode,
                     "gates": {name: r.to_dict() for name, r in results},
                     "summary": {"pass": n_pass, "fail": n_fail, "not_run": n_notrun},
                 },
@@ -397,11 +412,11 @@ def main(argv: list[str] | None = None) -> int:
                 ensure_ascii=False,
             )
         )
-        return n_fail
+        return n_fail + (n_notrun if mode == "production" else 0)
     for name, r in results:
         print(f"[{r.status}] {name}: {r.detail}")
     print(f"\nR40 hard gates: {n_pass} PASS / {n_fail} FAIL / {n_notrun} NOT_RUN")
-    return n_fail
+    return n_fail + (n_notrun if mode == "production" else 0)
 
 
 if __name__ == "__main__":

@@ -25,13 +25,99 @@ PROD_LANES = ("FAST_NATIVE_ALPHA", "EXPENSIVE_CERTIFIED_ALPHA",
               "MODEL_FEATURE_SCORE", "STATE_CONDITION_EVENT")
 
 
-def git_sha() -> str:
+def git_sha() -> str | None:
+    """Return the live repository HEAD; unavailable is never a comparable sentinel."""
     try:
-        out = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
-                             capture_output=True, text=True, timeout=30)
-        return out.stdout.strip()
+        out = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        sha = out.stdout.strip()
+        return sha if out.returncode == 0 and sha else None
     except Exception:
-        return "UNKNOWN"
+        return None
+
+
+def _canonical_gate_summary(out_dir: Path, head: str | None) -> dict[str, dict[str, object]]:
+    """Summarize only executed per-canonical evidence, preserving NOT_RUN."""
+    import csv
+
+    path = out_dir / "MODEL_CANONICAL_LEDGER.csv"
+    fields = {
+        "parameter_domain_certified": "MODEL_ALL_DIRECT_USE_HAVE_PARAMETER_DOMAIN",
+        "oracle_pass": "MODEL_ALL_DIRECT_USE_HAVE_ORACLE",
+        "causality_pass": "MODEL_ALL_DIRECT_USE_HAVE_CAUSALITY_EVIDENCE",
+        "missing_gap_pass": "MODEL_ALL_DIRECT_USE_HAVE_MISSING_POLICY_EVIDENCE",
+        "unit_contract_pass": "MODEL_ALL_DIRECT_USE_HAVE_UNIT_EVIDENCE",
+        "optimized_reference_parity_pass": "MODEL_ALL_OPTIMIZED_PATHS_REFERENCE_PARITY",
+        "batch_single_parity_pass": "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN",
+        "future_poison_pass": "MODEL_NEGATIVE_CONTROLS_ALL_FIRE",
+    }
+    all_rows = []
+    try:
+        with path.open(newline="", encoding="utf-8") as fh:
+            all_rows = list(csv.DictReader(fh))
+    except (OSError, csv.Error):
+        all_rows = []
+    rows = (
+        [r for r in all_rows if r.get("evidence_sha", "").strip() == head]
+        if head is not None else []
+    )
+    result: dict[str, dict[str, object]] = {}
+    for field, gate in fields.items():
+        applicable = rows
+        if field in {"parameter_domain_certified", "oracle_pass", "causality_pass", "missing_gap_pass", "unit_contract_pass", "optimized_reference_parity_pass"}:
+            applicable = [r for r in rows if r.get("lane") in PROD_LANES]
+        elif field == "batch_single_parity_pass":
+            applicable = [r for r in rows if r.get("stateful", "").strip().lower() == "true"]
+        values = [r.get(field, "").strip().lower() for r in applicable]
+        executed = [v for v in values if v in {"true", "false"}]
+        if not applicable or not executed:
+            status, value = "NOT_RUN", False
+        elif len(executed) != len(values) or any(v == "false" for v in executed):
+            status, value = "FAIL", False
+        else:
+            status, value = "PASS", True
+        result[gate] = {"value": value, "status": status,
+                        "ledger_canonical_total": len(all_rows),
+                        "fresh_canonical_total": len(rows),
+                        "canonical_total": len(applicable),
+                        "canonical_executed": len(executed),
+                        "canonical_pass": sum(v == "true" for v in executed),
+                        "detail": f"{field}: {sum(v == 'true' for v in executed)}/{len(applicable)} applicable fresh rows executed; ledger_total={len(all_rows)} fresh_total={len(rows)}; {status}",
+                        "evidence_sha": head}
+
+    production_rows = [r for r in rows if r.get("lane") in PROD_LANES]
+    typed_declared = [r for r in production_rows if r.get("feature_inputs", "").strip()]
+    typed_status = "PASS" if production_rows and len(typed_declared) == len(production_rows) else ("FAIL" if production_rows else "NOT_RUN")
+    result["MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS"] = {
+        "value": typed_status == "PASS", "status": typed_status,
+        "ledger_canonical_total": len(all_rows), "fresh_canonical_total": len(rows),
+        "canonical_total": len(production_rows), "canonical_executed": len(typed_declared),
+        "canonical_pass": len(typed_declared),
+        "detail": f"feature_inputs declaration present for {len(typed_declared)}/{len(production_rows)} direct-use fresh rows; ledger_total={len(all_rows)} fresh_total={len(rows)}; {typed_status}",
+        "evidence_sha": head,
+    }
+
+    stateful_rows = [r for r in rows if r.get("stateful", "").strip().lower() == "true"]
+    contract_field = "state_contract_pass" if all_rows and "state_contract_pass" in all_rows[0] else None
+    contract_values = [r.get(contract_field, "").strip().lower() for r in stateful_rows] if contract_field else []
+    contract_executed = [v for v in contract_values if v in {"true", "false"}]
+    if not contract_field or not stateful_rows or not contract_executed:
+        contract_status, contract_value = "NOT_RUN", False
+    elif len(contract_executed) != len(stateful_rows) or any(v == "false" for v in contract_executed):
+        contract_status, contract_value = "FAIL", False
+    else:
+        contract_status, contract_value = "PASS", True
+    result["MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT"] = {
+        "value": contract_value, "status": contract_status,
+        "ledger_canonical_total": len(all_rows), "fresh_canonical_total": len(rows),
+        "canonical_total": len(stateful_rows), "canonical_executed": len(contract_executed),
+        "canonical_pass": sum(v == "true" for v in contract_executed),
+        "detail": f"state_contract_pass: {sum(v == 'true' for v in contract_executed)}/{len(stateful_rows)} stateful fresh rows executed; ledger_total={len(all_rows)} fresh_total={len(rows)}; {contract_status}",
+        "evidence_sha": head,
+    }
+    return result
 
 
 def main() -> int:
@@ -64,9 +150,12 @@ def main() -> int:
 
     gates: dict[str, dict] = {}
 
-    def gate(name: str, ok: bool, detail: str) -> None:
+    def gate(name: str, ok: bool, detail: str, status: str | None = None) -> None:
+        status = status or ("PASS" if ok else "FAIL")
         gates[name] = {
-            "PASS" if ok else "FAIL": True,
+            "value": bool(ok),
+            "status": status,
+            "check": detail,
             "detail": detail,
             "evidence_sha": sha,
         }
@@ -169,36 +258,23 @@ def main() -> int:
     gate("MODEL_ZERO_DUPLICATE_MINING_CANONICAL_ALIASES",
          not dup_aliases, f"duplicate_aliases={sorted(dup_aliases)}")
 
-    # M-001: evidence fresh at current HEAD.  The MODEL_* deliverables generated
-    # this round (ledger, hard-gates, current-head json) must be bound to the
-    # current git HEAD.  Prior-round evidence (R35 c4b3d55e / R37 d34cc9f5) is
-    # stale by design and tracked by audit_r37_evidence_truth's stale-detection.
-    ledger_bound = sha
-    try:
-        j = json.loads((out_dir / "MODEL_CURRENT_HEAD.json").read_text(encoding="utf-8"))
-        ledger_bound = j.get("commit_sha", sha)
-    except Exception:
-        pass
-    gate("MODEL_CURRENT_HEAD_EVIDENCE_FRESH",
-         ledger_bound == sha,
-         f"ledger_bound={ledger_bound} current_head={sha}")
+    # Per-canonical gates are derived from the ledger rows just generated. Empty
+    # fields remain NOT_RUN; they can never be counted as implicit passes.
+    canonical_gates = _canonical_gate_summary(out_dir, sha)
+    for g, entry in canonical_gates.items():
+        gates[g] = entry
 
-    # typed inputs / parameter domain / oracle / causality / missing / unit:
-    # evidence paths exist (R35 test suite) but not yet per-canonical for all
-    # direct-use models -> NOT_RUN (honest).
-    for g in ("MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS",
-              "MODEL_ALL_DIRECT_USE_HAVE_PARAMETER_DOMAIN",
-              "MODEL_ALL_DIRECT_USE_HAVE_ORACLE",
-              "MODEL_ALL_DIRECT_USE_HAVE_CAUSALITY_EVIDENCE",
-              "MODEL_ALL_DIRECT_USE_HAVE_MISSING_POLICY_EVIDENCE",
-              "MODEL_ALL_DIRECT_USE_HAVE_UNIT_EVIDENCE",
-              "MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT",
-              "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN",
-              "MODEL_ALL_OPTIMIZED_PATHS_REFERENCE_PARITY",
-              "MODEL_NEGATIVE_CONTROLS_ALL_FIRE"):
-        gates[g] = {"NOT_RUN": True,
-                    "detail": "per-canonical evidence path not yet materialized for all direct-use models",
-                    "evidence_sha": sha}
+    # Keep the report bound to the live HEAD and explicitly compare any prior
+    # artifact binding. A missing or unavailable SHA fails closed.
+    prior_bound = None
+    try:
+        prior = json.loads((out_dir / "MODEL_CURRENT_HEAD.json").read_text(encoding="utf-8"))
+        prior_bound = prior.get("commit_sha")
+    except (OSError, ValueError):
+        pass
+    gate("MODEL_CURRENT_HEAD_EVIDENCE_FRESH", prior_bound == sha and sha is not None,
+         f"evidence_sha={prior_bound!r} repository_HEAD={sha!r}")
+
 
     (out_dir / "MODEL_FINAL_HARD_GATES.json").write_text(
         json.dumps({"commit_sha": sha, "gates": gates},

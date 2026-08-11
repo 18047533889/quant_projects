@@ -97,6 +97,7 @@ def check_evidence_cross_product_completeness(
     *,
     required: Mapping[str, frozenset[str]] | None = None,
     required_canonicals: Sequence[str] | None = None,
+    required_by_canonical: Mapping[str, Mapping[str, frozenset[str]]] | None = None,
 ) -> dict[str, Any]:
     """per-canonical 覆盖 canonical × parameter-domain × backend × variant ×
     grain × source context 的全部必需轴组合。
@@ -129,8 +130,17 @@ def check_evidence_cross_product_completeness(
     per: dict[str, Any] = {}
     missing_total = 0
     for canon in canonicals:
+        canonical_required = (required_by_canonical or {}).get(canon, req)
+        canonical_combos, canonical_axes = required_axis_cross_product(
+            required=canonical_required
+        )
+        if canonical_axes != axis_names:
+            raise ValueError(
+                f"required axes for {canon!r} differ from global axes: "
+                f"{canonical_axes!r} != {axis_names!r}"
+            )
         got = covered.get(canon, set())
-        missing = sorted(combos - got)
+        missing = sorted(canonical_combos - got)
         per[canon] = {
             "covered": len(got),
             "missing": list(missing),
@@ -143,6 +153,28 @@ def check_evidence_cross_product_completeness(
         "all_complete": missing_total == 0,
         "required_cross_product": len(combos),
     }
+
+
+def production_evidence_requirements() -> tuple[
+    list[str], dict[str, dict[str, frozenset[str]]]
+]:
+    """Return the live production surface and each canonical's claimed backends."""
+    from backend.operator_capability import production_eligible_backends
+    from cleaned_operators import load_all
+    from cleaned_operators.production_hardening import factor_production_targets
+
+    load_all()
+    canonicals = sorted(factor_production_targets())
+    per_canonical: dict[str, dict[str, frozenset[str]]] = {}
+    for canonical in canonicals:
+        backends = {
+            "duckdb_sql" if backend == "sql" else backend
+            for backend in production_eligible_backends(canonical)
+        }
+        required_axes = dict(REQUIRED_AXES)
+        required_axes["backend"] = frozenset(backends)
+        per_canonical[canonical] = required_axes
+    return canonicals, per_canonical
 
 
 def load_store_points(path: str | Path) -> list[dict[str, Any]]:
@@ -167,7 +199,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     points = load_store_points(path)
     axis = check_evidence_axis_completeness(points)
-    cross = check_evidence_cross_product_completeness(points)
+    canonicals, requirements = production_evidence_requirements()
+    cross = check_evidence_cross_product_completeness(
+        points,
+        required_canonicals=canonicals,
+        required_by_canonical=requirements,
+    )
     print(f"evidence={path}")
     print(f"points={len(points)}")
     print(f"axis_complete={axis['complete']} incomplete={axis['incomplete'][:10]}")

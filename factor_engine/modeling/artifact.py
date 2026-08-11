@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
@@ -24,7 +28,10 @@ __all__ = [
     "ModelArtifactManifest",
     "ModelArtifact",
     "PREPROCESSING_IDENTITY_KINDS",
+    "ARTIFACT_SCHEMA_VERSION",
 ]
+
+ARTIFACT_SCHEMA_VERSION = 1
 
 
 # --------------------------------------------------------------------------- #
@@ -79,6 +86,7 @@ class ModelArtifactManifest:
     training_cutoff: str = ""
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "hyperparameters", _freeze(self.hyperparameters))
         if self.final_fit_end is None:
             object.__setattr__(self, "final_fit_end", self.train_end)
         if self.final_fit_start is None:
@@ -132,9 +140,7 @@ class ModelArtifactManifest:
             "random_seed": self.random_seed,
             "solver_version": self.solver_version,
         }
-        return hashlib.sha256(
-            json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
+        return _digest(payload)
 
 
 # --------------------------------------------------------------------------- #
@@ -154,15 +160,15 @@ class FrozenPreprocessing:
         for s in steps:
             if s.get("kind") not in PREPROCESSING_IDENTITY_KINDS:
                 raise ValueError(f"unknown preprocessing kind {s.get('kind')!r}")
-        self._steps = steps
+        self._steps = tuple(_freeze(s) for s in steps)
 
     @property
-    def steps(self) -> list[dict[str, Any]]:
+    def steps(self) -> tuple[Mapping[str, Any], ...]:
         return self._steps
 
     def state_hash(self) -> str:
         return hashlib.sha256(
-            json.dumps(self._steps, sort_keys=True, default=_json_default).encode("utf-8")
+            _canonical_json(self._steps).encode("utf-8")
         ).hexdigest()
 
     def transform(self, X: np.ndarray) -> np.ndarray:
@@ -182,10 +188,44 @@ class FrozenPreprocessing:
         return out
 
 
-def _json_default(o: Any) -> Any:
-    if isinstance(o, np.ndarray):
-        return o.tolist()
-    return str(o)
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({k: _freeze(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, np.ndarray):
+        out = np.array(value, copy=True)
+        out.setflags(write=False)
+        return out
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {k: _thaw(v) for k, v in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    return value
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(
+        _thaw(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def _apply_imputer(X: np.ndarray, step: dict[str, Any]) -> np.ndarray:
@@ -233,9 +273,14 @@ class ModelArtifact:
     ) -> None:
         self.manifest = manifest
         self.learner = learner
-        self.frozen = frozen
+        self.frozen = FrozenModel(
+            learner_name=frozen.learner_name,
+            family=frozen.family,
+            params=_freeze(frozen.params),
+            metadata=_freeze(frozen.metadata),
+        )
         self.preprocessing = preprocessing
-        self.fit_info = dict(fit_info or {})
+        self.fit_info = _freeze(dict(fit_info or {}))
         self._created = False  # prediction guard (§22)
 
     # -- identity ------------------------------------------------------------
@@ -259,6 +304,7 @@ class ModelArtifact:
                 m.model_name,
                 m.model_version,
                 m.training_cutoff,
+                m.available_at,
                 m.validation_end or "",
                 m.feature_schema_hash,
                 m.label_contract_id,
@@ -297,8 +343,9 @@ class ModelArtifact:
     # -- serialisation -------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": ARTIFACT_SCHEMA_VERSION,
             "manifest": {
-                **self.manifest.__dict__,
+                **{k: _thaw(v) for k, v in self.manifest.__dict__.items()},
                 "lineage_hash": self.manifest.lineage_hash(),
             },
             "learner_name": self.learner.name,
@@ -311,19 +358,28 @@ class ModelArtifact:
             "frozen": {
                 "learner_name": self.frozen.learner_name,
                 "family": self.frozen.family,
-                "params": self.frozen.params,
-                "metadata": self.frozen.metadata,
+                "params": _thaw(self.frozen.params),
+                "metadata": _thaw(self.frozen.metadata),
             },
-            "preprocessing_steps": self.preprocessing.steps,
-            "fit_info": self.fit_info,
+            "preprocessing_steps": _thaw(self.preprocessing.steps),
+            "fit_info": _thaw(self.fit_info),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], learner: BaseLearner) -> "ModelArtifact":
         from modeling.contracts import SampleAdequacyContract
 
+        version = data.get("schema_version")
+        if version != ARTIFACT_SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported artifact schema_version {version!r}; "
+                f"expected {ARTIFACT_SCHEMA_VERSION}"
+            )
         m = data["manifest"]
+        expected_lineage = m.get("lineage_hash")
         manifest = ModelArtifactManifest(**{k: v for k, v in m.items() if k != "lineage_hash"})
+        if not isinstance(expected_lineage, str) or expected_lineage != manifest.lineage_hash():
+            raise ValueError("artifact lineage hash mismatch")
         spec = LearnerSpec(
             learner_name=data["learner_spec"]["learner_name"],
             family=data["learner_spec"]["family"],
@@ -346,10 +402,29 @@ class ModelArtifact:
         )
 
     def save(self, path: Any) -> None:
-        import json
-
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(self.to_dict(), fh, indent=1, default=_json_default)
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            raise FileExistsError(f"refusing to overwrite artifact {target}")
+        payload = _canonical_json(self.to_dict())
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.link(tmp_name, target)
+            os.unlink(tmp_name)
+            dir_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        finally:
+            try:
+                os.unlink(tmp_name)
+            except FileNotFoundError:
+                pass
 
     @classmethod
     def load(cls, path: Any, learner: BaseLearner | None = None) -> "ModelArtifact":
