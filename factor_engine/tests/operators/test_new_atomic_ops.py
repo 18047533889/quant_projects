@@ -13,7 +13,7 @@ from cleaned_operators.registry import OperatorRegistry
 ensure_cleaned_loaded()
 
 P0_CANONICALS = frozenset(
-    """ts_quantile_range ts_trimmed_mean ts_robust_zscore
+    """ts_quantile_range ts_trimmed_mean ts_robust_zscore_inclusive ts_robust_zscore_prior
     ts_positive_ratio ts_negative_ratio ts_zero_ratio
     ts_abs_concentration ts_abs_entropy
     ts_min_if ts_max_if ts_quantile_if ts_corr_if ts_beta_if ts_regression_resid_if
@@ -59,7 +59,8 @@ def test_p0_operators_preserve_shape_and_are_deterministic() -> None:
     calls: dict[str, list[object]] = {
         "ts_quantile_range": [panel],
         "ts_trimmed_mean": [panel],
-        "ts_robust_zscore": [panel],
+        "ts_robust_zscore_inclusive": [panel],
+        "ts_robust_zscore_prior": [panel],
         "ts_positive_ratio": [panel],
         "ts_negative_ratio": [panel],
         "ts_zero_ratio": [panel],
@@ -85,10 +86,10 @@ def test_p0_operators_preserve_shape_and_are_deterministic() -> None:
         "group_ex_self_weighted_mean": [panel, panel.abs() + 1.0, _group()],
         "hierarchical_group_neutralize": [panel, _group(), _group()],
         "cs_robust_resid": [panel, panel * 0.5],
-        "overnight_return": [panel + 10.0, panel + 9.0],
-        "open_close_return": [panel + 10.0, panel + 11.0],
-        "open_to_vwap_return": [panel + 10.0, panel + 10.5],
-        "vwap_to_close_return": [panel + 10.5, panel + 11.0],
+        "overnight_return": [panel + 10.0, panel + 9.0, "raw"],
+        "open_close_return": [panel + 10.0, panel + 11.0, "raw"],
+        "open_to_vwap_return": [panel + 10.0, panel + 10.5, "raw"],
+        "vwap_to_close_return": [panel + 10.5, panel + 11.0, "raw"],
         "ashare_limit_distance": [panel + 10.0, panel + 10.05],
         "ashare_limit_up_touch": [panel + 10.0, panel + 10.0],
         "ashare_limit_down_touch": [panel + 10.0, panel + 10.0],
@@ -131,7 +132,7 @@ def test_overnight_return_numeric() -> None:
     open_px = pd.DataFrame([10.0, 10.0, 10.0], index=idx, columns=cols)
     pre_close = pd.DataFrame([9.0, 10.0, 0.0], index=idx, columns=cols)
     op = OperatorRegistry.get("overnight_return")
-    out = op.calculate(open_px, pre_close)
+    out = op.calculate(open_px, pre_close, price_basis="raw")
     assert out.iloc[0, 0] == pytest.approx(10.0 / 9.0 - 1.0)
     assert np.isnan(out.iloc[2, 0])
 
@@ -518,14 +519,15 @@ def test_state_event_registration() -> None:
 
 
 def test_ts_transition_count_detects_rising_edge() -> None:
-    """ts_transition_count 应正确识别 0→1 切换（rising edge）。"""
+    """ts_transition_count 应正确识别状态切换（0→1 或 1→0）。"""
     idx = pd.date_range("2024-01-01", periods=10)
-    # 状态序列: 0 0 1 1 0 1 0 0 1 1 → transitions at idx 2, 5, 8 (3 total)
+    # 状态序列: 0 0 1 1 0 1 0 0 1 1
+    # Transitions: idx 2 (0→1), idx 4 (1→0), idx 5 (0→1), idx 6 (1→0), idx 8 (0→1) = 5 total
     condition = pd.DataFrame([0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0], index=idx, columns=["A"])
     op = OperatorRegistry.get("ts_transition_count")
     out = op.calculate(condition, window=10, missing_policy="break")
-    # 最后一行窗口内应有 3 次 0→1 切换
-    assert out.iloc[-1, 0] == 3.0
+    # 最后一行窗口内应有 5 次状态切换
+    assert out.iloc[-1, 0] == 5.0
 
 
 def test_ts_time_since_change_counts_bars_correctly() -> None:

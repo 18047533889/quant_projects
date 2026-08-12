@@ -200,8 +200,18 @@ intraday_limit_reopen_count = _factory("limit_reopen_count", _COMMON)
 # ``cleaned_operators/microstructure/intraday_agg.py`` (they take explicit
 # minute-bar panel inputs).  The SourceRef-backed ``intraday_*`` factories
 # remain for the read-minute-implicitly path.
-INTRADAY_DAILY_DSL_FUNCTIONS = {
+
+# Build function registry with both intraday_* and intra_* aliases
+_all_intraday = {
     name: value
     for name, value in globals().copy().items()
     if name.startswith("intraday_") and callable(value)
 }
+
+# Add intra_* aliases for all intraday_* functions (Phase 4 requirement)
+INTRADAY_DAILY_DSL_FUNCTIONS = {}
+for name, func in _all_intraday.items():
+    INTRADAY_DAILY_DSL_FUNCTIONS[name] = func
+    # Create intra_* alias (e.g. intraday_realized_variance -> intra_realized_variance)
+    alias = name.replace("intraday_", "intra_", 1)
+    INTRADAY_DAILY_DSL_FUNCTIONS[alias] = func

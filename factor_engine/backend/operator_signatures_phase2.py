@@ -276,6 +276,16 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     signatures["calendar_day_diff"] = _sig(
         "calendar_day_diff", ArgSpec("date1", _F), ArgSpec("date2", _F)
     )
+    signatures["trading_day_diff"] = _sig(
+        "trading_day_diff", ArgSpec("date1", _F), ArgSpec("date2", _F)
+    )
+    signatures["relation_distinct_count"] = _sig(
+        "relation_distinct_count", ArgSpec("entity_ids", _F)
+    )
+    signatures["relation_overlap_ratio"] = _sig(
+        "relation_overlap_ratio",
+        ArgSpec("current_ids", _F), ArgSpec("previous_ids", _F), ArgSpec("method", _ANY)
+    )
 
     # ---- model-type rolling regression (2026-08 P2) ------------------------
     signatures["ts_huber_regression_resid"] = _sig(

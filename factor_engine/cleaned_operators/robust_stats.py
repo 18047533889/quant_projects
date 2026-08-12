@@ -390,7 +390,6 @@ def _register_robust_zscore_split() -> None:
         )
 
         extend_extended_only(["ts_robust_zscore_inclusive", "ts_robust_zscore_prior"])
-        retract_extended_only(["ts_robust_zscore"])
     except ImportError:  # pragma: no cover - surface module always present in-tree
         pass
 

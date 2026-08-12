@@ -1208,6 +1208,14 @@ _R11_UNUSABLE_SWEEP_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_R11_UNUSABLE_SWEEP_POLICIES)
 
+# Phase 2: relation/index/event operators (2026-08-12)
+_PHASE2_RELATION_POLICIES = {
+    "trading_day_diff": {"scope": "elementwise", "pit_safe": True},
+    "relation_distinct_count": {"scope": "cs", "pit_safe": True},
+    "relation_overlap_ratio": {"scope": "cs", "pit_safe": True},
+}
+_EXPLICIT_POLICIES.update(_PHASE2_RELATION_POLICIES)
+
 # Alpha-language expansion (2026-08): run/hysteresis state, path geometry,
 # distribution shift, volatility structure, cs locality, events, report seq.
 # All are causal trailing-window / sequential transforms -> pit_safe.

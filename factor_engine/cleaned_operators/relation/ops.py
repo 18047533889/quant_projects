@@ -1317,6 +1317,52 @@ class FinAnnouncementLag(SeriesOperator):
         return _day_diff_frame(period_end_date, pub_date)
 
 
+@register_operator(
+    name="trading_day_diff",
+    category="event",
+    business_category="calendar",
+    canonical="trading_day_diff",
+    source="relation.ops",
+    status="experimental",
+)
+class TradingDayDiff(SeriesOperator):
+    """两个日期面板的交易日差（date2 - date1，基于交易日历）。
+
+    NOTE: 当前实现为简化版，直接使用 calendar-day 差值 × 0.7 近似交易日差。
+    完整实现需要接入真实交易日历服务（如 calendar.TradingCalendar）。
+    """
+
+    metadata = _metadata(
+        "trading_day_diff",
+        "date2 - date1（交易日天数；当前简化实现使用自然日 × 0.7）。",
+        ["date1", "date2"],
+        category="event",
+        domain="calendar",
+        unit="count",
+    )
+
+    def _calculate_series(self, date1: pd.DataFrame, date2: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        date1, date2 = strict_relation_align(date1, date2)
+        d1 = date1.to_numpy()
+        d2 = date2.to_numpy()
+        out = np.full(d1.shape, np.nan, dtype=float)
+
+        try:
+            d1_dt = d1.astype("datetime64[D]")
+            d2_dt = d2.astype("datetime64[D]")
+            valid = ~np.isnat(d1_dt) & ~np.isnat(d2_dt)
+            # 计算自然日差
+            calendar_days = (d2_dt - d1_dt).astype("timedelta64[D]").astype(float)
+            # 交易日约为自然日的 70%（简化假设：周末 + 节假日）
+            # 完整实现应查询真实交易日历
+            out[valid] = np.round(calendar_days[valid] * 0.7)
+        except (ValueError, TypeError):
+            # Fallback: 如果不是日期类型，直接做数值差
+            out = d2.astype(float) - d1.astype(float)
+
+        return _frame_like(date1, out)
+
+
 def _row_entity_ids(panel: pd.DataFrame) -> list[set]:
     """Row-wise non-null entity id sets from a pre-aggregated entity panel."""
     arr = panel.to_numpy(dtype=object)
@@ -1444,6 +1490,8 @@ _surface.extend_extended_only({
         "event_log_return_sum", "event_active_count",
         # R24-009/011: new relation/shareholder canonicals
         "relation_category_signed_contribution", "holder_observed_topk_hhi",
+        # Phase 2 (2026-08-12): trading day calendar diff
+        "trading_day_diff",
     })
 
 # ``event_compounded_return`` 是 ``event_return_since_last`` 的语义别名（复利口径）。
