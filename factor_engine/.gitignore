@@ -6,3 +6,6 @@
 _r38_spill_store/
 _r38_spool/
 cleaned_operators.zip
+
+dist/
+*.whl
