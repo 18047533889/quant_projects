@@ -262,6 +262,35 @@ class PriceBasisSpec(enum.Enum):
     def label(self) -> str:
         return self.value
 
+    @classmethod
+    def coerce(cls, value: Any) -> "PriceBasisSpec":
+        """#R32-P0-123 fail-closed 解析：未知 price basis **抛异常，绝不回落 RAW**。
+
+        WHY fail-closed：静默 fallback 到 ``RAW`` 是最危险的一类 bug——把复权价
+        当未复权价处理，除权日会凭空产生 -10%~-50% 的假收益/假跌停信号，而且
+        **不报错**，回测里表现为"策略在除权日特别赚钱"。宁可让 typo（
+        ``"forward"`` / ``"hfq"`` / ``"backward_adj"``）当场炸掉。
+
+        ``None`` 同样拒绝：调用方"没说"不等于"就是 RAW"，必须显式声明。
+        """
+        if isinstance(value, cls):
+            return value
+        if value is None:
+            raise ValueError(
+                "price basis 未声明（None）——fail-closed 拒绝：不得默认按 RAW 处理。"
+                f"请显式传入 {[m.value for m in cls]} 之一。"
+            )
+        if isinstance(value, str):
+            key = value.strip().lower()
+            for member in cls:
+                if member.value == key:
+                    return member
+        raise ValueError(
+            f"未知 price basis {value!r}——fail-closed 拒绝（不回落 RAW）。"
+            f"合法取值：{[m.value for m in cls]}。"
+            "静默按 RAW 处理复权价会在除权日产生假收益/假涨跌停信号。"
+        )
+
 
 # ---------------------------------------------------------------------------
 # InstrumentIdentity + InstrumentType（R30-P1-007）

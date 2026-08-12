@@ -54,6 +54,13 @@ def test_operator_expansion_fields_resolve_with_semantics() -> None:
     assert FIELD_REGISTRY.require("rd_expenses").source_name == "RdExpenses"
     assert FIELD_REGISTRY.require("total_liabilities").source_name == "TotalLiability"
 
+    # Phase 0 expansion: new financial/valuation fields
+    assert FIELD_REGISTRY.require("pe_ttm").name == "pe_ratio_ttm"
+    assert FIELD_REGISTRY.require("gross_profit").source_name == "GrossProfit"
+    assert FIELD_REGISTRY.require("nopat").table == "StockIncome"
+    assert FIELD_REGISTRY.require("total_debt").table == "StockBalance"
+    assert FIELD_REGISTRY.require("invested_capital").grain == ("balance",)
+
 
 def test_corrected_status_and_index_identities() -> None:
     status = FIELD_REGISTRY.require("listed_state")

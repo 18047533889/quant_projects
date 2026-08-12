@@ -146,9 +146,12 @@ def test_extract_matrices_aligns_decay_weights_to_finite_rows():
     X, y, aux, w = _extract_matrices(ds, pre, None, decay_half_life_bars=2)
     assert w is not None
     assert len(w) == len(y)
-    # weights are per-row, positive, latest finite-label row ~ 1.0
+    # weights are per-row, positive, latest date = 1.0 (decay anchor)
     assert np.all(w > 0)
-    assert np.allclose(w.max(), 1.0)
+    last_mask = (ds.frame["date"] == ds.frame["date"].max()).to_numpy()
+    assert np.allclose(w[last_mask], 1.0)
+    # decay: older rows have lower weight
+    assert w.max() > w.min()
 
 
 def test_train_model_with_decay_half_life_bars_works():

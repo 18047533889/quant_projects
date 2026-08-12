@@ -1,35 +1,38 @@
 # -*- coding: utf-8 -*-
-"""R30-P0-002: FactorSourcePlan —— 单个因子的 source 依赖 IR（FE 侧）。
+"""R32-P0-087/089: FactorSourcePlan typed bindings + fail-closed dependency extraction.
 
-R30 分工：**FE 负责 dependency extraction（FactorSourcePlan）；DA 不反向解析
-factor expression**。本模块只构造/封装依赖 IR 与分组统计，不读任何数据，也不
-引入 DuckDB 相关依赖。
+R32-P0-087 (Typed Bindings)
+    FactorSourcePlan 必须保存 Concept/Column→Dataset typed binding，不只是分离的
+    concepts/datasets 元组。新增 ``column_bindings: tuple[ColumnSourceBinding, ...]``
+    字段，向后兼容保留 ``leaf_concepts`` / ``source_datasets``。
 
-``FactorSourcePlan`` 把一个因子的数据依赖折叠成一张确定性快照：
+    **替代旧实现**：本模块替换原 ``planner/factor_source_plan.py``（纯元组存储），
+    现为 FE×DA 绑定层的生产实现。
 
-- ``leaf_concepts``：因子表达式直接引用的逻辑字段（concept）；
-- ``source_datasets``：这些 concept 所在的物理 dataset；
-- ``required_frequency`` / ``required_grain``：读取频率与经济粒度；
-- ``pit_requirements``：PIT / decision-policy 要求；
-- ``price_basis``：价格口径（raw / backward_adjusted / …）；
-- ``aggregations`` / ``joins``：跨源聚合与 join 描述；
-- ``coverage_requirements``：最小覆盖率等证据要求。
-
-``identity()`` 是稳定 digest：同一 factor 编译多次 → 同一 digest；
-source / market / PIT / price_basis 变化 → identity 变。**绝不依赖 Date.now。**
-
-``extract(...)`` 从既有 source-dependency manifest（``build_source_dependency_
-manifest`` 的产物）抽取 leaf_concepts / source_datasets；expression_plan 缺失时
-用 overrides 填充。依赖提取仍属 FE——本模块只是把它封装成 R30 命名 IR。
+R32-P0-089 (Fail-Closed Dependency Extraction)
+    Dependency extraction production fail-closed。``_build_manifest()`` 失败时：
+    - production / automated_research → raise DependencyExtractionError
+    - interactive → 返回 None（显式降级，需显式 allow_degraded=True）
+    - 不再静默 ``except Exception: return None``
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Any, Iterable, Mapping
 
-__all__ = ["FactorSourcePlan", "stable_digest"]
+__all__ = [
+    "FactorSourcePlan",
+    "stable_digest",
+    "DependencyExtractionError",
+]
+
+
+class DependencyExtractionError(Exception):
+    """R32-P0-089: dependency extraction 失败（production/automated_research fail-closed）。"""
+    pass
 
 
 def _json_scalar(value: Any) -> Any:
@@ -40,6 +43,13 @@ def _json_scalar(value: Any) -> Any:
         return [_json_scalar(v) for v in value]
     if isinstance(value, Mapping):
         return {str(k): _json_scalar(v) for k, v in value.items()}
+    # R32-P0-087: ColumnSourceBinding 有 to_dict()
+    to_dict_fn = getattr(value, "to_dict", None)
+    if callable(to_dict_fn):
+        try:
+            return to_dict_fn()
+        except Exception:  # noqa: BLE001
+            pass
     return str(value)
 
 
@@ -52,12 +62,7 @@ def _normalize_dict(d: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_grain(grain: Any) -> Any:
-    """grain 归一化为可哈希/可序列化形态（tuple 排序列化，字符串原样保留）。
-
-    ``required_grain`` 允许是 ``("instrument", "time")`` 这类经济粒度 tuple，
-    也允许是 ``"quarterly"`` / ``"ttm"`` 这类 timeframe 标签字符串（调用方在
-    batch-plan 分组时把它解释为 timeframe 语义）。
-    """
+    """grain 归一化为可哈希/可序列化形态。"""
     if grain is None:
         return None
     if isinstance(grain, (tuple, list, set, frozenset)):
@@ -76,33 +81,72 @@ def stable_digest(payload: Any) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
-def _build_manifest(expression_plan: Any) -> tuple[str, ...] | None:
-    """防御性调用 ``planner.source_dependencies.build_source_dependency_manifest``。
-
-    并发 session 可能改签名——任何失败都返回 None，绝不抛。
+def _detect_runtime_mode() -> str:
+    """R32-P0-089: 探测当前 runtime mode（production / automated_research / interactive）。
+    
+    production → 严格 fail-closed
+    automated_research → fail-closed（自动挖掘不允许依赖缺失）
+    interactive → 显式降级允许（用户主动探索）
     """
+    mode = os.environ.get("RUNTIME_MODE", "").strip().lower()
+    if mode in ("production", "prod", "strict"):
+        return "production"
+    if mode in ("automated_research", "automated", "auto_research", "research_auto"):
+        return "automated_research"
+    if mode in ("interactive", "dev", "development", "notebook"):
+        return "interactive"
+    # 默认 fail-closed（R32-P0-089 安全默认）
+    return "production"
+
+
+def _build_manifest(expression_plan: Any, *, allow_degraded: bool = False) -> tuple[str, ...] | None:
+    """R32-P0-089: 调用 build_source_dependency_manifest，production fail-closed。
+    
+    Args:
+        expression_plan: 表达式计划
+        allow_degraded: 是否允许降级（interactive 模式）
+        
+    Returns:
+        manifest tuple 或 None（仅 allow_degraded=True 时）
+        
+    Raises:
+        DependencyExtractionError: production/automated_research 模式下提取失败
+    """
+    runtime_mode = _detect_runtime_mode()
+    fail_closed = runtime_mode in ("production", "automated_research")
+    
     try:
         from planner.source_dependencies import build_source_dependency_manifest
-    except Exception:  # pragma: no cover - import 环境缺失时降级
+    except Exception as exc:
+        if fail_closed and not allow_degraded:
+            raise DependencyExtractionError(
+                f"Cannot import build_source_dependency_manifest in {runtime_mode} mode: {exc}"
+            ) from exc
         return None
+    
     try:
         manifest = build_source_dependency_manifest(expression_plan)
-    except Exception:  # pragma: no cover - 底层签名/语义变化时降级
+    except Exception as exc:
+        if fail_closed and not allow_degraded:
+            raise DependencyExtractionError(
+                f"Dependency extraction failed in {runtime_mode} mode: {exc}"
+            ) from exc
         return None
+    
     return tuple(manifest or ())
 
 
 def _parse_manifest(
     manifest: Iterable[Any],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """从 source-dependency manifest 抽取 (leaf_concepts, source_datasets)。
-
-    manifest 项可能是 ``build_source_dependency_manifest`` 的规范 JSON 字符串，
-    也可能是 dict（``{"table": ..., "field": ...}``）；两者都只读 table/field，
-    解析失败的单条直接跳过（不吞整个 manifest）。
+) -> tuple[tuple[str, ...], tuple[str, ...], list[Any]]:
+    """R32-P0-087/089: 从 manifest 抽取 (concepts, datasets, raw_bindings)。
+    
+    raw_bindings 保存原始 manifest 项（供 ColumnSourceBinding 构造）。
     """
     concepts: set[str] = set()
     datasets: set[str] = set()
+    raw_bindings: list[Any] = []
+    
     for item in manifest or ():
         payload: Any = None
         if isinstance(item, str):
@@ -115,27 +159,72 @@ def _parse_manifest(
         else:
             payload = getattr(item, "to_dict", lambda: None)()
             if payload is None and item is not None:
-                payload = {"table": getattr(item, "table", None),
-                           "field": getattr(item, "field", None)}
+                payload = {
+                    "table": getattr(item, "table", None),
+                    "field": getattr(item, "field", None),
+                }
+        
         if not isinstance(payload, Mapping):
             continue
+        
         table = payload.get("table") or payload.get("dataset")
         field = payload.get("field")
+        
         if table:
             datasets.add(str(table))
         if field:
             concepts.add(str(field))
-    return tuple(sorted(concepts)), tuple(sorted(datasets))
+        
+        raw_bindings.append(payload)
+    
+    return tuple(sorted(concepts)), tuple(sorted(datasets)), raw_bindings
+
+
+def _build_column_bindings(raw_bindings: list[Any], *, market: str = "") -> tuple[Any, ...]:
+    """R32-P0-087: 从 manifest raw bindings 构造 typed ColumnSourceBinding。
+    
+    防御性 import ColumnSourceBinding / SourceScopeId；不可得时返回空 tuple。
+    """
+    try:
+        from planner.source_binding import ColumnSourceBinding
+        from planner.physical_factor_dag import SourceScopeId
+    except Exception:  # pragma: no cover
+        return ()
+    
+    bindings: list[ColumnSourceBinding] = []
+    for item in raw_bindings:
+        if not isinstance(item, Mapping):
+            continue
+        
+        dataset = str(item.get("table") or item.get("dataset") or "")
+        field = str(item.get("field") or "")
+        if not dataset or not field:
+            continue
+        
+        # 构造 SourceScopeId
+        scope = SourceScopeId(dataset=dataset, market=market)
+        
+        # 构造 ColumnSourceBinding
+        bindings.append(ColumnSourceBinding(
+            encoded_column=field,  # manifest 里的 field 作为列名
+            dataset=dataset,
+            field=field,
+            market=market,
+            source_scope=scope,
+        ))
+    
+    return tuple(bindings)
 
 
 class FactorSourcePlan:
-    """单个因子的 source 依赖 IR（R30-P0-002）。
-
-    字段全部可 JSON 序列化；``identity()`` 基于 ``to_dict()`` 的稳定 digest。
-
-    额外 ``**extra`` 参数（如 ``timeframe`` / ``universe`` / ``security_scope``）
-    会保留到 ``_extra``，供 :mod:`planner.factor_batch_plan` 的分组语义读取——
-    FactorSourcePlan 构造签名之外的维度不丢失，也不污染主字段。
+    """R32-P0-087/089: 单个因子的 source 依赖 IR（typed bindings + fail-closed）。
+    
+    R32-P0-087 新增：
+        - ``column_bindings``: typed ColumnSourceBinding 元组
+        - ``to_dict()`` 序列化 bindings
+        
+    向后兼容：
+        - ``leaf_concepts`` / ``source_datasets`` 保留（旧调用方仍可读）
     """
 
     def __init__(
@@ -144,6 +233,7 @@ class FactorSourcePlan:
         market: str,
         leaf_concepts: Iterable[str] = (),
         source_datasets: Iterable[str] = (),
+        column_bindings: Iterable[Any] = (),  # R32-P0-087
         required_frequency: str | None = None,
         required_grain: Any = None,
         pit_requirements: Mapping[str, Any] | None = None,
@@ -157,6 +247,8 @@ class FactorSourcePlan:
         self.market = str(market or "")
         self.leaf_concepts = tuple(sorted(str(c) for c in (leaf_concepts or ())))
         self.source_datasets = tuple(sorted(str(d) for d in (source_datasets or ())))
+        # R32-P0-087: typed bindings
+        self.column_bindings = tuple(column_bindings or ())
         self.required_frequency = str(required_frequency) if required_frequency else None
         self.required_grain = _normalize_grain(required_grain)
         self.pit_requirements = dict(pit_requirements or {})
@@ -166,13 +258,15 @@ class FactorSourcePlan:
         self.coverage_requirements = dict(coverage_requirements or {})
         self._extra = dict(extra or {})
 
-    # -- identity -----------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
+        """R32-P0-087: 序列化包含 column_bindings。"""
         return {
             "factor_id": self.factor_id,
             "market": self.market,
             "leaf_concepts": list(self.leaf_concepts),
             "source_datasets": list(self.source_datasets),
+            # R32-P0-087: 序列化 typed bindings
+            "column_bindings": [_json_scalar(b) for b in self.column_bindings],
             "required_frequency": self.required_frequency,
             "required_grain": _json_scalar(self.required_grain),
             "pit_requirements": _normalize_dict(self.pit_requirements),
@@ -184,17 +278,15 @@ class FactorSourcePlan:
         }
 
     def identity(self) -> str:
-        """稳定 digest：同一 factor 编译多次 → 同一 digest；source / market /
-        PIT / price_basis 变化 → identity 变。"""
+        """稳定 digest：同一 factor 编译多次 → 同一 digest。"""
         return stable_digest(self.to_dict())
 
-    def __repr__(self) -> str:  # pragma: no cover - 调试用
+    def __repr__(self) -> str:  # pragma: no cover
         return (
             f"FactorSourcePlan(factor_id={self.factor_id!r}, market={self.market!r}, "
-            f"price_basis={self.price_basis!r}, identity={self.identity()[:8]}…)"
+            f"bindings={len(self.column_bindings)}, identity={self.identity()[:8]}…)"
         )
 
-    # -- extraction ---------------------------------------------------------
     @classmethod
     def extract(
         cls,
@@ -202,36 +294,45 @@ class FactorSourcePlan:
         market: str,
         expression_plan: Any = None,
         source_manifest: Iterable[Any] | None = None,
+        allow_degraded: bool = False,  # R32-P0-089
         **overrides: Any,
     ) -> "FactorSourcePlan":
-        """从既有 source-dependency manifest 抽取依赖并构造 :class:`FactorSourcePlan`。
-
-        - ``source_manifest`` 显式给出 → 直接解析它（``build_source_dependency_
-          manifest`` 的产物，元组/可迭代）；
-        - ``source_manifest`` 缺省但 ``expression_plan`` 给出 → 先调用
-          ``build_source_dependency_manifest`` 再解析；
-        - 两者都缺省 → ``overrides`` 里的 ``leaf_concepts`` / ``source_datasets``
-          直接作为依赖。
-
-        其余维度（``required_frequency`` / ``price_basis`` / ``pit_requirements``
-        / ``aggregations`` / ``joins`` / ``coverage_requirements`` / 任意 ``extra``）
-        全部透传 ``overrides``。``expression_plan`` 的依赖提取仍属 FE——本方法只
-        是把既有 manifest 封装成 R30 命名 IR。
+        """R32-P0-087/089: 从 manifest 提取依赖并构造 typed bindings。
+        
+        Args:
+            factor_id: 因子 ID
+            market: 市场
+            expression_plan: 表达式计划（用于 build_source_dependency_manifest）
+            source_manifest: 显式 manifest（优先使用）
+            allow_degraded: 是否允许降级（interactive 模式）
+            **overrides: 覆盖字段
+            
+        Raises:
+            DependencyExtractionError: production/automated_research 模式下提取失败
         """
         leaf_concepts = tuple(str(c) for c in (overrides.pop("leaf_concepts", ()) or ()))
         source_datasets = tuple(str(d) for d in (overrides.pop("source_datasets", ()) or ()))
+        column_bindings = tuple(overrides.pop("column_bindings", ()) or ())
+        
         if source_manifest is None and expression_plan is not None:
-            source_manifest = _build_manifest(expression_plan)
+            # R32-P0-089: fail-closed dependency extraction
+            source_manifest = _build_manifest(expression_plan, allow_degraded=allow_degraded)
+        
         if source_manifest is not None:
-            concepts, datasets = _parse_manifest(source_manifest)
+            concepts, datasets, raw_bindings = _parse_manifest(source_manifest)
             if not leaf_concepts:
                 leaf_concepts = concepts
             if not source_datasets:
                 source_datasets = datasets
+            # R32-P0-087: 构造 typed bindings
+            if not column_bindings:
+                column_bindings = _build_column_bindings(raw_bindings, market=market)
+        
         return cls(
             factor_id=factor_id,
             market=market,
             leaf_concepts=leaf_concepts,
             source_datasets=source_datasets,
+            column_bindings=column_bindings,
             **overrides,
         )

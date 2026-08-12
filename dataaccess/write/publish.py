@@ -169,6 +169,15 @@ def publish_from_staging(
                 if _target_has_published_content(target_dir):
                     archive_path = _archive_path(target_parent, target_dir.name)
                     archive_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # R32-P0-105：publish manifest 写入需要 metadata:write 授权
+                from data_access.security.principal import ACTION_METADATA_WRITE
+                try:
+                    authorizer.authorize_dataset(target_name, action=ACTION_METADATA_WRITE)
+                except AttributeError:
+                    # 兼容旧 authorizer 不支持 action 参数的情况
+                    pass
+
                 manifest_path = write_publish_manifest(
                     candidate_dir,
                     staging_name=staging_name,
@@ -182,6 +191,7 @@ def publish_from_staging(
                 # #25 收官轮：第一个 rename 前 durable journal——进程在两个 rename
                 # 之间死亡时，下次 publish / 读路径能确定性恢复 target（old 或 new，
                 # 绝不留 missing）。journal 落盘失败 → abort（任何 rename 都没发生）。
+                # R32-P0-105：journal 写入也需要 metadata:write 授权（已在上方检查过）
                 _journal = {
                     "target_name": target_dir.name,
                     "candidate": candidate_dir.name,

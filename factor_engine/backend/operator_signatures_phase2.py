@@ -137,6 +137,18 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "cs_robust_resid",
         ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("trim_ratio", _FLT), ArgSpec("add_intercept", _ANY),
     )
+    signatures["cs_trimmed_ols_resid"] = _sig(
+        "cs_trimmed_ols_resid",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("trim_ratio", _FLT), ArgSpec("add_intercept", _ANY),
+    )
+    signatures["cs_huber_resid"] = _sig(
+        "cs_huber_resid",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("add_intercept", _ANY),
+    )
+    signatures["cs_lad_resid"] = _sig(
+        "cs_lad_resid",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("add_intercept", _ANY),
+    )
 
     # ---- return decomposition ---------------------------------------------
     signatures["overnight_return"] = _sig(
@@ -177,6 +189,31 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     )
     signatures["ashare_limit_open_failed"] = _sig(
         "ashare_limit_open_failed", ArgSpec("open", _F), ArgSpec("low", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+    )
+
+    # ---- Filter Layer (2026-08-12) ----------------------------------------
+    signatures["ts_hampel_filter_causal"] = _sig(
+        "ts_hampel_filter_causal",
+        ArgSpec("x", _F), ArgSpec("window", _W),
+        ArgSpec("n_sigma", _FLT), ArgSpec("replacement", _ANY), ArgSpec("scale_floor", _FLT),
+    )
+    signatures["ts_median3_causal"] = _sig(
+        "ts_median3_causal",
+        ArgSpec("x", _F),
+    )
+    signatures["ts_rolling_median_causal"] = _sig(
+        "ts_rolling_median_causal",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT),
+    )
+    signatures["state_adaptive_slew_limit"] = _sig(
+        "state_adaptive_slew_limit",
+        ArgSpec("x", _F), ArgSpec("slew_mult", _FLT),
+        ArgSpec("scale_window", _INT), ArgSpec("scale_method", _ANY),
+    )
+    signatures["ts_kama"] = _sig(
+        "ts_kama",
+        ArgSpec("x", _F), ArgSpec("er_window", _INT),
+        ArgSpec("fast_period", _INT), ArgSpec("slow_period", _INT), ArgSpec("min_periods", _INT),
     )
 
     # ---- relation aggregation (variadic ranked panels) --------------------
@@ -750,6 +787,71 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "ts_rolling_sr_gaussian_mean_shift_score",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("shift_sigma", _FLT),
         ArgSpec("baseline_window", _W),
+    )
+
+    # Filter Layer (2026-08-12): robust EMA with innovation clipping.
+    signatures["ts_robust_ema"] = _sig(
+        "ts_robust_ema",
+        ArgSpec("x", _F), ArgSpec("span", _INT), ArgSpec("clip_sigma", _FLT),
+        ArgSpec("warmup_window", _INT), ArgSpec("scale_floor", _FLT),
+    )
+    signatures["ts_super_smoother"] = _sig(
+        "ts_super_smoother",
+        ArgSpec("x", _F), ArgSpec("period", _INT),
+    )
+    signatures["ts_butterworth_lowpass_causal"] = _sig(
+        "ts_butterworth_lowpass_causal",
+        ArgSpec("x", _F), ArgSpec("cutoff_period", _INT), ArgSpec("order", _INT),
+    )
+    signatures["ts_causal_local_linear_smoother"] = _sig(
+        "ts_causal_local_linear_smoother",
+        ArgSpec("x", _F), ArgSpec("window", _INT), ArgSpec("min_periods", _INT),
+    )
+
+    # Filter Layer: hysteresis and turnover control (2026-08-12 P0).
+    signatures["state_adaptive_deadband"] = _sig(
+        "state_adaptive_deadband",
+        ArgSpec("x", _F), ArgSpec("band_mult", _FLT),
+        ArgSpec("scale_window", _W), ArgSpec("scale_method", TypeKind.SCALAR_STR),
+    )
+    signatures["state_rank_deadband"] = _sig(
+        "state_rank_deadband",
+        ArgSpec("x", _F), ArgSpec("band_pct", _FLT), ArgSpec("group", _G),
+    )
+    signatures["state_quantile_hysteresis"] = _sig(
+        "state_quantile_hysteresis",
+        ArgSpec("x", _F), ArgSpec("enter_quantile", _FLT),
+        ArgSpec("exit_quantile", _FLT), ArgSpec("group", _G),
+    )
+    signatures["state_adaptive_slew_limit"] = _sig(
+        "state_adaptive_slew_limit",
+        ArgSpec("x", _F), ArgSpec("slew_mult", _FLT),
+        ArgSpec("scale_window", _W), ArgSpec("scale_method", TypeKind.SCALAR_STR),
+    )
+    signatures["state_l1_turnover_prox"] = _sig(
+        "state_l1_turnover_prox",
+        ArgSpec("x", _F), ArgSpec("lambda_turnover", _FLT),
+    )
+    signatures["state_l2_partial_adjustment"] = _sig(
+        "state_l2_partial_adjustment",
+        ArgSpec("x", _F), ArgSpec("lambda_smooth", _FLT),
+    )
+    signatures["state_confidence_weighted_ema"] = _sig(
+        "state_confidence_weighted_ema",
+        ArgSpec("x", _F), ArgSpec("confidence", _F),
+        ArgSpec("alpha_min", _FLT), ArgSpec("alpha_max", _FLT),
+    )
+    signatures["state_uncertainty_deadband"] = _sig(
+        "state_uncertainty_deadband",
+        ArgSpec("x", _F), ArgSpec("uncertainty", _F), ArgSpec("k_sigma", _FLT),
+    )
+    signatures["state_cost_aware_deadband"] = _sig(
+        "state_cost_aware_deadband",
+        ArgSpec("x", _F), ArgSpec("cost_proxy", _F), ArgSpec("cost_mult", _FLT),
+    )
+    signatures["state_cost_aware_slew"] = _sig(
+        "state_cost_aware_slew",
+        ArgSpec("x", _F), ArgSpec("cost_proxy", _F), ArgSpec("slew_mult", _FLT),
     )
 
     return signatures

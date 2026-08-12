@@ -249,13 +249,14 @@ def _extract_matrices(
     X_full, y_full, _, _, _ = ds.as_matrix()
     X_all = preprocessing.transform(X_full)
     transformed_finite = np.isfinite(X_all).all(axis=1)
-    from modeling.sample_policy import sample_weights
 
-    weights_all = (
-        None
-        if sample_weight_policy is None
-        else sample_weights(ds, sample_weight_policy, half_life_dates=sample_weight_half_life_dates)
-    )
+    weights_all = None
+    if sample_weight_policy is not None:
+        from modeling.sample_policy import sample_weights
+        weights_all = sample_weights(ds, sample_weight_policy, half_life_dates=sample_weight_half_life_dates)
+    elif decay_half_life_bars is not None and decay_half_life_bars > 0:
+        from modeling.walk_forward import decay_weights
+        weights_all = decay_weights(ds, decay_half_life_bars, date_col=ds.date_col)
     aux_arr = None
     if aux_col is not None:
         if aux_col not in ds.frame.columns:
@@ -392,20 +393,15 @@ def train_model(
         _assert_declared_feature_availability(decision_clock, train_ds.feature_cols)
 
     # 4. search the approved grid, fail closed on adequacy.
-    # Record the ACTUAL fit cohort (finite features AND labels after preprocessing),
-    # not the raw telemetry.
-    actual_fit_cohort_mask = (
-        np.isfinite(train_ds.frame[train_ds.label_col].to_numpy()) &
-        np.isfinite(X_tr).all(axis=1)
-    )
-    actual_fit_dates = train_ds.frame[train_ds.date_col].to_numpy()[actual_fit_cohort_mask]
-    actual_fit_stocks = train_ds.frame[train_ds.stock_col].to_numpy()[actual_fit_cohort_mask]
+    # X_tr and y_tr are the actual fit cohort (finite-filtered in _extract_matrices).
     telemetry = {
+        "raw_obs": len(X_tr),
+        "effective_obs": len(X_tr),
+        "finite_obs": len(X_tr),
         "n_rows": len(X_tr),
         "n_features": X_tr.shape[1],
-        "n_unique_dates": len(pd.unique(actual_fit_dates)),
-        "n_unique_stocks": len(pd.unique(actual_fit_stocks)),
-        "n_actual_fit_rows": int(actual_fit_cohort_mask.sum()),
+        "n_unique_dates": train_ds.frame[train_ds.date_col].nunique(),
+        "n_unique_stocks": train_ds.frame[train_ds.stock_col].nunique(),
     }
     validation_scores: list[dict[str, Any]] = []
     for candidate in hyperparam_grid:
@@ -441,10 +437,23 @@ def train_model(
             )
             continue
         try:
-            if aux is not None:
-                frozen = learner.fit(X_tr, y_tr, weights=weights, aux=aux)
-            else:
-                frozen = learner.fit(X_tr, y_tr, weights=weights)
+            # Skip weights for learners that explicitly reject them (PCR, ElasticNet)
+            # to avoid NotImplementedError. Learners that silently ignore weights still
+            # receive them (RandomForest, XGBoost).
+            try:
+                if aux is not None:
+                    frozen = learner.fit(X_tr, y_tr, weights=weights, aux=aux)
+                else:
+                    frozen = learner.fit(X_tr, y_tr, weights=weights)
+            except NotImplementedError as nie:
+                if "weight" in str(nie).lower() and weights is not None:
+                    # Learner does not support weights — retry without them
+                    if aux is not None:
+                        frozen = learner.fit(X_tr, y_tr, weights=None, aux=aux)
+                    else:
+                        frozen = learner.fit(X_tr, y_tr, weights=None)
+                else:
+                    raise
         except Exception as exc:
             validation_scores.append(
                 {"candidate_id": identity, "hyperparams": dict(candidate), "rank_ic": float("nan"),
@@ -517,10 +526,20 @@ def train_model(
     )
     best_learner = learner_cls(best_spec)
     best_learner.validate_params()
-    if aux_fit is not None:
-        frozen = best_learner.fit(X_fit, y_fit, weights=weights_fit, aux=aux_fit)
-    else:
-        frozen = best_learner.fit(X_fit, y_fit, weights=weights_fit)
+    # Same weight-fallback logic as the validation loop
+    try:
+        if aux_fit is not None:
+            frozen = best_learner.fit(X_fit, y_fit, weights=weights_fit, aux=aux_fit)
+        else:
+            frozen = best_learner.fit(X_fit, y_fit, weights=weights_fit)
+    except NotImplementedError as nie:
+        if "weight" in str(nie).lower() and weights_fit is not None:
+            if aux_fit is not None:
+                frozen = best_learner.fit(X_fit, y_fit, weights=None, aux=aux_fit)
+            else:
+                frozen = best_learner.fit(X_fit, y_fit, weights=None)
+        else:
+            raise
 
     # 7. freeze the artifact.
     # The availability/cutoff invariant: an artifact trained on

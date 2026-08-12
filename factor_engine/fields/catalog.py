@@ -443,11 +443,11 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("total_profit", "StockIncome", "TotalProfit", unit=UNIT_CNY, grain="flow_ytd"),
     _f("income_tax_expense", "StockIncome", "IncomeTaxExpense", unit=UNIT_CNY, grain="flow_ytd"),
     _f("net_profit", "StockIncome", "NetProfit", unit=UNIT_CNY, aliases=("net_income",), grain="flow_ytd"),
-    _f("np_parent_company_owners", "StockIncome", "NpParentCompanyOwners", unit=UNIT_CNY, grain="flow_ytd"),
-    _f("selling_expense", "StockIncome", "SaleExpense", unit=UNIT_CNY, grain="flow_ytd"),
-    _f("administration_expense", "StockIncome", "AdministrationExpense", unit=UNIT_CNY, grain="flow_ytd"),
-    _f("financial_expense", "StockIncome", "FinancialExpense", unit=UNIT_CNY, aliases=("interest_expense",), grain="flow_ytd"),
-    _f("rd_expenses", "StockIncome", "RdExpenses", unit=UNIT_CNY, aliases=("research_development", "rd"), grain="flow_ytd"),
+    _f("np_parent_company_owners", "StockIncome", "NpParentCompanyOwners", unit=UNIT_CNY, aliases=("net_profit_parent",), grain="flow_ytd"),
+    _f("selling_expense", "StockIncome", "SaleExpense", unit=UNIT_CNY, aliases=("sales_expense",), grain="flow_ytd"),
+    _f("administration_expense", "StockIncome", "AdministrationExpense", unit=UNIT_CNY, aliases=("admin_expense",), grain="flow_ytd"),
+    _f("financial_expense", "StockIncome", "FinancialExpense", unit=UNIT_CNY, aliases=("finance_expense",), grain="flow_ytd"),
+    _f("rd_expenses", "StockIncome", "RdExpenses", unit=UNIT_CNY, aliases=("research_development", "rd", "rnd_expense"), grain="flow_ytd"),
 
     # StockBalance 物理列名与 COS parquet 逐列核对（2026-08）。
     _f("total_assets", "StockBalance", "TotalAssets", unit=UNIT_CNY, grain="balance"),
@@ -499,8 +499,16 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     # StockIndicator 物理列名与 COS parquet 逐列核对（2026-08）。
     _f("adjusted_profit", "StockIndicator", "AdjustedProfit", unit=UNIT_CNY, grain="flow_ytd"),
 
+    # Phase 0 expansion: additional valuation fields
+    _f("pe_ratio_ttm", "StockValuationDaily", "PeRatioTtm", aliases=("pe_ttm",)),
     _f("pe_ratio_lyr", "StockValuationDaily", "PeRatioLyr", aliases=("pe_lyr",)),
     _f("pcf_ratio_2", "StockValuationDaily", "PcfRatio2", aliases=("pcf2",)),
+
+    # Phase 0 expansion: derived financial metrics
+    _f("gross_profit", "StockIncome", "GrossProfit", unit=UNIT_CNY, aliases=("gp",), grain="flow_ytd"),
+    _f("nopat", "StockIncome", "Nopat", unit=UNIT_CNY, aliases=("net_operating_profit_after_tax",), grain="flow_ytd"),
+    _f("total_debt", "StockBalance", "TotalDebt", unit=UNIT_CNY, aliases=("debt",), grain="balance"),
+    _f("invested_capital", "StockBalance", "InvestedCapital", unit=UNIT_CNY, aliases=("ic",), grain="balance"),
 
     _f("industry_code", "StockIndustry", "IndustryCode", dtype="string", unit=UNIT_IDENTIFIER, role="group_key", mining_allowed=False),
     _f("industry_name", "StockIndustry", "IndustryName", dtype="string", unit=UNIT_TEXT, role="label", mining_allowed=False),

@@ -64,7 +64,20 @@ _STATEFUL_RULE_CANONICALS=frozenset({
 "ts_lag_of_peak_corr","ts_rank_if","ts_recovery_fraction","ts_state_age_percentile",
 "ts_state_exit_hazard","ts_state_residual_life",
 })
-EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS|frozenset({"fin_mean_abs_deviation"})
+# 2026-08-12 Filter Layer optimization: signal despike / adaptive smooth / hysteresis.
+_FILTER_DESPIKE_CANONICALS=frozenset({
+"ts_hampel_filter_causal","ts_median3_causal","ts_rolling_median_causal",
+})
+_FILTER_SMOOTH_CANONICALS=frozenset({
+"ts_robust_ema","ts_super_smoother","ts_kama","ts_butterworth_lowpass_causal","ts_causal_local_linear_smoother",
+})
+_FILTER_HYSTERESIS_CANONICALS=frozenset({
+"state_adaptive_deadband","state_rank_deadband","state_quantile_hysteresis","state_adaptive_slew_limit",
+"state_confidence_weighted_ema","state_uncertainty_deadband",
+"state_l1_turnover_prox","state_l2_partial_adjustment",
+"state_cost_aware_deadband","state_cost_aware_slew",
+})
+EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS|_FILTER_DESPIKE_CANONICALS|_FILTER_SMOOTH_CANONICALS|_FILTER_HYSTERESIS_CANONICALS|frozenset({"fin_mean_abs_deviation"})
 
 # R5-50: the extended surface must NOT be mutated by ``EXTENDED_ONLY_CANONICALS =
 # frozenset(set(old)|new)`` reassignments.  A consumer that did

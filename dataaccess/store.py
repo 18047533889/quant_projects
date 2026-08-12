@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 import sys
 import threading
 import time
@@ -182,6 +183,21 @@ def _cos_mode_is_auto() -> bool:
         os.environ.get("DATA_ACCESS_COS_READ_MODE", "mirror").strip().lower()
         == "auto"
     )
+
+
+def _strict_mutation_lock_required() -> bool:
+    """#R32-P0-122：strict/production 下 mutation 必须持锁（fail-closed）。
+
+    单一权威 = ``is_strict_semantics()``（production OR strict_read OR
+    automated_research）。导入期循环依赖时**保守按 strict 处理**——不能因为
+    import 顺序意外把 fail-closed 降级成 fail-open。
+    """
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return bool(is_strict_semantics())
+    except Exception:
+        return True
 
 
 def _assert_instrument_filter_supported(
@@ -371,6 +387,19 @@ class DataAccessStore:
         root = lock_root
         if root is None:
             # 无 manifest 的数据集：没有可失效/重建的 sidecar，正文自己负责锁。
+            #
+            # #R32-P0-122 production fail-closed：strict 语义下**不允许**「解析不出
+            # 锁根 → 静默无锁执行 mutation」。lock_root 为 None 可能是数据集确实没
+            # manifest（合法），也可能是 _resolve_raw_paths 失败/registry 配置漂移
+            # （不合法）——两者在这里无法区分，而后者意味着并发写没有任何互斥保护。
+            # research 保持旧行为（无锁放行），production/strict 直接拒绝。
+            if _strict_mutation_lock_required():
+                raise ValidationError(
+                    f"数据集 {dataset!r} 无法解析 mutation 锁根（manifest root=None）；"
+                    "strict/production 模式拒绝无锁写入（fail-closed）——"
+                    "并发写将失去互斥保护。请在 datasets.yaml 为该数据集配置可解析的 root，"
+                    "或在 research 模式下执行。"
+                )
             yield
             return
 
@@ -8339,17 +8368,38 @@ class DataAccessStore:
 
     @staticmethod
     def _clear_dir(path: Path) -> None:
-        """overwrite 模式下清空目标目录。不存在就跳过，不递归到白名单外。"""
+        """overwrite 模式下清空目标目录。不存在就跳过，不递归到白名单外。
+
+        #R32-P0-126 symlink TOCTOU：旧代码 ``child.is_dir() and not
+        child.is_symlink()`` 是**两次独立 stat**——两次之间 child 可被换成
+        symlink，``shutil.rmtree`` 就会跟着删到沙箱外（rmtree 不检查尾部
+        symlink 的父链）。现在用**单次 ``os.lstat``**（不跟随 symlink）一次性
+        取得类型：是真目录才 rmtree，其余（含 symlink，无论指向哪）一律
+        ``unlink`` 删链接本身、绝不跟随。
+        """
         if not path.exists():
             return
+        # target 自身是 symlink → 拒绝：overwrite 会清空 symlink 指向的真实目录，
+        # 那可能在白名单外（is_dir() 跟随 symlink，单独用它挡不住）。
+        if path.is_symlink():
+            raise ValidationError(
+                f"目标路径是 symlink，拒绝 overwrite（可能清空沙箱外目录）: {path}"
+            )
         if not path.is_dir():
             raise ValidationError(f"目标路径不是目录，不能 overwrite: {path}")
-        # 逐项删（比 rmtree 稍慢但更安全，避免 symlink 逃逸）
         for child in path.iterdir():
-            if child.is_dir() and not child.is_symlink():
+            try:
+                st = os.lstat(child)  # 单次系统调用，不跟随 symlink
+            except FileNotFoundError:
+                continue  # 已被并发删除，无需处理
+            if stat.S_ISDIR(st.st_mode):
+                # lstat 确认是真目录（symlink→dir 会被 lstat 判成 LNK，走 unlink）
                 shutil.rmtree(child)
             else:
-                child.unlink()
+                try:
+                    child.unlink()
+                except FileNotFoundError:
+                    continue
 
     @staticmethod
     def _write_table_to_dir(

@@ -77,7 +77,7 @@ class BufferPutResult:
 
 @dataclass
 class _Entry:
-    """backing 条目（size + 访问时间 + R40 #11 状态机/refcount + #14 淘汰因子）。"""
+    """backing 条目（size + 访问时间 + R40 #11 状态机/refcount + #14 淘汰因子 + R42-016）。"""
 
     value: Any
     bytes: int
@@ -91,17 +91,22 @@ class _Entry:
     reload_cost_ms: float = 2.0
     write_cost_ms: float = 5.0
     future_consumers: int = 1
+    # R42-016：reuse distance（下次使用距离，Belady-like eviction）。
+    next_use_distance: int = 0  # 0=unknown, >0=已知消费序列距离
 
 
 class SpillDecisionEngine:
-    """R40 #14：多因子 eviction 打分（不再只按 LRU 字节预算淘汰）。
+    """R40 #14 + R42-016：多因子 eviction 打分（Belady-like reuse distance）。
 
     ``evict_candidate(entries, pressure)`` 对可淘汰条目（refcount==0 且非 PINNED）
-    按 recompute_cost / reload_cost / write_cost / future_consumers / stale_ms
-    综合打分，返回 ``[(key, score)]`` **升序**（分数越低 = 淘汰成本越低 = 越先
-    淘汰）。``pressure`` 是 disk_pressure ∈ [0,1]：磁盘越紧，写盘（spill）越贵，
-    该维度用 ``write_cost * (1 + 3*pressure)`` 放大 → spill 型条目排名靠后
-    （更倾向 drop/recompute）。
+    按 recompute_cost / reload_cost / write_cost / future_consumers / stale_ms /
+    **next_use_distance** 综合打分，返回 ``[(key, score)]`` **升序**（分数越低 =
+    淘汰成本越低 = 越先淘汰）。``pressure`` 是 disk_pressure ∈ [0,1]：磁盘越紧，
+    写盘（spill）越贵，该维度用 ``write_cost * (1 + 3*pressure)`` 放大 → spill
+    型条目排名靠后（更倾向 drop/recompute）。
+
+    R42-016: next_use_distance > 0 时，distance 越大的条目越应先淘汰（Belady最优
+    页面替换算法变种）；distance == 0 时 fallback 到 LRU（stale_ms）。
     """
 
     def __init__(self, weights: dict[str, float] | None = None) -> None:
@@ -111,6 +116,7 @@ class SpillDecisionEngine:
             "write_cost": 0.4,
             "future_consumers": 0.2,
             "stale_ms": 0.01,
+            "next_use_distance": 2.0,  # R42-016: Belady权重（优先级高于LRU）
         }
 
     def evict_candidate(
@@ -124,6 +130,9 @@ class SpillDecisionEngine:
 
         refcount>0 或 PINNED 的条目一律跳过（不可淘汰）——这是 #11 的核心：
         在用的共享 CSE 条目不能被字节预算误伤。
+
+        R42-016: 已知 next_use_distance 的条目按 Belady 策略（distance 越大越先
+        淘汰），未知的按 LRU（stale_ms）。
         """
         now = time.monotonic() if now is None else now
         disk = max(0.0, min(1.0, float(pressure)))
@@ -134,16 +143,26 @@ class SpillDecisionEngine:
                 continue  # in-use：禁止淘汰
             stale_ms = max(0.0, now - entry.last_access)
             eff_write = max(0.0, entry.write_cost_ms) * (1.0 + 3.0 * disk)
+
+            # R42-016: next_use_distance > 0 时优先使用 Belady；否则 fallback LRU
+            if entry.next_use_distance > 0:
+                # Belady: distance 越大，分数越低（越应先淘汰）
+                # 用负数：-distance_weight * distance
+                distance_score = -w.get("next_use_distance", 2.0) * entry.next_use_distance
+            else:
+                # Unknown distance: fallback to LRU（stale_ms 越大越先淘汰）
+                distance_score = -w.get("stale_ms", 0.01) * stale_ms
+
             # 分数越低越先淘汰：
             #   + recompute/reload/write  → 淘汰成本越高排名越靠后；
+            #   + distance_score          → R42-016: Belady distance 或 LRU fallback
             #   - future_consumers        → 未来消费越多越不该淘汰；
-            #   - stale_ms                → 越久未用越应先淘汰（LRU 项）。
             score = (
                 w.get("recompute_cost", 1.0) * max(0.0, entry.recompute_cost_ms)
                 + w.get("reload_cost", 0.6) * max(0.0, entry.reload_cost_ms)
                 + w.get("write_cost", 0.4) * eff_write
+                + distance_score  # R42-016: 已经是负数（distance大→score低→先淘汰）
                 - w.get("future_consumers", 0.2) * max(0, entry.future_consumers)
-                - w.get("stale_ms", 0.01) * stale_ms
             )
             scored.append((key, score))
         scored.sort(key=lambda kv: (kv[1], kv[0]))
@@ -196,12 +215,18 @@ class GovernedBufferStore:
         bytes_: int | None = None,
         recompute_cost_ms: float = 0.0,
         spool: bool = False,
+        next_use_distance: int = 0,
+        future_consumers: int = 1,
     ) -> BufferPutResult:
-        """写入（R38 P0-029）：返回 BufferPutResult。
+        """写入（R38 P0-029 + R42-016）：返回 BufferPutResult。
 
         - 预算够 → MEMORY；
         - 预算不够 → LRU 淘汰 → 还不够 → 若 ``spool`` 且 spill store 可用 →
           SPILLED（真实 spill）；否则 REFUSED（不静默）。
+
+        R42-016 新增参数：
+            next_use_distance: 距离下次使用的执行序数差（0=unknown, >0=已知）
+            future_consumers: 未来剩余消费者数量（供 eviction 决策）
         """
         size = max(0, int(bytes_)) if bytes_ is not None else _estimate_bytes(value)
         now = time.monotonic()
@@ -237,7 +262,12 @@ class GovernedBufferStore:
                         )
             self._backing[key] = value
             self._entries[key] = _Entry(
-                value=value, bytes=size, last_access=now, recompute_cost_ms=recompute_cost_ms
+                value=value,
+                bytes=size,
+                last_access=now,
+                recompute_cost_ms=recompute_cost_ms,
+                next_use_distance=next_use_distance,
+                future_consumers=future_consumers,
             )
             self._writes += 1
             return BufferPutResult(STATUS_MEMORY, key, reason="ok")

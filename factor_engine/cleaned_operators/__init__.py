@@ -288,6 +288,11 @@ _LOAD_MODULES = (
     "cleaned_operators.technical.chip_ops",
     "cleaned_operators.cross_section.panel_gap",
     "cleaned_operators.r47_policy_pack",
+    # Filter Layer optimization (2026-08-12): despike / adaptive smooth / hysteresis.
+    "cleaned_operators.filter_contracts",
+    "cleaned_operators.filter_despike",
+    "cleaned_operators.filter_smooth",
+    "cleaned_operators.filter_hysteresis",
 )
 
 # R30 §7: explicit production / research / internal loader split.  The full

@@ -37,7 +37,7 @@ _request_id_var: ContextVar[str] = ContextVar("data_access_http_request_id", def
 import pyarrow as pa
 import pyarrow.ipc as ipc
 import pyarrow.parquet as pq
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import data_access
@@ -325,12 +325,16 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.post("/v1/read/arrow-stream", dependencies=[Depends(require_api_key)])
     def read_arrow_stream(request: ReadRequest, ctx: _ApiCallContext = Depends(require_api_key)) -> Response:
+        # R32 P0-112：query slot exactly-once release 保证（先预分配，
+        # 所有路径——first/exception/body-finally/early exception——都恰好释放一次）。
+        slot_held = False
         try:
             ctx.authorize(request.dataset, action="dataset:read")
         except AuthorizationError:
             raise HTTPException(status_code=403, detail="resource is not authorized")
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        slot_held = True
         try:
             store = get_store()
             budget = _api_budget(request, settings)
@@ -362,18 +366,21 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             except DataAccessError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-            def _scoped_batches():
-                # R28-16：生成器真正执行（verify/execute/流式读）也在 request-scoped
-                # 执行上下文内——不再退化成 process 级身份。
-                with execution_scope(exec_ctx):
-                    for b in batches:
-                        yield b
+            # R32 P0-115：HTTP buffer limit 防 OOM（StreamingResponse
+            # 默认无界缓冲，单 batch > 可用内存则 OOM）。sink 每次 write
+            # 清空（sink.truncate(0)），不累积跨 batch。
+            _MAX_BUFFER_BYTES = 128 * 1024 * 1024  # 128 MiB
 
-            it = _scoped_batches()
+            # R28-16：创建生成器（prepare_read 立即执行）在 request-scoped 执行上下文内。
+            with execution_scope(exec_ctx):
+                # 不能用包装生成器（会导致 "generator already executing"）——
+                # 直接用原始 batches，在 first/body 时消费。
+                it = batches
             try:
                 first = next(it)
             except StopIteration:
                 query_slots.release()
+                slot_held = False
                 return Response(status_code=204)
             except AccessDeniedError:
                 raise HTTPException(status_code=403, detail="resource is not authorized")
@@ -382,43 +389,87 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             except DataAccessError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+            # R32 P0-113：disconnect_cleanup：client 断开时（generator
+            # 未耗尽就退出 body()）回调确保 batches.close() +
+            # query_slots.release() 只跑一次。
+            cleanup_done = False
+
+            def _disconnect_cleanup():
+                nonlocal cleanup_done, slot_held
+                if cleanup_done:
+                    return
+                cleanup_done = True
+                close = getattr(batches, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        pass
+                if slot_held:
+                    query_slots.release()
+                    slot_held = False
+
             def body():
+                nonlocal cleanup_done, slot_held
                 try:
                     sink = io.BytesIO()
                     with ipc.new_stream(sink, first.schema) as writer:
                         writer.write_batch(first)
-                        yield sink.getvalue()
+                        chunk = sink.getvalue()
+                        # R32 P0-115：单 batch 超限 fail-closed（不静默截断）。
+                        if len(chunk) > _MAX_BUFFER_BYTES:
+                            raise HTTPException(
+                                status_code=413,
+                                detail=f"单批次超 {_MAX_BUFFER_BYTES} 字节（{len(chunk)} bytes），"
+                                "需缩小 batch_size 或增大 buffer limit"
+                            )
+                        yield chunk
                         sink.seek(0)
                         sink.truncate(0)
                         for batch in it:
                             writer.write_batch(batch)
-                            yield sink.getvalue()
+                            chunk = sink.getvalue()
+                            if len(chunk) > _MAX_BUFFER_BYTES:
+                                raise HTTPException(
+                                    status_code=413,
+                                    detail=f"单批次超 {_MAX_BUFFER_BYTES} 字节"
+                                )
+                            yield chunk
                             sink.seek(0)
                             sink.truncate(0)
                 finally:
-                    close = getattr(batches, "close", None)
-                    if callable(close):
-                        close()
-                    query_slots.release()
+                    _disconnect_cleanup()
+
+            # R32 P0-114：StreamingResponse background callback 注册
+            # disconnect 清理（client 断开时 FastAPI 调 background task）。
+            from fastapi import BackgroundTasks
+            bg_tasks = BackgroundTasks()
+            bg_tasks.add_task(_disconnect_cleanup)
 
             return StreamingResponse(
                 body(),
                 media_type="application/vnd.apache.arrow.stream",
                 headers={"X-Query-Mode": "stream", "X-Arrow-Stream-Version": "1"},
+                background=bg_tasks,
             )
         except Exception:
-            query_slots.release()
+            if slot_held:
+                query_slots.release()
+                slot_held = False
             raise
 
     @app.post("/v1/read", dependencies=[Depends(require_api_key)])
     def read_dataset(request: ReadRequest, ctx: _ApiCallContext = Depends(require_api_key)) -> Response:
         # R24 P0-S5 / T-S10：先 authorization，再调用 backend。
+        # R32 P0-112：query slot exactly-once release 保证。
+        slot_held = False
         try:
             ctx.authorize(request.dataset, action="dataset:read")
         except AuthorizationError:
             raise HTTPException(status_code=403, detail="resource is not authorized")
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        slot_held = True
         try:
             # R26-P0-005：request-scoped 执行上下文（嵌套读继承请求 principal）。
             from data_access.security.execution_context import execution_scope
@@ -426,7 +477,9 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             with execution_scope(_execution_context_for(ctx)):
                 return _read_dataset(request, settings)
         finally:
-            query_slots.release()
+            if slot_held:
+                query_slots.release()
+                slot_held = False
 
     def _read_dataset(request: ReadRequest, settings: ServiceSettings) -> Response:
         budget = _api_budget(request, settings)
@@ -522,12 +575,15 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         production 默认 DISABLED；需要显式 ``uri:read`` permission——
         不能仅因 URI 落在全局 registered prefix 就允许。
         """
+        # R32 P0-112：query slot exactly-once release 保证。
+        slot_held = False
         try:
             ctx.authorize(request.uri, action=ACTION_URI_READ)
         except AuthorizationError:
             raise HTTPException(status_code=403, detail="resource is not authorized")
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        slot_held = True
         try:
             budget = _api_budget(ReadRequest(dataset="uri"), settings)
             start = time.perf_counter()
@@ -567,7 +623,9 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             )
             return _serialize(table, meta, request.format_out)
         finally:
-            query_slots.release()
+            if slot_held:
+                query_slots.release()
+                slot_held = False
 
     @app.get("/v1/factors", dependencies=[Depends(require_api_key)])
     def factors_catalog(ctx: _ApiCallContext = Depends(require_api_key)) -> dict[str, Any]:
@@ -605,9 +663,12 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
     @app.post("/v1/factors/read", dependencies=[Depends(require_api_key)])
     def factors_read(request: FactorReadRequest, ctx: _ApiCallContext = Depends(require_api_key)) -> Response:
         """一次读多个因子（单查询 UNION ALL / 宽表 PIVOT）。"""
+        # R32 P0-112：query slot exactly-once release 保证。
+        slot_held = False
         ctx.authorize("factor_lake", action="factor:read")
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
+        slot_held = True
         try:
             start = time.perf_counter()
             try:
@@ -642,7 +703,9 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             )
             return _serialize(table, meta, request.format)
         finally:
-            query_slots.release()
+            if slot_held:
+                query_slots.release()
+                slot_held = False
 
     return app
 

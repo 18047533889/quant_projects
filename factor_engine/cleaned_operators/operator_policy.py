@@ -61,6 +61,10 @@ _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
         "subtract",
         "multiply",
         "divide",
+        # Filter Layer (2026-08-12)
+        "ts_hampel_filter_causal",
+        "ts_median3_causal",
+        "ts_rolling_median_causal",
     }
 )
 
@@ -565,6 +569,7 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "square": {"scope": "elementwise", "pit_safe": True},
     "log10": {"scope": "elementwise", "pit_safe": True},
     "log2": {"scope": "elementwise", "pit_safe": True},
+    "ashare_limit_distance": {"scope": "elementwise", "pit_safe": True},
     "ashare_limit_up_touch": {"scope": "elementwise", "pit_safe": True},
     "ashare_limit_down_touch": {"scope": "elementwise", "pit_safe": True},
     "ashare_open_at_upper_limit": {"scope": "elementwise", "pit_safe": True},
@@ -642,6 +647,12 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "ts_sum_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_mean_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_std_if": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_min_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_max_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_quantile_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_corr_if": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_beta_if": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_regression_resid_if": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_last_if": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_days_since": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_true_streak": {"scope": "ts", "pit_safe": True, "min_periods": 1},
@@ -883,6 +894,30 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     # 2026-08 advanced: rolling first-digit distribution is a time-series
     # transform (the ``report_`` prefix does not infer ``ts`` scope).
     "report_benford_js_divergence": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Phase 1: A-class atomic operators - robust statistics family (2026-08)
+    "ts_quantile_range": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_trimmed_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_robust_zscore_inclusive": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_robust_zscore_prior": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Phase 1: A-class atomic operators - downside risk family (2026-08)
+    "ts_downside_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_upside_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_current_drawdown_duration": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_time_under_water": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_best_lag_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_price_delay": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    # Filter Layer (2026-08-12)
+    "ts_hampel_filter_causal": {"scope": "ts", "pit_safe": True, "min_periods": "window"},
+    "ts_median3_causal": {"scope": "ts", "pit_safe": True},
+    "ts_rolling_median_causal": {"scope": "ts", "pit_safe": True, "min_periods": "min_periods"},
+    "ts_super_smoother": {"scope": "ts", "pit_safe": True, "min_periods": "period", "tags": ["stateful", "filter_role:low_pass"]},
+    "ts_kama": {"scope": "ts", "pit_safe": True, "min_periods": "er_window", "tags": ["stateful", "filter_role:adaptive_low_pass"]},
+    "state_adaptive_slew_limit": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_adaptive_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_rank_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_quantile_hysteresis": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_l1_turnover_prox": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_l2_partial_adjustment": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
 }
 
 
@@ -1115,6 +1150,28 @@ _FINAL_PACK_POLICIES = {
     "intra_session_return_asymmetry": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_close_participation": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_high_low_affinity": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    # Filter Layer (2026-08-12): robust EMA with innovation clipping.
+    "ts_robust_ema": {"scope": "ts", "pit_safe": True, "min_periods": "span", "tags": ["stateful", "filter_role:low_pass"]},
+    "ts_super_smoother": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:low_pass"]},
+    "ts_kama": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:adaptive_low_pass"]},
+    "ts_butterworth_lowpass_causal": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:low_pass"]},
+    "ts_causal_local_linear_smoother": {"scope": "ts", "pit_safe": True, "min_periods": 10, "tags": ["filter_role:low_pass"]},
+    # Filter Layer: hysteresis and turnover control (2026-08-12 P0).
+    "state_adaptive_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_rank_deadband": {"scope": "group", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_quantile_hysteresis": {"scope": "group", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_adaptive_slew_limit": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_confidence_weighted_ema": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:adaptive_low_pass"]},
+    "state_uncertainty_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
+    "state_l1_turnover_prox": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_l2_partial_adjustment": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_cost_aware_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    "state_cost_aware_slew": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    # Phase 1: A-class atomic operators - return decomposition family
+    "overnight_return": {"scope": "elementwise", "pit_safe": True, "lag": 1},
+    "open_close_return": {"scope": "elementwise", "pit_safe": True},
+    "open_to_vwap_return": {"scope": "elementwise", "pit_safe": True},
+    "vwap_to_close_return": {"scope": "elementwise", "pit_safe": True},
 }
 _EXPLICIT_POLICIES.update(_FINAL_PACK_POLICIES)
 
@@ -1166,6 +1223,17 @@ _ALPHA_LANGUAGE_POLICIES = {
     "ts_transition_intensity": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_sign_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_sign_cluster_index": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # State event族 (Phase 1 A类原子算子) — 布尔条件序列的状态转换和事件模式
+    "ts_transition_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_time_since_change": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_event_spacing_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_event_spacing_cv": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # Direction concentration族 (Phase 1 A类原子算子) — 方向浓度和分布统计
+    "ts_positive_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_negative_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_zero_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_abs_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_abs_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     # Module 2 — path / shape geometry
     "ts_monotonicity": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_turning_rate": {"scope": "ts", "pit_safe": True, "min_periods": 2},
@@ -1200,6 +1268,13 @@ _ALPHA_LANGUAGE_POLICIES = {
     "group_ex_self_std": {"scope": "group", "pit_safe": True, "min_periods": 1},
     "group_ex_self_mad": {"scope": "group", "pit_safe": True, "min_periods": 1},
     "group_ex_self_quantile": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    # Phase 1: A-class atomic operators - group extension family
+    "group_ex_self_mean": {"scope": "group", "pit_safe": True},
+    "group_ex_self_weighted_mean": {"scope": "group", "pit_safe": True},
+    "hierarchical_group_neutralize": {"scope": "group", "pit_safe": True},
+    "cs_trimmed_ols_resid": {"scope": "cs", "pit_safe": True},
+    "cs_huber_resid": {"scope": "cs", "pit_safe": True},
+    "cs_lad_resid": {"scope": "cs", "pit_safe": True},
     "relation_weighted_std_ex_self": {"scope": "group", "pit_safe": True, "min_periods": 1},
     # Module 6 — events + fundamental report sequence
     "event_frequency": {"scope": "ts", "pit_safe": True, "min_periods": 1},

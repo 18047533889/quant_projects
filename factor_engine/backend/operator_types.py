@@ -16,6 +16,7 @@ class TypeKind(str, Enum):
     SERIES_DATETIME = "Series[Datetime]"
     SCALAR_INT = "Scalar[Int]"
     SCALAR_FLOAT = "Scalar[Float]"
+    SCALAR_STR = "Scalar[Str]"
     GROUP_KEY = "GroupKey"
     WINDOW = "Window"
     ANY = "Any"
@@ -311,17 +312,17 @@ OPERATOR_SIGNATURES: dict[str, OperatorSignature] = {
     ),
 }
 
-from backend.operator_signatures_phase1 import phase1_operator_signatures
+# Lazy import to avoid circular dependency
+def _load_all_signatures():
+    from backend.operator_signatures_phase1 import phase1_operator_signatures
+    from backend.operator_signatures_phase2 import phase2_operator_signatures
+    from backend.operator_signatures_phase3 import phase3_operator_signatures
 
-OPERATOR_SIGNATURES.update(phase1_operator_signatures())
+    OPERATOR_SIGNATURES.update(phase1_operator_signatures())
+    OPERATOR_SIGNATURES.update(phase2_operator_signatures())
+    OPERATOR_SIGNATURES.update(phase3_operator_signatures())
 
-from backend.operator_signatures_phase2 import phase2_operator_signatures
-
-OPERATOR_SIGNATURES.update(phase2_operator_signatures())
-
-from backend.operator_signatures_phase3 import phase3_operator_signatures
-
-OPERATOR_SIGNATURES.update(phase3_operator_signatures())
+_load_all_signatures()
 
 
 def check_operator_types(node: PlanNode, *, canonical: str | None = None) -> list[str]:

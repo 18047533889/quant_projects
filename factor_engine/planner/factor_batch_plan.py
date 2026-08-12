@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
 """R30-P0-003: FactorBatchDataPlan + SourceDemandGroup —— 批量因子 source 规划。
 
+.. deprecated:: R32-P0-090
+    **DEPRECATED**: FactorBatchPlan 被 :class:`planner.read_wave_planner.ReadWavePlanner`
+    替代。ReadWavePlanner 是生产实现的**唯一权威**，提供：
+
+    - 真实物理 footprint optimizer（非固定 500k×8B）
+    - Cost-based superset coalescing
+    - Typed SourceScopeId / ColumnSourceBinding
+    - Wave memory budget 闭环控制
+    - Backend-specific representation 选择
+
+    FactorBatchPlan 保留用于**向后兼容旧 batch grouping 逻辑**，新代码应直接使用
+    ``ReadWavePlanner`` 或 ``build_waves_from_dag()``。
+
 R30 分工：FE 提供每个因子的 :class:`FactorSourcePlan`（P0-002），本模块把它们
 按真实数据需求归组，得到整批的 :class:`SourceDemandGroup` 列表：
 
@@ -30,6 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -39,6 +53,16 @@ __all__ = [
     "batch_data_request",
     "plan_from_factors",
 ]
+
+# R32-P0-090: Deprecation warning
+warnings.warn(
+    "FactorBatchPlan is deprecated since R32-P0-090. "
+    "Use planner.read_wave_planner.ReadWavePlanner instead for production workloads. "
+    "ReadWavePlanner provides true physical footprint optimization, cost-based coalescing, "
+    "and typed source bindings.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 # 防御性 import：并发 session 可能改 factor_source_plan；不可得时用本地兜底。
 try:

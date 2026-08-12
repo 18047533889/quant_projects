@@ -224,7 +224,10 @@ class DataQualityService:
     def _check_ohlc(
         self, table: Any
     ) -> tuple[str, str, list[str]]:
-        """OHLC consistency：high>=low、close<=high、open 在 [low, high]。"""
+        """OHLC consistency：high>=low、close<=high、open 在 [low, high]。
+
+        R32 P0-068..072：异常 → BLOCK（fail-closed）。
+        """
         cols = set(getattr(table, "column_names", []) or [])
         if not {"high", "low"}.issubset(cols):
             return "ohlc", PASS, []
@@ -255,10 +258,11 @@ class DataQualityService:
                         f"{below + above} rows"
                     )
             return "ohlc", (BLOCK if msgs else PASS), msgs
-        except Exception:
-            return "ohlc", PASS, []
+        except Exception as exc:
+            return "ohlc", BLOCK, [f"ohlc check failed: {exc}"]
 
     def _check_negative_volume(self, table: Any) -> tuple[str, str, list[str]]:
+        """R32 P0-068..072：异常 → BLOCK（fail-closed）。"""
         cols = set(getattr(table, "column_names", []) or [])
         if "volume" not in cols:
             return "negative_volume", PASS, []
@@ -273,11 +277,14 @@ class DataQualityService:
             if neg:
                 return "negative_volume", BLOCK, [f"negative volume: {neg} rows"]
             return "negative_volume", PASS, []
-        except Exception:
-            return "negative_volume", PASS, []
+        except Exception as exc:
+            return "negative_volume", BLOCK, [f"negative_volume check failed: {exc}"]
 
     def _check_financial_period(self, table: Any) -> tuple[str, str, list[str]]:
-        """financial period <= publish_time（PIT leakage）。"""
+        """financial period <= publish_time（PIT leakage）。
+
+        R32 P0-068..072：异常 → BLOCK（fail-closed）。
+        """
         cols = set(getattr(table, "column_names", []) or [])
         if not {"report_period", "publish_time"}.issubset(cols):
             return "financial_period", PASS, []
@@ -298,10 +305,11 @@ class DataQualityService:
                     [f"financial period > publish_time (PIT leakage): {leak} rows"],
                 )
             return "financial_period", PASS, []
-        except Exception:
-            return "financial_period", PASS, []
+        except Exception as exc:
+            return "financial_period", BLOCK, [f"financial_period check failed: {exc}"]
 
     def _check_currency(self, table: Any) -> tuple[str, str, list[str]]:
+        """R32 P0-068..072：异常 → WARN（currency 非致命）。"""
         cols = set(getattr(table, "column_names", []) or [])
         for name in _CURRENCY_COLUMNS:
             if name in cols:
@@ -321,12 +329,16 @@ class DataQualityService:
                             [f"currency enum: unknown currency values {unknown}"],
                         )
                     return "currency_enum", PASS, []
-                except Exception:
-                    return "currency_enum", PASS, []
+                except Exception as exc:
+                    return "currency_enum", WARN, [f"currency_enum check failed: {exc}"]
         return "currency_enum", PASS, []
 
     def _check_missing_partition(self, table: Any) -> tuple[str, str, list[str]]:
-        """时间范围空洞（启发式）：日频/离散时间列上 distinct 天数远小于跨度。"""
+        """时间范围空洞（启发式）：日频/离散时间列上 distinct 天数远小于跨度。
+
+        R32 P0-073..077：coverage grain 改为 session-based（非自然日），但本检查
+        保守启发式（不强制交易日历），异常 → WARN。
+        """
         cols = set(getattr(table, "column_names", []) or [])
         time_col = next((c for c in _TIME_COLUMN_CANDIDATES if c in cols), None)
         if time_col is None:
@@ -353,13 +365,16 @@ class DataQualityService:
                     [f"missing partition: {distinct} distinct dates < span {span}"],
                 )
             return "missing_partition", PASS, []
-        except Exception:
-            return "missing_partition", PASS, []
+        except Exception as exc:
+            return "missing_partition", WARN, [f"missing_partition check failed: {exc}"]
 
     def _check_schema_epoch(
         self, table: Any, schema_epoch: Any
     ) -> tuple[str, str, list[str]]:
-        """manifest schema_epoch 存在时，用表 schema 的实际摘要核对。"""
+        """manifest schema_epoch 存在时，用表 schema 的实际摘要核对。
+
+        R32 P0-068..072：异常 → WARN（schema drift 非致命）。
+        """
         if schema_epoch is None or table is None:
             return "schema_epoch", PASS, []
         try:
@@ -377,8 +392,8 @@ class DataQualityService:
                     ["schema/semantic epoch mismatch with manifest"],
                 )
             return "schema_epoch", PASS, []
-        except Exception:
-            return "schema_epoch", PASS, []
+        except Exception as exc:
+            return "schema_epoch", WARN, [f"schema_epoch check failed: {exc}"]
 
     # ---- 数据读取（只读，防御性） ----
 

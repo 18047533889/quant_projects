@@ -403,3 +403,11 @@ from runtime.execution_contract import declare_stateful  # noqa: E402
 
 declare_stateful("ts_time_since_change", state_model="recursive", chunking="required_full_history")
 declare_stateful("event_decay_asof", state_model="recursive", chunking="required_full_history")
+
+# Export list for audit scripts
+_CANONICALS = [
+    "ts_transition_count",
+    "ts_time_since_change",
+    "ts_event_spacing_mean",
+    "ts_event_spacing_cv",
+]

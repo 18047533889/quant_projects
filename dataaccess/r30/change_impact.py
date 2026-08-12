@@ -223,14 +223,17 @@ def recompute_budget(
 def to_fe_input(change: DataChangeSet, calendar: Any = None) -> dict[str, Any]:
     """把 ``DataChangeSet`` 翻译成 FE ``compute_change_impact`` 的可展开输入。
 
+    R32 P0-083..086：保留完整 changed_columns 列表（旧实现只取 [0]，多列修订丢失）。
+
     返回 dict 的关键字与 FE ``compute_change_impact(plan, *, field,
     changed_start, changed_end, column_identity, calendar)`` 对齐：
-    ``{"field", "changed_start", "changed_end", "column_identity"}``（calendar 仅
-    在传入时给出）。``column_identity`` 只含非空字段，键限定在
+    ``{"field", "changed_start", "changed_end", "column_identity", "changed_columns"}``
+    （calendar 仅在传入时给出）。``column_identity`` 只含非空字段，键限定在
     ``ColumnIdentity`` 的 ``(dataset, field, market, grain, price_basis,
     revision_identity)`` 内。**懒 import、不硬依赖 FE**——本函数不 import FE。
     """
-    field = change.changed_columns[0] if change.changed_columns else ""
+    changed_cols = list(change.changed_columns or ())
+    field = changed_cols[0] if changed_cols else ""
     column_identity: dict[str, str] = {"dataset": change.dataset}
     if field:
         column_identity["field"] = field
@@ -245,6 +248,7 @@ def to_fe_input(change: DataChangeSet, calendar: Any = None) -> dict[str, Any]:
         "changed_start": changed_start,
         "changed_end": changed_end,
         "column_identity": column_identity,
+        "changed_columns": changed_cols,  # R32: 保留完整列表
     }
     if calendar is not None:
         out["calendar"] = calendar

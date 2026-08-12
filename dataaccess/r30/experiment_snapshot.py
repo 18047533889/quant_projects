@@ -94,7 +94,14 @@ def datasets_source_ids(store: Any, datasets: Mapping[str, str]) -> dict[str, st
 
 @dataclass(frozen=True)
 class ExperimentDataSnapshot:
-    """一次实验读取的**整条数据依赖链**快照身份（R30-P0-009）。"""
+    """一次实验读取的**整条数据依赖链**快照身份（R30-P0-009）。
+
+    R32 P0-078..082：分离三类身份：
+        - source_snapshot_id: 数据源快照（datasets, calendar, universe, semantic_contract）
+        - execution_context_id: 执行上下文（code_build_sha, registry）
+        - security_scope_id: 安全范围（security_scope_digest）
+    向后兼容：snapshot_id 仍聚合全部依赖。
+    """
 
     experiment_id: str
     market: str | None
@@ -107,6 +114,11 @@ class ExperimentDataSnapshot:
     security_scope_digest: str | None
     snapshot_id: str
     version_gate: Mapping[str, str]
+
+    # R32 P0-078..082: 三个独立身份
+    source_snapshot_id: str = ""
+    execution_context_id: str = ""
+    security_scope_id: str = ""
 
     # ---- 构建 ----
 
@@ -157,6 +169,24 @@ class ExperimentDataSnapshot:
         sec_scope = security_scope(store)
         vg = version_gate()
 
+        # R32 P0-078..082: 三个独立 ID
+        source_snapshot_id = stable_digest_full(
+            canonical(experiment_id),
+            canonical(market_s),
+            canonical(tuple(sorted(f"{k}={v}" for k, v in ds_ids.items()))),
+            canonical(cal_snap.snapshot_id if cal_snap is not None else None),
+            canonical(uni_snap.snapshot_id if uni_snap is not None else None),
+            canonical(semantic),
+        )
+        execution_context_id = stable_digest_full(
+            canonical(registry),
+            canonical(build_sha),
+        )
+        security_scope_id = stable_digest_full(
+            canonical(sec_scope),
+        )
+
+        # 向后兼容：snapshot_id 聚合全部
         snapshot_id = stable_digest_full(
             canonical(experiment_id),
             canonical(market_s),
@@ -181,6 +211,9 @@ class ExperimentDataSnapshot:
             security_scope_digest=sec_scope,
             snapshot_id=snapshot_id,
             version_gate=dict(vg),
+            source_snapshot_id=source_snapshot_id,
+            execution_context_id=execution_context_id,
+            security_scope_id=security_scope_id,
         )
 
     # ---- 访问 ----
@@ -188,6 +221,9 @@ class ExperimentDataSnapshot:
     def to_dict(self) -> dict[str, Any]:
         return {
             "snapshot_id": self.snapshot_id,
+            "source_snapshot_id": self.source_snapshot_id,
+            "execution_context_id": self.execution_context_id,
+            "security_scope_id": self.security_scope_id,
             "experiment_id": self.experiment_id,
             "market": self.market,
             "datasets": dict(self.datasets),

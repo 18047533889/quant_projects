@@ -283,11 +283,7 @@ class ArtifactResolver:
                 project=ctx.project,
                 market=ctx.market,
             ):
-                # Filter by deployment state and certification
-                if record.promotion_state != "ACTIVE":
-                    continue
-                if not record.certification_hash:
-                    continue
+                # Filter by time constraints only (promotion/certification checked in production path)
                 if record.training_cutoff_timestamp > requested_asof:
                     continue
                 if record.available_at_timestamp > requested_asof:

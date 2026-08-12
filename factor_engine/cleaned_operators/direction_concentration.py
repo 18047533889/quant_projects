@@ -45,7 +45,10 @@ def _metadata(
     )
 
 
-def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
+def _frame_like(template: pd.DataFrame | pd.Series, values: np.ndarray) -> pd.DataFrame:
+    if isinstance(template, pd.Series):
+        # Single series input: return a DataFrame with one column
+        return pd.DataFrame(values, index=template.index, columns=[template.name], dtype=float)
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
@@ -64,6 +67,10 @@ def _strict_bool(value: Any, name: str = "normalize") -> bool:
 
 
 def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:
+    # Handle 1D input (single series) by reshaping to column vector
+    if values.ndim == 1:
+        values = values.reshape(-1, 1)
+
     rows, cols = values.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):

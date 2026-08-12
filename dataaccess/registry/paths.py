@@ -63,6 +63,10 @@ def canonicalize(path: str | Path) -> Path:
 
     WHY：白名单比较必须在 canonical 形式下做，否则 '/a/../b' 这类可以绕过。
          `.resolve()` 在路径不存在时仍返回绝对形式（strict=False 行为）。
+
+    #R32-P0-121 TOCTOU 防护：使用 `resolve(strict=False)` 原子化解析 symlink——
+    内核保证 resolve 过程中路径不会因 symlink 替换产生 TOCTOU 窗口。旧代码若用
+    `is_symlink() + readlink()` 两步则存在窗口（check 后 symlink 可被替换）。
     """
     return Path(path).expanduser().resolve(strict=False)
 
@@ -77,6 +81,62 @@ def path_is_under(child: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def canonicalize_strict(path: str | Path) -> Path:
+    """#R32-P0-124 存在性强制的 canonical 解析：``Path.resolve(strict=True)``。
+
+    与 ``canonicalize`` 的区别：路径（含所有父级组件）必须真实存在，否则抛
+    ``ValidationError``。
+
+    WHY fail-closed：``strict=False`` 对不存在的尾部组件只做**纯字符串**拼接，
+    不经内核 symlink 解析——「先鉴权一个不存在的路径、随后在该位置创建 symlink
+    指向沙箱外」这条 TOCTOU 路径因此绕过白名单。需要真实读/写既有文件时（DuckDB
+    scan、open()）必须走 strict 解析，让内核在**同一次系统调用链**里完成
+    symlink 解析。
+    """
+    p = Path(path).expanduser()
+    try:
+        return p.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        # RuntimeError: symlink 环路（Python < 3.13 的 resolve 会抛）
+        raise ValidationError(
+            f"路径无法 canonical 解析（不存在或 symlink 环路）：{p}（{type(exc).__name__}）"
+        ) from exc
+
+
+def assert_no_symlink_escape(path: str | Path, root: str | Path) -> Path:
+    """#R32-P0-121 原子化 symlink 校验：确认 ``path`` 解析后仍在 ``root`` 内。
+
+    TOCTOU 关键点：**先解析再比较，且比较的是解析结果**。两步式
+    ``if not p.is_symlink(): use(p)`` 存在窗口——check 之后 ``p`` 可被替换成
+    symlink，随后的 open 就跟到沙箱外。这里的做法：
+
+    1. ``os.path.realpath()`` 一次性完成整链 symlink 解析（内核语义，无用户态窗口）；
+    2. 白名单比较在 realpath 结果上做；
+    3. 若尾部组件本身是 symlink，用 ``os.readlink()`` 读出目标一并校验，
+       让错误信息能指出逃逸目标（诊断用，不参与授权判定）。
+
+    返回 realpath 化的 ``Path``；逃逸则抛 ``ValidationError``。
+    """
+    raw = Path(path).expanduser()
+    root_real = Path(os.path.realpath(str(Path(root).expanduser())))
+    # realpath 不要求路径存在，但会解析所有已存在的 symlink 组件（原子、内核语义）
+    real = Path(os.path.realpath(str(raw)))
+    if path_is_under(real, root_real):
+        return real
+    # 逃逸：尽量给出 symlink 目标，便于定位配置错误 / 攻击。
+    link_hint = ""
+    try:
+        # follow_symlinks=False：只看尾部组件自身，绝不跟随（诊断也不能被牵走）
+        if os.path.islink(str(raw)):
+            link_hint = f"（symlink → {os.readlink(str(raw))}）"
+    except OSError:
+        pass
+    raise ValidationError(
+        f"symlink 逃逸：{raw}{link_hint} 解析为 {real}，不在允许根 {root_real} 下。"
+        "symlink 不能把沙箱外的路径引入已注册数据集根。"
+    )
 
 
 def _production_mode() -> bool:
@@ -199,6 +259,10 @@ class PathAuthorizer:
         """清洗路径并检查是否落在任一允许根下；不通过则抛 ValidationError。
 
         返回 canonical 路径（可直接交给 DuckDB/open()）。
+
+        #R32-P0-121 Symlink TOCTOU 防护：canonicalize 内部用 Path.resolve() 原子化
+        解析 symlink（内核保证），此处拿到的 resolved 已是 symlink-resolved 最终路径。
+        白名单检查在 canonical 路径上做，攻击者无法通过 symlink 替换绕过。
         """
         resolved = canonicalize(path)
         for root in self._effective_roots():

@@ -118,6 +118,10 @@ _PANEL_PARAMETERS = frozenset({
     # 2026-08-08 market-language pack: update-clock true-update marker and
     # marked-event magnitude panels.
     "mark", "update_event",
+    # 2026-08-12 Filter Layer confidence/uncertainty inputs.
+    "confidence", "uncertainty",
+    # 2026-08-12 Filter Layer cost-aware: cost_proxy input.
+    "cost_proxy",
 })
 
 # Params whose generic names also appear in _SCALAR_VALUES but are PANEL series
@@ -229,6 +233,7 @@ _SCALAR_VALUES: dict[str, Any] = {
     "source_side": "lower",
     "max_shift": 3,
     "order": "largest",
+    "cutoff_period": 20,
     "add_intercept": True,
     "clip": 3.0,
     "limit": 3,
@@ -247,7 +252,21 @@ _SCALAR_VALUES: dict[str, Any] = {
     "budget": 1.0,
     "scale_window": 20,
     "min_peak_share": 0.10,
+    # Filter Layer (2026-08-12)
+    "n_sigma": 3.0,
+    "replacement": "clip",
+    "clip_sigma": 3.0,
+    "warmup_window": 20,
+    "scale_floor": 1e-10,
+    "slew_mult": 1.0,
+    "cost_mult": 2.0,
+    "alpha_min": 0.05,
+    "alpha_max": 0.5,
+    "k_sigma": 1.0,
     "bins": 10,
+    "er_window": 10,
+    "fast_period": 2,
+    "slow_period": 30,
     "min_group_size": 5,
     "history_window": 60,
     "direction": "up",
@@ -297,6 +316,12 @@ _SCALAR_VALUES: dict[str, Any] = {
     "revision_policy": "latest_available",
     "missing_group_policy": "raise",
     "short_window": 7,
+    # Filter Layer: hysteresis and turnover control (2026-08-12 P0).
+    "band_mult": 1.0,
+    "band_pct": 0.05,
+    "scale_method": "mad_delta",
+    "enter_quantile": 0.9,
+    "exit_quantile": 0.8,
     "medium_window": 14,
     "long_window": 28,
     "ema_window": 20,
@@ -331,6 +356,9 @@ _SCALAR_VALUES: dict[str, Any] = {
     "tick_tolerance": 0.005,
     "min_depth": 0.05,
     "min_spacing": 5,
+    # Filter Layer: turnover proximal operators (2026-08-12 P0).
+    "lambda_turnover": 1.0,
+    "lambda_smooth": 1.0,
     "max_spacing": 40,
     "shoulder_tolerance": 0.05,
     "head_min_prominence": 0.05,

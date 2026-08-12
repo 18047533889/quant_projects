@@ -54,12 +54,16 @@ def materialize_shared_nodes_parallel(
     ctx: Any,
     *,
     max_workers: int | None = None,
+    executor: Any = None,
 ) -> None:
-    """R27-165/231：独立 shared nodes **按依赖并行**物化（不再串行循环）。
+    """R27-165/231 + R42-014：独立 shared nodes **按依赖并行**物化。
 
     两个彼此完全独立的 shared nodes 现在并行；R27-002。共享子树物化本身
     ``_materialize_shared_subplan`` 线程安全（每 sid 独立写入
     ``ctx.shared_result_cache``）。有资源约束时 ``max_workers`` 限制并发。
+
+    R42-014：优先使用传入的 ``executor``（long-lived pool），避免每次创建临时
+    ThreadPoolExecutor。若无 executor 传入，fallback 到临时线程池（兼容旧调用）。
 
     R27-006：本函数保留「一次性物化全部 shared」的入口（老路径兼容），真正的
     DAG-ready 调度（某 shared predecessor ready 就立刻运行）由
@@ -76,12 +80,23 @@ def materialize_shared_nodes_parallel(
         sid, sub = items[0]
         _materialize_shared_subplan(backend, sub, ctx, sid)
         return
+
+    def _one(pair):
+        sid, sub = pair
+        _materialize_shared_subplan(backend, sub, ctx, sid)
+
+    # R42-014：优先使用传入的 long-lived executor
+    if executor is not None:
+        from concurrent.futures import wait
+        futures = [executor.submit(_one, pair) for pair in items]
+        done, _ = wait(futures)
+        for f in done:
+            f.result()  # 失败如实冒泡
+        return
+
+    # Fallback：创建临时线程池（兼容未传 executor 的旧路径）
     try:
         from concurrent.futures import ThreadPoolExecutor, wait
-
-        def _one(pair):
-            sid, sub = pair
-            _materialize_shared_subplan(backend, sub, ctx, sid)
 
         workers = max_workers or min(4, len(items))
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="r27-shared") as pool:
@@ -123,16 +138,38 @@ def _materialize_shared_subplan(
             # R38 P0-029（§12）：put 不再返回裸 bool——必须处理 REFUSED/RECOMPUTE。
             # P0-033（§14）：主链真实传入 recompute_cost（算子 cost 代理），LRU
             # 逐出时才能做 spill-vs-recompute 成本决策（高成本 spill / 低成本 drop）。
+            # R42-015/016：从 CSECertificateStore 读取 recompute_cost/next_use_distance/future_consumers。
             recompute_ms = 0.0
-            try:
-                from backend.operator_cost import estimate_plan_cost
+            next_use_dist = 0
+            future_cons = 1
+            cert_store = getattr(ctx, "cse_certificate_store", None)
+            if cert_store is not None:
+                cert = cert_store.get(sid)
+                if cert is not None:
+                    recompute_ms = float(cert.recompute_cost_ms)
+                    future_cons = int(cert.consumer_count)
+                    # R42-016: reuse_distance 三元组取 min（最近一次复用）
+                    if cert.reuse_distance and len(cert.reuse_distance) > 0:
+                        next_use_dist = min(cert.reuse_distance)
 
-                recompute_ms = float(
-                    estimate_plan_cost(sub).get("total_work", 0.0) or 0.0
-                )
-            except Exception:
-                recompute_ms = 0.0
-            res = store.put(sid, value, recompute_cost_ms=recompute_ms)
+            # Fallback: estimate_plan_cost（若 certificate 缺失）
+            if recompute_ms <= 0.0:
+                try:
+                    from backend.operator_cost import estimate_plan_cost
+
+                    recompute_ms = float(
+                        estimate_plan_cost(sub).get("total_work", 0.0) or 0.0
+                    )
+                except Exception:
+                    recompute_ms = 0.0
+
+            res = store.put(
+                sid,
+                value,
+                recompute_cost_ms=recompute_ms,
+                next_use_distance=next_use_dist,
+                future_consumers=future_cons,
+            )
             if res.status in ("MEMORY", "SPILLED"):
                 return
             # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref

@@ -25,6 +25,7 @@ data_access.read.factors —— 因子目录（FactorCatalog）与批量因子�
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -268,8 +269,25 @@ class FactorCatalog:
         records: dict[str, FactorMeta] = {}
         root = Path(lake_root)
         factors_dir = root / "factors" if (root / "factors").exists() else root
+        # #R32-P0-125 symlink 逃逸：因子湖枚举必须锚定在 realpath 化的 root 上，
+        # 否则 lake 里放一个指向 /etc（或另一个 principal 的湖）的 symlink 目录，
+        # discover 就会把外部内容当成本湖因子读进 catalog。
+        factors_real = Path(os.path.realpath(str(factors_dir)))
         if factors_dir.is_dir():
             for child in factors_dir.iterdir():
+                # is_dir() 跟随 symlink——symlink→外部目录会被当成合法因子目录。
+                # 先做 **不跟随**的 symlink 判定，再校验 realpath 仍在湖内。
+                if child.is_symlink():
+                    target = Path(os.path.realpath(str(child)))
+                    try:
+                        target.relative_to(factors_real)
+                    except ValueError:
+                        if strict:
+                            raise DataError(
+                                f"因子目录 symlink 逃逸（production fail-closed）："
+                                f"{child} → {target} 不在因子湖 {factors_real} 内。"
+                            )
+                        continue
                 if not child.is_dir():
                     continue
                 meta_path = child / FACTOR_META_FILENAME
