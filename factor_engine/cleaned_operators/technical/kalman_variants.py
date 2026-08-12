@@ -39,7 +39,7 @@ def _meta(
     description: str,
     params: list[str],
     *,
-    unit: str,
+    output_unit: str,
     param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     """Metadata factory for Kalman filter operators."""
@@ -50,7 +50,7 @@ def _meta(
         param_names=params,
         return_type="series",
         tags=["kalman", "filter", "smoothing", "causal"],
-        unit=unit,
+        output_unit=output_unit,
         param_specs=param_specs or {},
     )
 
@@ -219,9 +219,9 @@ class TSHInfinityLevelFilter(SeriesOperator):
         params=["x", "gamma", "q", "r"],
         unit="same_as_input",
         param_specs={
-            "gamma": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "q": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "r": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
+            "gamma": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "r": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -319,10 +319,10 @@ class TSAdaptiveNoiseKalman(SeriesOperator):
         params=["x", "q_init", "r_init", "window", "adapt_rate"],
         unit="same_as_input",
         param_specs={
-            "q_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "r_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "window": ParamSpec(dtype=int, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "adapt_rate": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
+            "q_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "r_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "adapt_rate": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -419,9 +419,9 @@ class TSStudentTKalmanFilter(SeriesOperator):
         params=["x", "q", "r", "dof"],
         unit="same_as_input",
         param_specs={
-            "q": ParamSpec(kind="numeric", role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "r": ParamSpec(kind="numeric", role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
-            "dof": ParamSpec(kind="numeric", role=ParamRole.ESTIMATOR_RESOLUTION, equivalence=None),
+            "q": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "r": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "dof": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 

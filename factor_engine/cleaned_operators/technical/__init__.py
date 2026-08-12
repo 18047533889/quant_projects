@@ -4,3 +4,4 @@ from . import signal  # noqa: F401
 from . import kalman_variants  # noqa: F401
 from . import denoise_filter  # noqa: F401
 from . import polars_denoise_filter  # noqa: F401
+from . import frequency_filters  # noqa: F401
