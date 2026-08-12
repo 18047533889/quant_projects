@@ -184,13 +184,37 @@ def schema_hash_from_decl(schema: Mapping[str, str] | None) -> str:
     return _sha256_text(payload)[:16]
 
 
-# 进程内 memo：s3:// URI → (ts, 对象头元数据)（避免每次 manifest 都 head 一次）。
-# #P0-C6 不永久缓存：remote 对象同 key 会被覆盖（ETag/version_id 变化，snapshot_id
-# 必须跟着变）；失败的 None（无凭证/网络）也不该永久缓存（首次无凭证、之后补凭证
-# 必须能重试）。统一短 TTL，过期即 revalidation——strict/pin 永远拿不到超过 TTL
-# 的陈旧 HEAD。
-_remote_meta_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+# R32-P0-045/046: Remote metadata cache must be security/credential scoped with
+# bounded size and typed negative cache.
+@dataclass(frozen=True)
+class _RemoteMetaCacheKey:
+    """R32-P0-045: Cache key includes security/credential scope."""
+    uri: str
+    credential_scope_id: str | None = None
+    credential_generation: str | None = None
+
+@dataclass
+class _RemoteMetaCacheEntry:
+    """R32-P0-046: Typed cache entry with TTL and negative cache support."""
+    value: dict[str, Any] | None  # None = NotFound or error
+    cached_at: float
+    is_success: bool  # True = success, False = error/not-found
+    error_type: str | None = None
+
+_remote_meta_cache: dict[_RemoteMetaCacheKey, _RemoteMetaCacheEntry] = {}
 _REMOTE_META_TTL_SECONDS = 30.0
+_REMOTE_META_NEGATIVE_TTL_SECONDS = 5.0  # Shorter TTL for errors
+_REMOTE_META_MAX_ENTRIES = 10000  # R32-P0-046: Bounded cache size
+
+def _evict_lru_remote_cache() -> None:
+    """R32-P0-046: LRU eviction when cache exceeds max size."""
+    if len(_remote_meta_cache) <= _REMOTE_META_MAX_ENTRIES:
+        return
+    # Sort by cached_at, remove oldest entries
+    sorted_entries = sorted(_remote_meta_cache.items(), key=lambda x: x[1].cached_at)
+    to_remove = len(_remote_meta_cache) - int(_REMOTE_META_MAX_ENTRIES * 0.9)
+    for key, _ in sorted_entries[:to_remove]:
+        _remote_meta_cache.pop(key, None)
 
 
 def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | None:
@@ -203,43 +227,86 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
     ``fresh=True``（#P0 收官 0.9.5）：**绕过 TTL 缓存强制重新 HEAD**。ScanHandle
     collect 前的 snapshot revalidation 用它——collect(t1) 必须拿到 scan(t0) 之后
     对象的最新身份，不能复用 30s 内的旧 HEAD 而漏掉同 key 覆盖。
+
+    R32-P0-045: Cache key includes credential_scope_id and generation.
+    R32-P0-046: Bounded LRU cache with typed negative cache.
+    R32-P0-047: Check credential expiry before use.
     """
-    key = str(uri)
-    now = time.monotonic()
-    if not fresh:
-        cached = _remote_meta_cache.get(key)
-        if cached is not None and now - cached[0] < _REMOTE_META_TTL_SECONDS:
-            return cached[1]
+    from data_access.cos.remote import cos_uri_to_s3_uri, resolve_s3_credentials
+    import boto3
+    from botocore.config import Config
+
+    # Get credentials and check expiry (R32-P0-047)
     try:
-        from data_access.cos.remote import cos_uri_to_s3_uri, resolve_s3_credentials
-
         creds = resolve_s3_credentials()
-        import boto3
-        from botocore.config import Config
+    except Exception:
+        return None
 
+    # R32-P0-047: Check credential expires_at before queries
+    if creds.expires_at is not None:
+        import time
+        from datetime import timezone
+        now_utc = datetime.now(timezone.utc)
+        # Add safety margin: 60s for expected operation + 30s skew
+        required_valid_duration = 90
+        if creds.expires_at <= now_utc.timestamp() + required_valid_duration:
+            # Credential expired or expiring soon, don't use it
+            return None
+
+    # R32-P0-045: Build cache key with credential scope
+    cache_key = _RemoteMetaCacheKey(
+        uri=str(uri),
+        credential_scope_id=creds.credential_scope_id,
+        credential_generation=None,  # TODO: Track credential generation
+    )
+
+    now = time.monotonic()
+
+    # Check cache unless fresh=True
+    if not fresh:
+        entry = _remote_meta_cache.get(cache_key)
+        if entry is not None:
+            # R32-P0-046: Different TTL for success vs error
+            ttl = _REMOTE_META_TTL_SECONDS if entry.is_success else _REMOTE_META_NEGATIVE_TTL_SECONDS
+            if now - entry.cached_at < ttl:
+                return entry.value
+
+    # R32-P0-046: Evict old entries if cache too large
+    _evict_lru_remote_cache()
+
+    try:
         # #P0-C7 先统一 cos:// → s3:// 再切 bucket/key：旧代码对所有 scheme 用
         # ``key[len("s3://"):]``，cos:// 前缀长度不同导致 bucket/key 直接错位
         # （generic cos:// 对象 snapshot 元数据解析错误）。
-        s3_uri = cos_uri_to_s3_uri(key)
+        s3_uri = cos_uri_to_s3_uri(str(uri))
         path = s3_uri[len("s3://") :]
         bucket, sep, obj = path.partition("/")
         if not sep or not obj:
-            _remote_meta_cache[key] = (now, None)
+            entry = _RemoteMetaCacheEntry(
+                value=None, cached_at=now, is_success=False, error_type="invalid_uri"
+            )
+            _remote_meta_cache[cache_key] = entry
             return None
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=(
+
+        # R32-P0-044: Pass aws_session_token for STS credentials
+        client_kwargs = {
+            "service_name": "s3",
+            "endpoint_url": (
                 ("https://" if creds.use_ssl else "http://") + creds.endpoint
                 if creds.endpoint
                 else None
             ),
-            region_name=creds.region,
-            aws_access_key_id=creds.access_key_id,
-            aws_secret_access_key=creds.secret_access_key,
-            config=Config(
+            "region_name": creds.region,
+            "aws_access_key_id": creds.access_key_id,
+            "aws_secret_access_key": creds.secret_access_key,
+            "config": Config(
                 connect_timeout=2, read_timeout=5, retries={"max_attempts": 0}
             ),
-        )
+        }
+        if creds.session_token:
+            client_kwargs["aws_session_token"] = creds.session_token
+
+        s3 = boto3.client(**client_kwargs)
         resp = s3.head_object(Bucket=bucket, Key=obj)
         meta = {
             "etag": str(resp.get("ETag", "")).strip('"') or None,
@@ -247,10 +314,19 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
             "content_length": resp.get("ContentLength"),
             "last_modified": resp.get("LastModified"),
         }
-        _remote_meta_cache[key] = (now, meta)
+        # R32-P0-046: Success entry with typed cache
+        entry = _RemoteMetaCacheEntry(
+            value=meta, cached_at=now, is_success=True, error_type=None
+        )
+        _remote_meta_cache[cache_key] = entry
         return meta
-    except Exception:
-        _remote_meta_cache[key] = (now, None)
+    except Exception as e:
+        # R32-P0-046: Typed negative cache - distinguish error types
+        error_type = type(e).__name__
+        entry = _RemoteMetaCacheEntry(
+            value=None, cached_at=now, is_success=False, error_type=error_type
+        )
+        _remote_meta_cache[cache_key] = entry
         return None
 
 
@@ -412,18 +488,21 @@ def build_data_snapshot(
     params: Mapping[str, Any] | None = None,
     files: Sequence[FileVersion] | None = None,
 ) -> DataSnapshot:
+    """Build DataSnapshot from data facts only.
+
+    R32-P0-042/043: build_sha removed from DataSnapshot identity. DataSnapshot
+    represents ONLY data facts (dataset, schema, files, params). Code/build facts
+    belong in ExecutionIdentity. Changing code without changing data should NOT
+    change snapshot_id.
+
+    Both build_data_snapshot and rebuild_snapshot_files now use identical
+    canonicalization logic (R32-P0-043).
+    """
     canon = canonicalize_params(params)
     file_versions = tuple(files) if files is not None else build_file_manifest(paths)
     manifest_hash = file_manifest_hash(file_versions)
     schema_hash = schema_hash_from_decl(schema)
-    # R29-P0 #207：build SHA 并入 snapshot 身份——换代码构建即换 snapshot_id
-    # （lineage/缓存身份与「哪个版本的代码读的」绑定，杜绝跨构建复用）。
-    try:
-        from data_access._build_meta import build_sha
-
-        build = build_sha()
-    except Exception:
-        build = None
+    # R32-P0-042/043: Unified identity algorithm without build_sha
     identity = json.dumps(
         {
             "dataset": dataset,
@@ -431,7 +510,6 @@ def build_data_snapshot(
             "schema_hash": schema_hash,
             "manifest_hash": manifest_hash,
             "params": canon,
-            "build_sha": build,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -457,16 +535,20 @@ def rebuild_snapshot_files(
     保持 dataset / registry_hash / schema_hash / params / created_at 不变，
     按新 files 重算 file_manifest_hash 与 snapshot_id——lineage/缓存身份与
     「实际读到什么」重新对齐，不再把旧 snapshot 当成刚读的数据（#7）。
+
+    R32-P0-043: Uses identical canonicalization as build_data_snapshot.
     """
     file_versions = tuple(files)
     manifest_hash = file_manifest_hash(file_versions)
+    # R32-P0-043: Use canonicalize_params for consistency
+    canon = canonicalize_params(dict(snapshot.params))
     identity = json.dumps(
         {
             "dataset": snapshot.dataset,
             "registry_hash": snapshot.registry_hash,
             "schema_hash": snapshot.schema_hash,
             "manifest_hash": manifest_hash,
-            "params": dict(snapshot.params),
+            "params": canon,
         },
         sort_keys=True,
         separators=(",", ":"),

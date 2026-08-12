@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+import numpy as np
+import pandas as pd
+
 from modeling.contracts import (
     AFTER_CLOSE_TO_NEXT_VWAP,
     BEFORE_SAME_DAY_VWAP,
@@ -27,10 +30,58 @@ __all__ = [
     "vwap_to_vwap_label",
     "sample_label_interval",
     "feature_availability_problem",
+    "LabelMaturityUnavailableError",
+    "maturity_cutoff_fail_closed",
 ]
 
 
 import re
+
+
+class LabelMaturityUnavailableError(ValueError):
+    """Raised when a label's maturity target cannot be proven from the calendar."""
+    pass
+
+
+def maturity_cutoff_fail_closed(
+    final_fit_end: str,
+    horizon_bars: int,
+    bar_calendar: np.ndarray,
+) -> str:
+    """Fail-closed version of _maturity_cutoff (MF-P0-004 remediation).
+
+    Advance ``final_fit_end`` by ``horizon_bars`` on the bar calendar to compute
+    when the final fit's labels matured (``anchor + H``).  FAIL CLOSED: raises
+    ``LabelMaturityUnavailableError`` when the calendar cannot prove the maturity
+    target is covered — this prevents silently generating a production artifact
+    with immature labels (look-ahead risk).
+    """
+    if horizon_bars <= 0:
+        return final_fit_end
+    if len(bar_calendar) == 0:
+        raise LabelMaturityUnavailableError(
+            f"bar_calendar is empty; cannot advance {final_fit_end} by {horizon_bars} bars"
+        )
+    try:
+        cal = pd.DatetimeIndex(bar_calendar)
+        anchor = pd.Timestamp(final_fit_end)
+        pos = int(cal.searchsorted(anchor, side="right")) - 1
+    except Exception as exc:
+        raise LabelMaturityUnavailableError(
+            f"cannot parse final_fit_end={final_fit_end!r} against calendar: {exc}"
+        ) from exc
+    if pos < 0:
+        raise LabelMaturityUnavailableError(
+            f"final_fit_end {final_fit_end} is before the calendar start {cal[0]}"
+        )
+    target = pos + horizon_bars
+    if target >= len(cal):
+        raise LabelMaturityUnavailableError(
+            f"label not yet mature: final_fit_end={final_fit_end} (pos={pos}) "
+            f"+ horizon_bars={horizon_bars} → target pos={target}, but calendar "
+            f"ends at pos={len(cal)-1} ({cal[-1]})"
+        )
+    return str(pd.Timestamp(cal[target]))
 
 
 def _time_ordinal(s: str) -> float:

@@ -29,7 +29,7 @@ _surface.extend_extended_only({
         "fiscal_asymmetric_elasticity", "fiscal_reversal_ratio",
         "fiscal_regression_resid_std", "fiscal_accrual_quality",
         "fin_seasonal_zscore", "fin_seasonal_percentile", "fiscal_true_streak",
-        "date_diff_days", "cash_flow_lifecycle_stage",
+        "date_diff_days", "cash_flow_lifecycle_stage", "relation_jaccard",
     })
 
 try:
@@ -526,6 +526,118 @@ def pd_fiscal_accrual_quality(accrual, cashflow, period_id, periods=12, require_
     return pd_fiscal_regression_resid_std(accrual, period_id, cashflow, periods=periods, min_obs=periods, add_intercept=True, ddof=1, require_consecutive=require_consecutive, revision_policy=revision_policy)
 
 
+def pd_relation_jaccard(entity_id, snapshot_id, periods=1, revision_policy="latest_available", **_):
+    """Relation set Jaccard similarity over distinct fiscal events.
+
+    Computes Jaccard similarity between the current snapshot's entity set and a
+    lagged snapshot's entity set:
+        J = |current ∩ lag| / |current ∪ lag|
+
+    - Same snapshot: entities deduplicated
+    - Both empty: NaN
+    - One empty: 0.0
+    - No future snapshots used
+    - Revisions effective from revision time
+    - Fiscal period semantics (distinct report events)
+    """
+    entity_id, snapshot_id = _align(entity_id, snapshot_id)
+    periods = _positive(periods, "periods")
+    policy = _policy(revision_policy)
+
+    from cleaned_operators.fiscal_strict import period_ordinal
+
+    # Convert snapshot_id to ordinals
+    snapshot_arr = snapshot_id.to_numpy(dtype=object)
+    entity_arr = entity_id.to_numpy(dtype=object)
+
+    ordinal_arr = np.full(snapshot_arr.shape, np.nan, dtype=float)
+    for row in range(snapshot_arr.shape[0]):
+        for col in range(snapshot_arr.shape[1]):
+            ord_val = period_ordinal(snapshot_arr[row, col])
+            if ord_val is not None:
+                ordinal_arr[row, col] = ord_val
+
+    out = np.full(entity_id.shape, np.nan, dtype=float)
+
+    # Build state machine per instrument column
+    for col in range(entity_id.shape[1]):
+        # Track visible snapshots: {ordinal: set(entities)}
+        snapshots: dict[int, set[str]] = {}
+        first_seen: dict[int, set[str]] = {}  # For first_available policy
+
+        for row in range(entity_id.shape[0]):
+            ordinal = ordinal_arr[row, col]
+            entity_val = entity_arr[row, col]
+
+            # Update snapshot state
+            if np.isfinite(ordinal):
+                ord_key = int(ordinal)
+
+                # Initialize snapshot if new
+                if ord_key not in snapshots:
+                    snapshots[ord_key] = set()
+                    first_seen[ord_key] = set()
+
+                # Add entity (apply revision policy)
+                if entity_val is not None:
+                    try:
+                        if isinstance(entity_val, float) and np.isnan(entity_val):
+                            pass  # Skip NaN
+                        else:
+                            entity_str = str(entity_val)
+                            if entity_str and entity_str not in ('nan', 'None', 'NaN', ''):
+                                if policy == "latest_available":
+                                    # Always update with latest
+                                    snapshots[ord_key].add(entity_str)
+                                elif policy == "first_available":
+                                    # Only add if first time seeing this entity for this ordinal
+                                    if entity_str not in first_seen[ord_key]:
+                                        snapshots[ord_key].add(entity_str)
+                                        first_seen[ord_key].add(entity_str)
+                    except:
+                        pass
+
+            # Compute Jaccard for current row
+            # Get visible ordinals up to this row
+            visible_ordinals = sorted(snapshots.keys())
+
+            if len(visible_ordinals) > periods:
+                # The current ordinal is the most recent one visible at this row
+                current_ord = visible_ordinals[-1]
+                lag_ord = visible_ordinals[-(periods + 1)]
+
+                current_set = snapshots[current_ord]
+                lag_set = snapshots[lag_ord]
+
+                union = current_set | lag_set
+                intersection = current_set & lag_set
+
+                if not union:
+                    out[row, col] = np.nan
+                else:
+                    out[row, col] = len(intersection) / len(union)
+
+    return pd.DataFrame(out, index=entity_id.index, columns=entity_id.columns)
+
+
+def pl_relation_jaccard(entity_id, snapshot_id, periods=1, revision_policy="latest_available", **_):
+    """Polars backend for relation_jaccard.
+
+    Converts to pandas, computes, and converts back.
+    """
+    import polars as pl
+
+    # Convert to pandas
+    entity_pd = entity_id.to_pandas()
+    snapshot_pd = snapshot_id.to_pandas()
+
+    # Compute using pandas implementation
+    result_pd = pd_relation_jaccard(entity_pd, snapshot_pd, periods=periods, revision_policy=revision_policy)
+
+    # Convert back to polars
+    return pl.from_pandas(result_pd)
+
+
 def pd_fiscal_asymmetric_elasticity(cost, activity, period_id, periods=12, mode="down_minus_up", add_intercept=True, min_obs_per_regime=3, require_consecutive=True, revision_policy="latest_available", **_):
     cost, activity, period_id = _align(cost, activity, period_id)
     periods, minimum = _positive(periods, "periods"), _positive(min_obs_per_regime, "min_obs_per_regime")
@@ -611,10 +723,22 @@ def register() -> None:
         "fiscal_true_streak": (["condition", "period_id", "require_consecutive", "revision_policy"], pd_fiscal_true_streak, "consecutive true distinct fiscal events"),
         "date_diff_days": (["left", "right"], pd_date_diff_days, "calendar-day difference between explicit date panels"),
         "cash_flow_lifecycle_stage": (["operating", "investing", "financing"], pd_cash_flow_lifecycle_stage, "cash-flow sign lifecycle classification"),
+        "relation_jaccard": (["entity_id", "snapshot_id", "periods", "revision_policy"], pd_relation_jaccard, "relation set Jaccard similarity over distinct fiscal snapshots"),
     }
     for name, (params, fn, description) in specs.items():
         _register(name, params, fn, description)
     _register("fiscal_direction_consistency", specs["fiscal_sign_consistency"][0], pd_fiscal_sign_consistency, "deprecated alias for fiscal_sign_consistency", aliases=("fiscal_direction_consistency",))
     _register("fiscal_pair_direction_agreement", specs["fiscal_sign_agreement"][0], pd_fiscal_sign_agreement, "deprecated compatibility alias; use fiscal_sign_agreement", aliases=("fiscal_pair_direction_agreement",))
+
+    # Register Polars backend for relation_jaccard
+    if pl is not None:
+        OperatorRegistry.register(
+            _FunctionOperator("relation_jaccard", ["entity_id", "snapshot_id", "periods", "revision_policy"], pl_relation_jaccard, "relation set Jaccard similarity over distinct fiscal snapshots"),
+            canonical="relation_jaccard",
+            backend="polars",
+            source="fiscal_event_strict",
+            status="production",
+            backend_explicit=True
+        )
 
 register()

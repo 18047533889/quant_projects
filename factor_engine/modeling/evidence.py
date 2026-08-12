@@ -36,6 +36,7 @@ __all__ = [
     "WalkForwardEvidence",
     "run_walk_forward_evidence",
     "report_hard_gate_set",
+    "check_model_direct_use_readiness",
 ]
 
 
@@ -752,6 +753,80 @@ def _probe_asof_resolution() -> bool:
         return False
 
 
+def check_model_direct_use_readiness() -> tuple[int, int, dict[str, list[str]]]:
+    """Check DirectUse readiness for all model operators (MF-P0-002 / REM-024).
+
+    Returns (ready_count, total_count, reasons_dict) where reasons_dict maps
+    each non-ready operator to a list of failure reasons.
+
+    The MINIMUM readiness checklist (per taskbook §27 / §36 tri-state):
+      - explicit_timing: operator has an entry in MODEL_TIMING_CONTRACTS
+      - production_lane: lane is FAST_NATIVE_ALPHA / EXPENSIVE_CERTIFIED_ALPHA /
+                         MODEL_FEATURE_SCORE / STATE_CONDITION_EVENT
+      - not_tombstoned: lane != DELETE_TOMBSTONE
+      - parameter_domain_certified: at least one certified point exists (from
+                                     runtime.parameter_domain_store)
+
+    This is HONEST reporting: if no operator has behavioral certification today,
+    ready_count = 0. Never fake a counter without the real artifact.
+    """
+    try:
+        from cleaned_operators import load_all
+        from cleaned_operators.registry import OperatorRegistry
+        from cleaned_operators.model_timing import MODEL_TIMING_CONTRACTS, is_model_like_name
+        from cleaned_operators.model_lane import assign_model_lane, _category_of
+
+        load_all()
+        canonicals = sorted(OperatorRegistry.list_canonical())
+        model_like = [c for c in canonicals if is_model_like_name(c, _category_of(c))]
+
+        PROD_LANES = frozenset({
+            "FAST_NATIVE_ALPHA", "EXPENSIVE_CERTIFIED_ALPHA",
+            "MODEL_FEATURE_SCORE", "STATE_CONDITION_EVENT"
+        })
+
+        ready_count = 0
+        reasons_dict: dict[str, list[str]] = {}
+
+        for c in model_like:
+            lane = assign_model_lane(c)
+            failures: list[str] = []
+
+            # Gate 1: explicit timing
+            if c not in MODEL_TIMING_CONTRACTS:
+                failures.append("no_explicit_timing")
+
+            # Gate 2: production lane
+            if lane not in PROD_LANES:
+                failures.append("not_production_lane")
+
+            # Gate 3: not tombstoned
+            if lane == "DELETE_TOMBSTONE":
+                failures.append("tombstoned")
+
+            # Gate 4: parameter domain certified (real check against store)
+            param_certified = False
+            try:
+                from runtime.parameter_domain_store import ParameterDomainCertificationStore
+                store = ParameterDomainCertificationStore()
+                param_certified = bool(store.operator_has_any_certified_region(c))
+            except Exception:
+                param_certified = False
+
+            if not param_certified:
+                failures.append("no_parameter_domain_point")
+
+            if not failures:
+                ready_count += 1
+            else:
+                reasons_dict[c] = failures
+
+        return ready_count, len(model_like), reasons_dict
+
+    except Exception:
+        return 0, 0, {}
+
+
 def report_hard_gate_set(git_sha: str | None = None, current_head: str | None = None) -> dict[str, dict[str, Any]]:
     """The §64 hard-gate subset this package honestly verifies.
 
@@ -1013,6 +1088,24 @@ def report_hard_gate_set(git_sha: str | None = None, current_head: str | None = 
             freshness_reason,
         ),
     ]
+
+    # DirectUse behavioral certification gate (MF-P0-002 / REM-024)
+    ready_count, total_count, reasons = check_model_direct_use_readiness()
+    certification_ok = ready_count > 0
+    certification_reason = (
+        f"DirectUse readiness: {ready_count}/{total_count} model operators have "
+        f"behavioral certification (explicit_timing + production_lane + "
+        f"not_tombstoned + parameter_domain_certified)"
+        if certification_ok
+        else f"DirectUse readiness: 0/{total_count} model operators certified "
+             f"(honest state: no behavioral proofs yet)"
+    )
+    gates.append((
+        "MODEL_ALL_DIRECT_USE_HAVE_BEHAVIORAL_CERTIFICATION",
+        certification_ok,
+        certification_reason,
+    ))
+
     out: dict[str, dict[str, Any]] = {}
     for entry in gates:
         name, value, check = entry[0], entry[1], entry[2]

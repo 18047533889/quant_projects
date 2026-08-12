@@ -109,6 +109,12 @@ def _time_key(value: Any) -> Any:
 
 @dataclass(frozen=True)
 class ManifestFile:
+    """R32-P0-064: 区分 unknown (None) 与 0。
+
+    rows=None 表示未知行数（manifest 构建失败/footer 缺失），与 rows=0（真实空文件）严格区分。
+    bytes=None 表示未知大小，与 bytes=0（零字节文件）严格区分。
+    成本估算/资源准入对 None 必须用保守上界，绝不当成 0（避免低估）。
+    """
     path: str
     rows: int | None = None
     bytes: int | None = None

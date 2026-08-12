@@ -77,7 +77,10 @@ _FILTER_HYSTERESIS_CANONICALS=frozenset({
 "state_l1_turnover_prox","state_l2_partial_adjustment",
 "state_cost_aware_deadband","state_cost_aware_slew",
 })
-EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS|_FILTER_DESPIKE_CANONICALS|_FILTER_SMOOTH_CANONICALS|_FILTER_HYSTERESIS_CANONICALS|frozenset({"fin_mean_abs_deviation"})
+_TECHNICAL_INDICATORS_CANONICALS=frozenset({
+"HMA","QQE","RSX","ALMA","CoppockCurve","ElderRay","FisherTransform",
+})
+EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS|_FILTER_DESPIKE_CANONICALS|_FILTER_SMOOTH_CANONICALS|_FILTER_HYSTERESIS_CANONICALS|_TECHNICAL_INDICATORS_CANONICALS|frozenset({"fin_mean_abs_deviation","group_multi_resid"})
 
 # R5-50: the extended surface must NOT be mutated by ``EXTENDED_ONLY_CANONICALS =
 # frozenset(set(old)|new)`` reassignments.  A consumer that did
@@ -192,7 +195,7 @@ _DAILY_FINAL_PACK_2026_08 = frozenset({
     "ts_quantile_skew", "ts_quantile_kurtosis", "ts_tail_ratio", "ts_extreme_cluster_ratio",
     # group 2 — nonlinear dependence
     "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-    "ts_lagged_mutual_information", "ts_upper_tail_coexceedance_probability", "ts_lower_tail_dependence",
+    "ts_lagged_mutual_information", "ts_upper_tail_coexceedance_probability", "ts_lower_tail_coexceedance_probability",
     # group 3 — complexity / long memory
     "ts_permutation_entropy", "ts_weighted_permutation_entropy",
     "ts_permutation_transition_entropy", "ts_sample_entropy", "ts_hurst_dfa",
@@ -205,7 +208,7 @@ _DAILY_FINAL_PACK_2026_08 = frozenset({
     "ashare_limit_open_down_streak", "ashare_limit_up_volume_ratio",
     "ashare_limit_down_volume_ratio",
     # group 5 — relation / group distribution
-    "relation_topk_concentration", "relation_distribution_skew", "relation_distribution_kurtosis",
+    "relation_topk_concentration", "relation_distribution_skew", "relation_distribution_pearson_kurtosis",
     "relation_hhi_change", "relation_entropy_change", "relation_concentration_acceleration",
     "relation_rank_mobility", "relation_share_mobility", "group_skewness", "group_kurtosis",
     "group_quantile_spread", "group_tail_ratio",
@@ -441,7 +444,7 @@ _DAILY_GEMINI_PACK_2026_08 = frozenset({
     "cs_weighted_percentile_rank", "group_distribution_js_divergence",
     "event_level_survival_share",
     # weighted moment / conditional / robust resid
-    "ts_weighted_standardized_moment", "ts_cov_if", "cs_multi_robust_resid",
+    "ts_weighted_standardized_moment", "ts_cov_if",
     # activity clock
     "ts_activity_clock_lagged_value", "ts_activity_clock_age",
     "ts_max_drawdown_activity_cost",

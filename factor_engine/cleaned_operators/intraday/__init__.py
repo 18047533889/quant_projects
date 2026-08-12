@@ -17,4 +17,7 @@ __all__ = [
     "time_structure",
     "vwap_path",
     "overnight",
+    "topology_manifold",
+    "state_space",
+    "pattern_recognition",
 ]

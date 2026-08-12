@@ -129,9 +129,10 @@ def _maturity_cutoff(
     calendar so the artifact's ``training_cutoff`` equals the last moment the
     final fit's labels matured (``anchor + H``), not the last anchor date.
 
-    Falls back to ``final_fit_end`` when the calendar cannot be advanced (no
-    datetime calendar / horizon out of range) — the fallback is a documented
-    lower bound, never an over-statement of availability.
+    MF-P0-004: Fail-closed when advancement is impossible. Returns final_fit_end
+    only when the calendar lookup succeeds AND horizon_bars future bars exist.
+    If the future calendar is unavailable, we cannot certify label maturity, so
+    fail-closed (return final_fit_end without advancement = understate availability).
     """
     if horizon_bars <= 0 or len(bar_calendar) == 0:
         return final_fit_end
@@ -147,12 +148,13 @@ def _maturity_cutoff(
     if pos < 0:
         return final_fit_end
     target = pos + horizon_bars
-    # Return the same full-timestamp form as ``str(pd.Timestamp(...))`` so the
-    # manifest's string comparisons (final_fit_end / selection_train_end /
-    # available_at) stay lexicographically consistent.
+    # MF-P0-004: Only advance if target is within calendar bounds
+    # If target >= len(cal), we cannot verify label maturity, so fail-closed
     if target < len(cal):
         return str(pd.Timestamp(cal[target]))
-    return str(pd.Timestamp(cal[pos]))
+    # MF-P0-004: Fail-closed when future calendar unavailable
+    # Do NOT fallback to cal[pos] (would understate maturity horizon)
+    return final_fit_end
 
 
 def _rank_ic(y_true: np.ndarray, y_pred: np.ndarray) -> float:

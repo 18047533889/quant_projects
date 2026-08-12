@@ -17,6 +17,32 @@ from data_access.snapshot.fidelity import SnapshotFidelity
 
 
 @dataclass(frozen=True)
+class ObjectIdentity:
+    """R32-P0-039: Formally model checksum/content hash.
+
+    Object identity based on content hash/checksum when available.
+
+    - ``kind``: "md5", "sha256", "etag", "version_id", "mtime_ns"
+    - ``algorithm``: hash algorithm if applicable
+    - ``value``: hash/checksum value
+    - ``size``: object size in bytes
+    """
+
+    kind: str
+    value: str
+    size: int | None = None
+    algorithm: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "value": self.value,
+            "size": self.size,
+            "algorithm": self.algorithm,
+        }
+
+
+@dataclass(frozen=True)
 class ResolvedObject:
     """解析后的单个远程/本地对象（R25 §11）。
 
@@ -29,6 +55,9 @@ class ResolvedObject:
                          执行前/后直接按 ``size + mtime_ns`` 精确比较，消除 2s 容差
                          下「同大小文件替换」的漏网）
     - ``source``         exact_list（COS LIST/HEAD）| source_manifest（上游权威）
+    - ``_identity``      R32-P0-039: ObjectIdentity（checksum/content hash）- internal storage
+    - ``checksum``       Content checksum (e.g., MD5, SHA256)
+    - ``checksum_algorithm`` Algorithm used for checksum
     """
 
     uri: str
@@ -38,6 +67,53 @@ class ResolvedObject:
     last_modified: datetime | None = None
     mtime_ns: int | None = None
     source: str | None = None
+    _identity: ObjectIdentity | None = field(default=None, repr=False)
+    checksum: str | None = None
+    checksum_algorithm: str | None = None
+
+    @property
+    def identity(self) -> ObjectIdentity | None:
+        """R32-P0-039: Extract ObjectIdentity from available fields.
+
+        Priority: checksum > etag/version_id > mtime_ns
+        """
+        if self._identity:
+            return self._identity
+
+        # Content checksum (highest priority for local files)
+        if self.checksum and self.checksum_algorithm:
+            return ObjectIdentity(
+                kind="checksum",
+                value=self.checksum,
+                size=self.content_length,
+                algorithm=self.checksum_algorithm,
+            )
+
+        # Remote object with etag
+        if self.etag:
+            return ObjectIdentity(
+                kind="etag",
+                value=self.etag,
+                size=self.content_length,
+            )
+
+        # Remote object with version_id
+        if self.version_id:
+            return ObjectIdentity(
+                kind="version_id",
+                value=self.version_id,
+                size=self.content_length,
+            )
+
+        # Local object with mtime_ns
+        if self.mtime_ns is not None:
+            return ObjectIdentity(
+                kind="mtime_ns",
+                value=str(self.mtime_ns),
+                size=self.content_length,
+            )
+
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,6 +128,9 @@ class ResolvedObject:
             ),
             "mtime_ns": self.mtime_ns,
             "source": self.source,
+            "identity": self.identity.to_dict() if self.identity else None,
+            "checksum": self.checksum,
+            "checksum_algorithm": self.checksum_algorithm,
         }
 
 
@@ -84,8 +163,16 @@ class ResolvedSourceSnapshot:
         return len(self.objects)
 
     @property
-    def total_bytes(self) -> int:
-        return sum(int(o.content_length or 0) for o in self.objects)
+    def total_bytes(self) -> int | None:
+        """R32-P0-040: Distinguish unknown from 0.
+
+        If any object has unknown content_length (None), return None instead of
+        treating it as 0. Resource admission must use conservative bounds for
+        unknown sizes.
+        """
+        if any(o.content_length is None for o in self.objects):
+            return None
+        return sum(int(o.content_length) for o in self.objects)
 
     @property
     def has_wildcard(self) -> bool:
@@ -112,22 +199,32 @@ class ResolvedSourceSnapshot:
 
 
 def content_digest_of_objects(objects: Sequence[ResolvedObject]) -> str:
-    """R25 §31：content_set_digest。
+    """R25 §31 + R32-P0-031/038: content_set_digest with proper identity.
 
-    ``hash(sorted(object_key, etag/version_id, content_length))``——本地 immutable
-    generation 用 path+checksum；远程用 etag/versionId+length。这是 reproducibility
-    identity：同 key 被 overwrite（etag 变）→ digest 变 → snapshot 变。
+    ``hash(sorted(object_key, etag/version_id, content_length, mtime_ns))``
+
+    - Local immutable generation uses path+checksum (or size+mtime_ns)
+    - Remote uses etag/versionId+length
+    - Empty object set has canonical non-empty digest (R32-P0-031)
+    - Local mtime_ns included for same-path replacement detection (R32-P0-038)
+
+    This is reproducibility identity: same key overwrite (etag change) →
+    digest change → snapshot change.
     """
     entries = []
     for o in sorted(objects, key=lambda x: str(x.uri)):
+        # R32-P0-038: Include mtime_ns for local files
         ident = (
             str(o.uri),
             str(o.etag or ""),
             str(o.version_id or ""),
             str(int(o.content_length or 0)),
+            str(int(o.mtime_ns or 0)),
         )
         entries.append("|".join(ident))
+    # R32-P0-031: Empty set has canonical digest, not magic empty string
     if not entries:
-        return ""
+        empty_payload = json.dumps([], sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(empty_payload.encode("utf-8")).hexdigest()[:32]
     text = json.dumps(entries, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]

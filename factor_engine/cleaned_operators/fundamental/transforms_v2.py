@@ -883,3 +883,211 @@ _surface.extend_extended_only(set(_NEW_V2_CANONICALS))
 # Round-3 item 27: the per-period fundamental revision ledger (release +
 # supersede/revision timestamps per period, PIT ``value_as_of`` lookup).
 from cleaned_operators.fundamental import ledger as _fundamental_revision_ledger  # noqa: E402,F401
+
+
+# ============================================================================
+# Industry-grouped fiscal regression operators
+# ============================================================================
+
+def industry_fiscal_resid(
+    y,
+    period_id,
+    industry,
+    x1,
+    x2=None,
+    x3=None,
+    x4=None,
+    x5=None,
+    periods=12,
+    min_obs=None,
+    add_intercept=True,
+    require_consecutive=True,
+    revision_policy="latest_available",
+):
+    """Industry-within fiscal-period regression residual.
+
+    For each industry group independently, fits OLS regression over the most
+    recent `periods` distinct fiscal report events and returns the current
+    event's residual (y_t - predict(x_t)).
+
+    Uses FiscalEventView to ensure PIT semantics: only report events visible
+    at each decision timestamp contribute, and revisions update only from the
+    revision timestamp forward.
+
+    Parameters
+    ----------
+    y : pd.DataFrame
+        Dependent variable panel (daily forward-filled).
+    period_id : pd.DataFrame
+        Fiscal period identifier panel (e.g., "2024Q3").
+    industry : pd.DataFrame
+        Industry classification panel (integer or string codes).
+    x1, x2, x3, x4, x5 : pd.DataFrame or None
+        Independent variable panels (variadic, up to 5 regressors).
+    periods : int, default=12
+        Rolling window length in distinct fiscal report events.
+    min_obs : int or None
+        Minimum observations required to fit; defaults to `periods`.
+    add_intercept : bool, default=True
+        Whether to include an intercept in the regression.
+    require_consecutive : bool, default=True
+        If True, fail closed when fiscal periods are not consecutive.
+    revision_policy : str, default="latest_available"
+        Either "latest_available" or "first_available" for revision handling.
+
+    Returns
+    -------
+    pd.DataFrame
+        Panel of residuals (y_t - y_hat_t) for the current fiscal event, or
+        NaN when insufficient history, rank deficiency, or industry missing.
+
+    Notes
+    -----
+    Each industry group maintains independent regression state. An instrument
+    with missing `industry` returns NaN for all rows.
+    """
+    from cleaned_operators.fiscal_event_ops import FiscalEventView, _align
+
+    # Collect all input panels
+    inputs = [y, period_id, industry, x1]
+    for x in (x2, x3, x4, x5):
+        if x is not None:
+            inputs.append(x)
+
+    # Strict alignment check
+    _align(*inputs)
+
+    # Validate parameters
+    periods = _pos_int(periods, "periods")
+    min_obs = periods if min_obs is None else _pos_int(min_obs, "min_obs")
+    if not isinstance(add_intercept, bool):
+        add_intercept = bool(add_intercept)
+    if not isinstance(require_consecutive, bool):
+        require_consecutive = bool(require_consecutive)
+
+    # Build FiscalEventViews for each panel
+    y_view = FiscalEventView.from_panel(y, period_id, revision_policy=revision_policy)
+    industry_view = FiscalEventView.from_panel(industry, period_id, revision_policy=revision_policy)
+
+    x_views = [FiscalEventView.from_panel(x1, period_id, revision_policy=revision_policy)]
+    for x in (x2, x3, x4, x5):
+        if x is not None:
+            x_views.append(FiscalEventView.from_panel(x, period_id, revision_policy=revision_policy))
+
+    out = np.full(y.shape, np.nan, dtype=float)
+
+    # Process each column independently
+    for col in range(y.shape[1]):
+        # Build per-industry state: map industry_code -> list[(ordinal, y_val, x_vals)]
+        industry_history: dict[object, list[tuple[int, float, list[float]]]] = {}
+
+        for row in range(y.shape[0]):
+            # Current visible histories (don't apply require_consecutive at view level)
+            y_hist = dict(y_view.history(row, col, require_consecutive=False))
+            ind_hist = dict(industry_view.history(row, col, require_consecutive=False))
+            x_hists = [dict(view.history(row, col, require_consecutive=False)) for view in x_views]
+
+            # Current ordinal
+            current_ordinal = y_view.ordinals[row, col]
+            if not np.isfinite(current_ordinal):
+                continue
+            current_ordinal = int(current_ordinal)
+
+            # Update industry_history with all visible events up to current
+            common_ordinals = set(y_hist) & set(ind_hist)
+            for x_hist in x_hists:
+                common_ordinals &= set(x_hist)
+
+            for ordinal in sorted(common_ordinals):
+                if ordinal > current_ordinal:
+                    continue
+                ind_code = ind_hist[ordinal]
+                if not _finite(ind_code):
+                    continue
+                y_val = y_hist[ordinal]
+                x_vals = [x_hist[ordinal] for x_hist in x_hists]
+                if not _finite(y_val) or not all(_finite(xv) for xv in x_vals):
+                    continue
+
+                # Store or update this ordinal for this industry
+                if ind_code not in industry_history:
+                    industry_history[ind_code] = []
+
+                # Replace if ordinal already exists (revision), otherwise append
+                existing_idx = next((i for i, (o, _, _) in enumerate(industry_history[ind_code]) if o == ordinal), None)
+                if existing_idx is not None:
+                    industry_history[ind_code][existing_idx] = (ordinal, y_val, x_vals)
+                else:
+                    industry_history[ind_code].append((ordinal, y_val, x_vals))
+                    industry_history[ind_code].sort(key=lambda item: item[0])
+
+            # Now compute residual for the current row
+            if current_ordinal not in ind_hist:
+                continue
+            current_industry = ind_hist[current_ordinal]
+            if not _finite(current_industry) or current_industry not in industry_history:
+                continue
+
+            # Get the window for this industry
+            ind_events = industry_history[current_industry]
+            window = [evt for evt in ind_events if evt[0] <= current_ordinal][-periods:]
+
+            if len(window) < min_obs:
+                continue
+
+            # Check consecutiveness if required
+            if require_consecutive and len(window) > 1:
+                ordinals = [evt[0] for evt in window]
+                is_consecutive = all(ordinals[i] == ordinals[i-1] + 1 for i in range(1, len(ordinals)))
+                if not is_consecutive:
+                    continue
+
+            # Extract y and X arrays
+            y_array = np.array([evt[1] for evt in window], dtype=float)
+            x_array = np.array([evt[2] for evt in window], dtype=float)  # shape: (n_obs, n_features)
+
+            # Build design matrix
+            if add_intercept:
+                design = np.column_stack([np.ones(len(y_array)), x_array])
+            else:
+                design = x_array
+
+            # Check rank
+            residual_dof = len(y_array) - design.shape[1]
+            if residual_dof <= 0 or np.linalg.matrix_rank(design) != design.shape[1]:
+                continue
+
+            # Fit OLS
+            try:
+                coefficients = np.linalg.lstsq(design, y_array, rcond=None)[0]
+            except np.linalg.LinAlgError:
+                continue
+
+            # Compute residual for current observation (last in window)
+            current_y = y_array[-1]
+            current_x_row = design[-1]
+            y_hat = float(current_x_row @ coefficients)
+            residual = current_y - y_hat
+
+            if _finite(residual):
+                out[row, col] = residual
+
+    return pd.DataFrame(out, index=y.index, columns=y.columns)
+
+
+def _finite(value) -> bool:
+    try:
+        return bool(np.isfinite(float(value)))
+    except (TypeError, ValueError):
+        return False
+
+
+# Register the operator
+_register(
+    "industry_fiscal_resid",
+    ["y", "period_id", "industry", "x1", "x2", "x3", "x4", "x5", "periods", "min_obs", "add_intercept", "require_consecutive", "revision_policy"],
+    industry_fiscal_resid,
+    "Industry-grouped fiscal-period OLS regression residual with PIT semantics; each industry fits independently over distinct report events.",
+)
+
+_surface.extend_extended_only({"industry_fiscal_resid"})

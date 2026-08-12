@@ -215,9 +215,14 @@ def materialized_sql_result_lazy_wrapper(table) -> Any:
         该结果**已完整物化**（SQL 已执行完），只是套了一层 ``LazyFrame`` 壳以复用
         Polars long-lazy 消费接口。它**不代表 streaming**：
         ``supports_streaming=False``，``materializes_full_panel=True``。
+
+    MB-P1-018: DuckDB Region boundary optimization — prefer Arrow/Relation.
+    This function keeps the result in Arrow → Polars path without converting to Pandas.
+    The conversion happens only once at the final boundary when necessary.
     """
     import polars as pl
 
+    # MB-P1-018: Direct Arrow → Polars conversion (no Pandas intermediate)
     if hasattr(table, "to_pandas"):
         df = pl.from_arrow(table)
     else:
@@ -480,7 +485,12 @@ def _execute_duckdb(
     data_source: Any,
     query_budget: Any | None = None,
 ) -> pd.Series:
-    """DuckDB 单因子执行：SQL → Arrow 表 → MultiIndex Series。"""
+    """DuckDB 单因子执行：SQL → Arrow 表 → MultiIndex Series。
+
+    MB-P1-018: DuckDB Region boundary should prefer Arrow/Relation output,
+    avoiding unnecessary `.df()` conversion to Pandas when the downstream
+    consumer can work with Arrow directly.
+    """
     table = _execute_duckdb_table(
         compiled, pctx, data_source, query_budget=query_budget
     )

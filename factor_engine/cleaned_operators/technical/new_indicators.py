@@ -646,11 +646,20 @@ class FisherTransform(SeriesOperator):
         return out
 
 
+_CANONICALS.extend(["HMA", "QQE", "RSX", "ALMA", "CoppockCurve", "ElderRay", "FisherTransform"])
+
+
 def _register_surface() -> None:
+    """注册到 extended surface 并添加 Polars 后端支持。"""
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.rolling_pack import register_polars_bridge
 
     _surface.extend_extended_only(set(_CANONICALS))
 
+    # Polars 后端：委托 pandas reference
+    for _canon in _CANONICALS:
+        register_polars_bridge(_canon)
 
-_CANONICALS.extend(["HMA", "QQE", "RSX", "ALMA", "CoppockCurve", "ElderRay", "FisherTransform"])
+
 _register_surface()
+

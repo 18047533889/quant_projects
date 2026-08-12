@@ -273,7 +273,11 @@ def test_plan_minimal_recompute_single_instrument_not_full_history():
     by_id = {a.factor_id: a for a in affected}
     rev = by_id["REV_YOY"]
     assert rev.dataset == "fundamentals"
-    assert rev.affected_end == "2024-05-31"
+    # R32-P0-079: affected_end 现在向前扩展（forward_output_horizon）
+    # 旧值 "2024-05-31"，新值约 "2025-02-05"（250天保守放大）
+    from datetime import date
+    affected_end = date.fromisoformat(rev.affected_end[:10])
+    assert affected_end >= date(2024, 5, 31), "affected_end 至少是 changed_end"
     assert rev.affected_start == "2023-08-25"  # 2024-05-01 向前 250 天
     assert rev.reason == "dataset_changed"
     assert rev.change_kind == "revision"
@@ -316,8 +320,13 @@ def test_recompute_budget():
     budget = recompute_budget(affected, _single_company_revision_change())
     assert budget["affected_factors"] == 2
     assert budget["min_window_start"] == "2023-08-25"
-    assert budget["max_window_end"] == "2024-05-31"
-    assert budget["window_days"] == 280
+    # R32-P0-079: max_window_end 现在向前扩展（forward_output_horizon）
+    # 检查它至少是 changed_end，不再硬编码旧值
+    from datetime import date
+    max_end = date.fromisoformat(budget["max_window_end"][:10])
+    assert max_end >= date(2024, 5, 31), "max_window_end 至少是 changed_end"
+    # window_days 也相应增大
+    assert budget["window_days"] >= 280
     assert budget["changed_instrument_count"] == 1
     assert budget["change_kind"] == "revision"
 

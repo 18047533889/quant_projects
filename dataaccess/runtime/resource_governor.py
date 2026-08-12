@@ -45,7 +45,10 @@ def _auto_bound_standalone_memory() -> bool:
 
 
 def _default_safe_memory_bytes() -> int:
-    """探测 host RAM / cgroup memory.max / RLIMIT，取最严格并 ×0.5（保守 safe cap）。"""
+    """探测 host RAM / cgroup memory.max / RLIMIT，取最严格并 ×0.5（保守 safe cap）。
+
+    R32-P0-012：考虑当前 RSS + FE envelope（若有）。
+    """
     import os
 
     candidates: list[int] = []
@@ -76,10 +79,24 @@ def _default_safe_memory_bytes() -> int:
                     break
     except OSError:
         pass
+    # R32-P0-012：减去当前 RSS（current_usage）。
+    current_usage = 0
+    try:
+        with open("/proc/self/status", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    current_usage = int(line.split()[1]) * 1024
+                    break
+    except (OSError, ValueError):
+        pass
     if not candidates:
         # 无法探测 → 保守固定 4GB safe cap（fail-closed，不是无限）。
         return 4 * 1024**3
-    return max(0, int(min(candidates) * 0.5))
+    # R32-P0-012：safe_headroom = min(limits) * 0.5 - current_usage - reserve(10%)。
+    limit = min(candidates)
+    reserve = int(limit * 0.1)
+    safe = max(0, int(limit * 0.5) - current_usage - reserve)
+    return max(safe, 512 * 1024 * 1024)  # 最小 512MB
 
 
 @dataclass
@@ -195,25 +212,13 @@ class GlobalResourceGovernor:
 
         R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
         ``remote_requests`` 参与 admission；``released`` 状态受控。
+
+        R32-P0-007：host-backed 时先检查本地不变量，再取 host lease。
+        R32-P0-008：host 配置但失败时 production fail，不静默 fallback。
         """
+        host_lease = None
         with self._lock:
-            # R38 P0-020（P0-018）：host-backed admission——FE HostResourceCoordinator
-            # 注入 child-lease 桥时，DA 扫描先向当前 JobLease 请求 DAScanLease child。
-            # 成功 → host 是权威（本 governor 的内存上限由 host 统一治理，不双重计）；
-            # 失败/无活跃 job → 回退本地 governor admission（fail-closed 语义保持）。
-            if self._host_lease_request is not None:
-                try:
-                    host_lease = self._host_lease_request(
-                        reservation.estimated_memory,
-                        reservation.estimated_scan_bytes,
-                    )
-                except Exception:
-                    host_lease = None
-                if host_lease is not None:
-                    reservation.host_lease = host_lease
-                    self._active[reservation.query_id] = reservation
-                    self._remote_requests_total += max(0, reservation.remote_requests)
-                    return reservation
+            # R32-P0-007/P0-008：本地不变量检查优先于 host lease 请求。
             if reservation.query_id in self._active:
                 raise ResourceAdmissionError(
                     f"resource admission: query_id={reservation.query_id!r} 已存在"
@@ -236,35 +241,67 @@ class GlobalResourceGovernor:
                         f"active queries {per} 达到 per-principal 上限 "
                         f"{self._per_principal_active}。"
                     )
-            if self._max_memory is not None:
-                used = sum(r.estimated_memory for r in self._active.values())
-                if used + reservation.estimated_memory > self._max_memory:
+            # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
+            host_integration_configured = self._host_lease_request is not None
+        # R32-P0-007：锁外调用 host coordinator。
+        if host_integration_configured:
+            try:
+                host_lease = self._host_lease_request(
+                    reservation.estimated_memory,
+                    reservation.estimated_scan_bytes,
+                )
+            except Exception as exc:
+                # R32-P0-008：host 配置但失败 → production fail-closed。
+                from data_access.read.query_budget import is_strict_semantics
+                if is_strict_semantics():
                     raise ResourceAdmissionError(
-                        f"resource admission: 全局保留内存 {used + reservation.estimated_memory}"
-                        f" > 上限 {self._max_memory}（T-RES-001）。"
-                    )
-            if self._max_scan is not None:
-                inflight = sum(r.estimated_scan_bytes for r in self._active.values())
-                if inflight + reservation.estimated_scan_bytes > self._max_scan:
-                    raise ResourceAdmissionError(
-                        f"resource admission: 全局 inflight scan bytes "
-                        f"{inflight + reservation.estimated_scan_bytes} > 上限 "
-                        f"{self._max_scan}（R25 §27）。"
-                    )
-            # R28-9：remote 维度拆成两个独立指标，**admission 不再把「远端请求总数」
-            # 当成并发上限**。旧实现把 ``reservation.remote_requests``（一次查询要
-            # 访问的 COS 对象数，可能 100+）累加后与 ``max_remote_concurrency``
-            # 比——一次查 100 个对象并不等于同时发 100 个请求，实际并发可能只有
-            # 4，导致系统性过度限流。
-            #   - ``remote_requests``：成本/QueryBudget 维度，由 read_pipeline
-            #     ``enforce_remote_request_budget``（per-query 对象数预算）治理；
-            #   - ``remote_concurrency``：真正的并发 governor，由
-            #     ``acquire_remote_slot()`` / ``release_remote_slot()`` 治理
-            #     （``_remote_inflight`` 是真实 in-flight 并发数）。
-            # 这里只保留一个累积计数器供 telemetry（admission 判定不消费它）。
-            self._remote_requests_total += max(0, reservation.remote_requests)
-            self._active[reservation.query_id] = reservation
-            return reservation
+                        f"host-backed admission 配置但失败（R32-P0-008 fail-closed）: {exc}"
+                    ) from exc
+                # research 允许 fallback。
+                host_lease = None
+        # 锁内：原子 commit bookkeeping。
+        with self._lock:
+            # R32-P0-007：host lease 成功时作为权威，本地只做 bookkeeping。
+            if host_lease is not None:
+                try:
+                    reservation.host_lease = host_lease
+                    self._active[reservation.query_id] = reservation
+                    self._remote_requests_total += max(0, reservation.remote_requests)
+                    return reservation
+                except Exception as exc:
+                    # 本地 bookkeeping 失败，回滚 host lease。
+                    pass  # 锁外处理
+            else:
+                # 本地 governor admission（无 host 或 host 不可用）。
+                if self._max_memory is not None:
+                    used = sum(r.estimated_memory for r in self._active.values())
+                    if used + reservation.estimated_memory > self._max_memory:
+                        raise ResourceAdmissionError(
+                            f"resource admission: 全局保留内存 {used + reservation.estimated_memory}"
+                            f" > 上限 {self._max_memory}（T-RES-001）。"
+                        )
+                if self._max_scan is not None:
+                    inflight = sum(r.estimated_scan_bytes for r in self._active.values())
+                    if inflight + reservation.estimated_scan_bytes > self._max_scan:
+                        raise ResourceAdmissionError(
+                            f"resource admission: 全局 inflight scan bytes "
+                            f"{inflight + reservation.estimated_scan_bytes} > 上限 "
+                            f"{self._max_scan}（R25 §27）。"
+                        )
+                self._remote_requests_total += max(0, reservation.remote_requests)
+                self._active[reservation.query_id] = reservation
+                return reservation
+        # R32-P0-007：锁外回滚 host lease（若 bookkeeping 失败）。
+        if host_lease is not None:
+            try:
+                release_fn = getattr(host_lease, "release", None)
+                if callable(release_fn):
+                    release_fn()
+            except Exception:
+                pass
+            raise ResourceAdmissionError(
+                "resource admission: host lease 成功但本地 bookkeeping 失败（R32-P0-007）"
+            )
 
     # ---- R36 P0-017：由 HostResourceCoordinator 派生 envelope 上限 ----
 
@@ -331,14 +368,21 @@ class GlobalResourceGovernor:
 
     # ---- DuckDB 并发（R26-P1-016：声明的能力必须执行）----
 
-    def acquire_duckdb_slot(self) -> bool:
+    def acquire_duckdb_slot(self, *, timeout: float | None = None) -> bool:
         """R26-P1-016：DuckDB 并发 slot（blocking semaphore acquire）。
 
         遵守 ``max_duckdb_concurrency`` 上限；并发任务排队而非误报 fail（避免
         把「并行读」误判成超限）。返回 True（acquire 后）。
+
+        R32-P0-010：支持 deadline/timeout（timeout=None → 无限等待；timeout<=0 → nonblocking）。
         """
-        self._duckdb_sem.acquire()
-        return True
+        if timeout is None:
+            self._duckdb_sem.acquire()
+            return True
+        elif timeout <= 0:
+            return self._duckdb_sem.acquire(blocking=False)
+        else:
+            return self._duckdb_sem.acquire(blocking=True, timeout=timeout)
 
     def release_duckdb_slot(self) -> None:
         self._duckdb_sem.release()
@@ -367,21 +411,29 @@ class GlobalResourceGovernor:
             self._host_lease_request = fn
 
     def release(self, query_id: str) -> None:
+        """R32-P0-009：锁内 pop，锁外释放 host lease。"""
+        # 锁内：pop reservation，更新本地计数。
         with self._lock:
             reservation = self._active.pop(query_id, None)
-            # host-backed reservation：一并释放 host child lease（同一棵 lease 树）。
-            if reservation is not None and reservation.host_lease is not None:
-                try:
-                    release_fn = getattr(reservation.host_lease, "release", None)
-                    if callable(release_fn):
-                        release_fn()
-                except Exception:
-                    pass
             # R38 P0-026：incumbent release 后重算 over_current_target。
             used = sum(r.estimated_memory for r in self._active.values())
             self._over_current_target = (
                 self._max_memory is not None and used > self._max_memory
             )
+        # R32-P0-009：锁外释放 host lease（外部 callback 不持锁）。
+        if reservation is not None and reservation.host_lease is not None:
+            try:
+                release_fn = getattr(reservation.host_lease, "release", None)
+                if callable(release_fn):
+                    release_fn()
+            except Exception as exc:
+                # 结构化 cleanup error：telemetry + 必要时 worker unhealthy。
+                import logging
+                logger = logging.getLogger("data_access.resource_governor")
+                logger.error(
+                    "host lease release failed (query_id=%s): %s (R32-P0-009 structured cleanup)",
+                    query_id, exc, exc_info=True
+                )
 
     # ---- 状态 ----
 
@@ -457,16 +509,23 @@ def enforce_single_worker_contract() -> bool:
 
 
 @contextmanager
-def duckdb_slot(governor: "GlobalResourceGovernor | None" = None):
+def duckdb_slot(governor: "GlobalResourceGovernor | None" = None, *, deadline: float | None = None):
     """R26-P1-016：DuckDB 并发 slot（声明的 ``max_duckdb_concurrency`` 真正执行）。
 
     引擎执行（execute_arrow / execute_reader）持有 slot；acquire 失败 → 拒绝
     （fail-closed，不等排队）。成功/异常都 release exactly once。
+
+    R32-P0-010：支持 deadline。
     """
     gov = governor if governor is not None else get_global_governor()
-    if not gov.acquire_duckdb_slot():
+    timeout = None
+    if deadline is not None:
+        import time
+        timeout = max(0, deadline - time.monotonic())
+    if not gov.acquire_duckdb_slot(timeout=timeout):
+        from data_access.core.exceptions import ResourceAdmissionError
         raise ResourceAdmissionError(
-            "duckdb concurrency 达到上限（R26-P1-016：max_duckdb_concurrency 真正执行）"
+            "duckdb concurrency 达到上限或 deadline 已过（R26-P1-016 + R32-P0-010）"
         )
     try:
         yield

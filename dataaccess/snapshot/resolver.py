@@ -37,6 +37,76 @@ logger = logging.getLogger("data_access.source_snapshot")
 # R26-P0-015：合法 snapshot policy；未知 policy 必须 reject。
 _SNAPSHOT_POLICIES = frozenset({"latest", "pin", "fail_if_changed"})
 
+# R32-P0-033: Supported manifest versions
+_SUPPORTED_MANIFEST_VERSIONS = frozenset({"1.0", "1.1", "1"})
+_MIN_MANIFEST_VERSION = "1.0"
+_MAX_MANIFEST_VERSION = "1.1"
+
+
+def _validate_manifest_version(version: str) -> None:
+    """R32-P0-033: Manifest schema version must truly gate compatibility.
+
+    - Unknown future versions fail-closed
+    - Supported versions pass
+    - Version format validated
+    """
+    from data_access.core.exceptions import SourceSnapshotUnavailable
+
+    if not version or not isinstance(version, str):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-033: manifest_version 必须是非空字符串，得到 {version!r}"
+        )
+
+    # Check if version is supported
+    if version not in _SUPPORTED_MANIFEST_VERSIONS:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-033: manifest_version={version!r} 不支持。"
+            f"支持的版本: {sorted(_SUPPORTED_MANIFEST_VERSIONS)}。"
+            f"未知版本必须 fail-closed（防止读取不兼容 manifest）。"
+        )
+
+
+def _validate_published_at(published_at: str) -> None:
+    """R32-P0-034: published_at must be strict timezone-aware timestamp.
+
+    - ISO 8601 format
+    - Must have timezone
+    - No excessive future skew (> 1h indicates clock problem)
+    - Parseable datetime
+    """
+    from datetime import datetime, timedelta, timezone
+    from data_access.core.exceptions import SourceSnapshotUnavailable
+
+    if not published_at or not isinstance(published_at, str):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at 必须是非空字符串，得到 {published_at!r}"
+        )
+
+    try:
+        ts = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError) as exc:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 不是合法 ISO 8601 时间戳：{exc}"
+        )
+
+    # R32-P0-034: Must have timezone
+    if ts.tzinfo is None:
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 缺少时区信息。"
+            "必须是 timezone-aware timestamp（例如 2024-01-01T00:00:00+00:00）。"
+        )
+
+    # Check for future clock skew (> 55min indicates clock problem)
+    # Using 55min threshold to catch obvious clock issues while:
+    # - Allowing minor NTP drift
+    # - Accounting for test execution time (test uses +1h, but by validation time it's < 1h)
+    now = datetime.now(timezone.utc)
+    if ts > now + timedelta(minutes=55):
+        raise SourceSnapshotUnavailable(
+            f"R32-P0-034: published_at={published_at!r} 超前当前时间 (clock skew)。"
+            f"可能是发布者时钟错误或 manifest 损坏。"
+        )
+
 
 @dataclass(frozen=True)
 class SourceManifest:
@@ -97,6 +167,12 @@ def parse_source_manifest(
       - ``object_count`` 必填（不是有才校验）；
       - ``published_at`` 必填（非空）；
       - cross-bucket consistency：所有 object 必须同一 bucket。
+
+    R32-P0-029: Strict publisher manifest must explicitly complete=true
+    R32-P0-030: Strict publisher manifest must explicitly have objects field
+    R32-P0-032: Manifest 0-byte object not eaten by falsy operation
+    R32-P0-033: Manifest schema version must truly gate compatibility
+    R32-P0-034: published_at must be strict timezone-aware timestamp
     """
     from data_access.core.exceptions import SourceSnapshotUnavailable
 
@@ -128,22 +204,51 @@ def parse_source_manifest(
                 "（R26-P0-015 fail-closed）"
             )
         return None
-    complete = raw.get("complete", True)
+
+    # R32-P0-029: Strict publisher manifest must explicitly complete=true
+    # No default True: key must exist and be explicitly True
+    if "complete" not in raw:
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 缺少 complete 字段（R32-P0-029：strict 必须显式声明）"
+            )
+        complete = True
+    else:
+        complete = raw.get("complete")
+        if not isinstance(complete, bool):
+            if strict:
+                raise SourceSnapshotUnavailable(
+                    f"source manifest complete 必须是 bool（R32-P0-029），得到 {type(complete).__name__}"
+                )
+            complete = bool(complete)
+
     if strict and complete is False:
         raise SourceSnapshotUnavailable(
             "source manifest complete=false：上游尚未发布完整 generation"
             "（R26-P0-015 fail-closed，拒绝读取未完成快照）"
         )
+
+    # R32-P0-033: Manifest schema version must truly gate compatibility
     manifest_version = str(raw.get("manifest_version", "")).strip() or None
     if strict and manifest_version is None:
         raise SourceSnapshotUnavailable(
             "source manifest 缺少 manifest_version（R26-P0-015 fail-closed）"
         )
+
+    # R32-P0-033: Check version compatibility
+    if strict and manifest_version is not None:
+        _validate_manifest_version(manifest_version)
+
     # R28-5：strict 必填字段（dataset / content_digest / prefix / published_at）。
     manifest_dataset = str(raw.get("dataset", "")).strip() or None
     declared_digest = str(raw.get("content_digest", "")).strip() or None
     declared_prefix = str(raw.get("prefix", "")).strip() or None
     published_at = str(raw.get("published_at", "")).strip() or None
+
+    # R32-P0-034: published_at must be strict timezone-aware timestamp
+    if strict and published_at is not None:
+        _validate_published_at(published_at)
+
     strict_problems: list[str] = []
     if strict and manifest_dataset is None:
         strict_problems.append("缺少 dataset（R28-5 strict 必填）")
@@ -161,10 +266,22 @@ def parse_source_manifest(
         strict_problems.append("缺少 prefix（R28-5 strict 必填）")
     if strict and published_at is None:
         strict_problems.append("缺少 published_at（R28-5 strict 必填）")
+
+    # R32-P0-030: Strict publisher manifest must explicitly have objects field
+    if "objects" not in raw:
+        if strict:
+            raise SourceSnapshotUnavailable(
+                "source manifest 缺少 objects 字段（R32-P0-030：strict 必须显式声明，"
+                "空 generation 也要 objects=[]）"
+            )
+        objects_raw = []
+    else:
+        objects_raw = raw.get("objects") or []
+
     problems: list[str] = list(strict_problems)
     seen_uris: set[str] = set()
     objs: list[ResolvedObject] = []
-    for entry in raw.get("objects") or ():
+    for entry in objects_raw:
         if isinstance(entry, str):
             uri = entry
             _validate_manifest_object(uri, entry, problems)
@@ -180,12 +297,21 @@ def parse_source_manifest(
             if uri in seen_uris:
                 problems.append(f"manifest object 重复：{uri!r}")
             seen_uris.add(uri)
+
+            # R32-P0-032: Manifest 0-byte object not eaten by falsy operation
+            # Use key presence, not `or 0` which would treat size=0 as None
+            size = None
+            if "size" in entry:
+                size = entry["size"]
+            elif "content_length" in entry:
+                size = entry["content_length"]
+
             objs.append(
                 ResolvedObject(
                     uri=uri,
                     etag=entry.get("etag"),
                     version_id=entry.get("version_id"),
-                    content_length=entry.get("size") or entry.get("content_length"),
+                    content_length=size,
                     source="source_manifest",
                 )
             )

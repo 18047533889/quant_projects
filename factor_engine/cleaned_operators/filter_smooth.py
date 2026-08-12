@@ -149,17 +149,18 @@ class RobustEMAOperator(SeriesOperator):
                 e_t = x_i - y_prev
 
                 # 第二步: 用历史 innovations 的 MAD 估计 scale
-                if len(innovations_buffer) >= 2:
+                # FL-P0-002: warmup期使用ordinary EMA（不clip），避免scale_floor冻结
+                if len(innovations_buffer) >= warmup_window:
+                    # 有足够历史，可以估计scale并clip
                     innovations_array = np.array(innovations_buffer)
                     innovations_median = np.median(innovations_array)
                     mad = np.median(np.abs(innovations_array - innovations_median))
                     s_t = max(1.4826 * mad, scale_floor)
+                    # 第三步: clip innovation
+                    e_t_clipped = np.clip(e_t, -clip_sigma * s_t, clip_sigma * s_t)
                 else:
-                    # warmup 期间使用默认 scale
-                    s_t = scale_floor
-
-                # 第三步: clip innovation
-                e_t_clipped = np.clip(e_t, -clip_sigma * s_t, clip_sigma * s_t)
+                    # warmup期间：使用ordinary EMA（不clip innovation）
+                    e_t_clipped = e_t
 
                 # 第四步: 更新递归 state
                 y_t = y_prev + alpha * e_t_clipped
@@ -343,17 +344,23 @@ def ts_kama(
     """
     if isinstance(er_window, bool):
         raise ValueError("er_window must be integer")
+    if isinstance(er_window, float):
+        raise ValueError("er_window must be integer")
     er_window = int(er_window)
     if er_window < 2:
         raise ValueError("er_window must be >= 2")
 
     if isinstance(fast_period, bool):
         raise ValueError("fast_period must be integer")
+    if isinstance(fast_period, float):
+        raise ValueError("fast_period must be integer")
     fast_period = int(fast_period)
     if fast_period < 1:
         raise ValueError("fast_period must be >= 1")
 
     if isinstance(slow_period, bool):
+        raise ValueError("slow_period must be integer")
+    if isinstance(slow_period, float):
         raise ValueError("slow_period must be integer")
     slow_period = int(slow_period)
     if slow_period < 1:
@@ -362,14 +369,21 @@ def ts_kama(
     if fast_period >= slow_period:
         raise ValueError("fast_period must be < slow_period")
 
+    # FL-P0-003: min_periods parameter now has real runtime semantics
+    # It controls the minimum contiguous observations required before KAMA starts emitting
     if min_periods is None:
-        min_periods = er_window
+        min_periods = er_window + 1  # Default: ER computation requirement
     else:
         if isinstance(min_periods, bool):
+            raise ValueError("min_periods must be integer")
+        if isinstance(min_periods, float):
             raise ValueError("min_periods must be integer")
         min_periods = int(min_periods)
         if min_periods < 1:
             raise ValueError("min_periods must be >= 1")
+        # FL-P0-003: Ensure min_periods is at least er_window+1 (ER computation floor)
+        if min_periods < er_window + 1:
+            min_periods = er_window + 1
 
     # Efficiency Ratio: |change| / volatility
     change = (x - x.shift(er_window)).abs()
@@ -400,10 +414,8 @@ def ts_kama(
 
             contiguous += 1
 
-            # The ER needs er_window + 1 contiguous finite prices:
-            # change: x_t - x_{t-er_window} pairs bar t with bar t-er_window
-            # vol: diff().rolling(er_window).sum() needs er_window finite diffs
-            if contiguous < er_window + 1:
+            # FL-P0-003: Use min_periods (at least er_window+1)
+            if contiguous < min_periods:
                 continue
 
             if not np.isfinite(last):
@@ -577,16 +589,19 @@ class TSCausalLocalLinearSmoother(SeriesOperator):
                 start_idx = max(0, row - window + 1)
                 window_data = xv[start_idx:row+1, col]
 
-                # Filter finite values
+                # FL-P0-005: Filter finite values AND preserve physical bar offsets
                 finite_mask = np.isfinite(window_data)
                 finite_values = window_data[finite_mask]
 
                 if len(finite_values) < min_periods:
                     continue
 
-                # Build position array (0, 1, 2, ..., n-1)
+                # FL-P0-005: Build position array preserving physical time offsets
+                # WRONG: positions = np.arange(len(finite_values))  # compresses time
+                # RIGHT: positions = indices_where_finite  # preserves gaps
                 n = len(finite_values)
-                positions = np.arange(n, dtype=float)
+                window_indices = np.arange(len(window_data), dtype=float)
+                positions = window_indices[finite_mask]  # physical bar offsets
 
                 # OLS: y = a + b * position
                 # Normal equations:
@@ -608,8 +623,9 @@ class TSCausalLocalLinearSmoother(SeriesOperator):
                 a = (sum_pos2 * sum_y - sum_pos * sum_pos_y) / denom
                 b = (n * sum_pos_y - sum_pos * sum_y) / denom
 
-                # Endpoint fitted value: position = n-1
-                y_t = a + b * (n - 1)
+                # FL-P0-005: Endpoint fitted value at the PHYSICAL position of current bar
+                # The last position in the window is positions[-1] (not n-1 after compression)
+                y_t = a + b * positions[-1]
                 out[row, col] = y_t
 
         from cleaned_operators.rolling_pack import frame_like
@@ -848,3 +864,19 @@ def filter_smooth_contract(canonical: str) -> FilterContract:
             turnover_control=False,
         )
     raise ValueError(f"Unknown canonical: {canonical}")
+
+
+def _register_surface() -> None:
+    """注册到 extended surface 并添加 Polars 后端支持。"""
+    import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.rolling_pack import register_polars_bridge
+
+    _surface.extend_extended_only(set(_CANONICALS))
+
+    # Polars 后端：委托 pandas reference
+    for _canon in _CANONICALS:
+        register_polars_bridge(_canon)
+
+
+_register_surface()
+

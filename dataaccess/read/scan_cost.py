@@ -42,12 +42,46 @@ _ARROW_MAX_ROWS = 5_000_000
 _STREAM_MIN_ROWS = 1_000_000
 _ENGINE_STARTUP_MS = {"duckdb": 5.0, "polars": 15.0, "pyarrow": 3.0}
 
-# R40 #53：cost basis sentinel —— 成本未知但已用保守估计兜底。
+# R40 #53 + R32-P0-065：typed UnknownCost 而非 magic integer。
 COST_UNKNOWN_CONSERVATIVE = "cost_unknown_conservative"
 
 #: 保守估计的 safe ceiling（estimated_rows=MAX，total_bytes=SAFE_CEILING）。
 COST_MAX_ESTIMATED_ROWS = 10**12
 COST_SAFE_CEILING_BYTES = (1 << 63) - 1
+
+
+class CostDimension:
+    """R32-P0-066: Cost calibration 有量纲模型。
+
+    区分各种成本维度：
+    - IO_BYTES: 远程/本地字节传输成本
+    - CPU_ROWS: 行数处理成本（解码/反序列化）
+    - MEMORY_PROJECTION: 投影列内存占用
+    - ENGINE_STARTUP: 引擎启动固定成本
+    - FILE_OVERHEAD: 小文件开销（打开/关闭/元数据）
+    """
+    IO_BYTES = "io_bytes"
+    CPU_ROWS = "cpu_rows"
+    MEMORY_PROJECTION = "memory_projection"
+    ENGINE_STARTUP = "engine_startup"
+    FILE_OVERHEAD = "file_overhead"
+
+
+@dataclass(frozen=True)
+class UnknownCost:
+    """R32-P0-065: 类型化的未知成本（不用 sentinel 整数）。
+
+    reason: 为何成本未知（"no_manifest" / "stats_failed" / "empty_dataset"）
+    conservative_bound: 保守上界（None = 无法估算保守值，production reject）
+    """
+    reason: str
+    conservative_bound: int | None = None
+
+    def is_usable(self, production: bool = False) -> bool:
+        """production 下必须有保守上界才可用。"""
+        if production:
+            return self.conservative_bound is not None
+        return True
 
 
 @dataclass(frozen=True)
@@ -76,6 +110,10 @@ class ScanCost:
     # R40 #53：cost basis —— "manifest" | "stats" | COST_UNKNOWN_CONSERVATIVE |
     # "unknown"。production 对 "unknown"（无法计算保守估计）reject。
     cost_basis: str = "stats"
+    # R32-P0-066/067: 多维成本模型 {dimension: value}
+    cost_by_dimension: dict[str, float] | None = None
+    # R32-P0-067: 多维校准 scope（dataset × format × remote × time_range_selectivity）
+    calibration_scope: dict[str, str] | None = None
 
     @property
     def calibrated_score(self) -> float:
@@ -261,6 +299,28 @@ def estimate_scan_cost(
     estimate_ms = (time.monotonic() - t0) * 1000.0
     calibrated = _calibrated_factor(dataset)
 
+    # R32-P0-066: 多维成本模型
+    cost_by_dimension = {
+        CostDimension.IO_BYTES: float(selected_bytes or total_bytes or 0),
+        CostDimension.CPU_ROWS: float(estimated_rows),
+        CostDimension.MEMORY_PROJECTION: float(projection_bytes or 0),
+        CostDimension.ENGINE_STARTUP: startup,
+        CostDimension.FILE_OVERHEAD: file_factor * 100.0,  # 归一化
+    }
+
+    # R32-P0-067: 多维校准 scope
+    calibration_scope = {
+        "dataset": dataset,
+        "format": file_format or "parquet",
+        "remote": "remote" if remote else "local",
+        "selectivity_bin": (
+            "full" if selectivity >= 0.9
+            else "high" if selectivity >= 0.5
+            else "medium" if selectivity >= 0.1
+            else "low"
+        ),
+    }
+
     return ScanCost(
         dataset=dataset,
         file_count=file_count,
@@ -281,6 +341,8 @@ def estimate_scan_cost(
         calibrated_factor=calibrated,
         file_format=file_format,
         cost_basis=basis,
+        cost_by_dimension=cost_by_dimension,
+        calibration_scope=calibration_scope,
     )
 
 

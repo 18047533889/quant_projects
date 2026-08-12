@@ -136,7 +136,22 @@ class TSHampelFilterCausal(SeriesOperator):
                 # 估计中位数和MAD
                 m_t = float(np.median(finite_vals))
                 mad_raw = float(np.median(np.abs(finite_vals - m_t)))
-                s_t = max(MAD_SCALE * mad_raw, scale_floor)
+
+                # FL-P0-035: zero_scale_policy when MAD==0
+                # Don't let numerical epsilon decide economic jump significance
+                if mad_raw < 1e-14:
+                    # Zero MAD: past window is perfectly flat
+                    # Policy: use recent range as floor, or bypass filter
+                    recent_range = float(np.ptp(finite_vals))  # peak-to-peak
+                    if recent_range > 1e-12:
+                        # Non-trivial range despite zero MAD (discrete values)
+                        s_t = max(MAD_SCALE * recent_range / 4.0, scale_floor)
+                    else:
+                        # Truly flat: bypass filter (accept current value)
+                        out[row, col] = curr
+                        continue
+                else:
+                    s_t = max(MAD_SCALE * mad_raw, scale_floor)
 
                 # 判断是否为毛刺
                 deviation = abs(curr - m_t)
@@ -347,3 +362,24 @@ class TSRollingMedianCausal(SeriesOperator):
                 out[row, col] = float(np.median(finite_vals))
 
         return frame_like(x, out)
+
+
+def _register_surface() -> None:
+    """注册到 extended surface 并添加 Polars 后端支持。"""
+    import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.rolling_pack import register_polars_bridge
+
+    _CANONICALS = {
+        "ts_hampel_filter_causal",
+        "ts_median3_causal",
+        "ts_rolling_median_causal",
+    }
+
+    _surface.extend_extended_only(_CANONICALS)
+
+    # Polars 后端：委托 pandas reference
+    for _canon in _CANONICALS:
+        register_polars_bridge(_canon)
+
+
+_register_surface()

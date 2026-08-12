@@ -80,10 +80,28 @@ class ModelArtifactManifest:
     random_seed: int | None = None
     solver_version: str | None = None
 
-    #: When this artifact became legal (available_at); as-of resolution uses it.
-    available_at: str = ""
-    #: Training cutoff date — artifacts are only loadable at/after this.
+    # --------------------------------------------------------------------------- #
+    # MF-P0-005: Disambiguate the overloaded `training_cutoff` into semantically
+    # distinct time fields — each instant has a clear meaning and ordering invariants
+    # are enforced fail-closed.
+    # --------------------------------------------------------------------------- #
+    #: Last feature/anchor date actually used to fit the final model.
+    final_fit_anchor_end: str = ""
+    #: Last date whose label is fully mature (anchor + horizon).
+    label_maturity_cutoff: str = ""
+    #: Wall-clock timestamp when fitting finished.
+    fit_completed_at: str = ""
+    #: When the artifact may first be consumed (must be >= label_maturity_cutoff).
+    artifact_available_at: str = ""
+    #: When the artifact may first be used for decisions (must be >= artifact_available_at).
+    activation_at: str = ""
+
+    #: DEPRECATED: use the explicit fields above. Kept for backward compatibility;
+    #: derived from label_maturity_cutoff when new fields are set.
     training_cutoff: str = ""
+    #: When this artifact became legal (available_at); as-of resolution uses it.
+    #: DEPRECATED: use artifact_available_at.
+    available_at: str = ""
     #: Predictor ABI version — artifacts must match the runtime predictor ABI.
     predictor_abi_version: str = "v1"
 
@@ -93,8 +111,47 @@ class ModelArtifactManifest:
             object.__setattr__(self, "final_fit_end", self.train_end)
         if self.final_fit_start is None:
             object.__setattr__(self, "final_fit_start", self.train_start)
-        # Fail-closed invariants: an artifact can never claim to be available
-        # before the last observation used by its FINAL fit.
+
+        # MF-P0-005: Backward compatibility + fail-closed ordering invariants.
+        # If new fields are not set, derive from legacy fields.
+        if not self.final_fit_anchor_end and self.final_fit_end:
+            object.__setattr__(self, "final_fit_anchor_end", self.final_fit_end)
+        if not self.label_maturity_cutoff:
+            if self.training_cutoff:
+                object.__setattr__(self, "label_maturity_cutoff", self.training_cutoff)
+            elif self.final_fit_end:
+                object.__setattr__(self, "label_maturity_cutoff", self.final_fit_end)
+        if not self.artifact_available_at and self.available_at:
+            object.__setattr__(self, "artifact_available_at", self.available_at)
+        if not self.activation_at and self.artifact_available_at:
+            object.__setattr__(self, "activation_at", self.artifact_available_at)
+
+        # Backward compat: derive training_cutoff from new fields when it's not set
+        if not self.training_cutoff and self.label_maturity_cutoff:
+            object.__setattr__(self, "training_cutoff", self.label_maturity_cutoff)
+        if not self.available_at and self.artifact_available_at:
+            object.__setattr__(self, "available_at", self.artifact_available_at)
+
+        # MF-P0-005: Fail-closed ordering invariants.
+        # artifact_available_at >= label_maturity_cutoff (anti-look-ahead)
+        if self.artifact_available_at and self.label_maturity_cutoff:
+            if self.artifact_available_at < self.label_maturity_cutoff:
+                raise ValueError(
+                    f"artifact cannot be available before label maturity: "
+                    f"artifact_available_at={self.artifact_available_at} < "
+                    f"label_maturity_cutoff={self.label_maturity_cutoff}"
+                )
+
+        # activation_at >= artifact_available_at
+        if self.activation_at and self.artifact_available_at:
+            if self.activation_at < self.artifact_available_at:
+                raise ValueError(
+                    f"artifact cannot be activated before it is available: "
+                    f"activation_at={self.activation_at} < "
+                    f"artifact_available_at={self.artifact_available_at}"
+                )
+
+        # Legacy invariants (still enforced for backward compat)
         if self.final_fit_start and self.final_fit_end and self.final_fit_start > self.final_fit_end:
             raise ValueError(
                 f"final_fit_start {self.final_fit_start} > final_fit_end "
@@ -128,6 +185,13 @@ class ModelArtifactManifest:
             "final_fit_start": self.final_fit_start,
             "final_fit_end": self.final_fit_end,
             "refit_used_validation": self.refit_used_validation,
+            # MF-P0-005: Include new time fields in lineage
+            "final_fit_anchor_end": self.final_fit_anchor_end,
+            "label_maturity_cutoff": self.label_maturity_cutoff,
+            "fit_completed_at": self.fit_completed_at,
+            "artifact_available_at": self.artifact_available_at,
+            "activation_at": self.activation_at,
+            # Legacy fields (kept for backward compat)
             "available_at": self.available_at,
             "training_cutoff": self.training_cutoff,
             "decision_clock_id": self.decision_clock_id,

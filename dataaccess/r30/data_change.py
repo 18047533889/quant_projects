@@ -75,10 +75,18 @@ def _freeze_sequence(value: Any) -> tuple:
 class DataChangeSet:
     """一次数据集变化的事实描述。
 
+    R32-P0-077: changed_time_range 明确四条时间轴：
+      1. knowledge_time: 数据在什么时间点可知（财报披露日期）
+      2. event_time: 事件发生时间（财报所属期间结束日）
+      3. partition_time: 物理分区时间（文件名/路径时间）
+      4. write_time: 物理写入时间（mtime）
+
+    本字段是 **knowledge time** 意义上的变化区间（从 changed files 的 min_time/max_time
+    推得，通常对应 event_time 或 knowledge_time，具体由数据集 time_column 语义决定）。
+    **绝不是** write_time（物理文件修改时间）。
+
     所有序列字段冻结为 tuple；``change_kind`` 归一化为 :class:`ChangeKind`。
-    ``changed_time_range`` 是 **knowledge time 意义上的变化区间**（从 changed
-    files 的 min/max 推得），**不是**物理文件写入时间。``changed_instruments``
-    为空 tuple 表示「无法判定哪些标的变了」——消费方应保守处理。
+    ``changed_instruments`` 为空 tuple 表示「无法判定哪些标的变了」——消费方应保守处理。
     """
 
     dataset: str
@@ -86,7 +94,7 @@ class DataChangeSet:
     source_after: str | None = None
     changed_objects: tuple = ()
     changed_partitions: tuple = ()
-    changed_time_range: tuple | None = None  # (start, end) knowledge-time 窗口
+    changed_time_range: tuple | None = None  # (start, end) knowledge-time/event-time 窗口
     changed_instruments: tuple = ()
     changed_columns: tuple = ()
     change_kind: ChangeKind | str = ChangeKind.append
@@ -575,7 +583,10 @@ def revision_availability(
 ) -> dict[str, Any]:
     """合并物理文件日期与 knowledge time，判定 revision 在 ``knowledge_date`` 可见性。
 
-    返回 ``{latest_revision_date, period_end, knowledge_aware}``。
+    R32-P0-078: 禁止 mtime clamp 伪造——只有真实 knowledge_date ≤ 物理 mtime 时才能
+    看见该 revision。绝不允许「用未来日期查历史，然后 clamp 到历史日期」伪造 PIT。
+
+    返回 ``{latest_revision_date, period_end, knowledge_aware, clamped}``。
 
     - ``latest_revision_date``：一个在 ``knowledge_date`` 运行的消费方实际能用到
       的最新 revision 日期。当给了 knowledge_date 且物理最新写入晚于它时，钳制到
@@ -583,6 +594,8 @@ def revision_availability(
     - ``period_end``：changed 文件 ``max_time`` 的最大值（财报所属期间）。
     - ``knowledge_aware``：True = 应用了 knowledge time 校正；False = 只有物理
       日期（调用方未给 knowledge_date）。
+    - ``clamped``：True = 发生了 clamp（knowledge < physical），可能是回测；
+      False = 未 clamp（production 实时或 knowledge ≥ physical）。
     """
     params: dict[str, Any] = {}
     manifest = _load_manifest(store, dataset, params)
@@ -610,10 +623,17 @@ def revision_availability(
     period_end = max(period_ends) if period_ends else None
     kd = _to_date(knowledge_date)
 
+    clamped = False
     if kd is not None:
         knowledge_aware = True
         if physical_latest is not None:
-            latest = min(kd, physical_latest)
+            if kd < physical_latest:
+                # R32-P0-078: clamp 到 knowledge_date（回测/历史查询）
+                latest = kd
+                clamped = True
+            else:
+                # production 实时：knowledge >= physical，无 clamp
+                latest = physical_latest
         else:
             latest = kd
     else:
@@ -626,6 +646,7 @@ def revision_availability(
         ),
         "period_end": period_end,
         "knowledge_aware": bool(knowledge_aware),
+        "clamped": clamped,
     }
 
 

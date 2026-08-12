@@ -352,6 +352,148 @@ def fiscal_change_direction_agreement(x, y, period_id, periods=8, min_periods=3,
     return _make(x, cols, out)
 
 
+def _industry_fiscal_resid_calc(history_list, periods, min_obs, add_intercept):
+    """Compute OLS residual for industry-grouped fiscal regression.
+
+    history_list: list of (ordinal, industry, y, x_vals) tuples
+    Returns residual for the last observation in the window.
+    """
+    if len(history_list) < min_obs:
+        return np.nan
+
+    # Take last `periods` observations
+    window = history_list[-periods:]
+    if len(window) < min_obs:
+        return np.nan
+
+    # Extract arrays
+    y_array = np.array([item[2] for item in window], dtype=float)
+    x_array = np.array([item[3] for item in window], dtype=float)
+
+    # Build design matrix
+    if add_intercept:
+        design = np.column_stack([np.ones(len(y_array)), x_array])
+    else:
+        design = x_array
+
+    # Check rank
+    residual_dof = len(y_array) - design.shape[1]
+    if residual_dof <= 0 or np.linalg.matrix_rank(design) != design.shape[1]:
+        return np.nan
+
+    # Fit OLS
+    try:
+        coefficients = np.linalg.lstsq(design, y_array, rcond=None)[0]
+    except np.linalg.LinAlgError:
+        return np.nan
+
+    # Compute residual for current (last) observation
+    current_y = y_array[-1]
+    y_hat = float(design[-1] @ coefficients)
+    residual = current_y - y_hat
+
+    return residual if _finite(residual) else np.nan
+
+
+def industry_fiscal_resid(
+    y, period_id, industry, x1, x2=None, x3=None, x4=None, x5=None,
+    periods=12, min_obs=None, add_intercept=True, require_consecutive=True,
+    revision_policy="latest_available"
+):
+    """Industry-grouped fiscal-period regression residual (Polars backend)."""
+    periods = _pi(periods, "periods")
+    min_obs = periods if min_obs is None else _pi(min_obs, "min_obs")
+    add_intercept = bool(add_intercept)
+
+    # Collect x panels
+    x_panels = [x1]
+    for x in (x2, x3, x4, x5):
+        if x is not None:
+            x_panels.append(x)
+
+    cols = _cols(y, period_id, industry, x1)
+    for x in x_panels[1:]:
+        cols = [c for c in cols if c in x.columns]
+
+    rows = y.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    rc = bool(require_consecutive)
+
+    for col_idx, c in enumerate(cols):
+        # Extract column arrays
+        yv = y[c].to_numpy()
+        pv = _pv_list(period_id, c)
+        indv = industry[c].to_numpy()
+        xvs = [x[c].to_numpy() for x in x_panels]
+
+        # Per-industry state
+        n = len(yv)
+        order: list[int] = []
+        visible_y: dict[int, float] = {}
+        visible_ind: dict[int, object] = {}
+        visible_x: dict[int, list[float]] = {}
+        industry_history: dict[object, list[tuple[int, object, float, list[float]]]] = {}
+
+        for t in range(n):
+            ordinal = period_ordinal(pv[t]) if pv[t] is not None else None
+
+            # Update visible state
+            if ordinal is not None:
+                if np.isfinite(yv[t]):
+                    if ordinal not in visible_y:
+                        order.append(ordinal)
+                        order.sort()
+                    visible_y[ordinal] = float(yv[t])
+
+                if _finite(indv[t]):
+                    visible_ind[ordinal] = indv[t]
+
+                x_vals = [xv[t] for xv in xvs]
+                if all(np.isfinite(xv) for xv in x_vals):
+                    visible_x[ordinal] = [float(xv) for xv in x_vals]
+
+            # Build industry-grouped history
+            current = period_ordinal(pv[t]) if pv[t] is not None else None
+            if current is None:
+                continue
+
+            keys = [o for o in order if o <= current]
+            common = [o for o in keys if o in visible_y and o in visible_ind and o in visible_x]
+
+            if rc and common:
+                # Check consecutive
+                for i in range(1, len(common)):
+                    if common[i] != common[i-1] + 1:
+                        common = []
+                        break
+                if common and common[-1] != current:
+                    common = []
+
+            # Rebuild industry_history for current timestamp
+            industry_history.clear()
+            for ordinal in common:
+                ind_code = visible_ind[ordinal]
+                if ind_code not in industry_history:
+                    industry_history[ind_code] = []
+                industry_history[ind_code].append((
+                    ordinal, ind_code, visible_y[ordinal], visible_x[ordinal]
+                ))
+
+            # Compute residual for current row
+            if current not in visible_ind:
+                continue
+            current_industry = visible_ind[current]
+            if not _finite(current_industry) or current_industry not in industry_history:
+                continue
+
+            out[t, col_idx] = _industry_fiscal_resid_calc(
+                industry_history[current_industry],
+                periods, min_obs, add_intercept
+            )
+
+    return _make(y, cols, out)
+
+
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fiscal_true_streak", ("condition", "period_id", "require_consecutive", "revision_policy"), fiscal_true_streak, "Consecutive non-zero fiscal signals."),
     ("fiscal_sign_consistency", ("signal", "period_id", "periods", "min_periods", "require_consecutive", "revision_policy"), fiscal_sign_consistency, "Share of recent same-sign fiscal signals."),
@@ -360,6 +502,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fiscal_standardized_surprise", ("x", "period_id", "seasonal_lag", "lookback_periods", "min_history", "require_consecutive", "revision_policy"), fiscal_standardized_surprise, "Seasonally-lagged surprise z-score."),
     ("fiscal_sign_agreement", ("signal_x", "signal_y", "period_id", "periods", "min_periods", "require_consecutive", "revision_policy"), fiscal_sign_agreement, "Share of same-sign fiscal signals."),
     ("fiscal_change_direction_agreement", ("x", "y", "period_id", "periods", "min_periods", "require_consecutive", "revision_policy"), fiscal_change_direction_agreement, "Share of same-direction fiscal changes."),
+    ("industry_fiscal_resid", ("y", "period_id", "industry", "x1", "x2", "x3", "x4", "x5", "periods", "min_obs", "add_intercept", "require_consecutive", "revision_policy"), industry_fiscal_resid, "Industry-grouped fiscal-period regression residual."),
 )
 
 

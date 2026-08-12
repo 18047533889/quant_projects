@@ -21,6 +21,7 @@ DELETE_CANONICALS = frozenset({
 })
 
 # Straightforward DAGs belong in FactorRecipeRegistry, not the primitive registry.
+# R43: WMA promoted to canonical primitive (removed from RECIPE_CANONICALS)
 RECIPE_CANONICALS = frozenset({
     "ADXR",
     "AROON",
@@ -39,7 +40,6 @@ RECIPE_CANONICALS = frozenset({
     "StochasticD",
     "StochasticK",
     "TRIX",
-    "WMA",
     "WilliamsR",
     "close_gap",
     "current_ratio",
@@ -336,7 +336,7 @@ def finalize_layer_governance() -> None:
 
     actual = set(OperatorRegistry._operators)
     partitions = {
-        "daily": set(operator_surface.DAILY_CANONICALS),
+        "daily": set(operator_surface.DAILY_CANONICALS) | set(operator_surface.daily_factor_migrated()),
         "extended": set(operator_surface.EXTENDED_ONLY_CANONICALS),
         "research": set(operator_surface.RESEARCH_ONLY_CANONICALS),
         "unsafe": set(operator_surface.UNSAFE_CANONICALS),

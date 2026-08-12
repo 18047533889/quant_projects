@@ -72,6 +72,7 @@ packages = [
     "data_access.security",
     "data_access.runtime",
     "data_access.snapshot",
+    "data_access.r30",
 ]
 
 [tool.setuptools.package-dir]
@@ -87,6 +88,7 @@ packages = [
 "data_access.security" = "security"
 "data_access.runtime" = "runtime"
 "data_access.snapshot" = "snapshot"
+"data_access.r30" = "r30"
 
 [tool.setuptools.package-data]
 data_access = ["config/*.yaml", "config/README.md", "docs/*.md"]

@@ -918,6 +918,8 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "state_quantile_hysteresis": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},
     "state_l1_turnover_prox": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
     "state_l2_partial_adjustment": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:rate_limit"]},
+    # Relation Jaccard (2026-08-13) - fiscal period scope
+    "relation_jaccard": {"scope": "fundamental_period", "pit_safe": True},
 }
 
 
@@ -1216,6 +1218,12 @@ _PHASE2_RELATION_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_PHASE2_RELATION_POLICIES)
 
+# Research quality operators (2026-08-13): experimental fundamental quality measures
+_RESEARCH_QUALITY_POLICIES = {
+    "accounting_comparability_score": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 12},
+}
+_EXPLICIT_POLICIES.update(_RESEARCH_QUALITY_POLICIES)
+
 # Alpha-language expansion (2026-08): run/hysteresis state, path geometry,
 # distribution shift, volatility structure, cs locality, events, report seq.
 # All are causal trailing-window / sequential transforms -> pit_safe.
@@ -1280,6 +1288,7 @@ _ALPHA_LANGUAGE_POLICIES = {
     "group_ex_self_mean": {"scope": "group", "pit_safe": True},
     "group_ex_self_weighted_mean": {"scope": "group", "pit_safe": True},
     "hierarchical_group_neutralize": {"scope": "group", "pit_safe": True},
+    "group_multi_resid": {"scope": "group", "pit_safe": True},
     "cs_trimmed_ols_resid": {"scope": "cs", "pit_safe": True},
     "cs_huber_resid": {"scope": "cs", "pit_safe": True},
     "cs_lad_resid": {"scope": "cs", "pit_safe": True},
@@ -1504,6 +1513,8 @@ _FISCAL_EVENT_PACK_POLICIES = {
     "fiscal_direction_consistency": {"scope": "fundamental_period", "pit_safe": True},
     "fiscal_pair_direction_agreement": {"scope": "fundamental_period", "pit_safe": True},
     "row_sum_skipna": {"scope": "fundamental_period", "pit_safe": True},
+    "industry_fiscal_resid": {"scope": "fundamental_period", "pit_safe": True},
+    "fiscal_asymmetric_timeliness": {"scope": "fundamental_period", "pit_safe": True},
 }
 _EXPLICIT_POLICIES.update(_FISCAL_EVENT_PACK_POLICIES)
 

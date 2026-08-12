@@ -170,11 +170,26 @@ class PassLegalityError(CompilerPassError):
 
 
 class CompilerPassManager:
-    """Run typed passes with fail-closed contract and invariant enforcement."""
+    """Run typed passes with fail-closed contract and invariant enforcement.
+
+    REM-197: 维护一个 class-level 生产运行计数器，证明 pass manager 在真实生产路径中执行。
+    """
+
+    _production_run_count: int = 0
 
     def __init__(self, passes: Sequence[CompilerPass] = ()) -> None:
         self._passes = tuple(passes)
         self._validate_pipeline()
+
+    @classmethod
+    def get_production_run_count(cls) -> int:
+        """REM-197: 返回生产模式执行次数，用于可达性测试。"""
+        return cls._production_run_count
+
+    @classmethod
+    def reset_production_run_count(cls) -> None:
+        """REM-197: 重置生产模式计数器，测试专用。"""
+        cls._production_run_count = 0
 
     @property
     def passes(self) -> tuple[CompilerPass, ...]:
@@ -204,6 +219,10 @@ class CompilerPassManager:
         )
         current = plan
         traces: list[PassTrace] = []
+
+        # REM-197: increment production counter when genuinely running production
+        if ctx.production:
+            type(self)._production_run_count += 1
 
         for compiler_pass in self._passes:
             contract = compiler_pass.contract

@@ -30,7 +30,8 @@ from __future__ import annotations
 
 from typing import Any
 
-__version__ = "0.10.3"
+# REM-043: Version authority unified - r30 is a submodule, not a separate package
+# Version comes from parent data_access package only
 __all__ = [
     "query_trace",
     "metrics",

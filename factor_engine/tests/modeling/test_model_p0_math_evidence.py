@@ -96,7 +96,7 @@ def test_hard_gates_are_not_hardcoded_true():
     """Every gate has a non-empty invariant description; the gates the old
     implementation hard-coded ``True`` must now be backed by dynamic probes."""
     gates = report_hard_gate_set()
-    assert len(gates) == 18
+    assert len(gates) == 19
     # Gates that used to be hardcoded True — now dynamically probed (or, for the
     # one with no module to exercise, an honest NOT_RUN static claim).
     probe_gates = {

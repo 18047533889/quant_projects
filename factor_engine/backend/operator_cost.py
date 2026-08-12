@@ -226,6 +226,7 @@ _COSTS: dict[str, OperatorCost] = {
     "cs_bucket": OperatorCost("O(N log N)", "medium", False, 2, True, False),
     "cs_multi_resid": OperatorCost("O(NK^2)", "high", False, 2, True, False),
     "cs_wls_resid": OperatorCost("O(NK^2)", "high", False, 2, True, False),
+    "group_multi_resid": OperatorCost("O(NK^2)", "high", False, 2, True, False),
     "period_lag": OperatorCost("O(N)", "medium", True, 2, True, False),
     "ts_regression_tstat": OperatorCost("O(NW)", "high", False, 2, True, False),
     "ts_trend_tstat": OperatorCost("O(NW)", "high", False, 2, True, False),
@@ -247,6 +248,7 @@ _FEATURE_DIM_OPS = frozenset({
     "cs_regression",
     "cs_resid",
     "cs_multi_resid",
+    "group_multi_resid",
     "cs_wls_resid",
 })
 

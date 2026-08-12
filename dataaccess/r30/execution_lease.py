@@ -84,7 +84,11 @@ def _try_fetch_resource_envelope() -> dict[str, Any] | None:
 
 @dataclass
 class ExecutionLease:
-    """一次执行的资源租约（消费共享 envelope，不建立第二个 auto-sharder）。"""
+    """一次执行的资源租约（消费共享 envelope，不建立第二个 auto-sharder）。
+
+    R32-P0-005：child release 必须归还父预算。
+    R32-P0-006：全生命周期线程安全。
+    """
 
     lease_id: str
     memory: int
@@ -100,51 +104,81 @@ class ExecutionLease:
     _children: list["ExecutionLease"] = field(default_factory=list, init=False, repr=False)
     _remaining: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     _envelope: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    # R32-P0-006：内部锁保证线程安全。
+    _lock: Any = field(default=None, init=False, repr=False)
+    # R32-P0-005：parent ref 用于归还预算。
+    _parent: "ExecutionLease | None" = field(default=None, init=False, repr=False)
+    _parent_allocation: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
-    # ---- 生命周期 ----
+    def __post_init__(self) -> None:
+        """R32-P0-006：初始化内部锁和 parent refs。"""
+        import threading
+        object.__setattr__(self, "_lock", threading.RLock())
+        object.__setattr__(self, "_parent", None)
+        object.__setattr__(self, "_parent_allocation", {})
 
     def acquire(self, envelope: dict[str, Any] | None = None) -> "ExecutionLease":
         """按 envelope 占住本租约；envelope 缺省时本地无界（仍受调用方治理）。
 
         envelope 提供任一资源维度的上限时，请求量超过上限 → RuntimeError
         （fail-closed，不等执行完才发现超限）。返回 self（可链式）。
+
+        R32-P0-006：线程安全。
         """
-        if self._acquired or self._released:
-            raise RuntimeError(
-                f"ExecutionLease {self.lease_id} 已占用或已释放，无法再次 acquire"
-            )
-        if envelope is not None:
-            for key in _RESOURCE_KEYS:
-                limit = envelope.get(key)
-                if limit is not None and getattr(self, key) > limit:
-                    raise RuntimeError(
-                        f"ExecutionLease {self.lease_id} {key}={getattr(self, key)} "
-                        f"超过 envelope 上限 {limit}（R30-P1-014：租约只消费共享 "
-                        "envelope，不自我放大）。"
-                    )
-            self._envelope = dict(envelope)
-        else:
-            self._envelope = None
-        self._remaining = {
-            key: int(getattr(self, key)) for key in _RESOURCE_KEYS
-        }
-        self._acquired = True
-        return self
+        with self._lock:
+            if self._acquired or self._released:
+                raise RuntimeError(
+                    f"ExecutionLease {self.lease_id} 已占用或已释放，无法再次 acquire"
+                )
+            if envelope is not None:
+                for key in _RESOURCE_KEYS:
+                    limit = envelope.get(key)
+                    if limit is not None and getattr(self, key) > limit:
+                        raise RuntimeError(
+                            f"ExecutionLease {self.lease_id} {key}={getattr(self, key)} "
+                            f"超过 envelope 上限 {limit}（R30-P1-014：租约只消费共享 "
+                            "envelope，不自我放大）。"
+                        )
+                self._envelope = dict(envelope)
+            else:
+                self._envelope = None
+            self._remaining = {
+                key: int(getattr(self, key)) for key in _RESOURCE_KEYS
+            }
+            self._acquired = True
+            return self
 
     def release(self) -> None:
-        """释放本租约及全部子租约；幂等。"""
-        if self._released:
-            return
-        self._released = True
-        self._acquired = False
-        for child in self._children:
+        """释放本租约及全部子租约；幂等。
+
+        R32-P0-005：归还父预算（exactly-once）。
+        R32-P0-006：线程安全。
+        """
+        with self._lock:
+            if self._released:
+                return
+            self._released = True
+            self._acquired = False
+            children = list(self._children)
+            self._children.clear()
+            parent = self._parent
+            parent_allocation = dict(self._parent_allocation)
+            self._parent = None
+            self._parent_allocation = {}
+            self._remaining = {}
+            self._envelope = None
+        # 锁外：释放子租约。
+        for child in children:
             try:
                 child.release()
             except Exception:
                 pass
-        self._children.clear()
-        self._remaining = {}
-        self._envelope = None
+        # R32-P0-005：归还父预算（exactly-once，锁外调用父的 _return_child_budget）。
+        if parent is not None and parent_allocation:
+            try:
+                parent._return_child_budget(parent_allocation)
+            except Exception:
+                pass
 
     def remaining(self, now: float | None = None) -> float:
         """剩余时间（秒）。无 absolute_deadline → inf；已过 deadline → <= 0。"""
@@ -158,38 +192,54 @@ class ExecutionLease:
 
         子租约继承父租约的 absolute_deadline。父租约记账：成功即扣减对应
         ``_remaining``；父租约 release 时递归释放全部子租约。
+
+        R32-P0-005：子租约保存 parent ref + allocation token，release 时归还。
+        R32-P0-006：线程安全。
         """
-        if not self._acquired or self._released:
-            raise RuntimeError(
-                f"父租约 {self.lease_id} 未占用（acquire 后），无法请求子租约"
-            )
-        clean: dict[str, int] = {}
-        for key, value in dict(amounts).items():
-            if key not in _RESOURCE_KEYS:
-                raise ValueError(f"未知资源维度 {key!r}（合法: {_RESOURCE_KEYS}）")
-            value = max(0, int(value))
-            if self._remaining[key] < value:
+        with self._lock:
+            if not self._acquired or self._released:
                 raise RuntimeError(
-                    f"子租约 {key} 请求 {value} 超过父租约 {self.lease_id} "
-                    f"剩余 {self._remaining[key]}"
+                    f"父租约 {self.lease_id} 未占用（acquire 后），无法请求子租约"
                 )
-            clean[key] = value
-        child = ExecutionLease(
-            lease_id=f"{self.lease_id}/child-{len(self._children) + 1}",
-            memory=clean.get("memory", 0),
-            scan_bytes=clean.get("scan_bytes", 0),
-            remote_slots=clean.get("remote_slots", 0),
-            duckdb_slots=clean.get("duckdb_slots", 0),
-            temp_disk=clean.get("temp_disk", 0),
-            spill_budget=clean.get("spill_budget", 0),
-            absolute_deadline=self.absolute_deadline,
-        )
-        child._acquired = True
-        child._remaining = dict(clean)
-        for key, value in clean.items():
-            self._remaining[key] -= value
-        self._children.append(child)
-        return child
+            clean: dict[str, int] = {}
+            for key, value in dict(amounts).items():
+                if key not in _RESOURCE_KEYS:
+                    raise ValueError(f"未知资源维度 {key!r}（合法: {_RESOURCE_KEYS}）")
+                value = max(0, int(value))
+                if self._remaining[key] < value:
+                    raise RuntimeError(
+                        f"子租约 {key} 请求 {value} 超过父租约 {self.lease_id} "
+                        f"剩余 {self._remaining[key]}"
+                    )
+                clean[key] = value
+            child = ExecutionLease(
+                lease_id=f"{self.lease_id}/child-{len(self._children) + 1}",
+                memory=clean.get("memory", 0),
+                scan_bytes=clean.get("scan_bytes", 0),
+                remote_slots=clean.get("remote_slots", 0),
+                duckdb_slots=clean.get("duckdb_slots", 0),
+                temp_disk=clean.get("temp_disk", 0),
+                spill_budget=clean.get("spill_budget", 0),
+                absolute_deadline=self.absolute_deadline,
+            )
+            child._acquired = True
+            child._remaining = dict(clean)
+            # R32-P0-005：子租约保存父引用和分配记录。
+            child._parent = self
+            child._parent_allocation = dict(clean)
+            for key, value in clean.items():
+                self._remaining[key] -= value
+            self._children.append(child)
+            return child
+
+    def _return_child_budget(self, allocation: dict[str, int]) -> None:
+        """R32-P0-005：子租约 release 时归还预算（内部方法，由 child.release 调用）。"""
+        with self._lock:
+            if self._released:
+                return
+            for key, value in allocation.items():
+                if key in self._remaining:
+                    self._remaining[key] += value
 
     # ---- 状态 ----
 

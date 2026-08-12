@@ -228,6 +228,37 @@ class BoundedJobQueue:
                 except Exception:  # noqa: BLE001
                     pass
 
+    def _terminalize_pending_jobs(self) -> None:
+        """REM-067: drain 后 terminalize 残余 pending queued jobs。
+
+        残余队列中的 job（SUBMITTED/QUEUED）必须标记为 INTERRUPTED，
+        不能留下 orphan durable job 和泄漏的 quota。
+        """
+        pending_jobs = []
+        # Drain the queue
+        while True:
+            try:
+                job, _run_fn = self._pending.get_nowait()
+                pending_jobs.append(job)
+            except queue.Empty:
+                break
+
+        # Terminalize each job
+        for job in pending_jobs:
+            if job.is_terminal:
+                continue
+            interrupted = JobRecord(**vars(job))
+            interrupted.status = JobStatus.INTERRUPTED
+            interrupted.error_code = "JOB_INTERRUPTED"
+            interrupted.error = "job interrupted by service drain (never executed)"
+            interrupted.finished_at = _utc_now()
+            if self._store is not None:
+                try:
+                    self._store.update(interrupted)
+                except Exception:  # noqa: BLE001 - drain 不因单个持久化失败中断
+                    pass
+
+
     def drain(self, timeout: float = 30.0) -> None:
         """Graceful shutdown（R40 #97）：**先让 queued+running 自然完成**，再逐级
         升级 cancel / interrupt —— 绝不一开始就 cancel 所有 running。
@@ -237,6 +268,7 @@ class BoundedJobQueue:
         3) 宽限期后对残余 running 请求 cancel（持久化 + set event）；
         4) 更短 force-timeout 后标记残余 INTERRUPTED（CAS + set event），
            绝不留下 phantom running。
+        5) REM-067: terminalize 残余 pending queued jobs，不留 orphan。
 
         R32-P0-019 语义保留：draining 期间 worker ``while state != stopped``
         继续消费 queued。
@@ -263,6 +295,8 @@ class BoundedJobQueue:
                 return
             time.sleep(0.2)
         self._interrupt_running()
+        # Phase 4: REM-067 terminalize residual queued jobs
+        self._terminalize_pending_jobs()
         self._state = "stopped"
 
     def stop(self) -> None:
@@ -401,6 +435,12 @@ class BoundedJobQueue:
         self._store.update(job)
 
     def _begin(self, job: JobRecord, run_fn: Callable[[JobRecord], None]) -> None:
+        # REM-068: 检查 job 是否在 queued 时已被 cancel（读最新持久态）。
+        if self._store is not None:
+            fresh = self._store.get(job.run_id)
+            if fresh is not None and (fresh.is_terminal or fresh.cancel_requested_at):
+                # Job 已 cancelled/terminal，不执行。
+                return
         with self._lock:
             self._running[job.run_id] = job
             # R40 #101: 注册该 job 的 request-scoped cancel event。

@@ -27,6 +27,7 @@ import os
 import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from contextvars import ContextVar
 from typing import Any
@@ -136,10 +137,39 @@ def _api_budget(request: ReadRequest, settings: ServiceSettings) -> QueryBudget:
 
 def create_app(settings: ServiceSettings | None = None) -> FastAPI:
     settings = settings or ServiceSettings.from_env()
+
+    # R32-P0-021: Startup gate in ASGI lifespan (not just CLI)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """ASGI lifespan: startup gate runs before accepting requests."""
+        from data_access.runtime.startup_gate import run_startup_gate
+
+        # R32-P0-021: Run startup gate during lifespan startup
+        store = get_store()
+        try:
+            result = run_startup_gate(store)
+            if not result.passed:
+                raise RuntimeError(
+                    "Startup gate failed:\n  " + "\n  ".join(result.problems)
+                )
+        except Exception as exc:
+            import logging
+            logging.getLogger("data_access.service").error(
+                "Startup gate failed: %s", exc
+            )
+            raise
+
+        yield  # Server runs
+
+        # Cleanup on shutdown (if needed)
+
+    from contextlib import asynccontextmanager
+
     app = FastAPI(
         title="data_access read service",
         version=data_access.__version__,
         description="只读量化数据访问服务。",
+        lifespan=lifespan,
     )
     query_slots = threading.BoundedSemaphore(settings.max_concurrency)
 
@@ -222,31 +252,40 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.get("/ready")
     def ready() -> dict[str, str]:
-        """R25 §62 + R26-P0-021：真正 readiness（复用 startup gate health state）。
+        """R25 §62 + R32-P0-023/024: Cheap readiness check with redacted errors.
 
-        R26-P0-021 修正：
-            - engine 探测用真实 public API（``execute_arrow``，不是不存在的
-              ``engine.execute()``）；
-            - credential resolve 失败 / legacy root in_use（strict）**必须** 503，
-              不能仍返回 status=ready；
-            - 直接复用 ``run_startup_gate`` 的 health state，不自己另写一套逻辑。
+        P0-023: Don't repeat expensive discovery - reuse startup certificate.
+        P0-024: External errors must be redacted - don't leak paths/credentials.
         """
-        from data_access.runtime.startup_gate import run_startup_gate
+        from data_access.runtime.startup_gate import startup_certificate_expired
 
         store = get_store()
-        try:
-            result = run_startup_gate(store)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        if not result.passed:
+        # R32-P0-023: Check cached certificate instead of re-running full gate
+        cert = getattr(store, "_startup_certificate", None)
+        if cert is None or startup_certificate_expired(cert):
+            # R32-P0-024: Redact error details
             raise HTTPException(
-                status_code=503, detail="数据访问服务未就绪：" + "; ".join(result.problems)
+                status_code=503,
+                detail="Service not ready (startup gate not passed or expired)"
             )
-        # engine 真实 public API 探测（SELECT 1）。
+
+        if not getattr(cert, "passed", False):
+            # R32-P0-024: Don't leak internal paths/config in problems
+            raise HTTPException(
+                status_code=503,
+                detail="Service not ready (startup checks failed)"
+            )
+
+        # Lightweight engine check (fast SELECT 1)
         try:
             store._engine.execute_arrow("SELECT 1", [], deadline_ms=5_000)
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="engine 探测失败") from exc
+        except Exception:
+            # R32-P0-024: Redacted error
+            raise HTTPException(
+                status_code=503,
+                detail="Service not ready (backend unavailable)"
+            )
+
         return {
             "status": "ready",
             "datasets": str(len(store.registry.names())),

@@ -129,8 +129,9 @@ def apply_post_governance() -> None:
     if "neg" in OperatorRegistry._operators:
         OperatorRegistry.unregister("reverse")
         OperatorRegistry.register_alias("reverse", "neg")
-    if "ts_decay_linear" in OperatorRegistry._operators:
-        OperatorRegistry.register_alias("WMA", "ts_decay_linear")
+    # R43: WMA promoted to canonical primitive, no longer an alias of ts_decay_linear
+    # if "ts_decay_linear" in OperatorRegistry._operators:
+    #     OperatorRegistry.register_alias("WMA", "ts_decay_linear")
 
     renamed = {"cs_count", "cs_mean", "cs_std", "cs_sum"} & set(OperatorRegistry._operators)
     for canonical in renamed:

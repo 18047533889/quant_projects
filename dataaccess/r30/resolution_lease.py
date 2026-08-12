@@ -72,8 +72,18 @@ class ResolutionLease:
         返回 True 表示取得发现 slot。同时消费 governor 的
         ``acquire_remote_discovery_slot``（若注入）。发现相未开始 / 已进入执行相
         / 已释放 → 拒绝。
+
+        R32-P0-001：回滚时只释放**本次**取得的 slot，不释放进入本调用前已持有的。
+        R32-P0-002：governor 调用在锁外，避免 lock-order inversion / callback deadlock。
+        R32-P0-003：deadline 检查（expired → 拒绝）。
         """
         slots = max(1, int(slots))
+        # R32-P0-003：deadline 已过 → 拒绝。
+        if self.absolute_deadline is not None:
+            import time
+            if time.monotonic() >= self.absolute_deadline:
+                return False
+        # 锁内：检查状态 + 预留 slot。
         with self._lock:
             if self.phase is ResolutionPhase.RELEASED:
                 return False
@@ -85,46 +95,81 @@ class ResolutionLease:
                 self.phase = ResolutionPhase.RESOLUTION_ACTIVE
             if self._resolution_inflight + slots > self.max_resolution_slots:
                 return False
-            # 先取 governor discovery slot（失败 → 不占本租约 slot）。
-            if self.governor is not None:
-                try:
-                    acquire_fn = getattr(self.governor, "acquire_remote_discovery_slot", None)
-                    if callable(acquire_fn):
-                        for _ in range(slots):
-                            if not acquire_fn():
-                                # 部分成功则回滚已取得的 slot。
-                                release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
-                                if callable(release_fn):
-                                    for _ in range(self._resolution_inflight):
-                                        release_fn()
-                                return False
-                except Exception:
-                    return False
+            # 预留本地 slot（锁内），governor 调用在锁外。
+            old_inflight = self._resolution_inflight
+        # R32-P0-002：锁外调用 governor（避免持锁调用外部资源系统）。
+        acquired_now = 0
+        if self.governor is not None:
+            try:
+                acquire_fn = getattr(self.governor, "acquire_remote_discovery_slot", None)
+                if callable(acquire_fn):
+                    for i in range(slots):
+                        if not acquire_fn():
+                            # R32-P0-001：部分成功回滚**本次**已取得的 governor slot。
+                            release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
+                            if callable(release_fn):
+                                for _ in range(acquired_now):
+                                    release_fn()
+                            return False
+                        acquired_now += 1
+            except Exception:
+                # 异常回滚本次已取得的 governor slot。
+                release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
+                if callable(release_fn):
+                    for _ in range(acquired_now):
+                        try:
+                            release_fn()
+                        except Exception:
+                            pass
+                return False
+        # 锁内：原子 commit 本地 slot。
+        with self._lock:
+            if self.phase is ResolutionPhase.RELEASED:
+                # 阶段被其他线程改变，回滚 governor slot。
+                if self.governor is not None and acquired_now > 0:
+                    release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
+                    if callable(release_fn):
+                        for _ in range(acquired_now):
+                            try:
+                                release_fn()
+                            except Exception:
+                                pass
+                return False
             self._resolution_inflight += slots
             return True
 
     def release_resolution(self, slots: int = 1) -> None:
-        """归还 discovery slot（与 :meth:`acquire_resolution` 配对）。"""
+        """归还 discovery slot（与 :meth:`acquire_resolution` 配对）。
+
+        R32-P0-002：governor 调用在锁外。
+        """
         slots = max(1, int(slots))
+        # 锁内：减少本地计数。
         with self._lock:
             if self._resolution_inflight <= 0:
                 return
             n = min(slots, self._resolution_inflight)
             self._resolution_inflight -= n
-            if self.governor is not None:
-                try:
-                    release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
-                    if callable(release_fn):
-                        for _ in range(n):
-                            release_fn()
-                except Exception:
-                    pass
+        # 锁外：释放 governor slot。
+        if self.governor is not None and n > 0:
+            try:
+                release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
+                if callable(release_fn):
+                    for _ in range(n):
+                        release_fn()
+            except Exception:
+                pass
 
     def release_all_resolution(self) -> None:
-        """归还全部剩余 discovery slot（发现相完成 → 执行相前的标准收尾）。"""
+        """归还全部剩余 discovery slot（发现相完成 → 执行相前的标准收尾）。
+
+        R32-P0-002：governor 调用在锁外。
+        """
+        # 锁内：读取并清零本地计数。
         with self._lock:
             n = self._resolution_inflight
             self._resolution_inflight = 0
+        # 锁外：释放 governor slot。
         if n > 0 and self.governor is not None:
             try:
                 release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
@@ -151,7 +196,17 @@ class ResolutionLease:
 
         - 发现相必须有至少一次成功 discovery（RESOLUTION_ACTIVE 且 inflight==0）；
         - 返回 ExecutionLease（用同一 envelope 构造）；之后本租约即执行相。
+
+        R32-P0-003：deadline 已过 → 禁止进入执行相。
+        R32-P0-004：外部注入 execution_lease 必须验证。
         """
+        # R32-P0-003：deadline 已过 → 禁止 transition。
+        if self.absolute_deadline is not None:
+            import time
+            if time.monotonic() >= self.absolute_deadline:
+                raise RuntimeError(
+                    f"ResolutionLease {self.lease_id} deadline 已过，禁止进入执行相"
+                )
         with self._lock:
             if self.phase is ResolutionPhase.RELEASED:
                 raise RuntimeError(
@@ -173,10 +228,28 @@ class ResolutionLease:
                     f"ResolutionLease {self.lease_id} 仍有 {self._resolution_inflight} "
                     "个 inflight discovery，不能进入执行相"
                 )
-            if execution_lease is None:
+            # R32-P0-004：外部注入 execution_lease 必须验证。
+            if execution_lease is not None:
+                if not getattr(execution_lease, "_acquired", False):
+                    raise ValueError(
+                        f"外部注入 ExecutionLease 未 acquired（R32-P0-004）"
+                    )
+                if getattr(execution_lease, "_released", False):
+                    raise ValueError(
+                        f"外部注入 ExecutionLease 已 released（R32-P0-004）"
+                    )
+                # 验证 deadline 一致性。
+                lease_deadline = getattr(execution_lease, "absolute_deadline", None)
+                if self.absolute_deadline is not None and lease_deadline != self.absolute_deadline:
+                    raise ValueError(
+                        f"外部注入 ExecutionLease deadline={lease_deadline} 与 "
+                        f"ResolutionLease deadline={self.absolute_deadline} 不一致"
+                    )
+            else:
                 execution_lease = ExecutionLease.from_resource_envelope(
                     envelope, lease_id=f"{self.lease_id}/exec"
                 )
+                execution_lease.absolute_deadline = self.absolute_deadline
                 execution_lease.acquire(envelope)
             self._execution_lease = execution_lease
             self.phase = ResolutionPhase.EXECUTION_ACTIVE
@@ -189,28 +262,33 @@ class ResolutionLease:
     # ---- 生命周期 ----
 
     def release(self) -> None:
-        """释放全部（幂等）：归还 discovery slot + 释放 execution lease。"""
+        """释放全部（幂等）：归还 discovery slot + 释放 execution lease。
+
+        R32-P0-002：governor 调用在锁外。
+        """
+        # 锁内：标记 RELEASED，读取状态。
         with self._lock:
             if self.phase is ResolutionPhase.RELEASED:
                 return
-            # 归还剩余 discovery slot。
             n = self._resolution_inflight
             self._resolution_inflight = 0
-            if n > 0 and self.governor is not None:
-                try:
-                    release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
-                    if callable(release_fn):
-                        for _ in range(n):
-                            release_fn()
-                except Exception:
-                    pass
-            if self._execution_lease is not None:
-                try:
-                    self._execution_lease.release()
-                except Exception:
-                    pass
-                self._execution_lease = None
+            exec_lease = self._execution_lease
+            self._execution_lease = None
             self.phase = ResolutionPhase.RELEASED
+        # 锁外：释放 governor slot + execution lease。
+        if n > 0 and self.governor is not None:
+            try:
+                release_fn = getattr(self.governor, "release_remote_discovery_slot", None)
+                if callable(release_fn):
+                    for _ in range(n):
+                        release_fn()
+            except Exception:
+                pass
+        if exec_lease is not None:
+            try:
+                exec_lease.release()
+            except Exception:
+                pass
 
     def to_dict(self) -> dict[str, Any]:
         with self._lock:

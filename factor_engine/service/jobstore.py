@@ -91,6 +91,8 @@ class JobRecord:
     heartbeat_at: Optional[str] = None
     attempt: int = 1
     worker_id: Optional[str] = None
+    worker_epoch: int = 1  # REM-072: worker fencing epoch
+    lease_token: Optional[str] = None  # REM-072: worker fencing token
     phase: Optional[str] = None
     error_code: Optional[str] = None
     error: Optional[str] = None
@@ -106,6 +108,11 @@ class JobRecord:
     cost_estimate: dict[str, Any] = field(default_factory=dict)
     result_summary: dict[str, Any] = field(default_factory=dict)
     artifacts: dict[str, Any] = field(default_factory=dict)
+    # REM-070: retry lineage fields
+    root_operation_id: Optional[str] = None
+    parent_run_id: Optional[str] = None
+    attempt_id: int = 1
+    retry_reason: Optional[str] = None
 
     # --- lifecycle helpers -------------------------------------------------
     @property
@@ -422,7 +429,57 @@ class JobStore:
             pass
 
     # -- CRUD ---------------------------------------------------------------
+    def _persist_and_get_winner(self, job: JobRecord) -> JobRecord:
+        """REM-060: SQLite idempotency - persist and read back the durable winner.
+
+        After INSERT ... ON CONFLICT DO NOTHING, we must read back to get the
+        actual winner (which might be a concurrent insert, not our job).
+        """
+        if self._sqlite_conn is None:
+            # Manifest-only mode - no SQLite concurrency, simple persist
+            self._persist(job, create=True)
+            return job
+
+        # SQLite path: INSERT ... ON CONFLICT DO NOTHING, then read back winner
+        payload = self._job_to_raw(job)
+        payload_text = json.dumps(payload, ensure_ascii=False)
+
+        if job.idempotency_key:
+            idem_key = self._idem_key_for(job)
+            try:
+                self._sqlite_conn.execute("BEGIN IMMEDIATE")
+                self._sqlite_conn.execute(
+                    "INSERT INTO jobs (run_id, owner_principal, job_type, idempotency_key, payload) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT (owner_principal, job_type, idempotency_key) DO NOTHING",
+                    (job.run_id, idem_key[0], idem_key[1], idem_key[2], payload_text),
+                )
+                self._sqlite_conn.commit()
+
+                # Read back the durable winner
+                cur = self._sqlite_conn.execute(
+                    "SELECT payload FROM jobs WHERE owner_principal=? AND job_type=? AND idempotency_key=?",
+                    idem_key,
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise ServiceError("INTERNAL_ERROR", "idempotency winner disappeared", status=500)
+
+                winner_raw = json.loads(row[0])
+                winner = self._job_from_raw(winner_raw)
+                return winner
+            except Exception:
+                self._sqlite_conn.rollback()
+                raise
+        else:
+            # No idempotency key - simple insert
+            self._persist(job, create=True)
+            return job
+
     def create(self, job: JobRecord) -> JobRecord:
+        """REM-061: create 必须先持久化，失败则不留内存幽灵 job。
+        REM-063: 内部存储一个副本，防止调用者修改内部状态。
+        """
         with self._lock:
             if job.idempotency_key:
                 idem_key = self._idem_key_for(job)
@@ -443,12 +500,23 @@ class JobStore:
                             f"reuse run_id={existing_job.run_id}",
                             status=409,
                         )
-                    return existing_job
-                self._idempotency_index[idem_key] = job.run_id
-                self._idempotency_scoped[job.idempotency_key] = job.run_id
-            self._jobs[job.run_id] = job
-            self._persist(job, create=True)
-        return job
+                    # REM-063: return a copy
+                    return JobRecord(**vars(existing_job))
+
+                # REM-060: persist and read back the durable winner
+                # REM-061: persistence happens first; if it fails, no memory state
+                winner = self._persist_and_get_winner(job)
+                self._idempotency_index[idem_key] = winner.run_id
+                self._idempotency_scoped[job.idempotency_key] = winner.run_id
+                # REM-063: store internally, return a copy
+                self._jobs[winner.run_id] = winner
+                return JobRecord(**vars(winner))
+            else:
+                # REM-061: persist first before storing in memory
+                self._persist(job, create=True)
+                # REM-063: store internally, return a copy
+                self._jobs[job.run_id] = job
+                return JobRecord(**vars(job))
 
     def get_by_idempotency_key(
         self, key: str, *, owner_principal: Optional[str] = None, job_type: Optional[str] = None
@@ -464,8 +532,13 @@ class JobStore:
             return self._jobs.get(run_id) if run_id else None
 
     def get(self, run_id: str) -> Optional[JobRecord]:
+        """REM-063: 返回不可变快照，防止调用者意外修改内部状态。"""
         with self._lock:
-            return self._jobs.get(run_id)
+            job = self._jobs.get(run_id)
+            if job is None:
+                return None
+            # Return a copy to prevent mutation of store's internal state
+            return JobRecord(**vars(job))
 
     def update(self, job: JobRecord, *, write_manifest: bool = True) -> bool:
         """Persist a job state change.
@@ -473,6 +546,7 @@ class JobStore:
         R32-P0-022: 已进入 terminal 状态的 job 不允许被后来的旧执行覆盖 ——
         heartbeat monitor 标 INTERRUPTED 后，真实 worker 线程随后写 SUCCEEDED
         会被拒绝（terminal 状态不可变）。返回 True 表示已写入。
+        REM-062: persistence 失败必须 rollback in-memory state。
         """
         with self._lock:
             current = self._jobs.get(job.run_id)
@@ -482,9 +556,21 @@ class JobStore:
                 and current.status != job.status
             ):
                 return False
+
+            # REM-062: make a deep copy of current state for rollback
+            old_job = JobRecord(**vars(current)) if current else None
             self._jobs[job.run_id] = job
+
             if write_manifest:
-                self._persist(job)
+                try:
+                    self._persist(job)
+                except Exception:
+                    # REM-062: rollback on persistence failure
+                    if old_job is not None:
+                        self._jobs[job.run_id] = old_job
+                    else:
+                        self._jobs.pop(job.run_id, None)
+                    raise
             return True
 
     def cas_transition(
@@ -499,37 +585,46 @@ class JobStore:
         SQLite 路径用 ``UPDATE ... WHERE run_id=? AND status=?`` + rowcount 判定，
         跨进程也保持 CAS；terminal 状态不能被后来的旧执行（如 heartbeat 标
         INTERRUPTED 后 run_fn 才写 SUCCEEDED）覆盖。返回是否成功迁移。
+        REM-062: persistence 失败必须 rollback in-memory state。
         """
         with self._lock:
             current = self._jobs.get(job.run_id)
             if current is None or current.status != expected_status:
                 return False
+
+            # REM-062: make a deep copy of current state for rollback
+            old_job = JobRecord(**vars(current))
             self._jobs[job.run_id] = job
+
             if write_manifest:
-                if self._use_sqlite:
-                    payload = self._job_to_raw(job)
-                    cur = self._sqlite_conn.execute(
-                        "UPDATE jobs SET payload=?,idempotency_key=?,owner_principal=?,"
-                        "job_type=?,status=?,submitted_at=? WHERE run_id=? AND status=?",
-                        (
-                            json.dumps(payload, ensure_ascii=False),
-                            job.idempotency_key,
-                            job.owner_principal,
-                            job.job_type,
-                            job.status,
-                            job.submitted_at,
-                            job.run_id,
-                            expected_status,
-                        ),
-                    )
-                    self._sqlite_conn.commit()
-                    if cur.rowcount == 0:
-                        # 另一个进程已迁移 status —— 回滚内存态，CAS 失败。
-                        del self._jobs[job.run_id]
-                        self._jobs[current.run_id] = current
-                        return False
-                else:
-                    self._write_manifest(job)
+                try:
+                    if self._use_sqlite:
+                        payload = self._job_to_raw(job)
+                        cur = self._sqlite_conn.execute(
+                            "UPDATE jobs SET payload=?,idempotency_key=?,owner_principal=?,"
+                            "job_type=?,status=?,submitted_at=? WHERE run_id=? AND status=?",
+                            (
+                                json.dumps(payload, ensure_ascii=False),
+                                job.idempotency_key,
+                                job.owner_principal,
+                                job.job_type,
+                                job.status,
+                                job.submitted_at,
+                                job.run_id,
+                                expected_status,
+                            ),
+                        )
+                        self._sqlite_conn.commit()
+                        if cur.rowcount == 0:
+                            # 另一个进程已迁移 status —— 回滚内存态，CAS 失败。
+                            self._jobs[job.run_id] = old_job
+                            return False
+                    else:
+                        self._write_manifest(job)
+                except Exception:
+                    # REM-062: rollback on persistence failure
+                    self._jobs[job.run_id] = old_job
+                    raise
             return True
 
     def _persist(self, job: JobRecord, *, create: bool = False) -> None:
@@ -646,8 +741,9 @@ class JobStore:
 
     # -- introspection ------------------------------------------------------
     def list_jobs(self, *, status: str | None = None) -> list[JobRecord]:
+        """REM-063: 返回副本列表，防止调用者修改内部状态。"""
         with self._lock:
-            jobs = list(self._jobs.values())
+            jobs = [JobRecord(**vars(j)) for j in self._jobs.values()]
         if status:
             jobs = [j for j in jobs if j.status == status]
         return jobs
@@ -658,6 +754,85 @@ class JobStore:
             for job in self._jobs.values():
                 counts[job.status] = counts.get(job.status, 0) + 1
         return counts
+
+    def retry_job(self, original_run_id: str, *, retry_reason: str = "manual_retry", reconcile: bool = False) -> JobRecord:
+        """REM-069: 创建一个新的 retry job（new run_id），拒绝 ACTIVE job 的 retry。
+
+        REM-070: 保留 retry lineage（root_operation_id, parent_run_id, attempt_id, retry_reason）。
+        REM-071: reconcile=True 时，检查 side-effect 是否已 commit，如果是则直接 finalize。
+        """
+        with self._lock:
+            original = self._jobs.get(original_run_id)
+            if original is None:
+                raise ServiceError("JOB_NOT_FOUND", f"job {original_run_id} not found", status=404)
+
+            # REM-069: 拒绝 ACTIVE 状态的 retry
+            if original.status in {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.CANCELLING}:
+                raise ServiceError(
+                    "JOB_RETRY_REJECTED",
+                    f"cannot retry job {original_run_id} in status {original.status} (active)",
+                    status=409,
+                )
+
+            # REM-071: reconcile - 检查 side-effect 是否已 commit
+            if reconcile and original.artifacts:
+                generation_committed = original.artifacts.get("generation_committed", False)
+                if generation_committed:
+                    # 数据已写入但 finalization 失败，直接更新为 SUCCEEDED，不创建 retry job
+                    finalized = JobRecord(**vars(original))
+                    finalized.status = JobStatus.SUCCEEDED
+                    finalized.error = None
+                    finalized.error_code = None
+                    finalized.finished_at = finalized.finished_at or _utc_now()
+                    finalized.artifacts = finalized.artifacts.copy()
+                    finalized.artifacts["reconciled_existing_commit"] = True
+                    self.update(finalized)
+                    return finalized
+
+            # REM-070: 构建 retry lineage
+            new_run_id = f"{original_run_id}-retry-{original.attempt + 1}"
+            retry_job = JobRecord(
+                run_id=new_run_id,
+                service=original.service,
+                requested_by=original.requested_by,
+                owner_principal=original.owner_principal,
+                tenant=original.tenant,
+                project=original.project,
+                job_type=original.job_type,
+                endpoint_policy=original.endpoint_policy,
+                request=original.request.copy() if original.request else {},
+                request_digest=original.request_digest,
+                status=JobStatus.SUBMITTED,
+                submitted_at=_utc_now(),
+                attempt=original.attempt + 1,
+                # REM-070: retry lineage
+                root_operation_id=original.root_operation_id or original.run_id,
+                parent_run_id=original.run_id,
+                attempt_id=original.attempt_id + 1,
+                retry_reason=retry_reason,
+            )
+            return self.create(retry_job)
+
+    def update_with_fence(self, job: JobRecord) -> bool:
+        """REM-072: 只在 worker_epoch + lease_token 匹配时才允许写入（fencing）。
+
+        从 job 读取 worker_epoch 和 lease_token，与当前持久化状态比较。
+        返回 True 表示写入成功，False 表示 fence 失败（stale worker）。
+        """
+        with self._lock:
+            current = self._jobs.get(job.run_id)
+            if current is None:
+                return False
+
+            # 检查 fence 条件：job 的 epoch/token 必须匹配 current
+            if current.worker_epoch != job.worker_epoch:
+                return False
+            if current.lease_token != job.lease_token:
+                return False
+
+            # Fence 通过，执行更新
+            self.update(job)
+            return True
 
     def close(self) -> None:
         if self._sqlite_conn is not None:

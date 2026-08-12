@@ -33,28 +33,73 @@ _EPS = 1e-12
 
 
 def _cs_rank_pct(x: np.ndarray, group: np.ndarray | None) -> np.ndarray:
-    """Cross-sectional rank percentile [0, 1], NaN-aware."""
+    """Cross-sectional rank percentile [0, 1], NaN-aware.
+
+    FL-P0-014: Vectorized implementation O(T×N log N) instead of O(T×N²).
+    Uses scipy.stats.rankdata for efficient ranking with proper tie handling.
+    """
     rows, cols = x.shape
     out = np.full((rows, cols), np.nan, dtype=float)
+
+    # FL-P0-014: Vectorized per-row ranking (much faster than nested loops)
     for r in range(rows):
         row_vals = x[r, :]
+
         if group is not None:
             g_row = group[r, :]
+            unique_groups = np.unique(g_row[np.isfinite(g_row)])
+
+            # Rank within each group
+            for g in unique_groups:
+                mask = (g_row == g) & np.isfinite(row_vals)
+                if not np.any(mask):
+                    continue
+
+                group_vals = row_vals[mask]
+                group_indices = np.where(mask)[0]
+
+                if len(group_vals) == 0:
+                    continue
+
+                # Use scipy rankdata for O(N log N) ranking with average tie method
+                try:
+                    from scipy.stats import rankdata
+                    ranks = rankdata(group_vals, method='average')
+                    # Convert to percentile [0, 1]
+                    percentiles = ranks / len(ranks)
+                    out[r, group_indices] = percentiles
+                except ImportError:
+                    # Fallback to O(N²) if scipy unavailable
+                    for i, idx in enumerate(group_indices):
+                        v = group_vals[i]
+                        rank = np.sum(group_vals < v) + 0.5 * np.sum(group_vals == v)
+                        out[r, idx] = rank / len(group_vals)
         else:
-            g_row = None
-        for c in range(cols):
-            v = row_vals[c]
-            if not np.isfinite(v):
+            # No grouping: rank entire row
+            finite_mask = np.isfinite(row_vals)
+            if not np.any(finite_mask):
                 continue
-            if g_row is not None:
-                mask = (g_row == g_row[c]) & np.isfinite(row_vals)
-            else:
-                mask = np.isfinite(row_vals)
-            peers = row_vals[mask]
-            if len(peers) == 0:
+
+            finite_vals = row_vals[finite_mask]
+            finite_indices = np.where(finite_mask)[0]
+
+            if len(finite_vals) == 0:
                 continue
-            rank = np.sum(peers < v) + 0.5 * np.sum(peers == v)
-            out[r, c] = rank / len(peers)
+
+            # FL-P0-014: Vectorized ranking O(N log N)
+            try:
+                from scipy.stats import rankdata
+                ranks = rankdata(finite_vals, method='average')
+                # Convert to percentile [0, 1]
+                percentiles = ranks / len(ranks)
+                out[r, finite_indices] = percentiles
+            except ImportError:
+                # Fallback to O(N²) if scipy unavailable
+                for i, idx in enumerate(finite_indices):
+                    v = finite_vals[i]
+                    rank = np.sum(finite_vals < v) + 0.5 * np.sum(finite_vals == v)
+                    out[r, idx] = rank / len(finite_vals)
+
     return out
 
 
@@ -142,21 +187,21 @@ class StateAdaptiveDeadband(SeriesOperator):
                     out[row, col] = curr
                     continue
 
-                # Compute delta and update history
-                delta = curr - xv[row - 1, col] if row > 0 and np.isfinite(xv[row - 1, col]) else np.nan
-                if np.isfinite(delta):
-                    delta_history.append(delta)
-                    if len(delta_history) > scale_window:
-                        delta_history.pop(0)
+                # FL-P0-001: Compute adaptive scale BEFORE adding current delta
+                # The threshold for bar t must NOT include delta_t itself (strict causality)
+                # Current implementation is CORRECT: delta_history only updated AFTER scale computation
 
-                # Compute adaptive scale
+                # Compute adaptive scale from PAST deltas only
                 if len(delta_history) >= 2:
                     delta_arr = np.array(delta_history)
                     if scale_method == "mad_delta":
                         scale_t = 1.4826 * np.median(np.abs(delta_arr - np.median(delta_arr)))
                     else:  # std_delta
                         scale_t = np.std(delta_arr, ddof=1)
-                    band_t = band_mult * scale_t
+
+                    # FL-P0-043: zero scale policy - avoid band=0 from float noise
+                    MIN_BAND = 1e-12  # Numerical floor to prevent spurious updates from float precision
+                    band_t = max(band_mult * scale_t, MIN_BAND)
                 else:
                     band_t = 0.0
 
@@ -165,6 +210,14 @@ class StateAdaptiveDeadband(SeriesOperator):
                 if np.abs(diff) > band_t + _EPS:
                     y_prev = curr
                 out[row, col] = y_prev
+
+                # FL-P0-001: Update delta history AFTER computing scale_t and making decision
+                # This ensures delta_t does not participate in its own threshold
+                delta = curr - xv[row - 1, col] if row > 0 and np.isfinite(xv[row - 1, col]) else np.nan
+                if np.isfinite(delta):
+                    delta_history.append(delta)
+                    if len(delta_history) > scale_window:
+                        delta_history.pop(0)
 
         return frame_like(x, out)
 
@@ -178,6 +231,9 @@ class StateAdaptiveDeadband(SeriesOperator):
 )
 class StateRankDeadband(SeriesOperator):
     """Rank-space deadband: only update when rank percentile moves > band_pct.
+
+    FL-P0-010: Output is the HELD RANK PERCENTILE (always in [0,1]),
+    not the held raw value.
 
     Operates in cross-sectional rank space: computes rank_pct(x_t) and only
     updates the output when |rank_t - rank_prev| > band_pct.
@@ -229,8 +285,7 @@ class StateRankDeadband(SeriesOperator):
         rank_pct = _cs_rank_pct(xv, gv)
 
         for col in range(cols):
-            y_prev = np.nan
-            rank_prev = np.nan
+            rank_held = np.nan
 
             for row in range(rows):
                 curr = xv[row, col]
@@ -238,23 +293,20 @@ class StateRankDeadband(SeriesOperator):
 
                 if not np.isfinite(curr) or not np.isfinite(rank_t):
                     out[row, col] = np.nan
-                    y_prev = np.nan
-                    rank_prev = np.nan
+                    rank_held = np.nan
                     continue
 
                 # First valid observation initializes
-                if not np.isfinite(y_prev):
-                    y_prev = curr
-                    rank_prev = rank_t
-                    out[row, col] = curr
+                if not np.isfinite(rank_held):
+                    rank_held = rank_t
+                    out[row, col] = rank_t  # FL-P0-010: output rank percentile
                     continue
 
                 # Check rank change
-                if np.abs(rank_t - rank_prev) > band_pct + _EPS:
-                    y_prev = curr
-                    rank_prev = rank_t
+                if np.abs(rank_t - rank_held) > band_pct + _EPS:
+                    rank_held = rank_t
 
-                out[row, col] = y_prev
+                out[row, col] = rank_held  # FL-P0-010: output held rank percentile
 
         return frame_like(x, out)
 
@@ -589,11 +641,13 @@ class StateCostAwareDeadband(SeriesOperator):
                     out[row, col] = curr
                     continue
 
-                # Compute cost-aware band
+                # Compute cost-aware band (FL-P0-009: invalid cost → fail-closed)
                 if np.isfinite(cost_t) and cost_t > 0:
                     band_t = cost_mult * cost_t
                 else:
-                    band_t = 0.0
+                    # Invalid/missing cost: fail-closed (output NaN, don't update state)
+                    out[row, col] = np.nan
+                    continue
 
                 # Deadband logic
                 diff = curr - y_prev
@@ -614,8 +668,17 @@ class StateCostAwareDeadband(SeriesOperator):
 class StateCostAwareSlew(SeriesOperator):
     """Cost-aware slew rate limiter: change rate inversely proportional to cost.
 
-    Lower liquidity (higher cost) → smaller allowed change:
-        limit_t = slew_mult / (cost_proxy_t + epsilon)
+    FL-P0-008: Dimensionally valid formula with bounded limit:
+        cost_norm_t = cost_t / typical_cost  (assume typical_cost ≈ 1 for normalized input)
+        limit_t = base_limit / (1 + k * cost_norm_t)
+
+    Where:
+        - base_limit = slew_mult (max allowed change when cost=0)
+        - k = 1.0 (sensitivity to cost)
+        - cost=0 → limit = base_limit (full freedom)
+        - cost→∞ → limit → 0 (tight constraint)
+
+    FL-P0-009: Invalid cost (NaN/negative/missing) → fail-closed (output NaN).
 
     Slew limiting:
         delta_t = x_t - y_{t-1}
@@ -684,11 +747,18 @@ class StateCostAwareSlew(SeriesOperator):
                     out[row, col] = curr
                     continue
 
-                # Compute cost-aware slew limit (inversely proportional to cost)
+                # FL-P0-008: Compute cost-aware slew limit (bounded formula)
+                # FL-P0-009: Invalid cost → fail-closed
                 if np.isfinite(cost_t) and cost_t >= 0:
-                    limit_t = slew_mult / (cost_t + EPSILON)
+                    # limit_t = base_limit / (1 + k * cost_norm)
+                    # Assume cost is already normalized (typical_cost ≈ 1)
+                    cost_norm = cost_t
+                    k = 1.0
+                    limit_t = slew_mult / (1.0 + k * cost_norm)
                 else:
-                    limit_t = slew_mult / EPSILON  # Very large limit if cost is invalid
+                    # Invalid/missing cost: fail-closed (output NaN, don't update state)
+                    out[row, col] = np.nan
+                    continue
 
                 # Slew limiting
                 delta_t = curr - y_prev
@@ -794,12 +864,16 @@ class StateConfidenceWeightedEma(SeriesOperator):
                     out[row, col] = curr
                     continue
 
-                # Confidence must be in [0, 1]; if invalid, use alpha_min
+                # FL-P0-033: confidence must be in [0, 1]; out-of-range is fail-closed
                 if not np.isfinite(conf):
                     alpha_t = alpha_min
+                elif conf < 0.0 or conf > 1.0:
+                    # FL-P0-033: Out-of-range confidence → fail-closed (output NaN)
+                    # Don't silently clamp; reject invalid confidence values
+                    out[row, col] = np.nan
+                    continue
                 else:
-                    conf_clamped = float(np.clip(conf, 0.0, 1.0))
-                    alpha_t = alpha_min + conf_clamped * (alpha_max - alpha_min)
+                    alpha_t = alpha_min + conf * (alpha_max - alpha_min)
 
                 # EMA update
                 y_prev = y_prev + alpha_t * (curr - y_prev)
@@ -894,10 +968,11 @@ class StateUncertaintyDeadband(SeriesOperator):
                     out[row, col] = curr
                     continue
 
-                # Uncertainty invalid or non-positive: use alpha_min behavior (update)
+                # FL-P0-034: Uncertainty invalid or non-positive → fail-closed (output NaN)
+                # Don't treat uncertainty<=0 as "no constraint" (unconditional update)
+                # This would make the filter vulnerable to invalid uncertainty estimates
                 if not np.isfinite(unc) or unc <= 0.0:
-                    y_prev = curr
-                    out[row, col] = curr
+                    out[row, col] = np.nan
                     continue
 
                 # Check threshold
@@ -1087,3 +1162,31 @@ class StateL2PartialAdjustment(SeriesOperator):
         return frame_like(x, out)
 
 
+
+
+def _register_surface() -> None:
+    """注册到 extended surface 并添加 Polars 后端支持。"""
+    import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.rolling_pack import register_polars_bridge
+
+    _CANONICALS = {
+        "state_adaptive_deadband",
+        "state_rank_deadband",
+        "state_quantile_hysteresis",
+        "state_adaptive_slew_limit",
+        "state_cost_aware_deadband",
+        "state_cost_aware_slew",
+        "state_confidence_weighted_ema",
+        "state_uncertainty_deadband",
+        "state_l1_turnover_prox",
+        "state_l2_partial_adjustment",
+    }
+
+    _surface.extend_extended_only(_CANONICALS)
+
+    # Polars 后端：委托 pandas reference
+    for _canon in _CANONICALS:
+        register_polars_bridge(_canon)
+
+
+_register_surface()

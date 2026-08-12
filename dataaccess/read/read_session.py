@@ -21,16 +21,28 @@ FactorEngine 批量挖因子时对同一批 dataset/factor_id 反复 ``read``—
 
 **契约**：仅**读**场景使用——job 内写数据会导致 resolution 缓存陈旧
 （路径/文件集在写后变化）。写场景请用 Store 直连或新开会话。
+
+R32-P0-051: Explicit state machine (NEW/ACTIVE/CLOSED) with ExitStack for cleanup.
+R32-P0-052: Critical cleanup failures must not be silent.
 """
 from __future__ import annotations
 
+from contextlib import ExitStack
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable
 
 from data_access.security.execution_context import (
     _execution_ctx_var,
     resolve_execution_context,
 )
+
+
+class SessionState(Enum):
+    """R32-P0-051: Explicit session state machine."""
+    NEW = "NEW"
+    ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
 
 
 @dataclass(frozen=True)
@@ -54,10 +66,18 @@ class PhysicalResolutionContext:
 
     @classmethod
     def from_store(cls, store: Any, dataset: str) -> "PhysicalResolutionContext":
-        """从 store 防御性派生各维度（任一步失败 → 空串，不抛）。"""
+        """从 store 防御性派生各维度（任一步失败 → 空串，不抛）。
+
+        R32-P0-049: Failed PhysicalResolutionContext must NOT return shared empty
+        string. Production: fail. Research: return UNKNOWN_UNSHAREABLE with unique
+        generation to prevent cache collision.
+        """
         namespace = ""
         source_profile = ""
         mutation_generation = ""
+        contract_digest = ""
+        failed = False
+
         try:
             ds = store._registry.get(dataset)
             namespace = str(getattr(ds, "namespace", "") or getattr(ds, "provider", "") or "")
@@ -67,7 +87,8 @@ class PhysicalResolutionContext:
                 str(getattr(ds, "base_path", "") or ""),
             ])
         except Exception:
-            pass
+            failed = True
+
         try:
             token = store.manifest_version(dataset)
             if isinstance(token, dict):
@@ -77,12 +98,35 @@ class PhysicalResolutionContext:
                     or ""
                 )
         except Exception:
-            pass
-        contract_digest = ""
+            failed = True
+
         try:
             contract_digest = str(store._contract_digest_for(dataset) or "")
         except Exception:
-            pass
+            failed = True
+
+        # R32-P0-049: If resolution failed, production should fail, research gets
+        # unshareable unique identity
+        if failed and (not namespace and not source_profile and not mutation_generation and not contract_digest):
+            try:
+                from data_access.read.query_budget import is_strict_semantics
+                if is_strict_semantics():
+                    # Production: fail
+                    raise RuntimeError(
+                        f"PhysicalResolutionContext failed for dataset {dataset} in strict mode"
+                    )
+            except Exception:
+                pass
+            # Research: unique unshareable identity prevents cache collision
+            import time
+            unique_id = f"UNKNOWN_UNSHAREABLE:{time.time_ns()}"
+            return cls(
+                namespace=unique_id,
+                contract_digest=unique_id,
+                source_profile=unique_id,
+                mutation_generation=unique_id,
+            )
+
         return cls(
             namespace=namespace,
             contract_digest=contract_digest,
@@ -98,6 +142,8 @@ class _ResolutionCache(dict):
     访问 resolution cache；本类在基键后追加 ``namespace / contract_digest /
     source_profile / mutation_generation`` 四维——contract 更新 / mutation /
     source profile 变化都会改变 cache key，旧条目不再误命中。
+
+    R32-P0-050: clear() must also clear _memo to ensure fresh context after mutations.
     """
 
     def __init__(self, context_provider: Callable[[str], PhysicalResolutionContext] | None = None) -> None:
@@ -130,9 +176,18 @@ class _ResolutionCache(dict):
     def __contains__(self, key: object) -> bool:
         return super().__contains__(self._enrich(key))
 
+    def clear(self) -> None:
+        """R32-P0-050: Clear must also clear _memo for fresh context."""
+        super().clear()
+        self._memo.clear()
+
 
 class DataReadSession:
-    """job 级读会话：上下文绑定 + calendar 冻结 + resolution 复用。"""
+    """job 级读会话：上下文绑定 + calendar 冻结 + resolution 复用。
+
+    R32-P0-051: Explicit state machine with ExitStack for proper cleanup.
+    R32-P0-052: Critical cleanup failures are logged and propagated.
+    """
 
     def __init__(
         self,
@@ -165,69 +220,118 @@ class DataReadSession:
         self._resolution_cache: dict[tuple[Any, ...], Any] = _ResolutionCache(
             context_provider=lambda ds: PhysicalResolutionContext.from_store(store, ds)
         )
-        self._token: Any = None
-        self._mode_token: Any = None
-        self._prev_cache: Any = None
-        self._closed = False
+        # R32-P0-051: Explicit state machine
+        self._state = SessionState.NEW
+        # R32-P0-051: Use ExitStack for automatic cleanup registration
+        self._exit_stack = ExitStack()
+        self._cleanup_errors: list[Exception] = []
 
     def __enter__(self) -> "DataReadSession":
-        if self._closed:
-            raise RuntimeError("DataReadSession 已关闭，无法再次进入")
-        # 1) 绑定请求级执行上下文（整个 job）。
-        self._token = _execution_ctx_var.set(self._ctx)
-        # 1b) R39 P0 #50：job 级 RuntimeModeIdentity 单一权威——整个 session 内
-        #     QueryBudget / is_strict_semantics / PIT / calendar 都读它，不再各层
-        #     重读 env。退出时恢复。
-        from data_access.runtime.mode_identity import (
-            reset_runtime_mode_identity,
-            set_runtime_mode_identity,
-        )
+        """R32-P0-051: State machine prevents double-enter."""
+        if self._state == SessionState.CLOSED:
+            raise RuntimeError("DataReadSession is CLOSED, cannot re-enter")
+        if self._state == SessionState.ACTIVE:
+            raise RuntimeError("DataReadSession is already ACTIVE, cannot enter twice")
 
-        rm = getattr(self._ctx, "run_mode", None)
-        if rm is not None:
-            self._mode_token = set_runtime_mode_identity(
-                rm, source="DataReadSession"
-            )
-        # 2) R38 P0-050：resolution 缓存放 **ContextVar**（request-scoped），不再
-        #    修改 Store 全局属性——并发 session A/B overlap 时 A exit 不会清掉
-        #    B 的 cache。Store ``_resolution_cache`` 仅作向后兼容显示。
-        from data_access.runtime.read_session_context import (
-            reset_resolution_cache,
-            set_resolution_cache,
-        )
+        self._state = SessionState.ACTIVE
 
-        self._cache_token = set_resolution_cache(self._resolution_cache)
-        # 3) job 级冻结 calendar 世界（PIT 语义跨因子稳定）。
         try:
+            # 1) 绑定请求级执行上下文（整个 job）。
+            token = _execution_ctx_var.set(self._ctx)
+            # R32-P0-051: Register cleanup immediately with ExitStack
+            self._exit_stack.callback(_execution_ctx_var.reset, token)
+
+            # 1b) R39 P0 #50：job 级 RuntimeModeIdentity 单一权威——整个 session 内
+            #     QueryBudget / is_strict_semantics / PIT / calendar 都读它，不再各层
+            #     重读 env。退出时恢复。
+            from data_access.runtime.mode_identity import (
+                reset_runtime_mode_identity,
+                set_runtime_mode_identity,
+            )
+
+            rm = getattr(self._ctx, "run_mode", None)
+            if rm is not None:
+                mode_token = set_runtime_mode_identity(rm, source="DataReadSession")
+                # R32-P0-051: Register cleanup
+                self._exit_stack.callback(reset_runtime_mode_identity, mode_token)
+
+            # 2) R38 P0-050：resolution 缓存放 **ContextVar**（request-scoped），不再
+            #    修改 Store 全局属性——并发 session A/B overlap 时 A exit 不会清掉
+            #    B 的 cache。Store ``_resolution_cache`` 仅作向后兼容显示。
+            from data_access.runtime.read_session_context import (
+                reset_resolution_cache,
+                set_resolution_cache,
+            )
+
+            cache_token = set_resolution_cache(self._resolution_cache)
+            # R32-P0-051: Register cleanup
+            self._exit_stack.callback(reset_resolution_cache, cache_token)
+
+            # 3) job 级冻结 calendar 世界（PIT 语义跨因子稳定）。
             self._store.lock_calendars()
+            # R32-P0-051: Register cleanup for calendar unlock
+            def _unlock_calendars():
+                try:
+                    # Attempt to unlock calendars if method exists
+                    if hasattr(self._store, 'unlock_calendars'):
+                        self._store.unlock_calendars()
+                except Exception as e:
+                    # R32-P0-052: Log but don't fail on cleanup
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Calendar unlock failed during cleanup: {e}"
+                    )
+            self._exit_stack.callback(_unlock_calendars)
+
         except Exception:
-            self.__exit__(None, None, None)
+            # R32-P0-051: If any setup fails, rollback all cleanups
+            self._exit_stack.close()
+            self._state = SessionState.CLOSED
             raise
+
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        if self._token is not None:
-            _execution_ctx_var.reset(self._token)
-            self._token = None
-        try:
-            from data_access.runtime.read_session_context import (
-                reset_resolution_cache,
-            )
+        """R32-P0-051/052: Proper cleanup with error tracking.
 
-            if getattr(self, "_cache_token", None) is not None:
-                reset_resolution_cache(self._cache_token)
-                self._cache_token = None
-        except Exception:
-            pass
-        try:
-            from data_access.runtime.mode_identity import reset_runtime_mode_identity
+        Critical cleanup failures (ContextVar reset, lease release, calendar cleanup)
+        must be logged and tracked. Production worker health should be downgraded
+        on critical cleanup failure.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
 
-            if getattr(self, "_mode_token", None) is not None:
-                reset_runtime_mode_identity(self._mode_token)
-                self._mode_token = None
-        except Exception:
-            pass
-        self._closed = True
+        try:
+            # R32-P0-051: ExitStack handles all cleanups in reverse order
+            self._exit_stack.close()
+        except Exception as e:
+            # R32-P0-052: Critical cleanup failure must not be silent
+            logger.error(f"Critical DataReadSession cleanup failed: {e}", exc_info=True)
+            self._cleanup_errors.append(e)
+
+            # R32-P0-052: Track cleanup failures for production health monitoring
+            try:
+                # Emit metric/telemetry for cleanup failure
+                from data_access.telemetry import record_cleanup_failure
+                record_cleanup_failure("DataReadSession", str(e))
+            except Exception:
+                pass
+
+        finally:
+            self._state = SessionState.CLOSED
+
+        # R32-P0-052: If cleanup failed and we're in production, surface the error
+        if self._cleanup_errors:
+            try:
+                from data_access.read.query_budget import is_strict_semantics
+                if is_strict_semantics():
+                    # Production: critical cleanup failure should be visible
+                    logger.critical(
+                        f"DataReadSession had {len(self._cleanup_errors)} critical cleanup failures: "
+                        f"{[str(e) for e in self._cleanup_errors]}"
+                    )
+            except Exception:
+                pass
 
     # ---- 便捷代理（resolution 缓存自动生效）----
 

@@ -251,6 +251,7 @@ def test_report_hard_gate_set_all_present_and_bool():
         "MODEL_MOE_ALL_ACTIVE_EXPERTS_HAVE_SUPPORT",
         "MODEL_FINAL_HOLDOUT_NOT_EXPOSED_TO_SEARCH",
         "MODEL_CURRENT_HEAD_EVIDENCE_FRESH",
+        "MODEL_ALL_DIRECT_USE_HAVE_BEHAVIORAL_CERTIFICATION",
     }
     assert set(gates.keys()) == expected
     for name, entry in gates.items():

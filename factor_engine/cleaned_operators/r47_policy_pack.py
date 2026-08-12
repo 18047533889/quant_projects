@@ -23,6 +23,10 @@ from cleaned_operators.operator_policy import _EXPLICIT_POLICIES  # noqa: E402
 
 _R47_POLICIES: dict[str, dict[str, object]] = {
     # ---- intraday state / event / slice / profile (minute -> daily EOD) ----
+    "intra_kalman_latent_price": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_state_space_volume_components": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_functional_motif_score": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_visibility_graph_features": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_state_count": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_state_sum": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_state_vwap": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
@@ -57,6 +61,11 @@ _R47_POLICIES: dict[str, dict[str, object]] = {
     "intra_round_price_barrier_response": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_limit_pre_hit_pressure_profile": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     "intra_eod_reversal_decomposition": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    # ---- R47 pattern recognition operators ----
+    "intra_smart_money_fcm_score": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_price_peak_ridge_valley_state": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_volume_peak_ridge_valley_state": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intraday_value_at_extreme_state": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
     # ---- daily technical indicators / chip (trailing only) ----
     "HMA": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "QQE": {"scope": "ts", "pit_safe": True, "min_periods": 1},
@@ -72,6 +81,70 @@ _R47_POLICIES: dict[str, dict[str, object]] = {
     "panel_factor_pocket_strength": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "cs_predictability_mosaic_score": {"scope": "cs", "pit_safe": True, "min_periods": 1},
     "panel_predictability_mosaic_score": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    # ---- fiscal_batch1 (TRUE_GAP operators 2026-08-13) ----
+    "fiscal_acceleration": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 3},
+    "fiscal_pct_change": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 2},
+    "fiscal_rolling_std": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 3},
+    "fiscal_accrual_quality": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 4},
+    "fiscal_direction_consistency": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 3},
+    # ---- frequency_filter_batch (TRUE_GAP operators 2026-08-13) ----
+    "ts_bessel_lowpass_causal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_fir_lowpass_causal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_spectral_lowpass_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_causal_savgol_endpoint": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- panel_batch1 (TRUE_GAP operators 2026-08-13) ----
+    "panel_day_night_beta_gap": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "pastor_stambaugh_beta": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "price_delay_score": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "report_asof": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "event_window_return_asof": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- cs_batch1: cross-sectional TRUE_GAP operators (2026-08-13) ----
+    "cs_isolation_forest_score": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_factor_bucket_return": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_empirical_bayes_shrinkage": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "cs_shrink_to_group_mean": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "panel_peer_graph_aggregate": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    # ---- frequency-domain / causal filters (trailing only) ----
+    "ts_bessel_lowpass_causal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_fir_lowpass_causal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_spectral_lowpass_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_causal_savgol_endpoint": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- Kalman filter variants (2026-08-13 TRUE_GAP batch) ----
+    "ts_alpha_beta_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_h_infinity_level_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_adaptive_noise_kalman": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_student_t_kalman_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- Adaptive filters (2026-08-13 TRUE_GAP batch) ----
+    "ts_mcginley_dynamic": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_vidya": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_one_euro_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_nlms_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_rls_filter": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- denoise / regularization filters (2026-08-13 TRUE_GAP batch) ----
+    "ts_ssa_denoise_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_wavelet_shrinkage_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_total_variation_filter_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_l1_trend_filter_trailing": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # ---- Intraday topology/manifold operators (2026-08-13 TRUE_GAP batch) ----
+    "intra_matrix_profile_session_features": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_dmd_koopman_features": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_covariance_manifold_shift": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_critical_transition_score": {"scope": "session_intraday", "pit_safe": True, "min_periods": 1, "session_aware": True, "reset_at_session_boundary": True},
+    # ---- Smart money / graph intraday (2026-08-13) ----
+    "intra_dynamic_stock_graph_features": {"scope": "session_intraday", "pit_safe": True, "min_periods": 5, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_common_trading_intensity": {"scope": "session_intraday", "pit_safe": True, "min_periods": 3, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_local_conditional_entropy": {"scope": "session_intraday", "pit_safe": True, "min_periods": 10, "session_aware": True, "reset_at_session_boundary": True},
+    "intra_smart_money_vwap_ratio": {"scope": "session_intraday", "pit_safe": True, "min_periods": 4, "session_aware": True, "reset_at_session_boundary": True},
+    # ---- TRUE_GAP time-semantic operators (2026-08-13) ----
+    "financial_snapshot_lag": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "same_calendar_day_mean": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "same_calendar_month_return": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # ---- fiscal_batch3: capital stock / lifecycle / efficiency (2026-08-13) ----
+    "fiscal_capital_stock": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 8},
+    "fiscal_perpetual_inventory": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 8},
+    "cash_flow_lifecycle_stage": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 3},
+    "laborforce_efficiency": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 3},
+    "years_since_date": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 1},
 }
 
 _EXPLICIT_POLICIES.update(_R47_POLICIES)

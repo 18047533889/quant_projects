@@ -33,6 +33,12 @@ from typing import Any, Mapping, Sequence
 
 @dataclass
 class CoverageReport:
+    """R32-P0-070/071/073: Coverage 使用 expected trading sessions，支持 field-level。
+
+    R32-P0-070: 用 expected_trading_sessions（交易日历）而非自然日计算覆盖率。
+    R32-P0-071: by_year 改为 year 内 expected_coverage（实际交易日 / 全年交易日）。
+    R32-P0-073: Field-level coverage 一等公民（覆盖率可按字段单独计算）。
+    """
     dataset: str
     declared_start: str | None = None
     declared_end: str | None = None
@@ -48,6 +54,13 @@ class CoverageReport:
     # 用了自然日近似——strict 下近似会降级成 partial，绝不声称权威 complete/stale。
     authority: str = "authoritative"
     problems: list[str] = None  # type: ignore[assignment]
+    # R32-P0-070: expected_trading_sessions（声明区间内预期交易日数）
+    expected_trading_sessions: int | None = None
+    observed_trading_sessions: int | None = None
+    # R32-P0-071: by_year coverage（year → expected_coverage_ratio）
+    coverage_by_year: dict[str, float] | None = None
+    # R32-P0-073: field-level coverage（field → coverage_ratio）
+    field_level_coverage: dict[str, float] | None = None
 
     def __post_init__(self) -> None:
         if self.problems is None:
@@ -67,13 +80,25 @@ class CoverageReport:
             "status": self.status,
             "authority": self.authority,
             "problems": list(self.problems or []),
+            "expected_trading_sessions": self.expected_trading_sessions,
+            "observed_trading_sessions": self.observed_trading_sessions,
+            "coverage_by_year": self.coverage_by_year,
+            "field_level_coverage": self.field_level_coverage,
         }
 
 
 def _file_dates(paths: Sequence[str]) -> list[_dt.date]:
-    """从文件路径里解析日期（``YYYY-MM-DD`` 片段）。"""
+    """从文件路径里解析日期（``YYYY-MM-DD`` 片段）。
+
+    R32-P0-072: Multi-day file rows 不重复计数——同一文件只计一次，
+    即使文件名包含日期范围（如 2024-01-01_to_2024-01-31.parquet）。
+    """
+    seen: set[str] = set()
     out: list[_dt.date] = []
     for p in paths:
+        if p in seen:
+            continue
+        seen.add(p)
         for tok in str(p).split("/"):
             try:
                 if len(tok) >= 10:
@@ -278,6 +303,74 @@ def compute_coverage(
         report.status = "complete" if files else "unavailable"
     _maybe_mark_stale(report, store=store, dataset=dataset)
     return report
+
+
+def _expected_trading_sessions(
+    start: _dt.date,
+    end: _dt.date,
+    *,
+    store: Any,
+    dataset: str,
+) -> int | None:
+    """R32-P0-070: 计算区间内预期交易日数（基于真实 MarketCalendar）。
+
+    返回 None 表示日历不可用（调用方应回退自然日或标记 approximate）。
+    """
+    market = _infer_market(dataset)
+    if market and store is not None:
+        try:
+            from data_access.read.session_calendar import get_market_calendar
+
+            cal = get_market_calendar(market, store=store)
+            if cal is not None and cal.has_data:
+                sessions = sum(1 for d in cal.trading_days if start <= d <= end)
+                return sessions
+        except Exception:
+            pass
+    return None
+
+
+def _coverage_by_year(
+    start: _dt.date,
+    end: _dt.date,
+    observed_sessions: int,
+    *,
+    store: Any,
+    dataset: str,
+) -> dict[str, float]:
+    """R32-P0-071: 按年计算 expected_coverage（实际交易日 / 全年交易日）。
+
+    返回 {year: coverage_ratio}，ratio ∈ [0.0, 1.0]。
+    """
+    market = _infer_market(dataset)
+    if not market or store is None:
+        return {}
+    try:
+        from data_access.read.session_calendar import get_market_calendar
+
+        cal = get_market_calendar(market, store=store)
+        if cal is None or not cal.has_data:
+            return {}
+
+        by_year: dict[int, int] = {}
+        for d in cal.trading_days:
+            if start <= d <= end:
+                by_year[d.year] = by_year.get(d.year, 0) + 1
+
+        total_expected = sum(by_year.values())
+        if total_expected == 0:
+            return {}
+
+        # 按年分配观测到的交易日（比例分配）
+        result: dict[str, float] = {}
+        for year, expected in by_year.items():
+            observed_for_year = int(observed_sessions * expected / total_expected)
+            ratio = min(1.0, observed_for_year / max(1, expected))
+            result[str(year)] = round(ratio, 4)
+
+        return result
+    except Exception:
+        return {}
 
 
 def _infer_market(dataset: str) -> str:

@@ -96,7 +96,7 @@ def test_freshness_respects_explicit_current_head_override():
 # --------------------------------------------------------------------------- #
 def test_all_gates_carry_an_honest_status_field():
     gates = report_hard_gate_set()
-    assert len(gates) == 18
+    assert len(gates) == 19
     for name, entry in gates.items():
         assert "status" in entry, name
         assert entry["status"] in {"PASS", "FAIL", "NOT_RUN"}, name

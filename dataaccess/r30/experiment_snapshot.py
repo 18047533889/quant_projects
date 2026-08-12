@@ -131,15 +131,24 @@ class ExperimentDataSnapshot:
         datasets: Mapping[str, str],
         calendar: "CalendarSnapshot | Any | None" = None,
         universe: "UniverseSnapshot | str | None" = None,
+        *,
+        fail_on_unknown_source: bool = True,
     ) -> "ExperimentDataSnapshot":
         """从 store 构建实验数据快照。
+
+        R32-P0-074: required source unknown 时 fail closed——production 下必须有明确
+        的 source snapshot id，不允许用占位符/fallback。
 
         - ``calendar``：已是 ``CalendarSnapshot`` 直接用；原始 ``MarketCalendar``
           则现场 ``CalendarSnapshot.build``；None → ``CalendarSnapshot.from_store``；
         - ``universe``：已是 ``UniverseSnapshot`` 直接用；str（universe_id）→
           ``UniverseSnapshot.from_store``；None → 不绑定 universe；
         - ``datasets``：{name: caller_id}，实际 source id 由 store 解析。
+        - ``fail_on_unknown_source``：True = 任一 dataset 无法解析 source id 则 raise；
+          False = 用确定性占位符（兼容旧行为，research 模式）。
         """
+        from data_access.core.exceptions import ValidationError
+
         experiment_id = str(experiment_id)
         market_s = str(market) if market is not None else None
 
@@ -160,6 +169,17 @@ class ExperimentDataSnapshot:
             uni_snap = UniverseSnapshot.from_store(store, universe.strip())
 
         ds_ids = datasets_source_ids(store, datasets)
+
+        # R32-P0-074: fail-closed 检查
+        if fail_on_unknown_source:
+            for ds_name, ds_id in ds_ids.items():
+                if ds_id.endswith(stable_digest(ds_name)):
+                    # 用了 fallback 占位符（store 无法提供真实 source id）
+                    raise ValidationError(
+                        f"ExperimentDataSnapshot 构建失败（R32-P0-074 fail-closed）：dataset "
+                        f"{ds_name!r} 无法解析 source snapshot id（store.manifest_version 不可用）。"
+                        "production 下必须有明确的 source id，不允许用占位符。"
+                    )
 
         semantic = _safe_digest(store, "contract_ir_fingerprint") or _safe_digest(
             store, "registry_fingerprint"

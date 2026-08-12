@@ -47,6 +47,7 @@ include = [
     "ir*",
     "market*",
     "mining*",
+    "modeling*",
     "planner*",
     "research_tools*",
     "runtime*",

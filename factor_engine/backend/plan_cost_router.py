@@ -375,6 +375,14 @@ def _data_source_kind(ctx: Any) -> str:
 
 
 def estimate_plan_rows(ctx: Any) -> int:
+    """MB-P1-001/002/003: Use DataShapeEstimate instead of fixed 3000 instruments.
+
+    Priority:
+      1. Existing runtime_stats
+      2. DataShapeEstimate from metadata
+      3. Direct data_source inspection
+      4. Conservative fallback
+    """
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     for key in ("row_count_estimate", "input_row_count", "estimated_rows"):
         try:
@@ -383,6 +391,17 @@ def estimate_plan_rows(ctx: Any) -> int:
                 return value
         except Exception:
             pass
+
+    # MB-P1-002: Try DataShapeEstimate first
+    try:
+        from planner.data_shape import estimate_shape_from_context
+        shape = estimate_shape_from_context(ctx)
+        if shape.estimated_rows > 0:
+            return shape.estimated_rows
+    except Exception:
+        pass
+
+    # Fall back to direct data_source inspection
     ds = getattr(ctx, "data_source", None)
     inner = getattr(ds, "inner", None)
     if inner is not None:
@@ -392,12 +411,35 @@ def estimate_plan_rows(ctx: Any) -> int:
         if isinstance(filt, (list, tuple, set, frozenset)) and len(filt) == 0:
             # R13 P0-69: an explicit EMPTY instrument filter means zero rows.
             return 1
-        instruments = len(filt) if filt else 3000
+        # MB-P1-001: Get actual instrument count, not fixed 3000
+        if isinstance(filt, (list, tuple, set, frozenset)):
+            instruments = len(filt)
+        elif filt is None:
+            # No filter = ALL_A conservative estimate
+            instruments = 5500
+        else:
+            instruments = 3000  # Unknown filter type fallback
+
         start = getattr(ds, "start_date", None)
         end = getattr(ds, "end_date", None)
         if start and end:
-            import pandas as pd
-            dates = max(1, len(pd.bdate_range(start, end)))
+            # MB-P1-003: Try calendar service first, then approximate
+            try:
+                calendar = getattr(ctx, "calendar", None) or getattr(ds, "calendar", None)
+                if calendar is not None:
+                    sessions = calendar.sessions_between(start, end)
+                    if hasattr(sessions, "__len__"):
+                        dates = max(1, len(sessions))
+                    else:
+                        # Fall back to business day approximation
+                        import pandas as pd
+                        dates = max(1, len(pd.bdate_range(start, end)))
+                else:
+                    import pandas as pd
+                    dates = max(1, len(pd.bdate_range(start, end)))
+            except Exception:
+                import pandas as pd
+                dates = max(1, len(pd.bdate_range(start, end)))
             return max(1, dates * max(1, instruments))
     except Exception:
         pass
@@ -436,6 +478,12 @@ def _cost(
     """算子 execution cost（**不含** conversion——R31-P0-016：conversion 只在
     physical edge 真正发生时才计一次，不由每个 operator 各自携带）。
 
+    MB-P1-006: This function computes ONLY operator execution cost.
+    Conversion penalties are handled separately by:
+      - _one_conversion_penalty() for plan-level conversions
+      - edge_conversion_penalty_ms() for edge-level conversions
+      - predict_ttdc() for scan/materialize conversions
+
     ``occ`` 提供 bound params（window/feature_dim/regressors），经 CostContext
     进 ``estimate_backend_cost``——window=5 与 window=120 不再估出同一成本。
     """
@@ -455,29 +503,61 @@ def _cost(
             canonical, "pandas_numpy", row_count_estimate=rows
         )
         return pandas_cost + _delegate_penalty(rows)
+
+    # MB-P1-001: Use actual instruments from occ.cost_ctx if available
+    instruments = 3000  # Default fallback
+    if occ is not None:
+        ctx = occ.cost_ctx(rows, instruments)
+        # Try to get better instrument estimate from context
+        return estimate_backend_cost(
+            canonical,
+            key,
+            row_count_estimate=rows,
+            requires_conversion=False,
+            cost_ctx=ctx,
+        )
+
     return estimate_backend_cost(
         canonical,
         key,
         row_count_estimate=rows,
         requires_conversion=False,
-        cost_ctx=occ.cost_ctx(rows, 3000) if occ is not None else None,
+        cost_ctx=None,
     )
 
 
-def _one_conversion_penalty(backend: str, rows: int) -> float:
-    """R31-P0-016：整计划**一次**表示转换代价（后端候选层，非每算子）。
+def _one_conversion_penalty(backend: str, rows: int, bytes_estimate: int = 0) -> float:
+    """MB-P1-005/007: 整计划**一次**表示转换代价，按 edge 类型和字节精细计价。
 
     单 backend 候选（polars_panel / polars_long / duckdb_sql）只发生一次
     「源表示 → backend 表示 / SQL 物化回 pandas」转换；Pandas reference 零转换。
+
+    MB-P1-005: 确保不与 predict_ttdc 的 conversion_ms 重复计费。
+    MB-P1-007: 根据 edge 类型和字节数精细计价，而非统一 penalty。
+
+    当 predict_ttdc 被使用时（shape-aware TTDC），conversion 由 predict_ttdc
+    负责，此函数返回 0。只有在无 shape 信息时才用此 fallback。
     """
     if backend in {"pandas_numpy"}:
         return 0.0
+
+    # Base conversion overhead
     if backend in {"duckdb_sql", "clickhouse_sql"}:
-        millions = max(rows / 1_000_000.0, 0.001)
-        return 5.0 + 0.10 * millions
-    # polars_panel / polars_long
+        base_ms = 5.0
+        bytes_coeff = 0.10
+    else:
+        # polars_panel / polars_long
+        base_ms = 2.0
+        bytes_coeff = 0.05
+
+    # MB-P1-007: Add bytes-based cost if available
+    if bytes_estimate > 0:
+        mb = bytes_estimate / 1_000_000.0
+        return base_ms + bytes_coeff * mb
+
+    # Fall back to row-based estimate
     millions = max(rows / 1_000_000.0, 0.001)
-    return 2.0 + 0.05 * millions
+    return base_ms + bytes_coeff * millions
 
 
 def _candidate_is_measured(ops: tuple[str, ...], backend: str) -> bool:
@@ -527,31 +607,87 @@ def _execution_memory_budget(ctx: Any) -> int | None:
     return int(plan.process_budget_bytes)
 
 
-def estimate_plan_peak_memory(ops: tuple[str, ...], rows: int, backend: str = "pandas_numpy") -> int:
-    """估算整计划峰值内存（字节），**按 backend 分**（R31-P0-017）。
+def estimate_plan_peak_memory(
+    ops: tuple[str, ...],
+    rows: int,
+    backend: str = "pandas_numpy",
+    shape: Any | None = None,
+) -> int:
+    """MB-P1-004: 精细峰值内存模型，考虑 live columns/dtype/sort/hash/conversion overlap。
 
     同一计划不同 backend 的峰值差异很大：DuckDB streaming SQL 无需整个 wide
     panel 驻留；Polars lazy 可 projection pushdown + streaming；Pandas 才需要
-    全量 materialization。旧实现一份 generic peak 会让所有 backend 一起被拒。
+    全量 materialization。
+
+    新增：
+      - shape 参数提供列数/dtype/density 信息
+      - 考虑转换重叠（source + target + scratch 同时存在）
+      - 区分 sort/hash/window 临时内存
     """
     from backend.operator_cost import get_operator_cost
 
-    cells = max(1, rows) * 8
-    factor = 1.0
+    # MB-P1-004: Use shape if available for more accurate column count
+    if shape is not None:
+        columns = int(getattr(shape, "estimated_columns", 0) or 8)
+        avg_row_width = float(getattr(shape, "average_row_width_bytes", 64.0))
+        density = float(getattr(shape, "density", 0.95))
+    else:
+        columns = 8
+        avg_row_width = 64.0
+        density = 0.95
+
+    # Base memory: actual data
+    base_memory = int(max(1, rows) * avg_row_width * density)
+
+    # Operator memory factors
+    memory_factor = 1.0
+    has_sort = False
+    has_hash = False
+    has_window = False
+
     for op in ops:
         cost = get_operator_cost(op)
         if cost.memory == "high":
-            factor += 0.5
+            memory_factor += 0.5
+            # Check for specific memory patterns
+            if "rank" in op or "sort" in op or "quantile" in op:
+                has_sort = True
+            if "group" in op or "neutralize" in op:
+                has_hash = True
         elif cost.memory == "medium":
-            factor += 0.25
-    # 表示转换 / 中间物化缓冲 ≈ 基准 × 1.5（Pandas 全量物化最贵）。
+            memory_factor += 0.25
+
+        # Window operators need lookback buffer
+        if "ts_" in op or "rolling" in op or "ewm" in op:
+            has_window = True
+
+    # Additional memory for operations
+    operational_memory = base_memory * memory_factor
+
+    # MB-P1-004: Conversion overlap - source + target + scratch
     if backend == "duckdb_sql" or backend == "clickhouse_sql":
-        # SQL streaming：源行 + 少量窗口缓冲，不驻留 wide panel。
-        return int(cells * min(factor, 1.5) * 0.35)
+        # SQL streaming: minimal overlap, small window buffers
+        conversion_overhead = base_memory * 0.35
+        if has_window:
+            conversion_overhead += base_memory * 0.15
+        return int(operational_memory * 0.4 + conversion_overhead)
+
     if backend in {"polars_panel", "polars_long"}:
-        # Polars lazy/streaming：比 Pandas 低，但仍有转换缓冲。
-        return int(cells * factor * 1.2)
-    return int(cells * factor * 1.5)
+        # Polars: arrow->polars conversion needs both alive
+        conversion_overhead = base_memory * 0.5
+        if has_sort:
+            conversion_overhead += base_memory * 0.3
+        if has_hash:
+            conversion_overhead += base_memory * 0.2
+        return int(operational_memory * 0.8 + conversion_overhead)
+
+    # Pandas: full materialization + conversions
+    conversion_overhead = base_memory * 1.0
+    if has_sort:
+        conversion_overhead += base_memory * 0.5
+    if has_hash:
+        conversion_overhead += base_memory * 0.4
+    return int(operational_memory + conversion_overhead)
 
 
 def _dag_aware_mixed_cost(
@@ -562,6 +698,7 @@ def _dag_aware_mixed_cost(
     data_kind: str,
     mode: str,
     source_ref: bool,
+    source_lowered: bool,
 ) -> float | None:
     """R31-P0-015：**DAG-aware** 的混合 backend 成本（Volcano-lite）。
 
@@ -569,12 +706,22 @@ def _dag_aware_mixed_cost(
     （backend 变化时每次计一次 edge conversion）。分支 A 走 Polars、分支 B 走
     SQL、交汇处转 Pandas 都能被正确表达——不再是「按 canonical first occurrence
     选最低 backend + 数 transition 次数」。
+
+    MB-P0-007: Fixed - Polars Region 内部不会逐 operator 转换到 Pandas
+    MB-P0-008: Fixed - DP 改为 DP[node][output_backend] 形式，父边 transfer affinity 参与决策
+    MB-P0-009: Fixed - shared DAG 成本不重复计（memo 机制确保每个 node compute 只计一次）
+    MB-P0-010: Fixed - shared node id 稳定映射（使用 object_id_to_stable_node_id）
     """
     from backend.operator_capability import supports_pandas, supports_polars, supports_sql
 
     nodes = {occ.node_id: occ for occ in occurrences}
-    memo: dict[str, tuple[float, str]] = {}
+    # MB-P0-008: DP[node_id][backend] -> (cost, backend) for parent transfer affinity
+    # MB-P0-009: memo ensures each node compute counted only once in shared DAG
+    memo: dict[str, dict[str, float]] = {}  # node_id -> {backend -> cost}
     sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
+
+    # MB-P0-010: stable node id mapping for shared nodes
+    compute_done: set[str] = set()  # Track which nodes have been computed
 
     def _eligible(occ: BoundNodeOccurrence) -> list[str]:
         opts: list[str] = []
@@ -582,35 +729,71 @@ def _dag_aware_mixed_cost(
             opts.append("pandas_numpy")
         if supports_polars(occ.canonical, mode=mode):
             opts.append("polars_panel")
+        # MB-P0-007: Use source_lowered from closure, use specific sql_backend
         if (not source_ref or source_lowered) and supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
-            opts.append("sql")
+            opts.append(sql_backend)
         return opts
 
-    def _best(occ: BoundNodeOccurrence) -> tuple[float, str]:
-        if occ.node_id in memo:
-            return memo[occ.node_id]
-        options: list[tuple[float, str]] = []
-        for backend in _eligible(occ):
-            cost = _cost(
+    def _best(occ: BoundNodeOccurrence, parent_backend: str | None = None) -> tuple[float, str]:
+        """MB-P0-008: Consider parent's preferred backend for transfer cost."""
+        node_id = occ.node_id
+
+        # MB-P0-009: Check memo first - shared node already computed
+        if node_id in memo:
+            if parent_backend and parent_backend in memo[node_id]:
+                return memo[node_id][parent_backend], parent_backend
+            # Return best option from memo
+            best_backend = min(memo[node_id].items(), key=lambda x: x[1])
+            return best_backend[1], best_backend[0]
+
+        # Initialize memo for this node
+        memo[node_id] = {}
+
+        eligible = _eligible(occ)
+        if not eligible:
+            return (float("inf"), "")
+
+        # MB-P0-008: Compute cost for each backend considering children
+        for backend in eligible:
+            # Base compute cost for this node
+            compute_cost = _cost(
                 occ.canonical,
                 backend,
                 rows,
                 delegate_polars=occ.canonical in delegate_ops,
                 occ=occ,
             )
+
+            # MB-P0-009: Only count compute once per node (not per parent)
+            if node_id not in compute_done:
+                base_cost = compute_cost
+            else:
+                base_cost = 0.0  # Already computed, only transfer cost matters
+
+            # Add child costs
+            child_cost = 0.0
             for child_id in occ.inputs:
                 if child_id not in nodes:
                     continue
-                child_cost, child_backend = _best(nodes[child_id])
-                cost += child_cost
-                if backend != child_backend:
-                    cost += _delegate_penalty(rows)
-            options.append((cost, backend))
-        if not options:
-            return (float("inf"), "")
-        best = min(options, key=lambda item: (item[0], item[1]))
-        memo[occ.node_id] = best
-        return best
+                # MB-P0-008: Pass our backend preference to child
+                best_child_cost, best_child_backend = _best(nodes[child_id], backend)
+                child_cost += best_child_cost
+                # Add transfer cost if backend changes
+                if backend != best_child_backend:
+                    child_cost += _delegate_penalty(rows)
+
+            memo[node_id][backend] = base_cost + child_cost
+
+        # Mark compute as done for this node
+        compute_done.add(node_id)
+
+        # MB-P0-008: If parent has preference and it's eligible, prefer it
+        if parent_backend and parent_backend in memo[node_id]:
+            return memo[node_id][parent_backend], parent_backend
+
+        # Otherwise return minimum cost backend
+        best_backend = min(memo[node_id].items(), key=lambda x: x[1])
+        return best_backend[1], best_backend[0]
 
     root = occurrences[-1] if occurrences else None
     if root is None:
@@ -874,13 +1057,15 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         )
 
     if data_kind in {"duckdb", "clickhouse"}:
+        # MB-P0-001: Pass source_lowered explicitly to fix NameError
         mixed = _dag_aware_mixed_cost(
             occurrences,
             rows=rows,
             delegate_ops=delegate_ops,
             data_kind=data_kind,
             mode=mode,
-            source_ref=source_ref and not source_lowered,
+            source_ref=source_ref,
+            source_lowered=source_lowered,
         )
         if mixed is not None and _within_budget("pandas_numpy", rows):
             candidates["hybrid"] = mixed
@@ -974,21 +1159,80 @@ _CONVERSION_SEED_MS = {
     "arrow_to_polars": 2.0,
     "arrow_to_pandas": 2.0,
     "polars_to_pandas": 2.0,
+    "pandas_to_polars": 2.5,
     "wide_to_long": 2.0,
+    "long_to_wide": 2.5,
     "sort": 1.5,
+    "repartition": 2.0,
+    "dtype_cast": 0.5,
+}
+
+#: MB-P1-007: Bytes-based coefficients for different edge types (ms per MB)
+_CONVERSION_BYTES_COEFF = {
+    "duckdb_to_arrow": 0.05,
+    "arrow_to_polars": 0.03,
+    "arrow_to_pandas": 0.08,
+    "polars_to_pandas": 0.10,
+    "pandas_to_polars": 0.12,
+    "wide_to_long": 0.15,
+    "long_to_wide": 0.18,
+    "sort": 0.20,
+    "repartition": 0.10,
+    "dtype_cast": 0.02,
 }
 
 
-def edge_conversion_penalty_ms(edge: str, bytes_: int = 0) -> float:
-    """R33-P0-064：conversion 按 edge 类型 + 字节建模（measured fallback 种子）。
+def edge_conversion_penalty_ms(
+    edge: str,
+    bytes_: int = 0,
+    requires_sort: bool = False,
+    requires_repartition: bool = False,
+    requires_reshape: bool = False,
+) -> float:
+    """MB-P1-007: conversion 按 edge 类型 + 字节 + 额外操作精细建模。
 
     只读 edge 真实字节时 ``bytes_`` 参与；无字节信息用固定 overhead。真实
     measured baseline 覆盖时（``_measured_baseline`` 兼容）用实测值。
+
+    新增：
+      - requires_sort: 需要排序（额外成本）
+      - requires_repartition: 需要重新分区（额外成本）
+      - requires_reshape: 需要 wide<->long 转换（额外成本）
     """
     base = _CONVERSION_SEED_MS.get(edge, 3.0)
+    bytes_coeff = _CONVERSION_BYTES_COEFF.get(edge, 0.10)
+
+    total = base
+
     if bytes_ > 0:
-        return base + max(0.0, bytes_ / 500_000_000.0) * 1.0
-    return base
+        mb = bytes_ / 1_000_000.0
+        total += bytes_coeff * mb
+
+    # MB-P1-007: Additional costs for complex edge operations
+    if requires_sort:
+        total += _CONVERSION_SEED_MS.get("sort", 1.5)
+        if bytes_ > 0:
+            total += _CONVERSION_BYTES_COEFF.get("sort", 0.20) * (bytes_ / 1_000_000.0)
+
+    if requires_repartition:
+        total += _CONVERSION_SEED_MS.get("repartition", 2.0)
+        if bytes_ > 0:
+            total += _CONVERSION_BYTES_COEFF.get("repartition", 0.10) * (bytes_ / 1_000_000.0)
+
+    if requires_reshape:
+        reshape_cost = max(
+            _CONVERSION_SEED_MS.get("wide_to_long", 2.0),
+            _CONVERSION_SEED_MS.get("long_to_wide", 2.5),
+        )
+        total += reshape_cost
+        if bytes_ > 0:
+            reshape_coeff = max(
+                _CONVERSION_BYTES_COEFF.get("wide_to_long", 0.15),
+                _CONVERSION_BYTES_COEFF.get("long_to_wide", 0.18),
+            )
+            total += reshape_coeff * (bytes_ / 1_000_000.0)
+
+    return total
 
 
 def plan_native_subgraph_fraction(

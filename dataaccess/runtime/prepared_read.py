@@ -220,7 +220,12 @@ class VerifiedPhysicalScope:
 
 @dataclass(frozen=True)
 class PreparedRead:
-    """一次读的不可变执行计划（R26-P0-003/004）。"""
+    """一次读的不可变执行计划（R26-P0-003/004）。
+
+    R32-P0-061/062: 深度不可变——所有嵌套字段冻结为 tuple/immutable types，
+    禁止持有 mutable request 或 live store capability（backend_plan/lineage_seed
+    用 tuple[tuple[str, Any], ...] 代替 dict，确保 plan 可安全跨上下文传递）。
+    """
 
     request_identity: str
     dataset: str
@@ -232,8 +237,9 @@ class PreparedRead:
     resolved_source_snapshot: Any = None
     query_budget: Any = None
     resource_reservation: Any = None
-    backend_plan: Mapping[str, Any] = field(default_factory=dict)
-    lineage_seed: Mapping[str, Any] = field(default_factory=dict)
+    # R32-P0-061: backend_plan/lineage_seed 改为 immutable tuple of pairs
+    backend_plan: tuple[tuple[str, Any], ...] = ()
+    lineage_seed: tuple[tuple[str, Any], ...] = ()
     # R29-P0：prepare 时刻固化的安全身份。``security_digest`` =
     # (principal_id + policy.digest + run_mode) 的指纹；``credential_scope_id`` =
     # 生效 credential provider 的 scope。terminal execute 前必须与当前 execution
@@ -272,4 +278,7 @@ class PreparedRead:
             "temporal_plan": (
                 self.temporal_plan.__dict__ if self.temporal_plan is not None else None
             ),
+            # R32-P0-061: tuple of pairs → dict for serialization
+            "backend_plan": dict(self.backend_plan) if self.backend_plan else {},
+            "lineage_seed": dict(self.lineage_seed) if self.lineage_seed else {},
         }

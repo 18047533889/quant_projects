@@ -605,3 +605,234 @@ class CsLadResid(SeriesOperator):
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
         return _cs_robust_resid(y, x, _lad_fit, bool(add_intercept))
+
+
+def _group_multi_ols_fit(
+    ys: np.ndarray,
+    xs_list: list[np.ndarray],
+    add_intercept: bool,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Multi-feature OLS fit for one group cross-section.
+
+    Fits ``y ~ x1 + x2 + ... + xN`` (with optional intercept) via normal
+    equations. Returns ``(coeffs, fitted)`` or ``None`` on statistical failure
+    (insufficient samples, singular matrix).
+
+    Args:
+        ys: dependent variable (valid samples only)
+        xs_list: list of independent variable arrays (valid samples only)
+        add_intercept: whether to include intercept term
+
+    Returns:
+        (coeffs, fitted) where fitted = X @ coeffs, or None on failure
+    """
+    n = len(ys)
+    n_features = len(xs_list)
+
+    if n < 2:
+        return None
+
+    # Build design matrix
+    if add_intercept:
+        X = np.column_stack([np.ones(n)] + xs_list)
+    else:
+        X = np.column_stack(xs_list) if n_features > 1 else xs_list[0].reshape(-1, 1)
+
+    # Need at least as many observations as parameters (n >= n_params for exact/over-determined)
+    if n < X.shape[1]:
+        return None
+
+    # Check for rank deficiency (collinear features)
+    rank = np.linalg.matrix_rank(X)
+    if rank < X.shape[1]:
+        return None
+
+    # Solve normal equations
+    try:
+        coeffs = np.linalg.lstsq(X, ys, rcond=None)[0]
+    except np.linalg.LinAlgError:
+        return None
+
+    if not np.all(np.isfinite(coeffs)):
+        return None
+
+    fitted = X @ coeffs
+    return coeffs, fitted
+
+
+def _group_multi_resid_row(
+    y_row: np.ndarray,
+    x_rows: list[np.ndarray],
+    g_row: np.ndarray,
+    add_intercept: bool,
+    min_obs: int | None,
+) -> np.ndarray:
+    """Compute group-wise multi-feature regression residuals for one trading day.
+
+    Each group independently fits ``y ~ x1 + x2 + ... + xN`` and returns
+    residuals (y - y_pred). Groups with insufficient samples, singular matrices,
+    or all-NaN values emit NaN.
+
+    Args:
+        y_row: dependent variable for one row (N_stocks,)
+        x_rows: list of independent variable arrays, each (N_stocks,)
+        g_row: group labels for one row (N_stocks,)
+        add_intercept: whether to include intercept
+        min_obs: minimum observations per group (default: n_params where n_params = n_features + 1 if intercept else n_features)
+
+    Returns:
+        residuals array (N_stocks,)
+    """
+    out = np.full(len(y_row), np.nan, dtype=float)
+    n_features = len(x_rows)
+
+    # Default min_obs: number of parameters (allows perfect fit with 0 DOF)
+    if min_obs is None:
+        n_params = (n_features + 1) if add_intercept else n_features
+        min_obs = n_params
+
+    # Get unique groups (filter out NaN/None for object arrays)
+    if g_row.dtype == object:
+        valid_mask = pd.notna(g_row)
+        labels = pd.unique(g_row[valid_mask])
+    else:
+        labels = pd.unique(g_row[np.isfinite(g_row)])
+
+    for label in labels:
+        if not _valid_membership_label(label):
+            continue
+
+        # Find group members
+        idx = g_row == label
+
+        # Joint missing value filter: valid if y and ALL x's are finite
+        valid = np.isfinite(y_row[idx])
+        for x_row in x_rows:
+            valid = valid & np.isfinite(x_row[idx])
+
+        if valid.sum() < min_obs:
+            continue
+
+        # Extract valid samples
+        ys = y_row[idx][valid]
+        xs_list = [x_row[idx][valid] for x_row in x_rows]
+
+        # Fit OLS (rank check inside will detect singular matrices)
+        result = _group_multi_ols_fit(ys, xs_list, add_intercept)
+        if result is None:
+            continue
+
+        coeffs, fitted_valid = result
+
+        # Compute fitted values for ALL group members (including those with missing data)
+        group_indices = np.flatnonzero(idx)
+        if add_intercept:
+            X_full = np.column_stack([np.ones(len(group_indices))] + [x_row[idx] for x_row in x_rows])
+        else:
+            X_full = np.column_stack([x_row[idx] for x_row in x_rows]) if n_features > 1 else x_rows[0][idx].reshape(-1, 1)
+
+        fitted_full = X_full @ coeffs
+
+        # Only write residuals where all inputs (y and x's) are valid
+        resid_full = y_row[idx] - fitted_full
+        valid_full = np.isfinite(y_row[idx])
+        for x_row in x_rows:
+            valid_full = valid_full & np.isfinite(x_row[idx])
+
+        # Write residuals only for valid positions
+        out_idx = group_indices[valid_full]
+        out[out_idx] = resid_full[valid_full]
+
+    return out
+
+
+@register_operator(
+    name="group_multi_resid",
+    category="group_neutralization",
+    business_category="group_neutralization",
+    canonical="group_multi_resid",
+    source="group_ext",
+    status="experimental",
+)
+class GroupMultiResid(SeriesOperator):
+    """组内多元线性回归残差（多自变量 OLS）。
+
+    每个 group 独立拟合 ``y ~ x1 + x2 + ... + xN``，返回残差 (y - y_pred)。
+    ``add_intercept=True`` 时自动添加截距项。``min_obs`` 默认为参数个数（n_features + 1
+    含截距，或 n_features 不含截距），允许精确拟合。样本不足、矩阵奇异、全 NaN 组返回 NaN（fail-closed）。
+
+    参数说明：
+        y: 因变量
+        group: 分组标签
+        x1, x2, ..., x5: 自变量（variadic 参数）
+        add_intercept: 是否添加截距（默认 True）
+        min_obs: 最小观测数（默认等于参数个数，允许精确拟合）
+
+    语义：
+        - 联合过滤缺失值（y 和所有 x 必须同时有限）
+        - 每组独立做 OLS，矩阵奇异或样本不足时该组全 NaN
+        - 残差单位与 y 相同（unit:same_as:y）
+    """
+
+    metadata = _metadata(
+        "group_multi_resid",
+        "组内多元线性回归残差（支持多个自变量的组内 OLS 残差）",
+        ["y", "group", "x1", "x2", "x3", "x4", "x5", "add_intercept", "min_obs"],
+        domain="price_volume",
+        unit="same_as:y",
+    )
+
+    def _calculate_series(
+        self,
+        y: pd.DataFrame,
+        group: pd.DataFrame,
+        x1: pd.DataFrame,
+        x2: pd.DataFrame | None = None,
+        x3: pd.DataFrame | None = None,
+        x4: pd.DataFrame | None = None,
+        x5: pd.DataFrame | None = None,
+        add_intercept: bool = True,
+        min_obs: int | None = None,
+        **_: Any
+    ) -> pd.DataFrame:
+        # Collect non-None features
+        features = [x1]
+        for x in [x2, x3, x4, x5]:
+            if x is not None:
+                features.append(x)
+
+        # Align all inputs
+        aligned = _aligned(y, group, *features)
+        y_aligned = aligned[0]
+        group_aligned = aligned[1]
+        features_aligned = aligned[2:]
+
+        # Convert to numpy
+        yv = y_aligned.to_numpy(dtype=float)
+        gv = group_aligned.to_numpy()
+        xvs = [f.to_numpy(dtype=float) for f in features_aligned]
+
+        rows, cols = yv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+
+        # Process each row
+        for row in range(rows):
+            out[row] = _group_multi_resid_row(
+                yv[row],
+                [xv[row] for xv in xvs],
+                gv[row],
+                add_intercept,
+                min_obs,
+            )
+
+        return _frame_like(y_aligned, out)
+
+
+# Register group_multi_resid to extended surface
+try:
+    from cleaned_operators.operator_surface import extend_extended_only
+
+    extend_extended_only(["group_multi_resid"])
+except ImportError:  # pragma: no cover
+    pass
+

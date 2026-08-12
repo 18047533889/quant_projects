@@ -41,7 +41,12 @@ _CHECK_NAMES = (
 
 @dataclass(frozen=True)
 class QualityOptions:
-    """质量检查选项。只跑显式开启/配置的检查项。"""
+    """质量检查选项。只跑显式开启/配置的检查项。
+
+    R32-P0-069: DQ 列角色从 SemanticField 推导，不硬编码物理列名。
+    调用方可通过 semantic_field_map 传入语义映射：
+    {"time": "actual_time_column", "instrument": "actual_ticker_column", ...}
+    """
 
     required_columns: tuple[str, ...] = ()
     primary_key: tuple[str, ...] = ()
@@ -56,6 +61,8 @@ class QualityOptions:
     check_future_timestamp: bool = False
     min_rows: int | None = None                 # 行数下限（coverage）
     check_pit_leakage: bool = False             # report_period <= publish_time
+    # R32-P0-069: semantic field map (semantic_role -> physical_column_name)
+    semantic_field_map: dict[str, str] = field(default_factory=dict)
     # R25 §65：单位漂移 sentinel——{col: (semantics, typical_abs_range)}。
     # A Return bp semantics、US Ret decimal semantics、ROE ratio 等；监控分布
     # 突然 100x/10000x 缩放报警。``unit_sentinel`` 与 ``unit_sentinel_warn_only``
@@ -64,6 +71,19 @@ class QualityOptions:
         default_factory=dict
     )
     unit_sentinel_warn_only: bool = False
+
+    def resolve_column(self, semantic_role: str) -> str | None:
+        """R32-P0-069: 从语义角色解析实际列名。
+
+        优先级: semantic_field_map > 直接属性 (time_column/instrument_column)
+        """
+        if semantic_role in self.semantic_field_map:
+            return self.semantic_field_map[semantic_role]
+        if semantic_role == "time":
+            return self.time_column
+        if semantic_role == "instrument":
+            return self.instrument_column
+        return None
 
     def enabled_checks(self) -> list[str]:
         out: list[str] = []
@@ -124,110 +144,162 @@ def run_quality_checks(
     *,
     options: QualityOptions | None = None,
 ) -> QualityReport:
-    """对 Arrow Table 跑配置的质量检查，返回报告。"""
+    """对 Arrow Table 跑配置的质量检查，返回报告。
+
+    R32-P0-068: exception 必须视为 CHECK_FAILED（fail-closed），绝不能 PASS。
+    所有检查项都用 try-except 包裹，异常 → 记为 failure。
+    """
     options = options or QualityOptions()
     failures: list[str] = []
     details: dict[str, Any] = {}
 
     # 1) required columns
     if options.required_columns:
-        missing = [c for c in options.required_columns if c not in table.column_names]
-        details["required_columns"] = {"missing": missing}
-        if missing:
-            failures.append(f"missing columns: {missing}")
+        try:
+            missing = [c for c in options.required_columns if c not in table.column_names]
+            details["required_columns"] = {"missing": missing}
+            if missing:
+                failures.append(f"missing columns: {missing}")
+        except Exception as exc:
+            failures.append(f"required_columns check exception: {exc}")
+            details["required_columns"] = {"error": str(exc)}
 
     # 2) primary key uniqueness
     if options.primary_key:
-        missing_pk = [c for c in options.primary_key if c not in table.column_names]
-        if missing_pk:
-            failures.append(f"primary key columns missing: {missing_pk}")
-        else:
-            dup_count = _primary_key_duplicates(table, options.primary_key)
-            details["primary_key"] = {"duplicates": dup_count}
-            if dup_count:
-                failures.append(f"duplicate primary keys: {dup_count}")
+        try:
+            missing_pk = [c for c in options.primary_key if c not in table.column_names]
+            if missing_pk:
+                failures.append(f"primary key columns missing: {missing_pk}")
+            else:
+                dup_count = _primary_key_duplicates(table, options.primary_key)
+                details["primary_key"] = {"duplicates": dup_count}
+                if dup_count:
+                    failures.append(f"duplicate primary keys: {dup_count}")
+        except Exception as exc:
+            failures.append(f"primary_key check exception: {exc}")
+            details["primary_key"] = {"error": str(exc)}
 
     # 3) schema alignment
     if options.declared_schema:
-        mismatch = _schema_alignment(table, options.declared_schema)
-        details["schema_alignment"] = mismatch
-        if mismatch:
-            failures.append(f"schema mismatch: {mismatch}")
+        try:
+            mismatch = _schema_alignment(table, options.declared_schema)
+            details["schema_alignment"] = mismatch
+            if mismatch:
+                failures.append(f"schema mismatch: {mismatch}")
+        except Exception as exc:
+            failures.append(f"schema_alignment check exception: {exc}")
+            details["schema_alignment"] = {"error": str(exc)}
 
     # 4) null ratio
     if options.null_ratio_max is not None:
-        ratios = _null_ratios(table)
-        over = {c: r for c, r in ratios.items() if r > options.null_ratio_max}
-        details["null_ratio"] = {"max": options.null_ratio_max, "ratios": ratios}
-        if over:
-            failures.append(f"null ratio exceeds {options.null_ratio_max}: {over}")
+        try:
+            ratios = _null_ratios(table)
+            over = {c: r for c, r in ratios.items() if r > options.null_ratio_max}
+            details["null_ratio"] = {"max": options.null_ratio_max, "ratios": ratios}
+            if over:
+                failures.append(f"null ratio exceeds {options.null_ratio_max}: {over}")
+        except Exception as exc:
+            failures.append(f"null_ratio check exception: {exc}")
+            details["null_ratio"] = {"error": str(exc)}
 
     # 5) range
     if options.range:
-        violations = _range_violations(table, options.range)
-        details["range"] = violations
-        if violations:
-            failures.append(f"range violations: {violations}")
+        try:
+            violations = _range_violations(table, options.range)
+            details["range"] = violations
+            if violations:
+                failures.append(f"range violations: {violations}")
+        except Exception as exc:
+            failures.append(f"range check exception: {exc}")
+            details["range"] = {"error": str(exc)}
 
     # 6) finite / inf / NaN
     if options.finite_columns:
-        bad = _non_finite_columns(table, options.finite_columns)
-        details["finite"] = {"non_finite_counts": bad}
-        if any(bad.values()):
-            failures.append(f"non-finite values: {bad}")
+        try:
+            bad = _non_finite_columns(table, options.finite_columns)
+            details["finite"] = {"non_finite_counts": bad}
+            if any(bad.values()):
+                failures.append(f"non-finite values: {bad}")
+        except Exception as exc:
+            failures.append(f"finite check exception: {exc}")
+            details["finite"] = {"error": str(exc)}
 
     # 7) monotonic time
     if options.check_monotonic_time:
-        mono = _monotonic_time(table, options)
-        details["monotonic_time"] = mono
-        if not mono["monotonic"]:
-            failures.append(
-                f"time not monotonic per instrument: {mono['decreases']} decreases"
-            )
+        try:
+            mono = _monotonic_time(table, options)
+            details["monotonic_time"] = mono
+            if not mono["monotonic"]:
+                failures.append(
+                    f"time not monotonic per instrument: {mono['decreases']} decreases"
+                )
+        except Exception as exc:
+            failures.append(f"monotonic_time check exception: {exc}")
+            details["monotonic_time"] = {"error": str(exc)}
 
     # 8) duplicate timestamp (per instrument)
     if options.check_duplicate_timestamp:
-        dup_ts = _duplicate_timestamps(table, options)
-        details["duplicate_timestamp"] = {"duplicates": dup_ts}
-        if dup_ts:
-            failures.append(f"duplicate (time, instrument): {dup_ts}")
+        try:
+            dup_ts = _duplicate_timestamps(table, options)
+            details["duplicate_timestamp"] = {"duplicates": dup_ts}
+            if dup_ts:
+                failures.append(f"duplicate (time, instrument): {dup_ts}")
+        except Exception as exc:
+            failures.append(f"duplicate_timestamp check exception: {exc}")
+            details["duplicate_timestamp"] = {"error": str(exc)}
 
     # 9) future timestamp
     if options.check_future_timestamp:
-        future = _future_timestamps(table, options.time_column)
-        details["future_timestamp"] = {"future_rows": future}
-        if future:
-            failures.append(f"future timestamps: {future} rows")
+        try:
+            future = _future_timestamps(table, options.time_column)
+            details["future_timestamp"] = {"future_rows": future}
+            if future:
+                failures.append(f"future timestamps: {future} rows")
+        except Exception as exc:
+            failures.append(f"future_timestamp check exception: {exc}")
+            details["future_timestamp"] = {"error": str(exc)}
 
     # 10) coverage / min rows
     if options.min_rows is not None:
-        rows = table.num_rows
-        details["coverage"] = {"rows": rows, "min_rows": options.min_rows}
-        if rows < options.min_rows:
-            failures.append(f"row count {rows} < min {options.min_rows}")
+        try:
+            rows = table.num_rows
+            details["coverage"] = {"rows": rows, "min_rows": options.min_rows}
+            if rows < options.min_rows:
+                failures.append(f"row count {rows} < min {options.min_rows}")
+        except Exception as exc:
+            failures.append(f"coverage check exception: {exc}")
+            details["coverage"] = {"error": str(exc)}
 
     # 11) PIT leakage (report_period <= publish_time)
     if options.check_pit_leakage:
-        leak = _pit_leakage(table)
-        details["pit_leakage"] = {"leaked_rows": leak}
-        if leak:
-            failures.append(f"PIT leakage (report_period > publish_time): {leak} rows")
+        try:
+            leak = _pit_leakage(table)
+            details["pit_leakage"] = {"leaked_rows": leak}
+            if leak:
+                failures.append(f"PIT leakage (report_period > publish_time): {leak} rows")
+        except Exception as exc:
+            failures.append(f"pit_leakage check exception: {exc}")
+            details["pit_leakage"] = {"error": str(exc)}
 
     # 12) R25 §65：unit sentinel（单位漂移检测）——黄金 sentinel 监控分布突然
     # 100x/10000x 缩放。超界默认 BLOCK（fail）；``unit_sentinel_warn_only=True``
     # 只 WARN（details 里标记 warn_only）。DTO 只负责检测，不修数据（§64）。
     if options.unit_sentinel:
-        sentinel_failures, sentinel_details = _unit_sentinel_check(
-            table, options.unit_sentinel
-        )
-        details["unit_sentinel"] = {
-            "warn_only": options.unit_sentinel_warn_only,
-            "violations": sentinel_details,
-        }
-        if sentinel_failures and not options.unit_sentinel_warn_only:
-            failures.append(
-                f"unit sentinel violations (可能单位漂移): {sentinel_failures}"
+        try:
+            sentinel_failures, sentinel_details = _unit_sentinel_check(
+                table, options.unit_sentinel
             )
+            details["unit_sentinel"] = {
+                "warn_only": options.unit_sentinel_warn_only,
+                "violations": sentinel_details,
+            }
+            if sentinel_failures and not options.unit_sentinel_warn_only:
+                failures.append(
+                    f"unit sentinel violations (可能单位漂移): {sentinel_failures}"
+                )
+        except Exception as exc:
+            failures.append(f"unit_sentinel check exception: {exc}")
+            details["unit_sentinel"] = {"error": str(exc)}
 
     checks = tuple(_CHECK_NAMES) if not options.enabled_checks() else tuple(options.enabled_checks())
     return QualityReport(

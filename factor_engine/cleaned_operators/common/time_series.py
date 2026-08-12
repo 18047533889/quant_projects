@@ -2649,8 +2649,10 @@ class TSAutocorrPolars(SeriesOperator):
 # R22-058: causal poly2 siblings are mineable composition/terminal alphas on the
 # extended authoring surface (the in-sample ts_poly2_coeff/resid stay research
 # tools).  Their DirectUse verdicts are DIRECT_ALPHA.
-from cleaned_operators.operator_surface import extend_extended_only  # noqa: E402
+def _register_surface() -> None:
+    import cleaned_operators.operator_surface as _surface
+    _surface.extend_extended_only(
+        ["ts_poly2_prior_coeff", "ts_poly2_forecast_error", "ts_poly2_forecast_error_z", "WMA"]
+    )
 
-extend_extended_only(
-    ["ts_poly2_prior_coeff", "ts_poly2_forecast_error", "ts_poly2_forecast_error_z"]
-)
+_register_surface()

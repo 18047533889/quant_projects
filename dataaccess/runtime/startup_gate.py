@@ -22,30 +22,46 @@ logger = logging.getLogger("data_access.startup_gate")
 
 @dataclass
 class StartupGateResult:
-    passed: bool
+    """R32-P0-016：启动 gate 结果（三态：PASS / DEGRADED / FAIL）。"""
+    status: str  # "PASS" / "DEGRADED" / "FAIL"
     problems: list[str] = field(default_factory=list)
 
+    @property
+    def passed(self) -> bool:
+        """向后兼容：PASS 和 DEGRADED 都算通过（根据 run mode 判断）。"""
+        return self.status in ("PASS", "DEGRADED")
+
     def to_dict(self) -> dict[str, Any]:
-        return {"passed": self.passed, "problems": list(self.problems)}
+        return {
+            "status": self.status,
+            "passed": self.passed,
+            "problems": list(self.problems),
+        }
 
 
-@dataclass
+@dataclass(frozen=True)
 class StartupCertificate:
-    """R40 #59：production store 启动证书。
+    """R40 #59 + R32-P0-013：production store 启动证书（immutable）。
 
     - ``gate_name``   启动 gate 名称（默认 ``production_startup``）；
     - ``passed``      全部 critical checks 通过；
     - ``timestamp``   ISO-8601 证书签发时间；
     - ``evidence_hash`` 问题清单 + gate 版本的确定性摘要（证明该证书对应哪一组
       checks 判定）；
-    - ``problems``    research 模式收集的非阻塞问题（production 通过时为空）。
+    - ``problems``    research 模式收集的非阻塞问题（production 通过时为空）；
+    - ``subject_digest`` R32-P0-014：启动环境主体摘要（build SHA + package version +
+      registry digest + contract digest + semantic schema + policy digest + calendar
+      snapshot + credential generation + source profile + worker topology + gate version）。
+
+    R32-P0-013：frozen dataclass，调用者不能修改 passed。
     """
 
     gate_name: str = "production_startup"
     passed: bool = False
     timestamp: str = ""
     evidence_hash: str = ""
-    problems: list[str] = field(default_factory=list)
+    problems: tuple[str, ...] = field(default_factory=tuple)
+    subject_digest: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -54,6 +70,7 @@ class StartupCertificate:
             "timestamp": self.timestamp,
             "evidence_hash": self.evidence_hash,
             "problems": list(self.problems),
+            "subject_digest": self.subject_digest,
         }
 
 
@@ -69,14 +86,20 @@ def _evidence_hash_of(problems: Sequence[str], gate_name: str) -> str:
 
 def build_startup_certificate(
     passed: bool, problems: Sequence[str], *, gate_name: str = "production_startup",
+    subject_digest: str = "",
 ) -> StartupCertificate:
-    """构造 StartupCertificate（timestamp + evidence_hash）。"""
+    """构造 StartupCertificate（timestamp + evidence_hash + subject_digest）。
+
+    R32-P0-013：返回 frozen dataclass。
+    R32-P0-014：绑定 subject_digest。
+    """
     return StartupCertificate(
         gate_name=gate_name,
         passed=bool(passed),
         timestamp=datetime.now(timezone.utc).isoformat(),
         evidence_hash=_evidence_hash_of(problems, gate_name),
-        problems=list(problems),
+        problems=tuple(problems),
+        subject_digest=subject_digest,
     )
 
 
@@ -85,8 +108,12 @@ def startup_certificate_expired(
     *,
     ttl_seconds: int = _STARTUP_CERTIFICATE_TTL_SECONDS,
     now: datetime | None = None,
+    current_subject_digest: str | None = None,
 ) -> bool:
-    """证书是否过期（缺失 / 未通过 / timestamp 超过 TTL → 过期）。"""
+    """证书是否过期（缺失 / 未通过 / timestamp 超过 TTL → 过期）。
+
+    R32-P0-015：同时验证 subject_digest（配置变化立即失效）。
+    """
     if cert is None or not getattr(cert, "passed", False):
         return True
     raw = getattr(cert, "timestamp", "") or ""
@@ -101,7 +128,14 @@ def startup_certificate_expired(
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
-    return (now - ts).total_seconds() > max(0, int(ttl_seconds))
+    if (now - ts).total_seconds() > max(0, int(ttl_seconds)):
+        return True
+    # R32-P0-015：subject_digest 不匹配 → 环境变化，证书失效。
+    if current_subject_digest is not None:
+        cert_digest = getattr(cert, "subject_digest", "")
+        if cert_digest and cert_digest != current_subject_digest:
+            return True
+    return False
 
 
 def require_startup_certificate(
@@ -116,10 +150,19 @@ def require_startup_certificate(
     - store 已有未过期且 passed 的证书 → 直接返回（不重跑 gate）；
     - 否则跑 :func:`run_startup_gate`（production 失败会 raise）；
     - 成功后把证书挂到 ``store._startup_certificate``。
+
+    R32-P0-015：证书复用前验证 current_subject_digest。
     """
     cert = getattr(store, "_startup_certificate", None)
-    if cert is not None and not force and not startup_certificate_expired(cert):
-        return cert
+    if cert is not None and not force:
+        # R32-P0-015：计算当前 subject_digest，验证证书是否仍有效。
+        try:
+            from data_access.runtime.startup_subject import build_startup_subject_digest
+            current_digest = build_startup_subject_digest(store).to_digest()
+        except Exception:
+            current_digest = None
+        if not startup_certificate_expired(cert, current_subject_digest=current_digest):
+            return cert
     cert = run_startup_gate(store, production=production, checks=checks)
     try:
         store._startup_certificate = cert
@@ -361,17 +404,34 @@ def run_startup_gate(
     *,
     production: bool | None = None,
     checks: Sequence[Callable[[], list[str]]] | None = None,
-) -> StartupGateResult:
+    skip: bool = False,
+) -> StartupCertificate:
     """运行 production startup gate。
 
     ``production`` 缺省用 ``is_strict_semantics()``；非 production 只收集不失败
     （research 可跑，但问题会被列出）。
+
+    R32-P0-016：返回三态（PASS / DEGRADED / FAIL）。
+    R32-P0-014：绑定 subject_digest。
+    R32-P0-022: ``skip=True`` in production mode raises RuntimeError.
     """
     from data_access.read.query_budget import is_strict_semantics
 
     effective_production = (
         production if production is not None else is_strict_semantics()
     )
+
+    # R32-P0-022: Production forbid --skip-startup-gate
+    if skip and effective_production:
+        raise RuntimeError(
+            "R32-P0-022: Production mode cannot skip startup gate. "
+            "--skip-startup-gate is only allowed in dev/research mode."
+        )
+
+    if skip:
+        logger.warning("Startup gate skipped (dev/research mode only)")
+        return build_startup_certificate(True, ["startup gate skipped"])
+
     problems: list[str] = []
     runner = checks if checks is not None else (
         _contract_ir_blocking_problems,
@@ -389,14 +449,25 @@ def run_startup_gate(
         except Exception as exc:  # pragma: no cover
             problems.append(f"{getattr(check, '__name__', 'check')}: {exc}")
 
+    # R32-P0-014：构造 subject_digest。
+    subject_digest = ""
+    try:
+        from data_access.runtime.startup_subject import build_startup_subject_digest
+        subject_digest = build_startup_subject_digest(store).to_digest()
+    except Exception:
+        pass
+
     if effective_production:
-        # production：任一 critical fail → startup fail。
+        # R32-P0-016：production 任一 critical fail → FAIL。
         if problems:
             raise RuntimeError(
                 "Production startup gate failed:\n  " + "\n  ".join(problems)
             )
-        return build_startup_certificate(True, [])
-    # research：收集问题不失败（证书 passed=True，problems 记录非阻塞项）。
+        return build_startup_certificate(True, [], subject_digest=subject_digest)
+    # R32-P0-016：research 有问题 → DEGRADED，无问题 → PASS。
     for p in problems:
         logger.warning("startup gate (research, non-blocking): %s", p)
-    return build_startup_certificate(True, problems)
+    status = "DEGRADED" if problems else "PASS"
+    return build_startup_certificate(
+        True, problems, subject_digest=subject_digest
+    )
