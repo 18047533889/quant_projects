@@ -39,7 +39,7 @@ def _meta(
     description: str,
     params: list[str],
     *,
-    output_unit: str,
+    output_output_unit: str,
     param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     """Metadata factory for Kalman filter operators."""
@@ -131,7 +131,7 @@ class TSAlphaBetaFilter(SeriesOperator):
         name="ts_alpha_beta_filter",
         description="Alpha-beta (g-h) filter: simple two-parameter tracking filter (position + velocity state)",
         params=["x", "alpha", "beta"],
-        unit="same_as_input",
+        output_unit="same_as_input",
         param_specs={
             "alpha": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "beta": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -217,7 +217,7 @@ class TSHInfinityLevelFilter(SeriesOperator):
         name="ts_h_infinity_level_filter",
         description="H-infinity robust level filter: game-theoretic min-max filter robust to model uncertainty",
         params=["x", "gamma", "q", "r"],
-        unit="same_as_input",
+        output_unit="same_as_input",
         param_specs={
             "gamma": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "q": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -317,7 +317,7 @@ class TSAdaptiveNoiseKalman(SeriesOperator):
         name="ts_adaptive_noise_kalman",
         description="Adaptive noise Kalman filter: dynamically adapts process/measurement noise based on innovation statistics",
         params=["x", "q_init", "r_init", "window", "adapt_rate"],
-        unit="same_as_input",
+        output_unit="same_as_input",
         param_specs={
             "q_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "r_init": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -417,7 +417,7 @@ class TSStudentTKalmanFilter(SeriesOperator):
         name="ts_student_t_kalman_filter",
         description="Student-t Kalman filter: robust to outliers via heavy-tailed Student-t observation noise model",
         params=["x", "q", "r", "dof"],
-        unit="same_as_input",
+        output_unit="same_as_input",
         param_specs={
             "q": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "r": ParamSpec(dtype=float, param_role=ParamRole.ESTIMATOR_RESOLUTION),
