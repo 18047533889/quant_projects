@@ -278,37 +278,40 @@ def group_by_shared_axis(
 
     每个**不同**的共享 axis 只返回一次（同 index 不重复记录）。对象身份
     （``index is``）先短路，``Index.equals`` 作正确性兜底。
+
+    Axis keys provide a bounded candidate set for equality checks. The prior
+    pairwise scan made this batch observability path O(n²) in factor count.
     """
-    items = list(factor_series.items())
-    n = len(items)
-    used = [False] * n
-    groups: list[tuple[AxisBufferRef, list[str]]] = []
-    for i in range(n):
-        if used[i]:
-            continue
-        _fid_i, s_i = items[i]
-        ref_idx = s_i.index
-        members: list[str] = [_fid_i]
-        used[i] = True
-        for j in range(i + 1, n):
-            if used[j]:
-                continue
-            _fid_j, s_j = items[j]
-            if s_j.index is ref_idx or s_j.index.equals(ref_idx):
-                members.append(_fid_j)
-                used[j] = True
-        if len(members) >= 2:
-            groups.append(
-                (
-                    AxisBufferRef(
-                        axis_key=axis_key_of(ref_idx),
-                        row_count=len(ref_idx),
-                        index=ref_idx,
-                    ),
-                    members,
-                )
+    groups_by_key: dict[str, list[tuple[pd.Index, list[str]]]] = {}
+    identity_to_group: dict[int, tuple[pd.Index, list[str]]] = {}
+    for factor_id, series in factor_series.items():
+        index = series.index
+        group = identity_to_group.get(id(index))
+        if group is None:
+            key = axis_key_of(index)
+            candidates = groups_by_key.setdefault(key, [])
+            group = next(
+                (candidate for candidate in candidates if candidate[0].equals(index)),
+                None,
             )
-    return groups
+            if group is None:
+                group = (index, [factor_id])
+                candidates.append(group)
+            else:
+                group[1].append(factor_id)
+            identity_to_group[id(index)] = group
+        else:
+            group[1].append(factor_id)
+
+    return [
+        (
+            AxisBufferRef(axis_key=axis_key_of(index), row_count=len(index), index=index),
+            members,
+        )
+        for candidates in groups_by_key.values()
+        for index, members in candidates
+        if len(members) >= 2
+    ]
 
 
 def record_block_ref_used(ref: FactorBlockRef) -> None:
