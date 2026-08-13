@@ -118,7 +118,42 @@ def test_p0_102_generation_atomicity_no_partial_visibility(tmp_path):
     assert (current_gen_dir / "data.txt").read_text() == "new generation"
 
 
-def test_p0_102_upsert_partition_atomicity_documented(tmp_path):
+def test_p0_102_generation_pointer_failure_restores_previous_generation(tmp_path, monkeypatch):
+    """Pointer commit failure must not leave the old pointer dangling."""
+    from data_access.write import generation_atomicity
+    from data_access.write.generation_atomicity import (
+        atomic_publish_with_generation,
+        get_current_generation_id,
+        read_current_generation_data,
+    )
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+    archive_parent = tmp_path / "archive"
+
+    first = tmp_path / "first"
+    first.mkdir()
+    (first / "data.txt").write_text("old generation")
+    atomic_publish_with_generation(target_dir, first, archive_parent, metadata={"v": 1})
+    old_id = get_current_generation_id(target_dir)
+
+    second = tmp_path / "second"
+    second.mkdir()
+    (second / "data.txt").write_text("new generation")
+
+    def fail_pointer(*args, **kwargs):
+        raise OSError("simulated gateway timeout")
+
+    monkeypatch.setattr(generation_atomicity, "write_generation_pointer", fail_pointer)
+    with pytest.raises(OSError, match="gateway timeout"):
+        atomic_publish_with_generation(target_dir, second, archive_parent, metadata={"v": 2})
+
+    assert get_current_generation_id(target_dir) == old_id
+    current = read_current_generation_data(target_dir)
+    assert current is not None
+    assert (current / "data.txt").read_text() == "old generation"
+
+
     """验证 upsert 文档明确说明只有 partition-level 原子性。"""
     from data_access.write import upsert
     

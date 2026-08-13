@@ -102,17 +102,36 @@ def atomic_publish_with_generation(
         )
     os.rename(str(candidate_dir), str(new_generation_dir))
     
-    # Step 2: 归档旧 generation（如果存在）
+    # Step 2/3: commit the pointer while the old generation remains in place.
+    # Archiving before this commit creates a dangling old pointer if the pointer
+    # write times out (the gateway-timeout failure mode this path must avoid).
+    try:
+        write_generation_pointer(target_dir, generation_id, metadata)
+    except Exception:
+        # The old generation was intentionally left in place; remove only the
+        # unpublished candidate so the existing pointer remains valid.
+        try:
+            if new_generation_dir.exists():
+                shutil.rmtree(new_generation_dir)
+        except OSError as rollback_exc:
+            raise DataError("generation pointer 写入失败，候选 generation 清理失败") from rollback_exc
+        raise
+
+    # Step 4: archive old generation after the pointer commit.  Failure here is
+    # non-destructive: readers already have a valid new generation, and the old
+    # generation remains available for recovery/audit.
     if old_generation_id:
         old_generation_dir = generations_dir / old_generation_id
         if old_generation_dir.exists():
-            archive_path = archive_parent / f"gen_{old_generation_id}_{int(time.time())}"
+            archive_path = archive_parent / (
+                f"gen_{old_generation_id}_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+            )
             archive_path.parent.mkdir(parents=True, exist_ok=True)
-            os.rename(str(old_generation_dir), str(archive_path))
-    
-    # Step 3: 原子更新指针（单文件，无 missing 窗口）
-    write_generation_pointer(target_dir, generation_id, metadata)
-    
+            try:
+                os.rename(str(old_generation_dir), str(archive_path))
+            except OSError:
+                logger.warning("old generation archive failed; retaining it: %s", old_generation_dir)
+
     return {
         "generation_id": generation_id,
         "archive_path": str(archive_path) if archive_path else None,
