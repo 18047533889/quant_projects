@@ -1509,34 +1509,172 @@ class group_peer_information_diffusion(SeriesOperator):
         return _apply_to_panel(x, lambda c: diffusion_expr(c.meta.output_name()))
 
 
+def _tail_lead_scores(
+    values: np.ndarray,
+    groups: np.ndarray,
+    window: int,
+    quantile: float,
+    side: str,
+    lag: int,
+    min_periods: int,
+    prior_threshold: bool,
+    min_conditioning_events: int,
+) -> np.ndarray:
+    """Mirror the canonical completed-observation tail-lead estimator."""
+    rows, cols = values.shape
+    extreme = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        for row in range(rows):
+            stop = row if prior_threshold else row + 1
+            start = max(0, row - window + 1)
+            history = values[start:stop, col]
+            history = history[np.isfinite(history)]
+            if history.size < min_periods or not np.isfinite(values[row, col]):
+                continue
+            threshold = np.quantile(
+                history,
+                quantile if side == "lower" else 1.0 - quantile,
+            )
+            extreme[row, col] = float(
+                values[row, col] <= threshold
+                if side == "lower"
+                else values[row, col] >= threshold
+            )
+
+    scores = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        conditioned_sum = np.zeros(cols, dtype=float)
+        conditioned_count = np.zeros(cols, dtype=float)
+        baseline_sum = np.zeros(cols, dtype=float)
+        baseline_count = np.zeros(cols, dtype=float)
+        for event_row in range(max(0, row - window + 1), row + 1):
+            future_row = event_row + lag
+            if future_row >= rows or future_row > row:
+                continue
+            day_groups: dict[object, list[int]] = {}
+            for col in range(cols):
+                group_id = groups[event_row, col]
+                if group_id is not None:
+                    day_groups.setdefault(group_id, []).append(col)
+            for members in day_groups.values():
+                if len(members) < 2:
+                    continue
+                current = extreme[event_row, members]
+                if not np.all(np.isfinite(current)):
+                    continue
+                for position, col in enumerate(members):
+                    peers = np.delete(np.asarray(members), position)
+                    peer_future = extreme[future_row, peers]
+                    peer_future = peer_future[np.isfinite(peer_future)]
+                    if peer_future.size == 0:
+                        continue
+                    peer_rate = float(peer_future.mean())
+                    baseline_sum[col] += peer_rate
+                    baseline_count[col] += 1.0
+                    if current[position] > 0.0:
+                        conditioned_sum[col] += peer_rate
+                        conditioned_count[col] += 1.0
+        valid = (
+            (conditioned_count >= min_conditioning_events)
+            & (baseline_count > 0.0)
+        )
+        scores[row, valid] = (
+            conditioned_sum[valid] / conditioned_count[valid]
+            - baseline_sum[valid] / baseline_count[valid]
+        )
+    return scores
+
+
 @register_operator(
     name="group_tail_lead_score",
     category="group_feature",
     canonical="group_tail_lead_score",
     source="polars_native_phase6",
+    status="experimental",
 )
 class group_tail_lead_score(SeriesOperator):
-    """Tail leadership score"""
+    """PIT-safe tail leadership score using completed lead observations only."""
 
     metadata = OperatorMetadata(
         name="group_tail_lead_score",
         category="group_feature",
-        description="Leading indicator strength in group tail",
-        param_names=["x", "group", "threshold"],
-        param_types={"x": pl.DataFrame, "group": pl.DataFrame, "threshold": float},
+        description="Conditional peer tail probability difference over completed leads",
+        param_names=[
+            "x", "group", "window", "quantile", "side", "lag",
+            "min_periods", "prior_threshold", "min_conditioning_events",
+        ],
+        param_types={
+            "x": pl.DataFrame,
+            "group": pl.DataFrame,
+            "window": int,
+            "quantile": float,
+            "side": str,
+            "lag": int,
+            "min_periods": int,
+            "prior_threshold": bool,
+            "min_conditioning_events": int,
+        },
+        tags=["tail_systemic", "daily", "pit_safe", "causal", "research_only"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, threshold: float = 0.9, **kwargs) -> pl.DataFrame:
-        def tail_lead_expr(col_name):
-            col = pl.col(col_name)
-            q = col.quantile(threshold)
-            is_tail = (col > q).cast(pl.Float64)
-            # Lead = future group performance when in tail
-            group_future = col.mean().over("group").shift(-1)
-            lead_score = is_tail * group_future
-            return lead_score.alias(col_name)
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        group: pl.DataFrame,
+        window: int = 120,
+        quantile: float = 0.1,
+        side: str = "lower",
+        lag: int = 1,
+        min_periods: int = 10,
+        prior_threshold: bool = True,
+        min_conditioning_events: int = 5,
+        **kwargs,
+    ) -> pl.DataFrame:
+        # Evaluate d+lag only after it is completed (d+lag <= the output row), as
+        # required by the authoritative pandas research definition.
+        window = int(window)
+        quantile = float(quantile)
+        lag = int(lag)
+        min_periods = int(min_periods)
+        min_conditioning_events = int(min_conditioning_events)
+        if not (0.0 < quantile <= 0.5):
+            raise ValueError("group_tail_lead_score requires 0 < quantile <= 0.5")
+        if side not in ("lower", "upper"):
+            raise ValueError("side must be 'lower' or 'upper'")
+        if lag < 1:
+            raise ValueError("group_tail_lead_score requires lag >= 1")
+        if window < lag + 2:
+            raise ValueError("group_tail_lead_score requires window >= lag + 2")
+        if not 1 <= min_periods <= window:
+            raise ValueError("group_tail_lead_score requires 1 <= min_periods <= window")
+        if min_conditioning_events < 1:
+            raise ValueError(
+                "group_tail_lead_score requires min_conditioning_events >= 1"
+            )
 
-        return _apply_to_panel(x, lambda c: tail_lead_expr(c.meta.output_name()))
+        cols = [c for c in x.columns if c not in PANEL_SKIP_COLUMNS]
+        if not cols:
+            return x
+        missing = [c for c in cols if c not in group.columns]
+        if missing:
+            raise ValueError(f"group_tail_lead_score group panel missing columns: {missing}")
+
+        values = x.select(cols).to_numpy().astype(float, copy=False)
+        group_values = group.select(cols).to_numpy().astype(object, copy=False)
+        scores = _tail_lead_scores(
+            values,
+            group_values,
+            window,
+            quantile,
+            side,
+            lag,
+            min_periods,
+            bool(prior_threshold),
+            min_conditioning_events,
+        )
+        return x.with_columns(
+            [pl.Series(name=col, values=scores[:, i]) for i, col in enumerate(cols)]
+        )
 
 
 @register_operator(
