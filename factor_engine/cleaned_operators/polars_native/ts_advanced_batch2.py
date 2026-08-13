@@ -2143,12 +2143,12 @@ class TSLastIfPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_last_pivot_high", canonical="ts_last_pivot_high", backend="polars_native")
 class TSLastPivotHighPolarsNative(SeriesOperator):
-    """Value at most recent pivot high"""
+    """Value at the most recently confirmed pivot high."""
 
     metadata = OperatorMetadata(
         name="ts_last_pivot_high",
         category="time_series",
-        description="Most recent local maximum value",
+        description="Most recent strict local maximum, emitted after confirmation",
         param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "pivot"],
@@ -2158,23 +2158,25 @@ class TSLastPivotHighPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, window, **kwargs):
-        # Pivot high: x[t] > x[t-k:t] and x[t] > x[t:t+k]
         df = x.to_frame().lazy()
         col = x.name
 
         return (
             df.with_columns([
-                pl.col(col).rolling_max(window).shift(1).alias("_prev_max"),
-                pl.col(col).rolling_max(window).shift(-window+1).alias("_next_max"),
+                pl.col(col).shift(window).alias("_candidate"),
+                pl.col(col).rolling_max(window).shift(window + 1).alias("_left_max"),
+                pl.col(col).rolling_max(window).alias("_right_max"),
             ])
-            .with_columns([
-                pl.when((pl.col(col) >= pl.col("_prev_max")) & (pl.col(col) >= pl.col("_next_max")))
-                .then(pl.col(col))
+            .select([
+                pl.when(
+                    (pl.col("_candidate") > pl.col("_left_max"))
+                    & (pl.col("_candidate") > pl.col("_right_max"))
+                )
+                .then(pl.col("_candidate"))
                 .otherwise(None)
                 .forward_fill()
-                .alias("result")
+                .alias(col)
             ])
-            .select([pl.col(col)])
             .collect()
             .to_series()
         )
@@ -2182,12 +2184,12 @@ class TSLastPivotHighPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_last_pivot_low", canonical="ts_last_pivot_low", backend="polars_native")
 class TSLastPivotLowPolarsNative(SeriesOperator):
-    """Value at most recent pivot low"""
+    """Value at the most recently confirmed pivot low."""
 
     metadata = OperatorMetadata(
         name="ts_last_pivot_low",
         category="time_series",
-        description="Most recent local minimum value",
+        description="Most recent strict local minimum, emitted after confirmation",
         param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "pivot"],
@@ -2202,17 +2204,20 @@ class TSLastPivotLowPolarsNative(SeriesOperator):
 
         return (
             df.with_columns([
-                pl.col(col).rolling_min(window).shift(1).alias("_prev_min"),
-                pl.col(col).rolling_min(window).shift(-window+1).alias("_next_min"),
+                pl.col(col).shift(window).alias("_candidate"),
+                pl.col(col).rolling_min(window).shift(window + 1).alias("_left_min"),
+                pl.col(col).rolling_min(window).alias("_right_min"),
             ])
-            .with_columns([
-                pl.when((pl.col(col) <= pl.col("_prev_min")) & (pl.col(col) <= pl.col("_next_min")))
-                .then(pl.col(col))
+            .select([
+                pl.when(
+                    (pl.col("_candidate") < pl.col("_left_min"))
+                    & (pl.col("_candidate") < pl.col("_right_min"))
+                )
+                .then(pl.col("_candidate"))
                 .otherwise(None)
                 .forward_fill()
-                .alias("result")
+                .alias(col)
             ])
-            .select([pl.col(col)])
             .collect()
             .to_series()
         )
