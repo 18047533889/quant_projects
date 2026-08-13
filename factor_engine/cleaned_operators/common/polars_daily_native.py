@@ -493,7 +493,7 @@ class GroupNeutralizeNative(SeriesOperator):
     backend="polars",
 )
 class SizeNeutralizeNative(SeriesOperator):
-    """Size neutralize: residual vs log(max(market_cap, 1))."""
+    """Size neutralize: residual vs legal log(market_cap) (R19-024)."""
 
     metadata = OperatorMetadata(
         name="size_neutralize",
@@ -526,15 +526,15 @@ class SizeNeutralizeNative(SeriesOperator):
     backend="polars",
 )
 class IndustrySizeNeutralizeNative(SeriesOperator):
-    """Industry demean then size residual (Polars native)."""
+    """Industry+size FWL neutralize via registry bridge (matches numpy kernel)."""
 
     metadata = OperatorMetadata(
         name="industry_size_neutralize",
         category="group_neutralization",
-        description="行业+市值双中性（Polars 原生）",
+        description="行业+市值 FWL 联合中性化（Polars bridge → numpy kernel）",
         param_names=["x", "industry", "market_cap"],
         return_type="series",
-        tags=["group", "industry", "size", "polars", "native"],
+        tags=["group", "industry", "size", "polars", "native", "fwl"],
     )
 
     def _calculate_series(

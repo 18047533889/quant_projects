@@ -181,14 +181,17 @@ _EXPLICIT: dict[str, OpDoc] = {
         r"\tilde{X}_{i,t} = X_{i,t} - \bar{X}_{\mathrm{ind}(i),t}",
     ),
     "size_neutralize": OpDoc(
-        "市值中性化（对 log(max(cap, 1)) 截面回归残差）。",
-        "每个交易日 Y 对 log(max(市值, 1)) 回归，取残差。稳定公开名之一。",
+        "市值中性化（对合法 ln(mcap) 截面回归残差；非法市值缺失）。",
+        "每个交易日 Y 对 ln(市值) 回归取残差；仅 mcap>0 且有限参与（R19-024）。",
         r"Y_{i,t} = \alpha_t + \beta_t \ln(\max(\mathrm{cap}_{i,t}, 1)) + \varepsilon_{i,t}",
     ),
     "industry_size_neutralize": OpDoc(
-        "行业+市值双中性（先行业 demean，再市值残差）。",
-        "稳定公开名：先 group_neutralize，再 size_neutralize。",
-        r"\varepsilon^{(s)}_{i,t}\!\left(X_{i,t}-\bar{X}_{\mathrm{ind}(i),t}\right)",
+        "行业+市值双中性（FWL / 联合 OLS 残差）。",
+        "y 与 ln(合法市值) 均先行业 demean，再对 demean 后的 size 取截面残差；"
+        "等价行业 dummy + ln(mcap) 联合回归。合法市值要求 mcap>0 且有限。",
+        r"\tilde y = y-\bar y_{\mathrm{ind}},\ "
+        r"\tilde s=\ln(\mathrm{cap})-\overline{\ln(\mathrm{cap})}_{\mathrm{ind}},\ "
+        r"\varepsilon=\tilde y-\hat\alpha-\hat\beta\tilde s",
     ),
     # --- 元素级 ---
     "clip": OpDoc(

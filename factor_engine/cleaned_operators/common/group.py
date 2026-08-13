@@ -1047,11 +1047,15 @@ class IndustryNeutralize(SeriesOperator):
 
 @register_operator(name="size_neutralize", category="group_neutralization", business_category="group_neutralization", canonical="size_neutralize", source="factor_dsl_np")
 class SizeNeutralize(SeriesOperator):
-    """市值中性化：每日对 log(max(MarketCap, 1)) 做截面 OLS，取残差。"""
+    """市值中性化：每日对 ``log(market_cap)`` 做截面 OLS，取残差。
+
+    合法市值要求 ``mcap>0`` 且有限（R19-024）；非法市值 → NaN，禁止
+    ``log(max(cap, 1))`` 静默 clip。
+    """
     metadata = OperatorMetadata(
         name="size_neutralize",
         category="group_neutralization",
-        description="市值中性化（对 log(max(market_cap, 1)) 做截面回归残差）",
+        description="市值中性化（对合法 ln(mcap) 做截面回归残差；非法市值缺失）",
         examples=["size_neutralize(factor, market_cap)"],
         param_names=["x", "market_cap"],
         return_type="series",
@@ -1079,15 +1083,19 @@ class SizeNeutralize(SeriesOperator):
     source="factor_dsl_np",
 )
 class IndustrySizeNeutralize(SeriesOperator):
-    """行业+市值双中性：先行业组内 demean，再对 log(max(MarketCap, 1)) 取残差。"""
+    """行业+市值双中性（FWL / R19-023）。
+
+    ``y`` 与 ``log(market_cap)`` 均先按行业 demean，再对 demean 后的 size 取截面残差；
+    等价于对行业 dummy + ``ln(mcap)`` 联合 OLS。合法市值要求 ``mcap>0`` 且有限（R19-024）。
+    """
     metadata = OperatorMetadata(
         name="industry_size_neutralize",
         category="group_neutralization",
-        description="行业中性后再做市值中性（与评估双中性语义一致）",
+        description="行业+市值 FWL 联合中性化（等价行业 dummy + ln(mcap) OLS 残差）",
         examples=["industry_size_neutralize(factor, industry, market_cap)"],
         param_names=["x", "industry", "market_cap"],
         return_type="series",
-        tags=["group", "industry", "size", "neutralize"],
+        tags=["group", "industry", "size", "neutralize", "fwl"],
     )
 
     def _calculate_series(

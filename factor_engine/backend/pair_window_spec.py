@@ -19,9 +19,21 @@ class PairWindowSpec:
     pairwise_null_policy: str = "exclude_either_null"
 
     @classmethod
-    def from_plan_node(cls, node: PlanNode, *, default_size: int = 20) -> PairWindowSpec:
+    def from_plan_node(
+        cls,
+        node: PlanNode,
+        *,
+        default_size: int = 20,
+        default_min_periods: int = 2,
+    ) -> PairWindowSpec:
         base = window_spec_from_plan_node(node, default=default_size)
-        mp = max(base.min_periods, 2) if base.min_periods else 2
+        attrs = node.attrs or {}
+        if attrs.get("min_periods") is not None:
+            mp = max(int(base.min_periods), 2)
+        else:
+            # Caller omitted min_periods — use the op-specific production default
+            # (ts_corr/ts_cov → 2; ts_beta → 5 / NEW-024), never silent mp=1.
+            mp = max(int(default_min_periods), 2)
         return cls(
             size=base.size,
             min_periods=mp,

@@ -1576,28 +1576,42 @@ def _cs_broadcast_agg(agg: str, inner_sql: str, *, all_null_null: bool = False) 
 
 
 def _cs_mad_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
-    """截面 MAD：median(|x - median(x)|) 广播到各行。"""
+    """截面 MAD：median(|x - median(x)|) 广播到各行（finite sample）。"""
+    from backend.stat_valid import row_stat_invalid_sql
+
     med_fn = "median"
+    invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+    cleaned = (
+        f"SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS _v "
+        f"FROM ({inner_sql}) t_clean"
+    )
     return (
         f"SELECT ts, inst, "
         f"{med_fn}(abs(_v - med)) OVER (PARTITION BY ts) AS _v "
         f"FROM ("
         f"SELECT ts, inst, _v, {med_fn}(_v) OVER (PARTITION BY ts) AS med "
-        f"FROM ({inner_sql}) t0"
+        f"FROM ({cleaned}) t0"
         f") t"
     )
 
 
 def _cs_mad_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
-    """MAD 稳健 zscore：(x - median) / MAD；MAD=0 → NULL。"""
+    """MAD 稳健 zscore：(x - median) / MAD；MAD=0 → NULL（finite sample）。"""
+    from backend.stat_valid import row_stat_invalid_sql
+
     med_fn = "median"
+    invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+    cleaned = (
+        f"SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS _v "
+        f"FROM ({inner_sql}) t_clean"
+    )
     if dialect == SqlDialect.CLICKHOUSE:
         core = (
-            f"if(isNull(mad) OR mad = 0, NULL, (_v - med) / mad)"
+            f"if(isNull(mad) OR mad = 0 OR ({invalid}), NULL, (_v - med) / mad)"
         )
     else:
         core = (
-            f"CASE WHEN mad IS NULL OR mad = 0 THEN NULL "
+            f"CASE WHEN {invalid} OR mad IS NULL OR mad = 0 THEN NULL "
             f"ELSE (_v - med) / mad END"
         )
     return (
@@ -1607,7 +1621,7 @@ def _cs_mad_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
         f"{med_fn}(abs(_v - med)) OVER (PARTITION BY ts) AS mad "
         f"FROM ("
         f"SELECT ts, inst, _v, {med_fn}(_v) OVER (PARTITION BY ts) AS med "
-        f"FROM ({inner_sql}) t0"
+        f"FROM ({cleaned}) t0"
         f") t1"
         f") t"
     )
@@ -1973,7 +1987,6 @@ _SQL_FALLBACK_CANONICALS: frozenset[str] = frozenset({
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
-    "industry_size_neutralize",
 })
 
 
@@ -2025,14 +2038,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         if op == "maximum":
             fn = _dialect_fn(dialect, "greatest")
+            isnan = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+            nan = "nan" if dialect == SqlDialect.CLICKHOUSE else "'NaN'::DOUBLE"
             expr = (
                 f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+                f"WHEN {isnan}(l._v) OR {isnan}(r._v) THEN {nan} "
                 f"ELSE {fn}(l._v, r._v) END"
             )
         elif op == "minimum":
             fn = _dialect_fn(dialect, "least")
+            isnan = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+            nan = "nan" if dialect == SqlDialect.CLICKHOUSE else "'NaN'::DOUBLE"
             expr = (
                 f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+                f"WHEN {isnan}(l._v) OR {isnan}(r._v) THEN {nan} "
                 f"ELSE {fn}(l._v, r._v) END"
             )
         else:
@@ -3313,33 +3332,28 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
-    # Cross-sectional aggregations (simple)
-    if op == "cs_min":
+    # Cross-sectional aggregations (simple) — finite sample (R19-027).
+    if op in {"cs_min", "cs_max", "cs_range"}:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        return _Layer(
-            f"SELECT ts, inst, MIN(_v) OVER (PARTITION BY ts) AS _v FROM ({inner.sql}) t",
-            has_inst_window=inner.has_inst_window,
-            has_ts_partition=True,
-        )
+        from backend.stat_valid import row_stat_invalid_sql
 
-    if op == "cs_max":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
-        return _Layer(
-            f"SELECT ts, inst, MAX(_v) OVER (PARTITION BY ts) AS _v FROM ({inner.sql}) t",
-            has_inst_window=inner.has_inst_window,
-            has_ts_partition=True,
+        invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+        cleaned = (
+            f"SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS _v "
+            f"FROM ({inner.sql}) t_clean"
         )
-
-    if op == "cs_range":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
+        if op == "cs_min":
+            expr = "MIN(_v) OVER (PARTITION BY ts)"
+        elif op == "cs_max":
+            expr = "MAX(_v) OVER (PARTITION BY ts)"
+        else:
+            expr = (
+                "(MAX(_v) OVER (PARTITION BY ts) - MIN(_v) OVER (PARTITION BY ts))"
+            )
         return _Layer(
-            f"SELECT ts, inst, (MAX(_v) OVER (PARTITION BY ts) - MIN(_v) OVER (PARTITION BY ts)) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, {expr} AS _v FROM ({cleaned}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -3855,7 +3869,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
 
     if op == "size_neutralize":
-        # size_neutralize(x, market_cap) == cs_resid(x, ln(greatest(market_cap, 1)))
+        # size_neutralize(x, market_cap) == cs_resid(x, ln(market_cap))
+        # Legal caps only (R19-024): finite & >0 → ln; else NULL (no silent clip).
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_layer(node.inputs[0], dialect=dialect)
@@ -3863,15 +3878,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if y_layer is None or cap_layer is None:
             return None
         ln = _dialect_fn(dialect, "ln")
-        g = _dialect_fn(dialect, "greatest")
-        ln_cap = f"{ln}({g}(c._v, 1))"
+        ln_cap = (
+            f"CASE WHEN c._v IS NOT NULL AND c._v > 0 THEN {ln}(c._v) ELSE NULL END"
+        )
         part = "PARTITION BY y.ts"
         beta, alpha, n_valid = _cs_ols_components(
             dialect, y_col="y._v", x_col=ln_cap, partition=part
         )
         fit = f"({alpha}) + ({beta}) * ({ln_cap})"
         expr = (
-            f"CASE WHEN y._v IS NULL OR c._v IS NULL THEN NULL "
+            f"CASE WHEN y._v IS NULL OR ({ln_cap}) IS NULL THEN NULL "
             f"WHEN {n_valid} < 3 THEN NULL "
             f"ELSE y._v - ({fit}) END"
         )
@@ -3883,7 +3899,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
 
     if op == "industry_size_neutralize":
-        # Sequential dual: industry demean then size residual.
+        # FWL (R19-023): demean y and log(size) within industry, then residual.
+        # Legal caps only (R19-024): finite & >0 → ln; else NULL (no silent clip).
         if len(node.inputs) < 3:
             return None
         y_layer = _compile_layer(node.inputs[0], dialect=dialect)
@@ -3892,23 +3909,24 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if y_layer is None or ind_layer is None or cap_layer is None:
             return None
         ln = _dialect_fn(dialect, "ln")
-        g = _dialect_fn(dialect, "greatest")
-        ln_cap = f"{ln}({g}(d.cap, 1))"
+        ln_cap = (
+            f"CASE WHEN c._v IS NOT NULL AND c._v > 0 THEN {ln}(c._v) ELSE NULL END"
+        )
         demeaned_sql = (
             f"SELECT x.ts AS ts, x.inst AS inst, "
             f"(x._v - AVG(x._v) OVER (PARTITION BY x.ts, g._v)) AS dm, "
-            f"c._v AS cap "
+            f"(({ln_cap}) - AVG({ln_cap}) OVER (PARTITION BY x.ts, g._v)) AS ln_dm "
             f"FROM ({y_layer.sql}) x "
             f"LEFT JOIN ({ind_layer.sql}) g USING (ts, inst) "
             f"LEFT JOIN ({cap_layer.sql}) c USING (ts, inst)"
         )
         part = "PARTITION BY d.ts"
         beta, alpha, n_valid = _cs_ols_components(
-            dialect, y_col="d.dm", x_col=ln_cap, partition=part
+            dialect, y_col="d.dm", x_col="d.ln_dm", partition=part
         )
-        fit = f"({alpha}) + ({beta}) * ({ln_cap})"
+        fit = f"({alpha}) + ({beta}) * d.ln_dm"
         expr = (
-            f"CASE WHEN d.dm IS NULL OR d.cap IS NULL THEN NULL "
+            f"CASE WHEN d.dm IS NULL OR d.ln_dm IS NULL THEN NULL "
             f"WHEN {n_valid} < 3 THEN NULL "
             f"ELSE d.dm - ({fit}) END"
         )
@@ -4066,18 +4084,31 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        w = _window_int(node)
+        from backend.pair_window_spec import PairWindowSpec
+        from backend.stat_valid import stat_valid_sql
+
+        pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
+        w = pspec.size
         over = (
             f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
         corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
-        # R38-blocker fix (R19-030 current-row policy): 不能因当前行任一侧 NULL 就
-        # 强制输出 NULL —— pandas ``rolling(min_periods=2).corr`` 在"当前行缺失但
-        # 窗口有效对 >= min_periods"时仍输出有限值。窗口聚合自身跳过 NULL 对，
-        # 与 pandas current-row policy 一致；去掉 CASE 强制。
+        # Finite-pair mask (R19-027): ±Inf excluded like pandas rolling.corr after
+        # masking non-finite inputs. Current-row may still be NULL (R19-030).
+        l_ok = stat_valid_sql("l._v", dialect=dialect, exclude_nan=True)
+        r_ok = stat_valid_sql("r._v", dialect=dialect, exclude_nan=True)
+        pair = f"({l_ok} AND {r_ok})"
+        pair_l = f"CASE WHEN {pair} THEN l._v END"
+        pair_r = f"CASE WHEN {pair} THEN r._v END"
+        cnt = f"COUNT(CASE WHEN {pair} THEN 1 END) OVER ({over})"
+        body = f"{corr_fn}({pair_l}, {pair_r}) OVER ({over})"
+        expr = (
+            body
+            if pspec.min_periods <= 2
+            else f"CASE WHEN {cnt} < {pspec.min_periods} THEN NULL ELSE {body} END"
+        )
         return _Layer(
-            f"SELECT l.ts, l.inst, "
-            f"{corr_fn}(l._v, r._v) OVER ({over}) AS _v "
+            f"SELECT l.ts, l.inst, {expr} AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -4147,14 +4178,23 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        w = _window_int(node)
+        from backend.pair_window_spec import PairWindowSpec
+        from backend.stat_valid import stat_valid_sql
+
+        pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
+        w = pspec.size
         over = (
             f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
         cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
+        l_ok = stat_valid_sql("l._v", dialect=dialect, exclude_nan=True)
+        r_ok = stat_valid_sql("r._v", dialect=dialect, exclude_nan=True)
+        pair = f"({l_ok} AND {r_ok})"
+        pair_l = f"CASE WHEN {pair} THEN l._v END"
+        pair_r = f"CASE WHEN {pair} THEN r._v END"
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"{cov_fn}(l._v, r._v) OVER ({over}) AS _v "
+            f"{cov_fn}({pair_l}, {pair_r}) OVER ({over}) AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -4162,28 +4202,29 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     if op == "ts_beta":
         if len(node.inputs) < 2:
             return None
-        y = _compile_layer(node.inputs[0], dialect=dialect)
-        x = _compile_layer(node.inputs[1], dialect=dialect)
-        if y is None or x is None:
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
             return None
-        w = _window_int(node)
+        from backend.pair_window_spec import PairWindowSpec
+        from backend.pairwise_rolling import sql_pairwise_beta_expr
+
+        pspec = PairWindowSpec.from_plan_node(node, default_min_periods=5)
+        w = pspec.size
         over = (
-            f"PARTITION BY y.inst ORDER BY y.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
-        var_fn = "var_samp" if dialect == SqlDialect.DUCKDB else "varSamp"
-        nf = _dialect_fn(dialect, "nullif")
+        beta_expr = sql_pairwise_beta_expr(
+            left_col="l._v",
+            right_col="r._v",
+            over=over,
+            dialect_is_duckdb=dialect == SqlDialect.DUCKDB,
+            min_periods=pspec.min_periods,
+        )
         return _Layer(
-            f"WITH stats AS ("
-            f"SELECT y.ts, y.inst, y._v AS yv, x._v AS xv, "
-            f"{cov_fn}(y._v, x._v) OVER ({over}) AS cov_xy, "
-            f"{var_fn}(x._v) OVER ({over}) AS var_x "
-            f"FROM ({y.sql}) y LEFT JOIN ({x.sql}) x USING (ts, inst)"
-            f") "
-            f"SELECT ts, inst, "
-            f"CASE WHEN var_x IS NULL OR var_x = 0 THEN NULL "
-            f"ELSE cov_xy / {nf}(var_x, 0) END AS _v "
-            f"FROM stats",
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL ELSE ({beta_expr}) END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -7085,35 +7126,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
-    if op == "ts_beta":
-        if len(node.inputs) < 2:
-            return None
-        left = _compile_layer(node.inputs[0], dialect=dialect)
-        right = _compile_layer(node.inputs[1], dialect=dialect)
-        if left is None or right is None:
-            return None
-        from backend.pair_window_spec import PairWindowSpec
-        from backend.pairwise_rolling import sql_pairwise_beta_expr
-
-        pspec = PairWindowSpec.from_plan_node(node)
-        w = pspec.size
-        over = (
-            f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
-        )
-        beta_expr = sql_pairwise_beta_expr(
-            left_col="l._v",
-            right_col="r._v",
-            over=over,
-            dialect_is_duckdb=dialect == SqlDialect.DUCKDB,
-            min_periods=pspec.min_periods,
-        )
-        return _Layer(
-            f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL ELSE ({beta_expr}) END AS _v "
-            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
-            has_inst_window=True,
-        )
-
     if op == "ts_mad":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -7309,14 +7321,21 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
+        from backend.inf_sanitize import apply_inf_policy_sql
+
         pow_fn = "pow" if dialect == SqlDialect.CLICKHOUSE else "POW"
-        return _Layer(
-            f"SELECT l.ts, l.inst, "
+        raw = (
             f"CASE "
             f"WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
             f"WHEN l._v < 0 AND r._v <> FLOOR(r._v) THEN NULL "
             f"WHEN l._v = 0 AND r._v < 0 THEN NULL "
-            f"ELSE {pow_fn}(l._v, r._v) END AS _v "
+            f"ELSE {pow_fn}(l._v, r._v) END"
+        )
+        expr = apply_inf_policy_sql(
+            raw, "power", dialect_is_clickhouse=dialect == SqlDialect.CLICKHOUSE
+        )
+        return _Layer(
+            f"SELECT l.ts, l.inst, {expr} AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
@@ -7385,14 +7404,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         right = _compile_layer(node.inputs[1], dialect=dialect)
         if left is None or right is None:
             return None
-        w = _window_int(node)
+        from backend.pair_window_spec import PairWindowSpec
+        from backend.stat_valid import stat_valid_sql
+
+        pspec = PairWindowSpec.from_plan_node(node, default_min_periods=2)
+        w = pspec.size
         over = _rolling_ols_partition(w, prefix="l")
         cov_fn = "covar_samp" if dialect == SqlDialect.DUCKDB else "covarSamp"
-        # R38-blocker fix (R19-030 current-row policy): 与 ts_corr 相同——去掉
-        # current-row 强制 NULL；窗口聚合跳过 NULL 对，与 pandas rolling.cov 一致。
+        l_ok = stat_valid_sql("l._v", dialect=dialect, exclude_nan=True)
+        r_ok = stat_valid_sql("r._v", dialect=dialect, exclude_nan=True)
+        pair = f"({l_ok} AND {r_ok})"
+        pair_l = f"CASE WHEN {pair} THEN l._v END"
+        pair_r = f"CASE WHEN {pair} THEN r._v END"
+        cnt = f"COUNT(CASE WHEN {pair} THEN 1 END) OVER ({over})"
+        body = f"{cov_fn}({pair_l}, {pair_r}) OVER ({over})"
+        expr = (
+            body
+            if pspec.min_periods <= 2
+            else f"CASE WHEN {cnt} < {pspec.min_periods} THEN NULL ELSE {body} END"
+        )
         return _Layer(
-            f"SELECT l.ts, l.inst, "
-            f"{cov_fn}(l._v, r._v) OVER ({over}) AS _v "
+            f"SELECT l.ts, l.inst, {expr} AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -9387,8 +9419,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB:
             return None
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        # pandas rolling.kurt: any ±Inf in the window → NaN (does not skip Inf).
+        inf_cnt = (
+            f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) OVER ({over})"
+        )
         return _Layer(
-            f"SELECT ts, inst, KURTOSIS(_v) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, "
+            f"CASE WHEN {inf_cnt} > 0 THEN NULL "
+            f"ELSE KURTOSIS(_v) OVER ({over}) END AS _v "
+            f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )
 

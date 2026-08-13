@@ -509,12 +509,7 @@ class CSWeightedMeanPolarsNative(SeriesOperator):
             .alias(feature_name)
         ])
 
-        result_df = lf.collect().to_pandas()
-        if "index" in result_df.columns:
-            result_df = result_df.set_index("index")
-        result = result_df[feature_name]
-        result.index = original_index
-        return result
+        return _from_polars_safe(lf, feature_name, original_index)
 
 
 @register_operator(
@@ -554,12 +549,7 @@ class CSWeightedDemeanPolarsNative(SeriesOperator):
             (pl.col(feature_name) - weighted_mean).alias(feature_name)
         ])
 
-        result_df = lf.collect().to_pandas()
-        if "index" in result_df.columns:
-            result_df = result_df.set_index("index")
-        result = result_df[feature_name]
-        result.index = original_index
-        return result
+        return _from_polars_safe(lf, feature_name, original_index)
 
 
 @register_operator(
@@ -605,12 +595,7 @@ class CSWeightedZscorePolarsNative(SeriesOperator):
             pl.when(weighted_std != 0).then((pl.col(feature_name) - weighted_mean) / weighted_std).otherwise(None).alias(feature_name)
         ])
 
-        result_df = lf.collect().to_pandas()
-        if "index" in result_df.columns:
-            result_df = result_df.set_index("index")
-        result = result_df[feature_name]
-        result.index = original_index
-        return result
+        return _from_polars_safe(lf, feature_name, original_index)
 
 
 @register_operator(
@@ -645,21 +630,26 @@ class CSWeightedPercentileRankPolarsNative(SeriesOperator):
         df = pd.DataFrame({feature_name: feature, weight_name: weight})
         lf = pl.from_pandas(df.reset_index(drop=False)).lazy()
 
+        # Weighted percentile rank: cumsum(weights) / sum(weights) after sorting by feature
+        # Need to preserve original order by using row_number and sorting back
+        lf = lf.with_columns([
+            pl.arange(0, pl.len()).alias("_original_order")
+        ])
+
         lf = (
             lf.sort(feature_name)
             .with_columns([
                 (pl.col(weight_name).cum_sum() / pl.col(weight_name).sum())
-                .alias("weighted_rank")
+                .alias("_weighted_rank")
             ])
+            .sort("_original_order")
+            .with_columns([
+                pl.col("_weighted_rank").alias(feature_name)
+            ])
+            .drop(["_original_order", "_weighted_rank"])
         )
 
-        result_df = lf.collect().to_pandas()
-        if "index" in result_df.columns:
-            result_df = result_df.set_index("index")
-        result = result_df["weighted_rank"]
-        result.index = original_index
-        result.name = feature_name
-        return result
+        return _from_polars_safe(lf, feature_name, original_index)
 
 
 @register_operator(

@@ -1255,7 +1255,9 @@ def _try_ts_pair_from_base_columns(
     from backend.pair_window_spec import PairWindowSpec
     from backend.pairwise_rolling import polars_pairwise_output_guard, polars_ts_beta_expr, polars_vwap_expr
 
-    pspec = PairWindowSpec.from_plan_node(node)
+    # ts_beta production default is min_periods=5 (NEW-024 / rolling_beta); corr/cov stay at 2.
+    default_mp = 5 if op == "ts_beta" else 2
+    pspec = PairWindowSpec.from_plan_node(node, default_min_periods=default_mp)
     w = pspec.size
     mp = pspec.min_periods
     ddof = pspec.ddof
@@ -1311,8 +1313,10 @@ _BINARY_FUSION_OPS = frozenset(
 
 
 def _safe_pow_expr(base: pl.Expr, exp: pl.Expr) -> pl.Expr:
-    """非法定义域返回 NULL（对齐 SQL emitter）。"""
-    return (
+    """非法定义域返回 NULL（对齐 SQL emitter）；溢出 ±Inf → NULL（power semantics）。"""
+    from backend.inf_sanitize import apply_inf_policy_polars_fast
+
+    raw = (
         pl.when(base.is_null() | exp.is_null())
         .then(None)
         .when((base < 0) & (exp != exp.floor()))
@@ -1321,6 +1325,8 @@ def _safe_pow_expr(base: pl.Expr, exp: pl.Expr) -> pl.Expr:
         .then(None)
         .otherwise(base.pow(exp))
     )
+    return apply_inf_policy_polars_fast(raw, "power")
+
 
 
 def _truthy(col: str) -> pl.Expr:
@@ -1804,9 +1810,20 @@ def _compile_polars_impl(
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
+        # Finite-pair mask (same contract as fusion path / pandas).
+        lcol = (
+            pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
+            .then(None)
+            .otherwise(pl.col(_VAL))
+        )
+        rcol = (
+            pl.when(pl.col("_y").is_nan() | pl.col("_y").is_infinite())
+            .then(None)
+            .otherwise(pl.col("_y"))
+        )
         corr = pl.rolling_corr(
-            pl.col(_VAL),
-            pl.col("_y"),
+            lcol,
+            rcol,
             window_size=pspec.size,
             min_samples=pspec.min_periods,
         ).over(_INST, order_by=_TS)
@@ -1831,9 +1848,19 @@ def _compile_polars_impl(
         if left is None or right is None:
             return None
         joined = _join_binary(left, right)
+        lcol = (
+            pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
+            .then(None)
+            .otherwise(pl.col(_VAL))
+        )
+        rcol = (
+            pl.when(pl.col("_y").is_nan() | pl.col("_y").is_infinite())
+            .then(None)
+            .otherwise(pl.col("_y"))
+        )
         cov = pl.rolling_cov(
-            pl.col(_VAL),
-            pl.col("_y"),
+            lcol,
+            rcol,
             window_size=pspec.size,
             min_samples=pspec.min_periods,
             ddof=pspec.ddof,
@@ -1851,7 +1878,7 @@ def _compile_polars_impl(
         from backend.pair_window_spec import PairWindowSpec
         from backend.pairwise_rolling import polars_ts_beta_expr
 
-        pspec = PairWindowSpec.from_plan_node(node)
+        pspec = PairWindowSpec.from_plan_node(node, default_min_periods=5)
         left = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         right = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
         if left is None or right is None:
@@ -2093,11 +2120,14 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
+        from backend.stat_valid import polars_rank_input
+
         p = _float_attr(node, "p", default=0.5)
         pos_p = _literal_value(node, 0)
         if pos_p is not None:
             p = pos_p
-        q = pl.col(_VAL).quantile(quantile=p, interpolation="linear").over(_TS, order_by=_INST)
+        value = polars_rank_input(_VAL, exclude_nan=True)
+        q = value.quantile(quantile=p, interpolation="linear").over(_TS, order_by=_INST)
         return inner.with_columns(q.alias(_VAL))
 
     if op == "winsorize":
@@ -2144,7 +2174,8 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "size_neutralize":
-        # size_neutralize(x, market_cap) == cs_resid(x, log(max(market_cap, 1)))
+        # size_neutralize(x, market_cap) == cs_resid(x, log(market_cap))
+        # Legal caps only (R19-024): finite & >0 → log; else null (no silent clip).
         if len(node.inputs) < 2:
             return None
         y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2153,11 +2184,20 @@ def _compile_polars_impl(
             return None
         joined = y_layer.join(
             cap_layer.rename({_VAL: "_cap"}), on=[_TS, _INST], how="left"
-        ).with_columns(pl.col("_cap").clip(lower_bound=1.0).log().alias("_ln"))
+        ).with_columns(
+            pl.when(
+                pl.col("_cap").is_not_null()
+                & pl.col("_cap").is_finite()
+                & (pl.col("_cap") > 0.0)
+            )
+            .then(pl.col("_cap").log())
+            .otherwise(None)
+            .alias("_ln")
+        )
         beta, alpha, n_valid = _cs_ols_exprs(_VAL, "_ln")
         fit = alpha + beta * pl.col("_ln")
         return joined.with_columns(
-            pl.when(pl.col(_VAL).is_null() | pl.col("_cap").is_null())
+            pl.when(pl.col(_VAL).is_null() | pl.col("_ln").is_null())
             .then(None)
             .when(n_valid < 3)
             .then(None)
@@ -2166,7 +2206,8 @@ def _compile_polars_impl(
         ).select(_TS, _INST, _VAL)
 
     if op == "industry_size_neutralize":
-        # Sequential dual: industry demean, then size residual (eval-aligned).
+        # FWL (R19-023): demean y and log(size) within industry, then residual.
+        # log(size) uses legal caps only (R19-024): finite & >0 → log; else null.
         if len(node.inputs) < 3:
             return None
         y_layer = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -2178,19 +2219,34 @@ def _compile_polars_impl(
             y_layer.join(ind_layer.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
             .join(cap_layer.rename({_VAL: "_cap"}), on=[_TS, _INST], how="left")
             .with_columns(
+                pl.when(
+                    pl.col("_cap").is_not_null()
+                    & pl.col("_cap").is_finite()
+                    & (pl.col("_cap") > 0.0)
+                )
+                .then(pl.col("_cap").log())
+                .otherwise(None)
+                .alias("_ln"),
+            )
+            .with_columns(
                 pl.when(pl.col(_VAL).is_null())
                 .then(None)
                 .otherwise(
                     pl.col(_VAL) - pl.col(_VAL).mean().over(_TS, _GRP, order_by=_INST)
                 )
                 .alias("_dm"),
-                pl.col("_cap").clip(lower_bound=1.0).log().alias("_ln"),
+                pl.when(pl.col("_ln").is_null())
+                .then(None)
+                .otherwise(
+                    pl.col("_ln") - pl.col("_ln").mean().over(_TS, _GRP, order_by=_INST)
+                )
+                .alias("_ln_dm"),
             )
         )
-        beta, alpha, n_valid = _cs_ols_exprs("_dm", "_ln")
-        fit = alpha + beta * pl.col("_ln")
+        beta, alpha, n_valid = _cs_ols_exprs("_dm", "_ln_dm")
+        fit = alpha + beta * pl.col("_ln_dm")
         return joined.with_columns(
-            pl.when(pl.col("_dm").is_null() | pl.col("_cap").is_null())
+            pl.when(pl.col("_dm").is_null() | pl.col("_ln_dm").is_null())
             .then(None)
             .when(n_valid < 3)
             .then(None)
@@ -2273,9 +2329,8 @@ def _compile_polars_impl(
                 .otherwise(pl.col(_VAL) * rank / denom)
             )
         elif op == "group_mean":
-            # NaN/NULL members must stay NaN/NULL (audit #19: a missing value
-            # must not become a fabricated group statistic).  The pandas
-            # reference only assigns the group mean to finite members.
+            # NaN/NULL members must stay NaN/NULL (audit #19).  Inf follows
+            # pandas ``notna`` (participates / may poison), not finite-mask.
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
@@ -2310,14 +2365,15 @@ def _compile_polars_impl(
         elif op == "group_std":
             from backend.numeric_semantics import std_ddof_value
 
+            # pandas GroupStd uses ``notna`` (Inf included); Inf→std NaN→0 fill.
             cnt = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
             std_expr = pl.col(_VAL).std(ddof=std_ddof_value("group_std")).over(*over_keys, order_by=_INST)
             expr = (
-                pl.when(pl.col(_VAL).is_null())
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
                 .when(cnt < 2)
                 .then(0.0)
-                .when(std_expr.is_null())
+                .when(std_expr.is_null() | std_expr.is_infinite())
                 .then(0.0)
                 .otherwise(std_expr)
             )
@@ -2326,14 +2382,18 @@ def _compile_polars_impl(
 
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
-                expr = pl.when(pl.col(_VAL).is_null()).then(None).otherwise(pl.col(_VAL) - mean)
+                expr = (
+                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                    .then(None)
+                    .otherwise(pl.col(_VAL) - mean)
+                )
             else:
                 std = pl.col(_VAL).std(ddof=std_ddof_value("group_zscore")).over(*over_keys, order_by=_INST)
                 zero_fill = zscore_zero_std_fill("group_zscore")
                 expr = (
-                    pl.when(pl.col(_VAL).is_null())
+                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                     .then(None)
-                    .when(std.is_null() | (std == 0))
+                    .when(std.is_null() | (std == 0) | std.is_infinite())
                     .then(zero_fill)
                     .otherwise((pl.col(_VAL) - mean) / std)
                 )
@@ -2349,20 +2409,28 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        med = pl.col(_VAL).median().over(_TS, order_by=_INST)
-        mad = (pl.col(_VAL) - med).abs().median().over(_TS, order_by=_INST)
+        from backend.stat_valid import polars_rank_input
+
+        value = polars_rank_input(_VAL, exclude_nan=True)
+        med = value.median().over(_TS, order_by=_INST)
+        mad = (value - med).abs().median().over(_TS, order_by=_INST)
         return inner.with_columns(mad.alias(_VAL))
 
     if op == "cs_mad_zscore":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        med = pl.col(_VAL).median().over(_TS, order_by=_INST)
-        mad = (pl.col(_VAL) - med).abs().median().over(_TS, order_by=_INST)
+        from backend.stat_valid import polars_rank_input, polars_row_stat_invalid
+
+        value = polars_rank_input(_VAL, exclude_nan=True)
+        med = value.median().over(_TS, order_by=_INST)
+        mad = (value - med).abs().median().over(_TS, order_by=_INST)
         expr = (
-            pl.when(mad.is_null() | (mad == 0))
+            pl.when(polars_row_stat_invalid(_VAL, exclude_nan=True))
             .then(None)
-            .otherwise((pl.col(_VAL) - med) / mad)
+            .when(mad.is_null() | (mad == 0))
+            .then(None)
+            .otherwise((value - med) / mad)
         )
         return inner.with_columns(expr.alias(_VAL))
 
@@ -2533,7 +2601,11 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        value = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(pl.col(_VAL))
+        # R19-027..029: sample_validity=finite — ±Inf excluded like pandas
+        # CrossSectionSampleMask.
+        from backend.stat_valid import polars_rank_input, polars_row_stat_invalid
+
+        value = polars_rank_input(_VAL, exclude_nan=True)
         valid = value.count().over(_TS, order_by=_INST)
         kind = cs_aggregates[op]
         if kind == "mean":
@@ -2801,7 +2873,11 @@ def _compile_polars_impl(
         w = _window_int(node)
 
         def _kurt(arr: np.ndarray) -> float:
+            # Match pandas ``Series.rolling(...).kurt()``: ±Inf in the window
+            # poisons the statistic (returns NaN); NaN alone is skipped.
             s = pd.Series(np.asarray(arr, dtype=np.float64))
+            if np.isinf(s.to_numpy(dtype=float, na_value=np.nan)).any():
+                return np.nan
             if s.count() == 0:
                 return np.nan
             val = s.kurt()
@@ -3171,10 +3247,22 @@ def execute_polars_long_plan(
     revalidate = getattr(ds, "revalidate_for_long_collect", None)
     if callable(revalidate):
         revalidate()
-    from data_access.read.query_budget import (
-        enforce_arrow_budget,
-        resolve_query_budget,
-    )
+    # QueryBudget is optional when DataAccess is not installed (in-memory /
+    # unit-test paths). Production DA sources still enforce the budget.
+    try:
+        from data_access.read.query_budget import (
+            enforce_arrow_budget,
+            resolve_query_budget,
+        )
+    except ImportError:  # pragma: no cover - local FE-only test envs
+        return polars_long_to_multiindex_series(
+            lf.collect(),
+            timestamp_col=ctx.timestamp_col,
+            instrument_col=ctx.instrument_col,
+            value_col="value",
+            template_index=optional_universe_index(ctx),
+        ).sort_index()
+
     import time as _t
 
     _budget = resolve_query_budget(None)

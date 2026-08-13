@@ -335,9 +335,16 @@ def finalize_layer_governance() -> None:
     from cleaned_operators import operator_policy, operator_surface
 
     actual = set(OperatorRegistry._operators)
+    # Migrated daily names intentionally remain listed in EXTENDED_ONLY for
+    # authoring-history / union coverage, but classify_canonical prefers daily.
+    # Partition disjointness therefore excludes daily from the extended bucket.
+    daily_partition = (
+        set(operator_surface.DAILY_CANONICALS)
+        | set(operator_surface.daily_factor_migrated())
+    )
     partitions = {
-        "daily": set(operator_surface.DAILY_CANONICALS) | set(operator_surface.daily_factor_migrated()),
-        "extended": set(operator_surface.EXTENDED_ONLY_CANONICALS),
+        "daily": daily_partition,
+        "extended": set(operator_surface.EXTENDED_ONLY_CANONICALS) - daily_partition,
         "research": set(operator_surface.RESEARCH_ONLY_CANONICALS),
         "unsafe": set(operator_surface.UNSAFE_CANONICALS),
         "legacy": set(operator_surface.LEGACY_ONLY_CANONICALS),

@@ -1,6 +1,7 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = "_build_backend"
+backend-path = ["."]
 
 [project]
 name = "factor-engine"
@@ -20,7 +21,6 @@ dependencies = [
 factor-engine-serve = "service.app:main"
 
 [tool.setuptools]
-include-package-data = true
 py-modules = [
     "logging_utils",
     "pit_contract",
@@ -56,12 +56,17 @@ include = [
     "service*",
     "storage*",
     "util*",
+    "validation*",
 ]
+exclude = ["tests", "tests.*", "benchmarks", "benchmarks.*", "audit", "audit.*", "*.tests", "*.tests.*", "*.__pycache__"]
 
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
 "docs" = ["*.json", "*.yaml", "*.md"]
 "cleaned_operators" = ["docs/*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "audit", "audit.*", "*.pyc", "__pycache__", "test_*.py", "*_test.py"]
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
@@ -74,16 +79,17 @@ modin = ["modin>=0.28"]
 # R31-118：核心 parallel 路径已统一到 concurrent.futures（as_completed 流式 sink），
 # joblib 不再是生产依赖；旧 `[parallel]` extra 移除，避免无效依赖。
 backtest = ["backtrader>=1.9.78.123"]
-data = ["data-access>=0.2.0"]
+data = ["data-access>=0.10.0"]
 # 性能运行时：ResourceBroker 的 live headroom / 进程族 RSS / IO pressure 依赖
 # psutil（R31-119：资源治理不是 optional 装饰，是生产约束）；threadpoolctl 用于
 # BLAS/OpenMP 运行时线程限制（R31-120/121）。
 performance = ["psutil>=5.9", "threadpoolctl>=3.1"]
-# R31_P0-031：最低版本 = 实际 CI 验证过的最小兼容版本（0.2.0 已含
+# R31_P0-031：最低版本 = 实际 CI 验证过的最小兼容版本（0.10.0 已含
 # ``data_access.read.scan_cost`` / ``semantic_catalog``，FE 全量依赖它们）。
-full = ["data-access>=0.2.0", "polars>=0.20", "duckdb>=0.10", "psutil>=5.9"]
+full = ["data-access>=0.10.0", "polars>=0.20", "duckdb>=0.10", "psutil>=5.9"]
 service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
-dev = ["pytest>=8.0", "fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27"]
+validation = ["pydantic>=2.0"]
+dev = ["pytest>=8.0", "fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27", "pydantic>=2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

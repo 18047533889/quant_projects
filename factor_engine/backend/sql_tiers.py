@@ -629,7 +629,6 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset({
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
-    "industry_size_neutralize",
 })
 
 # DuckDB 分层

@@ -93,6 +93,9 @@ packages = [
 [tool.setuptools.package-data]
 data_access = ["config/*.yaml", "config/README.md", "docs/*.md"]
 
+[tool.setuptools.exclude-package-data]
+"*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "scripts", "scripts.*", "*.pyc", "__pycache__"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
