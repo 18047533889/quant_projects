@@ -59,7 +59,25 @@ def test_put_timeout_is_one_absolute_budget_across_notifications():
     assert time.monotonic() - started < 0.35
 
 
-def test_oversized_item_uses_finite_single_item_borrow():
+def test_put_returns_false_when_queue_closes_while_blocked():
+    queue = BoundedResultQueue(1)
+    assert queue.put(ResultItem("resident", b"x", bytes=1))
+    result = {}
+
+    def blocked_put() -> None:
+        result["ok"] = queue.put(ResultItem("blocked", b"y", bytes=1), timeout=1.0)
+
+    thread = threading.Thread(target=blocked_put)
+    thread.start()
+    time.sleep(0.02)
+    queue.close()
+    thread.join(timeout=0.5)
+
+    assert not thread.is_alive()
+    assert result["ok"] is False
+    assert queue.queued_count == 1
+
+
     queue = BoundedResultQueue(10)
     oversized = ResultItem("large", b"x" * 25, bytes=25)
 

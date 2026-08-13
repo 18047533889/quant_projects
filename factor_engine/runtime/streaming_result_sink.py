@@ -70,7 +70,7 @@ def _classify_write_error(exc: BaseException) -> str:
         return "transient"
     if "oom" in msg or "out of memory" in msg or name == "memoryerror":
         return "permanent"
-    return "transient"  # 默认只重试有限次；超预算仍 FAILED（见 writer 循环）
+    return "permanent_unknown"
 
 
 def _should_flush(
@@ -137,17 +137,32 @@ class BoundedResultQueue:
             return len(self._items)
 
     def put(self, item: ResultItem, *, timeout: float = 600.0) -> bool:
-        """放入结果；队列满（bytes）时阻塞等待消费者（backpressure，R27-106）。"""
+        """放入结果；队列满（bytes）时阻塞等待消费者（R27-106）。
+
+        The timeout is one absolute budget, not a fresh budget after every
+        notification.  A single item larger than the configured queue is
+        admitted only when the queue is empty; otherwise it would be
+        impossible to make progress and callers would wait until timeout.
+        """
         if item.bytes <= 0:
             item.bytes = _bytes_of(item.value)
+        item.bytes = max(0, int(item.bytes))
+        deadline = time.monotonic() + max(0.0, float(timeout))
         with self._lock:
             if self._closed:
                 return False
-            while self._current_bytes + item.bytes > self.max_bytes:
-                t0 = time.monotonic()
-                if not self._lock.wait(timeout):
+            while (
+                self._items
+                and self._current_bytes + item.bytes > self.max_bytes
+            ):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     return False
+                t0 = time.monotonic()
+                self._lock.wait(remaining)
                 self._write_backpressure_seconds += time.monotonic() - t0
+                if self._closed:
+                    return False
             self._items.append(item)
             self._current_bytes += item.bytes
             self._lock.notify()
@@ -295,7 +310,7 @@ class _WriterWorker:
                 kind = _classify_write_error(exc)
                 with self._lock:
                     self.retried += 1
-                if kind == "permanent" or attempts >= _MAX_RETRIES:
+                if kind.startswith("permanent") or attempts >= _MAX_RETRIES:
                     with self._lock:
                         self.state = WS_FAILED
                         self.fatal_error = exc
@@ -363,8 +378,14 @@ class StreamingResultSink:
         self._writer_threads = max(1, int(writer_threads))
         self._threads: list[threading.Thread] = []
         # R33-P0-051：每 worker 一个独立队列（同 partition → 同 worker → 单 writer）。
+        # Split one total memory budget deterministically; the remainder goes
+        # to the lowest worker ids so no worker silently receives the full
+        # global budget.
+        base, remainder = divmod(max(1, int(queue_bytes)), self._writer_threads)
+        capacities = [base + (1 if i < remainder else 0) for i in range(self._writer_threads)]
+        self._writer_capacities = capacities
         self._worker_queues: list[BoundedResultQueue] = [
-            BoundedResultQueue(queue_bytes) for _ in range(self._writer_threads)
+            BoundedResultQueue(capacity) for capacity in capacities
         ]
         # 兼容旧接口：``sink.queue`` 指向 worker-0 队列（单 writer 时即唯一队列）。
         self.queue = self._worker_queues[0]
@@ -445,19 +466,21 @@ class StreamingResultSink:
         budget）——按 worker 数均分到各队列。缩容不丢已有 items。
         """
         total = max(1, int(total))
-        per = max(1, total // max(1, len(self._worker_queues)))
-        for q in self._worker_queues:
-            q.set_target_bytes(per)
+        base, remainder = divmod(total, max(1, len(self._worker_queues)))
+        for i, q in enumerate(self._worker_queues):
+            q.set_target_bytes(base + (1 if i < remainder else 0))
 
     def submit(self, name: str, value: Any, **meta: Any) -> bool:
         """R33-P0-049：提交结果。writer 已 FAILED 时拒绝新提交（fatal 传播）。"""
         if self._fatal_error is not None:
             return False
         item = ResultItem(name=name, value=value, meta=dict(meta))
-        with self._lock:
-            self._accepted += 1
         idx = self._route_worker(item)
-        return self._worker_queues[idx].put(item)
+        accepted = self._worker_queues[idx].put(item)
+        if accepted:
+            with self._lock:
+                self._accepted += 1
+        return accepted
 
     def _join_timeout_for_finish(self) -> float:
         """finish() 使用的 join timeout：默认基础上按队列剩余 items 放宽。
@@ -578,6 +601,7 @@ class StreamingResultSink:
             failed_workers = [w.worker_id for w in self._workers if w.state == WS_FAILED]
             return {
                 "queue": self.queue.summary(),
+                "total_queue_capacity_bytes": sum(q.max_bytes for q in self._worker_queues),
                 "accepted": self._accepted,
                 "committed": committed,
                 "failed": failed,
