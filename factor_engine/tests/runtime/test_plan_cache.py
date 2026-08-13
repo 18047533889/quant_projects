@@ -51,6 +51,22 @@ def test_persistent_plan_cache_roundtrip_disk(tmp_path):
     pd.testing.assert_series_equal(hit, series, check_names=False)
 
 
+def test_persistent_plan_cache_rejects_metadata_for_different_key(tmp_path):
+    import json
+
+    root = tmp_path / "plan_cache_key_binding"
+    cache = PersistentPlanCache(root, data_scope="s1")
+    cache.set("key_a", _panel())
+
+    path = cache._disk_path(cache._scoped_key("key_a"))
+    meta_path = path.with_suffix(".meta.json")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["cache_key_digest"] = "0" * 64
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    assert PersistentPlanCache(root, data_scope="s1").get("key_a") is None
+
+
 def test_persistent_plan_cache_roundtrip_dataframe(tmp_path):
     root = tmp_path / "plan_cache"
     cache = PersistentPlanCache(root, data_scope="s1")

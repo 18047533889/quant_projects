@@ -558,7 +558,7 @@ def _rebuild_index_from_meta(meta: dict[str, Any], fallback_columns: list[str]) 
     return arrays[0] if arrays else pd.RangeIndex(0)
 
 
-def _save_value(path: Path, value: Any) -> None:
+def _save_value(path: Path, value: Any, *, cache_key: str | None = None) -> None:
     """将 Series/DataFrame 原子写入 Parquet 并附带元数据 JSON。
 
     审计 #330 + R20-153..172：
@@ -593,6 +593,11 @@ def _save_value(path: Path, value: Any) -> None:
         return
     meta["schema_version"] = PLAN_CACHE_SCHEMA_VERSION
     meta["index_schema"] = _index_schema_meta(value.index)
+    if cache_key is not None:
+        # Verify that a payload is read only under the exact scoped-key digest
+        # that created its path; payload/schema checks alone cannot detect a
+        # digest collision or an accidentally moved cache file.
+        meta["cache_key_digest"] = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
 
     # R20-158：per-key 写锁（同 key 多 writer 交错 payload/meta 的防护）。
     # R32-P1-045：bounded lock registry（per-key 表不再无限增长）。
@@ -626,7 +631,7 @@ def _save_value(path: Path, value: Any) -> None:
             raise
 
 
-def _load_value(path: Path) -> Any | None:
+def _load_value(path: Path, *, cache_key: str | None = None) -> Any | None:
     """从 Parquet + 元数据 JSON 恢复缓存值（校验 checksum + schema，fail-closed）。
 
     审计 #330：checksum 缺失或不匹配都返回 ``None``，不信任未经验证的磁盘缓存。
@@ -651,6 +656,10 @@ def _load_value(path: Path) -> Any | None:
             return None
         if int(meta.get("schema_version", 0)) != PLAN_CACHE_SCHEMA_VERSION:
             return None
+        if cache_key is not None:
+            expected_digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
+            if meta.get("cache_key_digest") != expected_digest:
+                return None
         if _payload_checksum(path) != checksum:
             return None
         frame = pd.read_parquet(path)
@@ -822,7 +831,7 @@ class PersistentPlanCache(CacheManager):
         path = self._disk_path(scoped)
         if not path.is_file():
             return None
-        value = _load_value(path)
+        value = _load_value(path, cache_key=scoped)
         if value is None:
             return None
         # R6-152: a disk (L2) hit must still count toward the memory budget and
@@ -888,7 +897,7 @@ class PersistentPlanCache(CacheManager):
                     gov.release_accounting(self.layer_name, freed)
         path = self._disk_path(scoped)
         path.parent.mkdir(parents=True, exist_ok=True)
-        _save_value(path, value)
+        _save_value(path, value, cache_key=scoped)
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> PersistentPlanCache:
         """with_scope。
