@@ -43,6 +43,7 @@ class QResidentTableHandle:
     row_count: int
     byte_size: int  # Estimated memory footprint
     region_id: str  # Origin region ID
+    connection_id: int | None = None  # Identity of the owning q connection
 
     def __repr__(self) -> str:
         return (

@@ -154,16 +154,21 @@ class QExecutor:
             logger.debug(f"Executing q Region {plan.region_id}:\n{plan.q_code}")
             q(plan.q_code)
 
-            # 获取输出
+            # 获取输出。中间结果保持在 q 中；只有 region 边界才下载。
             q_result = q(plan.output_table)
-            output_df = self.type_adapter.q_to_pandas(q_result)
+            if return_resident_handle:
+                output_df = pd.DataFrame()
+                rows, output_bytes = self._resident_result_metadata(q_result)
+            else:
+                output_df = self.type_adapter.q_to_pandas(q_result)
 
-            # 记录 Q→Python 传输
-            output_bytes = output_df.memory_usage(deep=True).sum()
-            self._telemetry["q_to_python_bytes"] += output_bytes
+                # 记录 Q→Python 传输
+                output_bytes = int(output_df.memory_usage(deep=True).sum())
+                self._telemetry["q_to_python_bytes"] += output_bytes
 
             execution_time = (time.perf_counter() - start_time) * 1000  # ms
-            rows = len(output_df)
+            if not return_resident_handle:
+                rows = len(output_df)
 
             logger.info(
                 f"q Region {plan.region_id} executed: "
@@ -179,6 +184,7 @@ class QExecutor:
                     row_count=rows,
                     byte_size=int(output_bytes),
                     region_id=plan.region_id,
+                    connection_id=id(q),
                 )
                 logger.debug(f"Created resident handle: {resident_handle}")
 
@@ -207,6 +213,25 @@ class QExecutor:
                 error_message=error_msg,
             )
 
+    @staticmethod
+    def _resident_result_metadata(q_result: Any) -> tuple[int, int]:
+        """Read bounded metadata without materializing a q result.
+
+        PyKX table objects expose ``len`` and may expose ``nbytes``. Metadata
+        is best-effort: inspection failures must not trigger a q-to-pandas
+        round trip or turn a successful resident region into a failure.
+        """
+        try:
+            rows = max(0, int(len(q_result)))
+        except (TypeError, ValueError, AttributeError):
+            rows = 0
+
+        try:
+            byte_size = max(0, int(getattr(q_result, "nbytes", 0)))
+        except (TypeError, ValueError, AttributeError):
+            byte_size = 0
+        return rows, byte_size
+
     def _load_inputs_to_q(
         self,
         q: Any,
@@ -223,6 +248,12 @@ class QExecutor:
         for table_name, data in input_data.items():
             # 检查是否是 Q-resident handle
             if isinstance(data, QResidentTableHandle):
+                if data.connection_id is not None and data.connection_id != id(q):
+                    raise RuntimeError(
+                        f"Stale Q-resident handle for {data.table_name}: "
+                        "owning q connection is no longer active"
+                    )
+
                 # 数据已在 Q 中，无需上传
                 logger.debug(
                     f"Reusing Q-resident table {data.table_name} "

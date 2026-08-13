@@ -20,6 +20,17 @@ from backend.q_backend.q_executor import (
     get_q_executor_telemetry,
     reset_q_executor_telemetry,
 )
+from backend.q_backend.q_process_manager import QAvailabilityStatus
+
+
+@pytest.fixture(autouse=True)
+def reset_q_executor_singleton():
+    """Keep the global executor bound to each test's patched dependencies."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    q_executor_module._EXECUTOR = None
+    yield
+    q_executor_module._EXECUTOR = None
 
 
 @pytest.fixture
@@ -29,6 +40,10 @@ def mock_q_process():
         from backend.q_backend.q_process_manager import QAvailabilityStatus
 
         mock_conn = MagicMock()
+        mock_q_result = MagicMock(name="q_result")
+        mock_q_result.__len__.return_value = 100
+        mock_q_result.nbytes = 8000
+        mock_conn.return_value = mock_q_result
         mock_mgr_instance = MagicMock()
         mock_mgr.return_value = mock_mgr_instance
 
@@ -90,9 +105,7 @@ def sample_region_plan():
 
 def test_resident_handle_creation(mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan):
     """Test that execution creates QResidentTableHandle when requested."""
-    reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
-    executor = get_q_executor()
+    executor = QExecutor(type_adapter=mock_type_adapter)
 
     result = executor.execute_region(
         sample_region_plan,
@@ -105,14 +118,16 @@ def test_resident_handle_creation(mock_q_process, mock_type_adapter, sample_inpu
     assert isinstance(result.resident_handle, QResidentTableHandle)
     assert result.resident_handle.table_name == "result"
     assert result.resident_handle.region_id == "region_A"
-    assert result.resident_handle.row_count > 0
+    assert result.resident_handle.connection_id == id(mock_q_process)
+    assert result.resident_handle.row_count == 100
+    assert result.resident_handle.byte_size == 8000
+    assert result.output_df.empty
+    mock_type_adapter.q_to_pandas.assert_not_called()
 
 
 def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that QResidentTableHandle reuse skips DataFrame upload."""
-    reset_q_executor_telemetry()
-    from backend.q_backend.q_executor import get_q_executor
-    executor = get_q_executor()
+    executor = QExecutor(type_adapter=mock_type_adapter)
 
     # Region A: initial upload
     plan_a = QRegionPlan(
@@ -133,7 +148,7 @@ def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapt
     assert result_a.resident_handle is not None
 
     # Check telemetry after Region A
-    telemetry_after_a = get_q_executor_telemetry()
+    telemetry_after_a = dict(executor._telemetry)
     uploads_after_a = telemetry_after_a["python_to_q_bytes"]
     reuse_after_a = telemetry_after_a["resident_reuse_count"]
 
@@ -158,7 +173,7 @@ def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapt
     assert result_b.success
 
     # Check telemetry after Region B
-    telemetry_after_b = get_q_executor_telemetry()
+    telemetry_after_b = dict(executor._telemetry)
     uploads_after_b = telemetry_after_b["python_to_q_bytes"]
     reuse_after_b = telemetry_after_b["resident_reuse_count"]
 
@@ -206,6 +221,10 @@ def test_batch_regions_automatic_residency(mock_q_process, mock_type_adapter, sa
 
     assert len(results) == 3
     assert all(r.success for r in results)
+    assert results[0].output_df.empty
+    assert results[1].output_df.empty
+    assert not results[2].output_df.empty
+    assert mock_type_adapter.q_to_pandas.call_count == 1
 
     # Check telemetry
     telemetry = get_q_executor_telemetry()
@@ -330,6 +349,61 @@ def test_telemetry_counters_accuracy(mock_q_process, mock_type_adapter, sample_i
 
     # No reuse in single region execution
     assert telemetry["resident_reuse_count"] == 0
+
+
+def test_stale_resident_handle_fails_before_q_execution(
+    mock_q_process, mock_type_adapter, sample_region_plan
+):
+    """A handle from another q connection must fail closed without aliasing."""
+    executor = QExecutor(
+        process_manager=MagicMock(),
+        type_adapter=mock_type_adapter,
+    )
+    executor.process_manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    executor.process_manager.get_connection.return_value = mock_q_process
+    stale_handle = QResidentTableHandle(
+        table_name="input_table",
+        q_table_ref=MagicMock(),
+        row_count=100,
+        byte_size=8000,
+        region_id="old_region",
+        connection_id=id(mock_q_process) + 1,
+    )
+
+    with pytest.raises(RuntimeError, match="Stale Q-resident handle"):
+        executor.execute_region(
+            sample_region_plan,
+            {"input_table": stale_handle},
+        )
+
+    mock_type_adapter.q_to_pandas.assert_not_called()
+    mock_q_process.assert_not_called()
+
+
+def test_resident_metadata_failure_does_not_materialize(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    """Unavailable q metadata stays bounded and does not force conversion."""
+    q_result = mock_q_process.return_value
+    q_result.__len__.side_effect = TypeError("length unavailable")
+    q_result.nbytes = MagicMock()
+    q_result.nbytes.__int__.side_effect = TypeError("size unavailable")
+    executor = QExecutor(type_adapter=mock_type_adapter)
+
+    result = executor.execute_region(
+        sample_region_plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+    )
+
+    assert result.success
+    assert result.rows_processed == 0
+    assert result.resident_handle is not None
+    assert result.resident_handle.byte_size == 0
+    mock_type_adapter.q_to_pandas.assert_not_called()
 
 
 if __name__ == "__main__":
