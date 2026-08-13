@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor_assets"
+version = "0.1.0"
+description = "Factor asset identity, registry, lifecycle, and governance"
+authors = [{name = "Quant Platform Team"}]
+requires-python = ">=3.9"
+dependencies = [
+    "typing-extensions>=4.5.0",
+    "dataclasses-json>=0.5.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+adapters = [
+    "quant_evaluator>=0.1.0",
+]
+
+[tool.setuptools.packages]
+find = {}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

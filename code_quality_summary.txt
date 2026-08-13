@@ -1,0 +1,87 @@
+================================================================================
+CODE QUALITY ANALYSIS SUMMARY
+Generated: 2026-08-14
+================================================================================
+
+EXECUTIVE SUMMARY:
+------------------
+Total Issues Found: 3,631 (flake8)
+Files Needing Format: 358 (black)
+High Complexity Functions: 173 (complexity > 20)
+Missing Docstrings: 1,617 functions
+Low Maintainability Files: 23 (Grade B/C)
+
+PACKAGE SCORES:
+---------------
+toolkit:         9.38/10 ⭐ (Excellent)
+factor_layer:    4.35/10 ⚠️ (Needs Work)
+dataaccess:      Analysis incomplete (very large codebase)
+quant_evaluator: Analysis incomplete
+
+TOP 5 CRITICAL ISSUES:
+----------------------
+1. DataAccessStore._read_joined_sql (Complexity: 89) - CRITICAL
+   → Location: dataaccess/store.py:4975
+   → Action: Split into smaller functions immediately
+
+2. store.py Maintainability (MI: 0.00, Grade C) - CRITICAL  
+   → 9,000+ lines in single file
+   → Action: Decompose into multiple modules
+
+3. parse_source_manifest (Complexity: 73) - HIGH
+   → Location: dataaccess/snapshot/resolver.py:151
+   → Action: Extract validation logic
+
+4. 340 Unused Imports (F401) - HIGH
+   → Action: Run autoflake to remove
+
+5. 358 Files Need Formatting - MEDIUM
+   → Action: Run black formatter
+
+QUICK WIN COMMANDS (20 minutes):
+---------------------------------
+# Format all code
+black dataaccess factor_layer toolkit quant_evaluator
+
+# Sort imports  
+isort dataaccess factor_layer toolkit quant_evaluator
+
+# Remove unused imports (review diff first!)
+autoflake --remove-all-unused-imports --remove-unused-variables \
+  --in-place --recursive dataaccess factor_layer toolkit quant_evaluator
+
+ESTIMATED IMPACT:
+-----------------
+These three commands will fix:
+- 358 formatting issues
+- ~1,000 style violations
+- 10,366 lines of import ordering
+- ~500 unused imports
+
+Total time: 20 minutes
+Issues resolved: ~2,000
+
+PRIORITY REFACTORING (Next 3 Days):
+------------------------------------
+P0: dataaccess/store.py - _read_joined_sql (Complexity 89)
+P0: dataaccess/snapshot/resolver.py - parse_source_manifest (Complexity 73)
+P0: dataaccess/read/physical_plan.py - _execute_composed (Complexity 68)
+P0: dataaccess/read/contract_ir.py - build_contract_ir (Complexity 64)
+P0: dataaccess/snapshot/resolver.py - SourceSnapshotResolver.resolve (Complexity 61)
+
+LONG-TERM ACTIONS (4-5 Weeks):
+-------------------------------
+Week 1: Automated fixes + import cleanup
+Week 2-3: Refactor 29 F-grade complexity functions
+Week 4: Add docstrings to public APIs
+Week 5: Architecture improvements (split large modules)
+
+SUCCESS CRITERIA:
+-----------------
+✓ All packages: Pylint score > 8.0
+✓ Zero functions with complexity > 30
+✓ All public APIs documented
+✓ Zero critical flake8 violations
+✓ Pre-commit hooks installed
+
+Full detailed report: CODE_QUALITY_REPORT.md

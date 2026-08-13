@@ -4,10 +4,18 @@ from setuptools import build_meta as _orig
 
 # Re-export the standard setuptools backend
 prepare_metadata_for_build_wheel = _orig.prepare_metadata_for_build_wheel
-build_wheel = _orig.build_wheel
 build_sdist = _orig.build_sdist
 get_requires_for_build_wheel = _orig.get_requires_for_build_wheel
 get_requires_for_build_sdist = _orig.get_requires_for_build_sdist
+
+# Editable install support (PEP 660)
+try:
+    prepare_metadata_for_build_editable = _orig.prepare_metadata_for_build_editable
+    get_requires_for_build_editable = _orig.get_requires_for_build_editable
+    build_editable = _orig.build_editable
+except AttributeError:
+    # Fallback for older setuptools
+    pass
 
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):

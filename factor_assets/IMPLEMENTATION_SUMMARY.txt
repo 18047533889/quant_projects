@@ -1,0 +1,93 @@
+Factor Assets - Clustering and Similarity Implementation Summary
+================================================================
+
+Completed Implementation:
+------------------------
+
+1. similarity/ann.py - Approximate Nearest Neighbor Search
+   - ANNBackend enum (FAISS, ANNOY)
+   - ANNSearchResult dataclass
+   - FaissANNIndex - FAISS-based ANN with L2 normalization for cosine similarity
+   - AnnoyANNIndex - Annoy-based ANN with angular distance
+   - create_ann_index() factory function
+   - Protocol-based ANNIndex interface
+   - Supports: build(), search(), search_by_id() with similarity thresholds
+   - Works with EvidenceRef-based embeddings
+
+2. similarity/exact.py - Enhanced with QE Integration
+   - QEPairwiseSimilarity class added
+   - Integrates with QuantEvaluator adapter for pairwise correlation
+   - Supports caching and batch operations
+   - compute_similarity() - single pair correlation via QE
+   - find_similar() - find similar factors via QE
+   - Works with EvidenceRef, not raw values
+
+3. clustering/families.py - Hierarchical Clustering Added
+   - HierarchicalClustering class with multiple linkage methods
+   - Dendrogram dataclass with cutting operations:
+     * cut_at_distance() - cut at distance threshold
+     * cut_at_num_clusters() - cut to specific cluster count
+     * get_optimal_num_clusters() - automatic elbow detection
+   - Supports: single, complete, average, ward linkage
+   - Converts correlation to distance: dist = 1 - abs(corr)
+   - Handles single-node and empty graph edge cases
+
+Test Coverage:
+-------------
+- tests/similarity/test_ann.py (16 tests)
+  * ANNSearchResult validation
+  * FaissANNIndex build, search, threshold filtering
+  * AnnoyANNIndex build, search
+  * Factory creation
+  * Integration tests for consistency
+  * Note: 12 tests skip when faiss/annoy not installed (expected)
+
+- tests/test_clustering_hierarchical.py (15 tests, all pass)
+  * Dendrogram building with various graph structures
+  * Cluster cutting by distance and count
+  * Optimal cluster estimation
+  * Integration with connected components
+  * Large graph performance
+
+- tests/similarity/test_exact.py (19 tests, all pass)
+  * Existing CorrelationSimilarity tests
+  * Ready for QE integration tests
+
+- tests/test_clustering_families.py (10 tests, all pass)
+  * Existing connected components and modularity tests
+
+Total: 60 tests written, 48 pass with current dependencies
+
+Dependencies:
+------------
+Required:
+- numpy (available)
+- scipy (available)
+
+Optional (graceful degradation):
+- faiss-cpu (for FAISS ANN index)
+- annoy (for Annoy ANN index)
+
+Key Design Principles:
+--------------------
+1. All operations work with EvidenceRef, not raw factor values
+2. Optional dependencies handled gracefully with clear error messages
+3. Protocol-based interfaces for extensibility
+4. Symmetric caching for pairwise operations
+5. Frozen dataclasses for immutability
+6. Comprehensive validation and error handling
+
+Integration Points:
+------------------
+- QEPairwiseSimilarity ready for QuantEvaluator adapter injection
+- ANN indices consume embeddings from evidence-based representations
+- Hierarchical clustering consumes SparseCorrelationGraph
+- All components export through __init__.py with availability flags
+
+Production Readiness:
+--------------------
+- Core functionality complete and tested
+- Optional ANN backends installable on demand
+- QE integration stub in place, ready for real adapter
+- Hierarchical clustering production-ready with scipy
+- All existing tests pass
