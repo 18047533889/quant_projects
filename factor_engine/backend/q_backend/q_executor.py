@@ -100,6 +100,7 @@ class QExecutor:
         *,
         fallback_policy: QExecutionFallbackPolicy | None = None,
         return_resident_handle: bool = False,
+        materialize_output: bool = True,
     ) -> QExecutionResult:
         """执行 q Region 计划。
 
@@ -154,21 +155,20 @@ class QExecutor:
             logger.debug(f"Executing q Region {plan.region_id}:\n{plan.q_code}")
             q(plan.q_code)
 
-            # 获取输出。中间结果保持在 q 中；只有 region 边界才下载。
+            # 获取输出。中间 region 只需保留 q-resident handle，不应无条件
+            # materialize 成 pandas；这会产生无谓的 q→Python ping-pong。
             q_result = q(plan.output_table)
-            if return_resident_handle:
+            should_materialize = materialize_output and not return_resident_handle
+            if should_materialize:
+                output_df = self.type_adapter.q_to_pandas(q_result)
+                output_bytes = int(output_df.memory_usage(deep=True).sum())
+                rows = len(output_df)
+                self._telemetry["q_to_python_bytes"] += output_bytes
+            else:
                 output_df = pd.DataFrame()
                 rows, output_bytes = self._resident_result_metadata(q_result)
-            else:
-                output_df = self.type_adapter.q_to_pandas(q_result)
-
-                # 记录 Q→Python 传输
-                output_bytes = int(output_df.memory_usage(deep=True).sum())
-                self._telemetry["q_to_python_bytes"] += output_bytes
 
             execution_time = (time.perf_counter() - start_time) * 1000  # ms
-            if not return_resident_handle:
-                rows = len(output_df)
 
             logger.info(
                 f"q Region {plan.region_id} executed: "
@@ -319,6 +319,7 @@ class QExecutor:
                 current_input,
                 fallback_policy=fallback_policy,
                 return_resident_handle=enable_residency and not is_last,
+                materialize_output=is_last,
             )
             results.append(result)
 

@@ -125,6 +125,34 @@ def test_resident_handle_creation(mock_q_process, mock_type_adapter, sample_inpu
     mock_type_adapter.q_to_pandas.assert_not_called()
 
 
+def test_intermediate_residency_skips_q_to_pandas_materialization(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Resident intermediates stay in q until the final boundary."""
+    reset_q_executor_telemetry()
+    from backend.q_backend.q_executor import get_q_executor
+    executor = get_q_executor()
+    plan = QRegionPlan(
+        region_id="region_intermediate",
+        node_ids=("node_1",),
+        q_code="intermediate: mavg[20; input_table[`price]]",
+        input_tables=("input_table",),
+        output_table="intermediate",
+    )
+
+    result = executor.execute_region(
+        plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+        materialize_output=False,
+    )
+
+    assert result.success
+    assert result.resident_handle is not None
+    mock_type_adapter.q_to_pandas.assert_not_called()
+    assert get_q_executor_telemetry()["q_to_python_bytes"] == 0
+
+
 def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that QResidentTableHandle reuse skips DataFrame upload."""
     executor = QExecutor(type_adapter=mock_type_adapter)
