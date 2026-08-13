@@ -4,10 +4,10 @@ Polars Native CS (Cross-Section) Operators - Advanced Batch (Phase 3)
 
 高级截面统计算子：LOF、Isolation Forest、KNN 系列、Mahalanobis、回归残差等。
 
-核心模式：
-- 使用 Polars .over() 实现真正的截面操作
-- 复杂 ML 算子提供 skeleton + TODO（需要完整实现）
-- 所有算子使用 backend="polars" 注册
+治理状态：
+- 本模块包含尚未达到 canonical 语义的研究表达式和占位实现
+- 所有注册统一标记为 ``research_only``，不得进入 production 路由
+- ``collect().to_pandas()`` 仅用于恢复 pandas Series ABI，不代表 lazy/native 能力
 """
 from __future__ import annotations
 
@@ -21,9 +21,24 @@ except ImportError:
 
 from cleaned_operators.base_polars import (
     SeriesOperator,
-    register_operator,
+    register_operator as _register_operator,
     OperatorMetadata,
 )
+
+
+def register_operator(**kwargs):
+    """Quarantine this unfinished cluster and remove false native labeling."""
+    kwargs["status"] = "research_only"
+    base_decorator = _register_operator(**kwargs)
+
+    def decorator(cls):
+        cls.metadata.tags = [
+            "polars_expr_research" if tag == "polars_native" else tag
+            for tag in cls.metadata.tags
+        ]
+        return base_decorator(cls)
+
+    return decorator
 
 
 def _to_polars_safe(feature: pd.Series) -> pl.LazyFrame:
