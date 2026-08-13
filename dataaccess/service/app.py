@@ -144,14 +144,18 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         """ASGI lifespan: startup gate runs before accepting requests."""
         from data_access.runtime.startup_gate import run_startup_gate
 
-        # R32-P0-021: Run startup gate during lifespan startup
+        # R32-P0-021: Run startup gate during lifespan startup and publish the
+        # resulting certificate for /ready.  Do not derive production mode from
+        # unrelated process globals: the app's immutable settings are the
+        # startup contract used by its auth and readiness endpoints.
         store = get_store()
         try:
-            result = run_startup_gate(store)
+            result = run_startup_gate(store, production=settings.production_mode)
             if not result.passed:
                 raise RuntimeError(
                     "Startup gate failed:\n  " + "\n  ".join(result.problems)
                 )
+            store._startup_certificate = result
         except Exception as exc:
             import logging
             logging.getLogger("data_access.service").error(
@@ -256,15 +260,35 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         P0-024: External errors must be redacted - don't leak paths/credentials.
         """
         from data_access.runtime.startup_gate import startup_certificate_expired
+        from data_access.runtime.startup_subject import build_startup_subject_digest
 
         store = get_store()
-        # R32-P0-023: Check cached certificate instead of re-running full gate
         cert = getattr(store, "_startup_certificate", None)
-        if cert is None or startup_certificate_expired(cert):
+        try:
+            current_digest = build_startup_subject_digest(store).to_digest()
+        except Exception:
+            # A readiness check must fail closed if the environment identity
+            # cannot be established; otherwise a stale certificate can remain
+            # usable after registry/configuration changes.
+            raise HTTPException(
+                status_code=503,
+                detail="Service not ready (startup identity unavailable)",
+            )
+        if cert is None or startup_certificate_expired(
+            cert, current_subject_digest=current_digest
+        ):
             # R32-P0-024: Redact error details
             raise HTTPException(
                 status_code=503,
                 detail="Service not ready (startup gate not passed or expired)"
+            )
+
+        if getattr(cert, "problems", ()):
+            # Research-mode gates are non-raising but DEGRADED; do not expose
+            # readiness until all startup checks pass.
+            raise HTTPException(
+                status_code=503,
+                detail="Service not ready (startup checks failed)"
             )
 
         if not getattr(cert, "passed", False):

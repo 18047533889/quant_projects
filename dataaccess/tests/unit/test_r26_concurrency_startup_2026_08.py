@@ -194,3 +194,60 @@ def test_tr26_svc_ready_engine_probe_fails_503():
         ):
             resp = client.get("/ready")
     assert resp.status_code == 503
+
+
+def test_ready_rejects_degraded_certificate_even_when_passed():
+    """Readiness is fail-closed for non-production DEGRADED startup results."""
+    from fastapi.testclient import TestClient
+    from data_access.runtime.startup_gate import build_startup_certificate
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
+    store = _base_store()
+    store._startup_certificate = build_startup_certificate(True, ["degraded"])
+    app = create_app(ServiceSettings(api_key="testkey"))
+    with patch("data_access.service.app.get_store", return_value=store):
+        with TestClient(app) as client:
+            response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Service not ready (startup checks failed)"
+
+
+def test_lifespan_runs_gate_and_publishes_certificate():
+    """ASGI startup runs the gate before serving and caches its certificate."""
+    from fastapi.testclient import TestClient
+    from data_access.runtime.startup_gate import build_startup_certificate
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
+    store = _base_store()
+    certificate = build_startup_certificate(True, [])
+    app = create_app(ServiceSettings(api_key="testkey", production_mode=True))
+    with patch("data_access.service.app.get_store", return_value=store), patch(
+        "data_access.runtime.startup_gate.run_startup_gate",
+        return_value=certificate,
+    ) as gate:
+        with TestClient(app) as client:
+            assert client.get("/ready").status_code == 200
+    gate.assert_called_once_with(store, production=True)
+    assert store._startup_certificate is certificate
+
+
+def test_ready_fails_closed_when_current_startup_identity_cannot_be_built():
+    """A certificate cannot mask an unavailable current environment identity."""
+    from fastapi.testclient import TestClient
+    from data_access.runtime.startup_gate import build_startup_certificate
+    from data_access.service.app import create_app
+    from data_access.service.config import ServiceSettings
+
+    store = _base_store()
+    store._startup_certificate = build_startup_certificate(True, [])
+    app = create_app(ServiceSettings(api_key="testkey"))
+    with patch("data_access.service.app.get_store", return_value=store), patch(
+        "data_access.runtime.startup_subject.build_startup_subject_digest",
+        side_effect=RuntimeError("identity unavailable"),
+    ):
+        with TestClient(app) as client:
+            response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Service not ready (startup identity unavailable)"
