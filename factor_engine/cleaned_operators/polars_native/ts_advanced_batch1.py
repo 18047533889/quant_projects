@@ -54,18 +54,30 @@ class TSAbsConcentrationPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, **kwargs):
         # HHI = sum((x_i / sum(x))^2)
+        # HHI is sum(abs(x)^2) / sum(abs(x))^2 over each trailing window.
+        # This algebraic form is exact and keeps the implementation in native
+        # Polars expressions (the previous expression was malformed and also
+        # attempted to roll already-normalized point values).
         return (
             feature.to_frame()
             .lazy()
-            .with_columns([
-                (pl.col(feature.name).abs()).alias("_abs"),
-            ])
-            .with_columns([
-                (pl.col("_abs").rolling_sum(window)).alias("_sum"),
-            ])
-            .with_columns([
-                pl.when(pl.col("_sum" != 0).then(pl.col("_abs") / pl.col("_sum").otherwise(None)).pow(2).rolling_sum(window)).alias(feature.name)
-            ])
+            .with_columns(
+                [
+                    pl.col(feature.name).abs().alias("_abs"),
+                ]
+            )
+            .with_columns(
+                [
+                    pl.col("_abs").rolling_sum(window).alias("_sum"),
+                    (pl.col("_abs") ** 2).rolling_sum(window).alias("_sum_sq"),
+                ]
+            )
+            .with_columns(
+                pl.when(pl.col("_sum") > 0)
+                .then(pl.col("_sum_sq") / (pl.col("_sum") ** 2))
+                .otherwise(None)
+                .alias(feature.name)
+            )
             .select([feature.name])
             .collect()
             .to_series()
@@ -1233,23 +1245,27 @@ class TSConfirmedPivotHighPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, left_bars, right_bars, **kwargs):
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < left_bars or i + right_bars >= len(feature):
-                result.iloc[i] = np.nan
-                continue
-            
-            center = feature.iloc[i]
-            left = feature.iloc[i - left_bars:i]
-            right = feature.iloc[i + 1:i + right_bars + 1]
-            
-            if pd.notna(center) and (center > left).all() and (center > right).all():
-                result.iloc[i] = center
-            else:
-                result.iloc[i] = np.nan
-        
-        return result
+        # Emit at the confirmation timestamp, not at the historical center.
+        # At t, the candidate is t-right_bars; both sides are therefore known.
+        candidate = pl.col(feature.name).shift(right_bars)
+        left_max = pl.col(feature.name).shift(right_bars + 1).rolling_max(left_bars)
+        right_max = pl.col(feature.name).rolling_max(right_bars)
+        return (
+            feature.to_frame()
+            .lazy()
+            .select(
+                pl.when(
+                    candidate.is_not_null()
+                    & (candidate > left_max)
+                    & (candidate > right_max)
+                )
+                .then(candidate)
+                .otherwise(None)
+                .alias(feature.name)
+            )
+            .collect()
+            .to_series()
+        )
 
 
 @register_operator(name="ts_confirmed_pivot_low", canonical="ts_confirmed_pivot_low", backend="polars")
@@ -1270,23 +1286,26 @@ class TSConfirmedPivotLowPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, left_bars, right_bars, **kwargs):
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < left_bars or i + right_bars >= len(feature):
-                result.iloc[i] = np.nan
-                continue
-            
-            center = feature.iloc[i]
-            left = feature.iloc[i - left_bars:i]
-            right = feature.iloc[i + 1:i + right_bars + 1]
-            
-            if pd.notna(center) and (center < left).all() and (center < right).all():
-                result.iloc[i] = center
-            else:
-                result.iloc[i] = np.nan
-        
-        return result
+        # Emit at the confirmation timestamp, not at the historical center.
+        candidate = pl.col(feature.name).shift(right_bars)
+        left_min = pl.col(feature.name).shift(right_bars + 1).rolling_min(left_bars)
+        right_min = pl.col(feature.name).rolling_min(right_bars)
+        return (
+            feature.to_frame()
+            .lazy()
+            .select(
+                pl.when(
+                    candidate.is_not_null()
+                    & (candidate < left_min)
+                    & (candidate < right_min)
+                )
+                .then(candidate)
+                .otherwise(None)
+                .alias(feature.name)
+            )
+            .collect()
+            .to_series()
+        )
 
 
 # ============================================================================
