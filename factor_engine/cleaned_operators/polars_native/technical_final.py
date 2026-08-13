@@ -25,14 +25,32 @@ def _apply_to_panel(df: pl.DataFrame, expr_fn) -> pl.DataFrame:
 
 
 def _ema_expr(col: pl.Expr, span: int) -> pl.Expr:
-    """EMA 表达式（alpha = 2/(span+1)）"""
-    return col.ewm_mean(span=span, adjust=False, ignore_nulls=True)
+    """Pandas-compatible EMA with full warmup and missing-value carry."""
+    return (
+        col.fill_nan(None)
+        .ewm_mean(span=span, adjust=False, min_samples=span, ignore_nulls=True)
+        .fill_null(strategy="forward")
+    )
 
 
 def _wilder_ema_expr(col: pl.Expr, period: int) -> pl.Expr:
-    """Wilder's smoothing (alpha = 1/period)"""
-    alpha = 1.0 / period if period > 0 else 0.0
-    return col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
+    """Wilder smoothing with pandas-compatible warmup semantics."""
+    return (
+        col.fill_nan(None)
+        .ewm_mean(alpha=1.0 / period, adjust=False, min_samples=period, ignore_nulls=True)
+        .fill_null(strategy="forward")
+    )
+
+
+def _panel_columns(*frames: pl.DataFrame) -> list[str]:
+    columns = [c for c in frames[0].columns if c not in PANEL_SKIP_COLUMNS]
+    for frame in frames[1:]:
+        columns = [c for c in columns if c in frame.columns]
+    return columns
+
+
+def _panel_result(base: pl.DataFrame, values: dict[str, pl.Series]) -> pl.DataFrame:
+    return base.with_columns([series.alias(name) for name, series in values.items()])
 
 
 # ==================== ElderRay ====================
@@ -50,35 +68,28 @@ class ElderRay(SeriesOperator):
         name="ElderRay",
         category="technical_indicator",
         description="Elder Ray Index: measures buying and selling pressure",
-        param_names=["high", "low", "close", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "ema", "output"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "ema": int, "output": str},
     )
 
     def _calculate_series(
-        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, period: int = 13, **kwargs
+        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame,
+        ema: int = 13, output: str = "bull", **kwargs
     ) -> pl.DataFrame:
-        """Bull Power - Bear Power"""
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
-
-        result_data = {}
-        for col in cols:
-            h_val = high[col]
-            l_val = low[col]
-            c_val = close[col]
-            ema_val = _ema_expr(c_val, period)
-            # Bull Power - Bear Power
-            bull_power = h_val - ema_val
-            bear_power = l_val - ema_val
-            elder_ray = bull_power - bear_power
-            result_data[col] = elder_ray
-
-        result_df = pl.DataFrame(result_data)
-        for meta_col in PANEL_SKIP_COLUMNS:
-            if meta_col in high.columns:
-                result_df = result_df.with_columns([high[meta_col]])
-        return result_df
+        values = {}
+        for column in _panel_columns(high, low, close):
+            frame = pl.DataFrame({"high": high[column], "low": low[column], "close": close[column]})
+            average = _ema_expr(pl.col("close"), ema)
+            if output == "bull":
+                expression = pl.col("high") - average
+            elif output == "bear":
+                expression = pl.col("low") - average
+            elif output == "spread":
+                expression = pl.col("high") - pl.col("low")
+            else:
+                raise ValueError(f"ElderRay: unknown output {output!r}")
+            values[column] = frame.select(expression.alias(column)).to_series()
+        return _panel_result(close, values)
 
 
 # ==================== FisherTransform ====================
@@ -417,29 +428,19 @@ class TSI(SeriesOperator):
         name="TSI",
         category="technical_indicator",
         description="True Strength Index - double smoothed momentum",
-        param_names=["close", "long", "short"],
-        param_types={"close": pl.DataFrame, "long": int, "short": int},
+        param_names=["close", "long_window", "short_window"],
+        param_types={"close": pl.DataFrame, "long_window": int, "short_window": int},
     )
 
-    def _calculate_series(self, close: pl.DataFrame, long: int = 25, short: int = 13, **kwargs) -> pl.DataFrame:
-        def tsi_expr(col_name):
-            c = pl.col(col_name)
-            # Price momentum
-            momentum = c.diff()
-            abs_momentum = momentum.abs()
-
-            # Double smooth both momentum and absolute momentum
-            momentum_smooth1 = _ema_expr(momentum, long)
-            momentum_smooth2 = _ema_expr(momentum_smooth1, short)
-
-            abs_momentum_smooth1 = _ema_expr(abs_momentum, long)
-            abs_momentum_smooth2 = _ema_expr(abs_momentum_smooth1, short)
-
-            # TSI = 100 * (double smoothed momentum / double smoothed absolute momentum)
-            tsi = 100 * momentum_smooth2 / abs_momentum_smooth2
-            return tsi.alias(col_name)
-
-        return _apply_to_panel(close, lambda c: tsi_expr(c.meta.output_name()))
+    def _calculate_series(self, close: pl.DataFrame, long_window: int = 25, short_window: int = 13, **kwargs) -> pl.DataFrame:
+        values = {}
+        for column in _panel_columns(close):
+            momentum = pl.col(column).diff()
+            numerator = _ema_expr(_ema_expr(momentum, long_window), short_window)
+            denominator = _ema_expr(_ema_expr(momentum.abs(), long_window), short_window)
+            expression = pl.when(denominator != 0).then(100.0 * numerator / denominator).otherwise(None)
+            values[column] = close.select(expression.alias(column)).to_series()
+        return _panel_result(close, values)
 
 
 # ==================== TSI_signal ====================
@@ -457,32 +458,20 @@ class TSI_signal(SeriesOperator):
         name="TSI_signal",
         category="technical_indicator",
         description="TSI signal line - EMA smoothing of TSI",
-        param_names=["close", "long", "short", "signal"],
-        param_types={"close": pl.DataFrame, "long": int, "short": int, "signal": int},
+        param_names=["close", "long_window", "short_window", "signal_window"],
+        param_types={"close": pl.DataFrame, "long_window": int, "short_window": int, "signal_window": int},
     )
 
     def _calculate_series(
-        self, close: pl.DataFrame, long: int = 25, short: int = 13, signal: int = 7, **kwargs
+        self, close: pl.DataFrame, long_window: int = 25, short_window: int = 13,
+        signal_window: int = 7, **kwargs
     ) -> pl.DataFrame:
-        def tsi_signal_expr(col_name):
-            c = pl.col(col_name)
-            # Calculate TSI first
-            momentum = c.diff()
-            abs_momentum = momentum.abs()
-
-            momentum_smooth1 = _ema_expr(momentum, long)
-            momentum_smooth2 = _ema_expr(momentum_smooth1, short)
-
-            abs_momentum_smooth1 = _ema_expr(abs_momentum, long)
-            abs_momentum_smooth2 = _ema_expr(abs_momentum_smooth1, short)
-
-            tsi = 100 * momentum_smooth2 / abs_momentum_smooth2
-
-            # Apply signal smoothing
-            tsi_signal = _ema_expr(tsi, signal)
-            return tsi_signal.alias(col_name)
-
-        return _apply_to_panel(close, lambda c: tsi_signal_expr(c.meta.output_name()))
+        tsi = TSI()._calculate_series(close, long_window, short_window)
+        values = {
+            column: tsi.select(_ema_expr(pl.col(column), signal_window).alias(column)).to_series()
+            for column in _panel_columns(tsi)
+        }
+        return _panel_result(close, values)
 
 
 # ==================== VortexMinus ====================
@@ -531,8 +520,8 @@ class VortexMinus(SeriesOperator):
             tr_sum = tr.rolling_sum(period)
 
             # VI- = Sum(VM-) / Sum(TR)
-            vi_minus = vm_minus_sum / tr_sum
-            result_data[col] = vi_minus
+            vi_minus = pl.when(tr_sum != 0).then(vm_minus_sum / tr_sum).otherwise(None)
+            result_data[col] = pl.DataFrame({"high": h, "low": l, "close": c}).select(vi_minus.alias(col)).to_series()
 
         result_df = pl.DataFrame(result_data)
         for meta_col in PANEL_SKIP_COLUMNS:
@@ -587,8 +576,8 @@ class VortexPlus(SeriesOperator):
             tr_sum = tr.rolling_sum(period)
 
             # VI+ = Sum(VM+) / Sum(TR)
-            vi_plus = vm_plus_sum / tr_sum
-            result_data[col] = vi_plus
+            vi_plus = pl.when(tr_sum != 0).then(vm_plus_sum / tr_sum).otherwise(None)
+            result_data[col] = pl.DataFrame({"high": h, "low": l, "close": c}).select(vi_plus.alias(col)).to_series()
 
         result_df = pl.DataFrame(result_data)
         for meta_col in PANEL_SKIP_COLUMNS:
