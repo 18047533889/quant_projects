@@ -179,6 +179,27 @@ def test_ts05_sts_session_token(monkeypatch):
     assert creds.session_token == "STS_TOKEN"
 
 
+import hashlib
+
+
+def test_ts06_cache_principal_scope_is_stable_bounded_and_collision_resistant(monkeypatch):
+    from data_access.cos.remote import _cache_principal_scope
+
+    principal = "tenant/a:high\\n" + ("x" * 4096)
+    monkeypatch.setenv("DATA_ACCESS_PRINCIPAL_ID", principal)
+    first = _cache_principal_scope()
+    second = _cache_principal_scope()
+    assert first == second
+    assert first.startswith("p")
+    assert len(first) == 33
+    assert first == "p" + hashlib.sha256(
+        f"dataaccess-cos-principal\\0{principal}".encode()
+    ).hexdigest()[:32]
+
+    monkeypatch.setenv("DATA_ACCESS_PRINCIPAL_ID", "tenant_a:high")
+    assert _cache_principal_scope() != first
+
+
 # ---------------------------------------------------------------------------
 # T-S06 — high cache 不可被低权限复用（principal 隔离）
 # ---------------------------------------------------------------------------
@@ -196,8 +217,10 @@ def test_ts06_cache_principal_isolation(monkeypatch):
     monkeypatch.setenv("DATA_ACCESS_PRINCIPAL_ID", "server-low")
     r2 = cos_cache_root()
     assert r1 != r2
-    assert "server-high" in str(r1)
-    assert "server-low" in str(r2)
+    assert "server-high" not in str(r1)
+    assert "server-low" not in str(r2)
+    assert str(r1).endswith(s2)
+    assert str(r2).endswith(_cache_principal_scope())
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ COS 远程直读（DuckDB httpfs + S3 兼容 API）。
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -944,7 +945,14 @@ def _cache_principal_scope() -> str:
     """
     pid = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip()
     if pid:
-        return pid.replace("/", "_").replace(":", "_").replace(" ", "_") or "p"
+        # Never put an untrusted principal name in a filesystem path.  The old
+        # character replacement made distinct identities (for example
+        # ``tenant/a`` and ``tenant_a``) share a cache directory, and allowed
+        # arbitrarily long identity values to create unbounded path components.
+        # A domain-separated SHA-256 digest gives a stable, bounded scope while
+        # keeping the principal itself out of cache paths and logs.
+        digest = hashlib.sha256(f"dataaccess-cos-principal\\0{pid}".encode()).hexdigest()
+        return f"p{digest[:32]}"
     try:
         return f"u{os.getuid()}"
     except (AttributeError, OSError):
