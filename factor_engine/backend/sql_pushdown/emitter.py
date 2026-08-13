@@ -2599,7 +2599,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     if op in {"period_average", "ttm_from_quarterly"}:
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
-        count = int(node.attrs.get("periods", _raw_literal(node, 2, 2 if op) == "period_average" else 4)))
+        default_periods = 2 if op == "period_average" else 4
+        count = int(node.attrs.get("periods", _raw_literal(node, 2, default_periods)))
         if count < 1:
             return None
         layers = [_compile_layer(node.inputs[0], dialect=dialect)]
@@ -10462,6 +10463,7 @@ def _template_cache_key(
     if filt is not None:
         filt_sig = "|".join([
             str(getattr(filt, "instrument_filter_kind", "")),
+            str(filt.time_column), str(filt.instrument_column),
             str(filt.start), str(filt.end),
             ",".join(str(x) for x in (filt.instruments or ())),
         ])
