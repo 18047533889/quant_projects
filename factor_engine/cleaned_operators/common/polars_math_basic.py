@@ -14,6 +14,7 @@ from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, regi
 from cleaned_operators.base import ParamRole, ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
+_EPS = 1e-12
 _SRC = "factor_dsl_polars_native"
 
 
@@ -175,20 +176,32 @@ class SafeDivNullNative(SeriesOperator):
         name="safe_div_null",
         category="math",
         description="安全除法",
-        param_names=["x", "y"],
+        param_names=["x", "y", "epsilon"],
         return_type="series",
         tags=["math", "polars", "native"],
+        param_specs={
+            "epsilon": ParamSpec(dtype=float, min=0.0, default=_EPS, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, epsilon: float = _EPS, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.parameter_validation import strict_finite_scalar
+
+        eps = strict_finite_scalar(epsilon, "epsilon", minimum=0.0)
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
             if c not in y.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
+                numerator = pl.col(c).cast(pl.Float64, strict=False)
+                denominator = y[c].cast(pl.Float64, strict=False)
                 exprs.append(
-                    pl.when(y[c] == 0).then(None).otherwise(pl.col(c) / y[c]).alias(c)
+                    pl.when(
+                        numerator.is_finite()
+                        & denominator.is_finite()
+                        & (denominator.abs() > eps)
+                    ).then(numerator / denominator).otherwise(None).alias(c)
                 )
         return x.with_columns(exprs)
 

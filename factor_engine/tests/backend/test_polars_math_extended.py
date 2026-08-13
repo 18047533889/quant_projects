@@ -56,6 +56,32 @@ def test_round_polars_matches_pandas():
     _assert_close(op_p.calculate(pl_x, decimals=2), op_n.calculate(x, 2))
 
 
+
+    """Near-zero, NaN, and Inf operands must produce null, not Inf/NaN."""
+    op = OperatorRegistry.get("safe_div_null", backend="polars")
+    x = pl.DataFrame({
+        "date": [1, 2, 3, 4],
+        "A": [4.0, 4.0, np.inf, 4.0],
+        "B": [2.0, 4.0, 4.0, np.nan],
+    })
+    y = pl.DataFrame({
+        "date": [1, 2, 3, 4],
+        "A": [2.0, 1e-13, 2.0, np.nan],
+        "B": [0.0, 2.0, np.inf, 2.0],
+    })
+    out = op.calculate(x, y)
+    assert out["A"].to_list() == [2.0, None, None, None]
+    assert out["B"].to_list() == [None, 2.0, None, None]
+
+
+def test_safe_div_null_rejects_invalid_epsilon():
+    op = OperatorRegistry.get("safe_div_null", backend="polars")
+    x = pl.DataFrame({"A": [1.0]})
+    y = pl.DataFrame({"A": [1.0]})
+    with pytest.raises(ValueError):
+        op.calculate(x, y, epsilon=-1.0)
+
+
 def test_atan2_lerp_polars_matches_pandas():
     x = _panel()
     y = _panel() * 0.5
