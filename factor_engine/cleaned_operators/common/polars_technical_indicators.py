@@ -312,8 +312,8 @@ class MACDLineNative(SeriesOperator):
         slow = strict_integer(slow_period, "slow_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+        alpha_fast = 2.0 / (fast + 1)
+        alpha_slow = 2.0 / (slow + 1)
 
         exprs = []
         for c in cols:
@@ -352,9 +352,9 @@ class MACDSignalNative(SeriesOperator):
         signal = strict_integer(signal_period, "signal_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
-        alpha_signal = (2.0) / ((signal + 1) if ((signal + 1) != 0 else np.nan
+        alpha_fast = 2.0 / (fast + 1)
+        alpha_slow = 2.0 / (slow + 1)
+        alpha_signal = 2.0 / (signal + 1)
 
         exprs = []
         for c in cols:
@@ -395,9 +395,9 @@ class MACDHistNative(SeriesOperator):
         signal = strict_integer(signal_period, "signal_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
-        alpha_signal = (2.0) / ((signal + 1) if ((signal + 1) != 0 else np.nan
+        alpha_fast = 2.0 / (fast + 1)
+        alpha_slow = 2.0 / (slow + 1)
+        alpha_signal = 2.0 / (signal + 1)
 
         exprs = []
         for c in cols:
@@ -441,7 +441,7 @@ class ATRWilderNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(high)
-        alpha = (1.0) / w if w != 0 else np.nan
+        alpha = 1.0 / w
 
         if low is None or close is None:
             raise ValueError("ATR_WILDER requires high, low, close")
@@ -489,7 +489,7 @@ class ADXNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(high)
-        alpha = (1.0) / w if w != 0 else np.nan
+        alpha = 1.0 / w
 
         if low is None or close is None:
             raise ValueError("ADX requires high, low, close")
@@ -1026,8 +1026,8 @@ class ChaikinOscillatorNative(SeriesOperator):
         if low is None or close is None or volume is None:
             raise ValueError("ChaikinOscillator requires high, low, close, volume")
 
-        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+        alpha_fast = 2.0 / (fast + 1)
+        alpha_slow = 2.0 / (slow + 1)
 
         exprs = []
         for c in cols:
@@ -1399,8 +1399,8 @@ class KAMANative(SeriesOperator):
         slow = strict_integer(slow_period, "slow_period", minimum=1)
         cols = _numeric_cols(x)
 
-        fastest = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-        slowest = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+        fastest = 2.0 / (fast + 1)
+        slowest = 2.0 / (slow + 1)
 
         exprs = []
         for c in cols:

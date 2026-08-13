@@ -2848,7 +2848,7 @@ class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
             
             # Normalize squared values to sum to 1 (like eigenvalue distribution)
             squared = window_data.values ** 2
-            probs = (squared) / (squared.sum() if (squared.sum() != 0 else np.nan
+            probs = squared / squared.sum()
             probs = probs[probs > 0]
             
             # Entropy-based effective rank
