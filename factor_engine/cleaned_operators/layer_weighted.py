@@ -15,8 +15,8 @@ def _stats(x, weight):
     total = float(weight[valid].sum())
     if total <= EPS:
         return None
-    mean = float(np.dot(x[valid], weight[valid]) / total)
-    variance = float(np.dot((x[valid] - mean) ** 2, weight[valid]) / total)
+    mean = np.where(total) != 0, float(np.dot(x[valid], weight[valid]) / total), np.nan)
+    variance = np.where(total) != 0, float(np.dot((x[valid] - mean) ** 2, weight[valid]) / total), np.nan)
     return mean, max(variance, 0.0)
 
 
@@ -32,7 +32,7 @@ def _weighted(x, weight, mode):
         elif mode == "demean":
             out[row, valid] = x[row, valid] - stats[0]
         elif stats[1] > EPS:
-            out[row, valid] = (x[row, valid] - stats[0]) / np.sqrt(stats[1])
+            out[row, valid] = np.where(np.sqrt(stats[1]) != 0, (x[row, valid] - stats[0]) / np.sqrt(stats[1]), np.nan)
     return out
 
 
@@ -55,7 +55,7 @@ def _group_weighted(x, group, weight, zscore):
             if not zscore:
                 out[row, indices] = stats[0]
             elif stats[1] > EPS:
-                out[row, indices] = (x[row, indices] - stats[0]) / np.sqrt(stats[1])
+                out[row, indices] = np.where(np.sqrt(stats[1]) != 0, (x[row, indices] - stats[0]) / np.sqrt(stats[1]), np.nan)
     return out
 
 

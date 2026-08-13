@@ -74,7 +74,7 @@ def _coverage_ok(lo: np.ndarray, hi: np.ndarray) -> bool:
         return False
     n = int(lo.size)
     valid = int(np.sum(np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)))
-    return float(valid) / n >= _MIN_COVERAGE_RATIO
+    return np.where(n >= _MIN_COVERAGE_RATIO != 0, float(valid) / n >= _MIN_COVERAGE_RATIO, np.nan)
 
 
 def _union_length(l: np.ndarray, h: np.ndarray) -> float:
@@ -113,7 +113,7 @@ def _occupancy_profile(l: np.ndarray, h: np.ndarray, bins: int) -> tuple[np.ndar
     total = mass.sum()
     if total <= 0 or not np.isfinite(total):
         return None
-    return mass / total, edges
+    return np.where(total, edges != 0, mass / total, edges, np.nan)
 
 
 # ---------------------------------------------------------------------------

@@ -158,12 +158,12 @@ def _spectral_entropy_series(x2d: np.ndarray, window: int) -> np.ndarray:
             total = float(p.sum())
             if total <= _EPS or not np.isfinite(total):
                 continue
-            pn = p / total
+            pn = p / total if total != 0 else np.nan
             pn = pn[pn > 0.0]
             if pn.size < 2 or i_max < 2:
                 continue
             h = float(-np.sum(pn * np.log(pn)))
-            out[r, c] = float(h / np.log(float(i_max)))
+            out[r, c] = np.where(np.log(float(i_max))) != 0, float(h / np.log(float(i_max))), np.nan)
     return out
 
 
@@ -197,7 +197,7 @@ def _dominant_cycle_period_series(
             if peak / total < gate:
                 continue
             j = int(np.argmax(p))
-            period = float(n) / float(j + 1)
+            period = np.where(float(j + 1) != 0, float(n) / float(j + 1), np.nan)
             if period < 2.0 or not np.isfinite(period):
                 continue
             out[r, c] = period

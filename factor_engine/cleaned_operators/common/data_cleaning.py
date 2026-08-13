@@ -832,7 +832,7 @@ class SafeDivNullOp(TwoVarOperator):
 
     def _calculate_series(self, x, y, epsilon=1e-12, **kwargs):
         denom = y.where(y.abs() > epsilon)
-        out = x / denom
+        out = x / denom if denom != 0 else np.nan
         return out.replace([np.inf, -np.inf], np.nan)
 
 

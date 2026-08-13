@@ -23,6 +23,7 @@ import math
 import os
 import sys
 import threading
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -815,17 +816,26 @@ class MemoryGovernor:
         在 ``_lock`` 内调用 evict hook（hook 通过 ``release_accounting`` 重入
         RLock 安全）；lock 顺序恒为 governor → cache（调用方 ``set`` 也先取
         ``gov.lock``），不会锁反转。
+
+        内存泄漏修复：evict hook 异常不再传播，记录 warning 并继续尝试其他层。
         """
         freed = 0
         for name, hook in self._evict_hooks.items():
             if self.total_usage + needed <= self.process_budget_bytes:
                 break
             target = max(0, self.total_usage + needed - self.process_budget_bytes)
-            n = hook(target)
-            if n > 0:
-                self.release_accounting(name, n)
-                freed += n
-                self.evictions.append(f"{name}:{n}")
+            try:
+                n = hook(target)
+                if n > 0:
+                    self.release_accounting(name, n)
+                    freed += n
+                    self.evictions.append(f"{name}:{n}")
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning(
+                    "MemoryGovernor evict hook '%s' 抛异常: %s（继续尝试其他层）",
+                    name,
+                    exc,
+                )
         return freed
 
     def release(self, name: str, bytes_: int) -> None:
@@ -1045,9 +1055,10 @@ _ACTIVE_SCOPE_LOCK = threading.Lock()
 # pragma set），只有配置变化才重新应用；动态项（threads）单独更新。
 # ---------------------------------------------------------------------------
 
-#: id(conn) -> applied_config_fingerprint。由 ``_ENV_LOCK`` 串行化读写
+#: id(conn) -> (weakref to conn, applied_config_fingerprint)。由 ``_ENV_LOCK`` 串行化读写
 #: （``__enter__``/``__exit__`` 都在锁内），无需独立锁。
-_CONN_CONFIG_FINGERPRINTS: dict[int, str] = {}
+#: 内存泄漏修复：使用 weakref 跟踪连接对象，连接释放后自动清理。
+_CONN_CONFIG_FINGERPRINTS: dict[int, tuple[Any, str]] = {}
 
 #: 静态 PRAGMA 应用器（name -> value getter）。当前 FactorEngine 只对连接应用
 #: 动态 ``threads``；memory/temp 设置走 env（只影响新连接）。未来要静态应用到
@@ -1073,9 +1084,45 @@ def reset_conn_fingerprints() -> None:
     _CONN_CONFIG_FINGERPRINTS.clear()
 
 
+def _cleanup_dead_conn_fingerprints() -> None:
+    """清理死连接的 fingerprint 条目（内存泄漏修复）。
+
+    移除 weakref 已失效（连接已被 GC）的条目。
+    """
+    dead_keys = []
+    for conn_id, (weak_conn, _) in list(_CONN_CONFIG_FINGERPRINTS.items()):
+        if weak_conn() is None:
+            dead_keys.append(conn_id)
+    for key in dead_keys:
+        _CONN_CONFIG_FINGERPRINTS.pop(key, None)
+
+
+def _get_conn_fingerprint(conn: Any) -> str | None:
+    """获取连接的 fingerprint，同时清理死引用。"""
+    entry = _CONN_CONFIG_FINGERPRINTS.get(id(conn))
+    if entry is None:
+        return None
+    weak_conn, fp = entry
+    if weak_conn() is None:
+        # 死引用，清理
+        _CONN_CONFIG_FINGERPRINTS.pop(id(conn), None)
+        return None
+    return fp
+
+
+def _set_conn_fingerprint(conn: Any, fp: str) -> None:
+    """设置连接的 fingerprint，使用 weakref 避免泄漏。"""
+    try:
+        weak_conn = weakref.ref(conn)
+        _CONN_CONFIG_FINGERPRINTS[id(conn)] = (weak_conn, fp)
+    except TypeError:
+        # 某些对象不支持 weakref，回退到普通引用
+        _CONN_CONFIG_FINGERPRINTS[id(conn)] = (lambda: conn, fp)
+
+
 def conn_fingerprint(conn: Any) -> str | None:
     """当前 conn 已应用 config 的 fingerprint（测试/诊断用）。"""
-    return _CONN_CONFIG_FINGERPRINTS.get(id(conn))
+    return _get_conn_fingerprint(conn)
 
 
 class ExecutionResourceScope:
@@ -1123,6 +1170,9 @@ class ExecutionResourceScope:
         self._applied_config_fingerprint: str | None = None
         self.pragma_apply_count: int = 0
         self.pragma_skip_count: int = 0
+        # 内存泄漏修复：缓存 engine/conn 引用避免重复调用 get_store()
+        self._cached_engine: Any = None
+        self._cached_conn: Any = None
 
     @property
     def applied_config_fingerprint(self) -> str | None:
@@ -1187,16 +1237,27 @@ class ExecutionResourceScope:
         再次进入时跳过**静态** PRAGMA 的无操作重放（``pragma_skip_count += 1``），
         只有 config 首次应用/变化才真正执行（``pragma_apply_count += 1``）。
         退出恢复时会把 fingerprint 更新为恢复后的 config（见 ``__exit__``）。
+
+        内存泄漏修复：定期清理 _CONN_CONFIG_FINGERPRINTS 中的死连接条目，
+        并缓存 engine/conn 引用避免重复调用 get_store()。
         """
+        # 内存泄漏修复：清理过期的连接 fingerprint
+        _cleanup_dead_conn_fingerprints()
+
         threads = max(1, int(threads))
         try:
             from data_access import get_store
 
             engine = get_store()._engine
             conn = getattr(engine, "_conn", None)
+
+            # 内存泄漏修复：先缓存再处理，即使后续失败也能在 __exit__ 中使用
+            self._cached_engine = engine
+            self._cached_conn = conn
+
             new_fp = _config_fingerprint(threads, self.plan)
             if conn is not None and hasattr(engine, "_write_lock"):
-                prev_fp = _CONN_CONFIG_FINGERPRINTS.get(id(conn))
+                prev_fp = _get_conn_fingerprint(conn)
                 if prev_fp == new_fp:
                     # 相同 config 已应用：跳过无操作静态 pragma 重放。
                     self.pragma_skip_count += 1
@@ -1216,7 +1277,7 @@ class ExecutionResourceScope:
                             pass
                     # 动态项：threads 是唯一真正要更新的。
                     conn.execute(f"PRAGMA threads={int(threads)}")
-                    _CONN_CONFIG_FINGERPRINTS[id(conn)] = new_fp
+                    _set_conn_fingerprint(conn, new_fp)
                 self.pragma_apply_count += 1
                 self._applied_config_fingerprint = new_fp
         except Exception as exc:  # noqa: BLE001
@@ -1242,19 +1303,26 @@ class ExecutionResourceScope:
                     os.environ[key] = value
             if self._prev_pragma is not None:
                 try:
-                    from data_access import get_store
+                    # 内存泄漏修复：优先使用缓存的 engine/conn，避免重复调用 get_store()
+                    engine = self._cached_engine
+                    conn = self._cached_conn
 
-                    engine = get_store()._engine
-                    if hasattr(engine, "_write_lock"):
+                    # 如果缓存为空（异常情况），才重新获取
+                    if engine is None or conn is None:
+                        from data_access import get_store
+                        engine = get_store()._engine
+                        conn = getattr(engine, "_conn", None)
+
+                    if engine is not None and hasattr(engine, "_write_lock"):
                         with engine._write_lock:
-                            conn = engine._conn
-                            conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
-                            # R39-PERF-071：恢复后把 connection 的 fingerprint 更新为
-                            # 恢复后的 config——否则下次同 config 进入会误判「已应用」而
-                            # 跳过 threads 更新（连接实际已恢复到旧值）。
-                            _CONN_CONFIG_FINGERPRINTS[id(conn)] = _config_fingerprint(
-                                int(self._prev_pragma), self.plan
-                            )
+                            if conn is not None:
+                                conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
+                                # R39-PERF-071：恢复后把 connection 的 fingerprint 更新为
+                                # 恢复后的 config——否则下次同 config 进入会误判「已应用」而
+                                # 跳过 threads 更新（连接实际已恢复到旧值）。
+                                _set_conn_fingerprint(
+                                    conn, _config_fingerprint(int(self._prev_pragma), self.plan)
+                                )
                 except Exception as exc2:  # noqa: BLE001
                     # 审计 #349：恢复失败只在非 production 下吞掉；production 不吞。
                     if self.strict:
@@ -1266,6 +1334,10 @@ class ExecutionResourceScope:
                         int(self._prev_pragma),
                         exc2,
                     )
+                finally:
+                    # 清除缓存引用，避免持有连接对象
+                    self._cached_engine = None
+                    self._cached_conn = None
 
 
 # ---------------------------------------------------------------------------

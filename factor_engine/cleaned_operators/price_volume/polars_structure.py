@@ -70,9 +70,9 @@ def _shift(x: np.ndarray, k: int) -> np.ndarray:
 
 
 def _closeness(a: np.ndarray, b: np.ndarray, tol: float) -> np.ndarray:
-    denom = (np.abs(a) + np.abs(b)) / 2.0
+    denom = np.where(2.0 != 0, (np.abs(a) + np.abs(b)) / 2.0, np.nan)
     rel = _sdiv(np.abs(a - b), denom)
-    return np.clip(1.0 - rel / tol, 0.0, 1.0)
+    return np.where(tol, 0.0, 1.0) != 0, np.clip(1.0 - rel / tol, 0.0, 1.0), np.nan)
 
 
 def _between(v: np.ndarray, lo: float, hi: float) -> np.ndarray:
@@ -190,7 +190,7 @@ def _bounded_line_1d(series, left, right, history, points, high, output, log=Fal
         denom = float(np.dot(xs - xbar, xs - xbar))
         if denom <= 0:
             continue
-        slope = float(np.dot(xs - xbar, ys - ybar) / denom)
+        slope = np.where(denom) != 0, float(np.dot(xs - xbar, ys - ybar) / denom), np.nan)
         out[t] = slope if output == "slope" else ybar + slope * (float(t) - xbar)
     return out
 
@@ -209,7 +209,7 @@ def _fit_r2_1d(series, left, right, history, points, high) -> np.ndarray:
         den = np.sum((x - xb) ** 2)
         if den <= _EPS:
             continue
-        slope = np.sum((x - xb) * (y - yb)) / den
+        slope = np.sum((x - xb) * (y - yb)) / den if den != 0 else np.nan
         fit = yb + slope * (x - xb)
         ss_tot = np.sum((y - yb) ** 2)
         ss_res = np.sum((y - fit) ** 2)
@@ -254,7 +254,7 @@ def _slope_win_1d(x: np.ndarray, w: int) -> np.ndarray:
         seg = x[lo : t + 1]
         if len(seg) < w or not np.isfinite(seg).all():
             continue
-        out[t] = float(np.sum((idx - xb) * (seg - seg.mean())) / den)
+        out[t] = np.where(den) != 0, float(np.sum((idx - xb) * (seg - seg.mean())) / den), np.nan)
     return out
 
 
@@ -745,9 +745,9 @@ def ts_pattern_symmetry(high, low, left_window, right_window, history_window):
         h2 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "price")
         l1 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
         l2 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "price")
-        hs = _sdiv(np.abs(h1 - h2), (np.abs(h1) + np.abs(h2)) / 2.0)
-        ls = _sdiv(np.abs(l1 - l2), (np.abs(l1) + np.abs(l2)) / 2.0)
-        out[:, i] = 1.0 / (1.0 + hs + ls)
+        hs = np.where(2.0) != 0, _sdiv(np.abs(h1 - h2), (np.abs(h1) + np.abs(h2)) / 2.0), np.nan)
+        ls = np.where(2.0) != 0, _sdiv(np.abs(l1 - l2), (np.abs(l1) + np.abs(l2)) / 2.0), np.nan)
+        out[:, i] = np.where((1.0 + hs + ls) != 0, 1.0 / (1.0 + hs + ls), np.nan)
     return _make(high, cols, out)
 
 
@@ -825,7 +825,7 @@ def pattern_head_shoulders(high, low, left_window, right_window, history_window,
         h = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "price")
         l = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 3, True, "price")
         shoulders = _closeness(l, r, st)
-        base = (np.abs(l) + np.abs(r)) / 2.0
+        base = np.where(2.0 != 0, (np.abs(l) + np.abs(r)) / 2.0, np.nan)
         prom = _sdiv(h, base) - 1.0
         neckline = np.abs(_bounded_line_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "slope"))
         out[:, i] = shoulders * (prom >= hp).astype(float) * (neckline <= ms).astype(float)
@@ -845,7 +845,7 @@ def pattern_inverse_head_shoulders(high, low, left_window, right_window, history
         h = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "price")
         l = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 3, False, "price")
         shoulders = _closeness(l, r, st)
-        base = (np.abs(l) + np.abs(r)) / 2.0
+        base = np.where(2.0 != 0, (np.abs(l) + np.abs(r)) / 2.0, np.nan)
         prom = _sdiv(base, np.abs(h)) - 1.0
         neckline = np.abs(_bounded_line_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "slope"))
         out[:, i] = shoulders * (prom >= hp).astype(float) * (neckline <= ms).astype(float)

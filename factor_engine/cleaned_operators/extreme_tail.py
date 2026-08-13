@@ -200,7 +200,7 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # ``log(negative)`` into the mean; that is undefined, not a valid
         # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
         # sign, same as the threshold) — otherwise the window is NaN.
-        ratios = exc / u
+        ratios = exc / u if u != 0 else np.nan
         if np.any(ratios <= 0.0) or not np.all(np.isfinite(ratios)):
             continue
         xi = float(np.mean(np.log(ratios)))
@@ -429,7 +429,7 @@ def _extremal_index_series(
                 gap += 1
         if count < mex:
             continue
-        out[t] = float(clusters / count)
+        out[t] = np.where(count) != 0, float(clusters / count), np.nan)
     return out
 
 
@@ -528,7 +528,7 @@ def _mean_excess_slope_series(
         denom = float(np.sum((ua - ua.mean()) ** 2))
         if denom <= _EPS:
             continue
-        slope = float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom)
+        slope = np.where(denom) != 0, float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom), np.nan)
         if np.isfinite(slope):
             out[t] = slope
     return out
@@ -617,12 +617,12 @@ def _gpd_shape_pwm_series(
         exc = np.sort(exc)
         m = exc.size
         b0 = float(exc.mean())
-        weights = np.arange(m, dtype=float) / max(m - 1, 1)
-        b1 = float(np.sum(weights * exc) / m)
+        weights = np.where(max(m - 1, 1) != 0, np.arange(m, dtype=float) / max(m - 1, 1), np.nan)
+        b1 = np.where(m) != 0, float(np.sum(weights * exc) / m), np.nan)
         denom = 2.0 * b1 - b0
         if abs(denom) <= _EPS:
             continue
-        xi = 2.0 - b0 / denom
+        xi = 2.0 - b0 / denom if denom != 0 else np.nan
         if np.isfinite(xi):
             out[t] = xi
     return out

@@ -33,7 +33,7 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
 
 
 def _safe_div(num, den):
-    out = num / den.replace(0, np.nan)
+    out = np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
     return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -66,7 +66,7 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
 
 def _index_weight_gap(index_weight, free_float_weight):
     gap = index_weight - free_float_weight
-    return gap / free_float_weight.replace(0, np.nan).abs()
+    return np.where(free_float_weight.replace(0, np.nan).abs() != 0, gap / free_float_weight.replace(0, np.nan).abs(), np.nan)
 
 
 _mk(

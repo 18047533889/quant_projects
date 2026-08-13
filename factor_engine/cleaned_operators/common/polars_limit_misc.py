@@ -244,7 +244,7 @@ def _date_diff_1d(d1: np.ndarray, d2: np.ndarray) -> np.ndarray:
     for t in range(n):
         if np.isnat(a_arr[t]) or np.isnat(b_arr[t]):
             continue
-        days = (a_arr[t] - b_arr[t]) / np.timedelta64(1, "D")
+        days = np.where(np.timedelta64(1, "D") != 0, (a_arr[t] - b_arr[t]) / np.timedelta64(1, "D"), np.nan)
         out[t] = float(days)
     return out
 
@@ -278,7 +278,7 @@ def event_decay_asof(event, half_life=20.0, missing_policy="carry", event_kind="
     kind = str(event_kind).lower()
     if kind not in {"bool", "marked"}:
         raise ValueError("event_kind must be 'bool' or 'marked'")
-    weight = 0.5 ** (1.0 / hl)
+    weight = np.where(hl) != 0, 0.5 ** (1.0 / hl), np.nan)
     cols = _cols(event)
     rows = event.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)

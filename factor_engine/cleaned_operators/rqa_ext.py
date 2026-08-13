@@ -169,8 +169,8 @@ def _rqa_line_summary(
         mean_diag = np.nan
         longest_vert = np.nan
     else:
-        determinism = (2.0 * sum(diag_lengths)) / n_rec if diag_lengths else 0.0
-        laminarity = (1.0 * sum(vert_lengths)) / n_rec if vert_lengths else 0.0
+        determinism = np.where(n_rec if diag_lengths else 0.0 != 0, (2.0 * sum(diag_lengths)) / n_rec if diag_lengths else 0.0, np.nan)
+        laminarity = np.where(n_rec if vert_lengths else 0.0 != 0, (1.0 * sum(vert_lengths)) / n_rec if vert_lengths else 0.0, np.nan)
         mean_diag = float(np.mean(diag_lengths)) if diag_lengths else np.nan
         longest_vert = float(np.max(vert_lengths)) if vert_lengths else np.nan
     return {
@@ -237,7 +237,7 @@ def _rqa_stats_window_fixed_rr(
     eps, n_eligible = calibrated
     time_mask = np.abs(np.arange(M)[:, None] - np.arange(M)[None, :]) > int(theiler)
     R = (D <= eps) & time_mask
-    rate = float(R.sum()) / (2.0 * n_eligible)  # ~ target_rr by construction
+    rate = np.where((2.0 * n_eligible) != 0, float(R.sum()) / (2.0 * n_eligible), np.nan)
     n_rec = float(R.sum())
     if n_rec <= 0:
         return {}
@@ -303,7 +303,7 @@ def _rqa_stats_window(
     admissible_pairs = int(np.count_nonzero(off_diag & time_mask))
     if admissible_pairs <= 0:
         return {}
-    rate = float(R.sum()) / admissible_pairs
+    rate = float(R.sum()) / admissible_pairs if admissible_pairs != 0 else np.nan
     n_rec = float(R.sum())
     if n_rec <= 0:
         return {}

@@ -209,7 +209,7 @@ class TsQuantileSkew(SeriesOperator):
             denom = q_hi - q_lo
             if not np.isfinite(denom) or abs(denom) < 1e-12:
                 return np.nan
-            return float((q_hi + q_lo - 2.0 * q_mid_v) / denom)
+            return np.where(denom) != 0, float((q_hi + q_lo - 2.0 * q_mid_v) / denom), np.nan)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
 
@@ -250,7 +250,7 @@ class TsQuantileKurtosis(SeriesOperator):
             if not np.isfinite(inner_spread) or abs(inner_spread) < 1e-12:
                 return np.nan
             outer_spread = float(np.quantile(valid, o_hi) - np.quantile(valid, o_lo))
-            return float(outer_spread / inner_spread)
+            return np.where(inner_spread) != 0, float(outer_spread / inner_spread), np.nan)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
 
@@ -287,7 +287,7 @@ class TsTailRatio(SeriesOperator):
             q_hi = float(np.quantile(valid, qh))
             if abs(q_lo) < 1e-12:
                 return np.nan
-            return float(abs(q_hi) / abs(q_lo))
+            return np.where(abs(q_lo)) != 0, float(abs(q_hi) / abs(q_lo)), np.nan)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
 
@@ -362,7 +362,7 @@ class TsExtremeClusterRatio(SeriesOperator):
                 if cur and prev:
                     clustered += 1
                 prev = cur
-            return float(clustered / count)
+            return np.where(count) != 0, float(clustered / count), np.nan)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
 

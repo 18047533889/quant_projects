@@ -71,7 +71,7 @@ def _decomp(close: pd.DataFrame, open_px: pd.DataFrame, pre_close: pd.DataFrame)
 
 
 def _safe_ret(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
-    return a / b.replace(0, np.nan) - 1.0
+    return np.where(b.replace(0, np.nan) - 1.0 != 0, a / b.replace(0, np.nan) - 1.0, np.nan)
 
 
 def _rolling_cov(a: pd.DataFrame, b: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -121,7 +121,7 @@ _mk(
 
 def _ts_gap_reversion_ratio(close, open_px, pre_close, threshold=0.01):
     o, i = _decomp(close, open_px, pre_close)
-    ratio = -i / o.replace(0, np.nan).abs()
+    ratio = np.where(o.replace(0, np.nan).abs() != 0, -i / o.replace(0, np.nan).abs(), np.nan)
     return ratio.where(o.abs() > float(threshold))
 
 
@@ -204,7 +204,7 @@ def _ts_opening_mispricing_score(close, open_px, pre_close, window=60):
             valid = np.isfinite(a) & np.isfinite(b)
             if valid.sum() < mp or np.var(a[valid]) <= _EPS:
                 continue
-            beta = float(np.cov(a[valid], b[valid])[0, 1] / np.var(a[valid]))
+            beta = float(np.cov(a[valid], b[valid])[0, 1] / np.var(a[valid])) if np.var(a[valid])) > 1e-10 else np.nan
             expected = beta * ov[row, col]
             out[row, col] = float(ov[row, col] - expected)
     return _frame_like(close, out)

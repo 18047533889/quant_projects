@@ -333,7 +333,7 @@ def _hit_spectral_concentration_chunk(
     total = float(powers.sum())
     if total <= _EPS:
         return np.nan
-    return float(powers.max() / total)
+    return np.where(total) != 0, float(powers.max() / total), np.nan)
 
 
 @register_operator(
@@ -408,7 +408,7 @@ def _extremogram_excess_chunk(
     denom = float(yy.sum())
     if denom <= 0:
         return np.nan
-    cond = float(np.sum(yy * xx)) / denom
+    cond = float(np.sum(yy * xx)) / denom if denom != 0 else np.nan
     base = float(np.nanmean(E))
     return float(cond - base)
 
@@ -493,7 +493,7 @@ def _cross_extremogram_chunk(
     denom = float(sp.sum())
     if denom <= 0:
         return np.nan
-    cond = float(np.sum(sp * tf)) / denom
+    cond = float(np.sum(sp * tf)) / denom if denom != 0 else np.nan
     base = float(np.nanmean(Et))
     return float(cond - base)
 
@@ -581,7 +581,7 @@ def _extremal_decay_chunk(
         denom = float(yy.sum())
         if denom <= 0:
             continue
-        ex = float(np.sum(yy * xx)) / denom - base
+        ex = np.where(denom - base != 0, float(np.sum(yy * xx)) / denom - base, np.nan)
         # R5 P1-40(c): SELECTION BIAS — only *positive* excess lags enter the
         # log-linear fit, so tau is estimated on a censored subset of lags and
         # the fitted decay is biased (overstates decay).  Kept as a Research-only
@@ -597,10 +597,10 @@ def _extremal_decay_chunk(
     denom = float(np.sum(dh * dh))
     if denom <= _EPS:
         return np.nan
-    slope = float(np.sum(dh * (ee - ee.mean()))) / denom
+    slope = float(np.sum(dh * (ee - ee.mean()))) / denom if denom != 0 else np.nan
     if slope >= 0.0:
         return np.nan  # no decay (persistent or growing) -> tau undefined
-    tau = -1.0 / slope
+    tau = -1.0 / slope if slope != 0 else np.nan
     return float(min(tau, 1000.0))
 
 

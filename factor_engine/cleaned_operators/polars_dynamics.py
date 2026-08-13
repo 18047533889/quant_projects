@@ -139,9 +139,9 @@ def _markov_series(
                 s = float(row.sum())
                 if not np.isfinite(s) or s <= _EPS:
                     continue
-                row = row / s
+                row = row / s if s != 0 else np.nan
                 h = -float(np.sum(row * np.log(row)))
-                out[t] = float(h / log_b)
+                out[t] = np.where(log_b) != 0, float(h / log_b), np.nan)
         elif kind == "surprisal":
             edges = res["edges"][t]
             if not np.isfinite(edges).any() or t - lag < 0:
@@ -173,7 +173,7 @@ def _markov_series(
             denom = c[k + 1] - c[k - 1]
             if abs(denom) <= _EPS:
                 continue
-            out[t] = float(-(d1[k + 1] - d1[k - 1]) / denom)
+            out[t] = np.where(denom) != 0, float(-(d1[k + 1] - d1[k - 1]) / denom), np.nan)
         elif kind == "committor":
             # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
             if res["n_states_obs"][t] < 2:
@@ -318,7 +318,7 @@ def _markov_series(
             xt = series[t]
             if not np.isfinite(xt):
                 continue
-            out[t] = float((xt - xstar) / mad)
+            out[t] = np.where(mad) != 0, float((xt - xstar) / mad), np.nan)
         elif kind == "diffusion_gradient":
             if not (0 < k < B - 1):
                 continue
@@ -334,7 +334,7 @@ def _markov_series(
             denom = c[k + 1] - c[k - 1]
             if abs(denom) <= _EPS:
                 continue
-            out[t] = float((d2[k + 1] - d2[k - 1]) / denom)
+            out[t] = np.where(denom) != 0, float((d2[k + 1] - d2[k - 1]) / denom), np.nan)
         elif kind == "quasipotential":
             if res["counts"][t, k] < min_state_support:
                 continue

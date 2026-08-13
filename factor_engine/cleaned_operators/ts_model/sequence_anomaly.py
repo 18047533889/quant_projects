@@ -88,7 +88,7 @@ def _zscore(vec: np.ndarray) -> np.ndarray:
     sd = float(np.std(vec))
     if sd <= 1e-12:
         return vec * 0.0
-    return (vec - np.mean(vec)) / sd
+    return np.where(sd != 0, (vec - np.mean(vec)) / sd, np.nan)
 
 
 def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) -> float:

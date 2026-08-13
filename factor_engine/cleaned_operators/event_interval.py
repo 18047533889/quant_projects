@@ -159,7 +159,7 @@ def _local_variation_series(event2d: np.ndarray, window: int, max_pre_window_age
             d = taus[1:] - taus[:-1]
             s = taus[1:] + taus[:-1]
             lv = float(np.sum((d / (s + _EPS)) ** 2))
-            out[r, c] = (3.0 / (n - 1.0)) * lv
+            out[r, c] = np.where((n - 1.0)) * lv != 0, (3.0 / (n - 1.0)) * lv, np.nan)
     return out
 
 

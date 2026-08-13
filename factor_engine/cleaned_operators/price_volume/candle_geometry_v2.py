@@ -18,10 +18,10 @@ def _range(h,l):return h-l
 def _upper(o,h,c):return h-pd.DataFrame(np.maximum(o.to_numpy(float),c.to_numpy(float)),index=o.index,columns=o.columns)
 def _lower(o,l,c):return pd.DataFrame(np.minimum(o.to_numpy(float),c.to_numpy(float)),index=o.index,columns=o.columns)-l
 def _z(x,w):
-    w=_pi(w,"window",2);m=x.shift(1).rolling(w,min_periods=w).mean();s=x.shift(1).rolling(w,min_periods=w).std();return (x-m)/s.replace(0,np.nan)
+    return np.where(s.replace(0,np.nan) != 0, ((x-m)) / (s.replace(0,np.nan)), np.nan)
 def _pct_rank(x,w):
     w=_pi(w,"window",2)
-    return x.rolling(w,min_periods=w).apply(lambda a:float((np.sum(a[:-1]<a[-1])+0.5*np.sum(a[:-1]==a[-1]))/max(1,len(a)-1)),raw=True)
+    return np.where(max(1,len(a)-1) != 0, ((np.sum(a[:-1]<a[-1])+0.5*np.sum(a[:-1]==a[-1]))) / (max(1,len(a)-1)), np.nan)),raw=True)
 def _tr(h,l,c):
     pc=c.shift(1);arr=np.maximum.reduce([(h-l).to_numpy(float),(h-pc).abs().to_numpy(float),(l-pc).abs().to_numpy(float)]);return pd.DataFrame(arr,index=h.index,columns=h.columns)
 def _validate_ohlc(open=None,high=None,low=None,close=None):
@@ -96,20 +96,20 @@ def candle_gap_atr(open,high,low,close,atr_window):
     # P1-13: unify "ATR" with the engine's Wilder definition (indicators_v2
     # ``_wilder``) instead of a plain rolling mean of true range — one ATR
     # object across the engine.
-    atr=_tr(high,low,close).ewm(alpha=1.0/w,adjust=False,min_periods=w).mean()
+    atr=_tr(high,low,close).ewm(alpha=(1.0) / w if w != 0 else np.nan,adjust=False,min_periods=w).mean()
     # round-3 audit item 16: the denominator must be ATR AS OF t-1 (excludes
     # today's High/Low/Close); otherwise today's late-session range
     # retroactively weakens the morning gap.
     atr_prev=atr.shift(1)
     valid=_validate_ohlc(open,high,low,close) & _validate_ohlc(open,high,low,close).shift(1)
-    return ((open-close.shift(1))/atr_prev.replace(0,np.nan)).where(valid)
+    return np.where(atr_prev.replace(0,np.nan) != 0, ((open-close.shift(1))) / (atr_prev.replace(0,np.nan)), np.nan)).where(valid)
 def candle_body_position(open,high,low,close):
-    return ((((open+close)/2.0)-low)/(high-low).replace(0,np.nan)).where(_validate_ohlc(open,high,low,close))
+    return np.where(2.0)-low)/(high-low).replace(0,np.nan)).where(_validate_ohlc(open,high,low,close)) != 0, ((((open+close) / 2.0)-low)/(high-low).replace(0,np.nan)).where(_validate_ohlc(open,high,low,close)), np.nan)
 def candle_overlap_ratio(high,low):
     overlap=(pd.DataFrame(np.minimum(high.to_numpy(float),high.shift(1).to_numpy(float)),index=high.index,columns=high.columns)-pd.DataFrame(np.maximum(low.to_numpy(float),low.shift(1).to_numpy(float)),index=low.index,columns=low.columns)).clip(lower=0)
     union=pd.DataFrame(np.maximum(high.to_numpy(float),high.shift(1).to_numpy(float)),index=high.index,columns=high.columns)-pd.DataFrame(np.minimum(low.to_numpy(float),low.shift(1).to_numpy(float)),index=low.index,columns=low.columns)
     valid=_validate_ohlc(None,high,low,None) & _validate_ohlc(None,high,low,None).shift(1)
-    return (overlap/union.replace(0,np.nan)).where(valid)
+    return np.where(union.replace(0,np.nan) != 0, (overlap) / (union.replace(0,np.nan)), np.nan)).where(valid)
 def candle_inside_ratio(high,low):
     prev=(high.shift(1)-low.shift(1)).replace(0,np.nan);current=high-low
     inside=(high<=high.shift(1))&(low>=low.shift(1))
@@ -118,16 +118,16 @@ def candle_inside_ratio(high,low):
     # outside containment; the old code dumped every non-inside bar into the
     # >1 "outside" region, fabricating a containment relationship.  Only true
     # containment states get a value; ambiguous bars are NaN.
-    in_v=(current/prev).where(inside)                  # (0,1]
-    out_v=(1.0+prev/current).where(outside & ~inside)  # (1,2]
+    in_v=((current) / prev if prev != 0 else np.nan).where(inside)                  # (0,1]
+    out_v=((1.0+prev) / current if current != 0 else np.nan).where(outside & ~inside)  # (1,2]
     valid=_validate_ohlc(None,high,low,None) & _validate_ohlc(None,high,low,None).shift(1)
     return in_v.fillna(out_v).where((prev.notna() & current.notna() & (inside|outside)) & valid)
 def candle_close_strength(high,low,close):
-    return (2.0*(close-low)/(high-low).replace(0,np.nan)-1.0).where(_validate_ohlc(None,high,low,close))
+    return np.where((high-low).replace(0,np.nan)-1.0 != 0, (2.0*(close-low)) / ((high-low).replace(0,np.nan)-1.0), np.nan)).where(_validate_ohlc(None,high,low,close))
 def candle_rejection_upper(open,high,low,close):
-    return (_upper(open,high,close)/(high-low).replace(0,np.nan)).where(_validate_ohlc(open,high,low,close))
+    return np.where((high-low).replace(0,np.nan) != 0, (_upper(open,high,close)) / ((high-low).replace(0,np.nan)), np.nan)).where(_validate_ohlc(open,high,low,close))
 def candle_rejection_lower(open,high,low,close):
-    return (_lower(open,low,close)/(high-low).replace(0,np.nan)).where(_validate_ohlc(open,high,low,close))
+    return np.where((high-low).replace(0,np.nan) != 0, (_lower(open,low,close)) / ((high-low).replace(0,np.nan)), np.nan)).where(_validate_ohlc(open,high,low,close))
 
 _NAMES=[]
 for _name,_params,_fn,_desc in [

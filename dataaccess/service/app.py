@@ -163,8 +163,6 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
         # Cleanup on shutdown (if needed)
 
-    from contextlib import asynccontextmanager
-
     app = FastAPI(
         title="data_access read service",
         version=data_access.__version__,

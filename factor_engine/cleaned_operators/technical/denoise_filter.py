@@ -66,7 +66,7 @@ def _ssa_decompose(x: np.ndarray, L: int, n_components: int) -> np.ndarray:
             result[idx] += X_reconstructed[j, i]
             counts[idx] += 1
 
-    result = result / np.maximum(counts, 1)
+    result = np.where(np.maximum(counts, 1) != 0, result / np.maximum(counts, 1), np.nan)
     return result
 
 

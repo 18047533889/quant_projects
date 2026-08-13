@@ -367,10 +367,10 @@ def expanding_harmonic_mean(x: pd.DataFrame) -> pd.DataFrame:
 返回:
     截至各时点的调和平均 panel。
 """
-    inv = 1.0 / x.replace(0, np.nan)
+    inv = np.where(x.replace(0, np.nan) != 0, 1.0 / x.replace(0, np.nan), np.nan)
     count = x.expanding(min_periods=1).count().astype(float)
     inv_sum = inv.expanding(min_periods=1).sum()
-    return count / inv_sum
+    return np.where(inv_sum != 0, count / inv_sum, np.nan)
 
 
 def expanding_panel_stat(x: pd.DataFrame, stat: str, **kwargs) -> pd.DataFrame:
@@ -541,7 +541,7 @@ def causal_linear_extrapolate_panel(x: pd.DataFrame) -> pd.DataFrame:
                 (j for j in range(prev_idx - 1, -1, -1) if np.isfinite(arr[j])), None
             )
             if prev2_idx is not None and prev_idx > prev2_idx:
-                slope = (arr[prev_idx] - arr[prev2_idx]) / (prev_idx - prev2_idx)
+                slope = np.where((prev_idx - prev2_idx) != 0, (arr[prev_idx] - arr[prev2_idx]) / (prev_idx - prev2_idx), np.nan)
                 filled[i] = arr[prev_idx] + slope * (i - prev_idx)
             else:
                 filled[i] = arr[prev_idx]

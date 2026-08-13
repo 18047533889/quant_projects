@@ -230,7 +230,7 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
             cur & prev1 & has_r & has_b,
         )
     if p in {"on_neck", "in_neck", "thrusting"}:
-        prev_mid = (po + pc) / 2
+        prev_mid = np.where(2 != 0, (po + pc) / 2, np.nan)
         bull2 = pbear & bull & (o < pc)
         if p == "on_neck":
             mask = bull2 & _near(c, pc, tol)

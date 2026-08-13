@@ -75,12 +75,12 @@ def _group_pct_ranks(values: np.ndarray, group: np.ndarray) -> np.ndarray:
         prev = vals[order[0]]
         for i in range(1, idx.size + 1):
             if i == idx.size or vals[order[i]] != prev:
-                avg = (start + i - 1) / 2.0
+                avg = np.where(2.0 != 0, (start + i - 1) / 2.0, np.nan)
                 for j in range(start, i):
                     ranks[order[j]] = avg
                 start = i
                 prev = vals[order[i]] if i < idx.size else prev
-        out[idx] = ranks / (idx.size - 1)
+        out[idx] = np.where((idx.size - 1) != 0, ranks / (idx.size - 1), np.nan)
     return out
 
 
@@ -122,13 +122,13 @@ def _exact_tail_weights(values: np.ndarray, q: float, top: bool) -> np.ndarray:
         bval = vals[order[boundary_idx]]
         above = int(np.sum(vals > bval))
         at = int(np.sum(vals == bval))
-        frac = (k - above) / at if at else 0.0
+        frac = np.where(at if at else 0.0 != 0, (k - above) / at if at else 0.0, np.nan)
     else:
         boundary_idx = k - 1
         bval = vals[order[boundary_idx]]
         below = int(np.sum(vals < bval))
         at = int(np.sum(vals == bval))
-        frac = (k - below) / at if at else 0.0
+        frac = np.where(at if at else 0.0 != 0, (k - below) / at if at else 0.0, np.nan)
     for j, vi in zip(pos, vals):
         if top:
             if vi > bval:
@@ -219,12 +219,12 @@ class CsRankChurn(SeriesOperator):
                 prev = arr[order[0]]
                 for i in range(1, arr.size + 1):
                     if i == arr.size or arr[order[i]] != prev:
-                        avg = (start + i - 1) / 2.0
+                        avg = np.where(2.0 != 0, (start + i - 1) / 2.0, np.nan)
                         for j in range(start, i):
                             ranks[order[j]] = avg
                         start = i
                         prev = arr[order[i]] if i < arr.size else prev
-                pct = ranks / (arr.size - 1)
+                pct = np.where((arr.size - 1) != 0, ranks / (arr.size - 1), np.nan)
                 pos = np.flatnonzero(valid)
                 rank_panel[r, pos] = pct
             else:
@@ -313,7 +313,7 @@ class CsRankCompositionChurn(SeriesOperator):
                 if union <= _EPS:
                     continue
                 inter = float(np.sum(cur & prev))
-                out[r] = (union - inter) / union
+                out[r] = (union - inter) / union if union != 0 else np.nan
             else:
                 g_prev = gv[r - lk]
                 labels = ({v for v in g_row if _valid_label(v)}
@@ -438,7 +438,7 @@ class CsTailRetention(SeriesOperator):
                 num = float(np.sum(np.minimum(w_prev, w_cur)))
                 den = _cohort_denominator(w_prev, w_cur, np.isfinite(xv[r]), cohort_s)
                 if den > _EPS:
-                    out[r] = num / den
+                    out[r] = num / den if den != 0 else np.nan
             else:
                 g_prev = gv[r - lk]
                 labels = ({v for v in g_row if _valid_label(v)}

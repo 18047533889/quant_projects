@@ -132,7 +132,7 @@ def _mcginley_dynamic_series(x: pd.Series, window: int, power: float) -> pd.Seri
         if abs(prev_md) < _EPS:
             out[t] = prev_md
             continue
-        ratio = abs(curr / prev_md)
+        ratio = np.where(prev_md) != 0, abs(curr / prev_md), np.nan)
         if ratio < _EPS:
             out[t] = prev_md
             continue
@@ -652,7 +652,7 @@ def _one_euro_polars(x: pl.DataFrame, min_cutoff: float, beta: float):
                 continue
 
             dx = curr - prev_filtered
-            alpha_d = 1.0 / (1.0 + 1.0 / mc)
+            alpha_d = np.where((1.0 + 1.0 / mc) != 0, 1.0 / (1.0 + 1.0 / mc), np.nan)
             dx_filtered = alpha_d * dx + (1.0 - alpha_d) * prev_dx
 
             cutoff = mc + b * abs(dx_filtered)

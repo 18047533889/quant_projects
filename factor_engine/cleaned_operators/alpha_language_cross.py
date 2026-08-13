@@ -147,7 +147,7 @@ class CsNeighborGap(SeriesOperator):
                 # undefined — return NaN, never a huge ``gap/eps`` alpha.
                 if not np.isfinite(scale[j]) or scale[j] <= _EPS:
                     continue
-                out[row, j] = gap[j] / scale[j]
+                out[row, j] = np.where(scale[j] != 0, gap[j] / scale[j], np.nan)
         return frame_like(x, out)
 
 
@@ -477,7 +477,7 @@ class RelationWeightedStdExSelf(SeriesOperator):
                     total_w = float(w.sum())
                     if total_w <= 0.0:
                         continue
-                    w = w / total_w
+                    w = w / total_w if total_w != 0 else np.nan
                     vals = xv[row, others]
                     mu = float(np.sum(w * vals))
                     var = float(np.sum(w * (vals - mu) ** 2))

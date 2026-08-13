@@ -30,11 +30,16 @@ def stable_digest(*parts: Any) -> str:
                 for k, v in sorted(part.items(), key=lambda kv: str(kv[0]))
             )
             h.update(f"{{{text}}}".encode("utf-8"))
-        elif isinstance(part, (list, tuple, set, frozenset)):
+        elif isinstance(part, (set, frozenset)):
+            # Sets/frozensets have no order - sort for stability
             items = sorted(
                 (stable_digest(x) for x in part),
                 key=lambda d: d,
             )
+            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
+        elif isinstance(part, (list, tuple)):
+            # Lists/tuples have meaningful order - preserve it
+            items = [stable_digest(x) for x in part]
             h.update(("[" + ",".join(items) + "]").encode("utf-8"))
         elif isinstance(part, bytes):
             h.update(part)
@@ -54,8 +59,13 @@ def stable_digest_full(*parts: Any) -> str:
                 for k, v in sorted(part.items(), key=lambda kv: str(kv[0]))
             )
             h.update(f"{{{text}}}".encode("utf-8"))
-        elif isinstance(part, (list, tuple, set, frozenset)):
+        elif isinstance(part, (set, frozenset)):
+            # Sets/frozensets have no order - sort for stability
             items = sorted((stable_digest_full(x) for x in part), key=lambda d: d)
+            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
+        elif isinstance(part, (list, tuple)):
+            # Lists/tuples have meaningful order - preserve it
+            items = [stable_digest_full(x) for x in part]
             h.update(("[" + ",".join(items) + "]").encode("utf-8"))
         elif isinstance(part, bytes):
             h.update(part)

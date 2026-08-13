@@ -154,7 +154,7 @@ def _seg_return(close: pl.DataFrame, segment: str) -> pl.DataFrame:
         pl.col("close").first().alias("open"),
         pl.col("close").last().alias("last"),
     )
-    out = seg.with_columns(((pl.col("last") / pl.col("open")) - 1.0).alias("v"))
+    out = pl.when(pl.col("open")) - 1.0).alias("v")) != 0).then((seg.with_columns(((pl.col("last")) / (pl.col("open")) - 1.0).alias("v")))).otherwise(None)
     out = out.with_columns(pl.when(pl.col("last").is_not_null() & pl.col("open").is_not_null()).then(pl.col("v")).otherwise(None))
     return _pivot(out, "v")
 
@@ -501,7 +501,7 @@ def _vwap_path_common(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.Data
             - pl.col("S1") * (pl.col("S1") * pl.col("S2y") - pl.col("S1y") * pl.col("S2"))
             + pl.col("S0y") * (pl.col("S1") * pl.col("S3") - pl.col("S2") * pl.col("S2"))
         )
-        out = g2.with_columns((detA / detXX).alias("v"))
+        out = np.where(detXX).alias("v")) != 0, g2.with_columns((detA / detXX).alias("v")), np.nan)
         out = out.with_columns(pl.when(pl.col("n") >= 4).then(pl.col("v")).otherwise(None))
     return _pivot(out, "v")
 
@@ -1186,18 +1186,18 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         pl.len().alias("n"),
     ).with_columns(pl.col("n").cast(pl.Float64).alias("nf"))
     if kind == "idio_skew":
-        mean_e = pl.col("se") / pl.col("nf")
-        var_e = pl.col("se2") / pl.col("nf") - mean_e.pow(2)
-        m3 = pl.col("se3") / pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3)
+        mean_e = pl.when(pl.col("nf") != 0).then((pl.col("se")) / (pl.col("nf"))).otherwise(None)
+        var_e = pl.when(pl.col("nf") - mean_e.pow(2) != 0).then((pl.col("se2")) / (pl.col("nf") - mean_e.pow(2))).otherwise(None)
+        m3 = pl.when(pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3) != 0).then((pl.col("se3")) / (pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3))).otherwise(None)
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m3 / var_e.pow(1.5)).otherwise(None).alias("v")
         )
         return _pivot(out, "v")
     if kind == "idio_kurt":
         # E[((e-e_mean)/sd)^4]
-        mean_e = pl.col("se") / pl.col("nf")
-        var_e = pl.col("se2") / pl.col("nf") - mean_e.pow(2)
-        m4 = pl.col("se4") / pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4)
+        mean_e = pl.when(pl.col("nf") != 0).then((pl.col("se")) / (pl.col("nf"))).otherwise(None)
+        var_e = pl.when(pl.col("nf") - mean_e.pow(2) != 0).then((pl.col("se2")) / (pl.col("nf") - mean_e.pow(2))).otherwise(None)
+        m4 = pl.when(pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4) != 0).then((pl.col("se4")) / (pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4))).otherwise(None)
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m4 / var_e.pow(2)).otherwise(None).alias("v")
         )

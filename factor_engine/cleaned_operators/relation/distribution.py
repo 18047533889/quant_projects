@@ -222,7 +222,7 @@ class RelationTopkConcentration(SeriesOperator):
                 if total <= 0.0:
                     continue
                 top = float(np.sum(top_slots))
-                out[r, c] = top / total
+                out[r, c] = top / total if total != 0 else np.nan
         return frame_like(base, out)
 
 
@@ -232,7 +232,7 @@ def _skew(values: np.ndarray) -> float:
         return np.nan
     mean = float(np.mean(valid))
     std = float(np.std(valid, ddof=0))
-    return float(np.mean((valid - mean) ** 3) / (std ** 3))
+    return np.where((std ** 3)) != 0, float(np.mean((valid - mean) ** 3) / (std ** 3)), np.nan)
 
 
 def _kurtosis(values: np.ndarray) -> float:
@@ -241,7 +241,7 @@ def _kurtosis(values: np.ndarray) -> float:
         return np.nan
     mean = float(np.mean(valid))
     std = float(np.std(valid, ddof=0))
-    return float(np.mean((valid - mean) ** 4) / (std ** 4))
+    return np.where((std ** 4)) != 0, float(np.mean((valid - mean) ** 4) / (std ** 4)), np.nan)
 
 
 @register_operator(
@@ -811,7 +811,7 @@ class GroupTailRatio(SeriesOperator):
             q_hi = float(np.quantile(values, qh))
             if abs(q_lo) < 1e-12:
                 return np.nan
-            return float(abs(q_hi) / abs(q_lo))
+            return np.where(abs(q_lo)) != 0, float(abs(q_hi) / abs(q_lo)), np.nan)
 
         return _group_shape(x, group, _fn)
 

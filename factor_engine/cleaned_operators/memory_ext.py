@@ -101,7 +101,7 @@ def _sample_acf(contig: np.ndarray, max_lag: int) -> np.ndarray:
     if n < 3:
         return np.empty(0, dtype=float)
     mu = float(np.mean(contig))
-    gamma0 = float(np.sum((contig - mu) ** 2)) / float(n)
+    gamma0 = np.where(float(n) != 0, float(np.sum((contig - mu) ** 2)) / float(n), np.nan)
     if not np.isfinite(gamma0) or gamma0 <= 1e-12:
         return np.empty(0, dtype=float)
     m = min(int(max_lag), n - 1)
@@ -109,8 +109,8 @@ def _sample_acf(contig: np.ndarray, max_lag: int) -> np.ndarray:
     rho[0] = 1.0
     for k in range(1, m + 1):
         num = float(np.sum((contig[: n - k] - mu) * (contig[k:] - mu)))
-        gamma_k = num / float(n - k)
-        rho[k] = gamma_k / gamma0
+        gamma_k = np.where(float(n - k) != 0, num / float(n - k), np.nan)
+        rho[k] = gamma_k / gamma0 if gamma0 != 0 else np.nan
     return rho
 
 
@@ -210,7 +210,7 @@ def _fd_weights(fd: float, cutoff: int) -> np.ndarray:
     w = np.empty(c + 1, dtype=float)
     w[0] = 1.0
     for k in range(1, c + 1):
-        w[k] = -w[k - 1] * (fd - k + 1) / k
+        w[k] = -w[k - 1] * (fd - k + 1) / k if k != 0 else np.nan
     return w
 
 
@@ -237,13 +237,13 @@ def _fd_discarded_weight_mass(fd: float, cutoff: int, _tail_terms: int = 50000) 
     N = int(_tail_terms)
     w_prev = float(w[-1])
     for k in range(c + 1, N + 1):
-        wk = -w_prev * (fd - k + 1) / k
+        wk = -w_prev * (fd - k + 1) / k if k != 0 else np.nan
         total += abs(wk)
         w_prev = wk
     total += abs(w_prev) * float(N) / fd
     if total <= 1e-15:
         return 0.0
-    return float(max(0.0, min(1.0, 1.0 - kept / total)))
+    return np.where(total))) != 0, float(max(0.0, min(1.0, 1.0 - kept / total))), np.nan)
 
 
 def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np.ndarray:

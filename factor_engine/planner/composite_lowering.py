@@ -8,6 +8,7 @@ import itertools
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from planner.logical_plan import PlanNode
 

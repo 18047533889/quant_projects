@@ -66,14 +66,14 @@ def _cs_rank_pct(x: np.ndarray, group: np.ndarray | None) -> np.ndarray:
                     from scipy.stats import rankdata
                     ranks = rankdata(group_vals, method='average')
                     # Convert to percentile [0, 1]
-                    percentiles = ranks / len(ranks)
+                    percentiles = np.where(len(ranks) != 0, ranks / len(ranks), np.nan)
                     out[r, group_indices] = percentiles
                 except ImportError:
                     # Fallback to O(N²) if scipy unavailable
                     for i, idx in enumerate(group_indices):
                         v = group_vals[i]
                         rank = np.sum(group_vals < v) + 0.5 * np.sum(group_vals == v)
-                        out[r, idx] = rank / len(group_vals)
+                        out[r, idx] = np.where(len(group_vals) != 0, rank / len(group_vals), np.nan)
         else:
             # No grouping: rank entire row
             finite_mask = np.isfinite(row_vals)
@@ -91,14 +91,14 @@ def _cs_rank_pct(x: np.ndarray, group: np.ndarray | None) -> np.ndarray:
                 from scipy.stats import rankdata
                 ranks = rankdata(finite_vals, method='average')
                 # Convert to percentile [0, 1]
-                percentiles = ranks / len(ranks)
+                percentiles = np.where(len(ranks) != 0, ranks / len(ranks), np.nan)
                 out[r, finite_indices] = percentiles
             except ImportError:
                 # Fallback to O(N²) if scipy unavailable
                 for i, idx in enumerate(finite_indices):
                     v = finite_vals[i]
                     rank = np.sum(finite_vals < v) + 0.5 * np.sum(finite_vals == v)
-                    out[r, idx] = rank / len(finite_vals)
+                    out[r, idx] = np.where(len(finite_vals) != 0, rank / len(finite_vals), np.nan)
 
     return out
 
@@ -754,7 +754,7 @@ class StateCostAwareSlew(SeriesOperator):
                     # Assume cost is already normalized (typical_cost ≈ 1)
                     cost_norm = cost_t
                     k = 1.0
-                    limit_t = slew_mult / (1.0 + k * cost_norm)
+                    limit_t = np.where((1.0 + k * cost_norm) != 0, slew_mult / (1.0 + k * cost_norm), np.nan)
                 else:
                     # Invalid/missing cost: fail-closed (output NaN, don't update state)
                     out[row, col] = np.nan
@@ -1154,7 +1154,7 @@ class StateL2PartialAdjustment(SeriesOperator):
                     continue
 
                 # Partial adjustment: y_t = (x_t + lambda * y_{t-1}) / (1 + lambda)
-                y_new = (curr + lambda_smooth * y_prev) / (1.0 + lambda_smooth)
+                y_new = np.where((1.0 + lambda_smooth) != 0, (curr + lambda_smooth * y_prev) / (1.0 + lambda_smooth), np.nan)
 
                 out[row, col] = y_new
                 y_prev = y_new

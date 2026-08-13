@@ -388,7 +388,7 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str,
             p[t] = r
             continue
         p_pred = p_prev + q
-        k = p_pred / (p_pred + r)
+        k = np.where((p_pred + r) != 0, p_pred / (p_pred + r), np.nan)
         # Innovation is the difference between the observation and the
         # *predicted* state (mu_prev before the Kalman update), not the filtered
         # state.  Computing it after the update would shrink every innovation by
@@ -398,7 +398,7 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str,
         p_prev = (1.0 - k) * p_pred
         mu[t] = mu_prev
         p[t] = p_prev
-        innov_z[t] = innov / np.sqrt(max(p_pred + r, 1e-12))
+        innov_z[t] = np.where(np.sqrt(max(p_pred + r, 1e-12)) != 0, innov / np.sqrt(max(p_pred + r, 1e-12)), np.nan)
     if out_stat == "level":
         return mu
     if out_stat == "innovation_z":
@@ -470,8 +470,8 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
         p12_p = p12 + p22
         p22_p = p22 + q_trend
         # update (scalar observation with H = [1, 0])
-        k1 = p11_p / (p11_p + r)
-        k2 = p12_p / (p11_p + r)
+        k1 = np.where((p11_p + r) != 0, p11_p / (p11_p + r), np.nan)
+        k2 = np.where((p11_p + r) != 0, p12_p / (p11_p + r), np.nan)
         innov = x - l_pred
         level = l_pred + k1 * innov
         trend = t_pred + k2 * innov
@@ -546,8 +546,8 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
                 wx = np.asarray(warmup_x, dtype=float)
                 denom = float(np.dot(wx, wx))
                 if denom > 1e-12:
-                    b = float(np.dot(wx, wy) / denom)
-                    p = r / max(denom, 1e-12)
+                    b = np.where(denom) != 0, float(np.dot(wx, wy) / denom), np.nan)
+                    p = np.where(max(denom, 1e-12) != 0, r / max(denom, 1e-12), np.nan)
                 else:
                     b = 0.0  # diffuse prior fallback
                     p = 1e3
@@ -559,7 +559,7 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
         denom = p_pred * xv * xv + r
         if denom <= 0.0:
             continue
-        k = p_pred * xv / denom
+        k = p_pred * xv / denom if denom != 0 else np.nan
         innov = yv - b * xv
         b_new = b + k * innov
         p = (1.0 - k * xv) * p_pred

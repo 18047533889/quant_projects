@@ -773,7 +773,7 @@ def _null_calibration(op: Any, ctx: dict[str, Any]) -> tuple[list[AuditFinding],
             continue
         if min(s_lo, s_hi) <= 1e-12:
             continue
-        ratio = max(s_lo, s_hi) / min(s_lo, s_hi)
+        ratio = np.where(min(s_lo, s_hi) != 0, max(s_lo, s_hi) / min(s_lo, s_hi), np.nan)
         if ratio > 10.0:
             findings.append(
                 AuditFinding(
@@ -855,7 +855,7 @@ def _practical_usability(op: Any, ctx: dict[str, Any]) -> tuple[list[AuditFindin
                 f"usable factor",
             )
         )
-    coverage = float(np.isfinite(out).sum() / out.size)
+    coverage = np.where(out.size) != 0, float(np.isfinite(out).sum() / out.size), np.nan)
     if coverage < 0.15:
         findings.append(
             AuditFinding(

@@ -150,7 +150,7 @@ class DividePolars(SeriesOperator):
         name="divide", category="elementwise_math", description="逐元素除法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
     )
-    _calculate_series = _binary_colwise(lambda a, b: a / b)
+    _calculate_series = np.where(b) != 0, _binary_colwise(lambda a, b: a / b), np.nan)
 
 
 def _unary(expr_fn):

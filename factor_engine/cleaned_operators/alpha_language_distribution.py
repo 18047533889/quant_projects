@@ -128,7 +128,7 @@ class TsTailImbalance(SeriesOperator):
                 return np.nan
             upper = float(np.sum(v > m + kk * s))
             lower = float(np.sum(v < m - kk * s))
-            return float((upper - lower) / n)
+            return np.where(n) != 0, float((upper - lower) / n), np.nan)
 
         from cleaned_operators.rolling_pack import map_rolling
 
@@ -181,7 +181,7 @@ class TsExpectedShortfallAsymmetry(SeriesOperator):
             denom = u + l
             if not np.isfinite(denom) or denom < _EPS:
                 return np.nan
-            return float((u - l) / denom)
+            return np.where(denom) != 0, float((u - l) / denom), np.nan)
 
         from cleaned_operators.rolling_pack import map_rolling
 
@@ -233,7 +233,7 @@ class TsWassersteinShift(SeriesOperator):
             mad_o = _mad(oa)
             if not np.isfinite(mad_o) or mad_o < _EPS:
                 return np.nan
-            return w1 / mad_o
+            return np.where(mad_o != 0, w1 / mad_o, np.nan)
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
@@ -272,8 +272,8 @@ class TsKsShift(SeriesOperator):
             if ra.size < mp or oa.size < mp:
                 return np.nan
             combined = np.unique(np.concatenate([ra, oa]))
-            ecdf_a = np.searchsorted(ra, combined, side="right") / ra.size
-            ecdf_b = np.searchsorted(oa, combined, side="right") / oa.size
+            ecdf_a = np.where(ra.size != 0, np.searchsorted(ra, combined, side="right") / ra.size, np.nan)
+            ecdf_b = np.where(oa.size != 0, np.searchsorted(oa, combined, side="right") / oa.size, np.nan)
             return float(np.max(np.abs(ecdf_a - ecdf_b)))
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
@@ -312,7 +312,7 @@ class TsLocationShift(SeriesOperator):
             mad_o = _mad(oa)
             if not np.isfinite(mad_o) or mad_o < _EPS:
                 return np.nan
-            return (float(np.median(ra)) - float(np.median(oa))) / mad_o
+            return np.where(mad_o != 0, (float(np.median(ra)) - float(np.median(oa))) / mad_o, np.nan)
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
@@ -351,7 +351,7 @@ class TsScaleShift(SeriesOperator):
             mad_o = _mad(oa)
             if (not np.isfinite(mad_r) or mad_r < _EPS) or (not np.isfinite(mad_o) or mad_o < _EPS):
                 return np.nan
-            return float(np.log(mad_r / mad_o))
+            return np.where(mad_o)) != 0, float(np.log(mad_r / mad_o)), np.nan)
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
@@ -491,7 +491,7 @@ def _mmd_rbf(recent: np.ndarray, old: np.ndarray, min_periods: int) -> float:
 
     def _k(a: np.ndarray, b: np.ndarray) -> float:
         diff = a[:, None] - b[None, :]
-        return float(np.exp(-(diff * diff) / tau).mean())
+        return np.where(tau).mean()) != 0, float(np.exp(-(diff * diff) / tau).mean()), np.nan)
 
     kxx = _k(ra, ra)
     kyy = _k(oa, oa)

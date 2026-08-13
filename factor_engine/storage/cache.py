@@ -63,7 +63,23 @@ class _RefCountedSaveLock:
                 _SAVE_LOCKS_ORDER.append(self._key)
             _SAVE_LOCK_REFS[self._key] = _SAVE_LOCK_REFS.get(self._key, 0) + 1
             self._lock = lock
-        self._lock.acquire()
+        # P0-FIX: Add timeout to prevent indefinite deadlock
+        if not self._lock.acquire(timeout=30.0):
+            import logging
+            logging.getLogger(__name__).error(
+                f"Failed to acquire cache save lock for key={self._key!r} within 30s. "
+                f"Potential deadlock detected."
+            )
+            with _SAVE_LOCKS_GUARD:
+                refs = _SAVE_LOCK_REFS.get(self._key, 0) - 1
+                if refs > 0:
+                    _SAVE_LOCK_REFS[self._key] = refs
+                else:
+                    _SAVE_LOCK_REFS.pop(self._key, None)
+            raise RuntimeError(
+                f"Failed to acquire cache save lock for key={self._key!r} within 30s - "
+                f"potential deadlock or long-running critical section"
+            )
         self._acquired = True
         return self
 
@@ -648,7 +664,15 @@ def _load_value(path: Path) -> Any | None:
             _logger_cache_mismatch(path, expected)
             return None
         return loaded
-    except Exception:
+    except FileNotFoundError:
+        # Expected cache miss - no logging needed
+        return None
+    except Exception as e:
+        # P0-FIX: Log unexpected cache load failures for observability
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Cache load failed unexpectedly for {path}: {type(e).__name__}: {e}"
+        )
         return None
 
 

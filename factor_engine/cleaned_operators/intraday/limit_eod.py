@@ -113,7 +113,7 @@ def _pre_hit_pressure_day(
         return float(np.polyfit(x, pre_volumes, 1)[0])
     if output == "distance_decay":
         with np.errstate(divide="ignore", invalid="ignore"):
-            return float(np.mean((limit - pre_prices) / limit))
+            return np.where(limit)) != 0, float(np.mean((limit - pre_prices) / limit)), np.nan)
     if output == "path_efficiency":
         if len(pre_prices) < 2:
             return np.nan
@@ -121,7 +121,7 @@ def _pre_hit_pressure_day(
         path = float(np.sum(np.abs(np.diff(pre_prices))))
         if path <= _EPS:
             return np.nan
-        return float(net / path)
+        return np.where(path) != 0, float(net / path), np.nan)
     return np.nan
 
 
@@ -260,7 +260,7 @@ def _eod_reversal_day(
     if output == "pressure":
         if not np.isfinite(bw_std) or bw_std <= _EPS:
             return np.nan
-        return float(cw_move / bw_std)
+        return np.where(bw_std) != 0, float(cw_move / bw_std), np.nan)
     if output == "reversal":
         sign_bw = 1.0 if bw_move >= 0.0 else -1.0
         return float(-sign_bw * cw_move / (abs(bw_move) + _EPS))
@@ -275,8 +275,8 @@ def _eod_reversal_day(
             return np.nan
         if not np.isfinite(bw_std) or bw_std <= _EPS:
             return np.nan
-        pressure = float(cw_move / bw_std)
-        return float(pressure * cw_vol / tot_vol)
+        pressure = float(cw_move / bw_std) if bw_std) > 1e-10 else np.nan
+        return np.where(tot_vol) != 0, float(pressure * cw_vol / tot_vol), np.nan)
     return np.nan
 
 

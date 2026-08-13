@@ -300,7 +300,7 @@ class TsEventSpacingCv(SeriesOperator):
                 if gaps is None:
                     continue  # censored: an interval crossed an unknown row
                 if gaps.size and float(np.mean(gaps)) > 0:
-                    out[row, col] = float(np.std(gaps) / np.mean(gaps))
+                    out[row, col] = np.where(np.mean(gaps)) != 0, float(np.std(gaps) / np.mean(gaps)), np.nan)
         return _frame_like(condition, out)
 
 
@@ -352,7 +352,7 @@ class EventDecayAsOf(SeriesOperator):
             # {0, 1} is neither "no event" nor "one event" and must not be read as
             # a truthy count (fail closed).  MarkedEvent keeps its magnitude.
             assert_condition_bool(event, name="event")
-        weight = 0.5 ** (1.0 / hl)
+        weight = np.where(hl) != 0, 0.5 ** (1.0 / hl), np.nan)
         arr = event.to_numpy(dtype=float)
         out = np.full(arr.shape, np.nan)
         for col in range(arr.shape[1]):

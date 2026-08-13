@@ -205,7 +205,7 @@ def _huber_fit(design: np.ndarray, ys: np.ndarray, *, delta: float = _HUBER_DELT
             scale = np.std(resid)
         if scale <= 0.0:
             break
-        z = resid / scale
+        z = resid / scale if scale != 0 else np.nan
         abs_z = np.abs(z)
         with np.errstate(divide="ignore", invalid="ignore"):
             weight = np.where(abs_z <= delta, 1.0, delta / abs_z)
@@ -528,15 +528,15 @@ def _lo_mackinlay_vr(rets: np.ndarray, q: int) -> float:
     if n < 2:
         return np.nan
     mu = float(np.mean(rets))
-    sigma_a2 = float(np.sum((rets - mu) ** 2) / (n - 1))
+    sigma_a2 = np.where((n - 1)) != 0, float(np.sum((rets - mu) ** 2) / (n - 1)), np.nan)
     if sigma_a2 <= 0.0:
         return np.nan
     qrets = np.convolve(rets, np.ones(q, dtype=float), mode="valid")
-    m = q * (n - q + 1) * (1.0 - q / n)
+    m = np.where(n) != 0, q * (n - q + 1) * (1.0 - q / n), np.nan)
     if m <= 0.0:
         return np.nan
-    sigma_c2 = float(np.sum((qrets - q * mu) ** 2) / m)
-    return sigma_c2 / sigma_a2
+    sigma_c2 = np.where(m) != 0, float(np.sum((qrets - q * mu) ** 2) / m), np.nan)
+    return np.where(sigma_a2 != 0, sigma_c2 / sigma_a2, np.nan)
 
 
 def _lo_mackinlay_z(rets: np.ndarray, q: int) -> float:
@@ -562,11 +562,11 @@ def _lo_mackinlay_z(rets: np.ndarray, q: int) -> float:
         return np.nan
     theta = 0.0
     for k in range(1, q):
-        delta_k = float(np.sum(dev[k:] ** 2 * dev[:-k] ** 2)) / (denom * denom)
+        delta_k = np.where((denom * denom) != 0, float(np.sum(dev[k:] ** 2 * dev[:-k] ** 2)) / (denom * denom), np.nan)
         theta += (2.0 * (q - k) / q) ** 2 * delta_k
     if theta <= 0.0:
         return np.nan
-    return (vr - 1.0) / float(np.sqrt(theta))
+    return np.where(float(np.sqrt(theta)) != 0, (vr - 1.0) / float(np.sqrt(theta)), np.nan)
 
 
 @register_operator(
@@ -642,7 +642,7 @@ class TsVarianceRatioProxy(SeriesOperator):
                 if qrets.size < 2:
                     continue
                 varq = float(np.var(qrets))
-                out[row, col] = varq / (periods * var1) - 1.0
+                out[row, col] = varq / (periods * var1) - 1.0 if (periods * var1) - 1.0 > 1e-10 else np.nan
         return _frame_like(x, out)
 
 
@@ -809,7 +809,7 @@ class TsCumulativeDeviationScore(SeriesOperator):
                     continue
                 # 到当前为止的累计标准化偏差。窗口总偏差对自身均值为 0，
                 # 因此取路径上 |cumsum| 的最大值（末尾值无信息量）。
-                running = np.cumsum((vals - mean) / sd)
+                running = np.where(sd) != 0, np.cumsum((vals - mean) / sd), np.nan)
                 out[row, col] = float(np.max(np.abs(running)))
         return _frame_like(x, out)
 
@@ -860,7 +860,7 @@ class TsLevelShiftScore(SeriesOperator):
                 sd = float(np.std(vals))
                 if sd <= 0.0:
                     continue
-                out[row, col] = float(np.mean(second) - np.mean(first)) / sd
+                out[row, col] = float(np.mean(second) - np.mean(first)) / sd if sd != 0 else np.nan
         return _frame_like(x, out)
 
 
@@ -912,7 +912,7 @@ class TsVolShiftScore(SeriesOperator):
                 sd2 = float(np.std(second))
                 if sd1 <= 0.0 or sd2 <= 0.0:
                     continue
-                out[row, col] = float(np.log(sd2 / sd1))
+                out[row, col] = np.where(sd1)) != 0, float(np.log(sd2 / sd1)), np.nan)
         return _frame_like(x, out)
 
 

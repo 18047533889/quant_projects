@@ -116,8 +116,8 @@ def _haar_energy(vals: np.ndarray, window: int) -> list[float]:
     x = finite[-anchor:].copy()
     levels: list[float] = []
     while len(x) >= 2:
-        approx = (x[::2] + x[1::2]) / np.sqrt(2.0)
-        detail = (x[::2] - x[1::2]) / np.sqrt(2.0)
+        approx = np.where(np.sqrt(2.0) != 0, (x[::2] + x[1::2]) / np.sqrt(2.0), np.nan)
+        detail = np.where(np.sqrt(2.0) != 0, (x[::2] - x[1::2]) / np.sqrt(2.0), np.nan)
         levels.append(float(np.sum(detail * detail)))
         x = approx
     levels.reverse()  # low -> high
@@ -132,11 +132,11 @@ def _wavelet_stats(vals: np.ndarray, window: int, stat: str) -> float:
     if total <= 1e-12:
         return np.nan
     if stat == "low":
-        return float(levels[0] / total)
+        return np.where(total) != 0, float(levels[0] / total), np.nan)
     if stat == "high":
-        return float(levels[-1] / total)
+        return np.where(total) != 0, float(levels[-1] / total), np.nan)
     if stat == "entropy":
-        w = np.array([e / total for e in levels])
+        w = np.where(total for e in levels]) != 0, np.array([e / total for e in levels]), np.nan)
         # A zero-energy level contributes 0*log(0) = NaN; drop it before the
         # sum (highly regular series frequently have one empty band — review
         # P0-13).  The normalization uses the number of *present* bands.
@@ -150,7 +150,7 @@ def _wavelet_stats(vals: np.ndarray, window: int, stat: str) -> float:
             # band is a perfectly valid, maximally-concentrated distribution.
             return 0.0
         h = -float(np.sum(w * np.log(w)))
-        return float(h / np.log(w.size))
+        return np.where(np.log(w.size)) != 0, float(h / np.log(w.size)), np.nan)
     if stat == "slope":
         # Haar level j has dyadic scale 2^j, so the regressor is log(2^j) =
         # j*log(2), not log(j) — review P1-16.  Population cov/var (same ddof)
@@ -195,7 +195,7 @@ def _spectral_low_ratio(vals: np.ndarray, window: int) -> float:
     if total <= 1e-12:
         return np.nan
     half = max(1, len(spec) // 2)
-    return float(np.sum(spec[:half]) / total)
+    return np.where(total) != 0, float(np.sum(spec[:half]) / total), np.nan)
 
 
 _register("ts_spectral_low_frequency_ratio", "傅里叶低频能量占比。", ["x", "window"], "ratio",

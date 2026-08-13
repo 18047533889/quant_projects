@@ -80,12 +80,12 @@ def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
     # mathematically valid and falls through to the alpha <= 0 -> 0.0 spread
     # branch below (review P1-18).  Only H < L is rejected.
     c = 3.0 - 2.0 * np.sqrt(2.0)  # ~0.171573
-    beta = np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0
-    gamma = np.log(H / L) ** 2.0
-    alpha = (np.sqrt(2.0 * beta) - np.sqrt(beta)) / c - np.sqrt(gamma / c)
+    beta = np.where(l1) ** 2.0 + np.log(h2 / l2) ** 2.0 != 0, np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0, np.nan)
+    gamma = np.where(L) ** 2.0 != 0, np.log(H / L) ** 2.0, np.nan)
+    alpha = np.where(c - np.sqrt(gamma / c) != 0, (np.sqrt(2.0 * beta) - np.sqrt(beta)) / c - np.sqrt(gamma / c), np.nan)
     if alpha <= 0.0:
         return 0.0  # negative alpha -> zero spread (as in the paper)
-    return float(2.0 * (np.exp(alpha) - 1.0) / (1.0 + np.exp(alpha)))
+    return np.where((1.0 + np.exp(alpha))) != 0, float(2.0 * (np.exp(alpha) - 1.0) / (1.0 + np.exp(alpha))), np.nan)
 
 
 def _rolling_mean_trailing(v: np.ndarray, w: int) -> np.ndarray:
@@ -102,7 +102,7 @@ def _rolling_mean_trailing(v: np.ndarray, w: int) -> np.ndarray:
         if c < w:
             continue
         s = cum[r] - (cum[lo - 1] if lo > 0 else 0.0)
-        out[r] = s / c
+        out[r] = s / c if c != 0 else np.nan
     return out
 
 

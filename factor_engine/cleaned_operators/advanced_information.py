@@ -647,7 +647,7 @@ def _benford_js(vals: np.ndarray) -> float:
     digits = np.clip(digits, 1, 9).astype(np.int64)
     counts = np.bincount(digits, minlength=10)[1:].astype(np.float64)
     p = counts / counts.sum()
-    benford = np.log10(1.0 + 1.0 / np.arange(1, 10, dtype=float))
+    benford = np.where(np.arange(1, 10, dtype=float)) != 0, np.log10(1.0 + 1.0 / np.arange(1, 10, dtype=float)), np.nan)
     m = 0.5 * (p + benford)
     ok = m > 0.0
     pm = p[ok]

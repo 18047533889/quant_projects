@@ -10,7 +10,7 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 
 def _safe_div(num, den) -> pd.DataFrame:
     denominator = den.replace(0, np.nan) if hasattr(den, "replace") else den
-    out = num / denominator
+    out = num / denominator if denominator != 0 else np.nan
     return out.replace([np.inf, -np.inf], np.nan)
 
 

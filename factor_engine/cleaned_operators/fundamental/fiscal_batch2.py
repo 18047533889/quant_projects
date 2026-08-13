@@ -121,7 +121,7 @@ def pd_fiscal_reversal_ratio(
                     numerator += min(abs(current), abs(prev))
 
             if pairs >= min_pairs and denominator > _EPS:
-                out[row, col] = numerator / denominator
+                out[row, col] = numerator / denominator if denominator != 0 else np.nan
 
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
@@ -197,7 +197,7 @@ def pd_fiscal_standardized_surprise(
 
             std = float(np.std(np.asarray(surprises), ddof=1)) if len(surprises) > 1 else np.nan
             if np.isfinite(std) and std > _EPS:
-                out[row, col] = (current - previous) / std
+                out[row, col] = (current - previous) / std if std > 1e-10 else np.nan
 
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
@@ -419,7 +419,7 @@ def pd_fiscal_logit_score(
                     continue
                 # Clamp to avoid log(0) or log(negative)
                 clamped = max(0.001, min(0.999, value))
-                logit_val = np.log(clamped / (1.0 - clamped))
+                logit_val = np.where((1.0 - clamped)) != 0, np.log(clamped / (1.0 - clamped)), np.nan)
                 if _finite(logit_val):
                     logit_values.append(logit_val)
 
@@ -438,7 +438,7 @@ def pd_fiscal_logit_score(
             std_prior = float(np.std(prior_logits, ddof=1)) if len(prior_logits) > 1 else np.nan
 
             if np.isfinite(std_prior) and std_prior > _EPS:
-                out[row, col] = (current_logit - mean_prior) / std_prior
+                out[row, col] = (current_logit - mean_prior) / std_prior if std_prior > 1e-10 else np.nan
 
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 

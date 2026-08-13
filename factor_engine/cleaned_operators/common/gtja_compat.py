@@ -71,7 +71,7 @@ def _rolling_time_slope_1d(arr: np.ndarray, window: int, min_periods: int) -> np
         tc = t - t.mean()
         denom = float(np.dot(tc, tc))
         if denom > 0.0:
-            out[i] = float(np.dot(tc, v - v.mean()) / denom)
+            out[i] = np.where(denom) != 0, float(np.dot(tc, v - v.mean()) / denom), np.nan)
     return out
 
 
@@ -138,7 +138,7 @@ def _safe_divide(left, right, *, epsilon: float, default: float, missing_default
     missing = ~np.isfinite(xarr) | ~np.isfinite(yarr)
     small = np.abs(yarr) <= float(epsilon)
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        raw = xarr / yarr
+        raw = xarr / yarr if yarr != 0 else np.nan
     raw[small] = float(default)
     raw[missing] = float(default) if missing_default else np.nan
     raw[~np.isfinite(raw) & ~missing] = float(default)

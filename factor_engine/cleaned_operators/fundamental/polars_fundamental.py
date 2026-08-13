@@ -63,7 +63,7 @@ def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFra
 def _safe_div(a: float, b: float) -> float:
     if not np.isfinite(a) or not np.isfinite(b) or abs(b) <= _EPS:
         return np.nan
-    return float(a / b)
+    return np.where(b) != 0, float(a / b), np.nan)
 
 
 def _period_insert(order: list, key) -> None:
@@ -345,7 +345,7 @@ def fin_cagr(x, period_id, periods=4, periods_per_year=4, flow_type=None):
             cur = float(v[cc])
             if cur <= 0 or old <= 0:
                 return np.nan
-            return float((cur / old) ** (ppy / p) - 1.0)
+            return np.where(old) ** (ppy / p) - 1.0) != 0, float((cur / old) ** (ppy / p) - 1.0), np.nan)
         out[:, i] = _walk_1d(xv, pv, calc)
     return _make(x, cols, out)
 
@@ -483,7 +483,7 @@ def _trend_stat_1d(xv, pv, periods, which):
         if n <= 2:
             return np.nan
         mse = ss_res / (n - 2)
-        se = float(np.sqrt(mse / den)) if mse >= 0 else np.nan
+        se = np.where(den)) if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
         return slope / se if np.isfinite(se) and se > _EPS else np.nan
     return _walk_1d(xv, pv, calc)
 

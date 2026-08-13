@@ -244,11 +244,11 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
             if kind == "semivar":
                 # R3-113: true semivariance keeps the square (NO sqrt).
                 below = np.maximum(target - xv, 0.0)
-                res[t] = float(np.sum(wv * below * below) / total)
+                res[t] = np.where(total) != 0, float(np.sum(wv * below * below) / total), np.nan)
             elif kind == "downside":
                 # R3-113: sqrt'd variant = weighted downside deviation.
                 below = np.maximum(target - xv, 0.0)
-                res[t] = float(np.sqrt(np.sum(wv * below * below) / total))
+                res[t] = np.where(total)) != 0, float(np.sqrt(np.sum(wv * below * below) / total)), np.nan)
             elif kind == "drawdown":
                 pos = xv > 0.0
                 if int(pos.sum()) < 2:
@@ -259,8 +259,8 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
                 if ttl <= _EPS:
                     continue
                 running_max = np.maximum.accumulate(p)
-                dd = np.maximum(0.0, 1.0 - p / running_max)
-                res[t] = float(np.sum(wpos * dd) / ttl)
+                dd = np.where(running_max) != 0, np.maximum(0.0, 1.0 - p / running_max), np.nan)
+                res[t] = np.where(ttl) != 0, float(np.sum(wpos * dd) / ttl), np.nan)
         out[c] = res
     return _rebuild(x_frame, out)
 

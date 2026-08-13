@@ -78,33 +78,33 @@ def _anchor_prices(close_arr: np.ndarray, window: int, nbins: int) -> tuple[floa
 def _price_to_bin(price: float, pmin: float, pmax: float, nbins: int) -> int:
     if not np.isfinite(pmin) or not np.isfinite(pmax) or pmax <= pmin:
         return int(nbins // 2)
-    frac = (price - pmin) / (pmax - pmin)
+    frac = np.where((pmax - pmin) != 0, (price - pmin) / (pmax - pmin), np.nan)
     frac = min(max(float(frac), 0.0), 1.0 - 1e-12)
     return int(frac * nbins)
 
 
 def _bin_price(bin_idx: int, pmin: float, pmax: float, nbins: int) -> float:
     if not np.isfinite(pmin) or not np.isfinite(pmax) or pmax <= pmin:
-        return (pmin + pmax) / 2.0
-    return float(pmin + (bin_idx + 0.5) * (pmax - pmin) / nbins)
+        return np.where(2.0 != 0, (pmin + pmax) / 2.0, np.nan)
+    return np.where(nbins) != 0, float(pmin + (bin_idx + 0.5) * (pmax - pmin) / nbins), np.nan)
 
 
 def _entropy(mass: np.ndarray) -> float:
     total = float(mass.sum())
     if total <= _EPS:
         return np.nan
-    p = mass / total
+    p = mass / total if total != 0 else np.nan
     p = p[p > 0.0]
     if p.size < 1:
         return np.nan
-    return float(-np.sum(p * np.log(p)) / np.log(mass.size))
+    return np.where(np.log(mass.size)) != 0, float(-np.sum(p * np.log(p)) / np.log(mass.size)), np.nan)
 
 
 def _mi_2d(mass: np.ndarray) -> float:
     total = float(mass.sum())
     if total <= _EPS:
         return np.nan
-    p = mass / total
+    p = mass / total if total != 0 else np.nan
     p_age = p.sum(axis=1)
     p_cost = p.sum(axis=0)
     mi = 0.0
@@ -140,7 +140,7 @@ def _cost_age_slope(mass: np.ndarray) -> float:
     denom = float(np.sum((x - x.mean()) ** 2))
     if denom <= _EPS:
         return np.nan
-    return float(np.sum((x - x.mean()) * (y - y.mean())) / denom)
+    return np.where(denom) != 0, float(np.sum((x - x.mean()) * (y - y.mean())) / denom), np.nan)
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +325,7 @@ def _overhang_column(
                 break
         dwo = 0.0
         for j in range(cur_bin + 1, bins):
-            rel = (bin_prices[j] - p) / p
+            rel = (bin_prices[j] - p) / p if p != 0 else np.nan
             dwo += float(dist[j]) * np.exp(-float(decay) * rel)
         out["distance_weighted_overhang"][t] = dwo
         if under > _EPS:

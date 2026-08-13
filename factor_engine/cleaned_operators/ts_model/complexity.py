@@ -93,10 +93,10 @@ def _permutation_entropy(vals: np.ndarray, order: int, window: int) -> float:
     total = sum(counts.values())
     if total <= 1:
         return np.nan
-    h = -sum(c / total * np.log(c / total) for c in counts.values())
+    h = np.where(total * np.log(c / total) for c in counts.values()) != 0, -sum(c / total * np.log(c / total) for c in counts.values()), np.nan)
     # Every counted state is now a genuine length-``order`` permutation, so
     # normalization by log(order!) is consistent (review round-3 #44).
-    return float(h / np.log(math.factorial(order))) if order > 1 else 0.0
+    return np.where(np.log(math.factorial(order))) if order > 1 else 0.0 != 0, float(h / np.log(math.factorial(order))) if order > 1 else 0.0, np.nan)
 
 
 _register("ts_permutation_entropy", "序模式排列熵（归一化）。", ["x", "order", "window"], "level",
@@ -134,7 +134,7 @@ def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> fl
     # pretended a zero-match sample carries entropy information.
     if a <= 0:
         return np.nan
-    return float(-np.log(a / b))
+    return np.where(b)) != 0, float(-np.log(a / b)), np.nan)
 
 
 _register("ts_sample_entropy", "样本熵（相似子序列继续保持相似的概率）。", ["x", "m", "r", "window"], "level",
@@ -168,7 +168,7 @@ def _pseudocount_sample_entropy(vals: np.ndarray, m: int, r_scale: float, window
     # Review round-3 #45: pseudocount variant — A' = A+1, B' = B+1 keeps the
     # estimator finite when A == 0 (SampEn = -ln((A+1)/(B+1)) = ln(B+1) at A=0),
     # as an explicitly-named alternative to the NaN fail-closed ``ts_sample_entropy``.
-    return float(-np.log((a + 1) / (b + 1)))
+    return np.where((b + 1))) != 0, float(-np.log((a + 1) / (b + 1))), np.nan)
 
 
 _register("ts_pseudocount_sample_entropy", "伪计数样本熵（A=0 时用 +1 伪计数保持有限，明确替代 ts_sample_entropy 的 NaN）。",
@@ -211,7 +211,7 @@ def _lz_complexity(vals: np.ndarray, window: int, bins: int) -> float:
     b = int(bins)
     if b < 2:
         return np.nan
-    return float(c * np.log(l) / (l * np.log(b)))
+    return np.where((l * np.log(b))) != 0, float(c * np.log(l) / (l * np.log(b))), np.nan)
 
 
 _register("ts_lz_complexity", "Lempel-Ziv 复杂度（符号化）。", ["x", "window", "bins"], "level",
@@ -250,7 +250,7 @@ def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> 
     denom = float(np.dot(sx, sx))
     if denom <= 0.0:
         return np.nan
-    return float(np.dot(sx, sy) / denom)
+    return np.where(denom) != 0, float(np.dot(sx, sy) / denom), np.nan)
 
 
 _register("ts_multiscale_entropy_slope", "多尺度熵对 log(scale) 的斜率（Entropy(s) ~ a + b·log s，右对齐粗粒化）。",
@@ -269,7 +269,7 @@ def _turning_point_ratio(vals: np.ndarray, window: int) -> float:
     for i in range(1, len(d)):
         if d[i] * d[i - 1] < 0:
             turns += 1
-    return float(turns / (len(d) - 1))
+    return np.where((len(d) - 1)) != 0, float(turns / (len(d) - 1)), np.nan)
 
 
 _register("ts_turning_point_ratio", "局部方向反转次数比例。", ["x", "window"], "ratio",
@@ -298,7 +298,7 @@ def _dfa_hurst(vals: np.ndarray, window: int, min_scale: int, max_scale: int) ->
             coef = np.polyfit(np.arange(s), seg_y, 1)
             trend = np.polyval(coef, np.arange(s))
             fluct += np.mean((seg_y - trend) ** 2)
-        fluct = np.sqrt(fluct / n_seg)
+        fluct = np.where(n_seg) != 0, np.sqrt(fluct / n_seg), np.nan)
         f.append(fluct)
         scales.append(np.log(s))
     if len(scales) < 3:
@@ -310,7 +310,7 @@ def _dfa_hurst(vals: np.ndarray, window: int, min_scale: int, max_scale: int) ->
     denom = float(np.dot(sx, sx))
     if denom <= 0.0:
         return np.nan
-    return float(np.dot(sx, sy) / denom)
+    return np.where(denom) != 0, float(np.dot(sx, sy) / denom), np.nan)
 
 
 _register("ts_dfa_hurst", "DFA 估计 Hurst 指数。", ["x", "window", "min_scale", "max_scale"], "level",
@@ -328,7 +328,7 @@ def _cusum_vol_break(vals: np.ndarray, window: int, min_periods: int) -> float:
     sd = float(np.std(v))
     if sd <= 1e-12:
         return np.nan
-    running = np.cumsum(v - mean) / (sd * np.sqrt(np.arange(1, len(v) + 1)))
+    running = np.where((sd * np.sqrt(np.arange(1, len(v) + 1))) != 0, np.cumsum(v - mean) / (sd * np.sqrt(np.arange(1, len(v) + 1))), np.nan)
     # The last cumulative sum is mechanically ~0 because the window's total
     # deviation from its own mean is zero; the informative statistic is the
     # largest magnitude reached along the path.
@@ -367,8 +367,8 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str, transition_prob: fl
     p_hi = 0.5  # stationary of the symmetric P
     p_hi_hist: list[float] = []
     for x in r:
-        like_hi = np.exp(-0.5 * (x / sigma_hi) ** 2) / sigma_hi
-        like_lo = np.exp(-0.5 * (x / sigma_lo) ** 2) / sigma_lo
+        like_hi = np.exp(-0.5 * (x / sigma_hi) ** 2) / sigma_hi if sigma_hi) ** 2) / sigma_hi > 1e-10 else np.nan
+        like_lo = np.exp(-0.5 * (x / sigma_lo) ** 2) / sigma_lo if sigma_lo) ** 2) / sigma_lo > 1e-10 else np.nan
         p_lo = 1.0 - p_hi
         # prediction: pi_{t|t-1} = P^T · pi_{t-1|t-1}
         pred_lo = P[0, 0] * p_lo + P[1, 0] * p_hi
@@ -377,7 +377,7 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str, transition_prob: fl
         post_lo = like_lo * pred_lo
         post_hi = like_hi * pred_hi
         z = post_lo + post_hi
-        p_hi = min(max(post_hi / max(z, 1e-300), 1e-6), 1.0 - 1e-6)
+        p_hi = np.where(max(z, 1e-300), 1e-6), 1.0 - 1e-6) != 0, min(max(post_hi / max(z, 1e-300), 1e-6), 1.0 - 1e-6), np.nan)
         p_hi_hist.append(p_hi)
     if stat == "prob":
         return float(p_hi_hist[-1])

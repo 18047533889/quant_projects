@@ -240,7 +240,7 @@ def _first_passage_series(
             if not fully_observed:
                 continue  # no information: exclude the anchor entirely
             if tau > 0:
-                wgt = (H + 1 - tau) / H
+                wgt = (H + 1 - tau) / H if H != 0 else np.nan
                 signs.append(d * wgt)
             else:
                 # Full-observed non-hit anchor contributes 0, so the mean is the
@@ -372,8 +372,8 @@ def _fp_stats_series(
                     break
         if n_obs < ma:
             continue
-        up_frac[t] = n_up / n_obs
-        dn_frac[t] = n_dn / n_obs
+        up_frac[t] = n_up / n_obs if n_obs != 0 else np.nan
+        dn_frac[t] = n_dn / n_obs if n_obs != 0 else np.nan
         if len(tau_up) >= ma:
             up_ct[t] = float(np.mean(tau_up))
         if len(tau_dn) >= ma:

@@ -1,0 +1,24 @@
+Component,Failure Mode,Severity,R32 Status,Remediation
+stable_digest,Unknown type → repr fallback,P0,CLOSED,Now raises ValueError (fail-closed)
+ResolvedSourceSnapshot,Missing complete/objects,P0,CLOSED,Strict mode rejects missing fields
+EnvCredentialProvider,Partial credential family,P0,CLOSED,Raises ValidationError on incomplete family
+_remote_object_meta,Credential resolve double-call,P0,CLOSED,Cache check before resolve
+parse_source_manifest,Future schema version,P0,CLOSED,Rejects incompatible manifest_version
+parse_source_manifest,Clock skew tolerance,P0,CLOSED,Rejects future published_at
+StartupCertificate,Mutable certificate,P0,CLOSED,Now frozen dataclass
+StartupCertificate,Subject identity drift,P0,CLOSED,Subject digest validation on reuse
+DataReadSession,Unbounded lifecycle,P0,CLOSED,Three-state enforcement (NEW/ACTIVE/CLOSED)
+SQL validator,Regex-based source detection,P0,CLOSED,AST-based enumeration (sql_ast_validator)
+SQL validator,System table access,P0,CLOSED,Explicit rejection of information_schema/pg_catalog
+SQL validator,File function bypass,P0,CLOSED,Explicit rejection of read_parquet/read_csv
+Dataset boundary,Cross-dataset write,P0,CLOSED,verify_path_belongs_to_dataset validation
+Generation publish,Missing-target window,P0,CLOSED,Atomic pointer file (no intermediate absence)
+Metadata authorization,Unauthenticated metadata writes,P0,PARTIAL,Action defined; call sites need audit
+Distributed fencing,Concurrent writers,P0,DEFERRED,Documented constraint; needs implementation
+DQ checker,Exception → PASS,P0,DISCOVERED,Silent failure (audit finding; not in taskbook)
+Coverage grain,Natural day vs session,P0,DISCOVERED,Misaligned grain (audit finding; not in taskbook)
+ExperimentSnapshot,Mixed identity fields,P0,DISCOVERED,Single ID for source/execution/security (audit finding)
+FE change_impact,Multi-column drop,P0,DISCOVERED,Only takes changed_columns[0] (audit finding)
+FE FactorSourcePlan,Untyped binding,P0,DISCOVERED,leaf_concepts/source_datasets split (audit finding)
+FE dependency extract,Fail-open on error,P0,DISCOVERED,Returns None instead of raising (audit finding)
+FE dual planner,FactorBatchPlan vs ReadWavePlanner,P0,DISCOVERED,Dual authority (audit finding)

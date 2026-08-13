@@ -105,7 +105,7 @@ def _scale_trend(chunk: np.ndarray, s: int) -> tuple[float, float]:
     denom = float(np.dot(xs - xbar, xs - xbar))
     if denom <= 0.0:
         return np.nan, np.nan
-    slope = float(np.dot(xs - xbar, ys - ybar) / denom)
+    slope = np.where(denom) != 0, float(np.dot(xs - xbar, ys - ybar) / denom), np.nan)
     resid = ys - (ybar + slope * (xs - xbar))
     rs = float(np.sqrt(np.mean(resid ** 2)))
     return slope, rs

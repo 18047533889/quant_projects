@@ -35,7 +35,7 @@ class ChineseRecursiveSMA(SeriesOperator):
             raise ValueError("sma m must satisfy 1 <= m <= n")
         values = x.to_numpy(dtype=float)
         out = np.full(values.shape, np.nan, dtype=float)
-        alpha = float(m_i) / float(n_i)
+        alpha = np.where(float(n_i) != 0, float(m_i) / float(n_i), np.nan)
         for col_idx in range(values.shape[1]):
             state = np.nan
             for row_idx in range(values.shape[0]):

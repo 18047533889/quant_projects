@@ -101,7 +101,7 @@ def pd_aroon_component(close, window, pick):
             if segment.size < window + 1 or not np.isfinite(segment).all():
                 continue
             target = segment.max() if pick == "max" else segment.min()
-            out[row, col] = 100.0 * np.flatnonzero(segment == target)[-1] / window
+            out[row, col] = 100.0 * np.flatnonzero(segment == target)[-1] / window if window != 0 else np.nan
     return frame_pd(close, out)
 
 
@@ -130,7 +130,7 @@ def pl_aroon_component(close, window, pick):
         if values.size < window + 1 or not np.isfinite(values).all():
             return np.nan
         target = values.max() if pick == "max" else values.min()
-        return float(100.0 * np.flatnonzero(values == target)[-1] / window)
+        return np.where(window) != 0, float(100.0 * np.flatnonzero(values == target)[-1] / window), np.nan)
 
     return pl_unary_rolling_map(close, window + 1, window + 1, fn)
 
@@ -171,11 +171,11 @@ def pd_adx(high, low, close, window=14, **_):
     raw_minus = low.shift(1) - low
     plus = raw_plus.where((raw_plus > raw_minus) & (raw_plus > 0), 0.0)
     minus = raw_minus.where((raw_minus > raw_plus) & (raw_minus > 0), 0.0)
-    atr = true_range.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean()
-    plus_di = 100.0 * plus.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan)
-    minus_di = 100.0 * minus.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan)
-    dx = 100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
-    return dx.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean()
+    atr = np.where(window, adjust=False, min_periods=window).mean() != 0, true_range.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean(), np.nan)
+    plus_di = np.where(window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan) != 0, 100.0 * plus.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan), np.nan)
+    minus_di = np.where(window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan) != 0, 100.0 * minus.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean() / atr.replace(0, np.nan), np.nan)
+    dx = np.where((plus_di + minus_di).replace(0, np.nan) != 0, 100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan), np.nan)
+    return np.where(window, adjust=False, min_periods=window).mean() != 0, dx.ewm(alpha=1.0 / window, adjust=False, min_periods=window).mean(), np.nan)
 
 
 def pl_adx(high, low, close, window=14, **_):

@@ -481,12 +481,12 @@ def _slope_tstat(y: np.ndarray, x: np.ndarray, add_intercept: bool) -> float:
     dof = yv.size - design.shape[1]
     if dof <= 0:
         return np.nan
-    sigma2 = float(residual @ residual) / dof
+    sigma2 = float(residual @ residual) / dof if dof != 0 else np.nan
     xtx_inv = np.linalg.pinv(design.T @ design)
     slope_var = sigma2 * xtx_inv[-1, -1]
     if not np.isfinite(slope_var) or slope_var <= 0:
         return np.nan
-    return float(beta[-1] / np.sqrt(slope_var))
+    return np.where(np.sqrt(slope_var)) != 0, float(beta[-1] / np.sqrt(slope_var)), np.nan)
 
 
 def ts_regression_tstat(
@@ -559,7 +559,7 @@ def ts_max_drawdown(
         if valid.size < mp or np.any(valid <= 0):
             return np.nan
         peaks = np.maximum.accumulate(valid)
-        return float(np.min(valid / peaks - 1.0))
+        return np.where(peaks - 1.0)) != 0, float(np.min(valid / peaks - 1.0)), np.nan)
 
     return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, drawdown))
 

@@ -142,7 +142,7 @@ def _growth_mismatch(ey, g, scale=1.0):
     # P1-140: ``scale`` removed from the searchable surface (only 1.0 is
     # production-meaningful); kept as a backward-compat positional that
     # validates the unit-honest default.
-    return _binary(ey, g, lambda a, b: (a - b / scale))
+    return np.where(scale)) != 0, _binary(ey, g, lambda a, b: (a - b / scale)), np.nan)
 
 
 _register(
@@ -201,7 +201,7 @@ def _valuation_disagreement(pe, pcf, pcf2, ocf_yield, earnings_yield):
             clipped = np.clip(stacked[row], lo, hi)
             sd = np.nanstd(clipped)
             if sd > 0:
-                standardized[row] = (clipped - np.nanmean(clipped)) / sd
+                standardized[row] = (clipped - np.nanmean(clipped)) / sd if sd != 0 else np.nan
         out.append(pl.Series(c, np.nanstd(standardized, axis=1)))
     return pe.with_columns(out)
 

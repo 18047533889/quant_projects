@@ -37,29 +37,69 @@ class QOperatorCapability:
 _PHASE1_NATIVE_OPS = {
     # Arithmetic
     "add", "subtract", "multiply", "divide", "negate", "abs",
-    "power", "sqrt", "log", "exp",
+    "power", "sqrt", "log", "exp", "log1p", "expm1",
+    "sign", "floor", "ceil", "round",
 
     # Comparison
     "greater", "less", "greater_equal", "less_equal", "equal", "not_equal",
 
     # Lag/Delta
-    "lag", "delta", "pct_change",
+    "lag", "delta", "pct_change", "ts_returns", "ts_diff",
 
     # Rolling aggregations
     "ts_mean", "ts_sum", "ts_std", "ts_min", "ts_max",
-    "ts_count", "ts_median",
+    "ts_count", "ts_median", "ts_product", "ts_var",
+
+    # Cumulative operations
+    "ts_cumsum", "ts_cumprod", "ts_cummax", "ts_cummin",
+
+    # Time series statistical moments
+    "ts_skew", "ts_kurt", "ts_moment",
+
+    # Time series position/extrema
+    "ts_argmax", "ts_argmin", "ts_argmax_age", "ts_argmin_age",
+    "ts_days_since_high", "ts_days_since_low",
+    "ts_new_high", "ts_new_low",
+
+    # Time series drawdown/distance
+    "ts_max_drawdown", "ts_distance_to_high", "ts_distance_to_low",
+
+    # Time series decay
+    "ts_decay_linear", "ts_decay_exp", "ts_sum_decay",
+
+    # Time series rank/zscore
+    "ts_rank", "ts_zscore", "ts_demean", "ts_normalize",
+
+    # Time series quantile
+    "ts_quantile", "ts_percentile",
 
     # Correlation/Covariance
-    "ts_corr", "ts_cov",
+    "ts_corr", "ts_cov", "ts_beta",
 
-    # Rank/Group basic
-    "rank", "cs_rank", "group_mean", "group_sum",
+    # Cross-sectional operations
+    "rank", "cs_rank", "cs_zscore", "cs_demean", "cs_normalize",
+    "cs_quantile", "cs_percentile_rank",
+    "cs_winsorize", "cs_clip",
+    "cs_mean", "cs_std", "cs_median", "cs_var",
+
+    # Group operations
+    "group_mean", "group_sum", "group_std", "group_median",
+    "group_min", "group_max", "group_count",
+
+    # Conditional/Fill operations
+    "where", "fillna", "ffill", "bfill",
+    "clip", "replace",
 
     # VWAP/Basic aggregation
-    "vwap", "mean", "sum", "std", "min", "max",
+    "vwap", "mean", "sum", "std", "min", "max", "median",
+    "product", "var", "count_nonzero",
+    "first", "last",
 
     # Time operations
     "resample", "time_bucket",
+
+    # Simple indicators
+    "true_range", "ema", "wma", "sma",
 }
 
 # 暂缓场景（文档 §24）

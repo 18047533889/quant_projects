@@ -167,7 +167,7 @@ def _sig_depth2_norm(x: np.ndarray, y: np.ndarray, window: int) -> float:
     rx, ry = pair
     sx = _robust_scale(rx)
     sy = _robust_scale(ry)
-    out = _sig_level2(rx / sx, ry / sy, len(rx))
+    out = np.where(sx, ry / sy, len(rx)) != 0, _sig_level2(rx / sx, ry / sy, len(rx)), np.nan)
     if out is None:
         return np.nan
     return float(np.sqrt(sum(c * c for c in out[:4])))

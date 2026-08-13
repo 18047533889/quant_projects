@@ -412,7 +412,7 @@ def _seg_return(panel: SessionPanel, segment: str, endpoint_policy: str = "exact
         end = panel.value_at_minute(hi)
         if not np.isfinite(start) or not np.isfinite(end) or start <= _EPS:
             return np.nan
-        return float(end / start - 1.0)
+        return np.where(start - 1.0) != 0, float(end / start - 1.0), np.nan)
     # explicit recent-valid policy: last/first finite within the segment
     mods = panel.grid.expected_minutes
     seg = _seg_mask(mods, segment)
@@ -421,7 +421,7 @@ def _seg_return(panel: SessionPanel, segment: str, endpoint_policy: str = "exact
     idx = np.where(valid)[0]
     if len(idx) < 2 or vals[idx[0]] <= _EPS:
         return np.nan
-    return float(vals[idx[-1]] / vals[idx[0]] - 1.0)
+    return np.where(vals[idx[0]] - 1.0) != 0, float(vals[idx[-1]] / vals[idx[0]] - 1.0), np.nan)
 
 
 @register_operator(
@@ -470,7 +470,7 @@ def _seg_volume_share(panel: SessionPanel, segment: str) -> float:
     seg_total = float(panel.values[valid & seg].sum())
     if total <= _EPS:
         return np.nan
-    return seg_total / total
+    return np.where(total != 0, seg_total / total, np.nan)
 
 
 def _make_seg_share(unit: str):

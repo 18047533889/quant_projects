@@ -124,7 +124,7 @@ def _async_beta_column(
         if varx <= _EPS:
             continue
         ybar = float(np.mean(y))
-        out[t] = float(np.mean((x - xbar) * (y - ybar)) / varx)
+        out[t] = float(np.mean((x - xbar) * (y - ybar)) / varx) if varx) > 1e-10 else np.nan
     return out
 
 

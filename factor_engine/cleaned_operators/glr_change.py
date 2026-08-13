@@ -155,7 +155,7 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     # mean first keeps the centred values ~0-mean, so the prefix SS is computed
     # in a numerically stable regime and GLR(x) == GLR(x + 1e9) holds
     # (metamorphic translation invariance).
-    c = float(np.sum(v)) / n
+    c = float(np.sum(v)) / n if n > 0 else np.nan
     vc = v - c
     ps = np.concatenate(([0.0], np.cumsum(vc)))
     pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
@@ -168,10 +168,10 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     for tau in range(min_segment, n - min_segment + 1):
         n1 = tau
         n2 = n - tau
-        mu1 = ps[tau] / n1
-        mu2 = (ps[n] - ps[tau]) / n2
-        ss1 = pss[tau] - ps[tau] * ps[tau] / n1
-        ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
+        mu1 = ps[tau] / n1 if n1 != 0 else np.nan
+        mu2 = (ps[n] - ps[tau]) / n2 if n2 != 0 else np.nan
+        ss1 = pss[tau] - ps[tau] * ps[tau] / n1 if n1 != 0 else np.nan
+        ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2 if n2 != 0 else np.nan
         pooled = ss1 + ss2
         # P0-L-69: a PERFECT change point (constant A then constant B) has
         # pooled residual SS at floating-point zero — the strongest evidence in
@@ -182,7 +182,7 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
         if pooled <= floor:
             llr = np.inf
         else:
-            llr = (n / 2.0) * np.log(full_ss / pooled)
+            llr = np.where(2.0) * np.log(full_ss / pooled) != 0, (n / 2.0) * np.log(full_ss / pooled), np.nan)
         if llr > best:
             best = llr
             best_sign = 1.0 if mu2 > mu1 else (-1.0 if mu2 < mu1 else 0.0)
@@ -199,7 +199,7 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
     # R26-065..067: recentered prefix moments (same rationale as
     # ``_mean_shift_score``) — the variance LLR ratios pooled SS terms that must
     # be computed without catastrophic cancellation at large levels.
-    c = float(np.sum(v)) / n
+    c = float(np.sum(v)) / n if n > 0 else np.nan
     vc = v - c
     ps = np.concatenate(([0.0], np.cumsum(vc)))
     pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
@@ -212,8 +212,8 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
     for tau in range(min_segment, n - min_segment + 1):
         n1 = tau
         n2 = n - tau
-        ss1 = pss[tau] - ps[tau] * ps[tau] / n1
-        ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
+        ss1 = pss[tau] - ps[tau] * ps[tau] / n1 if n1 != 0 else np.nan
+        ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2 if n2 != 0 else np.nan
         # P0-L-69: a segment with zero variance (perfectly constant) is the
         # strongest variance evidence — but the old ``max(ss_i, _EPS*full_ss)``
         # denominator made the LLR a data-independent function of 1e-12.  A
@@ -225,8 +225,8 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
         if ss1 <= floor or ss2 <= floor:
             llr = np.inf
         else:
-            var1 = ss1 / n1
-            var2 = ss2 / n2
+            var1 = ss1 / n1 if n1 != 0 else np.nan
+            var2 = ss2 / n2 if n2 != 0 else np.nan
             # R6-160: the null model for a VARIANCE shift must use a CONSISTENT
             # location model — the pooled WITHIN-SEGMENT variance, not the global
             # variance around the grand mean.  The old ``full_ss / n`` mixed a pure
@@ -234,8 +234,8 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
             # so an equal-variance mean shift still fired the "variance shift"
             # detector.  Using the pooled within-segment variance keeps the LLR
             # measuring variance change only, with the location terms cancelling.
-            pooled_var = (ss1 + ss2) / n
-            llr = (n / 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2)
+            pooled_var = (ss1 + ss2) / n if n > 0 else np.nan
+            llr = (n / 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2) if 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2) > 1e-10 else np.nan
         if llr > best:
             best = llr
             if ss1 <= floor:
@@ -259,7 +259,7 @@ def _average_ranks(v: np.ndarray) -> np.ndarray:
         j = i
         while j < n and v[order[j]] == v[order[i]]:
             j += 1
-        avg = (i + 1 + j) / 2.0
+        avg = np.where(2.0 != 0, (i + 1 + j) / 2.0, np.nan)
         ranks[order[i:j]] = avg
         i = j
     return ranks
@@ -285,7 +285,7 @@ def _pettitt_score(v: np.ndarray, min_segment: int) -> float:
             best_sign = -1.0 if u > 0.0 else (1.0 if u < 0.0 else 0.0)
     if best_k <= _EPS:
         return 0.0
-    normalized = best_k / (n * n / 4.0)
+    normalized = np.where((n * n / 4.0) != 0, best_k / (n * n / 4.0), np.nan)
     return float(best_sign * min(normalized, 1.0))
 
 

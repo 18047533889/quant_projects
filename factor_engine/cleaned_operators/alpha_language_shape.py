@@ -93,7 +93,7 @@ def _ols_slope(y: np.ndarray) -> float:
     denom = n * float((x * x).sum()) - float(x.sum()) ** 2
     if denom <= 0.0:
         return np.nan
-    return (n * float((x * y).sum()) - float(x.sum()) * float(y.sum())) / denom
+    return np.where(denom != 0, (n * float((x * y).sum()) - float(x.sum()) * float(y.sum())) / denom, np.nan)
 
 
 def _ols_fit(y: np.ndarray) -> tuple[float, float, float]:
@@ -103,8 +103,8 @@ def _ols_fit(y: np.ndarray) -> tuple[float, float, float]:
     sx = float(x.sum())
     sy = float(y.sum())
     denom = n * float((x * x).sum()) - sx * sx
-    b = (n * float((x * y).sum()) - sx * sy) / denom
-    a = (sy - b * sx) / n
+    b = (n * float((x * y).sum()) - sx * sy) / denom if denom != 0 else np.nan
+    a = (sy - b * sx) / n if n > 0 else np.nan
     resid = y - (a + b * x)
     return float(b), float(a), float(np.std(resid))
 
@@ -154,7 +154,7 @@ class TsMonotonicity(SeriesOperator):
             total = c + d
             if total == 0:
                 return np.nan
-            return float((c - d) / total)
+            return np.where(total) != 0, float((c - d) / total), np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -215,7 +215,7 @@ class TsTurningRate(SeriesOperator):
                     flips += 1
             if pairs == 0:
                 return np.nan
-            return float(flips / pairs)
+            return np.where(pairs) != 0, float(flips / pairs), np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -276,7 +276,7 @@ class TsEffectiveTurningRate(SeriesOperator):
                     flips += 1
             if active_pairs == 0:
                 return np.nan
-            return float(flips / active_pairs)
+            return np.where(active_pairs) != 0, float(flips / active_pairs), np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -329,7 +329,7 @@ class TsTurningIntensity(SeriesOperator):
             # divide by _EPS.
             if mad_d == 0.0:
                 return np.nan
-            return float(np.mean(mags)) / mad_d
+            return np.where(mad_d != 0, float(np.mean(mags)) / mad_d, np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -373,7 +373,7 @@ class TsPathEfficiency(SeriesOperator):
                 # constant_path_policy=ZERO (declared): 0/0 is deliberately 0.0,
                 # not an _EPS accident.
                 return 0.0
-            return net / path
+            return np.where(path != 0, net / path, np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -469,7 +469,7 @@ class TsTrendBreakScore(SeriesOperator):
                 if abs(b_recent - b_old) < _EPS:
                     return 0.0
                 return np.nan
-            return (b_recent - b_old) / sigma
+            return np.where(sigma != 0, (b_recent - b_old) / sigma, np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -560,7 +560,7 @@ class TsEndpointDeviation(SeriesOperator):
             num = float(v[-1]) - x_hat_last
             if sigma < _EPS:
                 return 0.0 if abs(num) < _EPS else np.nan
-            return num / sigma
+            return np.where(sigma != 0, num / sigma, np.nan)
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -602,11 +602,11 @@ class TsMassConcentration(SeriesOperator):
             total = float(v.sum())
             if total <= 0.0:
                 return np.nan
-            shares = v / total
+            shares = v / total if total != 0 else np.nan
             hhi = float(np.sum(shares * shares))
             if n <= 1:
                 return np.nan
-            return float((hhi - 1.0 / n) / (1.0 - 1.0 / n))
+            return np.where(n) / (1.0 - 1.0 / n)) != 0, float((hhi - 1.0 / n) / (1.0 - 1.0 / n)), np.nan)
 
         return frame_like(weight, map_rolling(wv, w, _fn))
 
@@ -646,7 +646,7 @@ class TsChordExcursionArea(SeriesOperator):
                 return np.nan
             j = np.arange(v.size, dtype=float)
             den = max(v.size - 1, 1)
-            L = v[0] + (j / den) * (v[-1] - v[0])
+            L = np.where(den) * (v[-1] - v[0]) != 0, v[0] + (j / den) * (v[-1] - v[0]), np.nan)
             dev = v - L
             s_dev = float(np.sum(dev))
             s_abs = float(np.sum(np.abs(dev)))
@@ -689,7 +689,7 @@ class TsMaxChordExcursion(SeriesOperator):
                 return np.nan
             j = np.arange(v.size, dtype=float)
             den = max(v.size - 1, 1)
-            L = v[0] + (j / den) * (v[-1] - v[0])
+            L = np.where(den) * (v[-1] - v[0]) != 0, v[0] + (j / den) * (v[-1] - v[0]), np.nan)
             mce = float(np.max(np.abs(v - L)))
             path = float(np.sum(np.abs(np.diff(v))))
             return mce / (path + _EPS)

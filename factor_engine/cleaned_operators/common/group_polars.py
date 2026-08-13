@@ -142,7 +142,7 @@ def _zscore_row(row_x, row_g):
         mean = np.nanmean(vals)
         std = np.nanstd(vals, ddof=1)
         if std != 0 and not np.isnan(std):
-            out[indices] = (vals - mean) / std
+            out[indices] = (vals - mean) / std if std > 1e-10 else np.nan
         else:
             out[indices] = 0.0
 
@@ -165,7 +165,7 @@ def _rank_row(row_x, row_g):
         order = np.argsort(vals, kind="mergesort")
         ranks = np.empty(len(vals), dtype=float)
         ranks[order] = np.arange(1, len(vals) + 1, dtype=float)
-        return ranks / len(vals)
+        return np.where(len(vals) != 0, ranks / len(vals), np.nan)
 
     if not np.any(mask):
         return out
@@ -298,7 +298,7 @@ class GroupNormalizePolars(SeriesOperator):
                 rng = hi - lo
                 if rng == 0 or np.isnan(rng):
                     return np.full_like(vals, 0.5)
-                return (vals - lo) / rng
+                return np.where(rng != 0, (vals - lo) / rng, np.nan)
 
             if row_g is None or np.all(np.isnan(row_g)):
                 out[mask] = _scale(row_x[mask])
@@ -367,7 +367,7 @@ class GroupPercentilePolars(SeriesOperator):
                 if len(vals) == 0:
                     return np.array([], dtype=float)
                 ranks = np.argsort(np.argsort(vals, kind="mergesort"), kind="mergesort") + 1.0
-                pct = ranks / len(vals)
+                pct = np.where(len(vals) != 0, ranks / len(vals), np.nan)
                 return (pct <= q).astype(float)
 
             if row_g is None or np.all(np.isnan(row_g)):
@@ -416,7 +416,7 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
 
     def _apply(vals: np.ndarray) -> np.ndarray:
         ranks = _average_ranks_1d(vals)
-        w = ranks / ranks.sum()
+        w = np.where(ranks.sum() != 0, ranks / ranks.sum(), np.nan)
         return vals * w
 
     if row_g is None or np.all(np.isnan(row_g)):

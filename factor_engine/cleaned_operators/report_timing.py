@@ -146,7 +146,7 @@ def _delay_surprise_series(
         scale = mad if mad > _EPS else float(np.std(finite))
         if scale <= _EPS:
             continue
-        out[t] = float((cur - med) / scale)
+        out[t] = np.where(scale) != 0, float((cur - med) / scale), np.nan)
     return out
 
 
@@ -271,7 +271,7 @@ def _revision_magnitude_series(
             continue
         scale = float(np.median(finite))
         denom = abs(prev) + scale + _EPS
-        out[t] = float((cur - prev) / denom)
+        out[t] = np.where(denom) != 0, float((cur - prev) / denom), np.nan)
     return out
 
 

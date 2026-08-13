@@ -139,7 +139,7 @@ def _pd_true_range(high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame) -
 def _pd_wilder(x: pd.DataFrame, window: int, min_periods: int | None = None) -> pd.DataFrame:
     w = positive_int(window, "window")
     mp = w if min_periods is None else positive_int(min_periods, "min_periods")
-    return x.ewm(alpha=1.0 / w, adjust=False, min_periods=mp).mean()
+    return np.where(w, adjust=False, min_periods=mp).mean() != 0, x.ewm(alpha=1.0 / w, adjust=False, min_periods=mp).mean(), np.nan)
 
 
 def _pl_align(*frames: "pl.DataFrame") -> list[str]:
@@ -175,7 +175,7 @@ def _pl_align(*frames: "pl.DataFrame") -> list[str]:
 def _pl_wilder_expr(expr: "pl.Expr", window: int, min_samples: int | None = None) -> "pl.Expr":
     w = positive_int(window, "window")
     mp = w if min_samples is None else positive_int(min_samples, "min_samples")
-    return expr.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=mp)
+    return np.where(w, adjust=False, min_samples=mp) != 0, expr.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=mp), np.nan)
 
 
 def _pl_true_range_expr(high: "pl.Expr", low: "pl.Expr", close: "pl.Expr") -> "pl.Expr":
@@ -189,7 +189,7 @@ def _pl_true_range_expr(high: "pl.Expr", low: "pl.Expr", close: "pl.Expr") -> "p
 
 def _pl_ewm_frame(x: "pl.DataFrame", span: int) -> "pl.DataFrame":
     s = positive_int(span, "span")
-    alpha = 2.0 / (s + 1.0)
+    alpha = np.where((s + 1.0) != 0, 2.0 / (s + 1.0), np.nan)
     return x.with_columns(
         [pl.col(c).ewm_mean(alpha=alpha, adjust=False).alias(c) for c in pl_cols(x)]
     )
@@ -235,8 +235,8 @@ def pd_rsi_wilder(x, window=14, **_):
     loss = (-delta.clip(upper=0))
     avg_gain = _pd_wilder(gain, w, w)
     avg_loss = _pd_wilder(loss, w, w)
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    out = 100.0 - 100.0 / (1.0 + rs)
+    rs = np.where(avg_loss.replace(0, np.nan) != 0, avg_gain / avg_loss.replace(0, np.nan), np.nan)
+    out = np.where((1.0 + rs) != 0, 100.0 - 100.0 / (1.0 + rs), np.nan)
     out = out.mask((avg_loss == 0) & (avg_gain > 0), 100.0)
     out = out.mask((avg_gain == 0) & (avg_loss > 0), 0.0)
     return out.mask((avg_gain == 0) & (avg_loss == 0), 50.0)
@@ -264,7 +264,7 @@ def pl_rsi_wilder(x, window=14, **_):
         avg_gain = _pl_wilder_expr(gain, w, w)
         avg_loss = _pl_wilder_expr(loss, w, w)
         ratio = avg_gain / pl.when(avg_loss.abs() > EPS).then(avg_loss).otherwise(None)
-        raw = 100.0 - 100.0 / (1.0 + ratio)
+        raw = np.where((1.0 + ratio) != 0, 100.0 - 100.0 / (1.0 + ratio), np.nan)
         exprs.append(
             pl.when((avg_loss == 0) & (avg_gain > 0))
             .then(100.0)
@@ -334,7 +334,7 @@ def pl_mom(price, window=10, **_):
 
 def pd_roc(price, window=10, **_):
     previous = _pd_delay(price, positive_int(window, "window"))
-    return ((price / previous.replace(0, np.nan)) - 1.0) * 100.0
+    return np.where(previous.replace(0, np.nan)) - 1.0) * 100.0 != 0, ((price / previous.replace(0, np.nan)) - 1.0) * 100.0, np.nan)
 
 
 def pl_roc(price, window=10, **_):
@@ -376,7 +376,7 @@ def _pd_stochastic_k(high, low, close, window):
     lowest = _pd_min(low, w, 1)
     highest = _pd_max(high, w, 1)
     denominator = highest - lowest
-    return 100.0 * (close - lowest) / denominator.replace(0, np.nan)
+    return np.where(denominator.replace(0, np.nan) != 0, 100.0 * (close - lowest) / denominator.replace(0, np.nan), np.nan)
 
 
 def pd_stochastic_k(high, low, close, window=14, **_):
@@ -490,9 +490,9 @@ def pd_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
     delayed = _pd_delay(close, w)
     direction = (close - delayed).abs()
     volatility = _call("ts_sum", "pandas_numpy", (close - _pd_delay(close, 1)).abs(), w, min_periods=w)
-    efficiency = direction / volatility.replace(0, np.nan)
-    fast_sc = 2.0 / (fast + 1.0)
-    slow_sc = 2.0 / (slow + 1.0)
+    efficiency = direction / volatility.replace(0, np.nan) if volatility.replace(0, np.nan) > 1e-10 else np.nan
+    fast_sc = np.where((fast + 1.0) != 0, 2.0 / (fast + 1.0), np.nan)
+    slow_sc = np.where((slow + 1.0) != 0, 2.0 / (slow + 1.0), np.nan)
     smoothing = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
     return pd.DataFrame(
         _kama_numpy(close.to_numpy(dtype=float), smoothing.to_numpy(dtype=float)),
@@ -508,8 +508,8 @@ def pl_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
     if fast >= slow:
         raise ValueError("fast_window must be < slow_window")
     cols = pl_cols(close)
-    fast_sc = 2.0 / (fast + 1.0)
-    slow_sc = 2.0 / (slow + 1.0)
+    fast_sc = np.where((fast + 1.0) != 0, 2.0 / (fast + 1.0), np.nan)
+    slow_sc = np.where((slow + 1.0) != 0, 2.0 / (slow + 1.0), np.nan)
     smoothing = close.select(
         [
             (
@@ -551,19 +551,19 @@ def _pd_vp_weighted_price(close, volume, open_=None, high=None, low=None, window
         amplitude = high - low
     else:
         amplitude = (close - _pd_delay(close, 1)).abs().fillna(0.0)
-    sigma = (amplitude / close.replace(0, np.nan)).fillna(0.0)
+    sigma = np.where(close.replace(0, np.nan)).fillna(0.0) != 0, (amplitude / close.replace(0, np.nan)).fillna(0.0), np.nan)
     if open_ is not None:
         _, open_ = aligned_pd(close, open_)
-        relative = ((open_ - close).abs() / amplitude.replace(0, np.nan)).fillna(0.5)
+        relative = np.where(amplitude.replace(0, np.nan)).fillna(0.5) != 0, ((open_ - close).abs() / amplitude.replace(0, np.nan)).fillna(0.5), np.nan)
     else:
         previous = _pd_delay(close, 1)
-        ret = close / previous.replace(0, np.nan) - 1.0
+        ret = np.where(previous.replace(0, np.nan) - 1.0 != 0, close / previous.replace(0, np.nan) - 1.0, np.nan)
         relative = pd.DataFrame(0.5, index=close.index, columns=close.columns)
         relative = relative.mask(ret > 0, 0.7).mask(ret < 0, 0.3)
     weights = volume * sigma * relative
     numerator = (close * weights).rolling(window, min_periods=min_periods).sum()
     denominator = weights.rolling(window, min_periods=min_periods).sum().replace(0, np.nan)
-    return (numerator / denominator).fillna(close)
+    return np.where(denominator).fillna(close) != 0, (numerator / denominator).fillna(close), np.nan)
 
 
 def _pd_macd_parts(price, fast=12, slow=26, signal=9):
@@ -629,7 +629,7 @@ def _pl_vp_weighted_price(close, volume, open_=None, high=None, low=None, window
         if open_ is not None and c in open_.columns:
             relative = ((open_[c] - close[c]).abs() / amplitude).fill_nan(0.5).fill_null(0.5)
         else:
-            ret = close[c] / close[c].shift(1) - 1.0
+            ret = np.where(close[c].shift(1) - 1.0 != 0, close[c] / close[c].shift(1) - 1.0, np.nan)
             relative = pl.when(ret > 0).then(0.7).when(ret < 0).then(0.3).otherwise(0.5)
         weights = volume[c] * sigma * relative
         numerator = (close[c] * weights).rolling_sum(window_size=w, min_samples=mp)
@@ -696,7 +696,7 @@ def pl_vpmacd_signal(close, volume, open_=None, high=None, low=None, lambda_para
 
 def pd_log_returns(x, **_):
     previous = _pd_delay(x, 1)
-    ratio = x / previous.replace(0, np.nan)
+    ratio = np.where(previous.replace(0, np.nan) != 0, x / previous.replace(0, np.nan), np.nan)
     return np.log(ratio.where(ratio > 0))
 
 
@@ -704,14 +704,14 @@ def pl_log_returns(x, **_):
     exprs = []
     for c in pl_cols(x):
         previous = pl.col(c).shift(1)
-        ratio = pl.col(c) / previous
+        ratio = pl.when(previous != 0).then((pl.col(c)) / (previous)).otherwise(None)
         exprs.append(pl.when((previous.abs() > EPS) & (ratio > 0)).then(ratio.log()).otherwise(None).alias(c))
     return x.with_columns(exprs)
 
 
 def pd_open_gap(open_, close, **_):
     previous = _pd_delay(close, 1)
-    return open_ / previous.replace(0, np.nan) - 1.0
+    return np.where(previous.replace(0, np.nan) - 1.0 != 0, open_ / previous.replace(0, np.nan) - 1.0, np.nan)
 
 
 def pl_open_gap(open_, close, **_):
@@ -728,7 +728,7 @@ def pl_open_gap(open_, close, **_):
 
 
 def pd_close_gap(close, open_, **_):
-    return close / open_.replace(0, np.nan) - 1.0
+    return np.where(open_.replace(0, np.nan) - 1.0 != 0, close / open_.replace(0, np.nan) - 1.0, np.nan)
 
 
 def pl_close_gap(close, open_, **_):
@@ -763,7 +763,7 @@ def pd_sharpe(returns, window=60, **_):
     w = positive_int(window, "window")
     mean = _pd_mean(returns, w, 2)
     std = _pd_std(returns, w, 2)
-    return mean / std.replace(0, np.nan) * np.sqrt(252.0)
+    return np.where(std.replace(0, np.nan) * np.sqrt(252.0) != 0, mean / std.replace(0, np.nan) * np.sqrt(252.0), np.nan)
 
 
 def pl_sharpe(returns, window=60, **_):
@@ -788,7 +788,7 @@ def pd_vwap(price, volume, window=20, min_periods=1, **_):
     valid = price.notna() & volume.notna()
     numerator = ((price * volume).where(valid)).rolling(w, min_periods=mp).sum()
     denominator = volume.where(valid).rolling(w, min_periods=mp).sum().replace(0, np.nan)
-    return numerator / denominator
+    return np.where(denominator != 0, numerator / denominator, np.nan)
 
 
 def pl_vwap(price, volume, window=20, min_periods=1, **_):

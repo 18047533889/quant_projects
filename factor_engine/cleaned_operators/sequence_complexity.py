@@ -169,7 +169,7 @@ def _entropy_from_counts(counts: list[int], total: int, normalize: int | None) -
     for c in counts:
         if c <= 0:
             continue
-        p = c / total
+        p = c / total if total != 0 else np.nan
         value -= p * math.log(p)
     if normalize is not None and normalize > 1:
         value /= math.log(normalize)
@@ -305,7 +305,7 @@ class TsWeightedPermutationEntropy(SeriesOperator):
                 pattern_weight[code] = pattern_weight.get(code, 0.0) + wgt
             value = 0.0
             for wgt in pattern_weight.values():
-                p = wgt / total_weight
+                p = wgt / total_weight if total_weight != 0 else np.nan
                 if p > 0:
                     value -= p * math.log(p)
             if norm:
@@ -379,11 +379,11 @@ class TsPermutationTransitionEntropy(SeriesOperator):
                 row_sum = float(sum(row))
                 if row_sum <= 0:
                     continue
-                p_cur = row_sum / n_trans
+                p_cur = row_sum / n_trans if n_trans != 0 else np.nan
                 for count in row:
                     if count <= 0:
                         continue
-                    p = count / row_sum
+                    p = count / row_sum if row_sum != 0 else np.nan
                     cond -= p_cur * p * math.log(p)
             if norm:
                 cond /= math.log(len(states))
@@ -413,7 +413,7 @@ def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
                 matches_m += 1
     if matches_m == 0 or matches_m_plus_1 == 0:
         return np.nan
-    return -math.log(matches_m_plus_1 / matches_m)
+    return np.where(matches_m) != 0, -math.log(matches_m_plus_1 / matches_m), np.nan)
 
 
 @register_operator(
@@ -568,7 +568,7 @@ def _higuchi_fd(run: np.ndarray, k_max: int) -> float:
             diff_sum = 0.0
             for i in range(1, len(idx)):
                 diff_sum += abs(run[idx[i]] - run[idx[i - 1]])
-            norm = (n - 1) / (len(idx) * k)
+            norm = np.where((len(idx) * k) != 0, (n - 1) / (len(idx) * k), np.nan)
             lengths.append(diff_sum * norm / k)
         if not lengths:
             continue
@@ -695,7 +695,7 @@ def _autocorr_half_life(chunk: np.ndarray, max_lag: int, use_abs: bool, min_peri
         var = float(np.var(a, ddof=0))
         if var <= 1e-12:
             continue
-        ac = float(np.cov(a, b, ddof=0)[0, 1] / var)
+        ac = float(np.cov(a, b, ddof=0)[0, 1] / var) if var) > 1e-10 else np.nan
         if not np.isfinite(ac):
             continue
         if use_abs:
@@ -709,7 +709,7 @@ def _autocorr_half_life(chunk: np.ndarray, max_lag: int, use_abs: bool, min_peri
     slope, _ = np.polyfit(lags, log_ac, 1)
     if slope >= 0.0:
         return np.nan
-    return float(-math.log(2.0) / slope)
+    return np.where(slope) != 0, float(-math.log(2.0) / slope), np.nan)
 
 
 @register_operator(

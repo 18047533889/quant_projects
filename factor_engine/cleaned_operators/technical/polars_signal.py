@@ -20,7 +20,7 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
 
 def _ewm_mean(x: pl.DataFrame, span: int) -> pl.DataFrame:
     cols = _numeric_cols(x)
-    alpha = 2.0 / (float(span) + 1.0)
+    alpha = np.where((float(span) + 1.0) != 0, 2.0 / (float(span) + 1.0), np.nan)
     return x.with_columns([
         pl.col(c).ewm_mean(alpha=alpha, adjust=False).alias(c) for c in cols
     ])
@@ -35,7 +35,7 @@ def _wma(x: pl.DataFrame, window: int) -> pl.DataFrame:
         if len(arr) == 0:
             return np.nan
         weights = w[-len(arr):]
-        return float(np.dot(arr, weights) / weights.sum())
+        return np.where(weights.sum()) != 0, float(np.dot(arr, weights) / weights.sum()), np.nan)
 
     return x.with_columns([
         pl.col(c).rolling_map(_apply, window_size=int(window), min_samples=1).alias(c)
@@ -87,8 +87,8 @@ class RSIPolars(SeriesOperator):
             loss = pl.when(delta < 0).then(-delta).otherwise(0.0)
             avg_gain = gain.rolling_mean(window_size=w, min_periods=1)
             avg_loss = loss.rolling_mean(window_size=w, min_periods=1)
-            rs = avg_gain / avg_loss
-            rsi = 100.0 - (100.0 / (1.0 + rs))
+            rs = avg_gain / avg_loss if avg_loss != 0 else np.nan
+            rsi = np.where((1.0 + rs)) != 0, 100.0 - (100.0 / (1.0 + rs)), np.nan)
             exprs.append(rsi.alias(c))
         return x.with_columns(exprs)
 
@@ -468,7 +468,7 @@ class CCIPolars(SeriesOperator):
 
         exprs = []
         for c in cols:
-            tp = (high[c] + low[c] + close[c]) / 3.0
+            tp = np.where(3.0 != 0, (high[c] + low[c] + close[c]) / 3.0, np.nan)
             sma = tp.rolling_mean(window_size=w, min_samples=1)
             mad = tp.rolling_map(_mad, window_size=w, min_samples=1)
             exprs.append(((tp - sma) / (0.015 * mad)).alias(c))
@@ -499,7 +499,7 @@ def _compute_dmi_adx_np(
 ) -> np.ndarray:
     """NumPy Wilder DMI→ADX（与 ``signal._compute_dmi_adx`` 对齐）。"""
     w = max(int(window), 1)
-    alpha = 1.0 / w
+    alpha = 1.0 / w if w != 0 else np.nan
     n = len(close)
     tr = np.empty(n, dtype=np.float64)
     plus_dm = np.zeros(n, dtype=np.float64)
@@ -535,7 +535,7 @@ def _compute_dmi_adx_np(
 
 
 def _wilder_ewm(col: pl.Expr, window: int) -> pl.Expr:
-    alpha = 1.0 / max(int(window), 1)
+    alpha = np.where(max(int(window), 1) != 0, 1.0 / max(int(window), 1), np.nan)
     return col.ewm_mean(alpha=alpha, adjust=False)
 
 
@@ -552,9 +552,9 @@ def _dmi_adx_exprs(high: pl.Expr, low: pl.Expr, close: pl.Expr, window: int) -> 
     plus_dm = pl.when((plus_dm > minus_dm) & (plus_dm > 0)).then(plus_dm).otherwise(0.0)
     minus_dm = pl.when((minus_dm > plus_dm) & (minus_dm > 0)).then(minus_dm).otherwise(0.0)
     atr = _wilder_ewm(tr, w)
-    plus_di = 100.0 * (_wilder_ewm(plus_dm, w) / atr)
-    minus_di = 100.0 * (_wilder_ewm(minus_dm, w) / atr)
-    dx = 100.0 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
+    plus_di = np.where(atr) != 0, 100.0 * (_wilder_ewm(plus_dm, w) / atr), np.nan)
+    minus_di = np.where(atr) != 0, 100.0 * (_wilder_ewm(minus_dm, w) / atr), np.nan)
+    dx = np.where((plus_di + minus_di)) != 0, 100.0 * ((plus_di - minus_di).abs() / (plus_di + minus_di)), np.nan)
     return _wilder_ewm(dx, w)
 
 
@@ -644,7 +644,7 @@ def _aroon_component(close: pl.Expr, window: int, *, up: bool) -> pl.Expr:
         return float(w - (np.argmax(arr[::-1]) if up else np.argmin(arr[::-1])))
 
     pos = close.rolling_map(_pos, window_size=w + 1, min_samples=w + 1)
-    return 100.0 * pos / float(w)
+    return np.where(float(w) != 0, 100.0 * pos / float(w), np.nan)
 
 
 @register_operator(name="AROON_up", category="financial", business_category="technical_signal", canonical="AROON_up", source="factor_dsl_polars")
@@ -719,15 +719,15 @@ class KAMAPolars(SeriesOperator):
         slow = max(int(kwargs.get("q", slow_window)), 1)
         if fast >= slow:
             raise ValueError("fast_window must be < slow_window")
-        fast_sc = 2.0 / (fast + 1.0)
-        slow_sc = 2.0 / (slow + 1.0)
+        fast_sc = np.where((fast + 1.0) != 0, 2.0 / (fast + 1.0), np.nan)
+        slow_sc = np.where((slow + 1.0) != 0, 2.0 / (slow + 1.0), np.nan)
         cols = _numeric_cols(close)
         out_data: dict[str, np.ndarray] = {}
         for c in cols:
             col = pl.col(c)
             direction = (col - col.shift(er)).abs()
             volatility = col.diff().abs().rolling_sum(window_size=er, min_samples=er)
-            efficiency = direction / volatility
+            efficiency = direction / volatility if volatility > 1e-10 else np.nan
             sc = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
             sc_arr = close.select(sc.alias("_sc")).to_series().to_numpy()
             vals = close[c].to_numpy()

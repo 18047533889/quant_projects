@@ -1,0 +1,71 @@
+================================================================================
+OPERATOR COLD-START CONTRACT SUMMARY
+================================================================================
+
+Total Operators: 1266
+
+Operators by Surface:
+  daily          : 1179 ( 93.1%)
+  extended       :   73 (  5.8%)
+  unsafe         :    7 (  0.6%)
+  internal       :    3 (  0.2%)
+  research       :    3 (  0.2%)
+  legacy         :    1 (  0.1%)
+
+Evidence Coverage:
+  With evidence:    1162 ( 91.8%)
+  Without evidence:  104 (  8.2%)
+
+Operators without evidence (104):
+  ALMA, CoppockCurve, ElderRay, FisherTransform, HMA
+  QQE, RSX, WMA, accounting_comparability_score, arg
+  circulating_cap_unlock_proxy, constant, cosh, cot, cs_clip
+  cs_iqr, cs_median, cs_normalize, cs_outlier_score, cs_robust_scale
+  cs_trim_mean, csc, cube, fin_ttm, fiscal_asymmetric_timeliness
+  group_multi_resid, holder_concentration_change, holder_count_change_rate, holder_pledge_churn, identity
+  intra_idiosyncratic_variance, intra_negative_jump_variation, intra_positive_jump_variation, intra_realized_beta, intra_realized_correlation
+  intra_return_profile_cosine, intra_signed_jump_ratio, nonfinite_to_num, period_average, period_cagr
+  period_change, protected_div, quarter_from_cumulative, relation_jaccard, sec
+  sinh, state_adaptive_deadband, state_adaptive_slew_limit, state_confidence_weighted_ema, state_cost_aware_deadband
+  state_cost_aware_slew, state_l1_turnover_prox, state_l2_partial_adjustment, state_quantile_hysteresis, state_rank_deadband
+  state_uncertainty_deadband, tan, trading_day_diff, ts_adaptive_noise_kalman, ts_alpha_beta_filter
+  ts_ar_forecast, ts_ar_innovation, ts_ar_innovation_z, ts_bessel_lowpass_causal, ts_butterworth_lowpass_causal
+  ts_causal_local_linear_smoother, ts_causal_savgol_endpoint, ts_cumprod, ts_cumsum, ts_expectile_regression_coeff
+  ts_expectile_regression_resid, ts_fir_lowpass_causal, ts_h_infinity_level_filter, ts_hampel_filter_causal, ts_huber_regression_coeff
+  ts_huber_regression_resid_z, ts_kama, ts_l1_trend_filter_trailing, ts_mean_reversion_half_life, ts_median3_causal
+  ts_multi_regression_coeff, ts_multi_regression_r2, ts_multi_regression_resid, ts_multi_regression_resid_z, ts_quantile_regression_coeff
+  ts_quantile_regression_resid, ts_quantile_regression_slope, ts_returns, ts_ridge_regression_coeff, ts_ridge_regression_resid_z
+  ts_robust_ema, ts_rolling_median_causal, ts_sma, ts_spectral_lowpass_trailing, ts_ssa_denoise_trailing
+  ts_student_t_kalman_filter, ts_super_smoother, ts_total_variation_filter_trailing, ts_wavelet_shrinkage_trailing, ttm_from_cumulative
+  ttm_from_quarterly, valuation_pcf_definition_gap, valuation_pe_ttm_lyr_gap, yoy_by_period
+
+Backend Coverage by Surface:
+  daily (1179 operators):
+    pandas:   79
+    polars:   79
+    duckdb:   79
+  extended (73 operators):
+    pandas:    0
+    polars:    0
+    duckdb:    0
+  research (3 operators):
+    pandas:    0
+    polars:    0
+    duckdb:    0
+
+Daily operators with full 3-backend support: 79
+
+Daily operators with evidence but incomplete backend support: 1065
+  (showing first 50)
+  ADX, ATR_WILDER, CMF, CMO, ChaikinOscillator
+  DEMA, DMI_minus, DMI_plus, DX, EaseOfMovement
+  ForceIndex, KAMA, KeltnerLower, KeltnerMid, KeltnerPosition
+  KeltnerUpper, MACD_hist, MACD_line, MACD_signal, MFI
+  NATR, PPO, PPO_hist, PPO_signal, PSAR
+  PVO, PVO_hist, PVO_signal, RSI_WILDER, Supertrend
+  SupertrendDirection, TEMA, TSI, TSI_signal, UltimateOscillator
+  VortexMinus, VortexPlus, a_share_cap_ratio, abnormal_turnover, abnormal_volume
+  abs_return_volume_corr, acos, adv, altman_z_score, amihud_illiquidity
+  ashare_days_since_limit_down, ashare_days_since_limit_up, ashare_failed_limit_count, ashare_limit_asymmetry, ashare_limit_distance
+
+================================================================================

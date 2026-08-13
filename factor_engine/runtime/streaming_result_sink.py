@@ -374,6 +374,8 @@ class StreamingResultSink:
         self._fatal_error: BaseException | None = None
         self._drained = False
         self._started = False
+        # P0-FIX: Add cancellation flag for graceful shutdown
+        self._cancel_requested = False
         # R39-PERF-042：动态 least-loaded ownership。partition key 首次出现时
         # 交给当前负载最低的 worker，之后 pin（同一 partition 永不并发写）。
         self._partition_owners: dict[str, int] = {}
@@ -480,18 +482,30 @@ class StreamingResultSink:
         - 任何 worker FAILED → 抛 fatal error（不静默）；
         - ``accepted != committed + failed`` → 抛错（有 item 未落盘）。
         """
+        # P0-FIX: Set cancellation flag before closing queues
+        with self._lock:
+            self._cancel_requested = True
+
         for q in self._worker_queues:
             q.close()
         join_timeout = self._join_timeout_for_finish()
         for t in self._threads:
             t.join(timeout=join_timeout)
-        # R38 P0-045（§17）：join 超时后 writer 线程仍 alive → **fatal**（abort
+        # R38 P0-045（§17）+ P0-FIX：join 超时后 writer 线程仍 alive → **fatal**（abort
         # generation），**不** main 线程并发 drain 补写（避免并发消费/写竞态）。
+        # P0-FIX: Improved logging and cancellation handling
         alive = [t for t in self._threads if t.is_alive()]
         if alive:
+            import logging
+            logging.getLogger(__name__).error(
+                f"Writer thread timeout: {len(alive)}/{len(self._threads)} threads "
+                f"still alive after join(timeout={join_timeout:.1f}s). "
+                f"Cancellation requested but threads failed to stop. "
+                f"Generation aborted to prevent data corruption."
+            )
             self._set_fatal(
                 RuntimeError(
-                    f"writer thread(s) alive after join(timeout=10): "
+                    f"writer thread(s) alive after join(timeout={join_timeout:.1f}s): "
                     f"{len(alive)} alive — abort generation, no manual drain write "
                     "(R38-P0-045: live writer after join is fatal)"
                 )

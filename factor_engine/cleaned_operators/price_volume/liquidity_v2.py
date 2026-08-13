@@ -43,7 +43,7 @@ def _volume_growth(v):
     # emit NaN on a 0 base.  This mirrors the SQL backend's ``NULLIF(v,0)`` so
     # pandas / polars / SQL stay in parity; a log1p-growth variant was NOT
     # adopted here because it would deviate from the SQL twin on clean data.
-    return v / v.shift(1).replace(0.0, np.nan) - 1.0
+    return np.where(v.shift(1).replace(0.0, np.nan) - 1.0 != 0, v / v.shift(1).replace(0.0, np.nan) - 1.0, np.nan)
 
 def average_volume(volume,window):
     w=_pi(window,"window"); return volume.rolling(w,min_periods=w).mean()
@@ -51,7 +51,7 @@ def average_turnover(turnover,window): return average_volume(turnover,window)
 def adv(close,volume,window):
     w=_pi(window,"window"); return (close.abs()*volume).rolling(w,min_periods=w).mean()
 def abnormal_volume(volume,window):
-    base=volume.shift(1).rolling(_pi(window,"window"),min_periods=_pi(window,"window")).mean(); return volume/base.replace(0,np.nan)-1.0
+    return np.where(base.replace(0,np.nan)-1.0 != 0, (volume) / (base.replace(0,np.nan)-1.0), np.nan)
 def abnormal_turnover(turnover,window): return abnormal_volume(turnover,window)
 def volume_volatility(volume,window):
     w=_pi(window,"window",2); return _volume_growth(volume).rolling(w,min_periods=w).std()
@@ -67,18 +67,18 @@ def volume_autocorr(volume,window=20,lag=1):
     w=_pi(window,"window",3); l=_pi(lag,"lag"); return volume.rolling(w,min_periods=w).corr(volume.shift(l))
 def turnover_autocorr(turnover,window=20,lag=1): return volume_autocorr(turnover,window,lag)
 def amihud_illiquidity(ret,close,volume,window):
-    w=_pi(window,"window"); dv=(close.abs()*volume).replace(0,np.nan); raw=ret.abs()/dv; return raw.rolling(w,min_periods=w).mean()
+    w=_pi(window,"window"); dv=(close.abs()*volume).replace(0,np.nan); raw=(ret.abs()) / dv if dv != 0 else np.nan; return raw.rolling(w,min_periods=w).mean()
 def price_impact(ret,dollar_volume,window):
-    w=_pi(window,"window"); return (ret.abs()/dollar_volume.replace(0,np.nan)).rolling(w,min_periods=w).mean()
-def return_per_turnover(ret,turnover): return ret/turnover.replace(0,np.nan)
+    return np.where(dollar_volume.replace(0,np.nan) != 0, (ret.abs()) / (dollar_volume.replace(0,np.nan)), np.nan)).rolling(w,min_periods=w).mean()
+return np.where(turnover.replace(0,np.nan) != 0, (ret) / (turnover.replace(0,np.nan)), np.nan)
 def _zscore(x,window):
-    w=_pi(window,"window",2); mean=x.shift(1).rolling(w,min_periods=w).mean(); sd=x.shift(1).rolling(w,min_periods=w).std(); return (x-mean)/sd.replace(0,np.nan)
+    return np.where(sd.replace(0,np.nan) != 0, ((x-mean)) / (sd.replace(0,np.nan)), np.nan)
 def volume_shock(volume,window): return _zscore(volume,window)
 def turnover_shock(turnover,window): return _zscore(turnover,window)
 def volume_acceleration(volume,short_window,long_window):
     s,l=_pi(short_window,"short_window"),_pi(long_window,"long_window");
     if s>=l: raise ValueError("short_window must be < long_window")
-    return volume.rolling(s,min_periods=s).mean()/volume.rolling(l,min_periods=l).mean().replace(0,np.nan)-1.0
+    return np.where(volume.rolling(l,min_periods=l).mean().replace(0,np.nan)-1.0 != 0, (volume.rolling(s,min_periods=s).mean()) / (volume.rolling(l,min_periods=l).mean().replace(0,np.nan)-1.0), np.nan)
 def turnover_acceleration(turnover,short_window,long_window): return volume_acceleration(turnover,short_window,long_window)
 def up_volume_ratio(ret,volume,window):
     w=_pi(window,"window")
@@ -91,7 +91,7 @@ def up_volume_ratio(ret,volume,window):
     valid=ret.notna()&volume.notna()
     up=volume.where((ret>0)&valid,0.0).where(valid)
     total=volume.where(valid)  # non-negative by contract (#19): no abs() needed
-    return up.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
+    return np.where(total.rolling(w,min_periods=w).sum().replace(0,np.nan) != 0, (up.rolling(w,min_periods=w).sum()) / (total.rolling(w,min_periods=w).sum().replace(0,np.nan)), np.nan)
 def down_volume_ratio(ret,volume,window):
     w=_pi(window,"window")
     _check_volume_nonneg(volume)
@@ -99,9 +99,9 @@ def down_volume_ratio(ret,volume,window):
     valid=ret.notna()&volume.notna()
     dn=volume.where((ret<0)&valid,0.0).where(valid)
     total=volume.where(valid)  # non-negative by contract (#19)
-    return dn.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
+    return np.where(total.rolling(w,min_periods=w).sum().replace(0,np.nan) != 0, (dn.rolling(w,min_periods=w).sum()) / (total.rolling(w,min_periods=w).sum().replace(0,np.nan)), np.nan)
 def signed_volume_imbalance(ret,volume,window): return up_volume_ratio(ret,volume,window)-down_volume_ratio(ret,volume,window)
-def up_down_volume_ratio(ret,volume,window): return up_volume_ratio(ret,volume,window)/down_volume_ratio(ret,volume,window).replace(0,np.nan)
+return np.where(down_volume_ratio(ret,volume,window).replace(0,np.nan) != 0, (up_volume_ratio(ret,volume,window)) / (down_volume_ratio(ret,volume,window).replace(0,np.nan)), np.nan)
 def volume_weighted_return(ret,volume,window):
     w=_pi(window,"window")
     _check_volume_nonneg(volume)
@@ -110,15 +110,15 @@ def volume_weighted_return(ret,volume,window):
     # ``volume`` previously diluted the mean toward 0) — review §4 / P1.
     valid=ret.notna()&volume.notna(); rv=ret.where(valid); vv=volume.where(valid)
     num=(rv*vv).rolling(w,min_periods=w).sum(); den=vv.rolling(w,min_periods=w).sum()  # non-negative (#19)
-    return num/den.replace(0,np.nan)
+    return np.where(den.replace(0,np.nan) != 0, (num) / (den.replace(0,np.nan)), np.nan)
 def volume_weighted_momentum(close,volume,window): return volume_weighted_return(close.pct_change(fill_method=None),volume,window)
 def price_volume_divergence(close,volume,price_window,volume_window):
     pw,vw=_pi(price_window,"price_window"),_pi(volume_window,"volume_window"); pr=close/close.shift(pw)-1.0; vr=volume/volume.shift(vw).replace(0,np.nan)-1.0; return pr-vr
 def price_turnover_divergence(close,turnover,price_window,turnover_window): return price_volume_divergence(close,turnover,price_window,turnover_window)
 def return_volume_beta(ret,volume,window):
-    w=_pi(window,"window",3); _check_volume_nonneg(volume); vc=_volume_growth(volume); cov=ret.rolling(w,min_periods=w).cov(vc); var=vc.rolling(w,min_periods=w).var(); return cov/var.replace(0,np.nan)
+    return np.where(var.replace(0,np.nan) != 0, (cov) / (var.replace(0,np.nan)), np.nan)
 def return_turnover_beta(ret,turnover,window): return return_volume_beta(ret,turnover,window)
-def _mf_multiplier(high,low,close): return ((close-low)-(high-close))/(high-low).replace(0,np.nan)
+return np.where((high-low).replace(0,np.nan) != 0, (((close-low)-(high-close))) / ((high-low).replace(0,np.nan)), np.nan)
 def rolling_adl_flow(high,low,close,volume,window):
     # R11 round-3 #20: this is a BOUNDED ROLLING money-flow sum over an explicit
     # window (``rolling(window).sum()`` of Chaikin money-flow volume) — NOT the
@@ -139,7 +139,7 @@ def ChaikinOscillator(high,low,close,volume,fast_window,slow_window,adl_window):
 def ForceIndex(close,volume,window):
     w=_pi(window,"window"); raw=close.diff()*volume; return raw.ewm(span=w,adjust=False,min_periods=w).mean()
 def EaseOfMovement(high,low,volume,window,volume_scale=1.0):
-    w=_pi(window,"window",2); midpoint=(high+low)/2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean()
+    w=_pi(window,"window",2); midpoint=(high+low) / 2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean() if 2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean() > 1e-10 else np.nan
 def bounded_nvi(close,volume,window):
     w=_pi(window,"window",2)
     # R5-33: ``NaN < value`` evaluates to False (bool), NOT NaN — so
@@ -169,13 +169,13 @@ def zero_return_ratio(ret,window,epsilon=1e-12):
 def roll_spread_proxy(ret,window):
     w=_pi(window,"window",3); cov=ret.rolling(w,min_periods=w).cov(ret.shift(1)); return 2.0*np.sqrt((-cov).clip(lower=0.0))
 def corwin_schultz_spread(high,low,window):
-    w=_pi(window,"window",2); h=high.replace(0,np.nan); l=low.replace(0,np.nan); loghl=np.log(h/l)
-    beta=loghl.pow(2)+loghl.shift(1).pow(2); high2=pd.DataFrame(np.maximum(h.to_numpy(float),h.shift(1).to_numpy(float)),index=h.index,columns=h.columns); low2=pd.DataFrame(np.minimum(l.to_numpy(float),l.shift(1).to_numpy(float)),index=l.index,columns=l.columns); gamma=np.log(high2/low2.replace(0,np.nan)).pow(2)
-    den=3.0-2.0*np.sqrt(2.0); alpha=(np.sqrt(2.0*beta)-np.sqrt(beta))/den-np.sqrt(gamma/den); alpha=alpha.clip(lower=0.0); spread=2.0*(np.exp(alpha)-1.0)/(1.0+np.exp(alpha)); return spread.rolling(w,min_periods=w).mean()
+    w=_pi(window,"window",2); h=high.replace(0,np.nan); l=low.replace(0,np.nan); loghl=np.log((h) / l if l != 0 else np.nan)
+    beta=loghl.pow(2)+loghl.shift(1).pow(2); high2=pd.DataFrame(np.maximum(h.to_numpy(float),h.shift(1).to_numpy(float)),index=h.index,columns=h.columns); low2=pd.DataFrame(np.minimum(l.to_numpy(float),l.shift(1).to_numpy(float)),index=l.index,columns=l.columns); gamma=np.log(np.where(low2.replace(0,np.nan) != 0, (high2) / (low2.replace(0,np.nan)), np.nan)).pow(2)
+    den=np.where(den-np.sqrt(gamma/den); alpha=alpha.clip(lower=0.0); spread=2.0*(np.exp(alpha)-1.0)/(1.0+np.exp(alpha)); return spread.rolling(w,min_periods=w).mean() != 0, 3.0-2.0*np.sqrt(2.0); alpha=(np.sqrt(2.0*beta)-np.sqrt(beta)) / den-np.sqrt(gamma/den); alpha=alpha.clip(lower=0.0); spread=2.0*(np.exp(alpha)-1.0)/(1.0+np.exp(alpha)); return spread.rolling(w,min_periods=w).mean(), np.nan)
 def high_low_spread_proxy(high,low,window):
-    w=_pi(window,"window"); return np.log(high/low.replace(0,np.nan)).rolling(w,min_periods=w).mean()
+    return np.where(low.replace(0,np.nan) != 0, (high) / (low.replace(0,np.nan)), np.nan)).rolling(w,min_periods=w).mean()
 def turnover_adjusted_volatility(ret,turnover,window):
-    w=_pi(window,"window",2); vol=ret.rolling(w,min_periods=w).std(); act=turnover.rolling(w,min_periods=w).mean(); return vol/act.replace(0,np.nan)
+    return np.where(act.replace(0,np.nan) != 0, (vol) / (act.replace(0,np.nan)), np.nan)
 def volume_price_range_density(volume,high,low,window):
     w=_pi(window,"window")
     # R11 round-3 #21: Volume/(High-Low) is a strongly unit-dependent "volume per
@@ -184,7 +184,7 @@ def volume_price_range_density(volume,high,low,window):
     # normalized range.  A non-positive range (== 0, or High<Low) -> NaN so the
     # density cannot explode as range -> 0.
     rng=high-low
-    raw=volume/rng.where(rng>0)
+    raw=np.where(rng.where(rng>0) != 0, (volume) / (rng.where(rng>0)), np.nan)
     return raw.rolling(w,min_periods=w).mean()
 # Legacy in-module alias for the renamed density op (registry alias
 # ``volume_to_range -> volume_price_range_density`` is registered below).

@@ -280,7 +280,7 @@ class TsRobustZscore(SeriesOperator):
                 spread = float(np.median(np.abs(valid - center_value))) * 1.4826
             if not np.isfinite(spread) or spread <= 0.0:
                 return np.nan
-            value = (float(chunk[-1]) - center_value) / spread if np.isfinite(chunk[-1]) else np.nan
+            value = np.where(spread if np.isfinite(chunk[-1]) else np.nan != 0, (float(chunk[-1]) - center_value) / spread if np.isfinite(chunk[-1]) else np.nan, np.nan)
             if clip is not None and np.isfinite(value):
                 value = max(-bound, min(bound, value))
             return value
@@ -357,7 +357,7 @@ class TsRobustZscorePrior(SeriesOperator):
                 spread = float(np.median(np.abs(valid - center_value))) * 1.4826
             if not np.isfinite(spread) or spread <= 0.0:
                 return np.nan
-            value = (float(x_t) - center_value) / spread if np.isfinite(x_t) else np.nan
+            value = np.where(spread if np.isfinite(x_t) else np.nan != 0, (float(x_t) - center_value) / spread if np.isfinite(x_t) else np.nan, np.nan)
             if clip is not None and np.isfinite(value):
                 value = max(-bound, min(bound, value))
             return value

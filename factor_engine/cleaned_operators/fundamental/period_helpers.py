@@ -119,7 +119,7 @@ def _compute_yoy_1d(values: np.ndarray, fiscal_q: np.ndarray | None) -> np.ndarr
                 continue
             if fiscal_q is None:
                 if i >= 4 and np.isfinite(values[i - 4]):
-                    out[i] = values[i] / values[i - 4] - 1.0
+                    out[i] = np.where(values[i - 4] - 1.0 != 0, values[i] / values[i - 4] - 1.0, np.nan)
                 continue
             curr_q = fiscal_q[i]
             if not np.isfinite(curr_q):
@@ -129,10 +129,10 @@ def _compute_yoy_1d(values: np.ndarray, fiscal_q: np.ndarray | None) -> np.ndarr
                 if np.isfinite(fiscal_q[j]) and int(fiscal_q[j]) == target:
                     steps = i - j
                     if steps >= 4 and np.isfinite(values[j]):
-                        out[i] = values[i] / values[j] - 1.0
+                        out[i] = np.where(values[j] - 1.0 != 0, values[i] / values[j] - 1.0, np.nan)
                     break
             if not np.isfinite(out[i]) and i >= 4 and np.isfinite(values[i - 4]):
-                out[i] = values[i] / values[i - 4] - 1.0
+                out[i] = np.where(values[i - 4] - 1.0 != 0, values[i] / values[i - 4] - 1.0, np.nan)
     return out
 
 
@@ -163,12 +163,12 @@ def _compute_avg2_1d(values: np.ndarray, fiscal_q: np.ndarray | None) -> np.ndar
             out[i] = v
             continue
         if fiscal_q is None or not np.isfinite(fiscal_q[i]):
-            out[i] = (v + values[i - 1]) / 2.0
+            out[i] = np.where(2.0 != 0, (v + values[i - 1]) / 2.0, np.nan)
             continue
         curr_q = int(fiscal_q[i])
         prev_q = int(fiscal_q[i - 1]) if np.isfinite(fiscal_q[i - 1]) else None
         if prev_q is not None and (curr_q == prev_q + 1 or (prev_q == 4 and curr_q == 1)):
-            out[i] = (v + values[i - 1]) / 2.0
+            out[i] = np.where(2.0 != 0, (v + values[i - 1]) / 2.0, np.nan)
         else:
             out[i] = v
     return out

@@ -117,27 +117,32 @@ def estimate_operator_cost_v2(
     ctx = CostContext(**ctx_dict)
 
     # 基础成本（O(N) / O(NW) / O(NK^2)）
+    # P0-005: 校准基于真实 profile（修复低估 ~3750× 问题）
+    # 迭代校准：10× → 200× → 5000× → 1800× → 3500× (最终)
+    # 目标：±20% 误差范围，轻微过估优于低估（避免 OOM）
     rows = shape.estimated_rows
     instruments = shape.estimated_instruments
     compute_ms = 0.0
 
     if cost_spec is None:
         # 未登记算子，默认 O(N) 中等成本
-        compute_ms = rows / 1_000_000 * 10.0  # 10ms per million rows
+        compute_ms = rows / 1_000_000 * 35000.0  # 35ms per 1000 rows (3500× calibrated)
     else:
         complexity = cost_spec.time_complexity
         if "N log N" in complexity:
-            compute_ms = rows * (1 + 0.5 * (rows / 1_000_000)) / 1_000_000 * 20.0
+            # rank 算子实测较快，特殊优化
+            compute_ms = rows * (1 + 0.5 * (rows / 1_000_000)) / 1_000_000 * 14000.0
         elif "NW" in complexity:
             w = window or 20
-            compute_ms = rows * w / 1_000_000 * 5.0
+            compute_ms = rows * w / 1_000_000 * 17500.0  # 3500× calibrated (窗口操作)
         elif "NK^2" in complexity or "NK2" in complexity:
             k_val = k or feature_dim or 10
-            compute_ms = rows * k_val * k_val / 1_000_000 * 50.0
+            compute_ms = rows * k_val * k_val / 1_000_000 * 175000.0  # 3500× calibrated
         elif "O(N)" in complexity:
-            compute_ms = rows / 1_000_000 * 8.0
+            # zscore/neutralize 等跨截面算子实测较慢
+            compute_ms = rows / 1_000_000 * 28000.0  # 3500× calibrated
         else:
-            compute_ms = rows / 1_000_000 * 10.0
+            compute_ms = rows / 1_000_000 * 35000.0  # 3500× calibrated
 
     # backend overhead
     backend_overhead = {"pandas": 1.0, "polars": 0.5, "duckdb": 0.3, "numba": 0.2}.get(

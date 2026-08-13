@@ -140,7 +140,7 @@ def welford_rolling_var_(
         for v in valid[1:]:
             k += 1
             d = v - m
-            m = m + d / k
+            m = m + d / k if k != 0 else np.nan
             q = q + d * (v - m)
         out[i] = float(q / (k - ddof)) if k - ddof > 0 else np.nan
     return out

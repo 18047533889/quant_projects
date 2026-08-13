@@ -110,7 +110,7 @@ def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: in
             # R5 P1-42(a): a constant feature carries no information — fail
             # closed to NaN rather than emitting a degenerate all-zero column.
             return None
-        z[:, j] = (Z[:, j] - med) / scale
+        z[:, j] = (Z[:, j] - med) / scale if scale != 0 else np.nan
     return z
 
 
@@ -141,8 +141,8 @@ def _biweight_midcorr(a: np.ndarray, b: np.ndarray) -> float:
         madb = float(np.std(b))
     if mada <= _EPS or madb <= _EPS:
         return np.nan  # degenerate column: no scale -> fail closed
-    u = (a - ma) / (9.0 * mada)
-    v = (b - mb) / (9.0 * madb)
+    u = np.where((9.0 * mada) != 0, (a - ma) / (9.0 * mada), np.nan)
+    v = np.where((9.0 * madb) != 0, (b - mb) / (9.0 * madb), np.nan)
     wu = np.where(np.abs(u) < 1.0, (1.0 - u * u) ** 2, 0.0)
     wv = np.where(np.abs(v) < 1.0, (1.0 - v * v) ** 2, 0.0)
     if float(np.sum(wu * wv)) <= _EPS:

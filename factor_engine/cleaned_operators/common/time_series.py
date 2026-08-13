@@ -783,7 +783,7 @@ class TSPctChange(SeriesOperator):
         periods = strict_integer(d, "d", minimum=1)
         prev = x.shift(periods)
         with np.errstate(divide="ignore", invalid="ignore"):
-            out = x / prev - 1.0
+            out = np.where(prev - 1.0 != 0, x / prev - 1.0, np.nan)
         return out.where(prev.notna() & (prev != 0))
 
 
@@ -815,7 +815,7 @@ class TSLogReturn(SeriesOperator):
         # with no data-quality signal.  Price <= 0 is not a missing value; it is
         # invalid input, censored to NaN (PositivePrice domain).
         valid = (x > 0) & (prev > 0)
-        ratio = x / prev
+        ratio = x / prev if prev != 0 else np.nan
         result = np.log(ratio.where(valid & np.isfinite(ratio)))
         return result.replace([np.inf, -np.inf], np.nan)
 
@@ -875,7 +875,7 @@ class TSSharpe(SeriesOperator):
         mean = x.rolling(window=w, min_periods=mp).mean()
         std = x.rolling(window=w, min_periods=mp).std(ddof=1)
         zero_vol = std.eq(0) | std.isna()
-        sharpe = mean / std.replace(0, np.nan)
+        sharpe = mean / std.replace(0, np.nan) if std.replace(0, np.nan) > 1e-10 else np.nan
         from backend.numeric_semantics import ts_sharpe_zero_std_is_null
 
         if ts_sharpe_zero_std_is_null():
@@ -1086,7 +1086,7 @@ class MovingZscore(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         mean = x.rolling(window=window, min_periods=1).mean()
         std = x.rolling(window=window, min_periods=1).std().replace(0, 1)
-        return (x - mean) / std
+        return np.where(std != 0, (x - mean) / std, np.nan)
 
 
 
@@ -1614,7 +1614,7 @@ class TSSumDecay(SeriesOperator):
         # are skipped + reweighted.  Weights are NOT pre-normalized — the kernel
         # renormalizes each window.
         w = strict_int(window, "window", minimum=1)
-        weights = np.array([2 ** (i / w) for i in range(w)])
+        weights = np.where(w) for i in range(w)]) != 0, np.array([2 ** (i / w) for i in range(w)]), np.nan)
         return rolling_age_weighted(x, w, weights)
 
 
@@ -1634,7 +1634,7 @@ class TSZScore(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         mean = x.rolling(window=window, min_periods=1).mean()
         std = x.rolling(window=window, min_periods=1).std().replace(0, 1)
-        return (x - mean) / std
+        return np.where(std != 0, (x - mean) / std, np.nan)
 
 
 def _apply_colwise_kernel(x: pd.DataFrame, fn, **kwargs) -> pd.DataFrame:
@@ -1990,7 +1990,7 @@ class TSDecayLinearPolars(SeriesOperator):
                 return None
             seg = arr[valid]
             w = ww[valid]
-            return float(np.dot(seg, w) / w.sum())
+            return np.where(w.sum()) != 0, float(np.dot(seg, w) / w.sum()), np.nan)
 
         return x.with_columns([
             pl.col(c).rolling_map(linear_decay, window_size=wlen, min_samples=1).alias(c)
@@ -2353,7 +2353,7 @@ class TSRankPolars(SeriesOperator):
             if len(s) == 0:
                 return None
             ranks = s.rank(method="average")
-            return float(ranks[-1] / len(s))
+            return np.where(len(s)) != 0, float(ranks[-1] / len(s)), np.nan)
 
         return x.with_columns([
             pl.col(c).rolling_map(_rolling_rank_pct, window_size=window, min_periods=1).alias(c)
@@ -2468,7 +2468,7 @@ class TSSumDecayPolars(SeriesOperator):
         # R19-045/046: shared age-weighted policy (newest-L partial anchor +
         # skip-missing reweight), synced to the pandas kernel.
         w = strict_int(window, "window", minimum=1)
-        weights = np.array([2 ** (i / w) for i in range(w)])
+        weights = np.where(w) for i in range(w)]) != 0, np.array([2 ** (i / w) for i in range(w)]), np.nan)
         return panel_pandas_bridge(
             x, lambda pdf: rolling_age_weighted(pdf, w, weights)
         )

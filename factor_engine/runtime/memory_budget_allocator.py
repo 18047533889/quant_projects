@@ -14,11 +14,34 @@ memory（P0-014）。修复：
     - cache 目标随 live envelope 收缩（P0-015：不再长期 hard*15%），压力解除后
       只按比例缓慢恢复；
     - spill 预算来自**磁盘**（P0-016：spill_free - 保留），不是 RAM。
+
+2026-08-13: 使用自适应配置替代硬编码 BLOCK_ABS_MAX/SINK_ABS_MAX/CACHE_ABS_MAX。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+
+def _get_adaptive_bounds() -> dict[str, int]:
+    """获取自适应内存边界（基于系统资源）。"""
+    try:
+        from runtime.adaptive_config import get_global_adaptive_config
+        config = get_global_adaptive_config()
+        # BLOCK_ABS_MAX 使用 block_abs_max_bytes
+        # SINK_ABS_MAX/CACHE_ABS_MAX 使用其 4x（原比例：8GB vs 2GB）
+        return {
+            "BLOCK_ABS_MAX": config.block_abs_max_bytes,
+            "SINK_ABS_MAX": config.block_abs_max_bytes * 4,
+            "CACHE_ABS_MAX": config.block_abs_max_bytes * 4,
+        }
+    except ImportError:
+        # 回退：使用原硬编码值（向后兼容）
+        return {
+            "BLOCK_ABS_MAX": 2 * 1024**3,
+            "SINK_ABS_MAX": 8 * 1024**3,
+            "CACHE_ABS_MAX": 8 * 1024**3,
+        }
 
 
 #: 预算默认分数（§35/38/39/49：占 safe envelope）。
@@ -29,15 +52,30 @@ CACHE_FRACTION = 0.15
 #: 必须保留的 emergency reserve 分数（§16/17：fail-safe before OOM）。
 EMERGENCY_RESERVE_FRACTION = 0.25
 EMERGENCY_RESERVE_ABS = 512 * 1024**2       # 至少 512MB
-#: 绝对 bounds（§35..39）。
+#: 绝对 bounds（§35..39）—— 自适应计算，延迟初始化。
 WAVE_ABS_MIN = 256 * 1024**2
 WAVE_ABS_MAX = 16 * 1024**3
 BLOCK_ABS_MIN = 64 * 1024**2
-BLOCK_ABS_MAX = 2 * 1024**3
 SINK_ABS_MIN = 128 * 1024**2
-SINK_ABS_MAX = 8 * 1024**3
 CACHE_ABS_MIN = 128 * 1024**2
-CACHE_ABS_MAX = 8 * 1024**3
+
+# 自适应上限（延迟初始化，首次访问时计算）
+_adaptive_bounds: dict[str, int] | None = None
+
+
+def _get_bounds() -> dict[str, int]:
+    """获取或初始化自适应边界。"""
+    global _adaptive_bounds
+    if _adaptive_bounds is None:
+        _adaptive_bounds = _get_adaptive_bounds()
+    return _adaptive_bounds
+
+
+# 向后兼容：保留原常量名（通过 __getattr__ 动态查找）
+def __getattr__(name: str) -> int:
+    if name in ("BLOCK_ABS_MAX", "SINK_ABS_MAX", "CACHE_ABS_MAX"):
+        return _get_bounds()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @dataclass(frozen=True)
@@ -117,17 +155,18 @@ class MemoryBudgetAllocator:
         emergency = max(0, emergency)
         available = max(0, safe - active - emergency)
 
+        bounds = _get_bounds()
         wave = _clamp(int(safe * self._wf), WAVE_ABS_MIN, WAVE_ABS_MAX)
-        block = _clamp(int(safe * self._bf), BLOCK_ABS_MIN, BLOCK_ABS_MAX)
-        sink = _clamp(int(safe * self._sf), SINK_ABS_MIN, SINK_ABS_MAX)
-        cache = _clamp(int(safe * self._cf), CACHE_ABS_MIN, CACHE_ABS_MAX)
+        block = _clamp(int(safe * self._bf), BLOCK_ABS_MIN, bounds["BLOCK_ABS_MAX"])
+        sink = _clamp(int(safe * self._sf), SINK_ABS_MIN, bounds["SINK_ABS_MAX"])
+        cache = _clamp(int(safe * self._cf), CACHE_ABS_MIN, bounds["CACHE_ABS_MAX"])
 
         # 压力档位降预算（P0-015：cache 随 live envelope 收缩）。
         if pressure_stage in {"PRESSURE_2", "PRESSURE_3"}:
             wave = _clamp(int(wave * 0.5), WAVE_ABS_MIN, WAVE_ABS_MAX)
-            block = _clamp(int(block * 0.5), BLOCK_ABS_MIN, BLOCK_ABS_MAX)
+            block = _clamp(int(block * 0.5), BLOCK_ABS_MIN, bounds["BLOCK_ABS_MAX"])
         if pressure_stage in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
-            cache = _clamp(int(cache * 0.5), CACHE_ABS_MIN, CACHE_ABS_MAX)
+            cache = _clamp(int(cache * 0.5), CACHE_ABS_MIN, bounds["CACHE_ABS_MAX"])
 
         # sum ≤ available（优先级 wave > sink > block > cache 逐项砍）。
         budgets = {"read_wave": wave, "factor_block": block, "result_queue": sink, "cache": cache}

@@ -97,7 +97,7 @@ def _expectile(vals: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> flo
         if s <= _EPS:
             converged = True
             break
-        e_new = float(np.sum(w * v)) / s
+        e_new = float(np.sum(w * v)) / s if s != 0 else np.nan
         if abs(e_new - e) <= _CONV_TOL * max(1.0, abs(e)):
             e = e_new
             converged = True

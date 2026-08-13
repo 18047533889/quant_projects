@@ -176,7 +176,7 @@ def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame, *, strict: b
     num = numerator.to_numpy(dtype=float) if hasattr(numerator, "to_numpy") else np.asarray(numerator, dtype=float)
     den = denominator.to_numpy(dtype=float) if hasattr(denominator, "to_numpy") else np.asarray(denominator, dtype=float)
     with np.errstate(divide="ignore", invalid="ignore"):
-        out = num / den
+        out = num / den if den != 0 else np.nan
     # P0-61: a finite price <= 0 is not a price.  A zero denominator was already
     # NaN; a negative denominator (or a zero/negative numerator) would otherwise
     # emit a normal-looking return — reject the cell.

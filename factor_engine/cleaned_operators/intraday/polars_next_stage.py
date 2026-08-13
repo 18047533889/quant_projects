@@ -89,11 +89,11 @@ def _realized_moment(close: pl.DataFrame, kind: str) -> pl.DataFrame:
         (r * r * r * r).sum().alias("r4"),
     )
     if kind == "skewness":
-        out = agg.with_columns(((pl.col("r3") * pl.col("n").sqrt()) / pl.col("r2").pow(1.5)).alias("v"))
+        out = pl.when(pl.col("r2").pow(1.5)).alias("v")) != 0).then((agg.with_columns(((pl.col("r3") * pl.col("n").sqrt())) / (pl.col("r2").pow(1.5)).alias("v")))).otherwise(None)
     elif kind == "kurtosis":
-        out = agg.with_columns(((pl.col("r4") * pl.col("n")) / (pl.col("r2") * pl.col("r2"))).alias("v"))
+        out = pl.when((pl.col("r2") * pl.col("r2"))).alias("v")) != 0).then((agg.with_columns(((pl.col("r4") * pl.col("n"))) / ((pl.col("r2") * pl.col("r2"))).alias("v")))).otherwise(None)
     else:  # quarticity
-        out = agg.with_columns(((pl.col("r4") * pl.col("n")) / 3.0).alias("v"))
+        out = pl.when(3.0).alias("v")) != 0).then((agg.with_columns(((pl.col("r4") * pl.col("n"))) / (3.0).alias("v")))).otherwise(None)
     return _pivot(out, "v")
 
 
@@ -210,7 +210,7 @@ def _interval_ret(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
         pl.col("close").first().alias("open"),
         pl.col("close").last().alias("last"),
     )
-    out = seg.with_columns(((pl.col("last") / pl.col("open")) - 1.0).alias("v"))
+    out = pl.when(pl.col("open")) - 1.0).alias("v")) != 0).then((seg.with_columns(((pl.col("last")) / (pl.col("open")) - 1.0).alias("v")))).otherwise(None)
     return _pivot(out, "v")
 
 
@@ -228,7 +228,7 @@ def _interval_share(value: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     mask = (pl.col("mod") >= int(start)) & (pl.col("mod") <= int(end))
     seg = long.filter(mask).group_by(["date", "instrument"]).agg(pl.col("value").sum().alias("seg"))
     merged = seg.join(total, on=["date", "instrument"])
-    out = merged.with_columns((pl.col("seg") / pl.col("total")).alias("v"))
+    out = pl.when(pl.col("total")).alias("v")) != 0).then((merged.with_columns((pl.col("seg")) / (pl.col("total")).alias("v")))).otherwise(None)
     return _pivot(out, "v")
 
 

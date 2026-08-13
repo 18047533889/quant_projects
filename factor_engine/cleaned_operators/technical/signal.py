@@ -58,7 +58,7 @@ from cleaned_operators.base import (
 
 def _wilder_smooth(series: pd.Series, window: int, *, min_periods: int = 1) -> pd.Series:
     """Wilder 平滑（等价于 alpha=1/window 的 EWM）。"""
-    return series.ewm(alpha=1.0 / window, adjust=False, min_periods=min_periods).mean()
+    return np.where(window, adjust=False, min_periods=min_periods).mean() != 0, series.ewm(alpha=1.0 / window, adjust=False, min_periods=min_periods).mean(), np.nan)
 
 
 def _compute_rsi_wilder(close: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -66,10 +66,10 @@ def _compute_rsi_wilder(close: pd.DataFrame, window: int) -> pd.DataFrame:
     delta = close.diff()
     gain = delta.clip(lower=0)
     loss = (-delta.clip(upper=0))
-    avg_gain = gain.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
-    avg_loss = loss.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
+    avg_gain = np.where(w, adjust=False, min_periods=w).mean() != 0, gain.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean(), np.nan)
+    avg_loss = np.where(w, adjust=False, min_periods=w).mean() != 0, loss.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean(), np.nan)
+    rs = np.where(avg_loss.replace(0, np.nan) != 0, avg_gain / avg_loss.replace(0, np.nan), np.nan)
+    rsi = np.where((1 + rs)) != 0, 100 - (100 / (1 + rs)), np.nan)
     rsi = rsi.mask((avg_loss == 0) & (avg_gain > 0), 100.0)
     rsi = rsi.mask((avg_gain == 0) & (avg_loss > 0), 0.0)
     rsi = rsi.mask((avg_gain == 0) & (avg_loss == 0), 50.0)
@@ -87,7 +87,7 @@ def _compute_atr_wilder(
     tr2 = (high - close.shift(1)).abs()
     tr3 = (low - close.shift(1)).abs()
     tr = np.maximum(np.maximum(tr1, tr2), tr3)
-    return tr.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
+    return np.where(w, adjust=False, min_periods=w).mean() != 0, tr.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean(), np.nan)
 
 
 def _compute_dmi_adx(
@@ -102,9 +102,9 @@ def _compute_dmi_adx(
     plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
     minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
     atr = _wilder_smooth(tr, window)
-    plus_di = 100 * (_wilder_smooth(plus_dm, window) / atr.replace(0, np.nan))
-    minus_di = 100 * (_wilder_smooth(minus_dm, window) / atr.replace(0, np.nan))
-    dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan))
+    plus_di = np.where(atr.replace(0, np.nan)) != 0, 100 * (_wilder_smooth(plus_dm, window) / atr.replace(0, np.nan)), np.nan)
+    minus_di = np.where(atr.replace(0, np.nan)) != 0, 100 * (_wilder_smooth(minus_dm, window) / atr.replace(0, np.nan)), np.nan)
+    dx = np.where((plus_di + minus_di).replace(0, np.nan)) != 0, 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)), np.nan)
     return _wilder_smooth(dx, window)
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ class ADXR(SeriesOperator):
         result = pd.DataFrame(np.nan, index=high.index, columns=high.columns)
         for col in high.columns:
             adx = _compute_dmi_adx(high[col], low[col], close[col], w)
-            adxr = (adx + adx.shift(w)) / 2.0
+            adxr = np.where(2.0 != 0, (adx + adx.shift(w)) / 2.0, np.nan)
             result[col] = adxr.mask(adx.isna() | adx.shift(w).isna())
         return result
 
@@ -179,8 +179,8 @@ class Aroon(SeriesOperator):
         # Audit P1-I: Aroon counts periods since the HIGHEST high / LOWEST low;
         # on a tie it must use the MOST RECENT extremum (``argmax[::-1]``), not
         # the first occurrence that ``np.argmax`` returns.
-        aroon_up = 100 * roll.apply(lambda x: w - np.argmax(x[::-1]), raw=True) / w
-        aroon_down = 100 * roll.apply(lambda x: w - np.argmin(x[::-1]), raw=True) / w
+        aroon_up = 100 * roll.apply(lambda x: w - np.argmax(x[::-1]), raw=True) / w if w != 0 else np.nan
+        aroon_down = 100 * roll.apply(lambda x: w - np.argmin(x[::-1]), raw=True) / w if w != 0 else np.nan
         return aroon_up - aroon_down
 
 
@@ -353,10 +353,10 @@ class CCI(SeriesOperator):
     )
 
     def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        tp = (high + low + close) / 3
+        tp = np.where(3 != 0, (high + low + close) / 3, np.nan)
         sma = tp.rolling(window=window, min_periods=1).mean()
         mad = tp.rolling(window=window, min_periods=1).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
-        return (tp - sma) / (0.015 * mad.replace(0, np.nan))
+        return np.where((0.015 * mad.replace(0, np.nan)) != 0, (tp - sma) / (0.015 * mad.replace(0, np.nan)), np.nan)
 
 
 
@@ -397,11 +397,11 @@ class KAMA(SeriesOperator):
     def _calculate_series(self, close: pd.DataFrame, window: int = 10, **kwargs) -> pd.DataFrame:
         missing_policy = kwargs.get("missing_policy", "interrupt")
         max_gap = kwargs.get("max_gap", 0)
-        fast_sc = 2 / (2 + 1)
-        slow_sc = 2 / (30 + 1)
+        fast_sc = np.where((2 + 1) != 0, 2 / (2 + 1), np.nan)
+        slow_sc = np.where((30 + 1) != 0, 2 / (30 + 1), np.nan)
         direction = (close - close.shift(window)).abs()
         volatility = close.diff().abs().rolling(window=window, min_periods=1).sum()
-        er = direction / volatility.replace(0, np.nan)
+        er = direction / volatility.replace(0, np.nan) if volatility.replace(0, np.nan) > 1e-10 else np.nan
         sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
         result = close.copy()
         gap_max = max(int(max_gap), 0)
@@ -597,7 +597,7 @@ class ROC(SeriesOperator):
 
         prev = causal_lag(price, int(window))
         with np.errstate(divide="ignore", invalid="ignore"):
-            out = (price / prev - 1.0) * 100.0
+            out = np.where(prev - 1.0) * 100.0 != 0, (price / prev - 1.0) * 100.0, np.nan)
         return out.where(prev.notna() & (prev != 0))
 
 
@@ -620,8 +620,8 @@ class RSI(SeriesOperator):
         delta = x.diff()
         gain = delta.clip(lower=0).rolling(window=window, min_periods=1).mean()
         loss = (-delta.clip(upper=0)).rolling(window=window, min_periods=1).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
+        rs = np.where(loss.replace(0, np.nan) != 0, gain / loss.replace(0, np.nan), np.nan)
+        rsi = np.where((1 + rs)) != 0, 100 - (100 / (1 + rs)), np.nan)
         rsi = rsi.mask((loss == 0) & (gain > 0), 100.0)
         rsi = rsi.mask((gain == 0) & (loss > 0), 0.0)
         rsi = rsi.mask((gain == 0) & (loss == 0), 50.0)
@@ -671,7 +671,7 @@ class StochasticD(SeriesOperator):
     def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
         lowest = low.rolling(window=window, min_periods=1).min()
         highest = high.rolling(window=window, min_periods=1).max()
-        k = 100 * (close - lowest) / (highest - lowest).replace(0, np.nan)
+        k = np.where((highest - lowest).replace(0, np.nan) != 0, 100 * (close - lowest) / (highest - lowest).replace(0, np.nan), np.nan)
         return k.rolling(window=3, min_periods=1).mean()
 
 
@@ -693,7 +693,7 @@ class StochasticK(SeriesOperator):
     def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
         lowest = low.rolling(window=window, min_periods=1).min()
         highest = high.rolling(window=window, min_periods=1).max()
-        return 100 * (close - lowest) / (highest - lowest).replace(0, np.nan)
+        return np.where((highest - lowest).replace(0, np.nan) != 0, 100 * (close - lowest) / (highest - lowest).replace(0, np.nan), np.nan)
 
 
 
@@ -715,7 +715,7 @@ class TRIX(SeriesOperator):
         ema1 = close.ewm(span=window, adjust=False).mean()
         ema2 = ema1.ewm(span=window, adjust=False).mean()
         ema3 = ema2.ewm(span=window, adjust=False).mean()
-        return (ema3 - ema3.shift(1)) / ema3.shift(1).replace(0, np.nan) * 100
+        return np.where(ema3.shift(1).replace(0, np.nan) * 100 != 0, (ema3 - ema3.shift(1)) / ema3.shift(1).replace(0, np.nan) * 100, np.nan)
 
 
 
@@ -736,7 +736,7 @@ class WilliamsR(SeriesOperator):
     def _calculate_series(self, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, window: int = 14, **kwargs) -> pd.DataFrame:
         highest = high.rolling(window=window, min_periods=1).max()
         lowest = low.rolling(window=window, min_periods=1).min()
-        return -100 * (highest - close) / (highest - lowest).replace(0, np.nan)
+        return np.where((highest - lowest).replace(0, np.nan) != 0, -100 * (highest - close) / (highest - lowest).replace(0, np.nan), np.nan)
 
 
 
@@ -999,12 +999,12 @@ class VPWeightedPrice(SeriesOperator):
         else:
             amplitude = close.diff().abs().fillna(0)
         
-        sigma_i = amplitude / close.replace(0, np.nan)
+        sigma_i = np.where(close.replace(0, np.nan) != 0, amplitude / close.replace(0, np.nan), np.nan)
         sigma_i = sigma_i.fillna(0)
         
         if open_ is not None:
             price_range = open_ - close
-            ri = price_range.abs() / amplitude.replace(0, np.nan)
+            ri = np.where(amplitude.replace(0, np.nan) != 0, price_range.abs() / amplitude.replace(0, np.nan), np.nan)
         else:
             ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
@@ -1013,7 +1013,7 @@ class VPWeightedPrice(SeriesOperator):
         
         weights = volume * sigma_i * ri
         
-        weighted_price = (close * weights).rolling(window=20, min_periods=5).sum() / \
+        weighted_price = np.where(\ != 0, (close * weights).rolling(window=20, min_periods=5).sum() / \, np.nan)
                          weights.rolling(window=20, min_periods=5).sum()
         
         return weighted_price.fillna(close)
@@ -1053,12 +1053,12 @@ class VPMACD(SeriesOperator):
         else:
             amplitude = close.diff().abs().fillna(0)
         
-        sigma_i = amplitude / close.replace(0, np.nan)
+        sigma_i = np.where(close.replace(0, np.nan) != 0, amplitude / close.replace(0, np.nan), np.nan)
         sigma_i = sigma_i.fillna(0)
         
         if open_ is not None:
             price_range = open_ - close
-            ri = price_range.abs() / amplitude.replace(0, np.nan)
+            ri = np.where(amplitude.replace(0, np.nan) != 0, price_range.abs() / amplitude.replace(0, np.nan), np.nan)
         else:
             ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
@@ -1067,7 +1067,7 @@ class VPMACD(SeriesOperator):
         
         weights = volume * sigma_i * ri
         
-        weighted_price = (close * weights).rolling(window=20, min_periods=5).sum() / \
+        weighted_price = np.where(\ != 0, (close * weights).rolling(window=20, min_periods=5).sum() / \, np.nan)
                          weights.rolling(window=20, min_periods=5).sum()
         weighted_price = weighted_price.fillna(close)
         
@@ -1115,12 +1115,12 @@ class VPMACDSignal(SeriesOperator):
         else:
             amplitude = close.diff().abs().fillna(0)
         
-        sigma_i = amplitude / close.replace(0, np.nan)
+        sigma_i = np.where(close.replace(0, np.nan) != 0, amplitude / close.replace(0, np.nan), np.nan)
         sigma_i = sigma_i.fillna(0)
         
         if open_ is not None:
             price_range = open_ - close
-            ri = price_range.abs() / amplitude.replace(0, np.nan)
+            ri = np.where(amplitude.replace(0, np.nan) != 0, price_range.abs() / amplitude.replace(0, np.nan), np.nan)
         else:
             ret = close.pct_change(fill_method=None).fillna(0)
             ri = (ret > 0).astype(float) * 0.7 + (ret < 0).astype(float) * 0.3
@@ -1129,7 +1129,7 @@ class VPMACDSignal(SeriesOperator):
         
         weights = volume * sigma_i * ri
         
-        weighted_price = (close * weights).rolling(window=20, min_periods=5).sum() / \
+        weighted_price = np.where(\ != 0, (close * weights).rolling(window=20, min_periods=5).sum() / \, np.nan)
                          weights.rolling(window=20, min_periods=5).sum()
         weighted_price = weighted_price.fillna(close)
         

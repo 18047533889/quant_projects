@@ -494,11 +494,17 @@ class _ThreadSafeConnection:
                 for sql, params_list in batches:
                     if params_list:
                         self._conn.executemany(sql, params_list)
-            except Exception:
+            except Exception as e:
                 try:
                     self._conn.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
+                except sqlite3.OperationalError as rollback_err:
+                    # P0-FIX: Log rollback failures - critical for database consistency
+                    import logging
+                    logging.getLogger(__name__).error(
+                        f"CRITICAL: Batch transaction rollback failed after {type(e).__name__}: "
+                        f"rollback_error={rollback_err}, original_error={e}. "
+                        f"Catalog may be in inconsistent state."
+                    )
                 raise
             self._conn.commit()
             self.commit_count += 1
@@ -516,11 +522,17 @@ class _ThreadSafeConnection:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 yield
-            except Exception:
+            except Exception as e:
                 try:
                     self._conn.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
+                except sqlite3.OperationalError as rollback_err:
+                    # P0-FIX: Log rollback failures - critical for database consistency
+                    import logging
+                    logging.getLogger(__name__).error(
+                        f"CRITICAL: Transaction rollback failed after {type(e).__name__}: "
+                        f"rollback_error={rollback_err}, original_error={e}. "
+                        f"Catalog may be in inconsistent state."
+                    )
                 raise
             else:
                 self._conn.execute("COMMIT")

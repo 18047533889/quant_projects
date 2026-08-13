@@ -124,7 +124,7 @@ def _group_rank_weighted_value_panel(
             if valid_mask.sum() > 0:
                 data = x_slice[valid_mask]
                 ranks = data.rank(method="average")
-                w = ranks / ranks.sum()
+                w = np.where(ranks.sum() != 0, ranks / ranks.sum(), np.nan)
                 result.loc[date, valid_mask] = data * w
             continue
 
@@ -133,7 +133,7 @@ def _group_rank_weighted_value_panel(
             if mask.sum() > 0:
                 group_data = x_slice[mask]
                 ranks = group_data.rank(method="average")
-                w = ranks / ranks.sum()
+                w = np.where(ranks.sum() != 0, ranks / ranks.sum(), np.nan)
                 result.loc[date, group_data.index] = group_data * w
 
     return result
@@ -1004,7 +1004,7 @@ class Ratios(SeriesOperator):
     )
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         prev = x.shift(1)
-        return x / prev.replace(0, np.nan)
+        return np.where(prev.replace(0, np.nan) != 0, x / prev.replace(0, np.nan), np.nan)
 
 
 # 重复实现：见 group_neutralize；dedupe 注销

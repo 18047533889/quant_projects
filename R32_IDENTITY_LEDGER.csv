@@ -1,0 +1,19 @@
+Component,Identity Field,Algorithm,Stability,R32 Changes
+stable_digest,primitives (str/int/float/bool/None),sha256,STABLE,No change
+stable_digest,dict keys,sha256 + sorted keys,STABLE,No change
+stable_digest,list/tuple order,sha256 + preserved order,STABLE,No change
+stable_digest,set/frozenset,sha256 + sorted members,STABLE,No change
+stable_digest,Enum,sha256 + .value,NEW,Added R32-P0-107
+stable_digest,dataclass,sha256 + asdict recursion,NEW,Added R32-P0-107
+stable_digest,to_dict() protocol,sha256 + recurse,STABLE,No change
+stable_digest,unknown types,ValueError (fail-closed),NEW,Changed from repr fallback
+stable_digest_full,all above,sha256 256-bit full,NEW,Added R32-P0-108
+DataSnapshot.snapshot_id,dataset + registry_hash + schema_hash + manifest_hash + params + build_sha,sha256[:24],STABLE,build_sha already present (R29)
+ResolvedSourceSnapshot.content_digest,objects (uri + content_length + etag + version_id + last_modified),sha256,MODIFIED,Four-field identity (complete/objects/schema/published_at)
+FileVersion.identity,mtime_ns (local) / etag + version_id (remote),deterministic,STABLE,No change
+content_digest_of_objects,zero-byte vs unknown,distinct digests,NEW,Zero-byte != unknown (R32-P0-028)
+StartupCertificate.subject_digest,build_sha + package_version + registry + contract + policy + calendar + credentials,sha256,NEW,R32-P0-014
+PhysicalResolutionContext.mutation_generation,generation string,equality,NEW,R32-P0-047
+PreparedRead.cache_identity,snapshot_id + query + params + security_scope,sha256,NEW,R32-P0-056
+security_scope,principal + policy + run_mode,sha256,STABLE,No change (R30)
+ReadLineage.build_sha,build SHA string,equality,STABLE,No change (R29)

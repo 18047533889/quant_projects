@@ -120,7 +120,7 @@ def _survival_kernel(
             comp = np.asarray(completed, dtype=float)
             # percentile
             if comp.size >= min_pct:
-                pct[row] = float(np.sum(comp <= cur)) / comp.size
+                pct[row] = np.where(comp.size != 0, float(np.sum(comp <= cur)) / comp.size, np.nan)
             else:
                 pct[row] = np.nan
             # hazard
@@ -132,7 +132,7 @@ def _survival_kernel(
                 # must not produce a hazard estimate (hazard would read as a
                 # robust probability when it is really 1 sample).
                 if n_l >= min_haz:
-                    hazard[row] = (d_l + alpha) / (n_l + 2.0 * alpha)
+                    hazard[row] = np.where((n_l + 2.0 * alpha) != 0, (d_l + alpha) / (n_l + 2.0 * alpha), np.nan)
                 else:
                     hazard[row] = np.nan
             else:

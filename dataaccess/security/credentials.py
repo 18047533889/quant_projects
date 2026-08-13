@@ -100,36 +100,71 @@ class EnvCredentialProvider:
     source = "env"
 
     def resolve(self) -> CredentialMaterial:
-        access = next(
-            (os.environ.get(k, "").strip() for k in _ENV_SOURCE if os.environ.get(k, "").strip()),
-            "",
-        )
-        secret = next(
-            (os.environ.get(k, "").strip() for k in _ENV_SECRET if os.environ.get(k, "").strip()),
-            "",
-        )
-        if not access or not secret:
-            raise ValidationError(
-                "无可用 COS/S3 凭证：请通过部署注入 COS_SECRET_ID + COS_SECRET_KEY "
-                "（或 AWS_/S3_ 前缀），或显式配置 CredentialProvider。"
+        # P0-048: Try complete credential families atomically to prevent mixing
+        # Try COS family (Tencent Cloud)
+        cos_id = os.environ.get("COS_SECRET_ID", "").strip()
+        cos_key = os.environ.get("COS_SECRET_KEY", "").strip()
+        if cos_id and cos_key:
+            token = os.environ.get("COS_SESSION_TOKEN", "").strip() or None
+            scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
+            principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            return CredentialMaterial(
+                access_key_id=cos_id,
+                secret_access_key=cos_key,
+                session_token=token,
+                principal_id=principal,
+                credential_scope_id=scope,
+                source="env",
             )
-        token = next(
-            (os.environ.get(k, "").strip() for k in _ENV_TOKEN if os.environ.get(k, "").strip()),
-            None,
-        )
-        scope = (
-            os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
-        )
-        principal = (
-            os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
-        )
-        return CredentialMaterial(
-            access_key_id=access,
-            secret_access_key=secret,
-            session_token=token or None,
-            principal_id=principal,
-            credential_scope_id=scope,
-            source="env",
+
+        # Try AWS family
+        aws_id = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
+        aws_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
+        if aws_id and aws_key:
+            token = os.environ.get("AWS_SESSION_TOKEN", "").strip() or None
+            scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
+            principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            return CredentialMaterial(
+                access_key_id=aws_id,
+                secret_access_key=aws_key,
+                session_token=token,
+                principal_id=principal,
+                credential_scope_id=scope,
+                source="env",
+            )
+
+        # Try S3 family (generic)
+        s3_id = os.environ.get("S3_ACCESS_KEY_ID", "").strip()
+        s3_key = os.environ.get("S3_SECRET_ACCESS_KEY", "").strip()
+        if s3_id and s3_key:
+            token = os.environ.get("S3_SESSION_TOKEN", "").strip() or None
+            scope = os.environ.get("DATA_ACCESS_CREDENTIAL_SCOPE_ID", "").strip() or None
+            principal = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip() or None
+            return CredentialMaterial(
+                access_key_id=s3_id,
+                secret_access_key=s3_key,
+                session_token=token,
+                principal_id=principal,
+                credential_scope_id=scope,
+                source="env",
+            )
+
+        # No complete family found - check if credentials are mixed across families
+        cos_partial = bool(cos_id or cos_key)
+        aws_partial = bool(aws_id or aws_key)
+        s3_partial = bool(s3_id or s3_key)
+
+        if sum([cos_partial, aws_partial, s3_partial]) > 1:
+            raise ValidationError(
+                "Credential family mixing detected: each provider family "
+                "(COS_SECRET_ID+KEY, AWS_ACCESS_KEY_ID+SECRET_ACCESS_KEY, or "
+                "S3_ACCESS_KEY_ID+SECRET_ACCESS_KEY) must be complete. "
+                "Cannot mix credentials across families."
+            )
+
+        raise ValidationError(
+            "无可用 COS/S3 凭证：请通过部署注入 COS_SECRET_ID + COS_SECRET_KEY "
+            "（或 AWS_/S3_ 前缀），或显式配置 CredentialProvider。"
         )
 
 

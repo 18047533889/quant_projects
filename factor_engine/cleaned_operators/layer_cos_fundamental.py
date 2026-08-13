@@ -47,7 +47,7 @@ def _datetime_days(values):
     parsed = pd.to_datetime(values.reshape(-1), errors="coerce", utc=True)
     raw = np.asarray(parsed.view("int64"), dtype=float).reshape(values.shape)
     raw[raw == float(np.iinfo(np.int64).min)] = np.nan
-    return raw / 86_400_000_000_000.0
+    return np.where(86_400_000_000_000.0 != 0, raw / 86_400_000_000_000.0, np.nan)
 
 
 def pd_staleness(available_at, decision_time, **_):
@@ -59,7 +59,7 @@ def pd_staleness(available_at, decision_time, **_):
 
 def pl_staleness(available_at, decision_time, **_):
     cols = [c for c in pl_cols(available_at) if c in decision_time.columns]
-    return available_at.with_columns([(((decision_time[c].cast(pl.Datetime, strict=False) - available_at[c].cast(pl.Datetime, strict=False)).dt.total_seconds() / 86400.0).cast(pl.Float64).alias(c)) for c in cols])
+    return np.where(86400.0).cast(pl.Float64).alias(c)) for c in cols]) != 0, available_at.with_columns([(((decision_time[c].cast(pl.Datetime, strict=False) - available_at[c].cast(pl.Datetime, strict=False)).dt.total_seconds() / 86400.0).cast(pl.Float64).alias(c)) for c in cols]), np.nan)
 
 
 def _revision_array(values, periods, revisions, mode):
@@ -76,7 +76,7 @@ def _revision_array(values, periods, revisions, mode):
                 if mode == "absolute":
                     out[row, col] = value - previous[1]
                 elif abs(previous[1]) > EPS:
-                    out[row, col] = value / previous[1] - 1.0
+                    out[row, col] = np.where(previous[1] - 1.0 != 0, value / previous[1] - 1.0, np.nan)
             last[ordinal] = (revision, float(value))
     return out
 
@@ -121,7 +121,7 @@ def _stability_column(values, periods, count, method, consecutive):
         else:
             mean = np.mean(array)
             if abs(mean) > EPS:
-                out[row] = np.std(array, ddof=1) / abs(mean)
+                out[row] = np.where(abs(mean) != 0, np.std(array, ddof=1) / abs(mean), np.nan)
     return out
 
 
@@ -156,7 +156,7 @@ def pd_safe_div(x, y, epsilon=EPS, **_):
     xv, yv = x.to_numpy(dtype=float), y.to_numpy(dtype=float)
     valid = np.isfinite(xv) & np.isfinite(yv) & (np.abs(yv) > epsilon)
     out = np.full(x.shape, np.nan)
-    out[valid] = xv[valid] / yv[valid]
+    out[valid] = np.where(yv[valid] != 0, xv[valid] / yv[valid], np.nan)
     return frame_pd(x, out)
 
 

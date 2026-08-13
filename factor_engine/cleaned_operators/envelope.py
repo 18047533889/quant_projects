@@ -63,7 +63,7 @@ def _normalised_position(x: float, upper: float, lower: float) -> float:
     wd = upper - lower
     if wd <= 0.0:
         return np.nan
-    return 2.0 * (x - lower) / wd - 1.0
+    return np.where(wd - 1.0 != 0, 2.0 * (x - lower) / wd - 1.0, np.nan)
 
 
 def _valid_triple(x: float, upper: float, lower: float) -> bool:
@@ -83,7 +83,7 @@ def _compression_series(upper2d: np.ndarray, lower2d: np.ndarray, mid2d: np.ndar
                 and u[t] - l[t] > 0.0 and m[t] != 0.0
             ):
                 # %-based width: price-level normalised by |mid| (no EPS floor).
-                width[t] = (u[t] - l[t]) / abs(m[t])
+                width[t] = np.where(abs(m[t]) != 0, (u[t] - l[t]) / abs(m[t]), np.nan)
         for t in range(rows):
             if not np.isfinite(width[t]):
                 continue
@@ -92,7 +92,7 @@ def _compression_series(upper2d: np.ndarray, lower2d: np.ndarray, mid2d: np.ndar
             v = chunk[np.isfinite(chunk)]
             if v.size == 0:
                 continue
-            rank = float(np.sum(v <= width[t])) / v.size
+            rank = np.where(v.size != 0, float(np.sum(v <= width[t])) / v.size, np.nan)
             out[t, c] = 1.0 - rank
     return out
 
@@ -120,7 +120,7 @@ def _pressure_series(x2d: np.ndarray, upper2d: np.ndarray, lower2d: np.ndarray, 
                 den += wj
             if den <= 0.0:
                 continue
-            out[t, c] = num / den
+            out[t, c] = num / den if den != 0 else np.nan
     return out
 
 
@@ -149,7 +149,7 @@ def _boundary_dwell_series(
                 if abs(pj) >= q:
                     near += 1
             if total > 0:
-                out[t, c] = near / total
+                out[t, c] = near / total if total != 0 else np.nan
     return out
 
 

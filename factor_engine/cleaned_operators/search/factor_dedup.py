@@ -99,7 +99,7 @@ def build_typed_fixtures(
 
     fixtures["gaussian"] = frame(rng.normal(size=(rows, cols)))
     fixtures["heavy_tail"] = frame(rng.standard_t(df=3.0, size=(rows, cols)))
-    fixtures["trend"] = frame((t / rows) * 10.0 + rng.normal(scale=0.5, size=(rows, cols)))
+    fixtures["trend"] = np.where(rows) * 10.0 + rng.normal(scale=0.5, size=(rows, cols))) != 0, frame((t / rows) * 10.0 + rng.normal(scale=0.5, size=(rows, cols))), np.nan)
 
     ar = np.zeros((rows, cols))
     for i in range(1, rows):
@@ -676,7 +676,7 @@ def _state_agreement_day(av: np.ndarray, bv: np.ndarray) -> float:
     if not union.any():
         return 1.0
     inter = active_a & active_b
-    jac = float(inter.sum()) / float(union.sum())
+    jac = np.where(float(union.sum()) != 0, float(inter.sum()) / float(union.sum()), np.nan)
     if jac == 0.0:
         return 0.0
     agree = float((av[inter] == bv[inter]).mean())
@@ -741,11 +741,11 @@ def per_date_metrics(
         n_top = max(1, int(np.ceil(decile * n)))
         a_top = set(np.argpartition(av, -n_top)[-n_top:].tolist())
         b_top = set(np.argpartition(bv, -n_top)[-n_top:].tolist())
-        top_ov = float(len(a_top & b_top) / n_top)
+        top_ov = np.where(n_top) != 0, float(len(a_top & b_top) / n_top), np.nan)
         a_bot = set(np.argpartition(av, n_top)[:n_top].tolist())
         b_bot = set(np.argpartition(bv, n_top)[:n_top].tolist())
-        bot_ov = float(len(a_bot & b_bot) / n_top)
-        k = max(2, int(round(1.0 / decile)))
+        bot_ov = np.where(n_top) != 0, float(len(a_bot & b_bot) / n_top), np.nan)
+        k = np.where(decile))) != 0, max(2, int(round(1.0 / decile))), np.nan)
         pos_ov = float((_position_bucket(av, k) == _position_bucket(bv, k)).mean())
         out.append(
             PerDateMetrics(
@@ -866,7 +866,7 @@ def aggregate_day_metrics(
     return DayMetricsSummary(
         n_days=n_days,
         n_duplicate_days=dup,
-        duplicate_day_ratio=dup / n_days,
+        duplicate_day_ratio=np.where(n_days, != 0, dup / n_days,, np.nan)
         spearman_median=med(sp),
         spearman_p10=pctl(sp, 10),
         spearman_p90=pctl(sp, 90),
@@ -896,7 +896,7 @@ def _exact_value_days(ra: np.ndarray, rb: np.ndarray, *, min_peers: int) -> floa
         n += 1
         if bool((np.isnan(a) == np.isnan(b)).all()) and np.array_equal(a[mask], b[mask]):
             match += 1
-    return float(match / n) if n else 0.0
+    return np.where(n) if n else 0.0 != 0, float(match / n) if n else 0.0, np.nan)
 
 
 def _rich_per_date_duplicate(
@@ -1114,7 +1114,7 @@ def multi_regime_duplicate_decision(
         )
     if total == 0:
         return False, report
-    return (votes / total) >= min_regime_agreement, report
+    return np.where(total) >= min_regime_agreement, report != 0, (votes / total) >= min_regime_agreement, report, np.nan)
 
 
 def are_rank_duplicates(

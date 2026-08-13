@@ -301,7 +301,7 @@ def _dc_column(
         n_fin = fin_pref[i + 1] - fin_pref[lo]
         n_ev = ev_pref[i + 1] - ev_pref[lo]
         if n_fin >= 2:
-            evr[i] = n_ev / n_fin
+            evr[i] = n_ev / n_fin if n_fin != 0 else np.nan
 
     # Aggregate over the completed legs whose endpoints lie inside each row's
     # trailing window (legs are streamed once and are boundary-invariant).

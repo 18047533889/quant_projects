@@ -455,7 +455,7 @@ class AshareLimitEventDensity(SeriesOperator):
                 if known_count == 0:
                     continue
                 count = float(np.nansum(np.where(known, ev[lo : r + 1, c], 0.0)))
-                out[r, c] = count / known_count
+                out[r, c] = count / known_count if known_count != 0 else np.nan
         return frame_like(event, out)
 
 
@@ -493,7 +493,7 @@ class AshareLimitAsymmetry(SeriesOperator):
                     continue
                 up_count = float(np.nansum(np.where(known & (u_chunk != 0), u_chunk, 0.0)))
                 down_count = float(np.nansum(np.where(known & (d_chunk != 0), d_chunk, 0.0)))
-                out[r, c] = (up_count - down_count) / known_count
+                out[r, c] = (up_count - down_count) / known_count if known_count != 0 else np.nan
         return frame_like(up_event, out)
 
 
@@ -637,7 +637,7 @@ def _event_volume_ratio(volume: np.ndarray, event: np.ndarray, window: int) -> n
             base_vol = float(np.mean(v[valid_vol]))
             if base_vol <= 0.0:
                 continue
-            out[r, c] = event_vol / base_vol
+            out[r, c] = event_vol / base_vol if base_vol > 1e-10 else np.nan
     return out
 
 

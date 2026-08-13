@@ -120,7 +120,7 @@ def _crossing_speed_series(x2d: np.ndarray, y2d: np.ndarray, window: int) -> np.
             if not np.isfinite(dz[t, c]):
                 out[t, c] = np.nan
                 continue
-            out[t, c] = (abs(dz[t, c]) / scale[t, c]) * f
+            out[t, c] = np.where(scale[t, c]) * f != 0, (abs(dz[t, c]) / scale[t, c]) * f, np.nan)
     return out
 
 
@@ -148,7 +148,7 @@ def _crossing_acceleration_series(x2d: np.ndarray, y2d: np.ndarray, window: int)
             if not (np.isfinite(dz[t, c]) and np.isfinite(dz[t - 1, c])):
                 out[t, c] = np.nan
                 continue
-            a = (dz[t, c] - dz[t - 1, c]) / scale[t, c]
+            a = np.where(scale[t, c] != 0, (dz[t, c] - dz[t - 1, c]) / scale[t, c], np.nan)
             if np.isfinite(a):
                 out[t, c] = a
             else:

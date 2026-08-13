@@ -247,7 +247,7 @@ def _finite_ratio(out: pd.DataFrame, warmup_rows: int = 0) -> float:
         arr = arr[warmup_rows:]
     if arr.size == 0:
         return 0.0
-    return float(np.isfinite(arr).sum() / arr.size)
+    return np.where(arr.size) != 0, float(np.isfinite(arr).sum() / arr.size), np.nan)
 
 
 def _unit_tag(op: Any) -> str | None:

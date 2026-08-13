@@ -32,7 +32,7 @@ def _parts(open_: pd.DataFrame, high: pd.DataFrame, low: pd.DataFrame, close: pd
 
 
 def _safe_ratio(num, den):
-    return num / den.replace(0, np.nan)
+    return np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
 
 
 def _min_tick(close):
@@ -170,7 +170,7 @@ def harami_cross(open_, high, low, close):
 
 def piercing(open_, high, low, close):
     prev_open, prev_close = open_.shift(1), close.shift(1)
-    midpoint = (prev_open + prev_close) / 2.0
+    midpoint = np.where(2.0 != 0, (prev_open + prev_close) / 2.0, np.nan)
     flag = (
         (prev_close < prev_open) & (close > open_) &
         (open_ <= prev_close) & (close > midpoint) & (close < prev_open)
@@ -181,7 +181,7 @@ def piercing(open_, high, low, close):
 
 def dark_cloud(open_, high, low, close):
     prev_open, prev_close = open_.shift(1), close.shift(1)
-    midpoint = (prev_open + prev_close) / 2.0
+    midpoint = np.where(2.0 != 0, (prev_open + prev_close) / 2.0, np.nan)
     flag = (
         (prev_close > prev_open) & (close < open_) &
         (open_ >= prev_close) & (close < midpoint) & (close > prev_open)
@@ -196,7 +196,7 @@ def morning_star(open_, high, low, close):
     body2 = (c2-o2).abs(); body1 = (c1-o1).abs()
     range2 = (high.shift(2)-low.shift(2)).replace(0, np.nan)
     range1 = (high.shift(1)-low.shift(1)).replace(0, np.nan)
-    midpoint2 = (o2+c2)/2.0
+    midpoint2 =((o2+c2)) / 2.0 if 2.0 != 0 else np.nan
     flag = (
         (c2 < o2) & (body2 >= 0.50*range2) &
         (body1 <= 0.35*range1) &
@@ -216,7 +216,7 @@ def evening_star(open_, high, low, close):
     body2 = (c2-o2).abs(); body1 = (c1-o1).abs()
     range2 = (high.shift(2)-low.shift(2)).replace(0, np.nan)
     range1 = (high.shift(1)-low.shift(1)).replace(0, np.nan)
-    midpoint2 = (o2+c2)/2.0
+    midpoint2 =((o2+c2)) / 2.0 if 2.0 != 0 else np.nan
     flag = (
         (c2 > o2) & (body2 >= 0.50*range2) &
         (body1 <= 0.35*range1) &

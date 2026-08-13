@@ -1,0 +1,36 @@
+Module,Symbol,Type,Status,R32 Changes,Breaking
+data_access.r30._shared,stable_digest,function,MODIFIED,Enum support + fail-closed unknown types,YES
+data_access.r30._shared,stable_digest_full,function,MODIFIED,Enum support + 256-bit digest + fail-closed,YES
+data_access.r30._shared,security_scope,function,STABLE,No changes,NO
+data_access.r30._shared,version_gate,function,STABLE,No changes,NO
+data_access.r30._shared,API_VERSION,constant,STABLE,No changes,NO
+data_access.r30._shared,CONTRACT_SCHEMA_VERSION,constant,STABLE,No changes,NO
+data_access.r30._shared,REGISTRY_SCHEMA_VERSION,constant,STABLE,No changes,NO
+data_access.r30._shared,SEMANTIC_SCHEMA_VERSION,constant,STABLE,No changes,NO
+data_access.r30._shared,STORAGE_FORMAT_VERSION,constant,STABLE,No changes,NO
+data_access.read.read_contract,DataSnapshot,class,STABLE,No changes,NO
+data_access.read.read_contract,FileVersion,class,STABLE,No changes,NO
+data_access.read.read_contract,ReadResult,class,STABLE,No changes,NO
+data_access.read.read_contract,ReadLineage,class,STABLE,No changes,NO
+data_access.read.read_contract,ReadStats,class,STABLE,No changes,NO
+data_access.read.read_contract,build_data_snapshot,function,STABLE,No changes,NO
+data_access.read.read_contract,build_file_manifest,function,STABLE,No changes,NO
+data_access.read.read_contract,_remote_object_meta,function,MODIFIED,Fix credential resolve double-call,NO
+data_access.snapshot.source_snapshot,ResolvedSourceSnapshot,class,MODIFIED,Four-field identity (complete/objects/schema/published_at),YES
+data_access.snapshot.source_snapshot,ResolvedObject,class,STABLE,No changes,NO
+data_access.snapshot.source_snapshot,content_digest_of_objects,function,MODIFIED,Zero-byte vs unknown distinction,NO
+data_access.snapshot.resolver,parse_source_manifest,function,MODIFIED,Strict validation of complete/objects/schema,YES
+data_access.security.credentials,EnvCredentialProvider,class,MODIFIED,Family-atomic parsing,YES
+data_access.security.credentials,resolve_s3_credentials,function,STABLE,No changes,NO
+data_access.runtime.startup_gate,StartupCertificate,class,MODIFIED,Frozen dataclass + subject-bound,YES
+data_access.runtime.startup_gate,run_startup_gate,function,MODIFIED,Certificate generation logic,NO
+data_access.r30.session,DataReadSession,class,MODIFIED,Three-state lifecycle (NEW/ACTIVE/CLOSED),YES
+data_access.r30.session,PhysicalResolutionContext,class,NEW,Resolution cache context,NO
+data_access.read.read_session,_ResolutionCache,class,MODIFIED,Clear drops context memo,NO
+data_access.read.data_request,PreparedRead,class,MODIFIED,Auto cache identity,NO
+data_access.registry.dataset_boundary,verify_path_belongs_to_dataset,function,NEW,Dataset path boundary validation,NO
+data_access.write.generation_atomicity,atomic_publish_with_generation,function,NEW,Generation-based atomic publish,NO
+data_access.write.generation_atomicity,read_current_generation_data,function,NEW,Dereference generation pointer,NO
+data_access.read.sql_ast_validator,enumerate_sql_sources,function,NEW,AST-based SQL source enumeration,NO
+data_access.read.sql_ast_validator,validate_sql_sources_against_allowlist,function,NEW,SQL security boundary validation,NO
+data_access.read.sql_ast_validator,validate_sql_no_mutations,function,NEW,Reject DML/DDL in read paths,NO

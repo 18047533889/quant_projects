@@ -186,8 +186,8 @@ def _moment_of(x: np.ndarray, moment: str) -> float:
     m3 = float(np.mean((x - mu) ** 3))
     m4 = float(np.mean((x - mu) ** 4))
     if moment == "skew":
-        return m3 / (sd ** 3)
-    return m4 / (sd ** 4)  # kurtosis (Pearson m4/m2^2, not excess)
+        return np.where((sd ** 3) != 0, m3 / (sd ** 3), np.nan)
+    return np.where(m2^2 != 0, (m4) / (m2^2), np.nan), not excess)
 
 
 def _day_event_gaps(vals: np.ndarray, times: np.ndarray, target: Any) -> np.ndarray:
@@ -252,7 +252,7 @@ def _ols_slope(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
     if va <= _EPS:
         return np.nan
     cov = float(np.mean((a - np.mean(a)) * (b - np.mean(b))))
-    return cov / va
+    return np.where(va != 0, cov / va, np.nan)
 
 
 def _pearson(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
@@ -556,7 +556,7 @@ class IntraStateFollowRatio(SessionAggregationOperator):
             den = float(np.sum(xe))
             if den <= _EPS:
                 return np.nan
-            return float(np.sum(xl)) / den
+            return np.where(den != 0, float(np.sum(xl)) / den, np.nan)
 
         return _follow_pooled(x, state, target, lb, wd, _ratio)
 
@@ -723,7 +723,7 @@ class IntraStateDwellStats(SessionAggregationOperator):
                 if target_state is None:
                     return 1.0
                 target_bars = int(np.sum(finite & (vals == target_state)))
-                return float(target_bars) / float(valid_count)
+                return np.where(float(valid_count) != 0, float(target_bars) / float(valid_count), np.nan)
             lengths = _dwell_runs(vals, times, target_state)
             if lengths.size == 0:
                 return np.nan
@@ -735,7 +735,7 @@ class IntraStateDwellStats(SessionAggregationOperator):
                 mean = float(np.mean(lengths))
                 if mean <= _EPS:
                     return np.nan
-                return float(np.std(lengths)) / mean
+                return np.where(mean != 0, float(np.std(lengths)) / mean, np.nan)
             return float(lengths[-1])  # last
 
         return daily_agg(state, _kernel, min_finite=1)
@@ -793,11 +793,11 @@ class IntraStateTransitionEntropy(SessionAggregationOperator):
             total = float(T.sum())
             if total <= _EPS:
                 return np.nan
-            p = T / total
+            p = T / total if total != 0 else np.nan
             with np.errstate(divide="ignore", invalid="ignore"):
                 H = -float(np.sum(p[p > 0] * np.log(p[p > 0])))
             if normalize:
-                H = H / np.log(k)
+                H = np.where(np.log(k) != 0, H / np.log(k), np.nan)
             return H
 
         return daily_agg(state, _kernel, min_finite=1)

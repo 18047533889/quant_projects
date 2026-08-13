@@ -257,14 +257,14 @@ def _stationary_distribution(P: np.ndarray) -> np.ndarray | None:
     s = float(pi.sum())
     if not np.isfinite(s) or abs(s) <= _EPS:
         return None
-    pi = pi / s
+    pi = pi / s if s != 0 else np.nan
     if float(pi.min()) < -1e-8:
         return None
     pi = np.clip(pi, 0.0, None)
     s2 = float(pi.sum())
     if not np.isfinite(s2) or s2 <= _EPS:
         return None
-    return pi / s2
+    return np.where(s2 != 0, pi / s2, np.nan)
 
 
 def _observed_reachable(N_obs: np.ndarray, start: int, target: int) -> bool:
@@ -409,7 +409,7 @@ def _state_dynamics_series(
         valid_states = states_past >= 0
         counts[t] = np.bincount(states_past[valid_states], minlength=B).astype(float)
         total = float(int(valid_states.sum()))
-        pi_empirical[t] = counts[t] / max(total, 1.0)
+        pi_empirical[t] = np.where(max(total, 1.0) != 0, counts[t] / max(total, 1.0), np.nan)
         n_states_obs[t] = float(int(np.count_nonzero(counts[t])))
 
         d1_row = np.full(B, np.nan)
@@ -445,8 +445,8 @@ def _state_dynamics_series(
                     if dx.size == 0:
                         continue
                     # audit P0: D1 is a drift *rate* — divide by the lag step.
-                    d1_row[bbin] = float(np.mean(dx)) / lg
-                    d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
+                    d1_row[bbin] = float(np.mean(dx)) / lg if lg != 0 else np.nan
+                    d2_row[bbin] = np.where((2.0 * lg) != 0, float(np.mean(dx * dx)) / (2.0 * lg), np.nan)
         N_obs[t] = N
         D1[t] = d1_row
         D2[t] = d2_row
@@ -469,7 +469,7 @@ def _state_dynamics_series(
         # spectral consumers (committor, MFPT, spectral gap, entropy production).
         if mature and n_trans >= mc:
             row_sum = N.sum(axis=1)
-            P_smooth = (N + 0.5) / (row_sum[:, None] + 0.5 * B)
+            P_smooth = np.where((row_sum[:, None] + 0.5 * B) != 0, (N + 0.5) / (row_sum[:, None] + 0.5 * B), np.nan)
             P_smooth[(counts[t] > 0) & (row_sum == 0), :] = np.nan
             P[t] = P_smooth
             # audit P0: stationary measure as the left eigenvector of the
@@ -656,7 +656,7 @@ def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: i
         s = float(row.sum())
         if not np.isfinite(s) or s <= _EPS:
             continue
-        row = row / s
+        row = row / s if s != 0 else np.nan
         h = -float(np.sum(row * np.log(row)))
         out[t] = float(h / log_b)
     return out

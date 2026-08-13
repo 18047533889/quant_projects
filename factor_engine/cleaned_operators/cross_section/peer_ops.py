@@ -88,7 +88,7 @@ def _peer_weighted_mean_ex_self_row(x_row: np.ndarray, g_row: np.ndarray, w_row:
                 continue
             denom = total_w - w_row[j]
             if denom > _EPS:
-                out[j] = (total_wx - w_row[j] * x_row[j]) / denom
+                out[j] = (total_wx - w_row[j] * x_row[j]) / denom if denom != 0 else np.nan
     return out
 
 
@@ -172,7 +172,7 @@ def _rolling_regression(y: pd.DataFrame, x: pd.DataFrame, window: int, min_perio
             # so numerator and denominator share a single ddof.
             xbar = float(np.mean(b))
             denom = float(np.sum((b - xbar) ** 2))
-            out[row, col] = float(np.sum((a - np.mean(a)) * (b - xbar)) / denom)
+            out[row, col] = np.where(denom) != 0, float(np.sum((a - np.mean(a)) * (b - xbar)) / denom), np.nan)
     return _frame_like(y, out)
 
 
@@ -191,7 +191,7 @@ def _group_ex_self_mean_panel(own_ret: pd.DataFrame, group: pd.DataFrame) -> pd.
                 continue
             total = float(np.sum(x_row[idx]))
             for j in idx:
-                out[row, j] = (total - x_row[j]) / (len(idx) - 1.0)
+                out[row, j] = np.where((len(idx) - 1.0) != 0, (total - x_row[j]) / (len(idx) - 1.0), np.nan)
     return _frame_like(own_ret, out)
 
 
@@ -280,8 +280,8 @@ def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any, target
     target = vals[pos]
     below = int(np.sum(finite < target))
     equal = int(np.sum(finite == target))  # includes the target itself
-    avg_rank_zero_based = below + (equal - 1) / 2.0
-    return float(avg_rank_zero_based / (finite.size - 1))
+    avg_rank_zero_based = np.where(2.0 != 0, below + (equal - 1) / 2.0, np.nan)
+    return np.where((finite.size - 1)) != 0, float(avg_rank_zero_based / (finite.size - 1)), np.nan)
 
 
 def _group_multi_level_rank_consistency(x, group1, group2, group3):
@@ -304,7 +304,7 @@ def _group_multi_level_rank_consistency(x, group1, group2, group3):
             # sqrt(2/9) ~= 0.4714; the old sqrt(3)*sd scaling could only reach
             # ~0.1835 at the bottom.  Scale by 3/sqrt(2) for the full 0-1 range
             # and clip defensively against float round-off.
-            out[row, col] = float(np.clip(1.0 - sd * (3.0 / np.sqrt(2.0)), 0.0, 1.0))
+            out[row, col] = np.where(np.sqrt(2.0)), 0.0, 1.0)) != 0, float(np.clip(1.0 - sd * (3.0 / np.sqrt(2.0)), 0.0, 1.0)), np.nan)
     return _frame_like(x, out)
 
 

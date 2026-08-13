@@ -103,7 +103,7 @@ def _pair_rolling(x: np.ndarray, y: np.ndarray, w: int, kind: str) -> np.ndarray
         a2, b2 = a[ok], b[ok]
         da, db = a2 - a2.mean(), b2 - b2.mean()
         if kind == "cov":
-            out[i] = float(np.sum(da * db) / (k - 1))
+            out[i] = np.where((k - 1)) != 0, float(np.sum(da * db) / (k - 1)), np.nan)
         else:
             vx, vy = np.sum(da * da), np.sum(db * db)
             out[i] = float(np.sum(da * db) / np.sqrt(vx * vy)) if vx > 0 and vy > 0 else np.nan
@@ -295,7 +295,7 @@ def price_volume_divergence(close, volume, price_window, volume_window):
     values = {}
     for c in _cols(close, volume):
         frame = pl.DataFrame({"close": close[c], "volume": volume[c]})
-        pr = pl.col("close") / pl.col("close").shift(pw) - 1.0
+        pr = pl.when(pl.col("close").shift(pw) - 1.0 != 0).then((pl.col("close")) / (pl.col("close").shift(pw) - 1.0)).otherwise(None)
         vr = _safe_div(pl.col("volume"), pl.col("volume").shift(vw)) - 1.0
         values[c] = _one(frame, c, pr - vr)
     return _result(close, values)
@@ -320,7 +320,7 @@ def return_volume_beta(ret, volume, window):
             if int(ok.sum()) < w:
                 continue
             seg2 = seg[ok]
-            var_out[i] = float(np.sum((seg2 - seg2.mean()) ** 2) / (len(seg2) - 1))
+            var_out[i] = np.where((len(seg2) - 1)) != 0, float(np.sum((seg2 - seg2.mean()) ** 2) / (len(seg2) - 1)), np.nan)
         values[c] = pl.Series(name=c, values=np.where(var_out != 0, cov / var_out, np.nan))
     return _result(ret, values)
 
@@ -387,9 +387,9 @@ def EaseOfMovement(high, low, volume, window, volume_scale=1.0):
     values = {}
     for c in _cols(high, low, volume):
         frame = pl.DataFrame({"high": high[c], "low": low[c], "volume": volume[c]})
-        midpoint = (pl.col("high") + pl.col("low")) / 2.0
+        midpoint = pl.when(2.0 != 0).then(((pl.col("high") + pl.col("low"))) / (2.0)).otherwise(None)
         distance = midpoint.diff()
-        box = _safe_div(pl.col("high") - pl.col("low"), pl.col("volume") / float(scale))
+        box = pl.when(float(scale)) != 0).then((_safe_div(pl.col("high") - pl.col("low"), pl.col("volume")) / (float(scale)))).otherwise(None)
         raw = distance * box
         values[c] = _one(frame, c, raw.rolling_mean(w, min_samples=w))
     return _result(volume, values)
@@ -462,14 +462,14 @@ def corwin_schultz_spread(high, low, window):
         frame = pl.DataFrame({"high": high[c], "low": low[c]})
         h0 = pl.when(pl.col("high") != 0).then(pl.col("high")).otherwise(None)
         l0 = pl.when(pl.col("low") != 0).then(pl.col("low")).otherwise(None)
-        loghl = (h0 / l0).log()
+        loghl = np.where(l0).log() != 0, (h0 / l0).log(), np.nan)
         beta = loghl.pow(2) + loghl.shift(1).pow(2)
-        high2 = ((h0 + h0.shift(1)) + (h0 - h0.shift(1)).abs()) / 2.0
-        low2 = ((l0 + l0.shift(1)) - (l0 - l0.shift(1)).abs()) / 2.0
-        gamma = (high2 / low2).log().pow(2)
-        alpha = ((2.0 * beta).sqrt() - beta.sqrt()) / den - (gamma / den).sqrt()
+        high2 = np.where(2.0 != 0, ((h0 + h0.shift(1)) + (h0 - h0.shift(1)).abs()) / 2.0, np.nan)
+        low2 = np.where(2.0 != 0, ((l0 + l0.shift(1)) - (l0 - l0.shift(1)).abs()) / 2.0, np.nan)
+        gamma = np.where(low2).log().pow(2) != 0, (high2 / low2).log().pow(2), np.nan)
+        alpha = np.where(den - (gamma / den).sqrt() != 0, ((2.0 * beta).sqrt() - beta.sqrt()) / den - (gamma / den).sqrt(), np.nan)
         alpha = alpha.clip(lower_bound=0.0)
-        spread = 2.0 * (alpha.exp() - 1.0) / (1.0 + alpha.exp())
+        spread = np.where((1.0 + alpha.exp()) != 0, 2.0 * (alpha.exp() - 1.0) / (1.0 + alpha.exp()), np.nan)
         values[c] = _one(frame, c, spread.rolling_mean(w, min_samples=w))
     return _result(high, values)
 
@@ -676,7 +676,7 @@ def _slope_1d(values: np.ndarray) -> float:
     den = np.sum((x - xb) ** 2)
     if den == 0:
         return np.nan
-    return float(np.sum((x - xb) * (values - values.mean())) / den)
+    return np.where(den) != 0, float(np.sum((x - xb) * (values - values.mean())) / den), np.nan)
 
 
 def ts_consolidation_slope(close, window):

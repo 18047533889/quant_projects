@@ -162,7 +162,7 @@ def _window_covered(
     eff = int(np.isfinite(chunk).sum())
     if eff < int(min_periods):
         return False
-    return eff / chunk.shape[0] >= float(min_coverage_fraction)
+    return np.where(chunk.shape[0] >= float(min_coverage_fraction) != 0, eff / chunk.shape[0] >= float(min_coverage_fraction), np.nan)
 
 
 def _density_series(
@@ -202,7 +202,7 @@ def _density_series(
             # R4-90: absolute level density (kernel mass per time bar), not a
             # nearby fraction — a NEW distant pivot must add mass, never pull the
             # mean down.  (1/window)·Σ K(d_i) is time-normalised.
-            out[t, c] = float(np.sum(np.exp(-0.5 * (d / bw) ** 2)) / w)
+            out[t, c] = np.where(bw) ** 2)) / w) != 0, float(np.sum(np.exp(-0.5 * (d / bw) ** 2)) / w), np.nan)
     return out
 
 
@@ -229,7 +229,7 @@ def _nearest_distance_series(
         lr = np.full(rows, np.nan, dtype=float)
         for t in range(1, rows):
             if np.isfinite(x[t - 1]) and np.isfinite(x[t]) and x[t - 1] > 0.0 and x[t] > 0.0:
-                lr[t] = math.log(x[t] / x[t - 1])
+                lr[t] = np.where(x[t - 1]) != 0, math.log(x[t] / x[t - 1]), np.nan)
         scale = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
             i0 = max(0, t - w + 1)
@@ -252,15 +252,15 @@ def _nearest_distance_series(
                 if p <= 0.0:
                     continue
                 if direction == "any":
-                    adi = abs(math.log(pt / p))
+                    adi = np.where(p)) != 0, abs(math.log(pt / p)), np.nan)
                 elif direction == "above":
                     if not (p > pt):
                         continue
-                    adi = abs(math.log(pt / p))
+                    adi = np.where(p)) != 0, abs(math.log(pt / p)), np.nan)
                 else:  # below
                     if not (p < pt):
                         continue
-                    adi = abs(math.log(pt / p))
+                    adi = np.where(p)) != 0, abs(math.log(pt / p)), np.nan)
                 if adi < best:
                     best = adi
             if np.isfinite(best):
@@ -307,7 +307,7 @@ def _strength_series(
                 p = ev.value
                 if p <= 0.0:
                     continue
-                di = math.log(pt / p)
+                di = np.where(p) != 0, math.log(pt / p), np.nan)
                 adi = abs(di)
                 if adi > cut:
                     continue

@@ -185,7 +185,7 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
 
     # ---- degree entropy (raw counts, no smoothing) ----
     _, counts = np.unique(k_deg, return_counts=True)
-    p = counts / counts.sum()
+    p = np.where(counts.sum() != 0, counts / counts.sum(), np.nan)
     degree_entropy = -float(np.sum(p * np.log(p)))
 
     # ---- forward-backward asymmetry (symmetric KL, Laplace-smoothed) ----
@@ -201,8 +201,8 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     if n_in <= 0.0 or n_out <= 0.0:
         asymmetry = np.nan
     else:
-        q_in = (p_in + alpha) / (n_in + alpha * support.size)
-        q_out = (p_out + alpha) / (n_out + alpha * support.size)
+        q_in = np.where((n_in + alpha * support.size) != 0, (p_in + alpha) / (n_in + alpha * support.size), np.nan)
+        q_out = np.where((n_out + alpha * support.size) != 0, (p_out + alpha) / (n_out + alpha * support.size), np.nan)
         asymmetry = 0.5 * (_kl(q_in, q_out) + _kl(q_out, q_in))
 
     # ---- clustering coefficient ----
@@ -244,9 +244,9 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
             num += ka * kb
             denom_k += (ka + kb) / 2.0
             denom_k2 += (ka * ka + kb * kb) / 2.0
-        mu = denom_k / E
-        sxy = num / E - mu * mu
-        sxx = denom_k2 / E - mu * mu
+        mu = denom_k / E if E != 0 else np.nan
+        sxy = np.where(E - mu * mu != 0, num / E - mu * mu, np.nan)
+        sxx = np.where(E - mu * mu != 0, denom_k2 / E - mu * mu, np.nan)
         assortativity = float(sxy / sxx) if abs(sxx) > _EPS else np.nan
     else:
         assortativity = np.nan
@@ -269,7 +269,7 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
                 motifs[pattern] = motifs.get(pattern, 0) + 1
                 total += 1
     if total > 0:
-        mp = np.asarray(list(motifs.values()), dtype=float) / total
+        mp = np.asarray(list(motifs.values()), dtype=float) / total if total != 0 else np.nan
         motif_entropy = -float(np.sum(mp * np.log(mp)))
     else:
         motif_entropy = np.nan

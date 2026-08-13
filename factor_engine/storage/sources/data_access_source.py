@@ -10,6 +10,7 @@ import time
 import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, field as _dc_field
+from threading import RLock
 from typing import Any, Iterable
 
 import pandas as pd
@@ -805,6 +806,8 @@ class DataAccessSource(DataSource):
         # R20-111：restore 失败 / 检测到运行态被破坏时置位。production 下任何
         # 后续读操作 ``_assert_healthy`` 直接 abort；research 至少记 warning。
         self._corrupted_state: str | None = None
+        # 并发修复：保护 cache/字节计数/snapshot 更新的读写锁。
+        self._cache_lock = RLock()
 
     def _validate_semantic_contract(self) -> None:
         """Apply COS panel/event and required-filter policy at construction.
@@ -1053,21 +1056,7 @@ class DataAccessSource(DataSource):
     def _resolve_catalog_fields(self, names: list[str]) -> dict[str, Any] | None:
         """Resolve logical fields via ``store.resolve_fields`` (SemanticFieldCatalog).
 
-        Returns ``dict[logical_name, SemanticField]`` for the names the catalog
-        actually resolved, or ``None`` when the catalog itself is unavailable and
-        the caller should fall back to the FE FIELD_REGISTRY for ALL names.
-
-        Round-7 P1 partial resolution: a clean per-name catalog miss skips only
-        that name (the caller falls back to the FE registry per-name below), it
-        does NOT fail the whole batch.  Results are keyed by logical name — never
-        a positional ``zip``, which would silently truncate/reorder if the catalog
-        result ever diverged from the request order (round-7 P0).
-
-        P0-12 error hardening: catalog *failures* are classified —
-          * not configured / corrupt / unavailable are FATAL in production
-            (``strict_unknown_fields=True``) and warn + fall back in research;
-          * a genuine "field not found in catalog" (clean miss) falls through to
-            FIELD_REGISTRY so the registry stays the compatibility source of truth.
+        N+1 查询修复：批量失败后，合并 missing_names 重试一次批量查询，避免逐字段循环。
         """
         try:
             from data_access.read.semantic_catalog import get_semantic_catalog
@@ -1100,48 +1089,67 @@ class DataAccessSource(DataSource):
                         catalog_by_name[str(field_name)] = row
                 if len(catalog_by_name) >= len(names):
                     return catalog_by_name
-                # 部分命中：命中的直接用，未命中的逐字段补（保留 clean-miss 语义）。
+                # 部分命中：命中的直接用，未命中的**合并为一次批量重试**（N+1 修复）
                 missing_names = [n for n in names if n not in catalog_by_name]
             else:
                 missing_names = list(names)
-            for name in missing_names:
+
+            # N+1 修复：合并 missing_names 重试一次批量查询
+            if missing_names:
                 try:
-                    result = _get_store().resolve_fields([name], dataset=self.dataset)
-                except Exception as exc:
-                    if _is_clean_catalog_miss(exc):
+                    retry_result = _get_store().resolve_fields(missing_names, dataset=self.dataset)
+                    retry_rows = list(retry_result) if retry_result else []
+                    for row in retry_rows:
+                        field_name = getattr(row, "name", None) or getattr(row, "logical_name", None)
+                        if field_name and field_name in missing_names:
+                            catalog_by_name[str(field_name)] = row
+                    # 批量重试后仍未命中的，再逐字段处理（记录 clean miss）
+                    still_missing = [n for n in missing_names if n not in catalog_by_name]
+                    for name in still_missing:
                         logger.debug(
-                            "semantic catalog clean miss dataset=%s field=%s: %s",
-                            self.dataset, name, exc,
+                            "semantic catalog clean miss after batch retry dataset=%s field=%s",
+                            self.dataset, name,
                         )
-                        continue
-                    self._raise_or_fallback(
-                        _catalog_resolution_error_kind(exc), exc, "semantic catalog resolution failed"
-                    )
-                    continue
-                if result is None:
-                    continue
-                try:
-                    resolved = list(result)
-                except TypeError:
-                    self._raise_or_fallback(
-                        CatalogResolutionError,
-                        TypeError(
-                            f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
-                        ),
-                        "semantic catalog resolution returned a non-iterable",
-                    )
-                    continue
-                if len(resolved) != 1:
-                    self._raise_or_fallback(
-                        CatalogResolutionError,
-                        ValueError(
-                            f"catalog resolve_fields returned {len(resolved)} rows for one "
-                            f"request field={name!r} dataset={self.dataset!r}"
-                        ),
-                        "semantic catalog resolution length mismatch",
-                    )
-                    continue
-                catalog_by_name[name] = resolved[0]
+                except Exception as exc:
+                    # 批量重试失败：回退逐字段（保留原错误分类语义）
+                    for name in missing_names:
+                        try:
+                            result = _get_store().resolve_fields([name], dataset=self.dataset)
+                        except Exception as inner_exc:
+                            if _is_clean_catalog_miss(inner_exc):
+                                logger.debug(
+                                    "semantic catalog clean miss dataset=%s field=%s: %s",
+                                    self.dataset, name, inner_exc,
+                                )
+                                continue
+                            self._raise_or_fallback(
+                                _catalog_resolution_error_kind(inner_exc), inner_exc, "semantic catalog resolution failed"
+                            )
+                            continue
+                        if result is None:
+                            continue
+                        try:
+                            resolved = list(result)
+                        except TypeError:
+                            self._raise_or_fallback(
+                                CatalogResolutionError,
+                                TypeError(
+                                    f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
+                                ),
+                                "semantic catalog resolution returned a non-iterable",
+                            )
+                            continue
+                        if len(resolved) != 1:
+                            self._raise_or_fallback(
+                                CatalogResolutionError,
+                                ValueError(
+                                    f"catalog resolve_fields returned {len(resolved)} rows for one "
+                                    f"request field={name!r} dataset={self.dataset!r}"
+                                ),
+                                "semantic catalog resolution length mismatch",
+                            )
+                            continue
+                        catalog_by_name[name] = resolved[0]
             return catalog_by_name
         # 批量不可用（catalog 层整体异常已 fallback）→ 旧逐字段路径。
         catalog_by_name = {}
@@ -1791,51 +1799,61 @@ class DataAccessSource(DataSource):
     def refresh_snapshot(self, *, force: bool = False) -> str | None:
         """proactive 快照刷新（TTL 内短路）。
 
-        **优先走廉价 manifest token**（``store.manifest_version``），避免每隔 TTL
-        对整个 dataset 做昂贵 ``describe_dataset`` 再执行一次实际 read；只有没有
-        manifest 时才回退 describe。返回最近一次的数据快照身份（生产路径只消费
-        这里的缓存失效副作用）。
+        并发修复：用 _cache_lock 保护 snapshot 检查和更新，避免多线程同时触发昂贵的 describe_dataset。
         """
         self._assert_open()
         now = time.monotonic()
+
+        # 快速路径：TTL 内短路（无锁检查）
         if (
             not force
             and self._data_snapshot_id is not None
             and now - self._snapshot_checked_at < self._snapshot_ttl_seconds
         ):
             return self._data_snapshot_id
-        store = _get_store()
-        token = self._query_scoped_snapshot_token(store)
-        if token is not None:
-            # 廉价路径：manifest 版本变了才清缓存（token 与真实 snapshot id 分开跟踪）
-            if self._manifest_token is not None and token != self._manifest_token:
-                logger.info(
-                    "data_access manifest version changed dataset=%s old=%s new=%s; clearing caches",
+
+        # 需要刷新：获取锁避免多线程重复查询
+        with self._cache_lock:
+            # Double-check: 可能另一个线程已经刷新
+            if (
+                not force
+                and self._data_snapshot_id is not None
+                and now - self._snapshot_checked_at < self._snapshot_ttl_seconds
+            ):
+                return self._data_snapshot_id
+
+            store = _get_store()
+            token = self._query_scoped_snapshot_token(store)
+            if token is not None:
+                # 廉价路径：manifest 版本变了才清缓存（token 与真实 snapshot id 分开跟踪）
+                if self._manifest_token is not None and token != self._manifest_token:
+                    logger.info(
+                        "data_access manifest version changed dataset=%s old=%s new=%s; clearing caches",
+                        self.dataset,
+                        self._manifest_token,
+                        token,
+                    )
+                    self._clear_cache_locked(reset_snapshot=False)
+                self._manifest_token = token
+            else:
+                # 无 manifest：回退全量 describe（旧行为，仅此路径昂贵）
+                snapshot = store.describe_dataset(
                     self.dataset,
-                    self._manifest_token,
-                    token,
+                    params=dict(self.params),
+                    instrument_filter=self.instrument_filter,
                 )
-                self.clear_cache(reset_snapshot=False)
-            self._manifest_token = token
-        else:
-            # 无 manifest：回退全量 describe（旧行为，仅此路径昂贵）
-            snapshot = store.describe_dataset(
-                self.dataset,
-                params=dict(self.params),
-                instrument_filter=self.instrument_filter,
-            )
-            current = snapshot.snapshot_id
-            if self._data_snapshot_id and current != self._data_snapshot_id:
-                logger.info(
-                    "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
-                    self.dataset,
-                    self._data_snapshot_id,
-                    current,
-                )
-                self.clear_cache(reset_snapshot=False)
-            self._data_snapshot_id = current
-        self._snapshot_checked_at = now
-        return self._data_snapshot_id
+                current = snapshot.snapshot_id
+                if self._data_snapshot_id and current != self._data_snapshot_id:
+                    logger.info(
+                        "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
+                        self.dataset,
+                        self._data_snapshot_id,
+                        current,
+                    )
+                    self._clear_cache_locked(reset_snapshot=False)
+                self._data_snapshot_id = current
+            self._snapshot_checked_at = now
+            return self._data_snapshot_id
 
     def revalidate_for_long_collect(self) -> None:
         """#收官轮 P0：polars-long 受控 collect 前的快照 revalidation。
@@ -1897,6 +1915,12 @@ class DataAccessSource(DataSource):
         self._data_snapshot_id = current
 
     def clear_cache(self, *, reset_snapshot: bool = True) -> None:
+        """清理缓存（公开接口）。并发修复：加锁保护。"""
+        with self._cache_lock:
+            self._clear_cache_locked(reset_snapshot=reset_snapshot)
+
+    def _clear_cache_locked(self, *, reset_snapshot: bool = True) -> None:
+        """清理缓存的内部实现（调用方必须持有 _cache_lock）。"""
         # Round-7 P0: the field-plan cache is versioned by the semantic catalog and
         # must be dropped too, otherwise a catalog change (scale/mapping) keeps
         # serving stale normalization contracts.
@@ -1904,6 +1928,13 @@ class DataAccessSource(DataSource):
         self._column_cache.clear()
         self._panel_cache.clear()
         self._cache_bytes = 0
+        if self._lazy_bundle is not None:
+            # 资源泄漏修复：关闭旧 bundle
+            if hasattr(self._lazy_bundle, "close") and callable(self._lazy_bundle.close):
+                try:
+                    self._lazy_bundle.close()
+                except Exception:
+                    pass
         self._lazy_bundle = None
         if reset_snapshot:
             self._data_snapshot_id = None
@@ -1911,32 +1942,42 @@ class DataAccessSource(DataSource):
             self._snapshot_checked_at = 0.0
 
     def close(self) -> None:
-        self.clear_cache()
-        self._closed = True
+        """关闭 source 并释放资源。"""
+        with self._cache_lock:
+            self._clear_cache_locked()
+            self._closed = True
+
+    def __enter__(self):
+        """Context manager 支持。"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager 退出时自动关闭。"""
+        self.close()
+        return False
 
     def _put_cache(self, cache: OrderedDict[str, Any], name: str, value: Any) -> None:
         """R33-P0-030：column/panel 双表示统一 **global** 字节预算。
 
-        旧实现只从「当前这个 cache」淘汰——column cache 超预算时 panel cache 的
-        驻留字节不计入，总预算可能超限。现在 ``_cache_bytes`` 是两缓存**共用**
-        的全局记账，超预算时按 LRU 顺序从两个 cache 全局淘汰（跨表示）。
+        并发修复：用 _cache_lock 保护 cache 和 _cache_bytes 的读写。
         """
-        if name in cache:
-            self._cache_bytes -= self._series_bytes(cache[name])
-        cache[name] = value
-        cache.move_to_end(name)
-        self._cache_bytes += self._series_bytes(value)
-        # #42 先按全局字节上限淘汰（column/panel 统一 global LRU，R33-P0-030），
-        # 再按单 cache 列数上限淘汰。
-        while self._cache_bytes > self._max_cache_bytes:
-            evicted = self._evict_global_lru()
-            if evicted is None:
-                break
-            self._cache_bytes -= self._series_bytes(evicted)
-        for c in (self._column_cache, self._panel_cache):
-            while len(c) > self._max_cache_columns:
-                _, evicted = c.popitem(last=False)
+        with self._cache_lock:
+            if name in cache:
+                self._cache_bytes -= self._series_bytes(cache[name])
+            cache[name] = value
+            cache.move_to_end(name)
+            self._cache_bytes += self._series_bytes(value)
+            # #42 先按全局字节上限淘汰（column/panel 统一 global LRU，R33-P0-030），
+            # 再按单 cache 列数上限淘汰。
+            while self._cache_bytes > self._max_cache_bytes:
+                evicted = self._evict_global_lru()
+                if evicted is None:
+                    break
                 self._cache_bytes -= self._series_bytes(evicted)
+            for c in (self._column_cache, self._panel_cache):
+                while len(c) > self._max_cache_columns:
+                    _, evicted = c.popitem(last=False)
+                    self._cache_bytes -= self._series_bytes(evicted)
 
     def _evict_global_lru(self) -> Any | None:
         """跨 column/panel 的 global LRU 淘汰：整体最旧者先出（R33-P0-030）。"""
@@ -1987,10 +2028,17 @@ class DataAccessSource(DataSource):
         }
 
     def enable_lazy_scan(self, enabled: bool = True) -> None:
+        """R20-107..113 并发修复：enable_lazy_scan 不应触发共享 cache 清理。
+
+        每个 worker 线程调用 enable_lazy_scan(True) 时，因为 _lazy_scan 读的是
+        per-thread override (fallback 到 base)，第一次调用时 enabled != self._lazy_scan
+        总是成立，导致每个 worker 都清空共享 cache。正确做法：只清理调用线程自己
+        的 override，不触碰共享 cache（cache 失效由 refresh_snapshot 统一管理）。
+        """
         self._assert_open()
         enabled = bool(enabled)
-        if enabled != self._lazy_scan:
-            self.clear_cache(reset_snapshot=False)
+        # 修复：不再检查 enabled != self._lazy_scan 并清理全局 cache。
+        # per-thread override 的变更不应影响其他线程的共享缓存状态。
         self._lazy_scan = enabled
         if enabled:
             self.read_auto = True
@@ -2238,6 +2286,8 @@ class DataAccessSource(DataSource):
                     self._put_cache(self._column_cache, name, fetched[name])
                 return
 
+        # 资源泄漏修复：关闭旧 bundle 再创建新的
+        old_bundle = self._lazy_bundle
         self._lazy_bundle = build_lazy_column_bundle(
             store,
             self.dataset,
@@ -2254,6 +2304,12 @@ class DataAccessSource(DataSource):
             mode=self.read_mode,
             filters=self.semantic_filters or None,
         )
+        if old_bundle is not None and old_bundle is not self._lazy_bundle:
+            if hasattr(old_bundle, "close") and callable(old_bundle.close):
+                try:
+                    old_bundle.close()
+                except Exception:
+                    pass
         self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         fetched = self._lazy_bundle.materialize_columns(
             physical, output_names=output_names or None

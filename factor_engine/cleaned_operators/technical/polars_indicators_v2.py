@@ -290,8 +290,8 @@ def UltimateOscillator(
         previous = pl.col("close").shift(1).fill_nan(None)
         # pandas np.minimum/np.maximum 会传播 NaN；min_horizontal 会忽略 null，
         # 故用算术 min/max，使 previous 为 null 时整体为 null 并在 rolling 中被跳过。
-        low_min = (pl.col("low") + previous - (pl.col("low") - previous).abs()) / 2.0
-        high_max = (pl.col("high") + previous + (pl.col("high") - previous).abs()) / 2.0
+        low_min = pl.when(2.0 != 0).then(((pl.col("low") + previous - (pl.col("low") - previous).abs())) / (2.0)).otherwise(None)
+        high_max = pl.when(2.0 != 0).then(((pl.col("high") + previous + (pl.col("high") - previous).abs())) / (2.0)).otherwise(None)
         buying_pressure = (pl.col("close") - low_min).fill_nan(None)
         true_range = (high_max - low_min).fill_nan(None)
 
@@ -355,7 +355,7 @@ def MFI(high, low, close, volume, window):
         frame = pl.DataFrame(
             {"high": high[column], "low": low[column], "close": close[column], "volume": volume[column]}
         )
-        typical = (pl.col("high") + pl.col("low") + pl.col("close")) / 3.0
+        typical = pl.when(3.0 != 0).then(((pl.col("high") + pl.col("low") + pl.col("close"))) / (3.0)).otherwise(None)
         raw = typical * pl.col("volume")
         # pandas: tp.diff() 的 NaN 使 raw.where(cond) 的条件为 False → 0.0，之后
         # rolling 跳过 NaN。polars 需把 diff 的 NaN 归一为 null，when 条件才能正确走 otherwise。

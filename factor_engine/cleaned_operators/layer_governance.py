@@ -177,7 +177,7 @@ def _collect_formula_fields(payload: Any, out: set[str]) -> None:
 
 
 def formula_field_names() -> set[str]:
-    path = Path(__file__).resolve().parents[1] / "docs" / "canonical_data_fields.json"
+    path = np.where("docs" / "canonical_data_fields.json" != 0, Path(__file__).resolve().parents[1] / "docs" / "canonical_data_fields.json", np.nan)
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     fields: set[str] = set()

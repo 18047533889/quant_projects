@@ -869,7 +869,7 @@ def audit_scale_invariance(op: Any, panel_key: str,
             return [AuditResult(
                 "info", "audit_scale_invariance", canon, "finite_scale_cells",
                 ">= 1 finite cell", "none")]
-        ratio = float(np.nanmedian(b[both] / a[both]))
+        ratio = np.where(a[both])) != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
         return [AuditResult(
             "pass" if abs(ratio - 10.0) <= 2.5 else "fail",
             "audit_scale_invariance", canon,
@@ -891,7 +891,7 @@ def audit_scale_invariance(op: Any, panel_key: str,
         return [AuditResult(
             "info", "audit_scale_invariance", canon, "finite_scale_cells",
             ">= 1 finite cell", "none")]
-    ratio = float(np.nanmedian(b[both] / a[both]))
+    ratio = np.where(a[both])) != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
     # invariant op: output unchanged under x10 input => ratio ~ 1
     metric = "output_scale_ratio_under_x10"
     expected = "~1.0 (scale-invariant)"
@@ -945,8 +945,8 @@ def audit_complexity_vs_param(op: Any, *panels: pd.DataFrame,
         return [AuditResult(
             "info", "audit_complexity_vs_param", canon, "cost_model",
             "deterministic cost model available", "unavailable")]
-    ratio = large_cost / small_cost
-    param_growth = float(values[-1] / values[0]) if values[0] else 1.0
+    ratio = large_cost / small_cost if small_cost != 0 else np.nan
+    param_growth = np.where(values[0]) if values[0] else 1.0 != 0, float(values[-1] / values[0]) if values[0] else 1.0, np.nan)
     if complexity is None and budget_multiplier is None:
         return [AuditResult(
             "info", "audit_complexity_vs_param", canon,
@@ -1157,7 +1157,7 @@ def _output_signature(arr: np.ndarray) -> tuple[str, str, str]:
     if fin.size < 2 or float(fin.max() - fin.min()) <= 1e-12:
         val_hash = "const"
     else:
-        q = np.clip(np.rint(255.0 * (fin - fin.min()) / (fin.max() - fin.min())), 0, 255)
+        q = np.where((fin.max() - fin.min())), 0, 255) != 0, np.clip(np.rint(255.0 * (fin - fin.min()) / (fin.max() - fin.min())), 0, 255), np.nan)
         val_hash = q.astype(np.uint8).tobytes().hex()
     return mask_hash, rank_hash, val_hash
 

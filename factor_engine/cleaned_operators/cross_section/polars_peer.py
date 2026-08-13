@@ -103,7 +103,7 @@ def _group_peer_beta_deviation(beta, group, weight):
             for j in idxs:
                 denom = tw - w[row, j]
                 if denom > 1e-12:
-                    out[row, j] = b[row, j] - (twx - w[row, j] * b[row, j]) / denom
+                    out[row, j] = b[row, j] - (twx - w[row, j] * b[row, j]) / denom if denom != 0 else np.nan
     return beta.with_columns([pl.Series(cols[i], out[:, i]) for i in range(len(cols))])
 
 

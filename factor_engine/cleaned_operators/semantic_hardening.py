@@ -297,7 +297,7 @@ class DivOrNullAudited(TwoVarOperator):
     ) -> pd.DataFrame:
         eps = abs(float(epsilon))
         valid = x.notna() & y.notna() & (y.abs() > eps)
-        out = (x / y.where(valid)).where(valid)
+        out = np.where(y.where(valid)).where(valid) != 0, (x / y.where(valid)).where(valid), np.nan)
         return out.replace([np.inf, -np.inf], np.nan)
 
 

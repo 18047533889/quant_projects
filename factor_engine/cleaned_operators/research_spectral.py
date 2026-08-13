@@ -179,7 +179,7 @@ def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
             return []
         t = np.arange(seg, dtype=float)
         chunk = chunk - np.polyval(np.polyfit(t, chunk, 1), t)
-        hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg - 1.0))) if seg > 1 else np.ones(seg)
+        hann = np.where((seg - 1.0))) if seg > 1 else np.ones(seg) != 0, 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg - 1.0))) if seg > 1 else np.ones(seg), np.nan)
         X = np.fft.rfft(chunk * hann)
         Xf = X[1 : max_freq + 1]
         pwr = np.abs(Xf) ** 2
@@ -196,7 +196,7 @@ def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
             denom = P_sum[f1 - 1, f2 - 1] * S_sum[f1 + f2 - 1]
             if denom <= _EPS:
                 continue
-            b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom
+            b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom if denom != 0 else np.nan
             if np.isfinite(b2):
                 vals.append(float(b2))
     return vals
@@ -348,7 +348,7 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
         mu = tr.mean(axis=0)
         sd = tr.std(axis=0)
         sd = np.where(np.isfinite(sd) & (sd > _EPS), sd, 1.0)
-        return (tr - mu) / sd, (te - mu) / sd
+        return np.where(sd, (te - mu) / sd != 0, (tr - mu) / sd, (te - mu) / sd, np.nan)
 
     Yl_tr, Yl_te = _standardize(Ylags[:train_n], Ylags[train_n:])
     Xl_tr, Xl_te = _standardize(Xlags[:train_n], Xlags[train_n:])
@@ -385,7 +385,7 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
 
     Kr = _rbf(Yl_tr, Yl_tr, sigma_y)
     ntr = Kr.shape[0]
-    lambda_shared = 1e-3 * float(np.trace(Kr)) / ntr
+    lambda_shared = 1e-3 * float(np.trace(Kr)) / ntr if ntr != 0 else np.nan
 
     def _kridge(K_tr, target, K_te, lam):
         alpha = np.linalg.solve(K_tr + lam * np.eye(ntr), target)
@@ -409,14 +409,14 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     Kte_x = _rbf(Xl_te, Xl_tr, sigma_x)
     eta = 0.5
     scale = 1.0 + eta
-    Kf = (Kr + eta * Kx_tr) / scale
-    Kte_f = (Kte_r + eta * Kte_x) / scale
+    Kf = (Kr + eta * Kx_tr) / scale if scale != 0 else np.nan
+    Kte_f = (Kte_r + eta * Kte_x) / scale if scale != 0 else np.nan
     pred_f = _kridge(Kf, Ytr, Kte_f, lambda_shared)
     mse_f = float(np.mean((Yte - pred_f) ** 2))
 
     if mse_r <= _EPS or mse_f <= _EPS:
         return np.nan
-    return float(np.log(mse_r / mse_f))
+    return np.where(mse_f)) != 0, float(np.log(mse_r / mse_f)), np.nan)
 
 
 def _ts_kernel_granger_score(y: pd.DataFrame, x: pd.DataFrame, window: int = 120, lag: int = 2) -> pd.DataFrame:
@@ -479,7 +479,7 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
             sigma = 1.0
         Kzz = _rbf(ztr, ztr, sigma)
         Kzte = _rbf(zte, ztr, sigma)
-        lam = 1e-3 * np.trace(Kzz) / tr_idx.size
+        lam = np.where(tr_idx.size != 0, 1e-3 * np.trace(Kzz) / tr_idx.size, np.nan)
         smooth = Kzte @ np.linalg.solve(Kzz + lam * np.eye(tr_idx.size), np.eye(tr_idx.size))
         rx_all[te_idx] = x[te_idx] - smooth @ x[tr_idx]
         ry_all[te_idx] = y[te_idx] - smooth @ y[tr_idx]
@@ -512,10 +512,10 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
     # > 0 under any (non-linear) dependence.  (A true unbiased U-statistic
     # estimator is tracked separately; this canonical now measures what its
     # name claims.)
-    H = np.eye(m) - np.ones((m, m)) / m
+    H = np.eye(m) - np.ones((m, m)) / m if m != 0 else np.nan
     KxH = Kx @ H
     HKyH = H @ Ky @ H
-    hsic = float(np.trace(KxH @ HKyH)) / float((m - 1) * (m - 1))
+    hsic = np.where(float((m - 1) * (m - 1)) != 0, float(np.trace(KxH @ HKyH)) / float((m - 1) * (m - 1)), np.nan)
     return hsic if np.isfinite(hsic) else np.nan
 
 
@@ -575,7 +575,7 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
                 for j in range(i + 1, N_m):
                     if np.max(np.abs(seg_i - v[j : j + dim])) < eps:
                         count += 1
-        return 2.0 * count / (N_m * (N_m - 1))
+        return np.where((N_m * (N_m - 1)) != 0, 2.0 * count / (N_m * (N_m - 1)), np.nan)
 
     c1 = _c_integral(1)
     cm = _c_integral(m)
@@ -592,7 +592,7 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
             rptr += 1
         cnt = rptr - i
         k_count += cnt * (cnt - 1) // 2
-    triples = n * (n - 1) * (n - 2) / 6.0
+    triples = np.where(6.0 != 0, n * (n - 1) * (n - 2) / 6.0, np.nan)
     K = k_count / triples if triples > 0 else 0.0
     if K <= _EPS:
         return np.nan
@@ -604,7 +604,7 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
     )
     if sigma2 <= _EPS:
         return np.nan
-    return float(np.sqrt(n) * (cm - c1 ** m) / np.sqrt(sigma2))
+    return np.where(np.sqrt(sigma2)) != 0, float(np.sqrt(n) * (cm - c1 ** m) / np.sqrt(sigma2)), np.nan)
 
 
 def _ts_bds_statistic(x: pd.DataFrame, window: int = 250, embedding_dim: int = 2, distance_multiplier: float = 1.5) -> pd.DataFrame:
@@ -663,8 +663,8 @@ def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int, side: 
     # as 0.0.  Output log(1 + R_n), monotone in the accumulated evidence.
     logR = float("-inf")  # R_0 = 0
     for t in range(bw, n):
-        z = (v[t] - mu) / sd
-        log_lambda = shift * sign * z - shift * shift / 2.0
+        z = (v[t] - mu) / sd if sd != 0 else np.nan
+        log_lambda = np.where(2.0 != 0, shift * sign * z - shift * shift / 2.0, np.nan)
         logR = np.logaddexp(0.0, logR) + log_lambda
     return float(np.logaddexp(0.0, logR))
 

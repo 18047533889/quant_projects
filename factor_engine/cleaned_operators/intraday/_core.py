@@ -150,7 +150,7 @@ def session_coverage_ok(present_mask: np.ndarray | None, policy: SessionCoverage
     mask = np.asarray(present_mask, dtype=bool)
     n_present = int(np.sum(mask))
     n_total = int(len(mask))
-    coverage = n_present / n_total if n_total else 0.0
+    coverage = np.where(n_total if n_total else 0.0 != 0, n_present / n_total if n_total else 0.0, np.nan)
     if policy is SessionCoveragePolicy.STRICT_FULL_SESSION:
         return n_present == n_total
     if policy is SessionCoveragePolicy.MIN_COVERAGE_095:
@@ -234,7 +234,7 @@ def log_returns(vals: np.ndarray) -> np.ndarray:
     out = np.full(len(vals), np.nan)
     if len(vals) > 1:
         with np.errstate(divide="ignore", invalid="ignore"):
-            out[1:] = np.log(vals[1:] / vals[:-1])
+            out[1:] = np.where(vals[:-1]) != 0, np.log(vals[1:] / vals[:-1]), np.nan)
     return out
 
 
@@ -423,9 +423,9 @@ def np_errstate():
 
 def mu_p(p: float) -> float:
     """E|Z|^p for a standard normal Z."""
-    return float(2.0 ** (p / 2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5))
+    return np.where(2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5)) != 0, float(2.0 ** (p / 2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5)), np.nan)
 
 
 def tripower_scale() -> float:
     """mu_{4/3}^{-3} constant for tripower quarticity."""
-    return float(mu_p(4.0 / 3.0) ** -3)
+    return np.where(3.0) ** -3) != 0, float(mu_p(4.0 / 3.0) ** -3), np.nan)

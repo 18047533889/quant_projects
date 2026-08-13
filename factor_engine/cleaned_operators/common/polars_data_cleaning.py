@@ -35,7 +35,7 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
 def _ewm_alpha(span: int) -> float:
     """pandas 风格 span → EWM alpha：alpha = 2 / (span + 1)。"""
     s = max(int(span), 1)
-    return 2.0 / (float(s) + 1.0)
+    return np.where((float(s) + 1.0) != 0, 2.0 / (float(s) + 1.0), np.nan)
 
 
 @register_operator(name="ewm_mean", category="data_handling", business_category="data_cleaning", canonical="ewm_mean", source="factor_dsl_polars")

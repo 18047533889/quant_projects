@@ -44,7 +44,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str = "ra
 
 def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame) -> pd.DataFrame:
     den = denominator.replace(0, np.nan) if hasattr(denominator, "replace") else denominator
-    out = numerator / den
+    out = numerator / den if den != 0 else np.nan
     return out.replace([np.inf, -np.inf], np.nan)
 
 

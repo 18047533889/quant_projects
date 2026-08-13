@@ -165,7 +165,7 @@ def _hurst_generalized(vals: np.ndarray, q: float) -> float:
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 1e-12 else np.nan
     if not np.isfinite(r2) or r2 < _MIN_SCALING_R2:
         return np.nan
-    return float(slope) / q
+    return np.where(q != 0, float(slope) / q, np.nan)
 
 
 def _hurst_series(x2d: np.ndarray, window: int, q: float) -> np.ndarray:

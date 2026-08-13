@@ -90,7 +90,7 @@ def _state_since_kernel(
             if mode == "sum":
                 out[row, col] = acc
             elif mode == "mean":
-                out[row, col] = acc / float(cnt)
+                out[row, col] = np.where(float(cnt) != 0, acc / float(cnt), np.nan)
             elif mode == "count":
                 out[row, col] = float(cnt)
             else:  # last
@@ -281,7 +281,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
             if direction == 0:
                 extent[row] = 0.0
             else:
-                extent[row] = (p / origin - 1.0) / threshold
+                extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
             continue
         if direction == 1:
             if p > extreme:
@@ -292,7 +292,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
                 origin = extreme
                 extreme = p
             state[row] = float(direction)
-            extent[row] = (p / origin - 1.0) / threshold
+            extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
             continue
         # direction == -1
         if p < extreme:
@@ -303,7 +303,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
             origin = extreme
             extreme = p
         state[row] = float(direction)
-        extent[row] = (p / origin - 1.0) / threshold
+        extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
     return state, extent
 
 
@@ -482,16 +482,16 @@ class StateSinceTrendTstat(SeriesOperator):
                 if denom <= 0.0:
                     out[row, col] = np.nan
                     continue
-                b = (n * Ssy - Ss * Sy) / denom
-                a = (Sy - b * Ss) / n
+                b = (n * Ssy - Ss * Sy) / denom if denom != 0 else np.nan
+                a = (Sy - b * Ss) / n if n > 0 else np.nan
                 sse = Syy - a * Sy - b * Ssy
                 if sse < 0.0:
                     sse = 0.0
-                mse = sse / (n - 2.0) if n > 2.0 else np.nan
+                mse = np.where((n - 2.0) if n > 2.0 else np.nan != 0, sse / (n - 2.0) if n > 2.0 else np.nan, np.nan)
                 if not np.isfinite(mse) or mse <= 0.0:
                     out[row, col] = np.nan
                     continue
-                se_b = np.sqrt(mse / (Ss2 - Ss * Ss / n))
+                se_b = np.where((Ss2 - Ss * Ss / n)) != 0, np.sqrt(mse / (Ss2 - Ss * Ss / n)), np.nan)
                 out[row, col] = b / (se_b + _EPS)
         return frame_like(x, out)
 

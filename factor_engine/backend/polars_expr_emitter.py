@@ -1243,6 +1243,9 @@ def _try_ts_pair_from_base_columns(
     schema = set(base.collect_schema().names())
     if left_name not in schema or right_name not in schema:
         return None
+    # Define column references
+    lcol = pl.col(left_name)
+    rcol = pl.col(right_name)
     # pandas rolling pair stats treat ±Inf as missing (the same contract as
     # single-column rolling aggregations); drop Inf/NaN so a single Inf row
     # cannot poison the whole polars window.

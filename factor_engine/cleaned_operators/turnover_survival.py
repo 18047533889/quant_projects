@@ -183,7 +183,7 @@ def _column_stats(
         old_mass[t] = float(suf[0])
         if float(suf[0]) > _MAX_OLD_MASS:
             continue
-        wn = w / total
+        wn = w / total if total != 0 else np.nan
 
         # Zero-weight rows carry NaN prices; ``0 * NaN == NaN`` would poison
         # the weighted mean, so evaluate over a masked price vector.

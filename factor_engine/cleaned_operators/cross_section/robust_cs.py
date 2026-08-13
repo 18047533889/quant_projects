@@ -351,7 +351,7 @@ def _cs_robust_mahalanobis_mad(*features):
         good = scale > _EPS
         if not np.any(good):
             continue
-        z = (Xv[:, good] - center[good]) / scale[good]
+        z = np.where(scale[good] != 0, (Xv[:, good] - center[good]) / scale[good], np.nan)
         d = np.sqrt(np.sum(z * z, axis=1))
         out[row, valid] = d
     return _frame_like(features[0], out)
@@ -484,7 +484,7 @@ def _cs_residual_percentile(resid: pd.DataFrame) -> pd.DataFrame:
         if valid.sum() < 2:
             continue
         order = np.argsort(np.argsort(a[valid]))
-        out[row, valid] = order / (valid.sum() - 1.0)
+        out[row, valid] = np.where((valid.sum() - 1.0) != 0, order / (valid.sum() - 1.0), np.nan)
     return _frame_like(resid, out)
 
 

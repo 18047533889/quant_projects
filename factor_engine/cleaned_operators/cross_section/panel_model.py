@@ -471,7 +471,7 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
     mu = Xv.mean(axis=0)
     sd = np.std(Xv, axis=0)
     sd = np.where(sd > _EPS, sd, 1.0)
-    Xs = (Xv - mu) / sd
+    Xs = (Xv - mu) / sd if sd != 0 else np.nan
     if method == "pcr":
         # M-022: a single predictor (p=1) cannot be PCA-compressed —
         # ``PCAState`` requires >= 2 active features.  Degrade to a legal
@@ -482,7 +482,7 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
             beta = fit_linear_model_checked(design, yv)
             if beta is None:
                 return np.nan
-            z = (x_cur - mu) / sd
+            z = (x_cur - mu) / sd if sd != 0 else np.nan
             return float(beta[0] + beta[1:] @ z)
         # M-021: PCR is a REGRESSION — allow k <= p (every component).
         pca = _pca_svd(Xs, min(int(n_components), Xs.shape[1]), rank_policy="regression")
@@ -492,13 +492,13 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
         Xa = Xs[:, pca["active"]]
         score = pca["loadings"] @ Xa.T
         beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(score.shape[1]), score.T]), yv, rcond=None)
-        za = (x_cur - mu)[pca["active"]] / sd[pca["active"]]
+        za = np.where(sd[pca["active"]] != 0, (x_cur - mu)[pca["active"]] / sd[pca["active"]], np.nan)
         s = pca["loadings"] @ za
         return float(beta[0] + beta[1:] @ s)
     if method == "pls":
-        return _pls1_predict(Xs, yv, int(n_components), (x_cur - mu) / sd)
+        return np.where(sd) != 0, _pls1_predict(Xs, yv, int(n_components), (x_cur - mu) / sd), np.nan)
     if method == "enet":
-        return _enet_predict(Xs, yv, float(alpha), float(l1_ratio), (x_cur - mu) / sd)
+        return np.where(sd) != 0, _enet_predict(Xs, yv, float(alpha), float(l1_ratio), (x_cur - mu) / sd), np.nan)
     raise ValueError(f"unknown model: {method}")
 
 
@@ -528,13 +528,13 @@ def _pls1_predict(X: np.ndarray, y: np.ndarray, n_components: int, x_new: np.nda
         nw = np.linalg.norm(w)
         if nw <= _EPS:
             break
-        w = w / nw
+        w = w / nw if nw != 0 else np.nan
         t = Xc @ w
         tt = float(np.dot(t, t))
         if tt <= _EPS:
             break
-        p = (Xc.T @ t) / tt
-        q = float(np.dot(t, yc)) / tt
+        p = (Xc.T @ t) / tt if tt != 0 else np.nan
+        q = float(np.dot(t, yc)) / tt if tt != 0 else np.nan
         t_new = float(np.dot(x_resid, w))
         pred += t_new * q
         # P0-37: deflate the new sample with the same loading ``p`` used to
@@ -565,8 +565,8 @@ def _enet_predict(X: np.ndarray, y: np.ndarray, alpha: float, l1_ratio: float, x
         beta_old = beta.copy()
         for j in range(p):
             rj = yc - X @ beta + beta[j] * X[:, j]
-            rho = float(X[:, j] @ rj) / n
-            z = np.sign(rho) * max(abs(rho) - float(alpha) * float(l1_ratio), 0.0) / (
+            rho = float(X[:, j] @ rj) / n if n > 0 else np.nan
+            z = np.where(( != 0, np.sign(rho) * max(abs(rho) - float(alpha) * float(l1_ratio), 0.0) / (, np.nan)
                 1.0 + float(alpha) * (1.0 - float(l1_ratio))
             )
             beta[j] = z
@@ -672,7 +672,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             Xm, ym = Xc[mask], yc[mask]
             mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
-            Xs = (Xm - mu) / sd
+            Xs = (Xm - mu) / sd if sd != 0 else np.nan
             # ModelDesignGate: a rank-deficient / ill-conditioned regime design
             # fails closed (NaN) instead of returning a meaningless coefficient.
             design = np.column_stack([np.ones(len(ym)), Xs])
@@ -680,7 +680,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             # M-036: fit-quality telemetry (module-level diagnostic accessor).
             reg_tr = np.digitize(win_ms_tr[win_valid_tr], edges)
             reg_counts = np.bincount(reg_tr, minlength=nr)
-            reg_p = reg_counts / max(int(reg_counts.sum()), 1)
+            reg_p = np.where(max(int(reg_counts.sum()), 1) != 0, reg_counts / max(int(reg_counts.sum()), 1), np.nan)
             gate_entropy = float(-np.sum(reg_p[reg_p > 0] * np.log(reg_p[reg_p > 0])))
             _LAST_FIT_TELEMETRY.update({
                 "model": "regime",
@@ -695,7 +695,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             if beta is None:
                 continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
-            z = (x_cur - mu) / sd
+            z = (x_cur - mu) / sd if sd != 0 else np.nan
             out[row, col] = float(beta[0] + beta[1:] @ z)
     return _frame_like(y, out)
 
@@ -785,13 +785,13 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
                 sd = np.where(sd > _EPS, sd, 1.0)
                 # ModelDesignGate: an ill-conditioned expert design fails closed.
-                design = np.column_stack([np.ones(len(ym)), (Xm - mu) / sd])
+                design = np.where(sd]) != 0, np.column_stack([np.ones(len(ym)), (Xm - mu) / sd]), np.nan)
                 beta = fit_linear_model_checked(design, ym)
                 if beta is None:
                     preds.append(np.nan)
                     continue
                 row_cond_max = max(row_cond_max, _design_cond(design))
-                z = (x_cur - mu) / sd
+                z = (x_cur - mu) / sd if sd != 0 else np.nan
                 preds.append(float(beta[0] + beta[1:] @ z))
             valid_preds = [p for p in preds if np.isfinite(p)]
             if not valid_preds:
@@ -805,7 +805,7 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
             dist = np.abs(bin_centers - ms[row])
             dist = np.where(np.isfinite(dist), dist, np.inf)
             if not np.all(np.isinf(dist)):
-                gates = np.exp(-dist / max(float(np.std(win_ms[win_valid])), 1e-6))
+                gates = np.exp(-dist / max(float(np.std(win_ms[win_valid])), 1e-6)) if max(float(np.std(win_ms[win_valid])), 1e-6)) > 1e-10 else np.nan
                 gates = gates / max(gates.sum(), _EPS)
                 pred_arr = np.array(preds)
                 # Audit M04: a NaN expert prediction must not silently lose its
@@ -818,7 +818,7 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                     continue
                 g = gates[finite_experts]
                 p = pred_arr[finite_experts]
-                g = g / g.sum()
+                g = np.where(g.sum() != 0, g / g.sum(), np.nan)
                 out[row, col] = float(np.dot(g, p))
                 # M-036: fit-quality telemetry (module-level diagnostic accessor).
                 eff_train = int(np.sum(
@@ -902,13 +902,13 @@ def _autoencoder_error(feats, window, n_components: int = 2):
             sd = np.nanstd(sub, axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
             Xc = np.where(np.isfinite(sub), sub, mu)
-            Xs = (Xc - mu) / sd
+            Xs = (Xc - mu) / sd if sd != 0 else np.nan
             _, _, Vt = np.linalg.svd(Xs, full_matrices=False)
             r = min(rank, n_active - 1, Vt.shape[0])
             if r < 1:
                 continue
             row_active = X[row][active]
-            z = (row_active - mu) / sd
+            z = (row_active - mu) / sd if sd != 0 else np.nan
             if not np.all(np.isfinite(z)):
                 continue
             recon = Vt[:r].T @ (Vt[:r] @ z)

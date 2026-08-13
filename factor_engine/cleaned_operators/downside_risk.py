@@ -301,7 +301,7 @@ class TsTimeUnderWater(SeriesOperator):
                         peak = chunk[k]
                     running_peak[k] = peak
                 under = np.sum((chunk < running_peak) & np.isfinite(chunk))
-                out[row, col] = under / valid.size
+                out[row, col] = np.where(valid.size != 0, under / valid.size, np.nan)
         return _frame_like(x, out)
 
 
@@ -362,7 +362,7 @@ def _circular_block_permute(arr: np.ndarray, block: int, rng: np.random.Generato
     b = max(1, min(int(block), n))
     off = int(rng.integers(0, n))
     rotated = np.concatenate([arr[off:], arr[:off]])
-    blocks = [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))]
+    blocks = np.where(b)))] != 0, [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))], np.nan)
     order = list(range(len(blocks)))
     rng.shuffle(order)
     return np.concatenate([blocks[i] for i in order])[:n]
@@ -561,13 +561,13 @@ def _price_delay_model(
         return np.nan
     beta_r, *_ = np.linalg.lstsq(xr, yv, rcond=None)
     rss_r = float(np.sum((yv - xr @ beta_r) ** 2))
-    r2_r = 1.0 - rss_r / sst
+    r2_r = 1.0 - rss_r / sst if sst != 0 else np.nan
     beta_f, *_ = np.linalg.lstsq(xf, yv, rcond=None)
     rss_f = float(np.sum((yv - xf @ beta_f) ** 2))
-    r2_f = 1.0 - rss_f / sst
+    r2_f = 1.0 - rss_f / sst if sst != 0 else np.nan
     if r2_f <= 0.0:
         return np.nan
-    return max(0.0, 1.0 - r2_r / r2_f)
+    return np.where(r2_f) != 0, max(0.0, 1.0 - r2_r / r2_f), np.nan)
 
 
 @register_operator(

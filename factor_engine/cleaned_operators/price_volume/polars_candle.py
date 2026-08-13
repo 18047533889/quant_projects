@@ -130,7 +130,7 @@ def _pct_rank_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int,
         cur = arr[-1]
         prev = arr[:-1]
         # numpy 中 NaN<x 与 NaN==x 均 False，与 pandas 布尔语义一致
-        return float((np.sum(prev < cur) + 0.5 * np.sum(prev == cur)) / max(1, n - 1))
+        return np.where(max(1, n - 1)) != 0, float((np.sum(prev < cur) + 0.5 * np.sum(prev == cur)) / max(1, n - 1)), np.nan)
 
     rank = expr.rolling_map(_rank_fn, window_size=w, min_samples=w)
     if valid is not None:
@@ -509,7 +509,7 @@ def candle_gap_atr(open_, high, low, close, atr_window):
         # R4: unify ATR with the engine's Wilder definition (pandas
         # ``ewm(alpha=1/w, adjust=False, min_periods=w).mean()``), NOT a plain
         # rolling mean — one ATR object across the engine.
-        atr = tr.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w)
+        atr = pl.when(w, adjust=False, min_samples=w) != 0).then((tr.ewm_mean(alpha=1.0) / (w, adjust=False, min_samples=w))).otherwise(None)
         # round-3 audit item 16: the denominator must be ATR AS OF t-1 (excludes
         # today's High/Low/Close), so today's late-session range does not
         # retroactively weaken the morning gap.  pandas ``ewm`` carries the
@@ -528,7 +528,7 @@ def candle_body_position(open_, high, low, close):
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
-        midpoint = (pl.col("open") + pl.col("close")) / 2.0
+        midpoint = pl.when(2.0 != 0).then(((pl.col("open") + pl.col("close"))) / (2.0)).otherwise(None)
         valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
         out = _safe_div(midpoint - pl.col("low"), pl.col("high") - pl.col("low"))
         values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
@@ -554,7 +554,7 @@ def candle_inside_ratio(high, low):
         h, l = pl.col("high"), pl.col("low")
         prev = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         current = h - l
-        ratio = current / prev
+        ratio = current / prev if prev != 0 else np.nan
         inside = (h <= h.shift(1)) & (l >= l.shift(1))
         outside = (h >= h.shift(1)) & (l <= l.shift(1))
         # R4/P1-12: a shifted-up / shifted-down / gap bar is NEITHER inside NOR
@@ -676,7 +676,7 @@ def cdl_piercing(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         o, cl = pl.col("open"), pl.col("close")
         prev_o, prev_c = o.shift(1), cl.shift(1)
-        midpoint = (prev_o + prev_c) / 2.0
+        midpoint = np.where(2.0 != 0, (prev_o + prev_c) / 2.0, np.nan)
         flag = _flag((prev_c < prev_o) & (cl > o) & (o <= prev_c) & (cl > midpoint) & (cl < prev_o))
         valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
         valid = valid & valid.shift(1)
@@ -690,7 +690,7 @@ def cdl_dark_cloud_cover(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         o, cl = pl.col("open"), pl.col("close")
         prev_o, prev_c = o.shift(1), cl.shift(1)
-        midpoint = (prev_o + prev_c) / 2.0
+        midpoint = np.where(2.0 != 0, (prev_o + prev_c) / 2.0, np.nan)
         flag = -_flag((prev_c > prev_o) & (cl < o) & (o >= prev_c) & (cl < midpoint) & (cl > prev_o))
         valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
         valid = valid & valid.shift(1)
@@ -709,7 +709,7 @@ def cdl_morning_star(open_, high, low, close):
         body1 = (c1 - o1).abs()
         range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
         range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
-        midpoint2 = (o2 + c2) / 2.0
+        midpoint2 = np.where(2.0 != 0, (o2 + c2) / 2.0, np.nan)
         flag = _flag((c2 < o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl > o) & (cl > midpoint2))
         valid = _validate_ohlc(o, h, l, cl)
         valid = valid & valid.shift(1) & valid.shift(2)
@@ -728,7 +728,7 @@ def cdl_evening_star(open_, high, low, close):
         body1 = (c1 - o1).abs()
         range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
         range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
-        midpoint2 = (o2 + c2) / 2.0
+        midpoint2 = np.where(2.0 != 0, (o2 + c2) / 2.0, np.nan)
         flag = -_flag((c2 > o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl < o) & (cl < midpoint2))
         valid = _validate_ohlc(o, h, l, cl)
         valid = valid & valid.shift(1) & valid.shift(2)

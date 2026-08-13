@@ -58,7 +58,7 @@ class CumulativeReturns(SeriesOperator):
                     anchor = pv[t, c]
                     out[t, c] = 0.0
                 else:
-                    out[t, c] = pv[t, c] / anchor - 1.0
+                    out[t, c] = np.where(anchor - 1.0 != 0, pv[t, c] / anchor - 1.0, np.nan)
         return pd.DataFrame(out, index=price.index, columns=price.columns)
 
 
@@ -100,7 +100,7 @@ class MaxDrawdown(SeriesOperator):
                 cum *= 1.0 + rv[t, c]
                 if cum > peak:
                     peak = cum
-                dd[t, c] = (cum - peak) / peak
+                dd[t, c] = (cum - peak) / peak if peak != 0 else np.nan
         worst = pd.DataFrame(dd, index=returns.index, columns=returns.columns).expanding(min_periods=1).min()
         # Censor bars whose own return is missing (the drawdown state at that bar
         # is unknown) instead of silently reporting the historical record there.
@@ -142,7 +142,7 @@ class LogReturns(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         prev = x.shift(1)
-        ratio = x / prev.replace(0, np.nan)
+        ratio = np.where(prev.replace(0, np.nan) != 0, x / prev.replace(0, np.nan), np.nan)
         return np.log(ratio.replace([np.inf, -np.inf], np.nan))
 
 
@@ -163,7 +163,7 @@ class SharpeRatio(SeriesOperator):
     def _calculate_series(self, returns: pd.DataFrame, window: int = 60, **kwargs) -> pd.DataFrame:
         mean = returns.rolling(window=window, min_periods=2).mean()
         std = returns.rolling(window=window, min_periods=2).std()
-        return (mean / std.replace(0, np.nan)) * np.sqrt(252)
+        return np.where(std.replace(0, np.nan)) * np.sqrt(252) != 0, (mean / std.replace(0, np.nan)) * np.sqrt(252), np.nan)
 
 
 @register_operator(
@@ -187,7 +187,7 @@ class OpenGap(SeriesOperator):
 
     def _calculate_series(self, open_: pd.DataFrame, close: pd.DataFrame, **kwargs) -> pd.DataFrame:
         prev_close = close.shift(1)
-        return open_ / prev_close.replace(0, np.nan) - 1.0
+        return np.where(prev_close.replace(0, np.nan) - 1.0 != 0, open_ / prev_close.replace(0, np.nan) - 1.0, np.nan)
 
 
 @register_operator(
@@ -210,7 +210,7 @@ class CloseGap(SeriesOperator):
     )
 
     def _calculate_series(self, close: pd.DataFrame, open_: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return close / open_.replace(0, np.nan) - 1.0
+        return np.where(open_.replace(0, np.nan) - 1.0 != 0, close / open_.replace(0, np.nan) - 1.0, np.nan)
 
 
 # canonical=volatility backend=pandas_numpy selected=volatility source=financial/__init__.py
@@ -264,7 +264,7 @@ class VWAP(SeriesOperator):
         pv = (price * volume).where(valid)
         vol = volume.where(valid)
         den = vol.rolling(window=w, min_periods=mp).sum().replace(0, np.nan)
-        return pv.rolling(window=w, min_periods=mp).sum() / den
+        return np.where(den != 0, pv.rolling(window=w, min_periods=mp).sum() / den, np.nan)
 
 
 @register_operator(

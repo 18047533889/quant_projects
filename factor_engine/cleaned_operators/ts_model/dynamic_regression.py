@@ -238,12 +238,12 @@ def _multi_regression(
             elif stat == "resid_z":
                 if np.isfinite(ycol[row]):
                     ddof = max(design.shape[1], 1)
-                    sd = float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1))) if len(e) > ddof else np.nan
+                    sd = np.where(max(len(e) - ddof, 1))) if len(e) > ddof else np.nan != 0, float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1))) if len(e) > ddof else np.nan, np.nan)
                     if sd is not None and np.isfinite(sd) and sd > 0.0:
                         cur_xs = [x[row] for x in xcols]
                         terms = ([1.0] if add_intercept else []) + cur_xs
                         resid = float(ycol[row] - float(np.dot(terms, b)))
-                        out[row, col] = resid / sd
+                        out[row, col] = resid / sd if sd != 0 else np.nan
             elif stat in ("r2", "r2_adj"):
                 ss_res = float(np.sum(e * e))
                 # P1 (R² definition governance, versioned): ``_R2_DEFINITION ==
@@ -257,7 +257,7 @@ def _multi_regression(
                     # is fitted.  A through-the-origin (no-intercept) fit can be
                     # arbitrarily worse than predicting the mean, so R² must not
                     # be clipped to 0 — that would manufacture a false fit floor.
-                    r2 = float(1.0 - ss_res / ss_tot)
+                    r2 = np.where(ss_tot) != 0, float(1.0 - ss_res / ss_tot), np.nan)
                     if stat == "r2_adj":
                         n = len(vy)
                         # P1-88: the predictor count is the number of slope
@@ -272,7 +272,7 @@ def _multi_regression(
                         # one (regression through the origin) they are n - p.
                         # The centered SS_tot fixes the total df at n - 1.
                         denom = n - p - (1 if add_intercept else 0)
-                        out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0))
+                        out[row, col] = np.where(max(denom, 1.0)) != 0, float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0)), np.nan)
                     else:
                         out[row, col] = r2
     return frame_like(y, out)

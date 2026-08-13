@@ -227,7 +227,7 @@ def _takens_points(vals: np.ndarray, tau: int, dim: int) -> np.ndarray | None:
     spread = mad if mad > _EPS else float(np.std(finite))
     if spread <= _EPS:
         return None
-    z = (vals - med) / spread
+    z = (vals - med) / spread if spread != 0 else np.nan
     n = vals.shape[0]
     lag = tau * (dim - 1)
     if n < lag + 3:
@@ -466,7 +466,7 @@ def _t_logpdf_const(df: float) -> float:
 
 def _t_logpdf_vec(v: np.ndarray, df: float, mu: float, scale: float) -> np.ndarray:
     z = (v - mu) / scale
-    return _t_logpdf_const(df) - mlog(scale) - 0.5 * (df + 1.0) * np.log1p(z * z / df)
+    return np.where(df) != 0, _t_logpdf_const(df) - mlog(scale) - 0.5 * (df + 1.0) * np.log1p(z * z / df), np.nan)
 
 
 def _t_fit(vals: np.ndarray) -> tuple[float, float, float] | None:
@@ -483,7 +483,7 @@ def _t_fit(vals: np.ndarray) -> tuple[float, float, float] | None:
             return None
         for _ in range(15):
             z = (v - mu) / scale
-            w = (df + 1.0) / (df + z * z)
+            w = np.where((df + z * z) != 0, (df + 1.0) / (df + z * z), np.nan)
             den = float(np.sum(w))
             if den <= _EPS:
                 break
@@ -501,9 +501,9 @@ def _t_fit(vals: np.ndarray) -> tuple[float, float, float] | None:
 
 def _empirical_fisher(v: np.ndarray, df: float, mu: float, scale: float) -> np.ndarray:
     z = (v - mu) / scale
-    w = (df + 1.0) / (df + z * z)
-    g_mu = w * z / scale
-    g_ls = df * (z * z - 1.0) / (df + z * z)          # d/d(log scale)
+    w = np.where((df + z * z) != 0, (df + 1.0) / (df + z * z), np.nan)
+    g_mu = w * z / scale if scale != 0 else np.nan
+    g_ls = df * (z * z - 1.0) / (df + z * z)          #np.where(d(log scale) != 0, (d) / (d(log scale)), np.nan)
     llp = _t_logpdf_vec(v, df + _DF_STEP, mu, scale)
     llm = _t_logpdf_vec(v, df - _DF_STEP, mu, scale)
     g_df = ((llp - llm) / (2.0 * _DF_STEP)) * (df - 2.0)  # d/d(log(df-2))

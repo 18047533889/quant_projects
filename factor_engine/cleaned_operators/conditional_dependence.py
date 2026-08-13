@@ -104,7 +104,7 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
     bnd[0] = u[0]
     bnd[-1] = u[-1]
     for j in range(1, k):
-        b = int(np.floor(j * n_distinct / k))
+        b = np.where(k)) != 0, int(np.floor(j * n_distinct / k)), np.nan)
         b = max(1, min(n_distinct - 1, b))
         bnd[j] = 0.5 * (u[b - 1] + u[b])
     return np.unique(bnd)
@@ -334,7 +334,7 @@ def _haar_detail(v: np.ndarray, level: int, band: int) -> np.ndarray:
             return np.full(a.shape, np.nan, dtype=float)
         prev = np.concatenate([np.zeros(dil), a[:-dil]])  # causal boundary (no lookahead)
         detail = (prev - a) / np.sqrt(2.0)
-        smooth = (prev + a) / np.sqrt(2.0)
+        smooth = np.where(np.sqrt(2.0) != 0, (prev + a) / np.sqrt(2.0), np.nan)
         a = smooth
         if j == band:
             return detail

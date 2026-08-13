@@ -107,7 +107,7 @@ def _activity_clock_kernel(
         a = activity[s]
         if not np.isfinite(a) or a < 0.0:
             continue
-        scaled[s] = a / scale
+        scaled[s] = a / scale if scale != 0 else np.nan
     k = np.full(rows, np.nan, dtype=float)
     start = 0 if include_current else 1
     for r in range(rows):
@@ -257,7 +257,7 @@ def _ts_max_drawdown_activity_cost(
             if total_act <= _EPS:
                 continue
             running_max = np.maximum.accumulate(seg)
-            dd = seg / running_max - 1.0
+            dd = np.where(running_max - 1.0 != 0, seg / running_max - 1.0, np.nan)
             trough = int(np.argmin(dd))
             if dd[trough] >= -1e-12:
                 # No drawdown within the window is a VALID state: cost is 0,
@@ -271,7 +271,7 @@ def _ts_max_drawdown_activity_cost(
             pre = seg[: trough + 1]
             peak = int(len(pre) - 1 - int(np.argmax(pre[::-1])))
             seg_act = float(act[peak : trough + 1].sum())
-            out[r, c] = float(seg_act / total_act)
+            out[r, c] = np.where(total_act) != 0, float(seg_act / total_act), np.nan)
     return _frame_like(x, out)
 
 

@@ -102,16 +102,16 @@ def _distance_corr(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
         return np.nan, np.nan
     A = _double_center(a)
     B = _double_center(b)
-    dcov2 = float(np.sum(A * B)) / float(n * n)
-    dvar_x2 = float(np.sum(A * A)) / float(n * n)
-    dvar_y2 = float(np.sum(B * B)) / float(n * n)
+    dcov2 = np.where(float(n * n) != 0, float(np.sum(A * B)) / float(n * n), np.nan)
+    dvar_x2 = np.where(float(n * n) != 0, float(np.sum(A * A)) / float(n * n), np.nan)
+    dvar_y2 = np.where(float(n * n) != 0, float(np.sum(B * B)) / float(n * n), np.nan)
     if dvar_x2 <= 1e-12 or dvar_y2 <= 1e-12:
         return np.nan, np.nan
     dcov = float(np.sqrt(max(dcov2, 0.0)))
     denom = float(np.sqrt(np.sqrt(dvar_x2) * np.sqrt(dvar_y2)))
     if denom <= 1e-12:
         return np.nan, dcov
-    dcorr = float(min(1.0, max(0.0, dcov / denom)))
+    dcorr = np.where(denom))) != 0, float(min(1.0, max(0.0, dcov / denom))), np.nan)
     return dcorr, dcov
 
 
@@ -236,7 +236,7 @@ def _quantile_hist_mi(
     cont = np.zeros((bins, bins), dtype=np.float64)
     for i in range(n):
         cont[ba[i], bb[i]] += 1.0
-    p = cont / n
+    p = cont / n if n > 0 else np.nan
     p_row = p.sum(axis=1, keepdims=True)
     p_col = p.sum(axis=0, keepdims=True)
     mi = 0.0
@@ -247,7 +247,7 @@ def _quantile_hist_mi(
     if bias_correction:
         r_occ = int((p_row[:, 0] > 0).sum())
         c_occ = int((p_col[0, :] > 0).sum())
-        mi = max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n))
+        mi = np.where((2.0 * n)) != 0, max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n)), np.nan)
     hx = -float(np.sum(p_row * np.log(np.where(p_row > 0, p_row, 1.0))))
     hy = -float(np.sum(p_col * np.log(np.where(p_col > 0, p_col, 1.0))))
     # A (near-)constant marginal carries no information: fail closed to NaN.
@@ -258,7 +258,7 @@ def _quantile_hist_mi(
     denom = min(hx, hy)
     if denom <= 1e-12:
         return np.nan
-    return float(min(1.0, max(0.0, mi / denom)))
+    return np.where(denom))) != 0, float(min(1.0, max(0.0, mi / denom))), np.nan)
 
 
 @register_operator(
@@ -425,7 +425,7 @@ def _fractional_tail_membership(vals: np.ndarray, quantile: float, direction: st
         n_strict = float(weights.sum())
         # Clamp to [0, 1]: under a pathological quantile rank the boundary group
         # may not span the whole gap to the target (treat it fail-closed).
-        fraction = float(np.clip((target - n_strict) / n_boundary, 0.0, 1.0))
+        fraction = np.where(n_boundary, 0.0, 1.0)) != 0, float(np.clip((target - n_strict) / n_boundary, 0.0, 1.0)), np.nan)
         weights[boundary] = fraction
     return weights
 
@@ -455,7 +455,7 @@ def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_ta
     if denom < max(2, int(min_tail_count)):
         return np.nan
     joint = float(np.sum(x_w * y_w))
-    return joint / denom
+    return np.where(denom != 0, joint / denom, np.nan)
 
 
 @register_operator(

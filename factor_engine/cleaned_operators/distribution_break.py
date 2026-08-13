@@ -94,10 +94,10 @@ def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:
     dxy = _euclidean_pairs(X, Y)
     dxx = _euclidean_pairs(X, X)
     dyy = _euclidean_pairs(Y, Y)
-    first = float(np.sum(dxy)) / (m * n)
+    first = np.where((m * n) != 0, float(np.sum(dxy)) / (m * n), np.nan)
     # U-stat: exclude the diagonal (self-distances); denominator m*(m-1).
-    second = float(np.sum(dxx) - np.trace(dxx)) / (m * (m - 1))
-    third = float(np.sum(dyy) - np.trace(dyy)) / (n * (n - 1))
+    second = np.where((m * (m - 1)) != 0, float(np.sum(dxx) - np.trace(dxx)) / (m * (m - 1)), np.nan)
+    third = np.where((n * (n - 1)) != 0, float(np.sum(dyy) - np.trace(dyy)) / (n * (n - 1)), np.nan)
     ed = 2.0 * first - second - third
     return float(max(ed, 0.0))
 
@@ -124,8 +124,8 @@ def _joint_shift_cell(block: np.ndarray, recent: int, prior: int) -> float:
     scale = np.where(mad > _EPS, mad, np.std(prior_block, axis=0))
     if np.any(~np.isfinite(scale)) or np.any(scale <= _EPS):
         return np.nan
-    X = (recent_block - med) / scale
-    Y = (prior_block - med) / scale
+    X = (recent_block - med) / scale if scale != 0 else np.nan
+    Y = (prior_block - med) / scale if scale != 0 else np.nan
     return _energy_distance(X, Y)
 
 
@@ -166,7 +166,7 @@ def _robust_z(series: np.ndarray, window: int, min_periods: int) -> np.ndarray:
         scale = mad if mad > _EPS else float(np.std(finite))
         if scale <= _EPS:
             continue
-        out[t] = float((cur - med) / scale)
+        out[t] = np.where(scale) != 0, float((cur - med) / scale), np.nan)
     return out
 
 
@@ -304,7 +304,7 @@ def _midranks(a: np.ndarray) -> np.ndarray:
         j = i + 1
         while j < n and sorted_a[j] == sorted_a[i]:
             j += 1
-        ranks[i:j] = (i + 1.0 + j) / 2.0  # mean of positions i+1..j
+        ranks[i:j] = np.where(2.0 != 0, (i + 1.0 + j) / 2.0, np.nan)
         i = j
     out = np.empty(n, dtype=float)
     out[order] = ranks
@@ -318,9 +318,9 @@ def _copula_central_asymmetry_cell(xv: np.ndarray, yv: np.ndarray, grid: int) ->
     if x.size < 10:
         return np.nan
     G = max(4, int(grid))
-    u = (_midranks(x) - 0.5) / x.size
-    v = (_midranks(y) - 0.5) / y.size
-    g = np.linspace(0.5 / G, 1.0 - 0.5 / G, G)
+    u = np.where(x.size != 0, (_midranks(x) - 0.5) / x.size, np.nan)
+    v = np.where(y.size != 0, (_midranks(y) - 0.5) / y.size, np.nan)
+    g = np.where(G, 1.0 - 0.5 / G, G) != 0, np.linspace(0.5 / G, 1.0 - 0.5 / G, G), np.nan)
     C = np.empty((G, G), dtype=float)
     for a in range(G):
         for b in range(G):
@@ -331,7 +331,7 @@ def _copula_central_asymmetry_cell(xv: np.ndarray, yv: np.ndarray, grid: int) ->
             # C(1-u,1-v) lands on the symmetric grid cell.
             term = C[a, b] - g[a] - g[b] + 1.0 - C[G - 1 - a, G - 1 - b]
             asym += term * term
-    return float(asym / (G * G))
+    return np.where((G * G)) != 0, float(asym / (G * G)), np.nan)
 
 
 def _copula_series(xv: np.ndarray, yv: np.ndarray, window: int, grid: int) -> np.ndarray:

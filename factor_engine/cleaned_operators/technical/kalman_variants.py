@@ -182,11 +182,11 @@ def _h_infinity_level_filter_1d(obs: np.ndarray, gamma: float, q: float, r: floa
         # Update (if observation is finite)
         if np.isfinite(obs[i]):
             # H-infinity gain
-            denom = P_pred + r - (gamma**2) * P_pred**2 / (P_pred + r)
+            denom = np.where((P_pred + r) != 0, P_pred + r - (gamma**2) * P_pred**2 / (P_pred + r), np.nan)
             if abs(denom) < _EPS:
                 K = 0.0
             else:
-                K = P_pred / denom
+                K = P_pred / denom if denom != 0 else np.nan
 
             residual = obs[i] - x_pred
             x_est = x_pred + K * residual
@@ -383,7 +383,7 @@ def _student_t_kalman_1d(obs: np.ndarray, q: float, r: float, dof: float) -> np.
             # Weight = (dof + 1) / (dof + residual^2 / S)
             S = P_pred + r
             normalized_resid_sq = (residual**2) / S if abs(S) > _EPS else 0.0
-            weight = (dof + 1.0) / (dof + normalized_resid_sq)
+            weight = np.where((dof + normalized_resid_sq) != 0, (dof + 1.0) / (dof + normalized_resid_sq), np.nan)
 
             # Weighted Kalman gain
             K = (P_pred / S) * weight if abs(S) > _EPS else 0.0

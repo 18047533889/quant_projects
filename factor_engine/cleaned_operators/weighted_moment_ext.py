@@ -118,9 +118,9 @@ def _ts_weighted_standardized_moment(
             n_eff = (sw * sw) / (float(np.sum(wa * wa)) + _EPS)
             if n_eff < float(min_samples) - 1e-9:
                 continue
-            mu = float((wa * xa).sum() / sw)
+            mu = np.where(sw) != 0, float((wa * xa).sum() / sw), np.nan)
             dev = xa - mu
-            var_w = float((wa * dev * dev).sum() / sw)
+            var_w = np.where(sw) != 0, float((wa * dev * dev).sum() / sw), np.nan)
             if var_w <= _EPS:
                 continue
             sigma = np.sqrt(var_w)
@@ -172,7 +172,7 @@ def _ts_cov_if(
             my = float(ya.mean())
             if xa.size < 2:
                 continue
-            cov = float(np.sum((xa - mx) * (ya - my)) / (xa.size - 1.0))
+            cov = np.where((xa.size - 1.0)) != 0, float(np.sum((xa - mx) * (ya - my)) / (xa.size - 1.0)), np.nan)
             out[r, col] = cov
     return _frame_like(x, out)
 

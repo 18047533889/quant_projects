@@ -340,7 +340,7 @@ class SameCalendarMonthReturn(SeriesOperator):
                             prior_val = col_vals[candidate_row]
                             if np.isfinite(prior_val) and prior_val != 0.0:
                                 # Compute return: (current - prior) / prior
-                                out[row, col] = (current_val - prior_val) / prior_val
+                                out[row, col] = (current_val - prior_val) / prior_val if prior_val != 0 else np.nan
                                 break
 
         return _frame_like(x, out)

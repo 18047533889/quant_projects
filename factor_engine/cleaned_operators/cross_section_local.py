@@ -142,7 +142,7 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         if m < 2:
             continue
         ranks = _avg_tie_ranks(col[fin])
-        U[fin, j] = (ranks + 0.5) / m
+        U[fin, j] = (ranks + 0.5) / m if m != 0 else np.nan
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
 
@@ -262,7 +262,7 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
                 else:
                     continue
             yhat = float(beta[0] + np.dot(U[i], beta[1:]))
-            out[t, i] = float((y_i - yhat) / scale)
+            out[t, i] = np.where(scale) != 0, float((y_i - yhat) / scale), np.nan)
     return out
 
 
@@ -353,7 +353,7 @@ def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
             local_scale = raw_scale
             off = U[i] - mu
             proj = off - off @ V @ V.T
-            out[t, i] = float(np.linalg.norm(proj) / local_scale)
+            out[t, i] = np.where(local_scale) != 0, float(np.linalg.norm(proj) / local_scale), np.nan)
     return out
 
 
@@ -516,7 +516,7 @@ def _rank_transform(values: np.ndarray) -> np.ndarray:
         if m < 2:
             continue
         ranks = _avg_tie_ranks(col[fin])
-        out[fin, c] = (ranks + 0.5) / m
+        out[fin, c] = (ranks + 0.5) / m if m != 0 else np.nan
     return out
 
 
@@ -548,7 +548,7 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
             ent = float(-np.sum(joint * np.log(joint)))
             # Normalize by log(grid²) so entropy is a resolution-independent
             # [0,1] concentration measure (P1-21).  No MM term (R26-011).
-            out[t, :] = ent / np.log(float(g * g))
+            out[t, :] = np.where(np.log(float(g * g)) != 0, ent / np.log(float(g * g)), np.nan)
         else:
             pu = joint.sum(axis=1)
             pv = joint.sum(axis=0)

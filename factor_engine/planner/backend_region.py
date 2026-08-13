@@ -87,11 +87,36 @@ class StateContract:
 
 
 @dataclass(frozen=True)
+class StateContract:
+    """State continuation contract for stateful operators (§40).
+
+    MB-P0-012: For RECURSIVE_TIME execution, if requires_checkpoint is False,
+    the operation must be sequential-only (cannot parallelize across time).
+    """
+    requires_checkpoint: bool = False
+    checkpoint_seed: str | None = None
+    stateful_operators: tuple[str, ...] = ()
+    checkpoint_interval: int | None = None
+    # MB-P0-012: Track if operation requires sequential execution
+    sequential_only: bool = False
+
+    def __post_init__(self):
+        """Validate state contract constraints."""
+        # MB-P0-012: If stateful but no checkpoint, must be sequential
+        if self.stateful_operators and not self.requires_checkpoint:
+            if not self.sequential_only:
+                # Use object.__setattr__ for frozen dataclass
+                object.__setattr__(self, 'sequential_only', True)
+
+
+@dataclass(frozen=True)
 class BackendRegion:
     """A contiguous execution region assigned to a single backend.
 
     MB-P0-004: Replaces the single-backend PlanRoute with explicit region boundaries.
     MB-P2-005: Includes physical properties (sorted/partitioned/grouped).
+    MB-P0-011: CROSS_SECTION_PER_DATE cannot partition by instrument.
+    MB-P0-012: RECURSIVE_TIME without checkpoint must be sequential_only.
     """
 
     region_id: str
@@ -115,6 +140,25 @@ class BackendRegion:
     # MB-P1-016, MB-P1-017: Streaming and direct sink capabilities
     streaming_capable: bool = False
     supports_direct_sink: bool = False
+
+    def __post_init__(self):
+        """Validate region constraints (MB-P0-011, MB-P0-012)."""
+        # MB-P0-011: CROSS_SECTION_PER_DATE cannot partition by instrument
+        if self.execution_axis == ExecutionAxis.CROSS_SECTION_PER_DATE:
+            if self.required_properties and "instrument" in self.required_properties.partitioned_by:
+                raise ValueError(
+                    "CROSS_SECTION_PER_DATE cannot be partitioned by instrument: "
+                    "cross-sectional operations require all instruments in each date partition"
+                )
+
+        # MB-P0-012: RECURSIVE_TIME without checkpoint must be sequential_only
+        if self.execution_axis == ExecutionAxis.RECURSIVE_TIME_PER_INSTRUMENT:
+            if self.state_contract:
+                if not self.state_contract.requires_checkpoint and not self.state_contract.sequential_only:
+                    raise ValueError(
+                        "RECURSIVE_TIME without checkpoint must be sequential_only: "
+                        "cannot parallelize stateful operations without checkpointing"
+                    )
 
     def to_dict(self) -> dict[str, Any]:
         return {

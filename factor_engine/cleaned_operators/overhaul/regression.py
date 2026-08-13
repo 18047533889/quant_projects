@@ -49,14 +49,14 @@ def _fit_1d(
     sse = float(resid @ resid)
     centered = yv - yv.mean()
     sst = float(centered @ centered)
-    r2 = np.nan if sst <= 0 else 1.0 - sse / sst
+    r2 = np.nan if sst <= 0 else 1.0 - sse / sst if sst != 0 else np.nan
     dof = yv.size - design.shape[1]
     tstat = np.nan
     if dof > 0:
-        sigma2 = sse / dof
+        sigma2 = sse / dof if dof != 0 else np.nan
         slope_var = sigma2 * np.linalg.pinv(design.T @ design)[-1, -1]
         if np.isfinite(slope_var) and slope_var > 0:
-            tstat = float(beta[-1] / np.sqrt(slope_var))
+            tstat = float(beta[-1] / np.sqrt(slope_var)) if np.sqrt(slope_var)) > 1e-10 else np.nan
     intercept = float(beta[0]) if add_intercept else 0.0
     slope = float(beta[-1])
     current_resid = (
@@ -184,7 +184,7 @@ def pd_time_slope(x, window=20, min_periods=None, **_):
             t -= t.mean()
             denom = float(t @ t)
             if denom > 0:
-                out[row, col] = float(t @ (y - y.mean()) / denom)
+                out[row, col] = np.where(denom) != 0, float(t @ (y - y.mean()) / denom), np.nan)
     return frame_pd(x, out)
 
 
@@ -200,7 +200,7 @@ def pl_time_slope(x, window=20, min_periods=None, **_):
         y = values[mask]
         t -= t.mean()
         denom = float(t @ t)
-        return np.nan if denom <= 0 else float(t @ (y - y.mean()) / denom)
+        return np.where(denom) != 0, np.nan if denom <= 0 else float(t @ (y - y.mean()) / denom), np.nan)
 
     return pl_unary_rolling_map(x, w, 1, fn)
 
@@ -247,7 +247,7 @@ def pd_max_drawdown(x, window, min_periods=2, **_):
             if valid.size < mp or np.any(valid <= 0):
                 continue
             peaks = np.maximum.accumulate(valid)
-            out[row, col] = float(np.min(valid / peaks - 1.0))
+            out[row, col] = np.where(peaks - 1.0)) != 0, float(np.min(valid / peaks - 1.0)), np.nan)
     return frame_pd(x, out)
 
 

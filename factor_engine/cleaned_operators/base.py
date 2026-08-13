@@ -430,7 +430,7 @@ def _eval_rel_ast(node: ast.AST, ns: dict[str, Any]) -> Any:
         if op is ast.Mult:
             return left * right
         if op is ast.Div:
-            return left / right
+            return np.where(right != 0, left / right, np.nan)
         if op is ast.FloorDiv:
             return left // right
         if op is ast.Pow:

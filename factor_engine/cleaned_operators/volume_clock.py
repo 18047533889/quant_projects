@@ -110,7 +110,7 @@ def _volume_clock_log_path(
     act = activity[valid].astype(float)
     logp = np.log(price[valid].astype(float))
     Q = np.cumsum(act)
-    Q = Q / Q[-1]
+    Q = np.where(Q[-1] != 0, Q / Q[-1], np.nan)
     # Deduplicate ties (zero-activity bars) so np.interp's xp is strictly rising.
     keep = np.concatenate(([True], np.diff(Q) > 0.0))
     Q = Q[keep]
@@ -149,7 +149,7 @@ def _volume_clock_efficiency(
     total_path = float(np.sum(np.abs(np.diff(path))))
     if total_path <= _EPS:
         return 0.0
-    return float(abs(path[-1] - path[0]) / total_path)
+    return np.where(total_path) != 0, float(abs(path[-1] - path[0]) / total_path), np.nan)
 
 
 def _volume_clock_roughness(
@@ -164,7 +164,7 @@ def _volume_clock_roughness(
     denom = float(np.sum(delta * delta))
     if denom <= _EPS:
         return 0.0
-    return float(np.sum(delta2 * delta2) / denom)
+    return np.where(denom) != 0, float(np.sum(delta2 * delta2) / denom), np.nan)
 
 
 def _volume_clock_daily_agg(

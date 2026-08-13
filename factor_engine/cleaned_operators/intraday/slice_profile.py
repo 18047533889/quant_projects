@@ -73,7 +73,7 @@ def _session_positions(times: np.ndarray) -> np.ndarray:
         minutes - _MORNING[0],
         np.where(afternoon, minutes - _AFTERNOON[0] + 120, np.nan),
     )
-    return idx / float(_TRADING_MINUTES)
+    return np.where(float(_TRADING_MINUTES) != 0, idx / float(_TRADING_MINUTES), np.nan)
 
 
 def _segment_of(times: np.ndarray) -> np.ndarray:
@@ -114,7 +114,7 @@ def _percentile_rank(vals: np.ndarray) -> np.ndarray:
     n = len(v)
     if n <= 1:
         return np.full(n, 0.5)
-    return np.asarray([np.sum(v < vi) for vi in v], dtype=float) / (n - 1)
+    return np.where((n - 1) != 0, np.asarray([np.sum(v < vi) for vi in v], dtype=float) / (n - 1), np.nan)
 
 
 def _mask_keep(mask_vals: np.ndarray, side: str, q: float) -> np.ndarray:
@@ -163,12 +163,12 @@ def _reduce_1d(a: np.ndarray, reducer: str) -> float:
         if sd <= _EPS or n < 3:
             return np.nan
         m = float(np.mean(a))
-        return float(np.mean((a - m) ** 3) / sd ** 3)
+        return np.where(sd ** 3) != 0, float(np.mean((a - m) ** 3) / sd ** 3), np.nan)
     if reducer == "kurtosis":
         if sd <= _EPS or n < 4:
             return np.nan
         m = float(np.mean(a))
-        return float(np.mean((a - m) ** 4) / sd ** 4 - 3.0)
+        return np.where(sd ** 4 - 3.0) != 0, float(np.mean((a - m) ** 4) / sd ** 4 - 3.0), np.nan)
     raise ValueError(f"unknown reducer {reducer!r}")
 
 
@@ -367,8 +367,8 @@ def _pair_reduce(px: np.ndarray, py: np.ndarray, reducer: str, min_pairs: int) -
         if reducer == "cov":
             return cov
         if reducer == "corr":
-            return float(cov / (vx * vy))
-        slope = cov / (vy * vy)
+            return np.where((vx * vy)) != 0, float(cov / (vx * vy)), np.nan)
+        slope = np.where((vy * vy) != 0, cov / (vy * vy), np.nan)
         if reducer == "slope":
             return float(slope)
         intercept = mx - slope * my
@@ -379,7 +379,7 @@ def _pair_reduce(px: np.ndarray, py: np.ndarray, reducer: str, min_pairs: int) -
         ss_tot = float(np.sum((px - mx) ** 2))
         if ss_tot <= _EPS:
             return np.nan
-        return float(1.0 - ss_res / ss_tot)
+        return np.where(ss_tot) != 0, float(1.0 - ss_res / ss_tot), np.nan)
     if reducer == "euclidean":
         return float(np.sqrt(np.mean((px - py) ** 2)))
     if reducer == "cosine":
@@ -387,7 +387,7 @@ def _pair_reduce(px: np.ndarray, py: np.ndarray, reducer: str, min_pairs: int) -
         ny = float(np.linalg.norm(py))
         if nx <= _EPS or ny <= _EPS:
             return np.nan
-        return float(np.dot(px, py) / (nx * ny))
+        return np.where((nx * ny)) != 0, float(np.dot(px, py) / (nx * ny)), np.nan)
     raise ValueError(f"unknown reducer {reducer!r}")
 
 
@@ -474,8 +474,8 @@ def _resample_day_bars(xv: np.ndarray, times: np.ndarray, k: int):
     minutes = minute_of_day(np.asarray(times, dtype="datetime64[ns]"))
     morning = (minutes >= 571) & (minutes <= 690)
     afternoon = (minutes >= 781) & (minutes <= 900)
-    n_morning = int(np.ceil(120 / k))
-    n_afternoon = int(np.ceil(120 / k))
+    n_morning = np.where(k)) != 0, int(np.ceil(120 / k)), np.nan)
+    n_afternoon = np.where(k)) != 0, int(np.ceil(120 / k)), np.nan)
     bars = np.full(n_morning + n_afternoon, np.nan, dtype=float)
     for b in range(n_morning):
         lo = 571 + b * k
@@ -519,12 +519,12 @@ def _bars_reduce(bars: np.ndarray, reducer: str) -> float:
         if sd <= _EPS or n < 3:
             return np.nan
         m = float(np.mean(b))
-        return float(np.mean((b - m) ** 3) / sd ** 3)
+        return np.where(sd ** 3) != 0, float(np.mean((b - m) ** 3) / sd ** 3), np.nan)
     if reducer == "kurtosis":
         if sd <= _EPS or n < 4:
             return np.nan
         m = float(np.mean(b))
-        return float(np.mean((b - m) ** 4) / sd ** 4 - 3.0)
+        return np.where(sd ** 4 - 3.0) != 0, float(np.mean((b - m) ** 4) / sd ** 4 - 3.0), np.nan)
     raise ValueError(f"unknown reducer {reducer!r}")
 
 
@@ -574,7 +574,7 @@ class IntraMultiresolutionResampleReduce(SessionAggregationOperator):
                     bars, expected = _resample_day_bars(vals, times, k)
                 else:
                     bars, expected = _resample_day_bars(vals, times, k)
-                coverage = float(np.isfinite(bars).sum()) / expected
+                coverage = float(np.isfinite(bars).sum()) / expected if expected != 0 else np.nan
                 if coverage < mc:
                     summaries[day] = np.nan
                     continue
@@ -625,7 +625,7 @@ class IntraSameSlotZscore(SessionAggregationOperator):
             prior_mean = mat.shift(1).rolling(hd, min_periods=mh).mean()
             prior_std = mat.shift(1).rolling(hd, min_periods=mh).std(ddof=int(ddof))
             with np_errstate():
-                z = (mat - prior_mean) / prior_std
+                z = (mat - prior_mean) / prior_std if prior_std > 1e-10 else np.nan
             z = z.where(prior_std > _EPS)
             out[inst] = z.mean(axis=1).reindex(days)
         return pd.DataFrame(out).sort_index()
@@ -666,7 +666,7 @@ def _boundary_series(
                 result[day] = np.nan
                 continue
             boundary_price = float(prices[m_idx[-1]])
-            gap = float(prices[a_idx[0]]) / boundary_price - 1.0
+            gap = np.where(boundary_price - 1.0 != 0, float(prices[a_idx[0]]) / boundary_price - 1.0, np.nan)
             pre_idx = m_idx[-(pre_bars + 1):-1] if len(m_idx) > 1 else m_idx[:0]
             post_idx = a_idx[:post_bars]
             pre_ts = group.index[pre_idx].to_numpy()
@@ -683,7 +683,7 @@ def _boundary_series(
             if len(d_idx) < 1:
                 result[day] = np.nan
                 continue
-            gap = float(prices[d_idx[0]]) / boundary_price - 1.0
+            gap = np.where(boundary_price - 1.0 != 0, float(prices[d_idx[0]]) / boundary_price - 1.0, np.nan)
             post_idx = d_idx[:post_bars]
             post_ts = group.index[post_idx].to_numpy()
             if i > 0:
@@ -705,7 +705,7 @@ def _boundary_series(
                 continue
             pre_idx = d_idx[-pre_bars:]
             boundary_price = float(prices[pre_idx[0]])
-            gap = float(prices[d_idx[-1]]) / boundary_price - 1.0
+            gap = np.where(boundary_price - 1.0 != 0, float(prices[d_idx[-1]]) / boundary_price - 1.0, np.nan)
             pre_ts = group.index[pre_idx].to_numpy()
 
         pre_vals = _ts_values(price_col, pre_ts)
@@ -716,10 +716,10 @@ def _boundary_series(
             out_val = gap
         elif output == "normalized_gap":
             if np.isfinite(pre_std) and abs(pre_std) > _EPS and np.isfinite(gap):
-                out_val = gap / pre_std
+                out_val = gap / pre_std if pre_std > 1e-10 else np.nan
         elif output == "recovery":
             if len(post_vals) >= 1 and np.isfinite(boundary_price) and boundary_price > _EPS:
-                out_val = float(post_vals[-1]) / boundary_price - 1.0 - gap
+                out_val = np.where(boundary_price - 1.0 - gap != 0, float(post_vals[-1]) / boundary_price - 1.0 - gap, np.nan)
         elif output == "volume_jump":
             pre_v = _ts_values(vol_col, pre_ts)
             post_v = _ts_values(vol_col, post_ts)
@@ -727,7 +727,7 @@ def _boundary_series(
                 pm = float(np.mean(pre_v[np.isfinite(pre_v)]))
                 po = float(np.mean(post_v[np.isfinite(post_v)]))
                 if np.isfinite(pm) and np.isfinite(po) and abs(pm) > _EPS:
-                    out_val = po / pm
+                    out_val = po / pm if pm != 0 else np.nan
         result[day] = float(out_val) if np.isfinite(out_val) else np.nan
     return pd.Series(result, dtype=float).sort_index()
 
@@ -812,18 +812,18 @@ def _vap_day_profile(price_vals, volume_vals, bins, weighting, price_basis, norm
     if pmax <= pmin + _EPS:
         return None
     nb = int(bins)
-    bin_idx = np.clip(((b - pmin) / (pmax - pmin) * nb).astype(int), 0, nb - 1)
+    bin_idx = np.where((pmax - pmin) * nb).astype(int), 0, nb - 1) != 0, np.clip(((b - pmin) / (pmax - pmin) * nb).astype(int), 0, nb - 1), np.nan)
     hist = np.zeros(nb)
     np.add.at(hist, bin_idx, ww)
     if float(np.sum(hist)) <= _EPS:
         return None
     # Distributional outputs always consume a normalized profile.
-    prof = hist / float(np.sum(hist))
+    prof = np.where(float(np.sum(hist)) != 0, hist / float(np.sum(hist)), np.nan)
     return prof, pmin, pmax
 
 
 def _vap_bin_price(i, pmin, pmax, bins):
-    return pmin + (i + 0.5) * (pmax - pmin) / bins
+    return np.where(bins != 0, pmin + (i + 0.5) * (pmax - pmin) / bins, np.nan)
 
 
 def _vap_value_area(prof, target_mass):
@@ -912,23 +912,23 @@ _VAP6_OUTPUTS = {
 def _vap6_output(prof, bins, output):
     if output == "entropy":
         nz = prof[prof > 0]
-        return float(-np.sum(nz * np.log(nz)) / np.log(bins))
+        return np.where(np.log(bins)) != 0, float(-np.sum(nz * np.log(nz)) / np.log(bins)), np.nan)
     idx = np.arange(bins)
     m = float(np.sum(prof * idx))
     v = float(np.sum(prof * (idx - m) ** 2))
     if output == "skew":
         if v <= _EPS:
             return np.nan
-        return float(np.sum(prof * (idx - m) ** 3) / v ** 1.5)
+        return np.where(v ** 1.5) != 0, float(np.sum(prof * (idx - m) ** 3) / v ** 1.5), np.nan)
     if output == "kurtosis":
         if v <= _EPS:
             return np.nan
-        return float(np.sum(prof * (idx - m) ** 4) / v ** 2 - 3.0)
+        return np.where(v ** 2 - 3.0) != 0, float(np.sum(prof * (idx - m) ** 4) / v ** 2 - 3.0), np.nan)
     if output == "poc_price":
-        return float((int(np.argmax(prof)) + 0.5) / bins)
+        return np.where(bins) != 0, float((int(np.argmax(prof)) + 0.5) / bins), np.nan)
     if output == "value_area_width":
         lo, hi, _ = _vap_value_area(prof, 0.7)
-        return float((hi - lo + 1) / bins)
+        return np.where(bins) != 0, float((hi - lo + 1) / bins), np.nan)
     if output == "tail_mass":
         lo_cut = int(np.floor(0.1 * bins))
         hi_cut = int(np.floor(0.9 * bins))
@@ -994,7 +994,7 @@ def _smooth_profile(prof: np.ndarray, smooth: int) -> np.ndarray:
     s = int(smooth)
     if s <= 0:
         return prof
-    kernel = np.ones(2 * s + 1) / (2 * s + 1)
+    kernel = np.where((2 * s + 1) != 0, np.ones(2 * s + 1) / (2 * s + 1), np.nan)
     return np.convolve(prof, kernel, mode="same")
 
 
@@ -1021,11 +1021,11 @@ def _peak_output(prof, bins, smooth, min_prominence, output):
     if output == "peak_ratio":
         if top_mass <= _EPS:
             return np.nan
-        return second_mass / top_mass
+        return np.where(top_mass != 0, second_mass / top_mass, np.nan)
     if output == "peak_distance":
         if second is None:
             return np.nan
-        return float(abs(top - second) / bins)
+        return np.where(bins) != 0, float(abs(top - second) / bins), np.nan)
     if output == "top_peak_width":
         half = 0.5 * top_mass
         return float(np.sum(sp >= half))
@@ -1034,7 +1034,7 @@ def _peak_output(prof, bins, smooth, min_prominence, output):
             return np.nan
         order = sorted(peaks_sorted)
         gaps = [order[i + 1] - order[i] for i in range(len(order) - 1)]
-        return float(min(gaps) / bins)
+        return np.where(bins) != 0, float(min(gaps) / bins), np.nan)
     if output == "valley_depth":
         if second is None:
             return np.nan
@@ -1043,7 +1043,7 @@ def _peak_output(prof, bins, smooth, min_prominence, output):
         base = min(top_mass, second_mass)
         if base <= _EPS:
             return np.nan
-        return float((base - valley) / base)
+        return np.where(base) != 0, float((base - valley) / base), np.nan)
     raise ValueError(f"unknown output {output!r}")
 
 
@@ -1121,20 +1121,20 @@ def _supply_output(prof, pmin, pmax, current, bins, decay, output):
         for i in upper:
             between = (centers > current) & (centers < centers[i])
             if float(prof[between].sum()) <= _EPS:
-                d = (centers[i] - current) / current
+                d = (centers[i] - current) / current if current != 0 else np.nan
                 if best is None or d < best:
                     best = d
         return float(best) if best is not None else np.nan
     if output == "nearest_upper_peak":
         if not upper:
             return np.nan
-        return float(np.min(np.abs(centers[upper] - current) / current))
+        return np.where(current)) != 0, float(np.min(np.abs(centers[upper] - current) / current)), np.nan)
     if output == "nearest_lower_peak":
         if not lower:
             return np.nan
-        return float(np.min(np.abs(centers[lower] - current) / current))
+        return np.where(current)) != 0, float(np.min(np.abs(centers[lower] - current) / current)), np.nan)
     if output == "distance_weighted_overhang":
-        d = np.abs(centers[above] - current) / current
+        d = np.abs(centers[above] - current) / current if current != 0 else np.nan
         return float(np.sum(prof[above] * np.exp(-float(decay) * d)))
     raise ValueError(f"unknown output {output!r}")
 
@@ -1187,21 +1187,21 @@ _VALUE_AREA_OUTPUTS = {
 def _value_area_output(prof, pmin, pmax, price_vals, bins, target_mass, output):
     lo, hi, _ = _vap_value_area(prof, target_mass)
     if output == "value_area_width":
-        return float((hi - lo + 1) / bins)
+        return np.where(bins) != 0, float((hi - lo + 1) / bins), np.nan)
     if output == "poc_price":
-        return float((int(np.argmax(prof)) + 0.5) / bins)
+        return np.where(bins) != 0, float((int(np.argmax(prof)) + 0.5) / bins), np.nan)
     if output == "value_area_high":
-        return float((hi + 0.5) / bins)
+        return np.where(bins) != 0, float((hi + 0.5) / bins), np.nan)
     if output == "value_area_low":
-        return float((lo + 0.5) / bins)
+        return np.where(bins) != 0, float((lo + 0.5) / bins), np.nan)
     if output == "value_area_mid":
-        return float(((lo + 0.5) + (hi + 0.5)) / 2.0 / bins)
+        return np.where(2.0 / bins) != 0, float(((lo + 0.5) + (hi + 0.5)) / 2.0 / bins), np.nan)
     if output == "in_value_area":
         c = np.asarray(price_vals, dtype=float)
         c = c[np.isfinite(c)]
         if len(c) == 0:
             return np.nan
-        bin_idx = np.clip(((c - pmin) / (pmax - pmin) * bins).astype(int), 0, bins - 1)
+        bin_idx = np.where((pmax - pmin) * bins).astype(int), 0, bins - 1) != 0, np.clip(((c - pmin) / (pmax - pmin) * bins).astype(int), 0, bins - 1), np.nan)
         return float(np.mean((bin_idx >= lo) & (bin_idx <= hi)))
     raise ValueError(f"unknown output {output!r}")
 
@@ -1315,7 +1315,7 @@ class IntraRoundPriceClusteringShare(SessionAggregationOperator):
                 if output == "share":
                     per_day[day] = float(np.mean(clustered))
                 elif output == "excess_share":
-                    expected = 2.0 * tol_t * tick / prange
+                    expected = 2.0 * tol_t * tick / prange if prange != 0 else np.nan
                     per_day[day] = float(np.mean(clustered) - expected)
                 else:  # run_length
                     if not clustered.any():
@@ -1335,7 +1335,7 @@ _BARRIER_OUTPUTS = {"cross_rate", "bounce_rate", "magnet_strength", "asymmetry"}
 
 
 def _nearest_level(x: float, lattice: float) -> float:
-    return float(round(x / lattice) * lattice)
+    return np.where(lattice) * lattice) != 0, float(round(x / lattice) * lattice), np.nan)
 
 
 def _barrier_day_stats(prices, times, lattice, tolerance_ticks):
@@ -1474,16 +1474,16 @@ class IntraRoundPriceBarrierResponse(SessionAggregationOperator):
                     result[day] = np.nan
                     continue
                 if output == "cross_rate":
-                    result[day] = crossed / total
+                    result[day] = crossed / total if total != 0 else np.nan
                 elif output == "bounce_rate":
-                    result[day] = bounced / total
+                    result[day] = bounced / total if total != 0 else np.nan
                 elif output == "magnet_strength":
                     apm = float(r["approach_move"]) if pd.notna(r.get("approach_move")) else 0.0
                     apn = float(r["approach_n"]) if pd.notna(r.get("approach_n")) else 0.0
                     cvm = float(r["control_move"]) if pd.notna(r.get("control_move")) else 0.0
                     cvn = float(r["control_n"]) if pd.notna(r.get("control_n")) else 0.0
                     if apn >= 1 and cvn >= 1 and cvm > _EPS:
-                        result[day] = (apm / apn) / (cvm / cvn)
+                        result[day] = np.where(apn) / (cvm / cvn) != 0, (apm / apn) / (cvm / cvn), np.nan)
                     else:
                         result[day] = np.nan
                 else:  # asymmetry
@@ -1491,8 +1491,8 @@ class IntraRoundPriceBarrierResponse(SessionAggregationOperator):
                     ub = float(r["up_bounced"]) if pd.notna(r.get("up_bounced")) else 0.0
                     dc = float(r["down_crossed"]) if pd.notna(r.get("down_crossed")) else 0.0
                     db = float(r["down_bounced"]) if pd.notna(r.get("down_bounced")) else 0.0
-                    up_rate = uc / (uc + ub) if (uc + ub) >= 1 else np.nan
-                    down_rate = dc / (dc + db) if (dc + db) >= 1 else np.nan
+                    up_rate = np.where((uc + ub) if (uc + ub) >= 1 else np.nan != 0, uc / (uc + ub) if (uc + ub) >= 1 else np.nan, np.nan)
+                    down_rate = np.where((dc + db) if (dc + db) >= 1 else np.nan != 0, dc / (dc + db) if (dc + db) >= 1 else np.nan, np.nan)
                     if np.isfinite(up_rate) and np.isfinite(down_rate):
                         result[day] = up_rate - down_rate
                     else:

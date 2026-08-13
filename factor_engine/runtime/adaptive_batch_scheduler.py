@@ -135,7 +135,6 @@ ERROR_UNKNOWN = "unknown"
 ERROR_OOM = "oom"
 
 _TRANSIENT_EXC_TYPES: tuple[type[BaseException], ...] = (
-    TimeoutError,
     ConnectionError,
     OSError,
 )
@@ -152,10 +151,25 @@ _PERMANENT_MARKERS = (
 )
 
 
+def _is_transient_timeout(exc: TimeoutError) -> bool:
+    """P0-FIX: Distinguish transient (network/IO) from permanent (query) timeouts.
+
+    Query complexity timeouts are permanent and should not be retried.
+    Network/IO timeouts are transient and can be retried.
+    """
+    msg = str(exc).lower()
+    # Permanent timeout indicators
+    if any(marker in msg for marker in ["query", "execution", "compute", "complexity"]):
+        return False
+    # Transient timeout (network/IO)
+    return True
+
+
 def classify_error(exc: BaseException) -> str:
     """R31-006 + R38-P0-004：错误分类——transient 自动 retry；permanent 禁止 retry。
 
-    - ``OSError/TimeoutError/ConnectionError`` 及显式 transient 标记 → transient
+    - ``OSError/ConnectionError`` 及显式 transient 标记 → transient
+    - ``TimeoutError`` 根据消息区分：query timeout 是 permanent，network timeout 是 transient
     - PIT violation / semantic violation / invalid param / unsupported op /
       schema mismatch / deterministic numeric / DQ error → permanent
     - OOM（MemoryError / DuckDB OutOfMemory / Arrow / …）→ ``ERROR_OOM``：
@@ -166,6 +180,9 @@ def classify_error(exc: BaseException) -> str:
     msg = str(exc).lower()
     if any(m in msg for m in _PERMANENT_MARKERS):
         return ERROR_PERMANENT
+    # P0-FIX: Distinguish permanent vs transient timeouts
+    if isinstance(exc, TimeoutError):
+        return ERROR_TRANSIENT if _is_transient_timeout(exc) else ERROR_PERMANENT
     if isinstance(exc, _TRANSIENT_EXC_TYPES) or "transient" in msg:
         return ERROR_TRANSIENT
     if _is_oom(exc):
@@ -178,9 +195,24 @@ def _is_oom(exc: BaseException) -> bool:
         from runtime.resource_errors import is_oom_error
 
         return is_oom_error(exc)
-    except Exception:
-        name = type(exc).__name__.lower()
-        return name == "memoryerror" or "oom" in str(exc).lower() or "out of memory" in str(exc).lower()
+    except Exception as import_err:
+        # P0-FIX: Log fallback OOM detection for observability
+        import logging
+        logging.getLogger(__name__).warning(
+            f"OOM detection fallback active (import failed: {import_err}). "
+            f"Using simplified pattern matching."
+        )
+        # Comprehensive fallback patterns for DuckDB/Arrow/Polars OOM errors
+        exc_str = str(exc).lower()
+        exc_type = type(exc).__name__.lower()
+        return (
+            exc_type == "memoryerror"
+            or "oom" in exc_str
+            or "out of memory" in exc_str
+            or "cannot allocate" in exc_str
+            or "memory budget exceeded" in exc_str
+            or "memory limit exceeded" in exc_str
+        )
 
 
 def _dispatch_fusion(

@@ -34,7 +34,7 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
 
 
 def _safe_div(num, den):
-    out = num / den.replace(0, np.nan)
+    out = np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
     return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -192,7 +192,7 @@ def _valuation_cashflow_disagreement(pe_ratio, pcf_ratio, pcf_ratio2, ocf_yield,
             clipped = np.clip(arr[row], lo, hi)
             sd = np.nanstd(clipped)
             if sd > 0:
-                arr[row] = (clipped - np.nanmean(clipped)) / sd
+                arr[row] = (clipped - np.nanmean(clipped)) / sd if sd != 0 else np.nan
         standardized.append(arr)
     stacked = np.stack(standardized, axis=0)  # (components, rows, cols)
     out = np.full((stacked.shape[1], stacked.shape[2]), np.nan, dtype=float)
@@ -229,7 +229,7 @@ def _growth_mismatch(ey, g, scale=1.0):
     # ``scale`` would silently mask a percent/ratio unit mismatch (audit §5.2).
     # Removed from the searchable metadata surface; kept only as a
     # backward-compat positional that validates the unit-honest default.
-    return ey - g / scale
+    return np.where(scale != 0, ey - g / scale, np.nan)
 
 
 _mk(

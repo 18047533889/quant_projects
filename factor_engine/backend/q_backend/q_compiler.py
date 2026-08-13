@@ -62,6 +62,12 @@ class QCompiler:
             "sqrt": "sqrt",
             "log": "log",
             "exp": "exp",
+            "log1p": "{log 1+x}",
+            "expm1": "{(exp x)-1}",
+            "sign": "signum",
+            "floor": "floor",
+            "ceil": "ceiling",
+            "round": "{`long$x+0.5}",
 
             # Comparison
             "greater": ">",
@@ -74,6 +80,9 @@ class QCompiler:
             # Lag/Delta
             "lag": "prev",
             "delta": "deltas",
+            "ts_diff": "deltas",
+            "pct_change": "{(deltas x)%prev x}",
+            "ts_returns": "{(deltas x)%prev x}",
 
             # Rolling (窗口函数)
             "ts_mean": "mavg",
@@ -82,6 +91,31 @@ class QCompiler:
             "ts_min": "mmin",
             "ts_max": "mmax",
             "ts_count": "mcount",
+            "ts_median": "{(w#0Nf),med (w-1)#x}",  # rolling median
+            "ts_product": "{(*/)x}",
+            "ts_var": "{dev[x] xexp 2}",
+
+            # Cumulative operations
+            "ts_cumsum": "sums",
+            "ts_cumprod": "prds",
+            "ts_cummax": "maxs",
+            "ts_cummin": "mins",
+
+            # Time series statistical moments
+            "ts_skew": "{(avg((x-avg x)xexp 3))%(dev x)xexp 3}",
+            "ts_kurt": "{(avg((x-avg x)xexp 4))%(dev x)xexp 4}",
+
+            # Time series position/extrema
+            "ts_argmax": "{x?max x}",
+            "ts_argmin": "{x?min x}",
+            "ts_days_since_high": "{((count x)-1)-x?max x}",
+            "ts_days_since_low": "{((count x)-1)-x?min x}",
+
+            # Time series rank/zscore
+            "ts_rank": "{(iasc iasc x)%count x}",
+            "ts_zscore": "{(x-avg x)%dev x}",
+            "ts_demean": "{x-avg x}",
+            "ts_normalize": "{x%sum abs x}",
 
             # Aggregations
             "mean": "avg",
@@ -90,14 +124,40 @@ class QCompiler:
             "min": "min",
             "max": "max",
             "median": "med",
+            "var": "{dev[x] xexp 2}",
+            "product": "{(*/)x}",
+            "first": "first",
+            "last": "last",
+            "count_nonzero": "{sum x<>0}",
 
             # Rank
             "rank": "rank",
-            "cs_rank": "{iasc iasc x}",  # rank within group
+            "cs_rank": "{(iasc iasc x)%count x}",
+
+            # Cross-sectional operations
+            "cs_zscore": "{(x-avg x)%dev x}",
+            "cs_demean": "{x-avg x}",
+            "cs_normalize": "{x%sum abs x}",
+            "cs_mean": "avg",
+            "cs_std": "dev",
+            "cs_median": "med",
+            "cs_var": "{dev[x] xexp 2}",
+
+            # Conditional/Fill
+            "where": "?",
+            "fillna": "^",
+            "ffill": "fills",
+            "clip": "{(x&y)|z}",  # clip between z and y
 
             # Correlation
             "ts_corr": "cor",
             "ts_cov": "cov",
+            "ts_beta": "{cov[x;y]%dev[y] xexp 2}",
+
+            # Simple indicators
+            "ema": "ema",
+            "sma": "mavg",
+            "wma": "{wavg[til count x;x]}",
         }
 
     def can_compile_operator(self, op_name: str) -> bool:
@@ -145,14 +205,26 @@ class QCompiler:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{inputs[0]} {q_func} {inputs[1]}"
 
-        # 一元算子
-        if q_func in {"neg", "abs", "sqrt", "log", "exp"}:
+        # 一元算子 (简单函数)
+        if q_func in {"neg", "abs", "sqrt", "log", "exp", "signum", "floor", "ceiling",
+                      "sums", "prds", "maxs", "mins", "fills", "first", "last"}:
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{q_func} {inputs[0]}"
 
+        # 一元算子 (lambda 表达式)
+        if q_func.startswith("{") and q_func.endswith("}"):
+            if len(inputs) == 1:
+                return f"({q_func})[{inputs[0]}]"
+            elif len(inputs) == 2:
+                return f"({q_func})[{inputs[0]};{inputs[1]}]"
+            elif len(inputs) == 3:
+                return f"({q_func})[{inputs[0]};{inputs[1]};{inputs[2]}]"
+            else:
+                raise ValueError(f"{op_name} with lambda requires 1-3 inputs, got {len(inputs)}")
+
         # 滚动窗口算子
-        if op_name.startswith("ts_"):
+        if op_name.startswith("ts_") and q_func in {"mavg", "msum", "mdev", "mmin", "mmax", "mcount"}:
             window = params.get("window", 20)
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
@@ -179,14 +251,73 @@ class QCompiler:
         if op_name in {"rank", "cs_rank"}:
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            return f"{q_func} {inputs[0]}"
+            return f"({q_func})[{inputs[0]}]"
 
-        # Correlation/Covariance
+        # Correlation/Covariance/Beta
         if op_name in {"ts_corr", "ts_cov"}:
             window = params.get("window", 20)
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
+
+        if op_name == "ts_beta":
+            window = params.get("window", 20)
+            if len(inputs) != 2:
+                raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
+            return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
+
+        # EMA (exponential moving average)
+        if op_name == "ema":
+            span = params.get("span", 20)
+            alpha = 2.0 / (span + 1)
+            if len(inputs) != 1:
+                raise ValueError(f"ema requires 1 input, got {len(inputs)}")
+            return f"ema[{alpha};{inputs[0]}]"
+
+        # WMA (weighted moving average)
+        if op_name == "wma":
+            window = params.get("window", 20)
+            if len(inputs) != 1:
+                raise ValueError(f"wma requires 1 input, got {len(inputs)}")
+            return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
+
+        # Clip
+        if op_name in {"clip", "cs_clip"}:
+            lower = params.get("lower", -999999)
+            upper = params.get("upper", 999999)
+            if len(inputs) != 1:
+                raise ValueError(f"clip requires 1 input, got {len(inputs)}")
+            return f"({inputs[0]}|{lower})&{upper}"
+
+        # Where (conditional)
+        if op_name == "where":
+            if len(inputs) != 3:
+                raise ValueError(f"where requires 3 inputs (cond, true_val, false_val), got {len(inputs)}")
+            return f"?[{inputs[0]};{inputs[1]};{inputs[2]}]"
+
+        # Fill operations
+        if op_name == "fillna":
+            fill_value = params.get("fill_value", 0)
+            if len(inputs) != 1:
+                raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
+            return f"{inputs[0]}^{fill_value}"
+
+        # Quantile
+        if op_name in {"ts_quantile", "cs_quantile"}:
+            q_val = params.get("q", 0.5)
+            if len(inputs) != 1:
+                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
+            window = params.get("window", 20) if op_name.startswith("ts_") else None
+            if window:
+                return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}"
+            else:
+                return f"{q_val} quantile {inputs[0]}"
+
+        # Percentile rank
+        if op_name == "cs_percentile_rank":
+            if len(inputs) != 1:
+                raise ValueError(f"cs_percentile_rank requires 1 input, got {len(inputs)}")
+            return f"({{(iasc iasc x)%count x}})[{inputs[0]}]"
 
         raise ValueError(f"Compilation not implemented for {op_name}")
 

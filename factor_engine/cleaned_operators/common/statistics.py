@@ -172,7 +172,7 @@ class ACF(SeriesOperator):
             if int(paired.sum()) <= lag:  # NEW-030: at least lag+1 valid pairs
                 return np.nan
             cov = float(((a[paired] - mean) * (b[paired] - mean)).sum())
-            return cov / var
+            return np.where(var != 0, cov / var, np.nan)
 
         # NEW-030: min_periods must be at least lag+1 (a fixed-window ACF
         # cannot be a "statistic" when N grows 2->W while the window is fixed).
@@ -1076,7 +1076,7 @@ class Lasso(SeriesOperator):
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
             if y is None:
-                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)])
+                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)]) if (idx.std() + 1e-10)]) > 1e-10 else np.nan
                 try:
                     from sklearn.linear_model import Lasso as LassoCV
                     model = LassoCV(alpha=alpha, max_iter=1000)
@@ -1085,7 +1085,7 @@ class Lasso(SeriesOperator):
                 except ImportError:
                     coeffs = np.linalg.lstsq(X, xv, rcond=None)[0]
                     l1_penalty = alpha * np.sum(np.abs(coeffs))
-                    return coeffs[-1] / (1 + l1_penalty)
+                    return np.where((1 + l1_penalty) != 0, coeffs[-1] / (1 + l1_penalty), np.nan)
             return np.nan
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
@@ -1474,7 +1474,7 @@ class Ridge(SeriesOperator):
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
             if y is None:
-                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)])
+                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)]) if (idx.std() + 1e-10)]) > 1e-10 else np.nan
                 try:
                     XtX = X.T @ X + alpha * np.eye(X.shape[1])
                     XtX_inv = np.linalg.inv(XtX)
@@ -1714,7 +1714,7 @@ class wavg(SeriesOperator):
             w_v = w_vals[valid]
             if len(x_v) == 0 or w_v.sum() == 0:
                 return np.nan
-            return float((x_v * w_v).sum() / w_v.sum())
+            return np.where(w_v.sum()) != 0, float((x_v * w_v).sum() / w_v.sum()), np.nan)
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:

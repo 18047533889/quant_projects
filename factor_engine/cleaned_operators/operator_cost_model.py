@@ -205,8 +205,8 @@ def _poly_linear(w: float, _p: dict[str, Any]) -> float:
 
 def _bicoherence(w: float, p: dict[str, Any]) -> float:
     ns = max(2, int(p.get("n_segments", 4)))
-    seg = w / ns
-    f = min(32.0, seg / 2.0)
+    seg = w / ns if ns != 0 else np.nan
+    f = np.where(2.0) != 0, min(32.0, seg / 2.0), np.nan)
     return w * f * f
 
 
@@ -388,26 +388,26 @@ def _class_cost(
         p = float(s.n_features) if s.n_features else _bind_n_features(params)
 
     if cls is ComplexityClass.TS_ROLLING:
-        rt = T * N * w / _REF_COST
-        mem = w / _REF_WINDOW
+        rt = T * N * w / _REF_COST if _REF_COST != 0 else np.nan
+        mem = w / _REF_WINDOW if _REF_WINDOW != 0 else np.nan
     elif cls is ComplexityClass.CS_SORT_RANK:
-        rt = T * N * max(2.0, math.log2(max(N, 2.0))) / _REF_COST
-        mem = N / _REF_WINDOW
+        rt = T * N * max(2.0, math.log2(max(N, 2.0))) / _REF_COST if _REF_COST != 0 else np.nan
+        mem = N / _REF_WINDOW if _REF_WINDOW != 0 else np.nan
     elif cls is ComplexityClass.KNN_GRAPH:
-        rt = T * N * N / _REF_COST
-        mem = N * N / (_REF_WINDOW * _REF_WINDOW)
+        rt = T * N * N / _REF_COST if _REF_COST != 0 else np.nan
+        mem = np.where((_REF_WINDOW * _REF_WINDOW) != 0, N * N / (_REF_WINDOW * _REF_WINDOW), np.nan)
     elif cls is ComplexityClass.KERNEL_GRAM:
-        rt = T * w * w / _REF_COST
-        mem = w * w / (_REF_WINDOW * _REF_WINDOW)
+        rt = T * w * w / _REF_COST if _REF_COST != 0 else np.nan
+        mem = np.where((_REF_WINDOW * _REF_WINDOW) != 0, w * w / (_REF_WINDOW * _REF_WINDOW), np.nan)
     elif cls is ComplexityClass.MATRIX_INV:
-        rt = T * p ** 3 / _REF_COST
-        mem = p * p / (_REF_WINDOW * _REF_WINDOW)
+        rt = T * p ** 3 / _REF_COST if _REF_COST != 0 else np.nan
+        mem = np.where((_REF_WINDOW * _REF_WINDOW) != 0, p * p / (_REF_WINDOW * _REF_WINDOW), np.nan)
     elif cls is ComplexityClass.TRANSPORT:
-        rt = T * N * w * w / _REF_COST
-        mem = w * w / (_REF_WINDOW * _REF_WINDOW)
+        rt = T * N * w * w / _REF_COST if _REF_COST != 0 else np.nan
+        mem = np.where((_REF_WINDOW * _REF_WINDOW) != 0, w * w / (_REF_WINDOW * _REF_WINDOW), np.nan)
     elif cls is ComplexityClass.GROUP:
-        rt = T * N * g / _REF_COST
-        mem = N / _REF_WINDOW
+        rt = T * N * g / _REF_COST if _REF_COST != 0 else np.nan
+        mem = N / _REF_WINDOW if _REF_WINDOW != 0 else np.nan
     else:
         raise CostUnknownError(f"no complexity class for {cls!r}")
     return max(1.0, float(rt)), max(1.0, float(mem))
@@ -423,14 +423,14 @@ def _dmd_cost_contract(params: dict[str, Any], shape: tuple[float, float] | None
     T, N = _shape_factor(shape)
     rt = (w * d * d + d ** 3) * T * N
     mem = w * w
-    return max(1.0, rt / _REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW))
+    return np.where(_REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW)) != 0, max(1.0, rt / _REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW)), np.nan)
 
 
 def _pairwise_cost_contract(params: dict[str, Any], shape: tuple[float, float] | None) -> tuple[float, float]:
     w = _bind_window(params)
     T, N = _shape_factor(shape)
     rt = w * w * T * N
-    return max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW))
+    return np.where(_REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW)) != 0, max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW)), np.nan)
 
 
 def _cubic_cost_contract(params: dict[str, Any], shape: tuple[float, float] | None) -> tuple[float, float]:
@@ -440,16 +440,16 @@ def _cubic_cost_contract(params: dict[str, Any], shape: tuple[float, float] | No
     # R10 #33: kernel/cubic-cost operators build a W×W Gram structure — their
     # memory estimate must be O(W²), never O(W).
     mem = w * w
-    return max(1.0, rt / _REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW))
+    return np.where(_REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW)) != 0, max(1.0, rt / _REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW)), np.nan)
 
 
 def _bicoherence_cost_contract(params: dict[str, Any], shape: tuple[float, float] | None) -> tuple[float, float]:
     w = _bind_window(params)
     ns = max(2, int(params.get("n_segments", 4)))
-    f = min(32.0, (w / ns) / 2.0)
+    f = np.where(ns) / 2.0) != 0, min(32.0, (w / ns) / 2.0), np.nan)
     T, N = _shape_factor(shape)
     rt = w * f * f * T * N
-    return max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW))
+    return np.where(_REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW)) != 0, max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW)), np.nan)
 
 
 _EXPLICIT_COST_CONTRACTS: dict[str, Callable[[dict[str, Any], tuple[float, float] | None], tuple[float, float]]] = {
@@ -556,11 +556,11 @@ def estimate_runtime(
         w = _bind_window(params)
         T, N = _shape_factor(shape)
         base = fn(w, params)
-        rt = base * T * N / _REF_COST
+        rt = base * T * N / _REF_COST if _REF_COST != 0 else np.nan
         if prefix in _QUADRATIC_MEMORY_PREFIXES:
-            mem = (w * w) / (_REF_WINDOW * _REF_WINDOW)
+            mem = np.where((_REF_WINDOW * _REF_WINDOW) != 0, (w * w) / (_REF_WINDOW * _REF_WINDOW), np.nan)
         else:
-            mem = w / _REF_WINDOW
+            mem = w / _REF_WINDOW if _REF_WINDOW != 0 else np.nan
         return max(1.0, float(rt)), max(1.0, float(mem))
 
     cls = _category_class(canonical)
@@ -592,13 +592,13 @@ def runtime_cost(canonical: str, params: dict[str, Any] | None = None, shape: Co
         w = _bind_window(params)
         T, N = _shape_factor(shape)
         base = fn(w, params)
-        return max(1.0, base * T * N / _REF_COST)
+        return np.where(_REF_COST) != 0, max(1.0, base * T * N / _REF_COST), np.nan)
     cls = _category_class(canonical)
     if cls is not ComplexityClass.UNKNOWN:
         rt, _mem = _class_cost(cls, params, shape)
         return rt
     w = _bind_window(params)
-    return max(1.0, w / _REF_WINDOW)
+    return np.where(_REF_WINDOW) != 0, max(1.0, w / _REF_WINDOW), np.nan)
 
 
 def memory_cost(canonical: str, params: dict[str, Any] | None = None, shape: CostShape | tuple[int, int] | None = None) -> float:
@@ -618,14 +618,14 @@ def memory_cost(canonical: str, params: dict[str, Any] | None = None, shape: Cos
         prefix, _fn, _label = kernel
         w = _bind_window(params)
         if prefix in _QUADRATIC_MEMORY_PREFIXES:
-            return max(1.0, (w * w) / (_REF_WINDOW * _REF_WINDOW))
-        return max(1.0, w / _REF_WINDOW)
+            return np.where((_REF_WINDOW * _REF_WINDOW)) != 0, max(1.0, (w * w) / (_REF_WINDOW * _REF_WINDOW)), np.nan)
+        return np.where(_REF_WINDOW) != 0, max(1.0, w / _REF_WINDOW), np.nan)
     cls = _category_class(canonical)
     if cls is not ComplexityClass.UNKNOWN:
         _rt, mem = _class_cost(cls, params, shape)
         return mem
     w = _bind_window(params)
-    return max(1.0, w / _REF_WINDOW)
+    return np.where(_REF_WINDOW) != 0, max(1.0, w / _REF_WINDOW), np.nan)
 
 
 def has_declared_cost_contract(canonical: str) -> bool:

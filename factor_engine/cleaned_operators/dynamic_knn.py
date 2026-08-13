@@ -194,7 +194,7 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         if m < 2:
             continue
         ranks = _avg_tie_ranks(col[fin])
-        U[fin, j] = (ranks + 0.5) / m
+        U[fin, j] = (ranks + 0.5) / m if m != 0 else np.nan
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
 
@@ -353,7 +353,7 @@ def _retention_series(feats: np.ndarray, k: int, lag: int) -> np.ndarray:
             union = float(np.union1d(cur, prev).size)
             if union <= 0.0:
                 continue
-            out[t, i] = float(inter / union)
+            out[t, i] = np.where(union) != 0, float(inter / union), np.nan)
     return out
 
 

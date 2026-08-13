@@ -713,6 +713,7 @@ def lower_batch_dag(
     rows: int | None = None,
     instruments: int = 0,
     scan_cost_map: dict[str, Any] | None = None,
+    enable_dag_partitioning: bool = True,
 ) -> PhysicalFactorDAG:
     """把整批 DAGPlan（shared_nodes + roots）lower 成真实 physical DAG。
 
@@ -723,16 +724,57 @@ def lower_batch_dag(
       按算子能力路由（polars/duckdb 可下推的 shared subplan 走 native）。
     - R33-P0-034：``scan_cost_map``（task/source-scope -> ScanCost）写进各 root
       SOURCE_SCAN 的资源契约。
+    - NEW: DAG partitioning optimization - 最小化后端切换和转换成本
+    - R47 压力测试修复：批量大小 + 表达式深度前置验证
     """
     from runtime.adaptive_batch_scheduler import _plan_cost_bytes
+
+    # R47 压力测试修复：批量大小验证（诚实前置检查，不等到 MemoryError）
+    num_roots = len(dag.roots) if hasattr(dag, 'roots') else 0
+    if num_roots > MAX_DAG_WIDTH:
+        raise ValueError(
+            f"Cannot compile {num_roots} factors at once. "
+            f"Limit is {MAX_DAG_WIDTH} factors (stress test breaking point: 5000). "
+            f"Use compile_many_chunked() for large batches."
+        )
+
+    # R47 压力测试修复：表达式深度验证（防止 RecursionError）
+    for fp in (dag.roots or []):
+        try:
+            depth = validate_expression_depth(fp.root, MAX_EXPRESSION_DEPTH)
+            if depth > MAX_EXPRESSION_DEPTH * 0.8:  # 80% 警告阈值
+                import warnings
+                warnings.warn(
+                    f"Factor {fp.factor_name} has depth {depth} "
+                    f"(approaching limit {MAX_EXPRESSION_DEPTH}). "
+                    f"Consider flattening the expression."
+                )
+        except ValueError as e:
+            raise ValueError(f"Factor {fp.factor_name}: {e}") from e
 
     source_scope, snapshot_id = source_identity_from_ctx(ctx)
     source_scope_str = source_scope.key() if isinstance(source_scope, SourceScopeId) else str(source_scope)
     physical = PhysicalFactorDAG()
+
+    # 如果启用 DAG 分区优化，先进行全局后端分配
+    backend_assignments = None
+    if enable_dag_partitioning and len(dag.roots) > 1:
+        try:
+            backend_assignments = _optimize_backend_partitioning(
+                dag, ctx, rows, instruments
+            )
+        except Exception:
+            # 优化失败时回退到默认行为
+            pass
+
     # shared nodes
     for sid, sub in (dag.shared_nodes or {}).items():
         plan_cost = _plan_cost_bytes(sub)
-        bctx = backend_context_for(sub, ctx=ctx)
+        # 如果有分区优化结果，使用指定的后端
+        preferred = None
+        if backend_assignments and f"cse:{sid}" in backend_assignments:
+            preferred = backend_assignments[f"cse:{sid}"]
+        bctx = backend_context_for(sub, ctx=ctx, preferred=preferred)
         shared = PhysicalFactorTask(
             task_id=f"cse:{sid}",
             op=str(getattr(sub, "op", "shared")),
@@ -782,6 +824,10 @@ def lower_batch_dag(
     for fp in dag.roots:
         execution_scope = str(fp.execution_scope.scope_key()) if getattr(fp, "execution_scope", None) else ""
         cost = _scan_cost_for_root(scan_cost_map, source_scope_str)
+        # 使用优化的后端（如果有）
+        preferred = None
+        if backend_assignments and f"root:{fp.factor_name}" in backend_assignments:
+            preferred = backend_assignments[f"root:{fp.factor_name}"]
         stages = lower_root_plan(
             fp.root,
             factor_name=fp.factor_name,
@@ -792,6 +838,7 @@ def lower_batch_dag(
             source_snapshot_id=snapshot_id,
             execution_scope=execution_scope,
             scan_cost=cost,
+            preferred_backend=preferred,
         )
         for st in stages:
             if st.task_id not in physical.tasks:
@@ -810,3 +857,196 @@ def _scan_cost_for_root(
     """
     scan_cost_map = scan_cost_map or {}
     return scan_cost_map.get(source_scope)
+
+
+#: Stress test discovered limits (R47 §压力测试整改)
+MAX_DAG_WIDTH = 1000        # 发现破坏点：5000 factors → MemoryError
+MAX_EXPRESSION_DEPTH = 100  # 发现破坏点：200 layers → RecursionError
+CHUNK_SIZE_DEFAULT = 500    # 批量编译默认分块大小（安全裕量 50%）
+
+
+def validate_expression_depth(plan: Any, max_depth: int = MAX_EXPRESSION_DEPTH) -> int:
+    """递归测量表达式深度，防止 RecursionError（R47 压力测试修复）。
+
+    返回实际深度。若超限抛出 ValueError（诚实前置检查，不等到 backend.execute 栈溢出）。
+    """
+    def _measure(node: Any, depth: int) -> int:
+        if depth > max_depth:
+            raise ValueError(
+                f"Expression depth {depth} exceeds limit {max_depth}. "
+                f"Flatten or simplify the expression to prevent RecursionError."
+            )
+        if node is None:
+            return depth
+        max_child = depth
+        for child in getattr(node, "inputs", ()) or ():
+            max_child = max(max_child, _measure(child, depth + 1))
+        return max_child
+
+    return _measure(plan, 0)
+
+
+def compile_many_chunked(
+    dag_plans: list[Any],
+    *,
+    chunk_size: int = CHUNK_SIZE_DEFAULT,
+    ctx: Any | None = None,
+    analyses: dict[str, Any] | None = None,
+    rows: int | None = None,
+    instruments: int = 0,
+    scan_cost_map: dict[str, Any] | None = None,
+) -> list[PhysicalFactorDAG]:
+    """大批量因子分块编译（R47 压力测试修复：5000 factors → MemoryError）。
+
+    自动分批调用 ``lower_batch_dag``，每批 ≤ chunk_size（默认 500，安全裕量）。
+    返回多个 PhysicalFactorDAG（调用方自行合并或分批执行）。
+
+    示例：
+        # 10,000 因子 → 20 个批次
+        dags = compile_many_chunked(factor_plans, chunk_size=500)
+        for dag in dags:
+            scheduler.schedule(dag)
+    """
+    if len(dag_plans) > MAX_DAG_WIDTH:
+        import warnings
+        warnings.warn(
+            f"Compiling {len(dag_plans)} factors exceeds safe limit {MAX_DAG_WIDTH}. "
+            f"Using chunked compilation with chunk_size={chunk_size}."
+        )
+
+    results: list[PhysicalFactorDAG] = []
+    for i in range(0, len(dag_plans), chunk_size):
+        chunk = dag_plans[i : i + chunk_size]
+        # 构造临时 DAG 对象（假定 dag_plans 是 FactorPlan 列表，需按实际结构调整）
+        from dataclasses import dataclass
+        @dataclass
+        class ChunkedDAG:
+            roots: list[Any]
+            shared_nodes: dict[str, Any] | None = None
+
+        chunked = ChunkedDAG(roots=chunk, shared_nodes=None)
+        physical = lower_batch_dag(
+            chunked,
+            analyses=analyses,
+            ctx=ctx,
+            rows=rows,
+            instruments=instruments,
+            scan_cost_map=scan_cost_map,
+        )
+        results.append(physical)
+
+    return results
+
+
+def _optimize_backend_partitioning(
+    dag: Any,
+    ctx: Any | None = None,
+    rows: int | None = None,
+    instruments: int = 0,
+) -> dict[str, str]:
+    """使用 DAG 分区优化器为每个节点选择最优后端。
+
+    返回 {task_id: backend} 映射。
+    """
+    try:
+        from planning.dag_partition_optimizer import (
+            DAGNode,
+            DAGPartitionOptimizer,
+            DataShape,
+        )
+    except ImportError:
+        return {}
+
+    # 构建 DAG 节点图
+    nodes: dict[str, DAGNode] = {}
+
+    # 添加 shared nodes
+    for sid, sub in (dag.shared_nodes or {}).items():
+        node_id = f"cse:{sid}"
+        op_name = str(getattr(sub, "op", "shared"))
+
+        # 获取后端候选和成本
+        backend_candidates = ["pandas_numpy", "polars", "duckdb_sql"]
+        compute_costs = {}
+        for backend in backend_candidates:
+            try:
+                from backend.operator_cost import estimate_plan_cost
+                cost_dict = estimate_plan_cost(sub, rows=rows)
+                compute_costs[backend] = float(cost_dict.get("total_work", 10.0))
+            except Exception:
+                compute_costs[backend] = 10.0
+
+        shape = DataShape(
+            rows=rows or 100_000,
+            cols=5,
+        )
+
+        nodes[node_id] = DAGNode(
+            node_id=node_id,
+            operator=op_name,
+            backend_candidates=backend_candidates,
+            compute_costs=compute_costs,
+            shape=shape,
+            is_shared=True,
+        )
+
+    # 添加 root nodes
+    root_ids = []
+    for fp in dag.roots:
+        node_id = f"root:{fp.factor_name}"
+        root_ids.append(node_id)
+        op_name = str(getattr(fp.root, "op", "root"))
+
+        backend_candidates = ["pandas_numpy", "polars", "duckdb_sql"]
+        compute_costs = {}
+        for backend in backend_candidates:
+            try:
+                from backend.operator_cost import estimate_plan_cost
+                cost_dict = estimate_plan_cost(fp.root, rows=rows)
+                compute_costs[backend] = float(cost_dict.get("total_work", 10.0))
+            except Exception:
+                compute_costs[backend] = 10.0
+
+        shape = DataShape(
+            rows=rows or 100_000,
+            cols=5,
+        )
+
+        nodes[node_id] = DAGNode(
+            node_id=node_id,
+            operator=op_name,
+            backend_candidates=backend_candidates,
+            compute_costs=compute_costs,
+            shape=shape,
+        )
+
+    # 建立依赖关系（简化：shared -> roots）
+    for fp in dag.roots:
+        node_id = f"root:{fp.factor_name}"
+        # 查找该 root 依赖的 shared nodes
+        try:
+            from planner.cse import collect_consumed_sids
+            consumed = collect_consumed_sids(fp.root)
+            for sid in consumed:
+                cse_id = f"cse:{sid}"
+                if cse_id in nodes:
+                    nodes[node_id].children.append(cse_id)
+                    nodes[cse_id].parents.append(node_id)
+        except Exception:
+            pass
+
+    # 运行优化器
+    optimizer = DAGPartitionOptimizer(
+        conversion_penalty_multiplier=1.5,  # 惩罚转换成本，倾向同后端
+        enable_fusion=True,
+    )
+
+    plan = optimizer.optimize(nodes, root_ids)
+
+    # 提取后端分配
+    assignments: dict[str, str] = {}
+    for partition in plan.partitions:
+        for node_id in partition.node_ids:
+            assignments[node_id] = partition.backend
+
+    return assignments
