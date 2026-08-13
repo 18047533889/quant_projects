@@ -61,13 +61,19 @@ def _content_hash(arr: Any) -> str:
 
 
 def series_panel_cache_key(series: Any) -> str:
-    """稳定 cache key：基于内容的 sha256（值 buffer + index + name + length）。
+    """稳定 cache key：基于内容的 sha256（dtype + 值 buffer + index + name + length）。
 
     审计 #331：不再用 ``id(series)``——原地 ``series.iloc[:] = new_values`` 会
     改变 content 从而得到新键（同一 Series 对象也可命中更新后的 panel）。
     单次 ``tobytes()`` 是 C 速度，可接受。
+
+    修复（dtype 语义混淆）：
+        int64 全零数组和 float64 全零数组的 tobytes() 完全相同（IEEE 754 零均为
+        全零字节），不含 dtype 会使两者得到同一 key，导致错误的 panel 复用。
+        现在显式将 ``str(series.dtype)`` 纳入哈希，消除此类碰撞。
     """
     name = getattr(series, "name", None)
+    dtype = getattr(series, "dtype", None)
     to_numpy = getattr(series, "to_numpy", None)
     if callable(to_numpy):
         values_bytes = _content_hash(np.ascontiguousarray(to_numpy()))
@@ -75,6 +81,7 @@ def series_panel_cache_key(series: Any) -> str:
         values_bytes = _content_hash(getattr(series, "values", None))
     index_hash = _content_hash(getattr(series, "index", None))
     h = hashlib.sha256()
+    h.update(str(dtype).encode("utf-8"))          # dtype first — prevents int64/float64 collision
     h.update(values_bytes.encode("utf-8"))
     h.update(index_hash.encode("utf-8"))
     # Raw value bytes do not identify dtype: int64 ``1`` and float64 ``1.0``
