@@ -140,8 +140,17 @@ class BatchGlobalOptimizer:
             for opp in opportunities:
                 if self._is_worthwhile(opp):
                     try:
-                        rewritten_dag = self._apply_optimization(rewritten_dag, opp)
-                        applied.append(opp)
+                        before = self._dag_structure_signature(rewritten_dag)
+                        candidate = self._apply_optimization(rewritten_dag, opp)
+                        after = self._dag_structure_signature(candidate)
+                        if before != after:
+                            rewritten_dag = candidate
+                            applied.append(opp)
+                        else:
+                            _logger.info(
+                                "Skipped %s accounting because the DAG was unchanged",
+                                opp.kind,
+                            )
                     except Exception as exc:
                         _logger.warning(
                             f"Failed to apply {opp.kind} optimization: {exc}"
@@ -318,6 +327,25 @@ class BatchGlobalOptimizer:
             f"{opp.savings_work:.0f} work units"
         )
         return dag
+
+    def _dag_structure_signature(self, dag: Any) -> tuple[Any, ...]:
+        """Return the DAG structure used to verify a rewrite changed the plan."""
+        tasks = getattr(dag, "tasks", {})
+        if not hasattr(tasks, "items"):
+            return (type(dag).__qualname__, repr(dag))
+
+        signature = []
+        for task_id, task in sorted(tasks.items(), key=lambda item: str(item[0])):
+            node = getattr(task, "node_ref", None)
+            signature.append(
+                (
+                    str(task_id),
+                    getattr(task, "task_type", None),
+                    tuple(sorted(map(str, getattr(task, "dependencies", ())))),
+                    self._structural_fingerprint(node) if node is not None else None,
+                )
+            )
+        return tuple(signature)
 
     def _structural_fingerprint(self, node: Any) -> str | None:
         """Compute structural fingerprint for CSE."""

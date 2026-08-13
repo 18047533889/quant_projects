@@ -303,25 +303,38 @@ class StreamingExecutionPlanner:
         # Get topological order
         topo_order = self._topological_order(dag)
 
-        # Partition into streaming and non-streaming
-        streaming_ordered = [t for t in topo_order if t in streaming_task_set]
-        materialization_ordered = [t for t in topo_order if t in materialization_tasks]
-        other = [
-            t for t in topo_order
-            if t not in streaming_task_set and t not in materialization_tasks
-        ]
-
-        # Priority: streaming > other > materialization
-        # (Within each partition, preserve topological order)
-        return streaming_ordered + other + materialization_ordered
+        # Select streaming tasks first only among tasks whose dependencies are
+        # already satisfied. This preserves topology across pipeline breaks.
+        topo_position = {task_id: index for index, task_id in enumerate(topo_order)}
+        remaining = set(topo_order)
+        completed: set[str] = set()
+        order = []
+        while remaining:
+            ready = [
+                task_id
+                for task_id in remaining
+                if set(self._get_dependencies(dag, task_id)).issubset(completed)
+            ]
+            if not ready:
+                _logger.warning("Cannot schedule cyclic or incomplete task graph")
+                return []
+            ready.sort(
+                key=lambda task_id: (
+                    task_id not in streaming_task_set,
+                    topo_position[task_id],
+                )
+            )
+            selected = ready[0]
+            order.append(selected)
+            completed.add(selected)
+            remaining.remove(selected)
+        return order
 
     def _is_streaming_capable(self, op: str) -> bool:
         """Check if operator supports streaming execution."""
-        return (
-            op in self._STREAMING_OPS
-            or op in self._custom_streaming_ops
-            or op not in self._MATERIALIZATION_OPS
-        )
+        if op in self._MATERIALIZATION_OPS or op in self._custom_materialization_ops:
+            return False
+        return op in self._STREAMING_OPS or op in self._custom_streaming_ops
 
     def _has_materialized_input(
         self, dag: Any, task_id: str, streaming_tasks: list[str]
