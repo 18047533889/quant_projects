@@ -344,12 +344,15 @@ class NativeCSEManager:
     integrated with adaptive_batch_scheduler.
     """
 
-    def __init__(self, cache_size_bytes: int = 2 * 1024**3):
+    def __init__(self, cache_size_bytes: int | None = None):
         """Initialize CSE manager.
 
         Args:
-            cache_size_bytes: Maximum cache size
+            cache_size_bytes: Maximum cache size. If None, uses adaptive config.
         """
+        if cache_size_bytes is None:
+            from runtime.adaptive_config import get_global_adaptive_config
+            cache_size_bytes = get_global_adaptive_config().cache_size_bytes
         self._cache = NativeCSECache(max_size_bytes=cache_size_bytes)
         self._pending_computations: dict[str, threading.Event] = {}
         self._pending_lock = threading.Lock()

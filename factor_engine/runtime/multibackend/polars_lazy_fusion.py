@@ -57,11 +57,16 @@ class PolarsLazyFusionOptimizer:
         >>> result = optimizer.collect(lf, streaming=True)  # 统一优化
     """
 
-    def __init__(self, *, streaming_threshold_bytes: int = 2 * 1024**3) -> None:
-        """
+    def __init__(self, *, streaming_threshold_bytes: int | None = None) -> None:
+        """Initialize Polars lazy fusion optimizer.
+
         Args:
-            streaming_threshold_bytes: 超过此阈值自动 streaming collect（out-of-core）
+            streaming_threshold_bytes: Memory threshold for streaming mode (bytes).
+                                       If None, uses adaptive config.
         """
+        if streaming_threshold_bytes is None:
+            from runtime.adaptive_config import get_global_adaptive_config
+            streaming_threshold_bytes = get_global_adaptive_config().streaming_threshold_bytes
         self.streaming_threshold_bytes = streaming_threshold_bytes
         self._metrics = LazyFusionMetrics()
         self._lock = threading.RLock()
