@@ -1,0 +1,45 @@
+{
+  "project_name": "quant_evaluator",
+  "data_dir": "$QUANT_DATA_DIR",
+  "output_dir": "/home/shw/quant_projects/quant_evaluator/output",
+  "temp_dir": "/tmp/quant_evaluator",
+  "database": {
+    "type": "postgresql",
+    "host": "$DB_HOST",
+    "port": 5432,
+    "database": "quant_evaluator",
+    "username": "$DB_USERNAME",
+    "password": "$DB_PASSWORD",
+    "pool_size": 10,
+    "timeout": 60
+  },
+  "cache": {
+    "backend": "redis",
+    "max_size_mb": 2048,
+    "ttl_seconds": 7200,
+    "redis_url": "$REDIS_URL"
+  },
+  "logging": {
+    "level": "DEBUG",
+    "file": "/var/log/quant/evaluator.log",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "max_bytes": 52428800,
+    "backup_count": 10
+  },
+  "parallel_workers": 8,
+  "batch_size": 5000,
+  "enable_profiling": true,
+  "data_sources": [
+    {
+      "name": "production_factors",
+      "type": "remote",
+      "path": "https://api.example.com/factors",
+      "credentials": {
+        "api_key": "$API_KEY"
+      },
+      "timeout": 120,
+      "retry_count": 5,
+      "rate_limit": 100
+    }
+  ]
+}

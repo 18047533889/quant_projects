@@ -1,0 +1,47 @@
+# Quant Evaluator Configuration Example
+
+project_name: quant_evaluator
+
+# Data directories
+data_dir: /home/shw/quant_projects/data
+output_dir: /home/shw/quant_projects/quant_evaluator/output
+temp_dir: /tmp/quant_evaluator
+
+# Database configuration
+database:
+  type: duckdb
+  database: evaluator.db
+  pool_size: 5
+  timeout: 30
+
+# Cache configuration
+cache:
+  backend: memory
+  max_size_mb: 1024
+  ttl_seconds: 3600
+
+# Logging configuration
+logging:
+  level: INFO
+  file: /home/shw/quant_projects/logs/evaluator.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_bytes: 10485760
+  backup_count: 5
+
+# Processing configuration
+parallel_workers: 4
+batch_size: 1000
+enable_profiling: false
+
+# Data sources
+data_sources:
+  - name: factor_data
+    type: local
+    path: /home/shw/quant_projects/factor_assets
+    timeout: 60
+    retry_count: 3
+  - name: market_data
+    type: local
+    path: /home/shw/quant_projects/data/market
+    timeout: 60
+    retry_count: 3

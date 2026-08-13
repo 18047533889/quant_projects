@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant_evaluator"
+version = "0.0.1a1"
+description = "Pure batch evaluator returning typed evidence bundles for factor evaluation"
+requires-python = ">=3.9"
+authors = [
+    {name = "Quant Platform", email = "noreply@example.com"}
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=3.0",
+]
+
+[tool.setuptools]
+packages = [
+    "quant_evaluator",
+    "quant_evaluator.api",
+    "quant_evaluator.adapters",
+    "quant_evaluator.contracts",
+    "quant_evaluator.diagnosis",
+    "quant_evaluator.kernels",
+    "quant_evaluator.metrics",
+    "quant_evaluator.planner",
+    "quant_evaluator.registry",
+    "quant_evaluator.runtime",
+]
+
+[tool.setuptools.package-dir]
+"quant_evaluator" = "."
+"quant_evaluator.api" = "api"
+"quant_evaluator.adapters" = "adapters"
+"quant_evaluator.contracts" = "contracts"
+"quant_evaluator.diagnosis" = "diagnosis"
+"quant_evaluator.kernels" = "kernels"
+"quant_evaluator.metrics" = "metrics"
+"quant_evaluator.planner" = "planner"
+"quant_evaluator.registry" = "registry"
+"quant_evaluator.runtime" = "runtime"
+
+[tool.setuptools.package-data]
+quant_evaluator = ["py.typed"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["tests", "tests.*", "*.pyc", "__pycache__"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

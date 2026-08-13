@@ -1,0 +1,47 @@
+# Factor Optimizer Configuration Example
+
+project_name: factor_optimizer
+
+# Data directories
+input_dir: /home/shw/quant_projects/factor_assets/factors
+output_dir: /home/shw/quant_projects/factor_optimizer/output
+models_dir: /home/shw/quant_projects/factor_optimizer/models
+
+# Database configuration
+database:
+  type: duckdb
+  database: optimizer.db
+  pool_size: 5
+  timeout: 30
+
+# Cache configuration
+cache:
+  backend: disk
+  max_size_mb: 2048
+  ttl_seconds: 3600
+  disk_path: /home/shw/quant_projects/factor_optimizer/cache
+
+# Logging configuration
+logging:
+  level: INFO
+  file: /home/shw/quant_projects/logs/optimizer.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_bytes: 10485760
+  backup_count: 5
+
+# Optimization configuration
+optimization_method: genetic
+max_iterations: 100
+population_size: 50
+convergence_threshold: 0.000001
+
+# Feature selection
+feature_selection: true
+max_features: 50
+
+# Cross-validation
+cross_validation_folds: 5
+test_size: 0.2
+
+# Parallel processing
+parallel_trials: 4

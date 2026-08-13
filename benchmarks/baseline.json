@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-14T00:14:51.420480",
+  "platform": "quantitative_analysis",
+  "benchmarks": {
+    "fo": {
+      "error": "invalid syntax (bench_fo_search.py, line 213)"
+    },
+    "fa": {
+      "error": "invalid syntax (bench_fa_operations.py, line 189)"
+    },
+    "fp": {
+      "benchmark": "fp_transforms",
+      "description": "Factor processing panel transforms at scale",
+      "results": {
+        "small": {
+          "n_assets": 100,
+          "n_dates": 252,
+          "total_cells": 25200,
+          "transforms": {
+            "ts_mean_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_std_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_zscore_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_corr_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "rank": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "zscore": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "log_returns": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "volatility_20": {
+              "error": "\"unknown operator canonical: 'volatility'\""
+            },
+            "vwap_20": {
+              "error": "\"unknown operator canonical: 'vwap'\""
+            }
+          }
+        },
+        "medium": {
+          "n_assets": 1000,
+          "n_dates": 756,
+          "total_cells": 756000,
+          "transforms": {
+            "ts_mean_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_std_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_zscore_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_corr_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "rank": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "zscore": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "log_returns": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "volatility_20": {
+              "error": "\"unknown operator canonical: 'volatility'\""
+            },
+            "vwap_20": {
+              "error": "\"unknown operator canonical: 'vwap'\""
+            }
+          }
+        },
+        "large": {
+          "n_assets": 10000,
+          "n_dates": 2520,
+          "total_cells": 25200000,
+          "transforms": {
+            "ts_mean_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_std_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_zscore_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "ts_corr_20": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "rank": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "zscore": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "log_returns": {
+              "error": "object of type 'builtin_function_or_method' has no len()"
+            },
+            "volatility_20": {
+              "error": "\"unknown operator canonical: 'volatility'\""
+            },
+            "vwap_20": {
+              "error": "\"unknown operator canonical: 'vwap'\""
+            }
+          }
+        }
+      },
+      "total_time_s": 224.44
+    },
+    "qe": {
+      "benchmark": "qe_metrics",
+      "description": "Quant evaluator metric computation at scale",
+      "results": [
+        {
+          "n_factors": 100,
+          "error": "cannot import name 'evaluate' from 'quant_evaluator.api.requests' (/home/shw/quant_projects/quant_evaluator/api/requests.py)"
+        },
+        {
+          "n_factors": 1000,
+          "error": "cannot import name 'evaluate' from 'quant_evaluator.api.requests' (/home/shw/quant_projects/quant_evaluator/api/requests.py)"
+        },
+        {
+          "n_factors": 10000,
+          "error": "cannot import name 'evaluate' from 'quant_evaluator.api.requests' (/home/shw/quant_projects/quant_evaluator/api/requests.py)"
+        }
+      ],
+      "total_time_s": 0.01
+    }
+  }
+}

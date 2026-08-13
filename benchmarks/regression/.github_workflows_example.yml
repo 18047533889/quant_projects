@@ -1,0 +1,128 @@
+name: Performance Regression Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need full history for baseline comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest numpy pandas polars duckdb
+
+      - name: Determine baseline commit
+        id: baseline
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, use the base branch HEAD
+            BASELINE="${{ github.event.pull_request.base.sha }}"
+          else
+            # For pushes, use the parent commit
+            BASELINE="${{ github.event.before }}"
+          fi
+          echo "baseline_sha=$BASELINE" >> $GITHUB_OUTPUT
+          echo "Using baseline: $BASELINE"
+
+      - name: Run performance regression check
+        id: regression_check
+        continue-on-error: true
+        run: |
+          cd benchmarks/regression
+          ./ci_check.sh --threshold 10.0 --baseline "${{ steps.baseline.outputs.baseline_sha }}"
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BASELINE_SHA: ${{ steps.baseline.outputs.baseline_sha }}
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report-${{ github.sha }}
+          path: |
+            benchmarks/results/regression_report.html
+            benchmarks/results/regression_report.md
+            benchmarks/results/comparison.json
+          retention-days: 30
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = 'benchmarks/results/regression_report.md';
+
+            if (!fs.existsSync(reportPath)) {
+              console.log('No report found');
+              return;
+            }
+
+            const report = fs.readFileSync(reportPath, 'utf8');
+
+            // Add header with links
+            const header = `## 📊 Performance Regression Report\n\n` +
+              `**Commit:** ${context.sha.substring(0, 8)}\n` +
+              `**Baseline:** ${{ steps.baseline.outputs.baseline_sha }}\n` +
+              `**Threshold:** 10%\n\n`;
+
+            const body = header + report;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Performance Regression Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Fail on regression
+        if: steps.regression_check.outcome == 'failure'
+        run: |
+          echo "❌ Performance regression detected!"
+          echo "Review the report for details."
+          exit 1
+
+      - name: Success message
+        if: steps.regression_check.outcome == 'success'
+        run: |
+          echo "✅ No performance regressions detected!"

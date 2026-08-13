@@ -1,0 +1,49 @@
+# Factor Preprocess Configuration Example
+
+project_name: factor_preprocess
+
+# Data directories
+input_dir: /home/shw/quant_projects/data/raw
+output_dir: /home/shw/quant_projects/factor_preprocess/output
+cache_dir: /home/shw/quant_projects/factor_preprocess/cache
+
+# Database configuration
+database:
+  type: duckdb
+  database: preprocess.db
+  pool_size: 5
+  timeout: 30
+
+# Cache configuration
+cache:
+  backend: disk
+  max_size_mb: 2048
+  ttl_seconds: 7200
+  disk_path: /home/shw/quant_projects/factor_preprocess/cache
+
+# Logging configuration
+logging:
+  level: INFO
+  file: /home/shw/quant_projects/logs/preprocess.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_bytes: 10485760
+  backup_count: 5
+
+# Processing configuration
+chunk_size: 10000
+parallel_jobs: 4
+
+# Preprocessing pipeline
+preprocessing_pipeline:
+  - clean
+  - outlier_removal
+  - normalize
+  - missing_value_handling
+  - validate
+
+# Outlier detection
+outlier_method: iqr
+outlier_threshold: 3.0
+
+# Missing value handling
+missing_value_strategy: forward_fill

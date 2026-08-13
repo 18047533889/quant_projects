@@ -1,0 +1,62 @@
+/* Custom CSS for Quant Projects documentation */
+
+/* Improve code block styling */
+.highlight pre {
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Better table styling */
+table.docutils {
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+table.docutils th {
+    background-color: #f0f0f0;
+    font-weight: 600;
+}
+
+table.docutils td, table.docutils th {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+}
+
+/* Admonition styling */
+.admonition {
+    margin: 20px 0;
+    padding: 12px;
+    border-left: 4px solid;
+    border-radius: 4px;
+}
+
+.admonition.note {
+    border-left-color: #3b82f6;
+    background-color: #eff6ff;
+}
+
+.admonition.warning {
+    border-left-color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+.admonition.tip {
+    border-left-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+/* Improve heading anchors */
+a.headerlink {
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-left: 0.5em;
+}
+
+h1:hover a.headerlink,
+h2:hover a.headerlink,
+h3:hover a.headerlink,
+h4:hover a.headerlink {
+    opacity: 1;
+}

@@ -1,0 +1,85 @@
+Advanced Statistical Tests Module - Implementation Summary
+===========================================================
+
+Location: /home/shw/quant_projects/quant_evaluator/metrics/stats/
+
+Files Implemented:
+------------------
+1. granger_causality.py (7.8K, 237 lines)
+   - granger_causality_test(): Test if X Granger-causes Y
+   - pairwise_granger_causality(): NxN causality matrix
+   - _fit_ar_model(): AR(p) model via OLS
+   - _fit_var_model(): Bivariate VAR(p) model
+   Citation: Granger (1969) "Investigating Causal Relations by Econometric Models"
+
+2. cointegration.py (11K, 336 lines)
+   - johansen_test(): Johansen cointegration test (trace & max eigenvalue)
+   - engle_granger_test(): Two-step Engle-Granger test
+   - _lag_matrix(): VAR lag matrix construction
+   - _residuals_from_deterministics(): Detrending utility
+   Citations: Johansen (1991, 1995), Engle & Granger (1987)
+
+3. regime_detection.py (14K, 418 lines)
+   - GaussianHMM: Hidden Markov Model with Gaussian emissions
+     * fit(): Baum-Welch EM algorithm
+     * predict(): Viterbi decoding
+     * predict_proba(): Forward algorithm probabilities
+   - detect_regimes(): Convenience wrapper
+   Citation: Rabiner (1989) "A Tutorial on Hidden Markov Models"
+
+4. structural_breaks.py (15K, 453 lines)
+   - chow_test(): Chow structural break test
+   - cusum_test(): CUSUM test for parameter stability
+   - cusum_of_squares_test(): CUSUM-sq for variance changes
+   - sup_wald_test(): SupWald test with unknown break point
+   - bai_perron_test(): Bai-Perron multiple breaks detection
+   Citations: Chow (1960), Brown et al. (1975), Andrews (1993), Bai & Perron (1998, 2003)
+
+Test Coverage:
+--------------
+Total: 87 tests, all passing
+- test_granger_causality.py: 15 tests
+- test_cointegration.py: 23 tests  
+- test_regime_detection.py: 16 tests
+- test_structural_breaks.py: 33 tests
+
+Total Lines: 3,091 (implementation + tests)
+
+Key Features:
+-------------
+✓ Proper academic citations in docstrings
+✓ Comprehensive input validation and error handling
+✓ Edge case testing (NaN, insufficient data, collinearity, etc.)
+✓ NumPy-only implementations (no heavy dependencies)
+✓ Type hints throughout
+✓ Detailed mathematical documentation
+
+Usage Example:
+--------------
+from metrics.stats.granger_causality import granger_causality_test
+from metrics.stats.cointegration import johansen_test
+from metrics.stats.regime_detection import GaussianHMM
+from metrics.stats.structural_breaks import chow_test
+
+# Test if x predicts y
+f_stat, p_value, df, best_lag = granger_causality_test(y, x, max_lags=5)
+
+# Test for cointegration
+trace_stats, max_eig_stats, rank, eigenvalues = johansen_test(data, det_order=0, lags=2)
+
+# Detect market regimes
+model = GaussianHMM(n_states=2)
+model.fit(returns)
+states = model.predict(returns)
+
+# Test for structural break
+f_stat, p_value, df1, df2, k = chow_test(y, X, breakpoint=100)
+
+Integration:
+------------
+Module is importable via:
+  from quant_evaluator.metrics.stats import *
+
+All tests pass:
+  pytest tests/stats/ -v
+  ======================== 87 passed in 102.26s ========================

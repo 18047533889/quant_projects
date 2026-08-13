@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>模型前因子平台开发蓝图</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#64748b;--line:#dfe6ef;--accent:#3157d5;--accent2:#0f766e;--warn:#b45309;--dark:#0f172a}
+*{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.68}
+header{background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;padding:54px 24px 42px}.wrap{max-width:1180px;margin:auto}.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75}.hero h1{font-size:40px;margin:8px 0 12px;line-height:1.2}.hero p{max-width:900px;font-size:18px;opacity:.88}.pill{display:inline-block;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.13);margin:4px 6px 4px 0;font-size:13px}
+nav{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}nav .wrap{display:flex;gap:18px;overflow:auto;padding:12px 24px}nav a{white-space:nowrap;text-decoration:none;color:#334155;font-size:14px;font-weight:600}
+main{padding:34px 24px 80px}section{margin:0 auto 38px;max-width:1180px}.section-title{font-size:27px;margin:0 0 8px}.lead{color:var(--muted);max-width:930px}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 3px 14px rgba(15,23,42,.035)}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-6{grid-column:span 6}.span-12{grid-column:span 12}.card h3{margin:0 0 8px;font-size:18px}.kicker{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:800}.muted{color:var(--muted)}
+.flow{background:#0b1220;color:#dbeafe;border-radius:16px;padding:26px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;line-height:1.55}.good{border-left:4px solid #0f766e}.warn{border-left:4px solid #b45309}.bad{border-left:4px solid #b91c1c}.number{font-size:34px;font-weight:800;color:var(--accent)}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}th{background:#eef3fb;font-size:13px}td{font-size:14px}.tag{font-size:12px;border-radius:5px;background:#edf2ff;color:#3146a7;padding:3px 7px;display:inline-block}.red{background:#fee2e2;color:#991b1b}.green{background:#dcfce7;color:#166534}.amber{background:#fef3c7;color:#92400e}
+code{background:#eef2f7;padding:2px 5px;border-radius:4px}ul{padding-left:20px}.phase{display:flex;gap:14px;align-items:flex-start;margin:12px 0}.phase b{min-width:92px;color:var(--accent)}
+footer{border-top:1px solid var(--line);padding:28px 24px;color:var(--muted);background:#fff}@media(max-width:900px){.span-3,.span-4,.span-6{grid-column:span 12}.hero h1{font-size:31px}}
+</style>
+</head><body>
+<header><div class="wrap hero"><div class="eyebrow">Quant Research Infrastructure · Development-ready Blueprint</div><h1>模型前因子平台开发蓝图</h1><p>目标不是再建一个“量化大平台”，而是利用已有 DataAccess / FactorEngine 和旧仓中成熟代码，补齐 Evidence、Evolution、Asset Governance 与 Representation 四个真正缺失的能力。</p><div><span class="pill">Server-first</span><span class="pill">Legacy Mining</span><span class="pill">Batch/Matrix First</span><span class="pill">Standalone Packages</span><span class="pill">Multi-Agent Development</span></div></div></header>
+<nav><div class="wrap"><a href="#architecture">总架构</a><a href="#packages">四个新库</a><a href="#reuse">旧代码迁移</a><a href="#performance">性能</a><a href="#agents">并行开发</a><a href="#roadmap">路线图</a><a href="#guardrails">硬约束</a></div></nav>
+<main>
+<section id="architecture"><h2 class="section-title">1. 最终架构</h2><p class="lead">现有 DataAccess 管数据，FactorEngine 管因子定义与计算。新系统不重复 PIT、物化、Storage、DSL。FactorOptimizer 是可选反馈环，不强迫每个因子经过。</p><div class="flow">Manual / Alpha Miners / LLM / External Corpus
+                 │
+                 ▼
+          ┌──────────────┐
+          │ FactorEngine │  ← 因子定义、合法性、计算
+          └──────┬───────┘
+                 │ FactorBatch
+                 ▼
+        ┌─────────────────┐
+        │ QuantEvaluator  │  ← Evidence / Diagnosis
+        └───────┬─────────┘
+                │
+      ┌─────────┴──────────────┐
+      ▼                        │
+┌───────────────┐              │
+│FactorOptimizer│              │  （已经优化好的因子可跳过）
+└───────┬───────┘              │
+        └──→ FactorEngine → QE ─┤
+                                ▼
+                       ┌────────────────┐
+                       │  FactorAssets  │  ← Identity / Novelty / Graph / Assembly
+                       └───────┬────────┘
+                               ▼
+                       ┌────────────────┐
+                       │FactorPreprocess│  ← Representation / Neutralization
+                       └───────┬────────┘
+                               ▼
+                          Model Input</div></section>
+
+<section id="packages"><h2 class="section-title">2. 四个新库，各自只解决一类问题</h2><div class="grid">
+<div class="card span-6"><div class="kicker">Evidence</div><h3>QuantEvaluator</h3><p>“这个因子到底表现怎么样？”</p><ul><li>IC / RankIC / Horizon / Shape / Tail / Long-Short</li><li>Exposure / A股 tradability / liquidity / microcap</li><li>HAC / Bootstrap / FDR / Specification robustness</li><li>Batch/Matrix-First，Reference/Fast 双实现</li></ul></div>
+<div class="card span-6"><div class="kicker">Evolution</div><h3>FactorOptimizer</h3><p>“这个因子还能怎么改得更好？”</p><ul><li>Typed Mutation Grammar</li><li>Diagnosis → Repair</li><li>Multi-fidelity / Plateau / Pareto</li><li>LLM 只做 Researcher，不做 Judge</li></ul></div>
+<div class="card span-6"><div class="kicker">Governance</div><h3>FactorAssets</h3><p>“它值得留下吗？和其他因子是什么关系？”</p><ul><li>Identity / Seen Index / Lineage</li><li>Conditional Novelty / ANN / Sparse Graph</li><li>Family / Cluster / Shadow / Lifecycle</li><li>Representative / Robust Rank / Shrinkage aggregation</li></ul></div>
+<div class="card span-6"><div class="kicker">Representation</div><h3>FactorPreprocess</h3><p>“这些资产最终怎样表示给模型？”</p><ul><li>Rank / Robust Scale / Winsor</li><li>OLS/Ridge/Soft Neutralization</li><li>Raw + Residual + Exposure + Missing + Freshness</li><li>严格区分 Stateless 与 Fitted</li></ul></div>
+</div></section>
+
+<section id="reuse"><h2 class="section-title">3. 不是从零重写：旧仓按函数级采矿</h2><p class="lead">迁移的原则是“保留正确语义，不继承旧平台壳”。服务器本地代码是唯一事实源；下表是已知重点矿区，开始开发前必须重新确认。</p><table><thead><tr><th>现有资产</th><th>新归宿</th><th>处理方式</th></tr></thead><tbody>
+<tr><td>factor_evaluation / batch_metrics</td><td>QuantEvaluator</td><td><span class="tag green">Reference / Rewrite</span> IC、HAC、long-short、turnover 等</td></tr>
+<tr><td>FactorAnalyzer / Exposures</td><td>QuantEvaluator + Preprocess</td><td><span class="tag amber">拆分审计</span> 指标/暴露/归因与 neutralization 分家</td></tr>
+<tr><td>AlphaPurifier / APr_utils</td><td>FactorPreprocess</td><td><span class="tag green">高价值迁移</span> 去极值、标准化、中性化</td></tr>
+<tr><td>toolkit/cross_sectional</td><td>FactorPreprocess</td><td><span class="tag green">Reference</span> 纯横截面 transform</td></tr>
+<tr><td>toolkit/alpha_tools Registry</td><td>FactorOptimizer</td><td><span class="tag green">重构复用</span> 参数、元数据、hash、registry</td></tr>
+<tr><td>Gateway Complexity / Candidate</td><td>Optimizer / Assets</td><td><span class="tag amber">思想迁移</span> 用 FE AST 重写 complexity</td></tr>
+<tr><td>factor_admission/catalog</td><td>FactorAssets</td><td><span class="tag green">高价值迁移</span> decision ledger / SQLite 思路</td></tr>
+<tr><td>AutoFactor 内嵌 DA/FE/PIT/PhysicalPlan</td><td>无</td><td><span class="tag red">Discard</span> 已被当前底座覆盖</td></tr>
+<tr><td>GTJA185 / Week2</td><td>Corpora</td><td><span class="tag green">长期保留</span> 真实公式与性能/回归 workload</td></tr>
+</tbody></table></section>
+
+<section id="performance"><h2 class="section-title">4. 性能设计：快，但不再造第二个执行平台</h2><div class="grid"><div class="card span-4 good"><div class="number">Batch</div><h3>因子块</h3><p>按 date chunk × asset × factor block 处理，避免 10k 因子逐个 Python groupby。</p></div><div class="card span-4 good"><div class="number">Reuse</div><h3>中间量复用</h3><p>rank、valid mask、daily IC、quantile assignment、exposure matrix 在同次 request 内只算一次。</p></div><div class="card span-4 good"><div class="number">Parity</div><h3>Reference / Fast</h3><p>Pandas/NumPy/SciPy 做可审计参考；NumPy/Numba/Polars 做 production fast path。</p></div></div>
+<div class="card warn" style="margin-top:16px"><b>刻意不做：</b> 第一版不建立跨任务持久化 Artifact DAG、第二套 factor cache、distributed scheduler。只有实测证明重复计算是主要瓶颈时再升级。</div></section>
+
+<section id="agents"><h2 class="section-title">5. Claude Code：多 Agent 并行，但先冻结接口</h2><p class="lead">最危险的不是 Agent 少，而是 20 个 Agent 同时改 shared API。正确方式是“并行审计 → Contract Freeze → worktree 隔离开发 → 独立红队”。</p>
+<div class="grid"><div class="card span-4"><h3>Wave 0 · 只读审计</h3><p>4 个 legacy miner + boundary/license/corpus/red-team 同时扫描服务器。</p></div><div class="card span-4"><h3>Wave 1 · Freeze</h3><p>Lead Architect + Chief Integrator 冻结 schema、public API、file ownership。</p></div><div class="card span-4"><h3>Wave 2–4 · 开发</h3><p>QE / FP / FO / FA 同时推进；Developer Agent 使用 worktree isolation。</p></div><div class="card span-6"><h3>独立 Audit</h3><p>Math、Leakage、Performance、Boundary、Simplification、Extraction、License、Corpus Regression。</p></div><div class="card span-6"><h3>Agent Teams</h3><p>若环境启用，可用在架构研究/跨库协调；否则主会话 + project subagents + worktrees 即可。不要依赖不存在的 project team config。</p></div></div></section>
+
+<section id="roadmap"><h2 class="section-title">6. 推荐实施路线</h2><div class="card">
+<div class="phase"><b>Phase 0</b><span>Server Audit、Migration Matrix、Contract Freeze。</span></div>
+<div class="phase"><b>Phase 1</b><span>QE Foundation + Reference metrics。</span></div>
+<div class="phase"><b>Phase 2</b><span>FP 迁 AlphaPurifier / cross-sectional core。</span></div>
+<div class="phase"><b>Phase 3</b><span>FA Registry / Identity / Seen / Lifecycle。</span></div>
+<div class="phase"><b>Phase 4</b><span>FO Typed Grammar / Search / Plateau。</span></div>
+<div class="phase"><b>Phase 5</b><span>QE Advanced robustness / A-share / novelty。</span></div>
+<div class="phase"><b>Phase 6</b><span>FA ANN / Sparse graph / Family / Aggregation。</span></div>
+<div class="phase"><b>Phase 7</b><span>FP Multi-channel ModelInput Representation。</span></div>
+<div class="phase"><b>Phase 8+</b><span>Research Ledger、Library Review Skill、Integration、独立 Audit、Legacy Archive。</span></div>
+</div></section>
+
+<section id="guardrails"><h2 class="section-title">7. 本次明确不做什么</h2><div class="grid"><div class="card span-6 bad"><h3>禁止重复建设</h3><ul><li>PIT / calendar / universe / snapshot</li><li>Data lake / COS/S3/DuckDB wrapper</li><li>Factor DSL / compiler / materialization</li><li>通用 cache / DAG / Kafka 平台</li></ul></div><div class="card span-6 bad"><h3>禁止研究捷径</h3><ul><li>corr &gt; 0.9 就删除</li><li>一个万能 score</li><li>全样本 fit preprocess</li><li>每因子跑全部高级统计</li><li>10 万因子全 pair O(K²)</li><li>把“代码运行通过”当“研究验收通过”</li></ul></div></div></section>
+
+<section><h2 class="section-title">8. 交付包内部已经包含</h2><div class="card"><p><b>给人：</b>本 HTML。</p><p><b>给 AI：</b>19 份专题 MD、根 CLAUDE.md、启动提示、Claude Code Skill、20+ 个实际 Subagent 模板。MD 中包括库目录、API/contract、旧代码迁移、性能、测试、A股规则、license、并行执行、验收与 Do-Not-Build 清单。</p></div></section>
+</main><footer><div class="wrap">Development blueprint · 2026-08-13 · Server working tree is the source of truth.</div></footer>
+</body></html>

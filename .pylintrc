@@ -1,0 +1,31 @@
+[MAIN]
+jobs=4
+suggestion-mode=yes
+
+[MESSAGES CONTROL]
+# Disable some low-priority warnings for now
+disable=
+    missing-function-docstring,
+    missing-class-docstring,
+    missing-module-docstring,
+    import-outside-toplevel,
+    too-few-public-methods,
+    invalid-name,
+    protected-access
+
+[FORMAT]
+max-line-length=120
+indent-string='    '
+
+[DESIGN]
+max-args=7
+max-locals=20
+max-returns=6
+max-branches=15
+max-statements=60
+max-attributes=10
+
+[SIMILARITIES]
+min-similarity-lines=6
+ignore-imports=yes
+

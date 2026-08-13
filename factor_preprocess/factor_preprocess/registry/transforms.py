@@ -1,0 +1,364 @@
+"""
+Transform registry with versioning and discovery.
+
+Provides a central catalog of all preprocessing transforms with metadata,
+versioning, and category-based organization.
+"""
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Optional, Set, Any
+from enum import Enum
+import hashlib
+import inspect
+
+
+class TransformCategory(str, Enum):
+    """Transform category classification."""
+    CROSS_SECTIONAL = "cross_sectional"
+    TEMPORAL = "temporal"
+    VOLATILITY = "volatility"
+    MISSINGNESS = "missingness"
+    FRESHNESS = "freshness"
+    NEUTRALIZATION = "neutralization"
+    REPRESENTATION = "representation"
+
+
+@dataclass
+class TransformMetadata:
+    """Metadata for a registered transform."""
+    name: str
+    func: Callable
+    category: TransformCategory
+    version: str
+    description: str
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    tags: Set[str] = field(default_factory=set)
+    causal_safe: bool = True
+    signature_hash: Optional[str] = None
+
+    def __post_init__(self):
+        """Compute signature hash after initialization."""
+        if self.signature_hash is None:
+            self.signature_hash = self._compute_signature_hash()
+
+    def _compute_signature_hash(self) -> str:
+        """Compute stable hash of function signature."""
+        sig = inspect.signature(self.func)
+        sig_str = f"{self.name}:{str(sig)}"
+        return hashlib.sha256(sig_str.encode()).hexdigest()[:16]
+
+
+class TransformRegistry:
+    """
+    Central registry for preprocessing transforms.
+
+    Features:
+    - Versioned transform catalog
+    - Category-based organization
+    - Signature tracking for reproducibility
+    - Tag-based filtering
+    - Causal safety annotation
+    """
+
+    def __init__(self):
+        self._transforms: Dict[str, TransformMetadata] = {}
+        self._by_category: Dict[TransformCategory, List[str]] = {
+            cat: [] for cat in TransformCategory
+        }
+        self._by_tag: Dict[str, List[str]] = {}
+
+    def register(
+        self,
+        name: str,
+        func: Callable,
+        category: TransformCategory,
+        version: str = "1.0.0",
+        description: str = "",
+        parameters: Optional[Dict[str, Any]] = None,
+        tags: Optional[Set[str]] = None,
+        causal_safe: bool = True,
+    ) -> None:
+        """
+        Register a transform.
+
+        Parameters
+        ----------
+        name : str
+            Unique transform name
+        func : Callable
+            Transform function
+        category : TransformCategory
+            Transform category
+        version : str
+            Semantic version string
+        description : str
+            Human-readable description
+        parameters : dict, optional
+            Default parameter values
+        tags : set, optional
+            Searchable tags
+        causal_safe : bool
+            Whether transform preserves causal structure
+        """
+        if name in self._transforms:
+            existing = self._transforms[name]
+            if existing.version != version:
+                raise ValueError(
+                    f"Transform '{name}' already registered with version "
+                    f"{existing.version}, cannot register version {version}"
+                )
+            return
+
+        metadata = TransformMetadata(
+            name=name,
+            func=func,
+            category=category,
+            version=version,
+            description=description,
+            parameters=parameters or {},
+            tags=tags or set(),
+            causal_safe=causal_safe,
+        )
+
+        self._transforms[name] = metadata
+        self._by_category[category].append(name)
+
+        for tag in metadata.tags:
+            if tag not in self._by_tag:
+                self._by_tag[tag] = []
+            self._by_tag[tag].append(name)
+
+    def get(self, name: str) -> Optional[TransformMetadata]:
+        """Get transform metadata by name."""
+        return self._transforms.get(name)
+
+    def get_function(self, name: str) -> Optional[Callable]:
+        """Get transform function by name."""
+        meta = self.get(name)
+        return meta.func if meta else None
+
+    def list_by_category(self, category: TransformCategory) -> List[TransformMetadata]:
+        """List all transforms in a category."""
+        names = self._by_category.get(category, [])
+        return [self._transforms[name] for name in names]
+
+    def list_by_tag(self, tag: str) -> List[TransformMetadata]:
+        """List all transforms with a given tag."""
+        names = self._by_tag.get(tag, [])
+        return [self._transforms[name] for name in names]
+
+    def list_causal_safe(self) -> List[TransformMetadata]:
+        """List all causal-safe transforms."""
+        return [
+            meta for meta in self._transforms.values()
+            if meta.causal_safe
+        ]
+
+    def all_transforms(self) -> List[TransformMetadata]:
+        """Get all registered transforms."""
+        return list(self._transforms.values())
+
+    def get_signature_hash(self, name: str) -> Optional[str]:
+        """Get signature hash for reproducibility tracking."""
+        meta = self.get(name)
+        return meta.signature_hash if meta else None
+
+
+def create_default_registry() -> TransformRegistry:
+    """
+    Create registry with all built-in transforms.
+
+    Returns
+    -------
+    TransformRegistry
+        Fully populated registry
+    """
+    from factor_preprocess.transforms import (
+        cs_rank, cs_zscore, cs_demean, cs_winsor, cs_scale,
+        rolling_mean, rolling_std, rolling_zscore, ewma,
+        volatility_scale, volatility_scale_returns, realized_volatility,
+        forward_fill, missing_indicator, missing_run_length, missing_rate,
+        days_since_update, observation_age, freshness_score, stale_data_indicator,
+    )
+    from factor_preprocess.neutralization import ols_neutralize, compute_exposures
+
+    registry = TransformRegistry()
+
+    # Cross-sectional transforms
+    registry.register(
+        "cs_rank", cs_rank, TransformCategory.CROSS_SECTIONAL,
+        version="1.0.0",
+        description="Cross-sectional rank with tie handling",
+        tags={"rank", "normalization", "cs"},
+        causal_safe=True,
+    )
+    registry.register(
+        "cs_zscore", cs_zscore, TransformCategory.CROSS_SECTIONAL,
+        version="1.0.0",
+        description="Cross-sectional z-score normalization",
+        tags={"zscore", "normalization", "cs"},
+        causal_safe=True,
+    )
+    registry.register(
+        "cs_demean", cs_demean, TransformCategory.CROSS_SECTIONAL,
+        version="1.0.0",
+        description="Cross-sectional demean",
+        tags={"demean", "normalization", "cs"},
+        causal_safe=True,
+    )
+    registry.register(
+        "cs_winsor", cs_winsor, TransformCategory.CROSS_SECTIONAL,
+        version="1.0.0",
+        description="Cross-sectional winsorization",
+        tags={"winsor", "outlier", "cs"},
+        causal_safe=True,
+    )
+    registry.register(
+        "cs_scale", cs_scale, TransformCategory.CROSS_SECTIONAL,
+        version="1.0.0",
+        description="Cross-sectional scaling to target std",
+        tags={"scale", "normalization", "cs"},
+        causal_safe=True,
+    )
+
+    # Temporal transforms
+    registry.register(
+        "rolling_mean", rolling_mean, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Rolling window mean",
+        tags={"rolling", "mean", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "rolling_std", rolling_std, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Rolling window standard deviation",
+        tags={"rolling", "std", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "rolling_zscore", rolling_zscore, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Rolling z-score normalization",
+        tags={"rolling", "zscore", "temporal"},
+        causal_safe=True,
+    )
+    registry.register(
+        "ewma", ewma, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Exponentially weighted moving average",
+        tags={"ewma", "temporal", "smoothing"},
+        causal_safe=True,
+    )
+
+    # Volatility transforms
+    registry.register(
+        "volatility_scale", volatility_scale, TransformCategory.VOLATILITY,
+        version="1.0.0",
+        description="Scale by realized volatility",
+        tags={"volatility", "scale"},
+        causal_safe=True,
+    )
+    registry.register(
+        "volatility_scale_returns", volatility_scale_returns, TransformCategory.VOLATILITY,
+        version="1.0.0",
+        description="Scale returns by volatility",
+        tags={"volatility", "returns", "scale"},
+        causal_safe=True,
+    )
+    registry.register(
+        "realized_volatility", realized_volatility, TransformCategory.VOLATILITY,
+        version="1.0.0",
+        description="Compute realized volatility",
+        tags={"volatility", "compute"},
+        causal_safe=True,
+    )
+
+    # Missingness transforms
+    registry.register(
+        "forward_fill", forward_fill, TransformCategory.MISSINGNESS,
+        version="1.0.0",
+        description="Forward fill missing values",
+        tags={"missing", "fill"},
+        causal_safe=True,
+    )
+    registry.register(
+        "missing_indicator", missing_indicator, TransformCategory.MISSINGNESS,
+        version="1.0.0",
+        description="Binary missing data indicator",
+        tags={"missing", "indicator"},
+        causal_safe=True,
+    )
+    registry.register(
+        "missing_run_length", missing_run_length, TransformCategory.MISSINGNESS,
+        version="1.0.0",
+        description="Consecutive missing observation count",
+        tags={"missing", "run_length"},
+        causal_safe=True,
+    )
+    registry.register(
+        "missing_rate", missing_rate, TransformCategory.MISSINGNESS,
+        version="1.0.0",
+        description="Rolling missing data rate",
+        tags={"missing", "rate"},
+        causal_safe=True,
+    )
+
+    # Freshness transforms
+    registry.register(
+        "days_since_update", days_since_update, TransformCategory.FRESHNESS,
+        version="1.0.0",
+        description="Days since last non-missing update",
+        tags={"freshness", "staleness"},
+        causal_safe=True,
+    )
+    registry.register(
+        "observation_age", observation_age, TransformCategory.FRESHNESS,
+        version="1.0.0",
+        description="Age of observation in days",
+        tags={"freshness", "age"},
+        causal_safe=True,
+    )
+    registry.register(
+        "freshness_score", freshness_score, TransformCategory.FRESHNESS,
+        version="1.0.0",
+        description="Continuous freshness score [0, 1]",
+        tags={"freshness", "score"},
+        causal_safe=True,
+    )
+    registry.register(
+        "stale_data_indicator", stale_data_indicator, TransformCategory.FRESHNESS,
+        version="1.0.0",
+        description="Binary stale data indicator",
+        tags={"freshness", "staleness", "indicator"},
+        causal_safe=True,
+    )
+
+    # Neutralization transforms
+    registry.register(
+        "ols_neutralize", ols_neutralize, TransformCategory.NEUTRALIZATION,
+        version="1.0.0",
+        description="OLS residual neutralization",
+        tags={"neutralize", "ols", "residual"},
+        causal_safe=True,
+    )
+    registry.register(
+        "compute_exposures", compute_exposures, TransformCategory.NEUTRALIZATION,
+        version="1.0.0",
+        description="Compute factor exposures",
+        tags={"exposure", "ols"},
+        causal_safe=True,
+    )
+
+    return registry
+
+
+# Global default registry instance
+_default_registry: Optional[TransformRegistry] = None
+
+
+def get_default_registry() -> TransformRegistry:
+    """Get or create the default global registry."""
+    global _default_registry
+    if _default_registry is None:
+        _default_registry = create_default_registry()
+    return _default_registry

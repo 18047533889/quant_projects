@@ -1,0 +1,220 @@
+groups:
+  - name: quant_platform_critical
+    interval: 30s
+    rules:
+      # Memory alerts
+      - alert: DataAccessHighMemoryUsage
+        expr: process_resident_memory_bytes{job="data-access"} > 26e9
+        for: 5m
+        labels:
+          severity: warning
+          component: data-access
+        annotations:
+          summary: "data_access memory usage exceeds 26GB"
+          description: "Memory usage: {{ $value | humanize }}B on {{ $labels.instance }}"
+
+      - alert: DataAccessCriticalMemoryUsage
+        expr: process_resident_memory_bytes{job="data-access"} > 28e9
+        for: 2m
+        labels:
+          severity: critical
+          component: data-access
+        annotations:
+          summary: "data_access memory usage exceeds 28GB - OOM risk"
+          description: "Memory usage: {{ $value | humanize }}B on {{ $labels.instance }}"
+
+      - alert: FactorEngineHighMemoryUsage
+        expr: process_resident_memory_bytes{job="factor-engine"} > 14e9
+        for: 5m
+        labels:
+          severity: warning
+          component: factor-engine
+        annotations:
+          summary: "factor_engine memory usage exceeds 14GB"
+          description: "Memory usage: {{ $value | humanize }}B on {{ $labels.instance }}"
+
+      # Service health
+      - alert: ServiceDown
+        expr: up{job=~"data-access|factor-engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} has been down for 1 minute"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "Error rate: {{ $value | humanizePercentage }} over 5min"
+
+  - name: quant_performance
+    interval: 30s
+    rules:
+      # Query performance
+      - alert: DuckDBQuerySlow
+        expr: histogram_quantile(0.95, rate(duckdb_query_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+          component: data-access
+        annotations:
+          summary: "DuckDB queries are slow"
+          description: "95th percentile query time: {{ $value }}s"
+
+      - alert: DuckDBQueryVerySlow
+        expr: histogram_quantile(0.95, rate(duckdb_query_duration_seconds_bucket[5m])) > 120
+        for: 3m
+        labels:
+          severity: critical
+          component: data-access
+        annotations:
+          summary: "DuckDB queries critically slow"
+          description: "95th percentile query time: {{ $value }}s"
+
+      # Cache effectiveness
+      - alert: CacheHitRateLow
+        expr: cache_hit_ratio < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          component: data-access
+        annotations:
+          summary: "Cache hit ratio is low"
+          description: "Cache hit ratio: {{ $value | humanizePercentage }}"
+
+      - alert: CacheHitRateCriticallyLow
+        expr: cache_hit_ratio < 0.3
+        for: 5m
+        labels:
+          severity: critical
+          component: data-access
+        annotations:
+          summary: "Cache hit ratio critically low"
+          description: "Cache hit ratio: {{ $value | humanizePercentage }} - check COS connectivity"
+
+      # Request latency
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency on {{ $labels.job }}"
+          description: "95th percentile latency: {{ $value }}s"
+
+  - name: quant_resources
+    interval: 30s
+    rules:
+      # CPU usage
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage: {{ $value }} cores"
+
+      # Disk space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes{mountpoint="/data"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on /data"
+          description: "Available: {{ $value | humanizePercentage }}"
+
+      - alert: CriticalDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes{mountpoint="/data"}) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space on /data"
+          description: "Available: {{ $value | humanizePercentage }} - immediate action required"
+
+      # File descriptors
+      - alert: HighFileDescriptorUsage
+        expr: process_open_fds / process_max_fds > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High file descriptor usage on {{ $labels.job }}"
+          description: "Usage: {{ $value | humanizePercentage }}"
+
+  - name: quant_data_quality
+    interval: 60s
+    rules:
+      # Factor computation failures
+      - alert: FactorComputationFailureRate
+        expr: rate(factor_computation_failures_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: factor-engine
+        annotations:
+          summary: "High factor computation failure rate"
+          description: "Failure rate: {{ $value }} failures/sec"
+
+      # Data access errors
+      - alert: DataAccessReadFailures
+        expr: rate(data_access_read_errors_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          component: data-access
+        annotations:
+          summary: "High data read failure rate"
+          description: "Failure rate: {{ $value }} errors/sec"
+
+      # COS connectivity
+      - alert: COSConnectionErrors
+        expr: rate(cos_connection_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          component: data-access
+        annotations:
+          summary: "COS connection errors detected"
+          description: "Error rate: {{ $value }} errors/sec - check network/credentials"
+
+  - name: quant_capacity
+    interval: 60s
+    rules:
+      # Request queue depth
+      - alert: HighRequestQueueDepth
+        expr: request_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request queue depth on {{ $labels.job }}"
+          description: "Queue depth: {{ $value }} requests"
+
+      # Active connections
+      - alert: HighActiveConnections
+        expr: active_connections > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of active connections on {{ $labels.job }}"
+          description: "Active connections: {{ $value }}"
+
+      # DuckDB connection pool exhaustion
+      - alert: DuckDBConnectionPoolExhausted
+        expr: duckdb_connection_pool_wait_time_seconds > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: data-access
+        annotations:
+          summary: "DuckDB connection pool exhausted"
+          description: "Wait time: {{ $value }}s - consider increasing pool size"

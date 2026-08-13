@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  data-access:
+    build:
+      context: ./dataaccess
+      dockerfile: Dockerfile
+    image: quant/data-access:0.10.2
+    container_name: data-access-prod
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      DATA_ACCESS_API_KEY: ${DATA_ACCESS_API_KEY:?Required}
+      DATA_ACCESS_API_MAX_CONCURRENCY: "8"
+      DUCKDB_MEMORY_LIMIT: "20GB"
+      DUCKDB_THREADS: "12"
+      DUCKDB_TEMP_DIRECTORY: /tmp/duckdb
+      DATA_ACCESS_COS_CACHE_ROOT: /var/lib/dataaccess/cos-cache
+      DATA_ACCESS_COS_READ_MODE: remote
+      DATA_ACCESS_COS_S3_ENDPOINT: ${COS_S3_ENDPOINT:-cos.ap-guangzhou.myqcloud.com}
+      COS_SECRET_ID: ${COS_SECRET_ID:?Required}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:?Required}
+      QUANT_PRODUCTION_MODE: "1"
+      QUANT_SCHEMA_CHECK: "strict"
+    volumes:
+      - dataaccess-cache:/var/lib/dataaccess/cos-cache:rw
+      - dataaccess-tmp:/tmp/duckdb:rw
+      - /data/quant_workspace:/data/quant_workspace:ro
+    tmpfs:
+      - /tmp:size=4g,mode=1777
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    deploy:
+      resources:
+        limits:
+          cpus: '12'
+          memory: 28G
+        reservations:
+          cpus: '8'
+          memory: 20G
+
+  factor-engine:
+    build:
+      context: ./factor_engine
+      dockerfile: Dockerfile
+    image: quant/factor-engine:0.3.1
+    container_name: factor-engine-prod
+    restart: unless-stopped
+    ports:
+      - "8766:8766"
+    environment:
+      FACTOR_ENGINE_SERVICE_PORT: "8766"
+      FACTOR_ENGINE_MAX_WORKERS: "4"
+      FACTOR_ENGINE_USE_NUMBA: "1"
+      DATA_ACCESS_API_URL: "http://data-access:8765"
+      DATA_ACCESS_API_KEY: ${DATA_ACCESS_API_KEY:?Required}
+      QUANT_PRODUCTION_MODE: "1"
+      PYTHONPATH: "/opt/factor_engine"
+    volumes:
+      - /data/quant_workspace:/data/quant_workspace:rw
+      - factor-tmp:/tmp:rw
+    depends_on:
+      data-access:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8766/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 16G
+        reservations:
+          cpus: '4'
+          memory: 8G
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus-quant
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus:rw
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana-quant
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Required}
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana:rw
+      - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    depends_on:
+      - prometheus
+    user: "472:472"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dataaccess-cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/quant_workspace/cos_cache
+      o: bind
+  dataaccess-tmp:
+    driver: local
+  factor-tmp:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

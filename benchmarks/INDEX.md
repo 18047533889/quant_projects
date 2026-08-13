@@ -1,0 +1,245 @@
+# Benchmark Suite Index
+
+Complete benchmark suite for quantitative platform performance testing.
+
+## Created Files
+
+### Entry Points
+- **`standalone_benchmark.py`** ⭐ - Main self-contained benchmark (recommended)
+- **`benchmark.sh`** - Shell script wrapper for easy execution
+- **`run_all_benchmarks.py`** - Orchestrator for modular benchmarks
+
+### Individual Benchmarks
+- `bench_qe_metrics.py` - QE: Rank IC/ICIR computation (100/1K/10K factors)
+- `bench_fp_transforms.py` - FP: Panel transforms (25K/756K/25M cells)
+- `bench_fa_operations.py` - FA: Financial ratios & PIT joins (1K/10K/100K assets)
+- `bench_fo_search.py` - FO: Mutation & deduplication (100/1K/10K trials)
+
+### Utilities
+- `analyze_results.py` - Results analyzer and reporter
+
+### Documentation
+- `QUICKSTART.md` - Quick start guide (start here!)
+- `BENCHMARK_SUITE.md` - Comprehensive documentation
+- `README.md` - Overview
+- `INDEX.md` - This file
+
+## Quick Commands
+
+```bash
+# Run complete benchmark suite
+python3 standalone_benchmark.py
+
+# Or use helper script
+./benchmark.sh all
+
+# Analyze results
+python3 analyze_results.py baseline.json
+```
+
+## Benchmark Categories
+
+### 1. QE (Quant Evaluator)
+Measures performance of quantitative metric computation.
+- **What**: Rank IC, ICIR computation
+- **Scales**: 100, 1,000, 10,000 factors
+- **Runtime**: ~5-10 minutes for full suite
+- **Output**: factors/second, ms/factor
+
+### 2. FP (Factor Processing)  
+Measures panel data transformation performance.
+- **What**: Rolling operations, cross-sectional ranking
+- **Scales**: 25K, 756K, 25M cells
+- **Runtime**: ~2-5 minutes
+- **Output**: Mcells/second
+
+### 3. FA (Fundamental Analysis)
+Measures financial data processing performance.
+- **What**: Ratio computation, point-in-time joins
+- **Scales**: 1K, 10K, 100K assets
+- **Runtime**: ~30-60 seconds
+- **Output**: Krows/second
+
+### 4. FO (Factor Optimization)
+Measures search and deduplication performance.
+- **What**: Candidate generation, hash-based dedup
+- **Scales**: 100, 1K, 10K trials
+- **Runtime**: ~1 second
+- **Output**: trials/second, dedup rate
+
+## Output Format
+
+Results saved to `baseline.json`:
+
+```json
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-14T...",
+  "platform": "quantitative_analysis",
+  "benchmarks": {
+    "qe": {...},
+    "fp": {...},
+    "fa": {...},
+    "fo": {...}
+  }
+}
+```
+
+## Usage Patterns
+
+### First Time Setup
+```bash
+cd /home/shw/quant_projects/benchmarks
+python3 standalone_benchmark.py
+python3 analyze_results.py
+```
+
+### Quick Test (FO only)
+```bash
+python3 bench_fo_search.py
+```
+
+### Compare Configurations
+```bash
+# Baseline
+python3 standalone_benchmark.py
+cp baseline.json baseline_v1.json
+
+# After optimization
+python3 standalone_benchmark.py  
+cp baseline.json baseline_v2.json
+
+# Compare
+python3 analyze_results.py baseline_v1.json > report_v1.txt
+python3 analyze_results.py baseline_v2.json > report_v2.txt
+diff -u report_v1.txt report_v2.txt
+```
+
+### Continuous Monitoring
+```bash
+# Add to cron or CI/CD
+0 0 * * * cd /path/to/benchmarks && python3 standalone_benchmark.py && \
+  cp baseline.json "baseline_$(date +%Y%m%d).json"
+```
+
+## Dependencies
+
+### Standalone Suite
+- numpy
+- pandas
+
+### Modular Benchmarks
+- `bench_qe_metrics.py`: requires quant_evaluator
+- `bench_fp_transforms.py`: requires factor_engine  
+- `bench_fa_operations.py`: standalone (numpy/pandas)
+- `bench_fo_search.py`: standalone (numpy/pandas)
+
+## Performance Expectations
+
+Reference hardware: 8-core CPU, 32GB RAM
+
+| Benchmark | Small | Medium | Large |
+|-----------|-------|--------|-------|
+| QE | 10-30s | 100-300s | 1000-3000s |
+| FP | 0.1-0.5s | 1-5s | 30-150s |
+| FA | 0.1-0.5s | 1-5s | 10-50s |
+| FO | <0.1s | 0.1-0.5s | 1-5s |
+
+**Total runtime (standalone)**: 10-15 minutes for all scales
+
+## File Sizes
+
+```
+standalone_benchmark.py    17 KB    Self-contained suite
+run_all_benchmarks.py      7.8 KB   Modular orchestrator
+bench_qe_metrics.py        4.4 KB   QE benchmark
+bench_fp_transforms.py     6.1 KB   FP benchmark
+bench_fa_operations.py     8.9 KB   FA benchmark
+bench_fo_search.py         9.1 KB   FO benchmark
+analyze_results.py         6.5 KB   Results analyzer
+benchmark.sh               2.0 KB   Shell wrapper
+
+BENCHMARK_SUITE.md         7.1 KB   Full documentation
+QUICKSTART.md              4.8 KB   Quick start guide
+INDEX.md                   This file
+```
+
+## Architecture
+
+```
+benchmarks/
+│
+├── Entry Points
+│   ├── standalone_benchmark.py    ← Start here (recommended)
+│   ├── benchmark.sh
+│   └── run_all_benchmarks.py
+│
+├── Individual Modules
+│   ├── bench_qe_metrics.py
+│   ├── bench_fp_transforms.py
+│   ├── bench_fa_operations.py
+│   └── bench_fo_search.py
+│
+├── Utilities
+│   └── analyze_results.py
+│
+├── Documentation
+│   ├── QUICKSTART.md             ← Read this first
+│   ├── BENCHMARK_SUITE.md        ← Comprehensive docs
+│   ├── README.md
+│   └── INDEX.md                   ← This file
+│
+└── Output
+    ├── baseline.json              ← Generated by benchmarks
+    └── baseline.txt               ← Optional text report
+```
+
+## Next Steps
+
+1. **First run**: `python3 standalone_benchmark.py`
+2. **Analyze**: `python3 analyze_results.py`
+3. **Review**: Check `baseline.json` for performance metrics
+4. **Document**: Save baseline for future comparisons
+5. **Optimize**: Use metrics to identify bottlenecks
+6. **Repeat**: Run periodically to track regression
+
+## Troubleshooting
+
+### "Out of memory"
+- Reduce scales in benchmark scripts
+- Close other applications
+- Requires 4-8GB available RAM
+
+### "Module not found"
+- Use `standalone_benchmark.py` (minimal dependencies)
+- Or install: `pip install numpy pandas`
+
+### "Benchmark taking too long"
+- Expected for large scales (QE 10K = ~10 minutes)
+- Run smaller scales first: edit scales in script
+- Use `bench_fo_search.py` for quick test (<1 second)
+
+### "Results differ between runs"
+- Some variance is normal due to system load
+- Run multiple times and average
+- Close background applications for consistency
+
+## Support Resources
+
+- Script docstrings: Read source code for details
+- Error messages: Check console output
+- Partial results: Review `baseline.json` even on failure
+- Documentation: See `BENCHMARK_SUITE.md` for deep dive
+
+## Version History
+
+- **2026-08-14**: Initial release
+  - 4 benchmark categories (QE, FP, FA, FO)
+  - Standalone and modular modes
+  - JSON output format
+  - Analysis utilities
+  - Comprehensive documentation
+
+---
+
+**Recommendation**: Start with `QUICKSTART.md` → run `standalone_benchmark.py` → analyze with `analyze_results.py`
