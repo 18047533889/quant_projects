@@ -38,17 +38,29 @@ from typing import Optional, Union
 
 from cleaned_operators.base import (
     SeriesOperator,
-    register_operator,
+    register_operator as _register_operator,
     OperatorMetadata,
     ParamSpec,
     ParamRole,
 )
 
+
+def register_operator(*args, **kwargs):
+    """Quarantine this batch until each canonical has parity evidence.
+
+    The module contains proxies and formulas whose authoritative pandas
+    contracts use different signatures.  Keeping the registrations visible
+    while forcing ``research_only`` prevents the Polars proxies from being
+    advertised as production implementations.
+    """
+    kwargs["status"] = "research_only"
+    return _register_operator(*args, **kwargs)
+
 # ============================================================================
 # Distance Correlation and Feature Geometry
 # ============================================================================
 
-@register_operator(name="ts_distance_correlation_partial_proxy", canonical="ts_distance_correlation_partial_proxy", backend="polars", status="research_only")
+@register_operator(name="ts_distance_correlation_partial_proxy", canonical="ts_distance_correlation_partial_proxy", backend="polars")
 class TSDistanceCorrelationPartialProxyPolarsNative(SeriesOperator):
     """Proxy for partial distance correlation (residual-based)
 
@@ -99,7 +111,7 @@ class TSFeatureModeSharePolarsNative(SeriesOperator):
         return (feature ** 2).rolling_mean(window) / ((feature.rolling_mean(window) ** 2) + 1e-8)
 
 
-@register_operator(name="ts_feature_subspace_rotation", canonical="ts_feature_subspace_rotation", backend="polars", status="research_only")
+@register_operator(name="ts_feature_subspace_rotation", canonical="ts_feature_subspace_rotation", backend="polars")
 class TSFeatureSubspaceRotationPolarsNative(SeriesOperator):
     """Angle of principal component rotation between windows
 
@@ -1500,7 +1512,7 @@ class TSLoMackinlayZPolarsNative(SeriesOperator):
 # Local Lyapunov Exponent and Tail Coexceedance
 # ============================================================================
 
-@register_operator(name="ts_local_lyapunov_exponent", canonical="ts_local_lyapunov_exponent", backend="polars", status="research_only")
+@register_operator(name="ts_local_lyapunov_exponent", canonical="ts_local_lyapunov_exponent", backend="polars")
 class TSLocalLyapunovExponentPolarsNative(SeriesOperator):
     """Local Lyapunov exponent (chaos measure)
 
@@ -1560,7 +1572,7 @@ class TSLowerTailCoexceedanceProbabilityPolarsNative(SeriesOperator):
 # Markov Chain Features
 # ============================================================================
 
-@register_operator(name="ts_markov_committor", canonical="ts_markov_committor", backend="polars", status="research_only")
+@register_operator(name="ts_markov_committor", canonical="ts_markov_committor", backend="polars")
 class TSMarkovCommittorPolarsNative(SeriesOperator):
     """Committor probability (probability of reaching state B before A)
 
@@ -1592,7 +1604,7 @@ class TSMarkovCommittorPolarsNative(SeriesOperator):
         return position.clip(0.0, 1.0).rolling_mean(window)
 
 
-@register_operator(name="ts_markov_entropy_production", canonical="ts_markov_entropy_production", backend="polars", status="research_only")
+@register_operator(name="ts_markov_entropy_production", canonical="ts_markov_entropy_production", backend="polars")
 class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
     """Markov entropy production rate (irreversibility measure)
 
@@ -1624,7 +1636,7 @@ class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
         return (up - down).abs()
 
 
-@register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars", status="research_only")
+@register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars")
 class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
     """Mean first passage time to threshold
 
