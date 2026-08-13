@@ -452,17 +452,22 @@ class TSCovIfPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_nth_value", canonical="ts_nth_value", backend="polars")
 class TSNthValuePolarsNative(SeriesOperator):
-    """Get nth value from current position (negative=past, positive=future)"""
+    """Get the value n rows back in time."""
     metadata = OperatorMetadata(
         name="ts_nth_value",
         category="time_series",
-        description="Get nth value from current position (negative=past, positive=future)",
+        description="Historical value at a positive row lag",
         param_names=['feature', 'n'],
         return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
+        tags=["time_series", "lag", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "n": ParamSpec(dtype=int, param_role=ParamRole.SCALAR),
+        "n": ParamSpec(
+            dtype=int,
+            min=1,
+            history_semantics="exact_rows",
+            param_role=ParamRole.HORIZON,
+        ),
     }
 
     def _calculate_series(self, feature, n, **kwargs):
@@ -470,7 +475,7 @@ class TSNthValuePolarsNative(SeriesOperator):
             feature.to_frame()
             .lazy()
             .select([
-                pl.col(feature.name).shift(-n).alias(feature.name)
+                pl.col(feature.name).shift(n).alias(feature.name)
             ])
             .collect()
             .to_series()
