@@ -147,16 +147,22 @@ class DataQualityService:
     def _run_external_checks(
         self, dataset: str, table: Any, options: Any
     ) -> tuple[dict[str, str], list[str]] | None:
-        """调 quality/contracts.run_quality_checks；不可用/抛异常 → None（降级）。"""
+        """调 quality/contracts.run_quality_checks；不可用/抛异常时 fail closed。"""
         try:
             from data_access.quality.contracts import QualityOptions, run_quality_checks
-        except Exception:
-            return None
+        except Exception as exc:
+            return (
+                {"quality_contracts": BLOCK},
+                [f"quality_contracts checker unavailable: {exc}"],
+            )
         opts = options if isinstance(options, QualityOptions) else None
         try:
             report = run_quality_checks(dataset, table, options=opts)
-        except Exception:
-            return None
+        except Exception as exc:
+            return (
+                {"quality_contracts": BLOCK},
+                [f"quality_contracts check failed: {exc}"],
+            )
         failures = list(getattr(report, "failures", ()) or ())
         checks = {
             "quality_contracts": BLOCK if failures else PASS,

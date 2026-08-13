@@ -34,9 +34,30 @@ def test_quality_contracts_finite_exception():
         table,
         options=QualityOptions(finite_columns=("text_col",)),
     )
-    # finite check 对 text_col 不会真抛异常（_non_finite_columns 内建容错），
-    # 但本测试覆盖逻辑：若抛异常则 fail-closed
-    assert report.passed or not report.passed  # 实际结果取决于实现细节
+    assert report.checks == ("finite",)
+    assert isinstance(report.passed, bool)
+
+
+def test_data_quality_service_external_checker_exception_blocks(monkeypatch):
+    """外部 checker 崩溃不能被内置 PASS 检查掩盖。"""
+    import data_access.quality.contracts as contracts
+
+    table = pa.table({"value": [1.0, 2.0]})
+
+    class Store:
+        def read(self, dataset, **params):
+            return table
+
+    def fail_checker(dataset, checked_table, *, options=None):
+        raise RuntimeError("synthetic checker crash")
+
+    monkeypatch.setattr(contracts, "run_quality_checks", fail_checker)
+
+    result = DataQualityService().run(Store(), "synthetic")
+
+    assert result.severity == BLOCK
+    assert result.checks["quality_contracts"] == BLOCK
+    assert any("synthetic checker crash" in problem for problem in result.problems)
 
 
 def test_data_quality_service_ohlc_exception_blocks():
