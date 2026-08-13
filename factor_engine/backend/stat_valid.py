@@ -42,20 +42,33 @@ def polars_row_stat_invalid(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
 
 
 def stat_valid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool = True) -> str:
-    """SQL 谓词：值可用于 rank/aggregate 统计。"""
+    """SQL 谓词：值可用于 rank/aggregate 统计。
+
+    Aligns with pandas ``CrossSectionSampleMask`` / ``np.isfinite`` and
+    ``polars_rank_input``: ±Inf is never a legal statistical sample.
+    """
     from backend.sql_pushdown.emitter import SqlDialect
 
     if not exclude_nan:
         return f"{col} IS NOT NULL"
     isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
-    return f"({col} IS NOT NULL AND NOT {isnan_fn}({col}))"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    return (
+        f"({col} IS NOT NULL AND NOT {isnan_fn}({col}) AND NOT {isinf_fn}({col}))"
+    )
 
 
 def row_stat_invalid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool = True) -> str:
-    """SQL 谓词：当前行统计无效 → 输出 NULL。"""
+    """SQL 谓词：当前行统计无效 → 输出 NULL。
+
+    ±Inf is invalid exactly like NaN (R19-027..029 finite sample mask).
+    """
     from backend.sql_pushdown.emitter import SqlDialect
 
     if not exclude_nan:
         return f"{col} IS NULL"
     isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
-    return f"({col} IS NULL OR {isnan_fn}({col}))"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    return (
+        f"({col} IS NULL OR {isnan_fn}({col}) OR {isinf_fn}({col}))"
+    )
