@@ -29,6 +29,7 @@ from cleaned_operators.base import (
     ParamSpec,
     ParamRole,
 )
+from cleaned_operators.crossing import _crossing_acceleration_series
 
 
 # ============================================================================
@@ -1569,30 +1570,27 @@ class TSCrossSpectralPhasePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars")
 class TSCrossingAccelerationPolarsNative(SeriesOperator):
-    """Acceleration of threshold crossings (frequency change)"""
+    """Second difference of ``x - y`` on crossing bars, normalized by volatility."""
 
     metadata = OperatorMetadata(
         name="ts_crossing_acceleration",
         category="time_series",
-        description="Rate of change in crossing frequency",
-        param_names=["feature", "threshold", "window"],
+        description="Crossing-bar second difference of x - y, normalized by trailing volatility",
+        param_names=["x", "y", "window"],
         return_type="series",
         tags=["time_series", "rolling", "crossing", "pit_safe"],
     )
     metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        # Count crossings in two halves of window
-        crossings = ((feature > threshold) != (feature.shift(1) > threshold)).astype(int)
-        
-        half_window = window // 2
-        first_half = crossings.rolling(half_window).sum()
-        second_half = crossings.rolling(half_window).sum().shift(-half_window)
-        
-        return second_half - first_half
+    def _calculate_series(self, x, y, window, **kwargs):
+        values = _crossing_acceleration_series(
+            np.asarray(x, dtype=float).reshape(-1, 1),
+            np.asarray(y, dtype=float).reshape(-1, 1),
+            int(window),
+        )[:, 0]
+        return pd.Series(values, index=x.index, name=x.name)
 
 
 @register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars")
