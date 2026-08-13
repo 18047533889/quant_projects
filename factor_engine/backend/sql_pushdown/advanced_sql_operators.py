@@ -85,18 +85,25 @@ def cs_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     """
     std_fn = _dialect_fn(dialect, "stddev")
 
+    # Pandas treats NaN and +/-Inf as missing for this cross-sectional
+    # statistic: they are excluded from mean/std and their output is NaN.
+    # DuckDB's stddev over Inf raises OutOfRangeError, so normalize all
+    # non-finite inputs before aggregation.  Aggregate by ts (rather than
+    # retaining one stats row per input row) to avoid multiplying rows on join.
+    finite_v = "CASE WHEN isfinite(_v) THEN _v END"
     if dialect == SqlDialect.CLICKHOUSE:
-        # ClickHouse 使用 multiIf
+        # ClickHouse 使用 multiIf; isFinite is the ClickHouse spelling.
+        finite_v = "if(isFinite(_v), _v, NULL)"
         expr = (
             f"multiIf("
-            f"isNull(t._v), NULL, "
+            f"isNull(t._v) OR NOT isFinite(t._v), NULL, "
             f"isNull(s.std_v) OR s.std_v = 0, 0.0, "
             f"(t._v - s.mean_v) / s.std_v"
             f")"
         )
     else:
         expr = (
-            f"CASE WHEN t._v IS NULL THEN NULL "
+            f"CASE WHEN t._v IS NULL OR NOT isfinite(t._v) THEN NULL "
             f"WHEN s.std_v IS NULL OR s.std_v = 0 THEN 0.0 "
             f"ELSE (t._v - s.mean_v) / s.std_v END"
         )
@@ -104,9 +111,10 @@ def cs_zscore_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     return (
         f"WITH stats AS ("
         f"SELECT ts, "
-        f"AVG(_v) OVER (PARTITION BY ts) AS mean_v, "
-        f"{std_fn}(_v) OVER (PARTITION BY ts) AS std_v "
+        f"AVG({finite_v}) AS mean_v, "
+        f"{std_fn}({finite_v}) AS std_v "
         f"FROM ({inner_sql}) t "
+        f"GROUP BY ts"
         f") "
         f"SELECT t.ts, t.inst, {expr} AS _v "
         f"FROM ({inner_sql}) t "
