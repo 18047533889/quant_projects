@@ -1,0 +1,19 @@
+---
+description: Do not expose mining/algorithm brand names in reports or user-facing text
+alwaysApply: true
+---
+
+# No algorithm brand names in deliverables
+
+Never write specific mining / research-system brand names into user-facing reports, HTML, CSV labels, slide copy, or commit messages meant for sharing.
+
+Examples of names to avoid in **visible** text (non-exhaustive): CogAlpha / cogalpha, EvoAlpha / evoalpha, AlphaSage / alphasage, and similar product or team-tool brands.
+
+Prefer neutral wording instead:
+
+- 「本周新挖」「外部中性化候选」「历史精选」「本地回测」「平台回测」
+- Internal source codes like `pool_a` / `pool_b` are OK in JSON if not shown as product names
+- Factor IDs (`alpha_20260701_…`) are OK; do not attach brand glosses next to them
+- COS path strings may be kept in internal logs/scripts, but HTML/report copy should not advertise brand+path together
+
+When editing screening HTML or weekly-dug sections, scrub any existing brand labels before publishing.

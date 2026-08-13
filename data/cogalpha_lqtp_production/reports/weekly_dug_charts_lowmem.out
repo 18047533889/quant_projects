@@ -1,0 +1,43 @@
+2026-08-10T00:15:40+08:00 LOWMEM_START min_avail=16G
+refresh ok=72 miss_cache=25 miss_dsl=37
+2026-08-10T00:15:40+08:00 PHASE_A cache-only
+2026-08-10T00:15:40+08:00 [1/25][cache] alpha_8d5eed0f
+2026-08-10T00:15:40+08:00 mem_ok avail=28.6G need>=16G
+2026-08-10T00:16:14+08:00 FAIL rc=3 alpha_8d5eed0f
+2026-08-10T00:16:17+08:00 [2/25][cache] alpha_2cf514b1
+2026-08-10T00:16:17+08:00 mem_ok avail=28.6G need>=16G
+2026-08-10T00:16:49+08:00 FAIL rc=3 alpha_2cf514b1
+2026-08-10T00:16:53+08:00 [3/25][cache] alpha_faa78249
+2026-08-10T00:16:53+08:00 mem_ok avail=28.6G need>=16G
+2026-08-10T00:17:14+08:00 LOWMEM_START min_avail=15G
+refresh ok=72 miss_cache=25 miss_dsl=37
+2026-08-10T00:17:14+08:00 PHASE_A cache-only
+2026-08-10T00:17:14+08:00 [1/25][cache] alpha_8d5eed0f
+2026-08-10T00:17:14+08:00 mem_ok avail=28.6G need>=15G
+2026-08-10T00:17:46+08:00 FAIL rc=3 alpha_8d5eed0f
+2026-08-10T00:17:49+08:00 [2/25][cache] alpha_2cf514b1
+2026-08-10T00:17:49+08:00 mem_ok avail=28.5G need>=15G
+2026-08-10T00:18:21+08:00 FAIL rc=3 alpha_2cf514b1
+2026-08-10T00:18:24+08:00 [3/25][cache] alpha_faa78249
+2026-08-10T00:18:24+08:00 mem_ok avail=28.6G need>=15G
+2026-08-10T00:18:32+08:00 LOWMEM_START min_avail=15G
+refresh ok=72 miss_cache=25 miss_dsl=37
+2026-08-10T00:18:32+08:00 FILL remaining 61 (cache-try then dsl-yearly)
+2026-08-10T00:18:32+08:00 [1/61][dsl] alpha_8d5eed0f
+2026-08-10T00:18:32+08:00 mem_ok avail=28.6G need>=15G
+2026-08-10T00:22:42+08:00 FAIL rc=1 alpha_8d5eed0f
+2026-08-10T00:22:45+08:00 [2/61][dsl] alpha_2cf514b1
+2026-08-10T00:22:45+08:00 mem_ok avail=28.4G need>=15G
+2026-08-10T00:24:18+08:00 LOWMEM_START min_avail=15G
+refresh ok=73 miss_cache=24 miss_dsl=37
+2026-08-10T00:24:19+08:00 FILL remaining 60 (cache-try then dsl-yearly)
+2026-08-10T00:24:19+08:00 [1/60][dsl] alpha_2cf514b1
+2026-08-10T00:24:19+08:00 mem_ok avail=28.4G need>=15G
+2026-08-10T00:24:52+08:00 LOWMEM_START min_avail=15G
+refresh ok=73 miss_cache=24 miss_dsl=37
+2026-08-10T00:24:52+08:00 FILL remaining 60 (cache-try then dsl-yearly)
+2026-08-10T00:24:52+08:00 [1/60][dsl] alpha_2cf514b1
+2026-08-10T00:24:52+08:00 mem_ok avail=28.3G need>=15G
+2026-08-10T00:28:41+08:00 OK alpha_2cf514b1
+2026-08-10T00:28:44+08:00 [2/60][dsl] alpha_faa78249
+2026-08-10T00:28:44+08:00 mem_ok avail=27.1G need>=15G

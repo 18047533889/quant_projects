@@ -52,7 +52,7 @@ packages = [
 quant_evaluator = ["py.typed"]
 
 [tool.setuptools.exclude-package-data]
-"*" = ["tests", "tests.*", "*.pyc", "__pycache__"]
+"*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "*.pyc", "__pycache__", "test_*.py", "*_test.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

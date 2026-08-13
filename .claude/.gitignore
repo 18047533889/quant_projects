@@ -1,0 +1,2 @@
+# Agent worktrees are local clones (multi-GB); do not publish.
+worktrees/
