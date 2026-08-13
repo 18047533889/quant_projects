@@ -333,7 +333,12 @@ def purge_overlap(
     if calendar is not None:
         cutoff = calendar.shift_session(val_start, -(horizon + 1))
         return _filter_by_dates(train_ds, None, cutoff, col)
-    dates = np.sort(train_ds.frame[col].unique())
+    train_dates = train_ds.frame[col].unique()
+    validation_dates = validation_ds.frame[vcol].unique()
+    # Build bar positions from both sides of the boundary.  Using only dates
+    # present in train makes a missing session collapse the gap and can purge a
+    # label that actually matures before validation begins.
+    dates = np.sort(np.concatenate([train_dates, validation_dates]))
     p = int(pd.Index(dates).searchsorted(val_start, side="left"))
     cutoff_pos = p - horizon - 1
     if cutoff_pos < 0:

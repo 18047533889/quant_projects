@@ -35,6 +35,9 @@ def date_bounded_split(
     train = ds.filter_dates(start=train_start, end=train_end)
     validation = ds.filter_dates(start=validation_start, end=validation_end)
     test = ds.filter_dates(start=test_start, end=test_end)
+    violations = assert_date_authoritative(train, validation, test)
+    if violations:
+        raise ValueError("date-bounded split is not date-authoritative: " + "; ".join(violations))
     return train, validation, test
 
 

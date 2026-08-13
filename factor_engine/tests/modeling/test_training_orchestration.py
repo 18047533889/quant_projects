@@ -322,6 +322,25 @@ def test_split_helpers_date_authoritative():
     assert assert_date_authoritative(bad_train, bad_val, test) != []
 
 
+def test_date_bounded_split_rejects_pit_poisoned_overlap():
+    """A future-period row cannot be smuggled into both train and validation."""
+    ds = make_panel(n_dates=6, n_stocks=5)
+    dates = sorted(ds.frame["date"].unique())
+    poisoned = ds.frame["label"].copy()
+    poisoned.loc[ds.frame["date"] == dates[2]] = 999999.0
+    ds = PanelDataset(
+        ds.frame.assign(label=poisoned), date_col="date", stock_col="stock",
+        feature_cols=list(ds.feature_cols), label_col=ds.label_col,
+    )
+    with pytest.raises(ValueError, match="date-authoritative"):
+        date_bounded_split(
+            ds,
+            train_start=dates[0], train_end=dates[2],
+            validation_start=dates[2], validation_end=dates[4],
+            test_start=dates[5], test_end=dates[5],
+        )
+
+
 # --------------------------------------------------------------------------- #
 # trainer
 # --------------------------------------------------------------------------- #
