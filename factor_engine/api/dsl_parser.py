@@ -132,7 +132,7 @@ class _ExprBuilder:
                 # a factor expression).
                 if isinstance(node.value,float) and not math.isfinite(node.value):
                     raise DSLParseError(f"Non-finite numeric literal is not allowed: {node.value!r}")
-                if not isinstance(node.value,bool) and abs(float(node.value) >self._budget.max_literal_magnitude:
+                if not isinstance(node.value,bool) and abs(float(node.value)) > self._budget.max_literal_magnitude:
                     raise DSLParseError(
                         f"literal magnitude {node.value!r} exceeds ComplexityBudget."
                         f"max_literal_magnitude={self._budget.max_literal_magnitude}"

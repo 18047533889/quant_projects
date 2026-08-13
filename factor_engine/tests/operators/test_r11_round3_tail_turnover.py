@@ -62,9 +62,9 @@ def test_weighted_semivariance_split_and_alias():
     np.testing.assert_allclose(
         dd.to_numpy()[both] ** 2, sv.to_numpy()[both], rtol=1e-12, atol=1e-12
     )
-    assert np.nanmin(sv.to_numpy() >= 0.0
+    assert np.nanmin(sv.to_numpy()) >= 0.0
     # semivariance is a squared quantity: NOT the sqrt'd value.
-    assert np.nanmax(np.abs(sv.to_numpy() - dd.to_numpy()) > 0.0
+    assert np.nanmax(np.abs(sv.to_numpy() - dd.to_numpy())) > 0.0
     # back-compat alias for the historical sqrt behaviour.
     assert OperatorRegistry.resolve_canonical("ts_weighted_semivariance_sqrt") == "ts_weighted_downside_deviation"
     # the new canonical lives on the extended-only surface (a runtime mutator;
@@ -292,7 +292,7 @@ def test_volatility_scaled_cost_entropy():
     assert np.isfinite(float(cev.iloc[-1, 0]))
     assert 0.0 <= float(cev.iloc[-1, 0]) <= 1.0
     # the two measures are distinct (vol-scaled is a different shape summary).
-    assert abs(float(cev.iloc[-1, 0]) - float(ce.iloc[-1, 0]) > 1e-9
+    assert abs(float(cev.iloc[-1, 0]) - float(ce.iloc[-1, 0])) > 1e-9
     # polars parity
     pl = pytest.importorskip("polars")
 

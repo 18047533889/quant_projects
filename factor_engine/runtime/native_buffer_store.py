@@ -211,6 +211,11 @@ class NativeBufferStore:
                 self._buffers[key] = buffer
 
             # Add this representation
+            # FIX: If overwriting existing representation, subtract old bytes first
+            old_rep = buffer.representations.get(representation)
+            if old_rep is not None:
+                buffer.total_bytes -= old_rep.bytes
+
             rep_buffer = RepresentationBuffer(
                 representation=representation,
                 value=value,

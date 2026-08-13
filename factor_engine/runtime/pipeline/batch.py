@@ -704,7 +704,7 @@ def _directory_batch_eligible(
         return False
     configs = [load_config(path, profile=profile) for path in config_paths]
     mat_flags = [c.materialization is not None for c in configs]
-    if materialize is None and len(set(mat_flags) > 1:
+    if materialize is None and len(set(mat_flags)) > 1:
         return False
     return True
 

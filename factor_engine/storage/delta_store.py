@@ -181,7 +181,7 @@ def write_delta_fragment(
 
     file_bytes = int(final.stat().st_size)
     valid_rows = (
-        int((frag["is_valid"]) == 1).sum())
+        int((frag["is_valid"] == 1).sum())
         if "is_valid" in frag.columns
         else int(len(frag))
     )
@@ -282,7 +282,7 @@ def should_compact(
             if (manifest.delta_bytes() / base_bytes) >= float(max_delta_ratio):
                 return True
     # read-amplification: base + each delta is one file open
-    if (1 + len(manifest.deltas) >= int(max_read_amplification):
+    if (1 + len(manifest.deltas)) >= int(max_read_amplification):
         return True
     return False
 
@@ -341,7 +341,7 @@ def compact_partition(
     manifest.base = base_name
     manifest.base_rows = int(len(merged))
     manifest.base_valid_rows = (
-        int((merged["is_valid"]) == 1).sum())
+        int((merged["is_valid"] == 1).sum())
         if "is_valid" in merged.columns
         else int(len(merged))
     )
@@ -403,7 +403,7 @@ def migrate_factor_partition_to_delta(partition_dir: Path) -> dict:
     _fsync_dir(base_dir)
 
     valid_rows = (
-        int((df["is_valid"]) == 1).sum()) if "is_valid" in df.columns else int(len(df))
+        int((df["is_valid"] == 1).sum()) if "is_valid" in df.columns else int(len(df))
     )
     manifest = DeltaManifest(
         layout="delta",

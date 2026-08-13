@@ -86,7 +86,7 @@ def test_cs_local_curvature_symmetric_is_zero():
     inst = OperatorRegistry.get("cs_local_curvature", "pandas_numpy")
     out = inst.calculate(x, k=1)
     # Row 0: A=1,B=3,C=2. For C (value 2): lower=1 (gap 1), upper=3 (gap 1) -> 0.
-    assert abs(float(out.loc[0, "C"]) < 1e-9
+    assert abs(float(out.loc[0, "C"])) < 1e-9
 
 
 def test_group_ex_self_quantile_matches_manual():

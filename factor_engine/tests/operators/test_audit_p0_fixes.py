@@ -164,13 +164,13 @@ def test_cs_degenerate_cross_section_is_nan():
     equal = pd.DataFrame(np.tile([1.0, 1.0, 1.0, 1.0], (3, 1)), index=dates, columns=cols)
     out = _get("cs_local_density").calculate(equal, k=1)
     assert np.isnan(out.iloc[-1].to_numpy()).all()   # not ~2k/eps
-    assert _finite_maxabs(out.to_numpy() < 1e6
+    assert _finite_maxabs(out.to_numpy()) < 1e6
 
     outlier = pd.DataFrame([[1.0, 1.0, 1.0, 1.0]] * 2 + [[1.0, 1.0, 1.0, 2.0]],
                            index=dates, columns=cols)
     gap = _get("cs_neighbor_gap").calculate(outlier, k=1)
     assert np.isnan(gap.iloc[-1].to_numpy()).all()   # MAD~0 -> NaN, not gap/eps
-    assert _finite_maxabs(gap.to_numpy() < 1e6
+    assert _finite_maxabs(gap.to_numpy()) < 1e6
 
 
 # ---------------------------------------------------------------------------

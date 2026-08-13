@@ -974,7 +974,7 @@ class TSRecoveryFractionNative(SeriesOperator):
         for c in cols:
             val = x[c]
             peak = val.rolling_max(window_size=w)
-            recovery = (pl.when((peak.is_null()) | (peak == 0)).then(None).otherwise(val / peak)
+            recovery = pl.when((peak.is_null()) | (peak == 0)).then(None).otherwise(val / peak)
             exprs.append(recovery.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1551,7 +1551,7 @@ class TSChannelWidthATRNative(SeriesOperator):
             width = high - low
             # Simple ATR approximation: rolling std
             atr = val.rolling_std(window_size=atr_w)
-            width_atr = (pl.when((atr.is_null()) | (atr == 0)).then(None).otherwise(width / atr)
+            width_atr = pl.when((atr.is_null()) | (atr == 0)).then(None).otherwise(width / atr)
             exprs.append(width_atr.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1729,7 +1729,7 @@ class TSSwingAmplitudeATRNative(SeriesOperator):
             high = val.rolling_max(window_size=w)
             amplitude = high - low
             atr = val.rolling_std(window_size=atr_w)
-            amplitude_atr = (pl.when((atr.is_null()) | (atr == 0)).then(None).otherwise(amplitude / atr)
+            amplitude_atr = pl.when((atr.is_null()) | (atr == 0)).then(None).otherwise(amplitude / atr)
             exprs.append(amplitude_atr.alias(c))
         result = x.with_columns(exprs)
         return result

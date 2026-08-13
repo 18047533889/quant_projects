@@ -1937,7 +1937,7 @@ def test_cost_aware_deadband_proportional_to_cost(registry):
     # 正比性：band = cost_mult * cost_proxy，cost_mult 越大更新次数越少
     def _updates(mult: float) -> int:
         out = op.calculate(signal, cost, cost_mult=mult)["A"].to_numpy()
-        return int(np.count_nonzero(np.abs(np.diff(out) > 1e-9))
+        return int(np.count_nonzero(np.abs(np.diff(out)) > 1e-9))
 
     assert _updates(0.0) > _updates(2.0) > _updates(5.0), "band 应随 cost_mult 单调变宽"
 

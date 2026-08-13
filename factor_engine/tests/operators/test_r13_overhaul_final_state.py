@@ -305,7 +305,7 @@ def test_overhaul_replacements_inherit_canonical_logical_contract() -> None:
 
 def _contract_equal(left, right) -> bool:
     if isinstance(left, dict) and isinstance(right, dict):
-        if set(left.keys() != set(right.keys()):
+        if set(left.keys()) != set(right.keys()):
             return False
         return all(_contract_equal(left[k], right[k]) for k in left)
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):

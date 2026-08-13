@@ -162,7 +162,7 @@ def _rank_ic(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     y_true = np.asarray(y_true, dtype=np.float64)
     y_pred = np.asarray(y_pred, dtype=np.float64)
     mask = np.isfinite(y_true) & np.isfinite(y_pred)
-    if int(mask.sum() < 2:
+    if int(mask.sum()) < 2:
         return float("nan")
     from scipy.stats import spearmanr
 

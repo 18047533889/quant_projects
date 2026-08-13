@@ -131,7 +131,7 @@ def _panels() -> dict[str, pd.DataFrame]:
     # ~22% event rate: the event_interval_* ops require >=6 intervals (7 events)
     # to emit a value (Master Spec N-69), so a window=80 panel needs a dense
     # enough process that trailing windows reach 7 events quickly.
-    event = pd.DataFrame((rng2.random((80, 12) < 0.22).astype(float), index=idx, columns=cols)
+    event = pd.DataFrame((rng2.random((80, 12)) < 0.22).astype(float), index=idx, columns=cols)
     state = pd.DataFrame(
         np.where(np.floor(np.arange(80) / 5.0) % 2, 1.0, -1.0)[:, None] * np.ones((1, 12)),
         index=idx, columns=cols)

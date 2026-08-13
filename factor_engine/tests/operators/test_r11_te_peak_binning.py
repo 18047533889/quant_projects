@@ -150,10 +150,10 @@ def test_independence_excess_near_zero_while_raw_peak_positive():
             excesses.append(e)
     assert len(raw_peaks) >= 15
     # raw max-over-lags is positively biased even under independence ...
-    assert float(np.mean(raw_peaks) > 0.01
+    assert float(np.mean(raw_peaks)) > 0.01
     # ... but the surrogate-standardized excess is ~ 0.
-    assert abs(float(np.mean(excesses)) < 0.1
-    assert float(np.max(np.abs(np.asarray(excesses))) < 0.1
+    assert abs(float(np.mean(excesses))) < 0.1
+    assert float(np.max(np.abs(np.asarray(excesses)))) < 0.1
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ def test_excess_operator_positive_under_coupling():
     ).to_numpy(dtype=float)
     vals = out[np.isfinite(out)]
     assert vals.size > 0
-    assert float(np.mean(vals) > 0.05
+    assert float(np.mean(vals)) > 0.05
 
 
 # ---------------------------------------------------------------------------

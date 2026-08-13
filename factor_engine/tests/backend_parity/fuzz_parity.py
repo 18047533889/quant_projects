@@ -29,7 +29,7 @@ def _random_panel(rng: np.random.Generator, *, n_ts: int, n_inst: int, miss: flo
     insts = [f"I{i}" for i in range(n_inst)]
     idx = pd.MultiIndex.from_product([dates, insts], names=["timestamp", "instrument"])
     arr = rng.normal(0, 1, len(idx))
-    mask = rng.random(len(idx) < miss
+    mask = rng.random(len(idx)) < miss
     arr[mask] = np.nan
     if rng.random() < 0.1:
         arr[rng.integers(0, len(arr))] = np.inf

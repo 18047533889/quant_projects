@@ -151,7 +151,7 @@ def _arrow_safe_panel(panel: pd.DataFrame) -> bool:
     if not isinstance(panel, pd.DataFrame):
         return False
     cols = panel.columns
-    if len(set(map(str, cols)) != len(cols):
+    if len(set(map(str, cols))) != len(cols):
         return False
     try:
         return all(_dtype_arrow_safe(panel[c].dtype) for c in cols)

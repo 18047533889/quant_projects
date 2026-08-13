@@ -48,25 +48,32 @@ from cleaned_operators.base import (
 # Distance Correlation and Feature Geometry
 # ============================================================================
 
-@register_operator(name="ts_distance_correlation_partial_proxy", canonical="ts_distance_correlation_partial_proxy", backend="polars")
+@register_operator(name="ts_distance_correlation_partial_proxy", canonical="ts_distance_correlation_partial_proxy", backend="polars", status="research_only")
 class TSDistanceCorrelationPartialProxyPolarsNative(SeriesOperator):
-    """Proxy for partial distance correlation (residual-based)"""
+    """Proxy for partial distance correlation (residual-based)
+
+    NOTE: This operator is marked research_only. True partial distance correlation requires:
+    1. Computing distance matrices for all variables
+    2. U-centering the distance matrices
+    3. Computing partial distance covariance
+
+    Current implementation is a placeholder: coefficient of variation.
+    """
 
     metadata = OperatorMetadata(
         name="ts_distance_correlation_partial_proxy",
         category="time_series",
-        description="Proxy for partial distance correlation using residuals",
+        description="[RESEARCH ONLY] Proxy for partial distance correlation (requires distance matrices)",
         param_names=["feature", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "dependence", "pit_safe"],
+        tags=["time_series", "rolling", "dependence", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper partial distance correlation
-        # Placeholder: rolling correlation proxy
+        # Placeholder: coefficient of variation (NOT distance correlation)
         return feature.rolling_std(window) / (feature.rolling_mean(window).abs() + 1e-8)
 
 
@@ -92,25 +99,32 @@ class TSFeatureModeSharePolarsNative(SeriesOperator):
         return (feature ** 2).rolling_mean(window) / ((feature.rolling_mean(window) ** 2) + 1e-8)
 
 
-@register_operator(name="ts_feature_subspace_rotation", canonical="ts_feature_subspace_rotation", backend="polars")
+@register_operator(name="ts_feature_subspace_rotation", canonical="ts_feature_subspace_rotation", backend="polars", status="research_only")
 class TSFeatureSubspaceRotationPolarsNative(SeriesOperator):
-    """Angle of principal component rotation between windows"""
+    """Angle of principal component rotation between windows
+
+    NOTE: This operator is marked research_only. True PCA subspace rotation requires:
+    1. Computing PCA on consecutive rolling windows
+    2. Measuring angle between principal component subspaces
+    3. Requires multivariate data or sophisticated embedding
+
+    Current implementation is a placeholder: rolling standard deviation change.
+    """
 
     metadata = OperatorMetadata(
         name="ts_feature_subspace_rotation",
         category="time_series",
-        description="PCA subspace rotation angle between consecutive windows",
+        description="[RESEARCH ONLY] PCA subspace rotation angle between consecutive windows (requires PCA)",
         param_names=["feature", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "pca", "pit_safe"],
+        tags=["time_series", "rolling", "pca", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement PCA-based subspace rotation
-        # Placeholder: rolling variance change
+        # Placeholder: rolling variance change (NOT true subspace rotation)
         return feature.rolling_std(window).diff()
 
 
@@ -995,12 +1009,17 @@ class TSJointEnergyShiftPolarsNative(SeriesOperator):
         return (feature ** 2).rolling_mean(window).diff()
 
 
-@register_operator(name="ts_jump_bipower_proxy", canonical="ts_jump_bipower_proxy", backend="polars")
-class TSJumpBipowerProxyPolarsNative(SeriesOperator):
-    """Bipower variation proxy for jump detection"""
+@register_operator(name="ts_jump_bipower", canonical="ts_jump_bipower", backend="polars")
+class TSJumpBipowerPolarsNative(SeriesOperator):
+    """Bipower variation for jump detection
+
+    NOTE: Previously named ts_jump_bipower_proxy, but this implements the correct
+    bipower variation formula: sum of products of consecutive absolute returns.
+    This is the standard estimator from Barndorff-Nielsen & Shephard (2004).
+    """
 
     metadata = OperatorMetadata(
-        name="ts_jump_bipower_proxy",
+        name="ts_jump_bipower",
         category="time_series",
         description="Bipower variation for separating jumps from continuous variation",
         param_names=["feature", "window"],
@@ -1040,25 +1059,30 @@ class TSKMDiffusionGradientPolarsNative(SeriesOperator):
         return feature.rolling_std(window).diff()
 
 
-@register_operator(name="ts_km_equilibrium_distance", canonical="ts_km_equilibrium_distance", backend="polars")
-class TSKMEquilibriumDistancePolarsNative(SeriesOperator):
-    """Distance from current state to KM equilibrium point"""
+@register_operator(name="ts_deviation_from_mean", canonical="ts_deviation_from_mean", backend="polars")
+class TSDeviationFromMeanPolarsNative(SeriesOperator):
+    """Absolute deviation from rolling mean
+
+    NOTE: Previously named ts_km_equilibrium_distance, but that name was misleading.
+    True Kramers-Moyal equilibrium distance requires estimating where drift=0.
+    This operator simply computes |feature - rolling_mean|, which is a valid
+    measure of deviation but not KM equilibrium distance.
+    """
 
     metadata = OperatorMetadata(
-        name="ts_km_equilibrium_distance",
+        name="ts_deviation_from_mean",
         category="time_series",
-        description="Distance to equilibrium where drift = 0",
+        description="Absolute deviation from rolling mean",
         param_names=["feature", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "stochastic", "pit_safe"],
+        tags=["time_series", "rolling", "deviation", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement equilibrium detection
-        # Placeholder: distance from rolling mean
+        # Absolute deviation from rolling mean
         return (feature - feature.rolling_mean(window)).abs()
 
 
@@ -1467,25 +1491,32 @@ class TSLoMackinlayZPolarsNative(SeriesOperator):
 # Local Lyapunov Exponent and Tail Coexceedance
 # ============================================================================
 
-@register_operator(name="ts_local_lyapunov_exponent", canonical="ts_local_lyapunov_exponent", backend="polars")
+@register_operator(name="ts_local_lyapunov_exponent", canonical="ts_local_lyapunov_exponent", backend="polars", status="research_only")
 class TSLocalLyapunovExponentPolarsNative(SeriesOperator):
-    """Local Lyapunov exponent (chaos measure)"""
+    """Local Lyapunov exponent (chaos measure)
+
+    NOTE: This operator is marked research_only. True local Lyapunov exponent requires:
+    1. Phase space reconstruction via time-delay embedding
+    2. Tracking divergence of nearby trajectories
+    3. Computing exponential rate of separation
+
+    Current implementation is a placeholder: volatility change rate.
+    """
 
     metadata = OperatorMetadata(
         name="ts_local_lyapunov_exponent",
         category="time_series",
-        description="Local rate of divergence of nearby trajectories",
+        description="[RESEARCH ONLY] Local rate of divergence of nearby trajectories (requires embedding)",
         param_names=["feature", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "chaos", "nonlinear", "pit_safe"],
+        tags=["time_series", "rolling", "chaos", "nonlinear", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper Lyapunov estimation with phase space reconstruction
-        # Placeholder: volatility expansion rate
+        # Placeholder: volatility expansion rate (NOT true Lyapunov exponent)
         vol = feature.rolling_std(window)
         return vol.diff() / (vol + 1e-8)
 
@@ -1520,17 +1551,25 @@ class TSLowerTailCoexceedanceProbabilityPolarsNative(SeriesOperator):
 # Markov Chain Features
 # ============================================================================
 
-@register_operator(name="ts_markov_committor", canonical="ts_markov_committor", backend="polars")
+@register_operator(name="ts_markov_committor", canonical="ts_markov_committor", backend="polars", status="research_only")
 class TSMarkovCommittorPolarsNative(SeriesOperator):
-    """Committor probability (probability of reaching state B before A)"""
+    """Committor probability (probability of reaching state B before A)
+
+    NOTE: This operator is marked research_only. True committor probability requires:
+    1. Discretizing state space into bins
+    2. Estimating transition matrix from historical data
+    3. Solving linear system for committor probabilities
+
+    Current implementation is a placeholder: normalized position in threshold band.
+    """
 
     metadata = OperatorMetadata(
         name="ts_markov_committor",
         category="time_series",
-        description="Probability of reaching upper threshold before lower",
+        description="[RESEARCH ONLY] Probability of reaching upper threshold before lower (requires Markov chain estimation)",
         param_names=["feature", "lower_threshold", "upper_threshold", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "markov", "pit_safe"],
+        tags=["time_series", "rolling", "markov", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "lower_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
@@ -1539,23 +1578,30 @@ class TSMarkovCommittorPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, lower_threshold, upper_threshold, window, **kwargs):
-        # TODO: Implement proper committor via transition matrix
-        # Placeholder: normalized position in band
+        # Placeholder: normalized position in band (NOT true committor probability)
         position = (feature - lower_threshold) / (upper_threshold - lower_threshold + 1e-8)
         return position.clip(0.0, 1.0).rolling_mean(window)
 
 
-@register_operator(name="ts_markov_entropy_production", canonical="ts_markov_entropy_production", backend="polars")
+@register_operator(name="ts_markov_entropy_production", canonical="ts_markov_entropy_production", backend="polars", status="research_only")
 class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
-    """Markov entropy production rate (irreversibility measure)"""
+    """Markov entropy production rate (irreversibility measure)
+
+    NOTE: This operator is marked research_only. True entropy production requires:
+    1. State space discretization
+    2. Transition matrix estimation
+    3. Computing entropy production from forward/reverse transitions
+
+    Current implementation is a placeholder: absolute directional bias.
+    """
 
     metadata = OperatorMetadata(
         name="ts_markov_entropy_production",
         category="time_series",
-        description="Rate of entropy production in discretized state space",
+        description="[RESEARCH ONLY] Rate of entropy production in discretized state space (requires transition matrix)",
         param_names=["feature", "window", "n_bins"],
         return_type="series",
-        tags=["time_series", "rolling", "markov", "entropy", "pit_safe"],
+        tags=["time_series", "rolling", "markov", "entropy", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
@@ -1563,24 +1609,31 @@ class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, window, n_bins=5, **kwargs):
-        # TODO: Implement proper transition matrix and entropy production
-        # Placeholder: directional bias
+        # Placeholder: directional bias (NOT true entropy production)
         up = (feature.diff() > 0).cast(pl.Int32).rolling_mean(window)
         down = (feature.diff() < 0).cast(pl.Int32).rolling_mean(window)
         return (up - down).abs()
 
 
-@register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars")
+@register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars", status="research_only")
 class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
-    """Mean first passage time to threshold"""
+    """Mean first passage time to threshold
+
+    NOTE: This operator is marked research_only. True MFPT requires:
+    1. State space discretization
+    2. Transition matrix estimation
+    3. Solving for expected hitting times
+
+    Current implementation is a placeholder: inverse threshold crossing rate.
+    """
 
     metadata = OperatorMetadata(
         name="ts_markov_mean_first_passage_time",
         category="time_series",
-        description="Expected time to reach threshold from current state",
+        description="[RESEARCH ONLY] Expected time to reach threshold (requires Markov chain estimation)",
         param_names=["feature", "threshold", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "markov", "pit_safe"],
+        tags=["time_series", "rolling", "markov", "pit_safe", "research_only"],
     )
     metadata.param_specs = {
         "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
@@ -1588,24 +1641,29 @@ class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
-        # TODO: Implement proper MFPT via transition matrix
-        # Placeholder: inverse crossing rate
+        # Placeholder: inverse crossing rate (NOT true MFPT)
         crossed = (feature > threshold).cast(pl.Int32).diff().abs()
         crossing_rate = crossed.rolling_mean(window)
         return 1.0 / (crossing_rate + 1e-8)
 
 
-@register_operator(name="ts_markov_persistence", canonical="ts_markov_persistence", backend="polars")
-class TSMarkovPersistencePolarsNative(SeriesOperator):
-    """Markov persistence (diagonal dominance of transition matrix)"""
+@register_operator(name="ts_lag1_autocorr", canonical="ts_lag1_autocorr", backend="polars")
+class TSLag1AutocorrPolarsNative(SeriesOperator):
+    """Lag-1 autocorrelation (rolling correlation with previous period)
+
+    NOTE: Previously named ts_markov_persistence, but that name was misleading.
+    True Markov persistence is diagonal dominance of transition matrix.
+    This operator computes rolling lag-1 autocorrelation, which is a valid
+    measure of short-term persistence but not Markov chain persistence.
+    """
 
     metadata = OperatorMetadata(
-        name="ts_markov_persistence",
+        name="ts_lag1_autocorr",
         category="time_series",
-        description="Probability of staying in current state (auto-transition)",
+        description="Rolling lag-1 autocorrelation (correlation with previous period)",
         param_names=["feature", "window", "n_bins"],
         return_type="series",
-        tags=["time_series", "rolling", "markov", "persistence", "pit_safe"],
+        tags=["time_series", "rolling", "autocorrelation", "persistence", "pit_safe"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
@@ -1613,8 +1671,7 @@ class TSMarkovPersistencePolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, window, n_bins=5, **kwargs):
-        # TODO: Implement proper state discretization and transition matrix
-        # Placeholder: autocorrelation
+        # Lag-1 autocorrelation
         return feature.rolling_corr(feature.shift(1), window_size=window)
 
 

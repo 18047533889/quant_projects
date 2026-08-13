@@ -151,7 +151,7 @@ def _gates() -> list[dict[str, str]]:
         from runtime.task_run_observation import estimate_output_bytes
         import pandas as pd
 
-        return estimate_output_bytes(pd.Series([1.0, 2.0, 3.0]) > 0
+        return estimate_output_bytes(pd.Series([1.0, 2.0, 3.0])) > 0
 
     # ---- host lease ----
     def host_lease_no_double_count():

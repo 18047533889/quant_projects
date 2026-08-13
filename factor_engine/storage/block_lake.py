@@ -513,7 +513,7 @@ class FactorBlockLakeReader:
         return [
             e
             for e in entries
-            if e.get("date_bucket_end", e.get("date_bucket") >= qb_start
+            if e.get("date_bucket_end", e.get("date_bucket")) >= qb_start
             and e["date_bucket"] <= qb_end
         ]
 

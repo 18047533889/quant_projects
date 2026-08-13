@@ -83,7 +83,7 @@ def test_clickhouse_materialize_engine_path(tmp_path):
     mat = out["materialization"]
     assert mat.get("dual_write_committed") is True or mat.get("clickhouse")
     ch = mat.get("clickhouse") or {}
-    assert ch.get("rows_written", mat.get("rows_written", 0) >= 4
+    assert ch.get("rows_written", mat.get("rows_written", 0)) >= 4
 
     from data_access.clickhouse.panel import ClickHouseConfig, execute_query
 
@@ -95,7 +95,7 @@ def test_clickhouse_materialize_engine_path(tmp_path):
             f"WHERE factor_id = '{fid}'"
         ),
     )
-    assert int(result.column("c")[0].as_py() >= 4
+    assert int(result.column("c")[0].as_py()) >= 4
 
 
 @pytest.mark.integration

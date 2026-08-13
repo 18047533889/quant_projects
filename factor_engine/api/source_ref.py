@@ -423,9 +423,9 @@ def _enforce_source_ref_size_limits(token: str, raw: bytes, payload: Any) -> Non
         if isinstance(params, dict) and len(params) + (len(tparams) if isinstance(tparams, dict) else 0) > _SR_MAX_PARAMS:
             raise ValueError(f"source ref param count exceeds {_SR_MAX_PARAMS}")
         for key, value in list(params.items()) + list(tparams.items()):
-            if len(str(key) > _SR_MAX_KEY_LEN:
+            if len(str(key)) > _SR_MAX_KEY_LEN:
                 raise ValueError(f"source ref param key too long: {str(key)[:16]}...")
-            if len(str(value) > _SR_MAX_VALUE_LEN:
+            if len(str(value)) > _SR_MAX_VALUE_LEN:
                 raise ValueError("source ref param value too long")
 
 

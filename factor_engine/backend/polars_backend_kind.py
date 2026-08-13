@@ -21,15 +21,161 @@ Kinds:
 
 The router / capability / coverage reports must read this kind instead of
 ``backend == "polars"``.
+**ExecutionKind Declaration (2026-08-13 explicit capability contract)**:
+
+Operators should declare their execution characteristics via
+:class:`PhysicalImplementationSpec` rather than relying on source inspection.
+The classification logic falls back to heuristics with a warning when the
+declaration is missing, but explicit declaration is the authoritative path forward.
 """
 from __future__ import annotations
 
+import warnings
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 
+class ExecutionKind(str, Enum):
+    """How a backend physically executes an operator implementation.
+
+    This enum defines the execution taxonomy for operator implementations.
+    Operators should declare their ExecutionKind explicitly via
+    PhysicalImplementationSpec; source inspection is a fallback only.
+
+    Taxonomy:
+
+    * ``PANDAS_REFERENCE`` — Certified pandas_numpy reference implementation.
+      The gold standard for correctness. Always materializes full panels.
+
+    * ``POLARS_NATIVE_EXPR`` — Pure Polars expression building (pl.col(), pl.when(),
+      arithmetic/logical ops). No Python callbacks, no pandas round-trip.
+      Supports lazy evaluation and streaming when query allows.
+
+    * ``POLARS_NATIVE_KERNEL`` — Per-column numpy UDF over Polars columns
+      (``df.select(pl.col("x").map_batches(lambda s: ...))``) with no pandas
+      round-trip. Materializes the selected column(s) but stays in Polars memory.
+
+    * ``POLARS_PANDAS_DELEGATE`` — Polars → to_pandas() → pandas reference →
+      from_pandas() round-trip. Used for gap coverage when no native Polars
+      implementation exists. Materializes full panel in pandas.
+
+    * ``SQL_NATIVE`` — Native SQL lowering (DuckDB/ClickHouse dialect).
+      Pushed down to query engine; supports lazy/streaming when engine allows.
+
+    * ``SQL_PYTHON_UDF`` — SQL with Python scalar/aggregate UDFs registered
+      into the query engine. Less efficient than pure SQL; materializes UDF args.
+
+    * ``DUCKDB_PYTHON_REPLACEMENT`` — DuckDB replacement scan over Python objects
+      (pandas DataFrame → DuckDB via zero-copy Arrow when possible, copy otherwise).
+
+    * ``UNSUPPORTED`` — No implementation available for this backend.
+
+    Design note: This is the *execution* taxonomy, not the *capability* level.
+    A POLARS_PANDAS_DELEGATE implementation may still be production_safe if the
+    reference it delegates to is certified. ExecutionKind describes HOW it runs,
+    CapabilityLevel describes WHETHER it's safe to use.
+    """
+
+    PANDAS_REFERENCE = "pandas_reference"
+    POLARS_NATIVE_EXPR = "polars_native_expr"
+    POLARS_NATIVE_KERNEL = "polars_native_kernel"
+    POLARS_PANDAS_DELEGATE = "polars_pandas_delegate"
+    SQL_NATIVE = "sql_native"
+    SQL_PYTHON_UDF = "sql_python_udf"
+    DUCKDB_PYTHON_REPLACEMENT = "duckdb_python_replacement"
+    UNSUPPORTED = "unsupported"
+
+
+@dataclass(frozen=True)
+class PhysicalImplementationSpec:
+    """Explicit declaration of how an operator implementation executes.
+
+    This replaces source-code heuristics with an authoritative contract.
+    Operator classes should define a ``_physical_spec`` class attribute or
+    ``physical_spec()`` method returning this spec.
+
+    Fields:
+
+    * ``canonical`` — Canonical operator name (e.g., "ts_mean").
+    * ``backend`` — Physical backend identifier ("pandas_numpy", "polars", "duckdb_sql").
+    * ``execution_kind`` — How this implementation executes (see ExecutionKind enum).
+    * ``supports_lazy`` — Can defer computation until collect()?
+    * ``supports_streaming`` — Can process in batches without full materialization?
+    * ``stateful`` — Does execution carry mutable state across windows (e.g., EMA)?
+    * ``materializes_full_panel`` — Must load entire panel into memory?
+    * ``requires_sorted`` — Requires pre-sorted input for correctness?
+    * ``supports_nulls`` — Handles null values correctly per spec?
+    * ``supports_nan`` — Handles NaN correctly (vs treating as null)?
+    * ``supports_inf`` — Handles +/-Inf correctly (vs clamping/error)?
+    * ``notes`` — Human-readable notes about implementation choices/limits.
+
+    Example declaration in an operator class::
+
+        class TsMeanPolars(PolarsOperator):
+            _physical_spec = PhysicalImplementationSpec(
+                canonical="ts_mean",
+                backend="polars",
+                execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+                supports_lazy=True,
+                supports_streaming=True,
+                stateful=False,
+                materializes_full_panel=False,
+                requires_sorted=False,
+                supports_nulls=True,
+                supports_nan=True,
+                supports_inf=True,
+                notes="Pure rolling_mean expression; streaming-capable",
+            )
+
+            def _calculate_series(self, df, params):
+                return df.select(
+                    pl.col(params["input"])
+                    .rolling_mean(params["window"])
+                    .alias(params["output"])
+                )
+
+    For gap-coverage delegates::
+
+        class TsSkewnessPolarsDelegate(PolarsOperator):
+            _physical_spec = PhysicalImplementationSpec(
+                canonical="ts_skewness",
+                backend="polars",
+                execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+                supports_lazy=False,
+                supports_streaming=False,
+                stateful=False,
+                materializes_full_panel=True,
+                requires_sorted=False,
+                supports_nulls=True,  # Inherited from pandas reference
+                supports_nan=True,
+                supports_inf=True,
+                notes="Gap coverage: delegates to pandas reference via to_pandas()",
+            )
+    """
+
+    canonical: str
+    backend: str
+    execution_kind: ExecutionKind
+
+    # Execution mode capabilities
+    supports_lazy: bool = False
+    supports_streaming: bool = False
+    stateful: bool = False
+    materializes_full_panel: bool = False
+    requires_sorted: bool = False
+
+    # Data handling capabilities
+    supports_nulls: bool = False
+    supports_nan: bool = False
+    supports_inf: bool = False
+
+    # Documentation
+    notes: str = ""
+
+
 class BackendKind(str, Enum):
-    """Explicit backend-kind classification."""
+    """Explicit backend-kind classification (legacy compatibility)."""
 
     POLARS_NATIVE = "polars_native"
     POLARS_UDF_PANDAS_DELEGATE = "polars_udf_pandas_delegate"
@@ -94,6 +240,33 @@ def _kernel_is_delegate(operator: Any) -> bool:
     return False
 
 
+def get_physical_spec(operator: Any) -> PhysicalImplementationSpec | None:
+    """Extract PhysicalImplementationSpec from an operator if declared.
+
+    Checks for:
+    1. ``operator._physical_spec`` class/instance attribute
+    2. ``operator.physical_spec()`` method
+
+    Returns None if no explicit declaration found.
+    """
+    # Check for _physical_spec attribute
+    spec = getattr(operator, "_physical_spec", None)
+    if isinstance(spec, PhysicalImplementationSpec):
+        return spec
+
+    # Check for physical_spec() method
+    method = getattr(operator, "physical_spec", None)
+    if callable(method):
+        try:
+            result = method()
+            if isinstance(result, PhysicalImplementationSpec):
+                return result
+        except Exception:
+            pass
+
+    return None
+
+
 def polars_backend_kind(
     operator: Any,
     *,
@@ -105,7 +278,41 @@ def polars_backend_kind(
     Returns one of the :class:`BackendKind` values.  ``source`` / ``module`` are
     the registry ``backend_meta["source"]`` and the operator class module; when
     they are known the classification is exact without source inspection.
+
+    **Explicit declaration preferred**: Operators should declare
+    :class:`PhysicalImplementationSpec` via ``_physical_spec`` attribute or
+    ``physical_spec()`` method. Source inspection is a fallback with a warning.
     """
+    # Try explicit declaration first
+    spec = get_physical_spec(operator)
+    if spec is not None:
+        # Map ExecutionKind to BackendKind (legacy compatibility)
+        if spec.execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE:
+            return BackendKind.POLARS_UDF_PANDAS_DELEGATE
+        elif spec.execution_kind in {
+            ExecutionKind.POLARS_NATIVE_EXPR,
+            ExecutionKind.POLARS_NATIVE_KERNEL,
+        }:
+            return BackendKind.POLARS_NATIVE
+        elif spec.execution_kind == ExecutionKind.PANDAS_REFERENCE:
+            return BackendKind.PANDAS_REFERENCE
+        elif spec.execution_kind in {
+            ExecutionKind.SQL_NATIVE,
+            ExecutionKind.SQL_PYTHON_UDF,
+        }:
+            return BackendKind.SQL_NATIVE
+        else:
+            return BackendKind.UNSUPPORTED
+
+    # Fallback to heuristics with warning
+    canonical = getattr(operator, "canonical", "unknown")
+    warnings.warn(
+        f"Operator {canonical} (backend=polars) lacks explicit PhysicalImplementationSpec; "
+        f"falling back to source inspection heuristics. Add _physical_spec attribute "
+        f"or physical_spec() method for authoritative classification.",
+        stacklevel=2,
+    )
+
     if _source_is_delegate(source):
         return BackendKind.POLARS_UDF_PANDAS_DELEGATE
     if _module_is_delegate(operator, module=module):
@@ -156,6 +363,9 @@ def capability_quality(canonical: str, backend: str) -> str:
 
     A delegate-only polars slot is reported as ``polars_pandas_delegate``, never
     as a native "Polars supported" boolean.
+
+    **Explicit declaration preferred**: Uses PhysicalImplementationSpec when
+    available; falls back to source inspection with warning otherwise.
     """
     b = str(backend or "").lower()
     if b == "pandas_numpy":
@@ -164,12 +374,22 @@ def capability_quality(canonical: str, backend: str) -> str:
         kind = canonical_polars_kind(canonical)
         if kind == BackendKind.POLARS_UDF_PANDAS_DELEGATE:
             return "polars_pandas_delegate"
-        # Distinguish expression vs per-column numpy kernel by source inspection.
+
+        # Try explicit spec first
         try:
             from cleaned_operators.registry import OperatorRegistry
-
             op = OperatorRegistry.get(canonical, "polars")
             if op is not None:
+                spec = get_physical_spec(op)
+                if spec is not None:
+                    if spec.execution_kind == ExecutionKind.POLARS_NATIVE_EXPR:
+                        return "polars_native_expression"
+                    elif spec.execution_kind == ExecutionKind.POLARS_NATIVE_KERNEL:
+                        return "polars_native_kernel"
+                    elif spec.execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE:
+                        return "polars_pandas_delegate"
+
+                # Fallback: distinguish expression vs per-column numpy kernel by source inspection
                 kernel = getattr(op, "_calculate_series", None)
                 if kernel is not None:
                     import inspect
@@ -192,6 +412,9 @@ def capability_quality(canonical: str, backend: str) -> str:
 
 __all__ = [
     "BackendKind",
+    "ExecutionKind",
+    "PhysicalImplementationSpec",
+    "get_physical_spec",
     "PANDAS_DELEGATE_SOURCES",
     "PANDAS_DELEGATE_MODULES",
     "polars_backend_kind",

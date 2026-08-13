@@ -106,7 +106,7 @@ def test_ar_full_floor_first_finite_row_equals_window():
     assert first == 20
     # expanding emits strictly earlier than the full-history floor
     exp = op.calculate(x, window=20, order=1, warmup_policy="expanding")["A"].to_numpy()
-    assert int(np.argmax(np.isfinite(exp)) < 20
+    assert int(np.argmax(np.isfinite(exp))) < 20
 
 
 def test_ar_invalid_warmup_policy_rejected():

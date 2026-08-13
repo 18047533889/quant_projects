@@ -146,8 +146,8 @@ def test_signature_distinguishes_same_mean_std_count_different_patterns():
     # hash must not.
     a = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     b = np.array([5.0, 1.0, 4.0, 2.0, 3.0])
-    assert abs(a.mean() - b.mean() < 1e-12
-    assert abs(a.std() - b.std() < 1e-12
+    assert abs(a.mean() - b.mean()) < 1e-12
+    assert abs(a.std() - b.std()) < 1e-12
     assert a.size == b.size
     assert _output_signature(a) != _output_signature(b)
 

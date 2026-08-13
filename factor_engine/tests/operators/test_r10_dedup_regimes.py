@@ -64,7 +64,7 @@ def test_ashare_fixture_is_realistic_trading_with_jumps():
     # log-returns carry at least one big jump (>5% day) and vol clustering is
     # visible in the largest |return| far exceeding a plain Gaussian daily move.
     logret = np.diff(np.log(arr), axis=0)
-    assert float(np.nanmax(np.abs(logret)) > 0.05
+    assert float(np.nanmax(np.abs(logret))) > 0.05
 
 
 # --------------------------------------------------------------------------- #

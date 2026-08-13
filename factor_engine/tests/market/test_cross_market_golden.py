@@ -115,7 +115,7 @@ def test_fail_a_return_without_10000() -> None:
     # Using A bp as if it were decimal is a 10000x error.
     a_bp, us_dec = _synthetic_panels()
     assert not np.allclose(a_bp, us_dec)  # A raw bp != US decimal
-    assert np.max(np.abs(a_bp / 10000.0 - us_dec) < 1e-9  # correct scaling matches
+    assert np.max(np.abs(a_bp / 10000.0 - us_dec)) < 1e-9  # correct scaling matches
 
 
 def test_fail_us_ret_divided_by_10000() -> None:

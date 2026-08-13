@@ -55,7 +55,7 @@ def _build_panel() -> dict[str, pd.DataFrame]:
     low_limit = np.round(prev_close * 0.90, 2)
 
     # suspensions: ~3% random NaN rows (not at the edges)
-    sus_mask = RNG.random((_D, _N) < 0.03
+    sus_mask = RNG.random((_D, _N)) < 0.03
     for arr in (close, open_, high, low, volume, amount, turnover_ratio, market_cap, pe_ratio):
         arr = arr.reshape(-1)
         arr[sus_mask.reshape(-1)] = np.nan
@@ -78,7 +78,7 @@ def _build_panel() -> dict[str, pd.DataFrame]:
     eps_raw = RNG.normal(0.3, 0.15, (_D, _N))
     fund_raw = pd.DataFrame(eps_raw, index=dates, columns=symbols)
     update_event = pd.DataFrame(
-        (RNG.random((_D, _N) < 0.015).astype(float), index=dates, columns=symbols
+        (RNG.random((_D, _N)) < 0.015).astype(float), index=dates, columns=symbols
     )
     update_event.iloc[:5] = np.nan  # cold start
     eps = fund_raw.where(update_event > 0).ffill()

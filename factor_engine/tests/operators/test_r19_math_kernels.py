@@ -245,7 +245,7 @@ def test_industry_size_fwl_properties():
     for t in range(T):
         for g in np.unique(ind[t]):
             m = ind[t] == g
-            assert abs(float(np.nanmean(resid[t][m])) < 1e-9
+            assert abs(float(np.nanmean(resid[t][m]))) < 1e-9
         # FWL 正交性：resid ⊥ demeaned log size（全局）
         r = resid[t]
         st = size_tilde[t]

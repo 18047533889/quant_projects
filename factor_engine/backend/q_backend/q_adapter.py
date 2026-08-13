@@ -31,6 +31,27 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class QResidentTableHandle:
+    """Handle representing a table already resident in Q process memory.
+
+    Allows consecutive Q regions to reuse intermediate results without re-uploading.
+    Eliminates region-level data pingpong (文档 §85 Q_BACKEND_OPERATOR_LEVEL_PINGPONG_ZERO).
+    """
+    table_name: str  # Name in Q workspace
+    q_table_ref: Any  # Reference to Q table object
+    row_count: int
+    byte_size: int  # Estimated memory footprint
+    region_id: str  # Origin region ID
+
+    def __repr__(self) -> str:
+        return (
+            f"QResidentTableHandle(table={self.table_name}, "
+            f"rows={self.row_count}, bytes={self.byte_size}, "
+            f"region={self.region_id})"
+        )
+
+
 class QType(Enum):
     """q/K 数据类型。"""
     BOOLEAN = "boolean"  # `boolean$

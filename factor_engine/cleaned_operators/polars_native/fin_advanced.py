@@ -1267,14 +1267,18 @@ class FinDebtServiceCoverageProxyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_interest_coverage_proxy", canonical="fin_interest_coverage_proxy", backend="polars")
-class FinInterestCoverageProxyPolarsNative(SeriesOperator):
-    """EBIT / Interest expense (simplified)."""
-    
+@register_operator(name="fin_interest_coverage", canonical="fin_interest_coverage", backend="polars")
+class FinInterestCoveragePolarsNative(SeriesOperator):
+    """EBIT / Interest expense (interest coverage ratio)
+
+    NOTE: Previously named fin_interest_coverage_proxy, but this is the standard
+    definition of interest coverage ratio. No proxy needed - this is the exact formula.
+    """
+
     metadata = OperatorMetadata(
-        name="fin_interest_coverage_proxy",
+        name="fin_interest_coverage",
         category="fundamental",
-        description="EBIT / Interest expense (simplified).",
+        description="Interest coverage ratio: EBIT / Interest expense",
         param_names=["ebit", "interest_expense"],
         return_type="series",
         tags=["fundamental", "financial", "polars_native", "pit_safe"],

@@ -84,7 +84,7 @@ def test_return_and_detrended_level_entropies_differ():
     # spectrum retains low-frequency/curvature structure the differenced return
     # spectrum does not, so the two entropies must NOT coincide.
     assert float(v_ret.iloc[-1]) != pytest.approx(float(v_lvl.iloc[-1]), abs=1e-9)
-    assert float(np.nanmean(v_ret.values) != pytest.approx(float(np.nanmean(v_lvl.values)), abs=1e-9)
+    assert float(np.nanmean(v_ret.values)) != pytest.approx(float(np.nanmean(v_lvl.values)), abs=1e-9)
 
 
 def test_legacy_ts_spectral_entropy_matches_return_direction():

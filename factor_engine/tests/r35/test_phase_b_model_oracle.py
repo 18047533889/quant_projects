@@ -145,7 +145,7 @@ def test_kalman_level_oracle_tracks_state():
     obs = level + 0.3 * rng.standard_normal(n)
     filt = kalman_local_level(obs, q=0.001, r=0.09)
     # filter lags; at the end it should be close to the true level
-    assert np.nanmean(np.abs(filt[150:] - level[150:]) < 0.3
+    assert np.nanmean(np.abs(filt[150:] - level[150:])) < 0.3
 
 
 def test_kalman_oracle_matches_engine_kernel():

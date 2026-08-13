@@ -239,7 +239,7 @@ def test_event_response_invalid_params_rejected():
     idx = pd.date_range("2024-01-01", periods=120, freq="B")
     rng = np.random.default_rng(0)
     ret = pd.DataFrame(rng.standard_normal((120, 3)), index=idx, columns=list("ABC"))
-    ev = (rng.standard_normal((120, 3) > 1.0).astype(float)
+    ev = (rng.standard_normal((120, 3)) > 1.0).astype(float)
     ev = pd.DataFrame(ev, index=idx, columns=list("ABC"))
     op = _get("event_historical_response_mean")
     with pytest.raises(OperatorParameterError):
@@ -255,7 +255,7 @@ def test_event_response_insufficient_min_events_nan():
     idx = pd.date_range("2024-01-01", periods=120, freq="B")
     rng = np.random.default_rng(0)
     ret = pd.DataFrame(rng.standard_normal((120, 3)), index=idx, columns=list("ABC"))
-    ev = (rng.standard_normal((120, 3) > 1.0).astype(float)
+    ev = (rng.standard_normal((120, 3)) > 1.0).astype(float)
     ev = pd.DataFrame(ev, index=idx, columns=list("ABC"))
     op = _get("event_historical_response_sign_balance")
     out = op.calculate(ret, ev, history_window=40, horizon=5, min_events=100)

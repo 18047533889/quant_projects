@@ -87,7 +87,7 @@ class PolarsExpressionCompiler:
             cache_size: Expression cache 最大容量（LRU eviction）
         """
         self.cache_size = cache_size
-        self._cache: dict[str, CompiledExpression] =
+        self._cache: dict[str, CompiledExpression] = {}
         self._cache_order: list[str] = []  # LRU tracking
         self._metrics = ExpressionCompilerMetrics()
         self._lock = threading.RLock()

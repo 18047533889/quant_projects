@@ -1,6 +1,32 @@
 # -*- coding: utf-8 -*-
 """Polars 线程池配置与动态调优。
 
+IMPORTANT - THREADING MODEL:
+================================================================================
+Polars thread pool size is FIXED at import time via POLARS_MAX_THREADS env var.
+Runtime calls to pl.Config.set_thread_count() do NOT work reliably and can
+cause undefined behavior.
+
+CORRECT APPROACH:
+- Set POLARS_MAX_THREADS environment variable BEFORE importing polars
+- ResourceBroker should control the NUMBER OF CONCURRENT POLARS JOBS, not thread count
+- Each Polars job uses the fixed thread pool; concurrency control limits how many
+  jobs run simultaneously
+
+Example:
+    # At process startup (before any polars import)
+    os.environ['POLARS_MAX_THREADS'] = str(physical_cores)
+
+    # At runtime, ResourceBroker controls job concurrency:
+    with resource_broker.acquire(cpu_tokens=4):
+        # Run 1 Polars job using the fixed thread pool
+        df = lf.collect()
+
+    # To run fewer concurrent jobs, reduce semaphore count, not thread pool size
+
+DEPRECATED: All pl.Config.set_thread_count() calls in this file are disabled.
+================================================================================
+
 根据 ResourceBroker CPU 预算和任务类型动态调整 Polars 线程数，目标：
 - CPU 密集型：吞吐提升 30-50%（充分利用多核）
 - IO 密集型：适度超订（1.5x），隐藏 IO 等待
@@ -86,50 +112,26 @@ def optimal_polars_threads(
 
 @contextmanager
 def polars_thread_budget(threads: int):
-    """临时设置 Polars 线程数的上下文管理器。
+    """DEPRECATED: Runtime thread control does not work reliably in Polars.
 
     用法:
-        with polars_thread_budget(4):
-            df = lf.collect()  # 使用 4 线程执行
+        # WRONG (doesn't work):
+        # with polars_thread_budget(4):
+        #     df = lf.collect()
+
+        # CORRECT: Control job concurrency instead
+        with resource_broker.acquire(cpu_tokens=threads):
+            df = lf.collect()  # Uses fixed thread pool
 
     注意:
-        - Polars 0.20+ 支持运行时修改 thread_pool_size
-        - 嵌套调用：内层设置生效，退出后恢复外层
-        - 线程安全：使用 thread-local storage（Polars 内部处理）
+        - Polars thread pool is fixed at import time via POLARS_MAX_THREADS
+        - Runtime modifications via pl.Config.set_thread_count() are unreliable
+        - ResourceBroker should limit CONCURRENT JOBS, not threads per job
+        - This function is now a no-op and will be removed
     """
-    if pl is None:
-        # Polars 未安装：no-op
-        yield
-        return
-
-    # 保存当前线程数
-    try:
-        original = pl.thread_pool_size()
-    except AttributeError:
-        # 旧版本 Polars 无此 API：使用环境变量
-        original = None
-        old_env = os.environ.get("POLARS_MAX_THREADS")
-
-    try:
-        # 设置新线程数
-        if hasattr(pl, "Config"):
-            # Polars 0.20+
-            pl.Config.set_thread_count(threads)
-        else:
-            # 旧版本回退
-            os.environ["POLARS_MAX_THREADS"] = str(threads)
-
-        yield
-
-    finally:
-        # 恢复原值
-        if original is not None:
-            if hasattr(pl, "Config"):
-                pl.Config.set_thread_count(original)
-        elif old_env is not None:
-            os.environ["POLARS_MAX_THREADS"] = old_env
-        else:
-            os.environ.pop("POLARS_MAX_THREADS", None)
+    # NO-OP: Runtime thread changes don't work reliably
+    # The thread pool size was fixed when polars was imported
+    yield
 
 
 def configure_polars_for_execution(
@@ -138,29 +140,42 @@ def configure_polars_for_execution(
 ) -> dict[str, int]:
     """配置 Polars 全局执行参数（线程数、流式块大小）。
 
+    DEPRECATED: Runtime thread configuration does not work.
+
+    This function historically attempted to set thread count at runtime,
+    but Polars thread pool is fixed at import time.
+
     Args:
-        max_workers: 最大线程数（None 时使用 CPU 核心数）。
-        memory_mb: 内存限制（MB）；影响流式块大小。
+        max_workers: IGNORED - thread count must be set via POLARS_MAX_THREADS before import
+        memory_mb: Memory limit (MB); affects streaming chunk size.
 
     Returns:
         配置快照字典（用于日志/监控）。
 
     用法:
-        # 在 backend 初始化时调用一次
-        config = configure_polars_for_execution(
-            max_workers=8,
-            memory_mb=4096,
-        )
+        # CORRECT: Set before importing polars
+        import os
+        os.environ['POLARS_MAX_THREADS'] = str(8)
+        import polars as pl  # Thread pool is now fixed at 8
+
+        # WRONG: Trying to change at runtime (doesn't work)
+        # configure_polars_for_execution(max_workers=4)  # Has no effect
     """
     if pl is None:
         return {}
 
-    # 1. 线程数
-    if max_workers is None:
-        max_workers = get_physical_cores()
+    # 1. Thread count - READ ONLY (cannot be changed at runtime)
+    try:
+        current_threads = pl.thread_pool_size() if hasattr(pl, 'thread_pool_size') else None
+    except Exception:
+        current_threads = None
 
-    # 2. 流式块大小
-    # 策略：使用自适应配置（基于系统内存自动调整）
+    if current_threads is None:
+        # Try to read from environment
+        env_threads = os.environ.get("POLARS_MAX_THREADS")
+        current_threads = int(env_threads) if env_threads else get_physical_cores()
+
+    # 2. 流式块大小 - this CAN be configured at runtime
     if memory_mb is not None and memory_mb < 2000:
         chunk_size = 50_000
     else:
@@ -171,19 +186,16 @@ def configure_polars_for_execution(
         except ImportError:
             chunk_size = 100_000  # 回退默认值
 
-    # 应用配置
+    # Apply streaming config only (thread count cannot be changed)
     if hasattr(pl, "Config"):
-        pl.Config.set_thread_count(max_workers)
         try:
             pl.Config.set_streaming_chunk_size(chunk_size)
         except AttributeError:
             # 部分版本无此 API
             pass
-    else:
-        os.environ["POLARS_MAX_THREADS"] = str(max_workers)
 
     return {
-        "thread_count": max_workers,
+        "thread_count": current_threads,  # Read-only, already fixed
         "streaming_chunk_size": chunk_size,
     }
 

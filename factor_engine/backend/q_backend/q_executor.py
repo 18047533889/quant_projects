@@ -18,7 +18,11 @@ from typing import Any
 
 import pandas as pd
 
-from backend.q_backend.q_adapter import QTypeAdapter, get_q_type_adapter
+from backend.q_backend.q_adapter import (
+    QResidentTableHandle,
+    QTypeAdapter,
+    get_q_type_adapter,
+)
 from backend.q_backend.q_compiler import QRegionPlan
 from backend.q_backend.q_process_manager import (
     QAvailabilityStatus,
@@ -38,6 +42,7 @@ class QExecutionResult:
     rows_processed: int
     success: bool
     error_message: str | None = None
+    resident_handle: QResidentTableHandle | None = None  # For residency reuse
 
 
 @dataclass(frozen=True)
@@ -69,6 +74,13 @@ class QExecutor:
         self.process_manager = process_manager or get_q_process_manager()
         self.type_adapter = type_adapter or get_q_type_adapter()
 
+        # Telemetry counters for residency tracking
+        self._telemetry = {
+            "python_to_q_bytes": 0,
+            "q_to_python_bytes": 0,
+            "resident_reuse_count": 0,
+        }
+
     def check_execution_readiness(self) -> tuple[bool, str]:
         """检查 q 是否可执行。
 
@@ -84,16 +96,18 @@ class QExecutor:
     def execute_region(
         self,
         plan: QRegionPlan,
-        input_data: dict[str, pd.DataFrame],
+        input_data: dict[str, pd.DataFrame | QResidentTableHandle],
         *,
         fallback_policy: QExecutionFallbackPolicy | None = None,
+        return_resident_handle: bool = False,
     ) -> QExecutionResult:
         """执行 q Region 计划。
 
         参数:
             plan: 编译好的 q Region 计划
-            input_data: 输入表 {table_name: DataFrame}
+            input_data: 输入表 {table_name: DataFrame or QResidentTableHandle}
             fallback_policy: fallback 策略
+            return_resident_handle: 是否返回 Q-resident handle 供后续 region 复用
 
         返回:
             QExecutionResult
@@ -133,7 +147,7 @@ class QExecutor:
             # 获取 q 连接
             q = self.process_manager.get_connection()
 
-            # 将输入数据加载到 q
+            # 将输入数据加载到 q (支持 resident handle 复用)
             self._load_inputs_to_q(q, input_data)
 
             # 执行 q 代码
@@ -144,6 +158,10 @@ class QExecutor:
             q_result = q(plan.output_table)
             output_df = self.type_adapter.q_to_pandas(q_result)
 
+            # 记录 Q→Python 传输
+            output_bytes = output_df.memory_usage(deep=True).sum()
+            self._telemetry["q_to_python_bytes"] += output_bytes
+
             execution_time = (time.perf_counter() - start_time) * 1000  # ms
             rows = len(output_df)
 
@@ -152,12 +170,25 @@ class QExecutor:
                 f"{rows} rows, {execution_time:.2f}ms"
             )
 
+            # 创建 resident handle (如果需要)
+            resident_handle = None
+            if return_resident_handle:
+                resident_handle = QResidentTableHandle(
+                    table_name=plan.output_table,
+                    q_table_ref=q_result,
+                    row_count=rows,
+                    byte_size=int(output_bytes),
+                    region_id=plan.region_id,
+                )
+                logger.debug(f"Created resident handle: {resident_handle}")
+
             return QExecutionResult(
                 region_id=plan.region_id,
                 output_df=output_df,
                 execution_time_ms=execution_time,
                 rows_processed=rows,
                 success=True,
+                resident_handle=resident_handle,
             )
 
         except Exception as e:
@@ -179,25 +210,53 @@ class QExecutor:
     def _load_inputs_to_q(
         self,
         q: Any,
-        input_data: dict[str, pd.DataFrame],
+        input_data: dict[str, pd.DataFrame | QResidentTableHandle],
     ):
         """将输入数据加载到 q workspace。
 
+        支持 QResidentTableHandle 复用以消除 region 间 ping-pong。
+
         参数:
             q: q 连接
-            input_data: {table_name: DataFrame}
+            input_data: {table_name: DataFrame or QResidentTableHandle}
         """
-        for table_name, df in input_data.items():
-            # 转换为 q table
-            q_table = self.type_adapter.pandas_to_q(
-                df,
-                preserve_index=True,
-                zero_copy=True,  # 优化提示
-            )
+        for table_name, data in input_data.items():
+            # 检查是否是 Q-resident handle
+            if isinstance(data, QResidentTableHandle):
+                # 数据已在 Q 中，无需上传
+                logger.debug(
+                    f"Reusing Q-resident table {data.table_name} "
+                    f"({data.row_count} rows, {data.byte_size} bytes) "
+                    f"from region {data.region_id}"
+                )
+                # 如果名称不同，创建引用
+                if data.table_name != table_name:
+                    q(f"{table_name}: {data.table_name}")
+                    logger.debug(f"Aliased {data.table_name} -> {table_name}")
 
-            # 赋值到 q workspace
-            q[table_name] = q_table
-            logger.debug(f"Loaded {table_name}: {len(df)} rows to q")
+                # 更新 telemetry
+                self._telemetry["resident_reuse_count"] += 1
+            else:
+                # 标准 DataFrame，需要上传
+                df = data
+                # 转换为 q table
+                q_table = self.type_adapter.pandas_to_q(
+                    df,
+                    preserve_index=True,
+                    zero_copy=True,  # 优化提示
+                )
+
+                # 赋值到 q workspace
+                q[table_name] = q_table
+
+                # 记录上传字节数
+                upload_bytes = df.memory_usage(deep=True).sum()
+                self._telemetry["python_to_q_bytes"] += upload_bytes
+
+                logger.debug(
+                    f"Loaded {table_name}: {len(df)} rows "
+                    f"({upload_bytes} bytes) to q"
+                )
 
     def execute_batch_regions(
         self,
@@ -205,23 +264,30 @@ class QExecutor:
         input_data: dict[str, pd.DataFrame],
         *,
         fallback_policy: QExecutionFallbackPolicy | None = None,
+        enable_residency: bool = True,
     ) -> list[QExecutionResult]:
-        """批量执行多个 q Regions。
+        """批量执行多个 q Regions，支持中间结果 Q-resident 复用。
 
         参数:
             plans: Region 计划列表
             input_data: 共享输入数据
             fallback_policy: fallback 策略
+            enable_residency: 是否启用跨 region 数据复用
 
         返回:
             执行结果列表
         """
         results = []
-        for plan in plans:
+        current_input = dict(input_data)  # 初始输入
+
+        for i, plan in enumerate(plans):
+            is_last = (i == len(plans) - 1)
+
             result = self.execute_region(
                 plan,
-                input_data,
+                current_input,
                 fallback_policy=fallback_policy,
+                return_resident_handle=enable_residency and not is_last,
             )
             results.append(result)
 
@@ -229,6 +295,22 @@ class QExecutor:
             if not result.success and fallback_policy and fallback_policy.fail_on_unavailable:
                 logger.error(f"Region {plan.region_id} failed, stopping batch")
                 break
+
+            # 如果启用 residency 且不是最后一个 region，传递 resident handle
+            if enable_residency and not is_last and result.resident_handle:
+                # 下一个 region 将使用当前 region 的输出作为输入
+                # 假设输出表名在下一个 region 的输入中被引用
+                # 这里简化处理：将 resident handle 加入可用输入
+                next_plan = plans[i + 1]
+                if plan.output_table in next_plan.input_tables:
+                    current_input = {plan.output_table: result.resident_handle}
+                    logger.info(
+                        f"Passing resident handle from {plan.region_id} "
+                        f"to {next_plan.region_id} (eliminated re-upload)"
+                    )
+                else:
+                    # 下一个 region 不需要当前输出，重置为初始输入
+                    current_input = dict(input_data)
 
         return results
 
@@ -243,3 +325,16 @@ def get_q_executor() -> QExecutor:
     if _EXECUTOR is None:
         _EXECUTOR = QExecutor()
     return _EXECUTOR
+
+
+def get_q_executor_telemetry() -> dict[str, int]:
+    """获取全局 q 执行器的 telemetry 数据。"""
+    executor = get_q_executor()
+    return dict(executor._telemetry)
+
+
+def reset_q_executor_telemetry():
+    """重置全局 q 执行器的 telemetry 计数器。"""
+    executor = get_q_executor()
+    for key in executor._telemetry:
+        executor._telemetry[key] = 0

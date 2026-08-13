@@ -194,7 +194,7 @@ def test_compositional_mode_scaling_not_judged_insensitive():
         return np.array([1.0, 2.0, 3.0, 4.0]) * k
 
     # f vs 2f: same finite-mask, same cross-sectional rank, DIFFERENT raw values.
-    assert _output_signature(np.array([1.0, 2.0, 3.0, 4.0]) != _output_signature(
+    assert _output_signature(np.array([1.0, 2.0, 3.0, 4.0])) != _output_signature(
         np.array([2.0, 4.0, 6.0, 8.0])
     )
     assert sensitivity_verified(
@@ -210,7 +210,7 @@ def test_compositional_mode_additive_shift_not_judged_insensitive():
         k = p["k"]
         return np.array([1.0, 2.0, 3.0, 4.0]) + k
 
-    assert _output_signature(np.array([1.0, 2.0, 3.0, 4.0]) != _output_signature(
+    assert _output_signature(np.array([1.0, 2.0, 3.0, 4.0])) != _output_signature(
         np.array([2.0, 3.0, 4.0, 5.0])
     )
     assert sensitivity_verified(

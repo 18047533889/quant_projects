@@ -513,7 +513,7 @@ def test_r20_060_source_dependency_hash_enters_plan_key():
     f1 = _source_ref_column("StockIncome", "NetProfit")
     f2 = _source_ref_column("StockBalance", "TotalAssets")
     assert structural_key(f1) != structural_key(f2)
-    assert structural_key(_col("close") != structural_key(f1)
+    assert structural_key(_col("close")) != structural_key(f1)
 
 
 # ---------------------------------------------------------------------------

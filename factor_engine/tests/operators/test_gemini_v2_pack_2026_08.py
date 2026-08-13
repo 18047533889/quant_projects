@@ -102,7 +102,7 @@ def _make_panels(n: int = 140, m: int = 8, seed: int = 3) -> dict[str, pd.DataFr
     amt = (vol.to_numpy() * close.to_numpy())
     # 0/1 event indicator panel (for the Allan-factor family input contract).
     event = pd.DataFrame(
-        (rng.uniform(size=(n, m) < 0.02).astype(float), index=idx, columns=cols
+        (rng.uniform(size=(n, m)) < 0.02).astype(float), index=idx, columns=cols
     )
     return {
         "close": close,
@@ -354,7 +354,7 @@ def test_abdi_ranaldo_matches_reference_formula(_loaded):
     terms = (c[:-1] - eta[:-1]) * (c[:-1] - eta[1:])
     s2 = 4.0 * np.mean(terms)
     assert s2 > 0.0  # precondition: the reference is a positive squared spread
-    assert abs(out - np.sqrt(s2) < 1e-12
+    assert abs(out - np.sqrt(s2)) < 1e-12
 
     # audit #72: an UNRELIABLE (negative) variance estimate must fail closed to
     # NaN, never clip to 0 (which would read as "true spread = 0").

@@ -258,7 +258,7 @@ def _run_single_canonical(canonical: str) -> AuditRow:
     # composite->primitive lowering 时合法变化，不能当 drift）。semantic_attrs
     # （unit/grain/price_basis/universe）必须在 rewrite/lowering 中保持。
     sem_hash_values = [st.get("semantic_attrs_hash") for st in row.stages if st.get("semantic_attrs_hash")]
-    if len(set(sem_hash_values) > 1:
+    if len(set(sem_hash_values)) > 1:
         row.identity_drift_detected = True
         row.blockers.append("C01")
         row.fix_action = "align semantic_attrs across rewrite/lowering stages; preserve provenance node_id"

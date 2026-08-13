@@ -251,7 +251,7 @@ def test_mutation_shift_direction_pit():
     from cleaned_operators.availability_clock import default_available_at
 
     # close 前视（session_open 可知）=> 拒绝
-    assert default_available_at(("close",) != "session_open"
+    assert default_available_at(("close",)) != "session_open"
     # open 后视（session_open 可知）=> 允许
     assert default_available_at(("open",)) == "session_open"
 

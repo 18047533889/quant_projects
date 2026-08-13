@@ -1419,14 +1419,19 @@ class TSValueAtArgextremePolarsNative(SeriesOperator):
 # Variance Ratio and Variogram Operators
 # ============================================================================
 
-@register_operator(name="ts_variance_ratio_proxy", canonical="ts_variance_ratio_proxy", backend="polars")
-class TSVarianceRatioProxyPolarsNative(SeriesOperator):
-    """Variance ratio test proxy (ratio of scaled variances)"""
+@register_operator(name="ts_variance_ratio", canonical="ts_variance_ratio", backend="polars")
+class TSVarianceRatioPolarsNative(SeriesOperator):
+    """Variance ratio test statistic
+
+    NOTE: Previously named ts_variance_ratio_proxy, but this implements the correct
+    Lo-MacKinlay variance ratio: VR(q) = Var(q-period returns) / (q * Var(1-period returns))
+    This is the standard random walk test statistic.
+    """
 
     metadata = OperatorMetadata(
-        name="ts_variance_ratio_proxy",
+        name="ts_variance_ratio",
         category="time_series",
-        description="Variance ratio test proxy",
+        description="Lo-MacKinlay variance ratio test statistic",
         param_names=["feature", "short_window", "long_window"],
         return_type="series",
         tags=["time_series", "rolling", "variance", "pit_safe"],

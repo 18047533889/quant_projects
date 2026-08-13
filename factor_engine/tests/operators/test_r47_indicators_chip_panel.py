@@ -378,7 +378,7 @@ def test_limit_pre_hit_return_accel_golden() -> None:
     op = OperatorRegistry.get("intra_limit_pre_hit_pressure_profile")
     out = op.calculate(price, volume, hl, ll, side="up", pre_window=5, output="return_accel")
     vals = price["A"].to_numpy()
-    hit_idx = int(np.argmax(vals) >= 108.0))
+    hit_idx = int(np.argmax(vals >= 108.0))
     assert 0 < hit_idx < len(vals)
     pre = vals[hit_idx - 5 : hit_idx]
     expected = float(np.polyfit(np.arange(5), np.log(pre), 1)[0])

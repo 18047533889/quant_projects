@@ -101,7 +101,7 @@ def test_isotonic_residual_descriptive_follows_same_day_direction():
     out = _op("cs_isotonic_residual").calculate(y_df, x_df)
     # Day 1 is decreasing; the same-day Spearman picks the decreasing isotonic
     # fit, which captures the relation exactly -> residual ~ 0.
-    assert np.nanmax(np.abs(out.iloc[1].to_numpy(dtype=float)) < 1e-9
+    assert np.nanmax(np.abs(out.iloc[1].to_numpy(dtype=float))) < 1e-9
 
 
 def test_isotonic_residual_lagged_direction_fixed_by_prior():
@@ -114,7 +114,7 @@ def test_isotonic_residual_lagged_direction_fixed_by_prior():
     # decreasing relation -> residuals are NOT ~0 (the direction was not
     # re-picked in-sample).  The max |residual| of the wrong-direction fit is
     # large relative to the descriptive ~0.
-    assert np.nanmax(np.abs(arr[1]) > 1.0
+    assert np.nanmax(np.abs(arr[1])) > 1.0
 
 
 def test_isotonic_residual_lagged_ambiguous_prior_fails_closed():

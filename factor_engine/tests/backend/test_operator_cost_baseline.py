@@ -40,4 +40,4 @@ def test_backend_cost_baseline_json_freshness():
     ts_mean = ops.get("ts_mean") or {}
     assert "duckdb_sql" in ts_mean or any("duckdb_sql" in k for k in ts_mean), ts_mean
     cost = ts_mean.get("duckdb_sql") or next(v for k, v in ts_mean.items() if "duckdb_sql" in k)
-    assert float(cost.get("per_million_rows_ms", 0) > 0
+    assert float(cost.get("per_million_rows_ms", 0)) > 0

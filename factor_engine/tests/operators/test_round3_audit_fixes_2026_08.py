@@ -103,7 +103,7 @@ def test_coexceedance_baseline_is_tail_probability_squared():
     # longer assumed — each name's empirical tail rate is used instead.
     last = out[-1]
     assert np.all(np.isfinite(last))
-    assert abs(float(np.mean(last)) < 0.05, f"independent excess should be ~0, got {last}"
+    assert abs(float(np.mean(last))) < 0.05, f"independent excess should be ~0, got {last}"
 
 
 # ---------------------------------------------------------------------------

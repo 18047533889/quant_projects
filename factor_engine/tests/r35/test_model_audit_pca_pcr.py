@@ -178,7 +178,7 @@ def _naive_industry_pca_loading(ret, group, window, component):
             members = np.flatnonzero(mask)
             if len(members) < 4:
                 continue
-            local = int(np.where(members) == col)[0][0])
+            local = int(np.where(members == col)[0][0])
             X = rv[start:fit_end + 1][:, members]
             member_ids = tuple(col_ids[int(i)] for i in members)
             loading = _pca_loading(X, rv[row][members], int(component), member_ids)

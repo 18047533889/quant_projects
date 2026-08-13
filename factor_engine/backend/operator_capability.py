@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Unified backend capability registry and evidence-constrained cost router.
+"""Single authority for backend capability registry and evidence-constrained cost router.
 
+This module is the unified source of truth for all backend capability queries.
 Production admission is two-dimensional: the canonical operator must be a
 reviewed production target, and the selected physical backend must carry valid
 execution evidence.  Registry lifecycle labels, implementation presence and
 Pandas-first tier membership are never sufficient by themselves.
+
+Prior duplication note: backend/capability_registry.py was a facade wrapper
+that claimed to be the "unified authority" but only delegated to this module.
+It has been deprecated in favor of this single authority.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Literal, Sequence
 
 BackendName = Literal[
@@ -23,6 +30,37 @@ CapabilityStatus = Literal[
     "parity_verified",
     "production_safe",
 ]
+
+# Version: incremented when capability semantics change (merged from capability_registry)
+CAPABILITY_REGISTRY_VERSION = "v2.0.0"
+
+
+class BackendKind(str, Enum):
+    """Physical backend execution engines (merged from capability_registry)."""
+    PANDAS_NUMPY = "pandas_numpy"
+    POLARS = "polars"
+    DUCKDB_SQL = "duckdb_sql"
+    CLICKHOUSE_SQL = "clickhouse_sql"
+    Q_KDB = "q_kdb"  # Future
+
+
+class CapabilityLevel(str, Enum):
+    """Backend capability levels (alias for CapabilityStatus, merged from capability_registry)."""
+    UNSUPPORTED = "unsupported"
+    IMPLEMENTED = "implemented"
+    PARITY_VERIFIED = "parity_verified"
+    PRODUCTION_SAFE = "production_safe"
+
+
+class ExecutionKind(str, Enum):
+    """How a backend executes an operator (merged from capability_registry)."""
+    UNSUPPORTED = "unsupported"
+    NATIVE_EXPR = "native_expr"
+    NATIVE_GROUP = "native_group"
+    NATIVE_STREAMING = "native_streaming"
+    DELEGATE_PYTHON = "delegate_python"
+    DELEGATE_PANDAS = "delegate_pandas"
+    REFERENCE = "reference"
 
 
 class UnsupportedOperatorBackendError(RuntimeError):
@@ -65,6 +103,7 @@ class BackendCapability:
     supports_streaming: bool = False
     materializes_full_panel: bool = False
     notes: str = ""
+    registry_version: str = CAPABILITY_REGISTRY_VERSION
 
     def to_csv_row(self) -> dict[str, str | float | bool]:
         return {
@@ -84,6 +123,18 @@ class BackendCapability:
             "supports_streaming": self.supports_streaming,
             "materializes_full_panel": self.materializes_full_panel,
             "notes": self.notes,
+        }
+
+    def is_production_eligible(self) -> bool:
+        """Check if this capability is production-safe."""
+        return self.status == "production_safe"
+
+    def is_native_execution(self) -> bool:
+        """Check if execution is truly native (not delegate)."""
+        return self.execution_kind in {
+            "native_expr",
+            "native_group",
+            "native_streaming",
         }
 
 
@@ -110,6 +161,60 @@ class CapabilityDecision:
     production_safe: bool
     reason: str
     estimated_cost: float = 1.0
+
+
+@dataclass(frozen=True)
+class BackendCapabilityRecord:
+    """Complete capability record (alias for BackendCapability, merged from capability_registry)."""
+    canonical: str
+    backend: BackendKind
+    level: CapabilityLevel
+    execution_kind: ExecutionKind
+
+    # Semantic support flags
+    supports_nulls: bool = False
+    supports_nan: bool = False
+    supports_inf: bool = False
+    supports_scalar_broadcast: bool = False
+    supports_min_periods: bool = False
+    supports_group: bool = False
+    supports_window: bool = False
+
+    # Execution mode flags
+    supports_lazy: bool = False
+    supports_streaming: bool = False
+    materializes_full_panel: bool = False
+
+    # Cost estimation
+    estimated_speedup: float = 1.0
+
+    # Version tracking
+    registry_version: str = CAPABILITY_REGISTRY_VERSION
+
+    # Notes
+    notes: str = ""
+
+    def is_production_eligible(self) -> bool:
+        """Check if this capability is production-safe."""
+        return self.level == CapabilityLevel.PRODUCTION_SAFE
+
+    def is_native_execution(self) -> bool:
+        """Check if execution is truly native (not delegate)."""
+        return self.execution_kind in {
+            ExecutionKind.NATIVE_EXPR,
+            ExecutionKind.NATIVE_GROUP,
+            ExecutionKind.NATIVE_STREAMING,
+        }
+
+
+@dataclass(frozen=True)
+class CapabilityQueryResult:
+    """Result of a capability query with reasoning (merged from capability_registry)."""
+    supported: bool
+    production_safe: bool
+    record: BackendCapabilityRecord | None
+    reason: str
+    registry_version: str = CAPABILITY_REGISTRY_VERSION
 
 
 def resolve_canonical(name: str) -> str:
@@ -873,10 +978,10 @@ def get_best_backend(
         # certified pandas reference unless benchmark evidence says otherwise.
         if any(candidate == "polars" for candidate, _ in candidates):
             pl_op = OperatorRegistry.get(canonical, "polars")
-            from polars_backend_kind import polars_backend_kind
+            from backend.polars_backend_kind import polars_backend_kind
 
             kind = polars_backend_kind(pl_op)
-            if kind != "pandas_materialization_fallback":
+            if kind.value != "polars_udf_pandas_delegate":
                 chosen = "polars"
             else:
                 chosen = "pandas_numpy"
@@ -889,3 +994,248 @@ def get_best_backend(
             f"selected backend {chosen!r} disappeared for {canonical!r}"
         )
     return op, chosen
+
+
+class BackendCapabilityRegistry:
+    """Unified capability authority (merged from capability_registry).
+
+    This registry provides the single source of truth for all backend capability
+    queries. Design principles:
+    - Single version number for all capability state
+    - No inline capability checks in router/cost/emitter
+    - Explicit version tracking for physical plan cache invalidation
+    - Clear separation: registry owns capability, cost model owns estimates
+    """
+
+    _version_hash: str | None = None
+
+    @classmethod
+    def version(cls) -> str:
+        """Return current capability registry version."""
+        return CAPABILITY_REGISTRY_VERSION
+
+    @classmethod
+    def version_hash(cls) -> str:
+        """Return hash of capability state for cache keys."""
+        if cls._version_hash is not None:
+            return cls._version_hash
+
+        from backend.polars_long_policy import POLARS_LONG_NATIVE
+        from backend.sql_tiers import SQL_IMPLEMENTED_CANONICALS
+
+        components = [
+            CAPABILITY_REGISTRY_VERSION,
+            str(sorted(POLARS_LONG_NATIVE)),
+            str(sorted(SQL_IMPLEMENTED_CANONICALS)),
+        ]
+
+        try:
+            from backend.primitive_evidence import evidence_generation
+            components.append(str(evidence_generation()))
+        except Exception:
+            pass
+
+        combined = "|".join(components)
+        cls._version_hash = hashlib.sha256(combined.encode()).hexdigest()[:16]
+        return cls._version_hash
+
+    @classmethod
+    def query(
+        cls,
+        canonical: str,
+        backend: BackendKind | str,
+        *,
+        mode: Literal["production", "research"] = "production",
+        data_source_kind: str = "duckdb",
+        bound_params: dict[str, Any] | None = None,
+    ) -> CapabilityQueryResult:
+        """Query capability for canonical×backend×params.
+
+        Args:
+            canonical: Operator canonical name
+            backend: Physical backend kind
+            mode: Execution mode (production requires production_safe)
+            data_source_kind: Data source dialect for SQL backends
+            bound_params: Bound call parameters (for SQL validation)
+
+        Returns:
+            Complete capability query result with reasoning
+        """
+        canon = resolve_canonical(canonical)
+
+        # Normalize backend kind
+        if isinstance(backend, str):
+            backend_str = backend.lower()
+            if backend_str in {"polars_long", "polars"}:
+                backend_kind = BackendKind.POLARS
+            elif backend_str == "pandas_numpy":
+                backend_kind = BackendKind.PANDAS_NUMPY
+            elif backend_str in {"duckdb_sql", "sql"}:
+                backend_kind = BackendKind.DUCKDB_SQL
+            elif backend_str == "clickhouse_sql":
+                backend_kind = BackendKind.CLICKHOUSE_SQL
+            elif backend_str == "q_kdb":
+                backend_kind = BackendKind.Q_KDB
+            else:
+                return CapabilityQueryResult(
+                    supported=False,
+                    production_safe=False,
+                    record=None,
+                    reason=f"Unknown backend: {backend}",
+                )
+        else:
+            backend_kind = backend
+
+        # Handle SQL bound params validation
+        if backend_kind in {BackendKind.DUCKDB_SQL, BackendKind.CLICKHOUSE_SQL} and bound_params:
+            dialect = "duckdb_sql" if backend_kind == BackendKind.DUCKDB_SQL else "clickhouse_sql"
+            decision = check_call_capability(canon, bound_params, dialect=dialect)
+
+            if not decision.supported:
+                return CapabilityQueryResult(
+                    supported=False,
+                    production_safe=False,
+                    record=None,
+                    reason=decision.reason,
+                )
+
+            record = cls._build_record(canon, backend_kind, data_source_kind)
+            return CapabilityQueryResult(
+                supported=True,
+                production_safe=decision.production_safe,
+                record=record,
+                reason=decision.reason,
+            )
+
+        # Standard capability lookup
+        backend_name_map = {
+            BackendKind.PANDAS_NUMPY: "pandas_numpy",
+            BackendKind.POLARS: "polars",
+            BackendKind.DUCKDB_SQL: "duckdb_sql",
+            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
+        }
+
+        if backend_kind not in backend_name_map:
+            return CapabilityQueryResult(
+                supported=False,
+                production_safe=False,
+                record=None,
+                reason=f"Backend {backend_kind} not yet implemented",
+            )
+
+        backend_name: BackendName = backend_name_map[backend_kind]  # type: ignore
+        status = backend_status(canon, backend_name, data_source_kind=data_source_kind)
+
+        supported = status != "unsupported"
+        production_safe = status == "production_safe"
+
+        if mode == "production" and not production_safe:
+            record = cls._build_record(canon, backend_kind, data_source_kind) if supported else None
+            return CapabilityQueryResult(
+                supported=False,
+                production_safe=False,
+                record=record,
+                reason=f"Status {status} insufficient for production",
+            )
+
+        record = cls._build_record(canon, backend_kind, data_source_kind)
+        return CapabilityQueryResult(
+            supported=supported,
+            production_safe=production_safe,
+            record=record,
+            reason=f"Status: {status}",
+        )
+
+    @classmethod
+    def _build_record(
+        cls,
+        canonical: str,
+        backend: BackendKind,
+        data_source_kind: str,
+    ) -> BackendCapabilityRecord:
+        """Build complete capability record."""
+        backend_name_map = {
+            BackendKind.PANDAS_NUMPY: "pandas_numpy",
+            BackendKind.POLARS: "polars",
+            BackendKind.DUCKDB_SQL: "duckdb_sql",
+            BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
+        }
+
+        backend_name: BackendName = backend_name_map[backend]  # type: ignore
+        cap = capability_for(canonical, backend_name)
+
+        level_map = {
+            "unsupported": CapabilityLevel.UNSUPPORTED,
+            "implemented": CapabilityLevel.IMPLEMENTED,
+            "parity_verified": CapabilityLevel.PARITY_VERIFIED,
+            "production_safe": CapabilityLevel.PRODUCTION_SAFE,
+        }
+        level = level_map.get(cap.status, CapabilityLevel.UNSUPPORTED)
+
+        execution_kind_map = {
+            "unsupported": ExecutionKind.UNSUPPORTED,
+            "native_expr": ExecutionKind.NATIVE_EXPR,
+            "native_streaming": ExecutionKind.NATIVE_STREAMING,
+            "python_udf": ExecutionKind.DELEGATE_PYTHON,
+            "pandas_fallback": ExecutionKind.DELEGATE_PANDAS,
+            "pandas_materialization_fallback": ExecutionKind.DELEGATE_PANDAS,
+            "pandas_numpy_reference": ExecutionKind.REFERENCE,
+        }
+        exec_kind = execution_kind_map.get(cap.execution_kind, ExecutionKind.UNSUPPORTED)
+
+        return BackendCapabilityRecord(
+            canonical=canonical,
+            backend=backend,
+            level=level,
+            execution_kind=exec_kind,
+            supports_nulls=cap.supports_nulls,
+            supports_nan=cap.supports_nan,
+            supports_inf=cap.supports_inf,
+            supports_scalar_broadcast=cap.supports_scalar_broadcast,
+            supports_min_periods=cap.supports_min_periods,
+            supports_group=cap.supports_group,
+            supports_window=cap.supports_window,
+            supports_lazy=cap.supports_lazy,
+            supports_streaming=cap.supports_streaming,
+            materializes_full_panel=cap.materializes_full_panel,
+            estimated_speedup=cap.estimated_speedup,
+            notes=cap.notes,
+        )
+
+    @classmethod
+    def supports_backend(
+        cls,
+        canonical: str,
+        backend: BackendKind | str,
+        *,
+        mode: Literal["production", "research"] = "production",
+        data_source_kind: str = "duckdb",
+    ) -> bool:
+        """Check if canonical supports backend at given mode."""
+        result = cls.query(
+            canonical,
+            backend,
+            mode=mode,
+            data_source_kind=data_source_kind,
+        )
+        return result.supported and (
+            result.production_safe if mode == "production" else True
+        )
+
+    @classmethod
+    def list_backends(
+        cls,
+        canonical: str,
+        *,
+        mode: Literal["production", "research"] = "production",
+    ) -> list[BackendKind]:
+        """List all backends supporting canonical at given mode."""
+        backends = []
+        for backend in [
+            BackendKind.PANDAS_NUMPY,
+            BackendKind.POLARS,
+            BackendKind.DUCKDB_SQL,
+        ]:
+            if cls.supports_backend(canonical, backend, mode=mode):
+                backends.append(backend)
+        return backends

@@ -221,7 +221,7 @@ def _classify(outs: list[pd.DataFrame]) -> str | None:
         ra = pd.DataFrame(a).rank(axis=1, method="average").to_numpy()
         rb = pd.DataFrame(b).rank(axis=1, method="average").to_numpy()
         m = np.isfinite(ra) & np.isfinite(rb)
-        if int(m.sum() < 50:
+        if int(m.sum()) < 50:
             continue
         r = np.corrcoef(ra[m], rb[m])[0, 1]
         if np.isfinite(r):
@@ -252,7 +252,7 @@ def _audit_operator(op: Any, canon: str, fixtures: dict[str, pd.DataFrame]) -> t
                 vals = _sample_values(param, op, N_SAMPLES)
             except Exception:
                 continue
-            if len(set(vals) < 2:
+            if len(set(vals)) < 2:
                 continue
             for fixture_name, fixture in fixtures.items():
                 names, inputs = _build_inputs(op, canon, fixture)

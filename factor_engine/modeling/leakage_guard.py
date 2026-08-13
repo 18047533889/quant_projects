@@ -228,7 +228,7 @@ def _ordinals(frame: pd.DataFrame, date_col: str) -> pd.Series:
 
 
 def _params_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    if set(a.keys() != set(b.keys()):
+    if set(a.keys()) != set(b.keys()):
         return False
     for k in a:
         va, vb = a[k], b[k]

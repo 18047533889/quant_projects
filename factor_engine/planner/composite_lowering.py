@@ -1169,13 +1169,13 @@ def composite_direct_vs_lowered_equivalent(
     if finite.any():
         d_sign = np.sign(darr[finite])
         l_sign = np.sign(larr[finite])
-        sign_flips = int((d_sign) != l_sign).sum())
+        sign_flips = int((d_sign != l_sign).sum())
     rank_keep = None
     try:
         if finite.sum() >= 2:
             flat_d = darr[finite].ravel()
             flat_l = larr[finite].ravel()
-            if len(set(flat_d.tolist()) > 1:
+            if len(set(flat_d.tolist())) > 1:
                 from scipy.stats import spearmanr  # type: ignore[import-untyped]
 
                 corr = spearmanr(flat_d, flat_l).statistic

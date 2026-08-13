@@ -49,7 +49,7 @@ def _validate_delta_against_current_source(delta: dict[str, Any]) -> None:
     expected_emitters = provenance.emitter_hashes()
     emitter_overrides = dict(delta.get("emitter_hash_overrides") or {})
     for key, value in emitter_overrides.items():
-        if expected_emitters.get(str(key) != str(value):
+        if expected_emitters.get(str(key)) != str(value):
             raise ValueError(
                 f"stale primitive delta emitter {key!r}: "
                 f"expected={expected_emitters.get(str(key))!r} actual={value!r}"

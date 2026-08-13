@@ -204,7 +204,7 @@ def test_constant_window_fails_closed():
             continue
         # Constant window must not be Inf and not explode.
         assert np.isfinite(out.fillna(0.0).to_numpy()).all(), f"{canonical}: non-finite"
-        assert np.nanmax(np.abs(out.to_numpy()) < 1e6, f"{canonical}: exploded"
+        assert np.nanmax(np.abs(out.to_numpy())) < 1e6, f"{canonical}: exploded"
 
 
 def _research_op(canonical):

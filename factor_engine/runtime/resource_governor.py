@@ -1027,7 +1027,7 @@ def check_nested_cpu_oversubscription(
     8 factor tasks × 8 BLAS threads = 64 runnable（16 核机器上 oversubscription）。
     返回 True 表示**存在 oversubscription 风险**（需降 outer 或 inner）。
     """
-    return (max(0, outer_workers) * max(1, inner_threads) > max(1, cpu_budget)
+    return (max(0, outer_workers) * max(1, inner_threads)) > max(1, cpu_budget)
 
 
 # ---------------------------------------------------------------------------

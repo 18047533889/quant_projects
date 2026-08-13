@@ -55,7 +55,7 @@ def test_garch_white_noise_shock_roughly_zero():
     out = _garch(x, window=120)
     finite = out[np.isfinite(out)]
     assert len(finite) > 50
-    assert abs(float(np.mean(finite)) < 0.5, "white-noise standardized shock far from 0"
+    assert abs(float(np.mean(finite))) < 0.5, "white-noise standardized shock far from 0"
 
 
 def test_garch_volatility_clustering_reaction():

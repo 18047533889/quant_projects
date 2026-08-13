@@ -85,7 +85,7 @@ def test_parameter_domain_evidence_generated():
 
     d = json.loads(p.read_text(encoding="utf-8"))
     assert d.get("independent_oracle") is True
-    assert len(d.get("certified", {}) > 0, "必须认证出非默认参数域"
+    assert len(d.get("certified", {})) > 0, "必须认证出非默认参数域"
 
 
 # ---------------------------------------------------------------------------

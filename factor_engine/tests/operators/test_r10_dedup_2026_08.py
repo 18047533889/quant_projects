@@ -161,7 +161,7 @@ def test_ohlc_fixture_no_uninitialized_columns():
 def test_event_fixtures_typed():
     fx = build_typed_fixtures()
     eb = fx["event_bool"].to_numpy()
-    assert set(np.unique(eb) <= {0.0, 1.0}  # EventBool is 0/1
+    assert set(np.unique(eb)) <= {0.0, 1.0}  # EventBool is 0/1
     si = fx["event_signed_intensity"].to_numpy()
     # signed intensity has negative values where events fire
     assert (si < 0).any() and (si == 0).any()

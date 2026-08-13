@@ -89,9 +89,9 @@ from .intraday_final import (
 
 # TS advanced batch 5 (64 operators)
 from .ts_advanced_batch5 import (
-    TsDistance_correlation_partial_proxy,
+    TsDistance_correlation_partial_proxy,  # QUARANTINED: research_only
     TsFeature_mode_share,
-    TsFeature_subspace_rotation,
+    TsFeature_subspace_rotation,  # QUARANTINED: research_only
     TsFir_lowpass_causal,
     TsFirst_passage_bias,
     TsFirst_passage_conditional_time,
@@ -127,9 +127,9 @@ from .ts_advanced_batch5 import (
     TsInterval_overlap_connected_component_ratio,
     TsInterval_union_coverage,
     TsJoint_energy_shift,
-    TsJump_bipower_proxy,
+    TsJump_bipower,  # Renamed from TsJump_bipower_proxy
     TsKm_diffusion_gradient,
-    TsKm_equilibrium_distance,
+    TsDeviation_from_mean,  # Renamed from TsKm_equilibrium_distance
     TsKm_quasipotential_depth,
     TsKramers_moyal_diffusion,
     TsKramers_moyal_drift,
@@ -146,13 +146,13 @@ from .ts_advanced_batch5 import (
     TsLine_parallelism,
     TsLo_mackinlay_vr,
     TsLo_mackinlay_z,
-    TsLocal_lyapunov_exponent,
+    TsLocal_lyapunov_exponent,  # QUARANTINED: research_only
     TsLower_tail_coexceedance_probability,
     TsMarket_liquidity_beta,
-    TsMarkov_committor,
-    TsMarkov_entropy_production,
-    TsMarkov_mean_first_passage_time,
-    TsMarkov_persistence,
+    TsMarkov_committor,  # QUARANTINED: research_only
+    TsMarkov_entropy_production,  # QUARANTINED: research_only
+    TsMarkov_mean_first_passage_time,  # QUARANTINED: research_only
+    TsLag1_autocorr,  # Renamed from TsMarkov_persistence
 )
 
 # Candlestick patterns and features (35 operators)
@@ -339,9 +339,9 @@ __all__ = [
     "TsInterval_overlap_connected_component_ratio",
     "TsInterval_union_coverage",
     "TsJoint_energy_shift",
-    "TsJump_bipower_proxy",
+    "TsJump_bipower",  # Renamed from TsJump_bipower_proxy
     "TsKm_diffusion_gradient",
-    "TsKm_equilibrium_distance",
+    "TsDeviation_from_mean",  # Renamed from TsKm_equilibrium_distance
     "TsKm_quasipotential_depth",
     "TsKramers_moyal_diffusion",
     "TsKramers_moyal_drift",
@@ -358,13 +358,13 @@ __all__ = [
     "TsLine_parallelism",
     "TsLo_mackinlay_vr",
     "TsLo_mackinlay_z",
-    "TsLocal_lyapunov_exponent",
+    "TsLocal_lyapunov_exponent",  # QUARANTINED: research_only
     "TsLower_tail_coexceedance_probability",
     "TsMarket_liquidity_beta",
-    "TsMarkov_committor",
-    "TsMarkov_entropy_production",
-    "TsMarkov_mean_first_passage_time",
-    "TsMarkov_persistence",
+    "TsMarkov_committor",  # QUARANTINED: research_only
+    "TsMarkov_entropy_production",  # QUARANTINED: research_only
+    "TsMarkov_mean_first_passage_time",  # QUARANTINED: research_only
+    "TsLag1_autocorr",  # Renamed from TsMarkov_persistence
     # Candle features (13)
     "CandleBodyPercentile",
     "CandleBodyZscore",

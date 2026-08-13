@@ -206,7 +206,7 @@ def test_model_operator_spec_validation():
         canonical="predictive_pcr", execution_class=ModelExecutionClass.PREDICTIVE_SUPERVISED,
         semantic_role="model_score", artifact_required=False,
     )
-    assert len(validate_model_operator_spec(spec) >= 1
+    assert len(validate_model_operator_spec(spec)) >= 1
     good = ModelOperatorSpec(
         canonical="predictive_pcr", execution_class=ModelExecutionClass.PREDICTIVE_SUPERVISED,
         semantic_role="model_score", artifact_required=True,

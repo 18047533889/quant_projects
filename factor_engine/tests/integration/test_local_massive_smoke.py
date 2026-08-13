@@ -52,5 +52,5 @@ def test_factor_engine_run_from_config_on_local_stock_daily_bar(tmp_path: Path):
     out = FactorEngine.run_from_config(config_path)
     result = out["result"]
     assert len(result) > 0
-    assert int(result.notna().sum() > 0
+    assert int(result.notna().sum()) > 0
     assert quant_projects_root().is_dir()

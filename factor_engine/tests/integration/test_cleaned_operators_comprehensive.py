@@ -436,7 +436,7 @@ class TestExecutionCore:
         for ts in result.index.get_level_values("timestamp").unique():
             slice_ = result.xs(ts, level="timestamp")
             if slice_.notna().sum() >= 2:
-                assert abs(float(slice_.mean()) < 1e-9
+                assert abs(float(slice_.mean())) < 1e-9
 
     def test_instrument_isolation_ts_mean(self, three_inst_source):
         """宽表 panel 下各 instrument 列独立 rolling，不互相污染。"""

@@ -161,7 +161,7 @@ def _manual_curvature(yv, xv, bins, min_per_bin, empirical):
         medians, counts = _binned_medians(yv, xv, bins)
         centers = (np.arange(bins) + 0.5) / bins
     usable = counts >= min_per_bin
-    if int(usable.sum() < 3:
+    if int(usable.sum()) < 3:
         return np.nan
     qq, mm = centers[usable], medians[usable]
     if not np.all(np.isfinite(qq)) or np.unique(qq).size < 3:

@@ -466,7 +466,7 @@ def test_matrix_partial_update_merges_not_overwrites(tmp_path):
     )
     assert {"A", "B", "C", "D"} <= set(frame.columns)
     # 旧日期保留
-    assert set(pd.to_datetime(frame["datetime"]) >= {d1, d2}
+    assert set(pd.to_datetime(frame["datetime"])) >= {d1, d2}
     # 新值写入了 D
     row = frame[(frame["datetime"] == d2) & (frame["asset"] == "AAA")]
     assert float(row["D"].iloc[0]) == 99.0

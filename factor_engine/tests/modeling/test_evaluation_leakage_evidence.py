@@ -85,7 +85,7 @@ def test_block_aware_ic_reduces_blocks():
     d_block, ics_block = block_aware_ic(pred, y, dates, overlap_horizon=4)
     assert len(d_block) < len(d_full)
     assert len(ics_block) == len(d_block)
-    assert abs(float(np.mean(ics_block)) - float(np.mean(ics_full)) < 0.2
+    assert abs(float(np.mean(ics_block)) - float(np.mean(ics_full))) < 0.2
 
 
 # --------------------------------------------------------------------------- #

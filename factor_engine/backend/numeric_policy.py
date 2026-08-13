@@ -44,7 +44,7 @@ class ToleranceProfile:
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be within [0, 1]")
         for name in ("max_sign_flip_rate", "max_ic_delta"):
-            if float(getattr(self, name) < 0.0:
+            if float(getattr(self, name)) < 0.0:
                 raise ValueError(f"{name} must be non-negative")
 
     def to_dict(self) -> dict[str, Any]:

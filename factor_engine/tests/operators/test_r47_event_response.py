@@ -92,7 +92,7 @@ def test_registered_and_classified(name: str) -> None:
 
 def test_shape_and_determinism_1_and_2() -> None:
     x = _minute_panel(seed=1)
-    mask = pd.DataFrame((np.abs(x.to_numpy() > np.nanpercentile(np.abs(x.to_numpy()), 95)).astype(float),
+    mask = pd.DataFrame((np.abs(x.to_numpy()) > np.nanpercentile(np.abs(x.to_numpy()), 95)).astype(float),
                         index=x.index, columns=x.columns)
     for name in ("intra_event_window_reduce", "intra_event_pre_post_contrast"):
         op = OperatorRegistry.get(name)
@@ -340,7 +340,7 @@ def test_op9_golden_liquidity_resilience_curve_fit() -> None:
 def test_future_poison_all() -> None:
     close = _minute_panel(days=4, seed=6, cols=2)
     amount, vol = _amount_volume(close)
-    mask = pd.DataFrame((np.abs(close.to_numpy() > np.nanpercentile(np.abs(close.to_numpy()), 95)).astype(float),
+    mask = pd.DataFrame((np.abs(close.to_numpy()) > np.nanpercentile(np.abs(close.to_numpy()), 95)).astype(float),
                         index=close.index, columns=close.columns)
     tampered = close.copy()
     tampered.iloc[-240:] *= 10.0

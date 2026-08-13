@@ -30,7 +30,7 @@ class FeatureSchema:
     columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        if not self.columns or len(set(self.columns) != len(self.columns):
+        if not self.columns or len(set(self.columns)) != len(self.columns):
             raise ValueError("FeatureSchema columns must be non-empty and unique")
 
 

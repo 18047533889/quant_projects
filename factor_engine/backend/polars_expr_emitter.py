@@ -449,7 +449,7 @@ def _rolling_product_expr(w: int, *, min_periods: int) -> pl.Expr:
             return 0.0
         if np.isinf(arr).any():
             return np.nan
-        neg_cnt = int(np.sum(valid) < 0))
+        neg_cnt = int(np.sum(valid) < 0)
         sign = -1.0 if neg_cnt % 2 else 1.0
         log_abs = float(np.log(np.abs(valid)).sum())
         if not np.isfinite(log_abs) or log_abs > np.log(np.finfo(np.float64).max):
