@@ -125,36 +125,10 @@ def _maturity_cutoff(
     horizon_bars: int,
     bar_calendar: np.ndarray,
 ) -> str:
-    """Advance ``final_fit_end`` by ``horizon_bars`` on the observed bar
-    calendar so the artifact's ``training_cutoff`` equals the last moment the
-    final fit's labels matured (``anchor + H``), not the last anchor date.
+    """Return the timing authority's fail-closed label-maturity cutoff."""
+    from modeling.timing import maturity_cutoff_fail_closed
 
-    MF-P0-004: Fail-closed when advancement is impossible. Returns final_fit_end
-    only when the calendar lookup succeeds AND horizon_bars future bars exist.
-    If the future calendar is unavailable, we cannot certify label maturity, so
-    fail-closed (return final_fit_end without advancement = understate availability).
-    """
-    if horizon_bars <= 0 or len(bar_calendar) == 0:
-        return final_fit_end
-    try:
-        # NOTE: use pandas-native searchsorted — numpy's searchsorted raises
-        # TypeError comparing a datetime64[ns] array against a pd.Timestamp, so
-        # the naive np.searchsorted path silently fell back to final_fit_end.
-        cal = pd.DatetimeIndex(bar_calendar)
-        anchor = pd.Timestamp(final_fit_end)
-        pos = int(cal.searchsorted(anchor, side="right")) - 1
-    except Exception:
-        return final_fit_end
-    if pos < 0:
-        return final_fit_end
-    target = pos + horizon_bars
-    # MF-P0-004: Only advance if target is within calendar bounds
-    # If target >= len(cal), we cannot verify label maturity, so fail-closed
-    if target < len(cal):
-        return str(pd.Timestamp(cal[target]))
-    # MF-P0-004: Fail-closed when future calendar unavailable
-    # Do NOT fallback to cal[pos] (would understate maturity horizon)
-    return final_fit_end
+    return maturity_cutoff_fail_closed(final_fit_end, horizon_bars, bar_calendar)
 
 
 def _rank_ic(y_true: np.ndarray, y_pred: np.ndarray) -> float:

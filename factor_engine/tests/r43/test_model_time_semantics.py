@@ -99,13 +99,7 @@ def test_maturity_cutoff_counts_trading_sessions_not_calendar_days():
 
 
 def test_maturity_cutoff_cannot_produce_production_artifact_without_future():
-    """When calendar insufficient, cannot produce artifact (training will raise).
-
-    CROSS-FILE DEPENDENCY: This test documents the REQUIRED end-to-end behavior
-    but is BLOCKED until trainer.py::_maturity_cutoff is replaced with
-    timing.maturity_cutoff_fail_closed. Currently trainer uses fail-open fallback.
-    """
-    pytest.skip("BLOCKED: requires trainer.py to use maturity_cutoff_fail_closed")
+    """When calendar is insufficient, training cannot produce an artifact."""
     # 30 dates total, horizon=8, split train 0..19, val 20..29.
     # After purge (removes ~8 dates before val), train will have dates 0..~11.
     # With retrain_policy="train_plus_validation", refit_ds = train + val,
