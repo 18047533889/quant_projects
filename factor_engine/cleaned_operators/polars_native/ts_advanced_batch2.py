@@ -2310,12 +2310,12 @@ class TSLevelShiftScorePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_leverage_effect_pn", canonical="ts_leverage_effect_pn", backend="polars_native")
 class TSLeverageEffectPolarsNative(SeriesOperator):
-    """Correlation between returns and future volatility"""
+    """Causal correlation between lagged returns and trailing volatility."""
 
     metadata = OperatorMetadata(
         name="ts_leverage_effect_pn",
         category="time_series",
-        description="Correlation of returns with next-period volatility",
+        description="Causal correlation of lagged returns with current trailing volatility",
         param_names=["returns", "window"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "volatility"],
@@ -2325,21 +2325,18 @@ class TSLeverageEffectPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, returns, window, **kwargs):
-        # Corr(r_t, |r_{t+1}|) or Corr(r_t, realized_vol_{t+1})
-        df = returns.to_frame().lazy()
-        col = returns.name
-
-        return (
-            df.with_columns([
-                pl.col(col).alias("_ret"),
-                pl.col(col).shift(-1).abs().alias("_next_vol"),
-            ])
-            .select([
-                pl.corr("_ret", "_next_vol").over(pl.int_range(pl.len()).floordiv(window))
-            ])
-            .collect()
-            .to_series()
+        # Pair r[t-1] with volatility known at t.  The historical definition
+        # corr(r[t], vol[t+1]) is shifted back to avoid reading the future.
+        ret = returns.diff()
+        lagged_ret = ret.shift(1)
+        trailing_vol = ret.rolling_std(window)
+        covariance = (lagged_ret * trailing_vol).rolling_mean(window) - (
+            lagged_ret.rolling_mean(window) * trailing_vol.rolling_mean(window)
         )
+        scale = lagged_ret.rolling_std(window, ddof=0) * trailing_vol.rolling_std(
+            window, ddof=0
+        )
+        return covariance / scale
 
 
 @register_operator(name="ts_location_shift_pn", canonical="ts_location_shift_pn", backend="polars_native")
