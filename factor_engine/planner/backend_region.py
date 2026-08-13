@@ -254,6 +254,69 @@ class PhysicalRegionPlan:
     routing_basis: str = "estimated"  # "measured" | "estimated"
     certificate: Any | None = None
 
+    def __post_init__(self) -> None:
+        """Validate the physical DAG before it reaches an executor.
+
+        The plan is the sole backend authority: an edge may only carry the
+        representation actually produced by its producer into the residency
+        expected by its consumer.  Previously these fields were merely
+        descriptive, so a malformed plan could silently materialize or switch
+        backend at runtime.
+        """
+        regions_by_id = {region.region_id: region for region in self.regions}
+        if len(regions_by_id) != len(self.regions):
+            raise ValueError("PhysicalRegionPlan contains duplicate region IDs")
+
+        if self.regions and set(self.topological_order) != set(regions_by_id):
+            raise ValueError("topological_order must contain every region exactly once")
+        if len(set(self.topological_order)) != len(self.topological_order):
+            raise ValueError("topological_order contains duplicate region IDs")
+        if self.regions and not set(self.root_region_ids).issubset(regions_by_id):
+            raise ValueError("root_region_ids contains an unknown region")
+
+        order_index = {region_id: index for index, region_id in enumerate(self.topological_order)}
+        edge_ids: set[str] = set()
+        for edge in self.edges:
+            if edge.edge_id in edge_ids:
+                raise ValueError(f"PhysicalRegionPlan contains duplicate edge ID: {edge.edge_id}")
+            edge_ids.add(edge.edge_id)
+            producer = regions_by_id.get(edge.producer_region)
+            consumer = regions_by_id.get(edge.consumer_region)
+            if producer is None or consumer is None:
+                raise ValueError(f"TransferEdge {edge.edge_id} references an unknown region")
+            if producer.region_id == consumer.region_id:
+                raise ValueError(f"TransferEdge {edge.edge_id} cannot be self-referential")
+            if (edge.source_backend, edge.source_representation) != (
+                producer.backend, producer.representation
+            ):
+                # A transfer may explicitly materialize a boundary form (for
+                # example DuckDB Relation -> Arrow), but it must remain on the
+                # producer backend.  Backend changes are represented by the
+                # target side of the edge, never inferred by the executor.
+                allowed_boundary = {
+                    (PhysicalBackend.DUCKDB_SQL, Representation.ARROW_TABLE),
+                }
+                if (edge.source_backend, edge.source_representation) not in allowed_boundary:
+                    raise ValueError(
+                        f"TransferEdge {edge.edge_id} source residency does not match producer {producer.region_id}"
+                    )
+            if edge.target_backend != consumer.backend or edge.target_representation != consumer.representation:
+                raise ValueError(
+                    f"TransferEdge {edge.edge_id} target residency does not match consumer {consumer.region_id}"
+                )
+            if self.regions and order_index[edge.producer_region] >= order_index[edge.consumer_region]:
+                raise ValueError(
+                    f"TransferEdge {edge.edge_id} violates topological_order"
+                )
+
+        expected_switches = sum(
+            edge.source_backend != edge.target_backend for edge in self.edges
+        )
+        if self.backend_switch_count != expected_switches:
+            raise ValueError(
+                "backend_switch_count must equal backend-changing transfer edges"
+            )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "plan_id": self.plan_id,
