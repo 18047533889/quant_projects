@@ -23,6 +23,27 @@ def _task(peak: int, *, cpu: int = 1, io: int = 0, spill: int = 0,
     )
 
 
+def test_try_reserve_rejects_duplicate_task_id_without_double_charge():
+    broker = ResourceBroker(
+        hard_memory_limit=64 * 1024**3,
+        cpu_slots=4,
+        min_host_reserve_gb=1,
+        min_host_reserve_fraction=0.05,
+    )
+    task = _task(1024**3, cpu=3, io=1)
+
+    first = broker.try_reserve(task, task_id="same-task")
+    second = broker.try_reserve(task, task_id="same-task")
+
+    assert first is not None
+    assert second is None
+    assert broker.summary()["cpu"]["in_use"] == 3
+    assert broker.summary()["io"]["in_use"] == 1
+    first.release()
+    assert broker.summary()["cpu"]["in_use"] == 0
+    assert broker.summary()["io"]["in_use"] == 0
+
+
 def test_live_headroom_is_numeric():
     # R27-014/236：live headroom 是数值，不是 low/medium/high。
     h = live_memory_headroom_bytes()

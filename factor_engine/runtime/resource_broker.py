@@ -720,6 +720,14 @@ class ResourceBroker:
         """
         tid = str(task_id or id(task))
         with self._lock:
+            # A lease id is the accounting key. Re-admitting it would charge
+            # tokens twice while the second task overwrites the first in
+            # ``_running``, making one release leak the original reservation.
+            if tid in self._running:
+                self._admission_events.append(
+                    f"rejected_duplicate:{task.backend}:task_id={tid}"
+                )
+                return None
             if not self.can_admit(task):
                 self._admission_events.append(
                     f"rejected:{task.backend}:cpu={task.cpu_tokens}:mem={peak_hint(task)}"
