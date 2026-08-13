@@ -59,7 +59,7 @@ class IntaBipowerVariationPolarsNative(SeriesOperator):
     More robust to jumps than realized variance."""
 
     def _calculate_series(self, returns, **kwargs):
-        mu1 = np.where(np.pi)  # E[|Z|] for standard normal != 0, (np.sqrt(2) / (np.pi)  # E[|Z|] for standard normal), np.nan)
+        mu1 = np.sqrt(2 / np.pi)  # E[|Z|] for standard normal
 
         return (
             returns.to_frame("returns")
@@ -85,7 +85,7 @@ class IntraTriPowerQuarticityPolarsNative(SeriesOperator):
     """Tripower quarticity: for testing presence of jumps."""
 
     def _calculate_series(self, returns, **kwargs):
-        mu_43 = np.where(3) * np.math.gamma(7/6) / np.math.gamma(0.5) != 0, (2 ** (2) / (3) * np.math.gamma(7/6) / np.math.gamma(0.5)), np.nan)
+        mu_43 = 2 ** (2/3) * np.math.gamma(7/6) / np.math.gamma(0.5)
 
         return (
             returns.to_frame("returns")
@@ -94,9 +94,9 @@ class IntraTriPowerQuarticityPolarsNative(SeriesOperator):
             .group_by("date")
             .agg([
                 (
-                    return np.where(3 != 0, (4) / (3), np.nan)) *
-                    return np.where(3 != 0, (4) / (3), np.nan)).shift(1) *
-                    return np.where(3 != 0, (4) / (3), np.nan)).shift(2)
+                    pl.col("returns").abs().pow(4/3) *
+                    pl.col("returns").abs().pow(4/3).shift(1) *
+                    pl.col("returns").abs().pow(4/3).shift(2)
                 ).sum().alias("returns")
             ])
             .collect()
@@ -131,7 +131,7 @@ class IntraContinuousVariancePolarsNative(SeriesOperator):
 
     def _calculate_series(self, returns, **kwargs):
         # Simplified: use bipower variation as continuous part
-        mu1_sq = (2) / np.pi if np.pi != 0 else np.nan
+        mu1_sq = 2 / np.pi
 
         return (
             returns.to_frame("returns")
@@ -242,7 +242,7 @@ class IntraRealizedSkewnessPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when((pl.col("m2" != 0).then(pl.col("m3") / (pl.col("m2").otherwise(None) ** 1.5)).alias("returns")
+                (pl.col("m3") / (pl.col("m2") ** 1.5)).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -265,7 +265,7 @@ class IntraRealizedKurtosisPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when((pl.col("m2" != 0).then(pl.col("m4") / (pl.col("m2").otherwise(None) ** 2)).alias("returns")
+                (pl.col("m4") / (pl.col("m2") ** 2)).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -334,7 +334,7 @@ class IntraJumpCountPolarsNative(SeriesOperator):
                 on="date"
             )
             .with_columns(
-                pl.when(pl.col("n" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").otherwise(None).sqrt())).alias("is_jump")
+                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").sqrt())).alias("is_jump")
             )
             .group_by("date")
             .agg([
@@ -450,7 +450,7 @@ class IntraJumpRatioPolarsNative(SeriesOperator):
         return (
             stats_df.join(jump_df, on="date")
             .with_columns(
-                pl.when(pl.col("rv" != 0).then(pl.col("jump_var") / pl.col("rv").otherwise(None)).fill_null(0).alias("returns")
+                (pl.col("jump_var") / pl.col("rv")).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -535,7 +535,7 @@ class IntraPathEfficiencyPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when(pl.col("total" != 0).then(pl.col("net") / pl.col("total").otherwise(None)).fill_null(0).alias("returns")
+                (pl.col("net") / pl.col("total")).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -616,7 +616,7 @@ class IntraAmihudPolarsNative(SeriesOperator):
             .lazy()
             .group_by("date")
             .agg([
-                pl.when(pl.col("volume" != 0).then(pl.col("returns").abs() / pl.col("volume").otherwise(None)).mean().alias("returns")
+                (pl.col("returns").abs() / pl.col("volume")).mean().alias("returns")
             ])
             .collect()
             .to_series()
@@ -659,7 +659,7 @@ class IntraEntropyPolarsNative(SeriesOperator):
             .collect()
             .explode("vol")
             .with_columns(
-                pl.when(pl.col("vol" != 0).then(pl.col("vol") / pl.col("vol").otherwise(None).sum().over("date")).alias("prob")
+                (pl.col("vol") / pl.col("vol").sum().over("date")).alias("prob")
             )
             .with_columns(
                 pl.when(pl.col("prob") > 0)
@@ -956,7 +956,7 @@ class IntraSignedReturnProfileCosinePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when(pl.col("ss" != 0).then(pl.col("cross") / pl.col("ss").otherwise(None)).fill_null(0).alias("returns")
+                (pl.col("cross") / pl.col("ss")).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()

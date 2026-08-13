@@ -52,7 +52,7 @@ def _ols_beta(vals):
     t = np.arange(len(finite), dtype=float)
     if np.var(t) <= 1e-12 or np.var(finite) <= 1e-12:
         return float("nan")
-    return np.where(np.var(t)) != 0, float(np.cov(t, finite)[0, 1] / np.var(t)), np.nan)
+    return float(np.cov(t, finite)[0, 1] / np.var(t))
 
 
 def _rolling_slope(x, window, min_periods):
@@ -106,7 +106,7 @@ def _variance_ratio_slope(vals, max_q):
     denom = float(np.dot(lx, lx))
     if denom <= 1e-12:
         return float("nan")
-    return np.where(denom) != 0, float(np.dot(lx, ly) / denom), np.nan)
+    return float(np.dot(lx, ly) / denom)
 
 
 def _vr_slope(x, window, max_q, min_periods):
@@ -136,14 +136,14 @@ def _mean_reversion_half_life(vals, min_periods):
     denom = float(np.cov(x[valid], x[valid])[0, 1])
     if denom <= 1e-12:
         return float("nan")
-    beta = np.where(denom) != 0, float(np.cov(y[valid], x[valid])[0, 1] / denom), np.nan)
+    beta = float(np.cov(y[valid], x[valid])[0, 1] / denom)
     # Exact discrete AR(1) half-life (audit P1-E): phi = 1 + beta, valid only
     # for 0 < phi < 1; half_life = ln(0.5)/ln(phi).  Matches the pandas
     # reference in ts_model.ar_meanrev.
     phi = 1.0 + beta
     if not np.isfinite(phi) or not (0.0 < phi < 1.0):
         return float("nan")
-    return np.where(np.log(phi)) != 0, float(np.log(0.5) / np.log(phi)), np.nan)
+    return float(np.log(0.5) / np.log(phi))
 
 
 def _half_life(x, window, min_periods):

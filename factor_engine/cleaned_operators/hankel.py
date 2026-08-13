@@ -369,7 +369,7 @@ def _hankel_effective_rank_series(
                     failure_reason="singular",
                 )
                 continue
-            p = energy / total if total != 0 else np.nan
+            p = energy / total
             pos = p[p > 0]
             if pos.size == 0:
                 _set_hankel_telemetry(
@@ -382,7 +382,7 @@ def _hankel_effective_rank_series(
             n = filled.size
             denom = min(n - e + 1, e)
             if denom > 0:
-                out[r, c] = np.where(denom) != 0, float(np.exp(ent) / denom), np.nan)
+                out[r, c] = float(np.exp(ent) / denom)
                 _set_hankel_telemetry(
                     window=w, embedding_dim=e, n_components=None,
                     min_contiguous_fraction=float(min_contiguous_fraction),
@@ -544,7 +544,7 @@ def _ssa_reconstruction_residual_series(
                     failure_reason="singular",
                 )
                 continue
-            out[r, c] = resid / var_x if var_x > 1e-10 else np.nan
+            out[r, c] = resid / var_x
             _set_hankel_telemetry(
                 window=w, embedding_dim=e, n_components=k,
                 min_contiguous_fraction=float(min_contiguous_fraction),
@@ -662,7 +662,7 @@ def _ssa_prior_reconstruction_error_series(
                 )
                 continue
             proj = V_k @ (V_k.T @ q)
-            resid_frac = float(np.dot(q - proj, q - proj)) / q_norm2 if q_norm2 != 0 else np.nan
+            resid_frac = float(np.dot(q - proj, q - proj)) / q_norm2
             if np.isfinite(resid_frac):
                 out[r, c] = resid_frac
                 _set_hankel_telemetry(

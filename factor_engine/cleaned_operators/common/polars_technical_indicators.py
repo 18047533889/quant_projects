@@ -61,7 +61,7 @@ class WMANative(SeriesOperator):
 
         # WMA = sum(x_i * (n-i+1)) / sum(n-i+1) where i=0..n-1
         # weight_sum = n*(n+1)/2
-        weight_sum = (w * (w + 1)) / 2.0 if 2.0 != 0 else np.nan
+        weight_sum = (w * (w + 1)) / 2.0
 
         exprs = []
         for c in cols:
@@ -100,7 +100,7 @@ class DEMANative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        alpha = (2.0) / ((w + 1)) if ((w + 1)) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         exprs = []
         for c in cols:
@@ -136,7 +136,7 @@ class TEMANative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        alpha = (2.0) / ((w + 1)) if ((w + 1)) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         exprs = []
         for c in cols:
@@ -177,11 +177,11 @@ class HMANative(SeriesOperator):
         sqrt_w = max(1, int(w ** 0.5))
 
         def _wma(col_expr: pl.Expr, period: int) -> pl.Expr:
-            weight_sum = (period * (period + 1)) / 2.0 if 2.0 != 0 else np.nan
+            weight_sum = (period * (period + 1)) / 2.0
             weighted = pl.lit(0.0)
             for i in range(period):
                 weighted = weighted + col_expr.shift(i) * (period - i)
-            return np.where(weight_sum != 0, (weighted) / (weight_sum), np.nan)
+            return weighted / weight_sum
 
         exprs = []
         for c in cols:
@@ -225,7 +225,7 @@ class RSIWilderNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        alpha = (1.0) / (w  # Wilder's alpha) if (w  # Wilder's alpha) != 0 else np.nan
+        alpha = 1.0 / w  # Wilder's alpha
 
         exprs = []
         for c in cols:
@@ -236,8 +236,8 @@ class RSIWilderNative(SeriesOperator):
             avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)
             avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)
 
-            rs = (avg_gain) / avg_loss if avg_loss != 0 else np.nan
-            rsi = (pl.when(avg_loss == 0).then(100.0).otherwise(100.0 - 100.0) / ((1.0 + rs))) if ((1.0 + rs))) != 0 else np.nan
+            rs = pl.when(avg_loss != 0).then(avg_gain / avg_loss).otherwise(None)
+            rsi = pl.when(avg_loss == 0).then(100.0).otherwise(100.0 - 100.0 / (1.0 + rs))
             exprs.append(rsi.alias(c))
 
         return x.with_columns(exprs)
@@ -279,7 +279,7 @@ class CMONative(SeriesOperator):
             sum_loss = loss.rolling_sum(window_size=w, min_samples=1)
             total = sum_gain + sum_loss
 
-            cmo = (pl.when(total == 0).then(None).otherwise(100.0 * (sum_gain - sum_loss)) / (total)) if (total)) != 0 else np.nan
+            cmo = pl.when(total == 0).then(None).otherwise(100.0 * (sum_gain - sum_loss) / total)
             exprs.append(cmo.alias(c))
 
         return x.with_columns(exprs)
@@ -312,8 +312,8 @@ class MACDLineNative(SeriesOperator):
         slow = strict_integer(slow_period, "slow_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
+        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
 
         exprs = []
         for c in cols:
@@ -352,9 +352,9 @@ class MACDSignalNative(SeriesOperator):
         signal = strict_integer(signal_period, "signal_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
-        alpha_signal = (2.0) / ((signal + 1)) if ((signal + 1)) != 0 else np.nan
+        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+        alpha_signal = (2.0) / ((signal + 1) if ((signal + 1) != 0 else np.nan
 
         exprs = []
         for c in cols:
@@ -395,9 +395,9 @@ class MACDHistNative(SeriesOperator):
         signal = strict_integer(signal_period, "signal_period", minimum=1)
         cols = _numeric_cols(x)
 
-        alpha_fast = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
-        alpha_signal = (2.0) / ((signal + 1)) if ((signal + 1)) != 0 else np.nan
+        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+        alpha_signal = (2.0) / ((signal + 1) if ((signal + 1) != 0 else np.nan
 
         exprs = []
         for c in cols:
@@ -516,11 +516,11 @@ class ADXNative(SeriesOperator):
 
             # Smoothed values
             atr = tr.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)
-            plus_di = (100.0 * plus_dm.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)) / atr if atr != 0 else np.nan
-            minus_di = (100.0 * minus_dm.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)) / atr if atr != 0 else np.nan
+            plus_di = pl.when(atr != 0).then(100.0 * plus_dm.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False) / atr).otherwise(None)
+            minus_di = pl.when(atr != 0).then(100.0 * minus_dm.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False) / atr).otherwise(None)
 
             # DX and ADX
-            dx = (100.0 * (plus_di - minus_di).abs()) / ((plus_di + minus_di)) if ((plus_di + minus_di)) != 0 else np.nan
+            dx = pl.when((plus_di + minus_di) != 0).then(100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di)).otherwise(None)
             adx = dx.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=False)
 
             exprs.append(adx.alias(c))
@@ -568,7 +568,7 @@ class BollingerPctBNative(SeriesOperator):
             lower = ma - k * std
             bandwidth = upper - lower
 
-            pct_b = (pl.when(bandwidth == 0).then(None).otherwise((pl.col(c) - lower)) / (bandwidth)) if (bandwidth)) != 0 else np.nan
+            pct_b = pl.when(bandwidth != 0).then((pl.col(c) - lower) / bandwidth).otherwise(None)
             exprs.append(pct_b.alias(c))
 
         return x.with_columns(exprs)
@@ -605,7 +605,7 @@ class BollingerWidthNative(SeriesOperator):
         for c in cols:
             ma = pl.col(c).rolling_mean(window_size=w, min_samples=1)
             std = pl.col(c).rolling_std(window_size=w, min_samples=2)
-            width = (pl.when(ma == 0).then(None).otherwise(2 * k * std) / (ma)) if (ma)) != 0 else np.nan
+            width = pl.when(ma == 0).then(None).otherwise(2 * k * std / ma)
             exprs.append(width.alias(c))
 
         return x.with_columns(exprs)
@@ -637,7 +637,7 @@ class KeltnerMidNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(high)
-        alpha = (2.0) / ((w + 1)) if ((w + 1)) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         if low is None or close is None:
             raise ValueError("KeltnerMid requires high, low, close")
@@ -648,7 +648,7 @@ class KeltnerMidNative(SeriesOperator):
             l_col = low[c] if c in low.columns else pl.lit(None)
             c_col = close[c] if c in close.columns else pl.lit(None)
 
-            typical = ((h + l_col + c_col)) / 3.0 if 3.0 != 0 else np.nan
+            typical = (h + l_col + c_col) / 3.0
             mid = typical.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
             exprs.append(mid.alias(c))
 
@@ -884,7 +884,7 @@ class MFINative(SeriesOperator):
             c_col = close[c] if c in close.columns else pl.lit(None)
             v_col = volume[c] if c in volume.columns else pl.lit(None)
 
-            typical = ((h + l_col + c_col)) / 3.0 if 3.0 != 0 else np.nan
+            typical = (h + l_col + c_col) / 3.0
             raw_money_flow = typical * v_col
 
             flow_direction = (typical - typical.shift(1)).sign()
@@ -894,8 +894,8 @@ class MFINative(SeriesOperator):
             pos_sum = positive_flow.rolling_sum(window_size=w, min_samples=1)
             neg_sum = negative_flow.rolling_sum(window_size=w, min_samples=1)
 
-            money_ratio = (pos_sum) / neg_sum if neg_sum != 0 else np.nan
-            mfi = (pl.when(neg_sum == 0).then(100.0).otherwise(100.0 - 100.0) / ((1.0 + money_ratio))) if ((1.0 + money_ratio))) != 0 else np.nan
+            money_ratio = pl.when(neg_sum != 0).then(pos_sum / neg_sum).otherwise(None)
+            mfi = pl.when(neg_sum == 0).then(100.0).otherwise(100.0 - 100.0 / (1.0 + money_ratio))
             exprs.append(mfi.alias(c))
 
         return high.with_columns(exprs)
@@ -944,8 +944,8 @@ class CMFNative(SeriesOperator):
             )
             money_flow_volume = clv * v_col
 
-            cmf = (money_flow_volume.rolling_sum(window_size=w, min_samples=1)) / (\) if (\) != 0 else np.nan
-                  v_col.rolling_sum(window_size=w, min_samples=1)
+            vol_sum = v_col.rolling_sum(window_size=w, min_samples=1)
+            cmf = pl.when(vol_sum != 0).then(money_flow_volume.rolling_sum(window_size=w, min_samples=1) / vol_sum).otherwise(None)
             exprs.append(cmf.alias(c))
 
         return high.with_columns(exprs)
@@ -977,7 +977,7 @@ class ForceIndexNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(close)
-        alpha = (2.0) / ((w + 1)) if ((w + 1)) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         if volume is None:
             raise ValueError("ForceIndex requires close and volume")
@@ -1026,8 +1026,8 @@ class ChaikinOscillatorNative(SeriesOperator):
         if low is None or close is None or volume is None:
             raise ValueError("ChaikinOscillator requires high, low, close, volume")
 
-        alpha_fast = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-        alpha_slow = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
+        alpha_fast = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+        alpha_slow = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
 
         exprs = []
         for c in cols:
@@ -1089,7 +1089,7 @@ class RollingVWAPNative(SeriesOperator):
             pv_sum = (p * v).rolling_sum(window_size=w, min_samples=1)
             v_sum = v.rolling_sum(window_size=w, min_samples=1)
 
-            vwap = (pl.when(v_sum == 0).then(None).otherwise(pv_sum) / (v_sum)) if (v_sum)) != 0 else np.nan
+            vwap = pl.when(v_sum == 0).then(None).otherwise(pv_sum / v_sum)
             exprs.append(vwap.alias(c))
 
         return price.with_columns(exprs)
@@ -1127,16 +1127,18 @@ class CoppockCurveNative(SeriesOperator):
         exprs = []
         for c in cols:
             # ROC = (x / x_lag - 1) * 100
-            roc_s = ((pl.col(c)) / (pl.col(c).shift(s) - 1) * 100) if (pl.col(c).shift(s) - 1) * 100) != 0 else np.nan
-            roc_l = ((pl.col(c)) / (pl.col(c).shift(l) - 1) * 100) if (pl.col(c).shift(l) - 1) * 100) != 0 else np.nan
+            shifted_s = pl.col(c).shift(s)
+            shifted_l = pl.col(c).shift(l)
+            roc_s = pl.when(shifted_s != 0).then((pl.col(c) / shifted_s - 1) * 100).otherwise(None)
+            roc_l = pl.when(shifted_l != 0).then((pl.col(c) / shifted_l - 1) * 100).otherwise(None)
             roc_sum = roc_s + roc_l
 
             # WMA
-            weight_sum = (w * (w + 1)) / 2.0 if 2.0 != 0 else np.nan
+            weight_sum = (w * (w + 1)) / 2.0
             weighted = pl.lit(0.0)
             for i in range(w):
                 weighted = weighted + roc_sum.shift(i) * (w - i)
-            curve = (weighted) / weight_sum if weight_sum != 0 else np.nan
+            curve = weighted / weight_sum
 
             exprs.append(curve.alias(c))
 
@@ -1180,7 +1182,7 @@ class EfficiencyRatioNative(SeriesOperator):
             delta = (pl.col(c) - pl.col(c).shift(1)).abs()
             volatility = delta.rolling_sum(window_size=w, min_samples=1)
 
-            er = (pl.when(volatility == 0).then(None).otherwise(net_change) / volatility) if volatility) > 1e-10 else np.nan
+            er = pl.when(volatility == 0).then(None).otherwise(net_change / volatility)
             exprs.append(er.alias(c))
 
         return x.with_columns(exprs)
@@ -1290,17 +1292,17 @@ class UltimateOscillatorNative(SeriesOperator):
 
             bp_s = bp.rolling_sum(window_size=s, min_samples=1)
             tr_s = tr.rolling_sum(window_size=s, min_samples=1)
-            avg_s = (bp_s) / tr_s if tr_s != 0 else np.nan
+            avg_s = pl.when(tr_s != 0).then(bp_s / tr_s).otherwise(None)
 
             bp_m = bp.rolling_sum(window_size=m, min_samples=1)
             tr_m = tr.rolling_sum(window_size=m, min_samples=1)
-            avg_m = (bp_m) / tr_m if tr_m != 0 else np.nan
+            avg_m = pl.when(tr_m != 0).then(bp_m / tr_m).otherwise(None)
 
             bp_l = bp.rolling_sum(window_size=l, min_samples=1)
             tr_l = tr.rolling_sum(window_size=l, min_samples=1)
-            avg_l = (bp_l) / tr_l if tr_l != 0 else np.nan
+            avg_l = pl.when(tr_l != 0).then(bp_l / tr_l).otherwise(None)
 
-            uo = (100.0 * (4 * avg_s + 2 * avg_m + avg_l)) / 7.0 if 7.0 != 0 else np.nan
+            uo = 100.0 * (4 * avg_s + 2 * avg_m + avg_l) / 7.0
             exprs.append(uo.alias(c))
 
         return high.with_columns(exprs)
@@ -1358,7 +1360,7 @@ class SupertrendNative(SeriesOperator):
             atr = tr.rolling_mean(window_size=w, min_samples=1)
 
             # Basic bands
-            hl_avg = ((h + l_col)) / 2.0 if 2.0 != 0 else np.nan
+            hl_avg = (h + l_col) / 2.0
             upper_band = hl_avg + m * atr
             lower_band = hl_avg - m * atr
 
@@ -1397,8 +1399,8 @@ class KAMANative(SeriesOperator):
         slow = strict_integer(slow_period, "slow_period", minimum=1)
         cols = _numeric_cols(x)
 
-        fastest = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-        slowest = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
+        fastest = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+        slowest = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
 
         exprs = []
         for c in cols:
@@ -1406,7 +1408,7 @@ class KAMANative(SeriesOperator):
             net_change = (pl.col(c) - pl.col(c).shift(w - 1)).abs()
             delta = (pl.col(c) - pl.col(c).shift(1)).abs()
             volatility = delta.rolling_sum(window_size=w, min_samples=1)
-            er = (pl.when(volatility == 0).then(0.0).otherwise(net_change) / volatility) if volatility) > 1e-10 else np.nan
+            er = pl.when(volatility == 0).then(0.0).otherwise(net_change / volatility)
 
             # Smoothing Constant
             sc = ((er * (fastest - slowest) + slowest) ** 2)

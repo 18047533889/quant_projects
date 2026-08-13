@@ -65,7 +65,7 @@ def group_ex_self_mean(x, group):
             for j in np.flatnonzero(gv[t] == label):
                 if not finite[j]:
                     continue
-                out[t, j] = np.where((count - 1.0) != 0, (total - xv[t][j]) / (count - 1.0), np.nan)
+                out[t, j] = (total - xv[t][j]) / (count - 1.0)
     return _make(x, cols, out)
 
 
@@ -95,7 +95,7 @@ def group_ex_self_weighted_mean(x, weight, group):
                 denom = total_w - wv[t][j]
                 if denom <= 0.0:
                     continue
-                out[t, j] = (weighted - wv[t][j] * xv[t][j]) / denom if denom != 0 else np.nan
+                out[t, j] = (weighted - wv[t][j] * xv[t][j]) / denom
     return _make(x, cols, out)
 
 
@@ -219,7 +219,7 @@ def cs_trimmed_ols_resid(y, x, trim_ratio=0.1, add_intercept=True):
             coeffs = np.polyfit(xs, ys, 1)
             fitted = np.polyval(coeffs, xv[t])
         else:
-            slope = np.where(np.sum(xs * xs)) != 0, float(np.sum(xs * ys) / np.sum(xs * xs)), np.nan)
+            slope = float(np.sum(xs * ys) / np.sum(xs * xs))
             fitted = slope * xv[t]
         out[t] = yv[t] - fitted
     return _make(y, cols, out)

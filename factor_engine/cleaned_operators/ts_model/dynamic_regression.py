@@ -68,7 +68,10 @@ _MULTI_PARAM_SPECS: dict[str, ParamSpec] = {
 _MULTI_WINDOW_SEMANTICS = "max_lookback"
 _MULTI_WARMUP_POLICY = "expanding"
 _MULTI_FULL_WARMUP = "full"
-_MULTI_MIN_EFFECTIVE_OBS_EXPR = "max(min_periods, n_coeffs + 1)"
+# Model-audit 2026-08-13: raised from "n_coeffs + 1" to "5 * n_coeffs" to prevent
+# fitting a 4-feature model on 6 observations (overfitting risk). User can override
+# via explicit min_periods if needed.
+_MULTI_MIN_EFFECTIVE_OBS_EXPR = "max(min_periods, 5 * n_coeffs)"
 
 # P1 (no-intercept R² definition governance): the R² reported by every
 # ``ts_*_regression_r2*`` canonical uses the CENTERED total sum of squares
@@ -147,7 +150,7 @@ def _multi_regression(
 
     Window semantics (P1): ``window`` is a MAX LOOKBACK, not a strict full
     window.  With ``warmup_policy="expanding"`` (default) the kernel emits as
-    soon as ``max(min_periods, n_coeffs + 1)`` valid rows are present inside the
+    soon as ``max(min_periods, 5 * n_coeffs)`` valid rows are present inside the
     trailing window.  With ``warmup_policy="full"`` the trailing window must be
     completely observed (``fit_end >= window - 1``) before any output.
     """
@@ -170,7 +173,9 @@ def _multi_regression(
     fit = _build_fit(fit_fn, extra, add_intercept)
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
-    mp = max(int(min_periods), n_coeffs + 1)
+    # Model-audit 2026-08-13: ratio-based floor prevents overfitting (e.g., 4-feature
+    # fit on 6 obs). User min_periods still honored if set higher.
+    mp = max(int(min_periods), 5 * n_coeffs)
     lag = max(0, int(fit_lag))
     k = max(0, int(stability_k))
     for col in range(cols):
@@ -238,12 +243,15 @@ def _multi_regression(
             elif stat == "resid_z":
                 if np.isfinite(ycol[row]):
                     ddof = max(design.shape[1], 1)
-                    sd = np.where(max(len(e) - ddof, 1))) if len(e) > ddof else np.nan != 0, float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1))) if len(e) > ddof else np.nan, np.nan)
+                    if len(e) > ddof:
+                        sd = float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1)))
+                    else:
+                        sd = np.nan
                     if sd is not None and np.isfinite(sd) and sd > 0.0:
                         cur_xs = [x[row] for x in xcols]
                         terms = ([1.0] if add_intercept else []) + cur_xs
                         resid = float(ycol[row] - float(np.dot(terms, b)))
-                        out[row, col] = resid / sd if sd != 0 else np.nan
+                        out[row, col] = resid / sd
             elif stat in ("r2", "r2_adj"):
                 ss_res = float(np.sum(e * e))
                 # P1 (R² definition governance, versioned): ``_R2_DEFINITION ==
@@ -257,7 +265,7 @@ def _multi_regression(
                     # is fitted.  A through-the-origin (no-intercept) fit can be
                     # arbitrarily worse than predicting the mean, so R² must not
                     # be clipped to 0 — that would manufacture a false fit floor.
-                    r2 = np.where(ss_tot) != 0, float(1.0 - ss_res / ss_tot), np.nan)
+                    r2 = float(1.0 - ss_res / ss_tot)
                     if stat == "r2_adj":
                         n = len(vy)
                         # P1-88: the predictor count is the number of slope
@@ -272,7 +280,7 @@ def _multi_regression(
                         # one (regression through the origin) they are n - p.
                         # The centered SS_tot fixes the total df at n - 1.
                         denom = n - p - (1 if add_intercept else 0)
-                        out[row, col] = np.where(max(denom, 1.0)) != 0, float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0)), np.nan)
+                        out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0))
                     else:
                         out[row, col] = r2
     return frame_like(y, out)

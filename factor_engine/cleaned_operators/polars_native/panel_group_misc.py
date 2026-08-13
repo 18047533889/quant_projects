@@ -63,8 +63,8 @@ class ALMA(SeriesOperator):
             m = offset * (period - 1)
             s = (period) / sigma if sigma > 1e-10 else np.nan
             # Generate Gaussian weights
-            weights = np.where((2 * s * s)) for i in range(period)]) != 0, (pl.Series([np.exp(-((i - m) ** 2)) / ((2 * s * s)) for i in range(period)])), np.nan)
-            weights = (weights) / (weights.sum()) if (weights.sum()) != 0 else np.nan
+            weights = pl.Series([np.exp(-((i - m) ** 2) / (2 * s * s)) for i in range(period)])
+            weights = weights / weights.sum()
             # Apply weighted moving average
             return pl.col(col_name).rolling_map(lambda x: np.dot(x, weights.to_numpy()), window_size=period).alias(col_name)
 
@@ -97,7 +97,7 @@ class DMI_plus(SeriesOperator):
             tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=period)
             smoothed_dm = _wilder_ema_expr(dm_plus, period)
             smoothed_tr = _wilder_ema_expr(tr, period)
-            return np.where(smoothed_tr).alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
+            return np.where(smoothed_tr.alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         return high.with_columns([dmi_plus_expr(c, c) for c in cols])
@@ -129,7 +129,7 @@ class DMI_minus(SeriesOperator):
             tr = (pl.col(h_col) - pl.col(l_col)).abs().rolling_max(window_size=period)
             smoothed_dm = _wilder_ema_expr(dm_minus, period)
             smoothed_tr = _wilder_ema_expr(tr, period)
-            return np.where(smoothed_tr).alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
+            return np.where(smoothed_tr.alias(h_col) != 0, ((100 * smoothed_dm) / (smoothed_tr).alias(h_col)), np.nan)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         return high.with_columns([dmi_minus_expr(c, c) for c in cols])
@@ -160,9 +160,9 @@ class DX(SeriesOperator):
             dm_minus = pl.when(dm_minus > dm_plus).then(dm_minus).otherwise(0)
             tr = (pl.col(h_col) - pl.col(l_col)).abs()
 
-            di_plus = (100 * _wilder_ema_expr(dm_plus, period)) / (_wilder_ema_expr(tr, period)) if (_wilder_ema_expr(tr, period)) != 0 else np.nan
-            di_minus = (100 * _wilder_ema_expr(dm_minus, period)) / (_wilder_ema_expr(tr, period)) if (_wilder_ema_expr(tr, period)) != 0 else np.nan
-            dx = (100 * (di_plus - di_minus).abs()) / ((di_plus + di_minus)) if ((di_plus + di_minus)) != 0 else np.nan
+            di_plus = (100 * _wilder_ema_expr(dm_plus, period)) / (_wilder_ema_expr(tr, period) if (_wilder_ema_expr(tr, period) != 0 else np.nan
+            di_minus = (100 * _wilder_ema_expr(dm_minus, period)) / (_wilder_ema_expr(tr, period) if (_wilder_ema_expr(tr, period) != 0 else np.nan
+            dx = (100 * (di_plus - di_minus).abs()) / ((di_plus + di_minus) if ((di_plus + di_minus) != 0 else np.nan
             return dx.alias(h_col)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
@@ -389,7 +389,7 @@ class donchian_position(SeriesOperator):
         def donchian_expr(col_name):
             high = pl.col(col_name).rolling_max(window_size=period)
             low = pl.col(col_name).rolling_min(window_size=period)
-            position = ((pl.col(col_name) - low)) / ((high - low)) if ((high - low)) != 0 else np.nan
+            position = ((pl.col(col_name) - low)) / ((high - low) if ((high - low) != 0 else np.nan
             return position.alias(col_name)
 
         return _apply_to_panel(close, lambda c: donchian_expr(c.meta.output_name()))
@@ -510,7 +510,7 @@ class zscore(SeriesOperator):
             col = pl.col(col_name)
             mean = col.rolling_mean(window_size=period)
             std = col.rolling_std(window_size=period)
-            return np.where(std).alias(col_name) != 0, (((col - mean)) / (std).alias(col_name)), np.nan)
+            return np.where(std.alias(col_name) != 0, (((col - mean)) / (std).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: zscore_expr(c.meta.output_name()))
 
@@ -563,7 +563,7 @@ class vwap_deviation(SeriesOperator):
             vol = pl.col(v_col)
             pv = price * vol
             vwap = (pv.rolling_sum(window_size=period)) / vol.rolling_sum(window_size=period) if vol.rolling_sum(window_size=period) > 1e-10 else np.nan
-            return np.where(vwap).alias(c_col) != 0, (((price - vwap)) / (vwap).alias(c_col)), np.nan)
+            return np.where(vwap.alias(c_col) != 0, (((price - vwap)) / (vwap).alias(c_col)), np.nan)
 
         cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
         return close.with_columns([vwap_dev_expr(c, c) for c in cols])
@@ -595,7 +595,7 @@ class vwap_to_close_return(SeriesOperator):
             vol = pl.col(v_col)
             pv = price * vol
             vwap = (pv.rolling_sum(window_size=period)) / vol.rolling_sum(window_size=period) if vol.rolling_sum(window_size=period) > 1e-10 else np.nan
-            return np.where(vwap).alias(c_col) != 0, (((price - vwap)) / (vwap).alias(c_col)), np.nan)
+            return np.where(vwap.alias(c_col) != 0, (((price - vwap)) / (vwap).alias(c_col)), np.nan)
 
         cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
         return close.with_columns([vwap_ret_expr(c, c) for c in cols])
@@ -627,7 +627,7 @@ class open_to_vwap_return(SeriesOperator):
             vol = pl.col(v_col)
             pv = price * vol
             vwap = (pv.rolling_sum(window_size=period)) / vol.rolling_sum(window_size=period) if vol.rolling_sum(window_size=period) > 1e-10 else np.nan
-            return np.where(pl.col(o_col)).alias(o_col) != 0, (((vwap - pl.col(o_col))) / (pl.col(o_col)).alias(o_col)), np.nan)
+            return np.where(pl.col(o_col).alias(o_col) != 0, (((vwap - pl.col(o_col))) / (pl.col(o_col)).alias(o_col)), np.nan)
 
         cols = [c for c in open.columns if c not in PANEL_SKIP_COLUMNS]
         return open.with_columns([open_vwap_expr(c, c, c) for c in cols])
@@ -658,7 +658,7 @@ class group_feature_coverage_ratio(SeriesOperator):
             col = pl.col(col_name)
             total = col.count().over("group")
             non_null = col.is_not_null().cast(pl.Float64).sum().over("group")
-            return np.where(total).alias(col_name) != 0, ((non_null) / (total).alias(col_name)), np.nan)
+            return np.where(total.alias(col_name) != 0, ((non_null) / (total).alias(col_name)), np.nan)
 
         # Simplified: assume single group column
         return _apply_to_panel(x, lambda c: coverage_expr(c.meta.output_name()))
@@ -712,7 +712,7 @@ class group_feature_mode_share(SeriesOperator):
             # Use rank percentile as proxy for mode detection
             ranks = col.rank(method="dense").over("group")
             max_rank = ranks.max().over("group")
-            return np.where(col.count().over("group")).alias(col_name) != 0, ((max_rank) / (col.count().over("group")).alias(col_name)), np.nan)
+            return np.where(col.count().over("group").alias(col_name) != 0, ((max_rank) / (col.count().over("group")).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: mode_share_expr(c.meta.output_name()))
 
@@ -773,7 +773,7 @@ class group_signal_attraction_share(SeriesOperator):
             # Count matching signs in group
             same_sign = (sign == sign).cast(pl.Float64).sum().over("group")
             total = col.count().over("group")
-            return np.where(total).alias(col_name) != 0, ((same_sign) / (total).alias(col_name)), np.nan)
+            return np.where(total.alias(col_name) != 0, ((same_sign) / (total).alias(col_name)), np.nan)
 
         return _apply_to_panel(signal, lambda c: attraction_expr(c.meta.output_name()))
 
@@ -803,7 +803,7 @@ class panel_rolling_pca_explained_ratio(SeriesOperator):
             col = pl.col(col_name)
             var = col.rolling_var(window_size=period)
             total_var = var.sum().over("date")
-            return np.where(total_var).alias(col_name) != 0, ((var) / (total_var).alias(col_name)), np.nan)
+            return np.where(total_var.alias(col_name) != 0, ((var) / (total_var).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: pca_ratio_expr(c.meta.output_name()))
 
@@ -835,7 +835,7 @@ class panel_rolling_pca_loading(SeriesOperator):
             mean_demean = cs_mean - cs_mean.rolling_mean(window_size=period)
             cov = (col_demean * mean_demean).rolling_mean(window_size=period)
             std = col.rolling_std(window_size=period) * cs_mean.rolling_std(window_size=period)
-            return np.where(std).alias(col_name) != 0, ((cov) / (std).alias(col_name)), np.nan)
+            return np.where(std.alias(col_name) != 0, ((cov) / (std).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: loading_expr(c.meta.output_name()))
 
@@ -961,14 +961,14 @@ class panel_async_beta_ex_self(SeriesOperator):
             # Market = cross-sectional mean excluding self
             cs_sum = col.sum().over("date")
             cs_count = col.count().over("date")
-            market_ex_self = ((cs_sum - col)) / ((cs_count - 1)) if ((cs_count - 1)) != 0 else np.nan
+            market_ex_self = ((cs_sum - col)) / ((cs_count - 1) if ((cs_count - 1) != 0 else np.nan
 
             # Rolling beta
             col_demean = col - col.rolling_mean(window_size=period)
             mkt_demean = market_ex_self - market_ex_self.rolling_mean(window_size=period)
             cov = (col_demean * mkt_demean).rolling_mean(window_size=period)
             var = market_ex_self.rolling_var(window_size=period)
-            return np.where(var).alias(col_name) != 0, ((cov) / (var).alias(col_name)), np.nan)
+            return np.where(var.alias(col_name) != 0, ((cov) / (var).alias(col_name)), np.nan)
 
         return _apply_to_panel(returns, lambda c: async_beta_expr(c.meta.output_name()))
 
@@ -999,7 +999,7 @@ class panel_factor_pocket_strength(SeriesOperator):
             med_demean = cs_median - cs_median.rolling_mean(window_size=period)
             cov = (col_demean * med_demean).rolling_mean(window_size=period)
             std = col.rolling_std(window_size=period) * cs_median.rolling_std(window_size=period)
-            return np.where(std).alias(col_name) != 0, ((cov) / (std).alias(col_name)), np.nan)
+            return np.where(std.alias(col_name) != 0, ((cov) / (std).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: pocket_expr(c.meta.output_name()))
 
@@ -1027,7 +1027,7 @@ class panel_predictability_mosaic_score(SeriesOperator):
             # Autocorrelation strength
             autocorr = col.rolling_mean(window_size=period) * col.shift(1).rolling_mean(window_size=period)
             var = col.rolling_var(window_size=period)
-            return np.where(var).alias(col_name) != 0, ((autocorr) / (var).alias(col_name)), np.nan)
+            return np.where(var.alias(col_name) != 0, ((autocorr) / (var).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: mosaic_expr(c.meta.output_name()))
 
@@ -1266,7 +1266,7 @@ class group_corr_mst_length(SeriesOperator):
             # Average correlation within group
             group_std = col.std().over("group")
             total_std = col.std()
-            return np.where(total_std).alias(col_name) != 0, ((1 - group_std) / (total_std).alias(col_name)), np.nan)
+            return np.where(total_std.alias(col_name) != 0, ((1 - group_std) / (total_std).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: mst_expr(c.meta.output_name()))
 
@@ -1324,7 +1324,7 @@ class group_distribution_js_divergence(SeriesOperator):
             col = pl.col(col_name)
             group_var = col.var().over("group")
             total_var = col.var()
-            return np.where(total_var).alias(col_name) != 0, ((group_var) / (total_var).alias(col_name)), np.nan)
+            return np.where(total_var.alias(col_name) != 0, ((group_var) / (total_var).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: js_div_expr(c.meta.output_name()))
 
@@ -1353,7 +1353,7 @@ class group_feature_effective_rank(SeriesOperator):
             rank = col.rank(method="dense").over("group")
             max_rank = rank.max().over("group")
             # Normalized rank
-            return np.where(max_rank).alias(col_name) != 0, ((rank) / (max_rank).alias(col_name)), np.nan)
+            return np.where(max_rank.alias(col_name) != 0, ((rank) / (max_rank).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: eff_rank_expr(c.meta.output_name()))
 
@@ -1445,7 +1445,7 @@ class group_feature_spectral_gap(SeriesOperator):
             # Concentration of variance
             var = col.var().over("group")
             mean = col.mean().over("group")
-            return np.where((mean.abs() + 1e-8)).alias(col_name) != 0, ((var) / ((mean.abs() + 1e-8)).alias(col_name)), np.nan)
+            return np.where((mean.abs() + 1e-8).alias(col_name) != 0, ((var) / ((mean.abs() + 1e-8)).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: spectral_gap_expr(c.meta.output_name()))
 
@@ -1590,7 +1590,7 @@ class group_spd_feature_structure_shift(SeriesOperator):
             col = pl.col(col_name)
             current_var = col.var().over("group")
             past_var = col.var().over("group").shift(period)
-            shift = ((current_var - past_var)) / ((past_var + 1e-8)) if ((past_var + 1e-8)) != 0 else np.nan
+            shift = ((current_var - past_var)) / ((past_var + 1e-8) if ((past_var + 1e-8) != 0 else np.nan
             return shift.alias(col_name)
 
         return _apply_to_panel(x, lambda c: structure_shift_expr(c.meta.output_name()))
@@ -1622,7 +1622,7 @@ class turnover_adjusted_volatility(SeriesOperator):
             vol_std = ret.rolling_std(window_size=period)
             turnover = vol.rolling_mean(window_size=period)
             # Adjust volatility by turnover
-            adj_vol = (vol_std * (1 + 1) / ((turnover + 1))) if ((turnover + 1))) != 0 else np.nan
+            adj_vol = vol_std * (1 + 1) / (turnover + 1)
             return adj_vol.alias(r_col)
 
         cols = [c for c in returns.columns if c not in PANEL_SKIP_COLUMNS]
@@ -1650,7 +1650,7 @@ class volume_price_range_density(SeriesOperator):
         def density_expr(v_col, h_col, l_col):
             vol = pl.col(v_col)
             price_range = pl.col(h_col) - pl.col(l_col)
-            density = (vol) / ((price_range + 1e-8)) if ((price_range + 1e-8)) != 0 else np.nan
+            density = (vol) / ((price_range + 1e-8) if ((price_range + 1e-8) != 0 else np.nan
             return density.rolling_mean(window_size=period).alias(v_col)
 
         cols = [c for c in volume.columns if c not in PANEL_SKIP_COLUMNS]
@@ -1681,7 +1681,7 @@ class yoy_by_period(SeriesOperator):
         def yoy_expr(col_name):
             col = pl.col(col_name)
             lagged = col.shift(periods)
-            return np.where(lagged).alias(col_name) != 0, (((col - lagged)) / (lagged).alias(col_name)), np.nan)
+            return np.where(lagged.alias(col_name) != 0, (((col - lagged)) / (lagged).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: yoy_expr(c.meta.output_name()))
 
@@ -1741,7 +1741,7 @@ class dollar_volume_zscore(SeriesOperator):
             dollar_vol = vol * price
             mean = dollar_vol.rolling_mean(window_size=period)
             std = dollar_vol.rolling_std(window_size=period)
-            return np.where(std).alias(v_col) != 0, (((dollar_vol - mean)) / (std).alias(v_col)), np.nan)
+            return np.where(std.alias(v_col) != 0, (((dollar_vol - mean)) / (std).alias(v_col)), np.nan)
 
         cols = [c for c in volume.columns if c not in PANEL_SKIP_COLUMNS]
         return volume.with_columns([dollar_vol_zscore_expr(c, c) for c in cols])
@@ -1802,7 +1802,7 @@ class composition_normalized_entropy(SeriesOperator):
             p = (col) / total if total != 0 else np.nan
             entropy = -(p * p.log()).sum()
             max_entropy = np.log(n_components)
-            return np.where(max_entropy).alias(col_name) != 0, ((entropy) / (max_entropy).alias(col_name)), np.nan)
+            return np.where(max_entropy.alias(col_name) != 0, ((entropy) / (max_entropy).alias(col_name)), np.nan)
 
         return _apply_to_panel(x, lambda c: norm_entropy_expr(c.meta.output_name()))
 
@@ -1887,14 +1887,14 @@ class composition_js_divergence(SeriesOperator):
             p = pl.col(x_col)
             q = pl.col(y_col)
             # Normalize
-            p = (p) / (p.sum()) if (p.sum()) != 0 else np.nan
-            q = (q) / (q.sum()) if (q.sum()) != 0 else np.nan
+            p = p / p.sum()
+            q = q / q.sum()
             # M = (P + Q) / 2
-            m = ((p + q)) / 2 if 2 != 0 else np.nan
+            m = (p + q) / 2
             # JS = (KL(P||M) + KL(Q||M)) / 2
-            kl_pm = ((p * (p) / (m).log()).sum()) if (m).log()).sum()) != 0 else np.nan
-            kl_qm = ((q * (q) / (m).log()).sum()) if (m).log()).sum()) != 0 else np.nan
-            js = ((kl_pm + kl_qm)) / 2 if 2 != 0 else np.nan
+            kl_pm = (p * (p / m).log()).sum()
+            kl_qm = (q * (q / m).log()).sum()
+            js = (kl_pm + kl_qm) / 2
             return js.alias(x_col)
 
         cols = [c for c in x.columns if c not in PANEL_SKIP_COLUMNS]
@@ -1924,7 +1924,7 @@ class composition_ilr_balance(SeriesOperator):
             # Simplified ILR balance
             n1 = part1_size
             n2 = part2_size
-            coef = np.where((n1 + n2)) != 0, (np.sqrt(n1 * n2) / ((n1 + n2))), np.nan)
+            coef = np.where((n1 + n2) != 0, (np.sqrt(n1 * n2) / ((n1 + n2))), np.nan)
             # Balance = coef * log(geom_mean(part1) / geom_mean(part2))
             balance = coef * col.log()
             return balance.alias(col_name)
@@ -2018,18 +2018,20 @@ class ichimoku_cloud_position(SeriesOperator):
             l = pl.col(l_col)
 
             # Calculate Senkou A and B
-            tenkan = ((h.rolling_max(window_size=9) + l.rolling_min(window_size=9))) / 2 if 2 != 0 else np.nan
-            kijun = ((h.rolling_max(window_size=26) + l.rolling_min(window_size=26))) / 2 if 2 != 0 else np.nan
-            senkou_a = (((tenkan + kijun)) / (2).shift(-26)) if (2).shift(-26)) != 0 else np.nan
-            senkou_b = (((h.rolling_max(window_size=52) + l.rolling_min(window_size=52))) / (2).shift(-26)) if (2).shift(-26)) != 0 else np.nan
+            tenkan = (h.rolling_max(window_size=9) + l.rolling_min(window_size=9)) / 2
+            kijun = (h.rolling_max(window_size=26) + l.rolling_min(window_size=26)) / 2
+            senkou_a = ((tenkan + kijun) / 2).shift(-26)
+            senkou_b = ((h.rolling_max(window_size=52) + l.rolling_min(window_size=52)) / 2).shift(-26)
 
             # Cloud bounds
             cloud_top = pl.max_horizontal(senkou_a, senkou_b)
             cloud_bottom = pl.min_horizontal(senkou_a, senkou_b)
 
             # Position: >1 above cloud, 0-1 in cloud, <0 below cloud
-            position = (pl.when(c > cloud_top).then((c - cloud_top)) / (cloud_top).otherwise() if (cloud_top).otherwise() != 0 else np.nan
-                pl.when(c < cloud_bottom).then((c - cloud_bottom) / cloud_bottom).otherwise(0.5)
+            position = (
+                pl.when(c > cloud_top).then((c - cloud_top) / cloud_top)
+                .when(c < cloud_bottom).then((c - cloud_bottom) / cloud_bottom)
+                .otherwise(0.5)
             )
             return position.alias(c_col)
 
@@ -2059,10 +2061,10 @@ class ichimoku_cloud_width(SeriesOperator):
             h = pl.col(h_col)
             l = pl.col(l_col)
 
-            tenkan = ((h.rolling_max(window_size=9) + l.rolling_min(window_size=9))) / 2 if 2 != 0 else np.nan
-            kijun = ((h.rolling_max(window_size=26) + l.rolling_min(window_size=26))) / 2 if 2 != 0 else np.nan
-            senkou_a = (((tenkan + kijun)) / (2).shift(-26)) if (2).shift(-26)) != 0 else np.nan
-            senkou_b = (((h.rolling_max(window_size=52) + l.rolling_min(window_size=52))) / (2).shift(-26)) if (2).shift(-26)) != 0 else np.nan
+            tenkan = (h.rolling_max(window_size=9) + l.rolling_min(window_size=9)) / 2
+            kijun = (h.rolling_max(window_size=26) + l.rolling_min(window_size=26)) / 2
+            senkou_a = ((tenkan + kijun) / 2).shift(-26)
+            senkou_b = ((h.rolling_max(window_size=52) + l.rolling_min(window_size=52)) / 2).shift(-26)
 
             width = (senkou_a - senkou_b).abs()
             return width.alias(h_col)
@@ -2129,7 +2131,7 @@ class rolling_adl_flow(SeriesOperator):
             v = pl.col(v_col)
 
             # Money Flow Multiplier = ((C - L) - (H - C)) / (H - L)
-            mfm = (((c - l) - (h - c))) / ((h - l + 1e-8)) if ((h - l + 1e-8)) != 0 else np.nan
+            mfm = (((c - l) - (h - c))) / ((h - l + 1e-8) if ((h - l + 1e-8) != 0 else np.nan
             # Money Flow Volume = MFM * Volume
             mfv = mfm * v
             # Rolling ADL
@@ -2163,7 +2165,7 @@ class rolling_pvt(SeriesOperator):
             v = pl.col(v_col)
 
             # PVT = volume * (close - close_prev) / close_prev
-            pct_change = ((c - c.shift(1))) / (c.shift(1)) if (c.shift(1)) != 0 else np.nan
+            pct_change = ((c - c.shift(1))) / (c.shift(1) if (c.shift(1) != 0 else np.nan
             pvt_increment = v * pct_change
             pvt = pvt_increment.rolling_sum(window_size=period)
             return pvt.alias(c_col)
@@ -2195,7 +2197,7 @@ class accounting_comparability_score(SeriesOperator):
             # Measure consistency with cross-sectional median
             cs_median = col.median().over("date")
             deviation = (col - cs_median).abs()
-            comparability = (1) / ((1 + deviation)) if ((1 + deviation)) != 0 else np.nan
+            comparability = (1) / ((1 + deviation) if ((1 + deviation) != 0 else np.nan
             return comparability.rolling_mean(window_size=period).alias(col_name)
 
         return _apply_to_panel(x, lambda c: comparability_expr(c.meta.output_name()))
@@ -2225,7 +2227,7 @@ class baseline_scaled_wasserstein_distance(SeriesOperator):
             b_val = pl.col(b_col)
             distance = (x_val - b_val).abs()
             baseline_scale = b_val.abs().rolling_mean(window_size=period)
-            scaled = (distance) / ((baseline_scale + 1e-8)) if ((baseline_scale + 1e-8)) != 0 else np.nan
+            scaled = (distance) / ((baseline_scale + 1e-8) if ((baseline_scale + 1e-8) != 0 else np.nan
             return scaled.alias(x_col)
 
         cols = [c for c in x.columns if c not in PANEL_SKIP_COLUMNS]
@@ -2260,10 +2262,10 @@ class EaseOfMovement(SeriesOperator):
             distance = mid - mid.shift(1)
 
             # Box ratio = volume / (high - low)
-            box_ratio = (v) / ((h - l + 1e-8)) if ((h - l + 1e-8)) != 0 else np.nan
+            box_ratio = (v) / ((h - l + 1e-8) if ((h - l + 1e-8) != 0 else np.nan
 
             # EMV = distance / box_ratio
-            emv = (distance) / ((box_ratio + 1e-8)) if ((box_ratio + 1e-8)) != 0 else np.nan
+            emv = (distance) / ((box_ratio + 1e-8) if ((box_ratio + 1e-8) != 0 else np.nan
 
             return emv.rolling_mean(window_size=period).alias(h_col)
 
@@ -2386,7 +2388,7 @@ class KeltnerPosition(SeriesOperator):
             upper = middle + multiplier * atr
             lower = middle - multiplier * atr
 
-            position = ((c - lower)) / ((upper - lower + 1e-8)) if ((upper - lower + 1e-8)) != 0 else np.nan
+            position = ((c - lower)) / ((upper - lower + 1e-8) if ((upper - lower + 1e-8) != 0 else np.nan
             return position.alias(c_col)
 
         cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]

@@ -149,7 +149,7 @@ def pd_period_cagr(
         ratio = x / previous
     elif policy == "absolute":
         valid &= previous.abs().gt(EPS)
-        ratio = np.where(previous.abs() != 0, x.abs() / previous.abs(), np.nan)
+        ratio = x.abs() / previous.abs()
     else:
         raise ValueError("sign_policy must be 'strict' or 'absolute'")
     result = ratio.pow(float(ppy) / float(lag_n)) - 1.0

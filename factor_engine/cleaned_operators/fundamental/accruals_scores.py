@@ -85,7 +85,7 @@ def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1, flow_typ
 def _pct_change(cur: float, old: float) -> float:
     if not np.isfinite(old) or abs(old) <= _EPS:
         return np.nan
-    return np.where(abs(old)) != 0, float((cur - old) / abs(old)), np.nan)
+    return float((cur - old) / abs(old))
 
 
 def _delta(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1) -> pd.DataFrame:
@@ -95,7 +95,7 @@ def _delta(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1) -> pd.Dat
 
 
 def _safe_ratio(num: pd.DataFrame, den: pd.DataFrame) -> pd.DataFrame:
-    return np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
+    return num / den.replace(0, np.nan)
 
 
 def _net_borrowing_cashflow(cb, bo, rp, aa, flow_type=None):
@@ -333,7 +333,7 @@ def _burn_runway(cash_equivalents: pd.DataFrame, ocf: pd.DataFrame) -> pd.DataFr
     # different things.  The operator now documents the input as TTM/annualized
     # OCF; no hidden annualization is performed.
     neg_ocf = ocf.where(ocf < 0, np.nan).abs()
-    return np.where(neg_ocf.replace(0, np.nan) != 0, cash_equivalents / neg_ocf.replace(0, np.nan), np.nan)
+    return cash_equivalents / neg_ocf.replace(0, np.nan)
 
 
 _mk(

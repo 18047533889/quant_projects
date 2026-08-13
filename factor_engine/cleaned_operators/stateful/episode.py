@@ -90,7 +90,7 @@ def _state_since_kernel(
             if mode == "sum":
                 out[row, col] = acc
             elif mode == "mean":
-                out[row, col] = np.where(float(cnt) != 0, acc / float(cnt), np.nan)
+                out[row, col] = acc / float(cnt)
             elif mode == "count":
                 out[row, col] = float(cnt)
             else:  # last
@@ -281,7 +281,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
             if direction == 0:
                 extent[row] = 0.0
             else:
-                extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
+                extent[row] = (p / origin - 1.0) / threshold
             continue
         if direction == 1:
             if p > extreme:
@@ -292,7 +292,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
                 origin = extreme
                 extreme = p
             state[row] = float(direction)
-            extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
+            extent[row] = (p / origin - 1.0) / threshold
             continue
         # direction == -1
         if p < extreme:
@@ -303,7 +303,7 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
             origin = extreme
             extreme = p
         state[row] = float(direction)
-        extent[row] = np.where(origin - 1.0) / threshold != 0, (p / origin - 1.0) / threshold, np.nan)
+        extent[row] = (p / origin - 1.0) / threshold
     return state, extent
 
 
@@ -482,8 +482,8 @@ class StateSinceTrendTstat(SeriesOperator):
                 if denom <= 0.0:
                     out[row, col] = np.nan
                     continue
-                b = (n * Ssy - Ss * Sy) / denom if denom != 0 else np.nan
-                a = (Sy - b * Ss) / n if n > 0 else np.nan
+                b = (n * Ssy - Ss * Sy) / denom
+                a = (Sy - b * Ss) / n
                 sse = Syy - a * Sy - b * Ssy
                 if sse < 0.0:
                     sse = 0.0
@@ -491,7 +491,7 @@ class StateSinceTrendTstat(SeriesOperator):
                 if not np.isfinite(mse) or mse <= 0.0:
                     out[row, col] = np.nan
                     continue
-                se_b = np.where((Ss2 - Ss * Ss / n)) != 0, np.sqrt(mse / (Ss2 - Ss * Ss / n)), np.nan)
+                se_b = np.sqrt(mse / (Ss2 - Ss * Ss / n))
                 out[row, col] = b / (se_b + _EPS)
         return frame_like(x, out)
 

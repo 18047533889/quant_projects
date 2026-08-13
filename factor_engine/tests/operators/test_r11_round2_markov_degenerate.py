@@ -185,7 +185,7 @@ def test_two_state_chain_recovers_sensible_transition_matrix():
     assert np.all(np.isfinite(mid[1, 0])) and mid[1, 0] > 0.9
     # Each row was estimated from > 1 observed transitions.
     N = res["N_obs"][120]
-    assert int(N[0].sum()) > 1 and int(N[1].sum()) > 1
+    assert int(N[0].sum() > 1 and int(N[1].sum() > 1
 
     # State entropy of such a near-deterministic row is small-but-finite (NOT a
     # degenerate 0) and its value lies in (0, 1).

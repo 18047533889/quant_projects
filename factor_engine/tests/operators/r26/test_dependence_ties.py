@@ -26,7 +26,7 @@ def test_chatterjee_continuous_independent_is_zero():
     rng = np.random.default_rng(0)
     x = rng.normal(size=400)
     y = rng.normal(size=400)
-    assert abs(_xi(x, y)) < 0.1
+    assert abs(_xi(x, y) < 0.1
 
 
 def test_chatterjee_tied_x_independent_y_not_systematically_positive():
@@ -34,7 +34,7 @@ def test_chatterjee_tied_x_independent_y_not_systematically_positive():
     vals = [_xi(rng.integers(0, 4, size=300).astype(float), rng.normal(size=300)) for _ in range(5)]
     # R26-006: the old lexsort((yv,xv)) biased tied-x to ~0.9; the fix must
     # centre near 0.
-    assert abs(float(np.mean(vals))) < 0.2, vals
+    assert abs(float(np.mean(vals)) < 0.2, vals
 
 
 def test_chatterjee_perfect_dependence_high():
@@ -52,7 +52,7 @@ def test_chatterjee_within_x_tie_permutation_y_no_boost():
     # order) tie-break, so the estimate stays centred near 0 across permutations
     # (no systematic boost; finite-sample noise ~O(1/sqrt(n)) only).
     vals = [_xi(x, rng.permutation(y)) for _ in range(10)]
-    assert abs(float(np.mean(vals))) < 0.2, vals
+    assert abs(float(np.mean(vals)) < 0.2, vals
 
 
 def test_copula_mi_independent_near_zero_and_nonnegative():
@@ -61,14 +61,14 @@ def test_copula_mi_independent_near_zero_and_nonnegative():
     b = rng.normal(size=(2, 500))
     mi = _copula_cross_series(a, b, 8, entropy=False)
     assert not np.any(mi[mi == mi] < 0), "R26-011: MI must be >= 0"
-    assert float(np.nanmean(mi)) < 0.3
+    assert float(np.nanmean(mi) < 0.3
 
 
 def test_copula_mi_identical_variables_high():
     rng = np.random.default_rng(4)
     a = rng.normal(size=(2, 500))
     mi = _copula_cross_series(a, a.copy(), 8, entropy=False)
-    assert float(np.nanmean(mi)) > 0.5
+    assert float(np.nanmean(mi) > 0.5
 
 
 def test_copula_entropy_in_declared_domain():
@@ -77,4 +77,4 @@ def test_copula_entropy_in_declared_domain():
     b = rng.normal(size=(2, 500))
     e = _copula_cross_series(a, b, 8, entropy=True)
     vals = e[e == e]
-    assert float(vals.min()) >= 0.0 and float(vals.max()) <= 1.0
+    assert float(vals.min() >= 0.0 and float(vals.max() <= 1.0

@@ -97,7 +97,7 @@ def _numerical_rank(s: np.ndarray, tol: float = 1e-9) -> int:
     smax = float(s[0])
     if smax <= _EPS:
         return 0
-    return int(np.sum(s > tol * smax))
+    return int(np.sum(s) > tol * smax))
 
 
 def _valid_sid(s: Any) -> bool:
@@ -123,7 +123,7 @@ def _validate_session_ids(sid_frame: pd.DataFrame) -> np.ndarray:
             raise ValueError("session_id must be integral; got a boolean column")
     arr = sid_frame.to_numpy(dtype=float)
     fin = arr[np.isfinite(arr)]
-    if np.any(np.abs(fin - np.round(fin)) > 1e-9):
+    if np.any(np.abs(fin - np.round(fin) > 1e-9):
         raise ValueError("session_id must be integral (a non-integer float is not a valid SessionID)")
     return arr
 

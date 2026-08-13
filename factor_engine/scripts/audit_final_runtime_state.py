@@ -103,7 +103,7 @@ def _contract_hash(op: Any) -> str:
 def _logical_equal(left: Any, right: Any) -> bool:
     """Structural equality for a logical-contract field (mirrors registry)."""
     if isinstance(left, dict) and isinstance(right, dict):
-        if set(left.keys()) != set(right.keys()):
+        if set(left.keys() != set(right.keys()):
             return False
         return all(_logical_equal(left[k], right[k]) for k in left)
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):

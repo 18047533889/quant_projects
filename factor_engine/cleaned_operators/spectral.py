@@ -79,10 +79,10 @@ def _periodogram(chunk: np.ndarray) -> tuple[np.ndarray, int] | None:
     slope, intercept = np.polyfit(t, v, 1)
     resid = v - (slope * t + intercept)
     # Hann window
-    hann = np.where((n - 1.0))) if n > 1 else np.ones(n) != 0, 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (n - 1.0))) if n > 1 else np.ones(n), np.nan)
+    hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (n - 1.0))) if n > 1 else np.ones(n)
     resid = resid * hann
     spectrum = np.fft.rfft(resid)
-    power = np.where(float(n) != 0, (np.abs(spectrum) ** 2) / float(n), np.nan)
+    power = (np.abs(spectrum) ** 2) / float(n)
     i_max = n // 2
     p_pos = power[1 : i_max + 1]  # drop DC, keep positive frequencies
     if p_pos.size == 0:
@@ -106,11 +106,11 @@ def _spectral_centroid_series(x2d: np.ndarray, window: int) -> np.ndarray:
             total = float(p.sum())
             if total <= 0 or not np.isfinite(total):
                 continue
-            freqs = np.where(float(n) != 0, np.arange(1, i_max + 1, dtype=float) / float(n), np.nan)
-            sc = np.where(total) != 0, float(np.sum(freqs * p) / total), np.nan)
-            nyq = np.where(float(n) != 0, i_max / float(n), np.nan)
+            freqs = np.arange(1, i_max + 1, dtype=float) / float(n)
+            sc = float(np.sum(freqs * p) / total)
+            nyq = i_max / float(n)
             if nyq > 0:
-                out[r, c] = sc / nyq if nyq != 0 else np.nan
+                out[r, c] = sc / nyq
     return out
 
 
@@ -150,7 +150,7 @@ def _spectral_peak_concentration_series(x2d: np.ndarray, window: int) -> np.ndar
             total = float(p.sum())
             if total <= 0 or not np.isfinite(total):
                 continue
-            out[r, c] = np.where(total) != 0, float(p.max() / total), np.nan)
+            out[r, c] = float(p.max() / total)
     return out
 
 
@@ -171,7 +171,7 @@ def _spectral_quality_factor_series(x2d: np.ndarray, window: int) -> np.ndarray:
             if total <= 0 or not np.isfinite(total):
                 continue
             k_star = int(np.argmax(p))
-            half = np.where(2.0 != 0, float(p.max()) / 2.0, np.nan)
+            half = float(p.max()) / 2.0
             k_lo = k_star
             while k_lo - 1 >= 0 and p[k_lo - 1] >= half:
                 k_lo -= 1
@@ -181,15 +181,15 @@ def _spectral_quality_factor_series(x2d: np.ndarray, window: int) -> np.ndarray:
             i_star = k_star + 1
             i_lo = k_lo + 1
             i_hi = k_hi + 1
-            f_star = np.where(float(n) != 0, i_star / float(n), np.nan)
-            df = np.where(float(n) != 0, (i_hi - i_lo) / float(n), np.nan)
+            f_star = i_star / float(n)
+            df = (i_hi - i_lo) / float(n)
             # Audit #81: a single-bin peak has half-power width df = 0 — the
             # old ``f_star / (df + EPS)`` emitted Q ~ f_star/EPS (huge,
             # meaningless).  Use AT LEAST one-bin resolution: the FFT cannot
             # resolve a width narrower than 1/N, so Q is bounded by the peak
             # bin index (<= n/2) and never explodes.
-            df = np.where(float(n)) != 0, max(df, 1.0 / float(n)), np.nan)
-            out[r, c] = f_star / df if df != 0 else np.nan
+            df = max(df, 1.0 / float(n))
+            out[r, c] = f_star / df
     return out
 
 

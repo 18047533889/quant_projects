@@ -153,13 +153,13 @@ for _canon, _name, _fn in _UNARY:
 
 def _expanding_mean_col(c: pl.Expr) -> pl.Expr:
     cnt = c.is_not_null().cast(pl.Float64).cum_sum()
-    return np.where(cnt != 0, c.cum_sum() / cnt, np.nan)
+    return c.cum_sum() / cnt
 
 
 def _expanding_std_col(c: pl.Expr) -> pl.Expr:
     cnt = c.is_not_null().cast(pl.Float64).cum_sum()
-    mu = c.cum_sum() / cnt if cnt > 0 else np.nan
-    mean_sq = c.pow(2).cum_sum() / cnt if cnt > 0 else np.nan
+    mu = c.cum_sum() / cnt
+    mean_sq = c.pow(2).cum_sum() / cnt
     return (mean_sq - mu.pow(2)).sqrt()
 
 

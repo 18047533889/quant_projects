@@ -441,10 +441,10 @@ def pd_period_change(
         result = x - previous
     elif mode == "ratio":
         valid &= previous.abs().gt(EPS)
-        result = np.where(previous.where(valid) - 1.0 != 0, x / previous.where(valid) - 1.0, np.nan)
+        result = x / previous.where(valid) - 1.0
     elif mode == "log":
         valid &= previous.abs().gt(EPS)
-        ratio = np.where(previous.where(valid) != 0, x / previous.where(valid), np.nan)
+        ratio = x / previous.where(valid)
         valid &= ratio.gt(0)
         result = np.log(ratio.where(valid))
     else:
@@ -481,7 +481,7 @@ def pd_period_average(
     total = pieces[0].copy()
     for piece in pieces[1:]:
         total = total + piece
-    return np.where(float(count)).where(strict if bool(require_consecutive) else available) != 0, (total / float(count)).where(strict if bool(require_consecutive) else available), np.nan)
+    return (total / float(count)).where(strict if bool(require_consecutive) else available)
 
 
 def pd_period_cagr(
@@ -502,13 +502,13 @@ def pd_period_cagr(
     sign_policy = str(sign_policy).lower()
     if sign_policy == "strict":
         valid &= x.gt(0) & previous.gt(0)
-        ratio = np.where(previous.where(valid) != 0, x / previous.where(valid), np.nan)
+        ratio = x / previous.where(valid)
     elif sign_policy == "absolute":
         valid &= previous.abs().gt(EPS)
-        ratio = np.where(previous.abs().where(valid) != 0, x.abs() / previous.abs().where(valid), np.nan)
+        ratio = x.abs() / previous.abs().where(valid)
     else:
         raise ValueError("sign_policy must be 'strict' or 'absolute'")
-    result = np.where(float(lag)) - 1.0 != 0, ratio.pow(float(ppy) / float(lag)) - 1.0, np.nan)
+    result = ratio.pow(float(ppy) / float(lag)) - 1.0
     return result.where(valid).replace([np.inf, -np.inf], np.nan)
 
 
@@ -604,7 +604,7 @@ def pd_yoy_by_period(
     else:
         raise ValueError("denominator must be 'signed' or 'absolute'")
     valid &= denom.abs().gt(EPS)
-    return np.where(denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan) != 0, ((x - previous) / denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan), np.nan)
+    return ((x - previous) / denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan)
 
 
 if pl is not None:
@@ -850,10 +850,10 @@ if pl is not None:
                 expr = a - b
             elif mode == "ratio":
                 valid &= b.abs() > EPS
-                expr = np.where(b - 1.0 != 0, a / b - 1.0, np.nan)
+                expr = a / b - 1.0
             elif mode == "log":
                 valid &= (b.abs() > EPS) & (a / b > 0)
-                expr = np.where(b).log() != 0, (a / b).log(), np.nan)
+                expr = (a / b).log()
             else:
                 raise ValueError("mode must be 'absolute', 'ratio', or 'log'")
             replacements[col] = temp.select(
@@ -936,13 +936,13 @@ if pl is not None:
                 valid &= (pl.col("o") - pl.col("po") == float(lag))
             if sign_policy == "strict":
                 valid &= (a > 0) & (b > 0)
-                ratio = a / b if b != 0 else np.nan
+                ratio = a / b
             elif sign_policy == "absolute":
                 valid &= b.abs() > EPS
-                ratio = np.where(b.abs() != 0, a.abs() / b.abs(), np.nan)
+                ratio = a.abs() / b.abs()
             else:
                 raise ValueError("sign_policy must be 'strict' or 'absolute'")
-            expr = np.where(float(lag)) - 1.0 != 0, ratio.pow(float(ppy) / float(lag)) - 1.0, np.nan)
+            expr = ratio.pow(float(ppy) / float(lag)) - 1.0
             replacements[col] = temp.select(
                 pl.when(valid).then(expr).otherwise(None).alias(col)
             )[col]
@@ -1088,7 +1088,7 @@ if pl is not None:
             else:
                 raise ValueError("denominator must be 'signed' or 'absolute'")
             valid &= denom.abs() > EPS
-            expr = (a - b) / denom if denom != 0 else np.nan
+            expr = (a - b) / denom
             replacements[col] = temp.select(
                 pl.when(valid).then(expr).otherwise(None).alias(col)
             )[col]

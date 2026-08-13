@@ -88,7 +88,7 @@ def test_dynamics_pack_deterministic_shape_prefix():
     y = _frame(rng.normal(0.0, 1.0, size=(200, 4)))
     z = _frame(np.abs(rng.normal(0.0, 1.0, size=(200, 4))))
     g = _frame(np.tile(np.arange(4) % 2, (200, 1)))
-    ev = _frame((np.abs(x.to_numpy()) > 0.6).astype(float))
+    ev = _frame((np.abs(x.to_numpy() > 0.6).astype(float))
     scale = _frame(np.full((200, 4), 1.0))
     calls = {
         "ts_ordinal_irreversibility": (x,),
@@ -195,7 +195,7 @@ def test_first_passage_bias_upward_drift_positive():
     logp = _frame(np.log(np.arange(1.0, 201.0)))
     scale = _frame(np.ones(200) * 0.001)
     fpb = OperatorRegistry.get("ts_first_passage_bias", "pandas_numpy").calculate(logp, scale, 120, 1.0, 10, 3)
-    assert float(np.nanmean(fpb.to_numpy())) > 0.5
+    assert float(np.nanmean(fpb.to_numpy()) > 0.5
 
 
 def test_event_response_positive_drift():
@@ -203,13 +203,13 @@ def test_event_response_positive_drift():
     ret = _frame(rng.normal(0.001, 0.01, 200))
     ev = _frame((np.arange(200) % 20 == 0).astype(float))
     erm = OperatorRegistry.get("event_historical_response_mean", "pandas_numpy").calculate(ret, ev, 100, 5, "mean", 3)
-    assert float(np.nanmean(erm.to_numpy())) > 0.0
+    assert float(np.nanmean(erm.to_numpy()) > 0.0
 
 
 def test_markov_persistence_sticky():
     sticky = _frame(np.repeat(np.arange(5), 40))
     mp = OperatorRegistry.get("ts_markov_persistence", "pandas_numpy").calculate(sticky, 60, 3, 1, 3)
-    assert float(np.nanmean(mp.to_numpy())) > 0.5
+    assert float(np.nanmean(mp.to_numpy()) > 0.5
 
 
 def test_markov_transition_surprisal_is_nonnegative_nats():
@@ -228,7 +228,7 @@ def test_hill_heavy_tail_beats_normal():
     nn = _frame(rng.normal(0.0, 0.02, size=500))
     h_tt = OperatorRegistry.get("ts_hill_tail_index", "pandas_numpy").calculate(tt, 300, "upper", 0.2, 10)
     h_nn = OperatorRegistry.get("ts_hill_tail_index", "pandas_numpy").calculate(nn, 300, "upper", 0.2, 10)
-    assert float(np.nanmean(h_tt.to_numpy())) > float(np.nanmean(h_nn.to_numpy()))
+    assert float(np.nanmean(h_tt.to_numpy()) > float(np.nanmean(h_nn.to_numpy()))
 
 
 def test_quantile_regression_beta_recovers_slope():
@@ -256,7 +256,7 @@ def test_group_mode_share_common_factor_high():
         pd.DataFrame(f, index=dates, columns=assets),
         g,
     )
-    assert float(np.nanmean(ms.to_numpy())) > 0.6
+    assert float(np.nanmean(ms.to_numpy()) > 0.6
 
 
 def test_volume_clock_efficiency_monotonic_near_one():
@@ -351,7 +351,7 @@ def test_dynamics_polars_parity():
     y = _frame(rng.normal(0.0, 1.0, size=(200, 4)))
     z = _frame(np.abs(rng.normal(0.0, 1.0, size=(200, 4))))
     scale = _frame(np.full((200, 4), 1.0))
-    ev = _frame((np.abs(x.to_numpy()) > 0.6).astype(float))
+    ev = _frame((np.abs(x.to_numpy() > 0.6).astype(float))
     calls = {
         "ts_markov_persistence": (x,),
         "ts_markov_state_entropy": (x,),

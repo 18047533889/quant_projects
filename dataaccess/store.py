@@ -178,11 +178,18 @@ _PIT_AVAILABILITY_ORDER = {
 
 
 def _cos_mode_is_auto() -> bool:
-    """COS 读模式是否为 auto（混合 local+remote 的前提）。"""
-    return (
-        os.environ.get("DATA_ACCESS_COS_READ_MODE", "mirror").strip().lower()
-        == "auto"
-    )
+    """COS 读模式是否为 auto（混合 local+remote 的前提）。
+
+    P1-6 FIX: Validate env var at read time with clear error message.
+    """
+    raw = os.environ.get("DATA_ACCESS_COS_READ_MODE", "mirror").strip().lower()
+    allowed = {"mirror", "auto", "remote", "local"}
+    if raw not in allowed:
+        raise ValueError(
+            f"DATA_ACCESS_COS_READ_MODE='{raw}' is invalid; "
+            f"allowed values: {', '.join(sorted(allowed))}"
+        )
+    return raw == "auto"
 
 
 def _strict_mutation_lock_required() -> bool:
@@ -196,7 +203,10 @@ def _strict_mutation_lock_required() -> bool:
         from data_access.read.query_budget import is_strict_semantics
 
         return bool(is_strict_semantics())
-    except Exception:
+    except ImportError:
+        # P1-3 FIX: Narrow to ImportError (circular import during module load).
+        # Other exceptions (AttributeError, runtime errors) should not be silently
+        # swallowed in a critical fail-closed decision path.
         return True
 
 
@@ -353,9 +363,18 @@ class DataAccessStore:
 
         try:
             ds = self._registry.get(dataset)
-        except Exception:
+        except Exception as exc:
+            # P1-3 FIX: Keep broad except but log at warning. This is in a finally
+            # block guard where we're already propagating an active exception.
+            # If we can't get the dataset, we skip the manifest bump but must not
+            # swallow the original exception. Log context for debugging.
             if active_exc is None:
                 raise
+            logger.warning(
+                "manifest_bump_context: registry.get failed for dataset=%s: %s; "
+                "skipping manifest bump (original exception propagating)",
+                dataset, exc
+            )
             ds = None
         if ds is None:
             yield
@@ -372,16 +391,30 @@ class DataAccessStore:
                 from data_access.write.generation import generation_layout
 
                 lock_root, _glob_part = generation_layout(ds, dict(params))
-            except Exception:
+            except Exception as exc:
+                # P1-3 FIX: Keep broad except but log at warning. generation_layout
+                # can fail in many ways (missing params, schema issues, etc.).
+                # Log context rather than silently falling back to None.
+                logger.warning(
+                    "manifest_bump_context: generation_layout failed for dataset=%s: %s; "
+                    "falling back to raw paths",
+                    dataset, exc
+                )
                 lock_root = None
         if lock_root is None:
             try:
                 raw_paths = self._resolve_raw_paths(
                     ds, time_range=None, params=dict(params)
                 )
-            except Exception:
+            except Exception as exc:
+                # P1-3 FIX: Log context when catching in finally guard
                 if active_exc is None:
                     raise
+                logger.warning(
+                    "manifest_bump_context: _resolve_raw_paths failed for dataset=%s: %s; "
+                    "skipping manifest bump (original exception propagating)",
+                    dataset, exc
+                )
                 raw_paths = []
             lock_root = manifest_root_for_paths(raw_paths)
         root = lock_root

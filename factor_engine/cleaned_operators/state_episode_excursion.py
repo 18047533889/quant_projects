@@ -222,7 +222,7 @@ def _efficiency_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
             # been walked (path > 0).
             if not (np.isfinite(path[t]) and path[t] > _EPS):
                 continue
-            out[t, c] = np.where(path[t] != 0, abs(x[t] - x[e]) / path[t], np.nan)
+            out[t, c] = abs(x[t] - x[e]) / path[t]
     return out
 
 
@@ -243,7 +243,7 @@ def _retrace_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
             # emitted with no arbitrary clamp.
             if MFE[t] <= _EPS:
                 continue
-            out[t, c] = np.where(MFE[t] != 0, (MFE[t] - P[t]) / MFE[t], np.nan)
+            out[t, c] = (MFE[t] - P[t]) / MFE[t]
     return out
 
 

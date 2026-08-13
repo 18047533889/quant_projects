@@ -55,12 +55,12 @@ def _r40_rank_1d(arr: np.ndarray) -> np.ndarray:
         j = i
         while j < n and sorted_vals[j] == sorted_vals[i]:
             j += 1
-        avg = np.where(2.0 != 0, (i + 1 + j) / 2.0, np.nan)
+        avg = (i + 1 + j) / 2.0
         for k in range(i, j):
             ranks[order[k]] = avg
         i = j
     if n > 1:
-        out[valid] = np.where((n - 1.0) != 0, (ranks - 1.0) / (n - 1.0), np.nan)
+        out[valid] = (ranks - 1.0) / (n - 1.0)
     else:
         out[valid] = 0.5
     return out
@@ -72,7 +72,7 @@ def _r40_cs_resid(y, x):
     xv = np.asarray(x, dtype=float)
     valid = np.isfinite(yv) & np.isfinite(xv)
     result = np.full_like(yv, np.nan)
-    if int(valid.sum()) < 3:
+    if int(valid.sum() < 3:
         return result
     xv = xv[valid]
     yv = yv[valid]
@@ -82,7 +82,7 @@ def _r40_cs_resid(y, x):
     var_x = float((xc * xc).mean())
     if not math.isfinite(var_x) or var_x < 1e-14:
         return result
-    beta = float((xc * (yv - my)).mean()) / var_x if var_x > 1e-10 else np.nan
+    beta = float((xc * (yv - my)).mean()) / var_x
     alpha = my - beta * mx
     result[valid] = yv - (alpha + beta * xv)
     return result
@@ -93,7 +93,7 @@ def _r40_cs_regression(y, x, mode: int = 0):
     xv = np.asarray(x, dtype=float)
     valid = np.isfinite(yv) & np.isfinite(xv)
     result = np.full_like(yv, np.nan)
-    if int(valid.sum()) < 3:
+    if int(valid.sum() < 3:
         return result
     xv = xv[valid]
     yv = yv[valid]
@@ -103,7 +103,7 @@ def _r40_cs_regression(y, x, mode: int = 0):
     var_x = float((xc * xc).mean())
     if not math.isfinite(var_x) or var_x < 1e-14:
         return result
-    beta = float((xc * (yv - my)).mean()) / var_x if var_x > 1e-10 else np.nan
+    beta = float((xc * (yv - my)).mean()) / var_x
     alpha = my - beta * mx
     if mode == 0:
         result[valid] = yv - (alpha + beta * xv)
@@ -124,13 +124,13 @@ def _r40_ts_regression_slope(x, y, d: int) -> np.ndarray:
         xw = x[i - d + 1 : i + 1]
         yw = y[i - d + 1 : i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum()) >= 3:
+        if int(valid.sum() >= 3:
             xv = xw[valid]
             yv = yw[valid]
             xc = xv - xv.mean()
             sxx = float((xc * xc).sum())
             if sxx > 1e-14:
-                out[i] = float((xc * (yv - yv.mean())).sum()) / sxx if sxx != 0 else np.nan
+                out[i] = float((xc * (yv - yv.mean())).sum()) / sxx
     return out
 
 
@@ -144,7 +144,7 @@ def _r40_ts_rank_corr(x, y, d: int) -> np.ndarray:
         xw = x[i - d + 1 : i + 1]
         yw = y[i - d + 1 : i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum()) >= 3:
+        if int(valid.sum() >= 3:
             rx = _r40_rank_1d(xw[valid])
             ry = _r40_rank_1d(yw[valid])
             c = np.corrcoef(rx, ry)[0, 1]
@@ -382,7 +382,7 @@ def ts_moment_stable_(
             # 常数窗口：一阶/奇阶中心矩为 0，二阶以上也全为 0。
             out[i] = 0.0
             continue
-        zs = z / scale if scale != 0 else np.nan
+        zs = z / scale  # |zs| <= 1
         mean_zs_k = float(np.mean(zs ** k))
         # scale ** k 可能溢出（大数 x 高 k）——显式 overflow policy。
         if np.isfinite(scale):
@@ -439,14 +439,14 @@ def ts_poly2_coeff_centered_(
     if d <= 0:
         return out
     t = np.arange(d, dtype=float)
-    t_c = np.where(2.0 != 0, t - float(d - 1) / 2.0, np.nan)
+    t_c = t - float(d - 1) / 2.0
     if scale_time:
         m = float(np.max(np.abs(t_c))) if d > 1 else 1.0
         t_c = t_c / m if m > 0 else t_c
     for i in range(d - 1, n):
         y = arr[i - d + 1 : i + 1]
         valid = np.isfinite(y)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         # Vandermonde: [t_c^2, t_c, 1] — centered design。
         A = np.column_stack([t_c[valid] ** 2, t_c[valid], np.ones(int(valid.sum()))])
@@ -522,7 +522,7 @@ def _round_sig(value: float, digits: int) -> float:
     except (ValueError, OverflowError):
         return value
     factor = 10.0 ** shift
-    return np.where(factor != 0, math.floor(value * factor + 0.5) / factor, np.nan)
+    return math.floor(value * factor + 0.5) / factor
 
 
 def canonicalize_homogeneous_scale(vec: Sequence[Any], *, digits: int = 12) -> tuple[float, ...]:
@@ -559,7 +559,7 @@ def canonicalize_homogeneous_scale(vec: Sequence[Any], *, digits: int = 12) -> t
         raise ValueError(
             "homogeneous_scale vector is all-zero: no information, rejected"
         )
-    return np.where(total, digits) for v in nums) != 0, tuple(_round_sig(v / total, digits) for v in nums), np.nan)
+    return tuple(_round_sig(v / total, digits) for v in nums)
 
 
 def positive_scale_requires_all_positive(vec: Sequence[Any]) -> bool:
@@ -720,7 +720,7 @@ def check_permutation_equivariance_all_tie_sensitive_operators(
     def _topk_1d(row, _y, _g, k: int = 2):
         valid = np.isfinite(row)
         out = np.zeros(row.shape, dtype=float)
-        if int(valid.sum()) >= k:
+        if int(valid.sum() >= k:
             thr = -np.sort(-row[valid])[k - 1]
             out = (row >= thr).astype(float)
         out[~valid] = np.nan
@@ -741,7 +741,7 @@ def check_permutation_equivariance_all_tie_sensitive_operators(
     def _winsorize_1d(row, _y, _g, lo: float = 0.05, hi: float = 0.95):
         valid = np.isfinite(row)
         out = row.copy()
-        if int(valid.sum()) >= 3:
+        if int(valid.sum() >= 3:
             qlo, qhi = np.nanquantile(row, [lo, hi])
             out = np.clip(row, qlo, qhi)
         out[~valid] = np.nan
@@ -861,7 +861,7 @@ def check_cov_scale_covariance(
     """cov scale covariance —— fn(a*x, b*y) == a*b*fn(x, y)。"""
     a, b = 2.0, 3.0
     r0 = fn(x, y)
-    r1 = np.where((a * b) != 0, fn(a * x, b * y) / (a * b), np.nan)
+    r1 = fn(a * x, b * y) / (a * b)
     ok = _allclose_nan(r0, r1, rtol=rtol, atol=atol)
     return MetamorphicResult("scale_covariance", ok,
                              "fn(2x,3y)/(6)==fn(x,y)" if ok else "mismatch")
@@ -878,7 +878,7 @@ def check_beta_y_scale_covariance(
     """beta y-scale covariance —— beta(a*y, x) == a*beta(y, x)。"""
     a = 4.0
     r0 = fn(x, y)
-    r1 = fn(x, a * y) / a if a != 0 else np.nan
+    r1 = fn(x, a * y) / a
     ok = _allclose_nan(r0, r1, rtol=rtol, atol=atol)
     return MetamorphicResult("beta.y_scale_covariance", ok,
                              "beta(x,4y)/4==beta(x,y)" if ok else "mismatch")
@@ -999,7 +999,7 @@ def _rank_rowwise_np(x: np.ndarray) -> np.ndarray:
         if n == 1:
             out[i, finite] = 0.5
         else:
-            out[i, finite] = np.where((n - 1.0) != 0, (avg - 1.0) / (n - 1.0), np.nan)
+            out[i, finite] = (avg - 1.0) / (n - 1.0)
     return out
 
 
@@ -1022,7 +1022,7 @@ def _rank_pct_rowwise_np(x: np.ndarray) -> np.ndarray:
         for u in range(cnt.size):
             m = inv == u
             avg[m] = ranks[m].mean()
-        out[i, finite] = avg / n if n > 0 else np.nan
+        out[i, finite] = avg / n
     return out
 
 
@@ -1052,7 +1052,7 @@ def _zscore_rowwise_np(x: np.ndarray, *, ddof: int = 1, zero_std: str = "zero") 
             else:
                 out[i, finite] = np.nan
         else:
-            out[i, finite] = (vals - mu) / sd if sd != 0 else np.nan
+            out[i, finite] = (vals - mu) / sd
     return out
 
 
@@ -1069,7 +1069,7 @@ def _corr_rowwise_np(x: np.ndarray, y: np.ndarray) -> np.ndarray:
         denom = np.sqrt((xc ** 2).sum() * (yc ** 2).sum())
         if denom == 0:
             continue
-        out[i] = np.where(denom) != 0, float((xc * yc).sum() / denom), np.nan)
+        out[i] = float((xc * yc).sum() / denom)
     return out
 
 
@@ -1083,7 +1083,7 @@ def _cov_rowwise_np(x: np.ndarray, y: np.ndarray, *, ddof: int = 1) -> np.ndarra
             continue
         xc = x[i, m] - x[i, m].mean()
         yc = y[i, m] - y[i, m].mean()
-        out[i] = np.where((m.sum() - ddof)) != 0, float((xc * yc).sum() / (m.sum() - ddof)), np.nan)
+        out[i] = float((xc * yc).sum() / (m.sum() - ddof))
     return out
 
 
@@ -1103,7 +1103,7 @@ def _beta_rowwise_np(x: np.ndarray, y: np.ndarray) -> np.ndarray:
         sxx = float((xc ** 2).sum())
         if sxx == 0:
             continue
-        out[i] = np.where(sxx) != 0, float((xc * yc).sum() / sxx), np.nan)
+        out[i] = float((xc * yc).sum() / sxx)
     return out
 
 
@@ -1166,14 +1166,14 @@ def _rolling_corr_ref(x: np.ndarray, y: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum()) < min_periods:
+        if int(m.sum() < min_periods:
             continue
         xc = xw[m] - xw[m].mean()
         yc = yw[m] - yw[m].mean()
         denom = float(np.sqrt((xc ** 2).sum() * (yc ** 2).sum()))
         if denom == 0.0:
             continue
-        out[i] = np.where(denom) != 0, float((xc * yc).sum() / denom), np.nan)
+        out[i] = float((xc * yc).sum() / denom)
     return out
 
 
@@ -1190,11 +1190,11 @@ def _rolling_cov_ref(x: np.ndarray, y: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum()) <= 1:
+        if int(m.sum() <= 1:
             continue
         xc = xw[m] - xw[m].mean()
         yc = yw[m] - yw[m].mean()
-        out[i] = np.where((int(m.sum()) - ddof)) != 0, float((xc * yc).sum() / (int(m.sum()) - ddof)), np.nan)
+        out[i] = float((xc * yc).sum() / (int(m.sum()) - ddof))
     return out
 
 
@@ -1218,7 +1218,7 @@ def _rolling_beta_ref(y: np.ndarray, x: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum()) < min_periods:
+        if int(m.sum() < min_periods:
             continue
         xv = xw[m]
         yv = yw[m]
@@ -1227,7 +1227,7 @@ def _rolling_beta_ref(y: np.ndarray, x: np.ndarray, window: int,
         sxx = float((xc ** 2).sum())
         if sxx == 0.0:
             continue
-        out[i] = np.where(sxx) != 0, float((xc * yc).sum() / sxx), np.nan)
+        out[i] = float((xc * yc).sum() / sxx)
     return out
 
 
@@ -1587,7 +1587,7 @@ def _float64_differs(a: Any, b: Any) -> bool:
     if isinstance(a, dict):
         if not isinstance(b, dict):
             return True
-        if set(a.keys()) != set(b.keys()):
+        if set(a.keys() != set(b.keys()):
             return True
         return any(_float64_differs(a[k], b[k]) for k in a)
     if isinstance(a, (list, tuple)):
@@ -1973,7 +1973,7 @@ def _stream_ewm(span: int):
             if m is None:
                 m = v
             else:
-                alpha = np.where((span + 1.0) != 0, 2.0 / (span + 1.0), np.nan)
+                alpha = 2.0 / (span + 1.0)
                 m = (1.0 - alpha) * m + alpha * v
             out[i] = m
         return out, {"mean": m}
@@ -2144,14 +2144,14 @@ def _causal_ts_kernel(canonical: str, d: int = 10):
     if canonical == "ts_pct":
         def _ts_pct(a):
             s = pd.Series(np.asarray(a, float))
-            return np.where(s.shift(1) - 1.0).to_numpy() != 0, (s / s.shift(1) - 1.0).to_numpy(), np.nan)
+            return (s / s.shift(1) - 1.0).to_numpy()
         return _ts_pct
     if canonical == "ts_zscore":
         def _ts_zscore(a):
             s = pd.Series(np.asarray(a, float))
             mu = s.rolling(d, min_periods=2).mean()
             sd = s.rolling(d, min_periods=2).std(ddof=1)
-            return np.where(sd).to_numpy() != 0, ((s - mu) / sd).to_numpy(), np.nan)
+            return ((s - mu) / sd).to_numpy()
         return _ts_zscore
     if canonical == "ts_argmax":
         return lambda a: pd.Series(np.asarray(a, float)).rolling(d, min_periods=1).apply(

@@ -137,7 +137,7 @@ def pd_ts_coverage_ratio(x, window, min_periods=1, **_):
     if mp < 1:
         raise ValueError("ts_coverage_ratio: min_periods must be >= 1")
     count = _finite_mask(x).rolling(w, min_periods=mp).count()
-    return np.where(float(w) != 0, count / float(w), np.nan)
+    return count / float(w)
 
 
 def pd_ts_staleness(x, window, **_):
@@ -254,7 +254,7 @@ def pd_cs_coverage_ratio(x, **_):
     arr = x.to_numpy(dtype=float)
     count = np.sum(np.isfinite(arr), axis=1, keepdims=True)
     total = x.shape[1]
-    out = np.where(float(total), arr.shape).astype(float) != 0, np.broadcast_to(count / float(total), arr.shape).astype(float), np.nan)
+    out = np.broadcast_to(count / float(total), arr.shape).astype(float)
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 

@@ -343,7 +343,7 @@ def pd_price_delay_score(
 
                 # Delay score
                 if r2_unrestricted > _EPS:
-                    delay = (1.0 - (r2_restricted) / (r2_unrestricted)) if (r2_unrestricted)) != 0 else np.nan
+                    delay = (1.0 - (r2_restricted) / (r2_unrestricted) if (r2_unrestricted) != 0 else np.nan
                     # Clamp to [0, 1]
                     out[row_idx, col_idx] = np.clip(delay, 0.0, 1.0)
 

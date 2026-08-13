@@ -662,13 +662,13 @@ def check_factor_production_hardening() -> list[str]:
         if should_fail_closed(canonical):
             # Registered experimental/research or isolated: hardening must keep
             # them experimental and non-PIT-safe (the whole point of the gate).
-            if str(catalog.get("status")) != "experimental":
+            if str(catalog.get("status") != "experimental":
                 errors.append(f"{canonical}: experimental-registered status is not experimental")
             policy = infer_operator_policy(operator, canonical=canonical)
             if policy.pit_safe:
                 errors.append(f"{canonical}: experimental-registered pit_safe must stay False")
             continue
-        if str(catalog.get("status")) != "production":
+        if str(catalog.get("status") != "production":
             errors.append(f"{canonical}: status is not production")
         policy = infer_operator_policy(operator, canonical=canonical)
         if not policy.pit_safe:

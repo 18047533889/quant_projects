@@ -269,12 +269,12 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
         return None
     if S[0] <= _EPS or S[r - 1] <= _EPS * S[0]:
         return None
-    cond = np.where(S[r - 1] != 0, S[0] / S[r - 1], np.nan)
+    cond = S[0] / S[r - 1]
     if cond > 1e12:
         return None
     Ur = U[:, :r]
     Vr = Vt[:r, :].T
-    Sr_inv = np.where(S[:r]) != 0, np.diag(1.0 / S[:r]), np.nan)
+    Sr_inv = np.diag(1.0 / S[:r])
     A_tilde = Ur.T @ Y @ Vr @ Sr_inv
     # P0-06 rewrite: keep the (eigval, eigvector) PAIRS together so the filtered
     # subset stays aligned (eigenvalues alone cannot be re-paired to modes).
@@ -289,7 +289,7 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     # (The old code used the SVD-coordinate projection ``Ur.T @ H[:, 0]`` as if
     # it were the mode amplitude — that is not the standard DMD amplitude and
     # mis-orders the dominant mode / energies.)
-    Phi = np.where(S[:r]) @ W != 0, Y @ (Vr / S[:r]) @ W, np.nan)
+    Phi = Y @ (Vr / S[:r]) @ W          # (L, r) exact modes
     x1 = X[:, 0]
     # R16-087: the pinv rcond is an explicit, VERSIONED numerical policy —
     # ``np.linalg.pinv``'s library-default rcond can change the effective rank
@@ -397,7 +397,7 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # though both signs describe the SAME oscillation.  Canonical
                 # frequency uses |arg λ|/(2π) so the dominant frequency is stable
                 # and unambiguous for a real series.
-                val = np.where((2.0 * np.pi)) != 0, float(abs(np.angle(dom)) / (2.0 * np.pi)), np.nan)
+                val = float(abs(np.angle(dom)) / (2.0 * np.pi))
                 if np.isfinite(val):
                     out[r, c] = val
                 _set_dmd_telemetry(int(res["eig"].size), int(rank), int(top_k), "ok")
@@ -434,8 +434,8 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                             continue
                         is_conj = (
                             eig[i] != eig[j]
-                            and abs(abs(eig[i]) - abs(eig[j])) < 1e-6
-                            and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j]))) < 1e-6
+                            and abs(abs(eig[i]) - abs(eig[j]) < 1e-6
+                            and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j])) < 1e-6
                         )
                         if is_conj:
                             m = max(pair_log, float(log_energy[j]))

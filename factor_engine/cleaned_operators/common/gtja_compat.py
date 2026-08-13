@@ -64,14 +64,14 @@ def _rolling_time_slope_1d(arr: np.ndarray, window: int, min_periods: int) -> np
         start = max(0, i - window + 1)
         seg = values[start : i + 1]
         valid = np.isfinite(seg)
-        if int(valid.sum()) < min_periods:
+        if int(valid.sum() < min_periods:
             continue
         t = np.arange(seg.size, dtype=float)[valid]
         v = seg[valid]
         tc = t - t.mean()
         denom = float(np.dot(tc, tc))
         if denom > 0.0:
-            out[i] = np.where(denom) != 0, float(np.dot(tc, v - v.mean()) / denom), np.nan)
+            out[i] = float(np.dot(tc, v - v.mean()) / denom)
     return out
 
 
@@ -138,7 +138,7 @@ def _safe_divide(left, right, *, epsilon: float, default: float, missing_default
     missing = ~np.isfinite(xarr) | ~np.isfinite(yarr)
     small = np.abs(yarr) <= float(epsilon)
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        raw = xarr / yarr if yarr != 0 else np.nan
+        raw = xarr / yarr
     raw[small] = float(default)
     raw[missing] = float(default) if missing_default else np.nan
     raw[~np.isfinite(raw) & ~missing] = float(default)

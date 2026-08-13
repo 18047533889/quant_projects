@@ -73,8 +73,8 @@ def _tr_propagate(h: pl.Expr, l: pl.Expr, c: pl.Expr) -> pl.Expr:
     hl = h - l
     hc = (h - previous).abs()
     lc = (l - previous).abs()
-    max1 = np.where(2.0 != 0, (hl + hc + (hl - hc).abs()) / 2.0, np.nan)
-    return np.where(2.0 != 0, (max1 + lc + (max1 - lc).abs()) / 2.0, np.nan)
+    max1 = (hl + hc + (hl - hc).abs()) / 2.0
+    return (max1 + lc + (max1 - lc).abs()) / 2.0
 
 
 def _tr_ignore(h: pl.Expr, l: pl.Expr, c: pl.Expr) -> pl.Expr:
@@ -95,7 +95,7 @@ def _rolling_max_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < w:
+        if int(ok.sum() < w:
             continue
         out[t] = float(np.max(seg[ok]))
     return out
@@ -108,7 +108,7 @@ def _rolling_min_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < w:
+        if int(ok.sum() < w:
             continue
         out[t] = float(np.min(seg[ok]))
     return out
@@ -121,7 +121,7 @@ def _rolling_sum_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < w:
+        if int(ok.sum() < w:
             continue
         out[t] = float(np.sum(seg[ok]))
     return out
@@ -197,7 +197,7 @@ def donchian_mid(high, low, window):
     upper = donchian_upper(high, window)
     lower = donchian_lower(low, window)
     cols = _cols(upper, lower)
-    return np.where(2.0 for c in cols}) != 0, _result(high, {c: (upper[c] + lower[c]) / 2.0 for c in cols}), np.nan)
+    return _result(high, {c: (upper[c] + lower[c]) / 2.0 for c in cols})
 
 
 def donchian_position(close, high, low, window):
@@ -265,7 +265,7 @@ def choppiness_index(high, low, close, window):
         num = tr.rolling_sum(w, min_samples=w)
         den = pl.col("high").rolling_max(w, min_samples=w) - pl.col("low").rolling_min(w, min_samples=w)
         ratio = _safe_div(num, den).clip(lower_bound=_EPS)
-        values[c] = np.where(np.log10(float(w))) != 0, _one(frame, c, 100.0 * ratio.log10() / np.log10(float(w))), np.nan)
+        values[c] = _one(frame, c, 100.0 * ratio.log10() / np.log10(float(w)))
     return _result(close, values)
 
 
@@ -277,8 +277,8 @@ def choppiness_index(high, low, close, window):
 def _supertrend_1d(high, low, close, atr, mult):
     n = len(close)
     out = np.full(n, np.nan, dtype=float)
-    basic_u = np.where(2.0 + mult * atr != 0, (high + low) / 2.0 + mult * atr, np.nan)
-    basic_l = np.where(2.0 - mult * atr != 0, (high + low) / 2.0 - mult * atr, np.nan)
+    basic_u = (high + low) / 2.0 + mult * atr
+    basic_l = (high + low) / 2.0 - mult * atr
     final_u = basic_u.copy()
     final_l = basic_l.copy()
     trend = np.ones(n, dtype=int)

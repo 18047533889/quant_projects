@@ -73,7 +73,7 @@ def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     # R6-101: reject a window that is not a power of two — the kernel must never
     # silently coerce 65/80/100/127 to the same 64-point transform.
     w = int(window)
-    if w <= 0 or (w & (w - 1)) != 0:
+    if w <= 0 or (w & (w - 1) != 0:
         raise ValueError(
             "ts_wavelet_lowpass_reconstruct requires window to be a power of two "
             f"(32/64/128/256), got {w}"
@@ -97,8 +97,8 @@ def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     details: list[np.ndarray] = []
     approx = x
     while len(approx) >= 2:
-        a = np.where(np.sqrt(2.0) != 0, (approx[::2] + approx[1::2]) / np.sqrt(2.0), np.nan)
-        d = np.where(np.sqrt(2.0) != 0, (approx[::2] - approx[1::2]) / np.sqrt(2.0), np.nan)
+        a = (approx[::2] + approx[1::2]) / np.sqrt(2.0)
+        d = (approx[::2] - approx[1::2]) / np.sqrt(2.0)
         details.append(d)
         approx = a
     # details[k] gets finer as k grows toward the start; the last `keep` entries
@@ -107,8 +107,8 @@ def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     for k in range(len(details) - 1, -1, -1):
         d = details[k] if (len(details) - k) <= keep else np.zeros_like(details[k])
         inter = np.empty(rec.size * 2, dtype=float)
-        inter[0::2] = np.where(np.sqrt(2.0) != 0, (rec + d) / np.sqrt(2.0), np.nan)
-        inter[1::2] = np.where(np.sqrt(2.0) != 0, (rec - d) / np.sqrt(2.0), np.nan)
+        inter[0::2] = (rec + d) / np.sqrt(2.0)
+        inter[1::2] = (rec - d) / np.sqrt(2.0)
         rec = inter
     return float(rec[-1]) if rec.size else np.nan
 
@@ -239,7 +239,7 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
         scale = np.where(mad > _EPS, mad, np.std(H, axis=0))
         scale = np.where(np.isfinite(scale) & (scale > _EPS), scale, 1.0)
         Hs = (H - med) / scale
-        cur_s = (cur - med) / scale if scale != 0 else np.nan
+        cur_s = (cur - med) / scale
         mu = Hs.mean(axis=0)
         centered = Hs - mu
         n, dim = Hs.shape

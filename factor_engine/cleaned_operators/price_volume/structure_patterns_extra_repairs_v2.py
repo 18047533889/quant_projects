@@ -35,8 +35,8 @@ def pattern_triple_top(
     )
     highs = [prices[0], prices[2], prices[4]]
     trough = prices[3]
-    mean_high = np.where(3.0 != 0, sum(highs) / 3.0, np.nan)
-    depth = np.where(trough.replace(0, np.nan) - 1.0).ge( != 0, (mean_high / trough.replace(0, np.nan) - 1.0).ge(, np.nan)
+    mean_high = sum(highs) / 3.0
+    depth = (mean_high / trough.replace(0, np.nan) - 1.0).ge(
         _pf(min_depth, "min_depth", 0)
     )
     spacing = positions[4] - positions[2]
@@ -70,8 +70,8 @@ def pattern_triple_bottom(
     )
     lows = [prices[0], prices[2], prices[4]]
     peak = prices[3]
-    mean_low = np.where(3.0 != 0, sum(lows) / 3.0, np.nan)
-    depth = np.where(mean_low.replace(0, np.nan) - 1.0).ge( != 0, (peak / mean_low.replace(0, np.nan) - 1.0).ge(, np.nan)
+    mean_low = sum(lows) / 3.0
+    depth = (peak / mean_low.replace(0, np.nan) - 1.0).ge(
         _pf(min_depth, "min_depth", 0)
     )
     spacing = positions[4] - positions[2]

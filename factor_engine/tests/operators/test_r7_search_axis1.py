@@ -182,7 +182,7 @@ def test_int_bounds_sample_legal_integer_grid():
     vals = mod._sample_values("window", op, 3)
     assert all(isinstance(v, int) for v in vals)
     assert all(2 <= v <= 6 for v in vals)
-    assert len(set(vals)) >= 2
+    assert len(set(vals) >= 2
 
 
 def test_float_bounds_sample_reviewed_quantiles():

@@ -63,7 +63,7 @@ class TSFeatureModeSharePolarsNative(SeriesOperator):
             .select([
                 pl.col(x.name)
                 .rolling_map(
-                    lambda s: (s.mode()[0] == s).sum() / len(s) if len(s) > 0 and len(s.mode()) > 0 else None,
+                    lambda s: (s.mode()[0] == s).sum() / len(s) if len(s) > 0 and len(s.mode() > 0 else None,
                     window_size=window
                 )
             ])
@@ -191,13 +191,17 @@ class TSGapFillRatioPolarsNative(SeriesOperator):
 
         return (
             df.select([
-                pl.when((pl.col("open") > pl.col("close_prev")))  # Gap up
+                pl.when(pl.col("open") > pl.col("close_prev"))  # Gap up
                 .then(
-                    pl.when((pl.col("open" != 0).then(pl.col("high") - pl.col("open")) / (pl.col("open").otherwise(None) - pl.col("close_prev"))
+                    pl.when(pl.col("open") != 0)
+                    .then((pl.col("high") - pl.col("open")) / (pl.col("open") - pl.col("close_prev")))
+                    .otherwise(None)
                 )
-                .when((pl.col("open") < pl.col("close_prev")))  # Gap down
+                .when(pl.col("open") < pl.col("close_prev"))  # Gap down
                 .then(
-                    pl.when((pl.col("close_prev" != 0).then(pl.col("open") - pl.col("low")) / (pl.col("close_prev").otherwise(None) - pl.col("open"))
+                    pl.when(pl.col("close_prev") != 0)
+                    .then((pl.col("open") - pl.col("low")) / (pl.col("close_prev") - pl.col("open")))
+                    .otherwise(None)
                 )
                 .otherwise(None)
             ])
@@ -228,7 +232,9 @@ class TSGapReversionRatioPolarsNative(SeriesOperator):
 
         return (
             df.select([
-                pl.when((pl.col("open" != 0).then(pl.col("open") - pl.col("close")) / (pl.col("open").otherwise(None) - pl.col("close_prev"))
+                pl.when(pl.col("open") != 0)
+                .then((pl.col("open") - pl.col("close")) / (pl.col("open") - pl.col("close_prev")))
+                .otherwise(None)
             ])
             .collect()
             .to_series()
@@ -814,7 +820,7 @@ class TSHampelFilterCausalPolarsNative(SeriesOperator):
                 (pl.col(col) - pl.col(col).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
             ])
             .select([
-                pl.when((pl.col(col) - pl.col("_med")).abs() > n_sigma * 1.4826 * pl.col("_mad"))
+                pl.when(pl.col(col) - pl.col("_med")).abs() > n_sigma * 1.4826 * pl.col("_mad"))
                 .then(pl.col("_med"))
                 .otherwise(pl.col(col))
             ])
@@ -2014,7 +2020,7 @@ class TSKAMAPolarsNative(SeriesOperator):
                 pl.col(col).diff().abs().rolling_sum(window).alias("_volatility"),
             ])
             .with_columns([
-                pl.when((pl.col("_volatility" != 0).then(pl.col("_change") / (pl.col("_volatility").otherwise(None) + 1e-8)).alias("_er")
+                pl.when(pl.col("_volatility") != 0.then(pl.col("_change") / (pl.col("_volatility").otherwise(None) + 1e-8)).alias("_er")
             ])
             .with_columns([
                 ((pl.col("_er") * (2.0/(fast+1) - 2.0/(slow+1)) + 2.0/(slow+1)) ** 2).alias("_sc")
@@ -2161,7 +2167,7 @@ class TSLastPivotHighPolarsNative(SeriesOperator):
                 pl.col(col).rolling_max(window).shift(-window+1).alias("_next_max"),
             ])
             .with_columns([
-                pl.when((pl.col(col) >= pl.col("_prev_max")) & (pl.col(col) >= pl.col("_next_max")))
+                pl.when(pl.col(col) >= pl.col("_prev_max")) & (pl.col(col) >= pl.col("_next_max")))
                 .then(pl.col(col))
                 .otherwise(None)
                 .forward_fill()
@@ -2198,7 +2204,7 @@ class TSLastPivotLowPolarsNative(SeriesOperator):
                 pl.col(col).rolling_min(window).shift(-window+1).alias("_next_min"),
             ])
             .with_columns([
-                pl.when((pl.col(col) <= pl.col("_prev_min")) & (pl.col(col) <= pl.col("_next_min")))
+                pl.when(pl.col(col) <= pl.col("_prev_min")) & (pl.col(col) <= pl.col("_next_min")))
                 .then(pl.col(col))
                 .otherwise(None)
                 .forward_fill()

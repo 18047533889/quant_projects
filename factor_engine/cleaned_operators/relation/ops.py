@@ -238,7 +238,7 @@ class RelationHhi(SeriesOperator):
         values = _rank_values(stacked, missing_semantic)
         total = values.sum(axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
-            shares = values / total if total != 0 else np.nan
+            shares = values / total
             hhi = np.sum(shares * shares, axis=0)
         hhi = np.where(total > 0, hhi, np.nan)
         return _frame_like(base, hhi)
@@ -290,7 +290,7 @@ class HolderObservedTopkHhi(SeriesOperator):
         values = _rank_values(stacked, missing_semantic)
         total = values.sum(axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
-            shares = values / total if total != 0 else np.nan
+            shares = values / total
             hhi = np.sum(shares * shares, axis=0)
         hhi = np.where(total > 0, hhi, np.nan)
         return _frame_like(base, hhi)
@@ -335,7 +335,7 @@ class RelationEntropy(SeriesOperator):
         values = _rank_values(stacked, missing_semantic)
         total = values.sum(axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
-            shares = values / total if total != 0 else np.nan
+            shares = values / total
             entropy = -np.sum(shares * np.log(np.where(shares > 0, shares, 1.0)), axis=0)
         count = (np.isfinite(values)).sum(axis=0).astype(float)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -427,12 +427,12 @@ class RelationRankWeightedSum(SeriesOperator):
         stacked = _stack_panels(*args)
         values = _rank_values(stacked, missing_semantic)
         ranks = np.arange(1, stacked.shape[0] + 1, dtype=float)[:, None, None]
-        weights = 1.0 / ranks if ranks != 0 else np.nan
+        weights = 1.0 / ranks
         finite = np.isfinite(values)
         weighted = np.nansum(np.where(finite, values * weights, 0.0), axis=0)
         weight_sum = np.sum(np.where(finite, weights, 0.0), axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
-            out = weighted / weight_sum if weight_sum != 0 else np.nan
+            out = weighted / weight_sum
         out = np.where(np.isfinite(values).sum(axis=0) > 0, out, np.nan)
         return _frame_like(base, out)
 
@@ -1261,7 +1261,7 @@ def _day_diff_frame(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     try:
         ad = a.astype("datetime64[ns]")
         bd = b.astype("datetime64[ns]")
-        delta = np.where(np.timedelta64(1, "D") != 0, (bd - ad) / np.timedelta64(1, "D"), np.nan)
+        delta = (bd - ad) / np.timedelta64(1, "D")
         valid = ~np.isnat(ad) & ~np.isnat(bd)
         out[valid] = np.asarray(delta[valid], dtype=float)
     except (ValueError, TypeError):
@@ -1409,7 +1409,7 @@ def _jaccard(a: set, b: set) -> float:
     union = a | b
     if not union:
         return np.nan
-    return np.where(len(union)) != 0, float(len(a & b) / len(union)), np.nan)
+    return float(len(a & b) / len(union))
 
 
 @register_operator(
@@ -1474,7 +1474,7 @@ class IndexWeight(SeriesOperator):
         if bool(normalize):
             denom = np.nansum(arr, axis=1, keepdims=True)
             denom = np.where(np.abs(denom) > 1e-12, denom, np.nan)
-            arr = arr / denom if denom != 0 else np.nan
+            arr = arr / denom
         return _frame_like(weight, arr)
 
 

@@ -188,7 +188,7 @@ def test_fundamental_strength_score_normalizes_before_combining():
     pd.testing.assert_frame_equal(base, scaled)
     # Each rank-normalised component lies in [-1, 1] and the score is the MEAN
     # over the observed components (R11), so it is bounded by [-1, 1].
-    assert np.nanmax(np.abs(base.to_numpy(dtype=float))) <= 1.0
+    assert np.nanmax(np.abs(base.to_numpy(dtype=float)) <= 1.0
 
 
 # ---------------------------------------------------------------------------

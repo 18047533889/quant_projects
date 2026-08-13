@@ -34,14 +34,14 @@ def _memory_source() -> InMemorySeriesSource:
     idx = pd.MultiIndex.from_product([dates, insts], names=["timestamp", "instrument"])
     rng = np.random.default_rng(20260809)
     close = pd.Series(rng.normal(100, 10, len(idx)), index=idx)
-    close[(rng.random(len(idx)) < 0.12)] = np.nan  # NaN holes
+    close[(rng.random(len(idx) < 0.12)] = np.nan  # NaN holes
     # an inf to exercise inf semantics
     close.iloc[7] = np.inf
     open_ = close.shift(1, fill_value=close.iloc[0]) + rng.normal(0, 0.5, len(idx))
     high = np.maximum(open_, close) + np.abs(rng.normal(0, 1, len(idx)))
     low = np.minimum(open_, close) - np.abs(rng.normal(0, 1, len(idx)))
     volume = pd.Series(rng.integers(100, 2000, len(idx)).astype(float), index=idx)
-    volume[(rng.random(len(idx)) < 0.05)] = np.nan
+    volume[(rng.random(len(idx) < 0.05)] = np.nan
     ret = close / close.shift(1, fill_value=close.iloc[0]) - 1.0
     grp = pd.Series(
         [1.0 if (i % 4) < 2 else 2.0 for i in range(len(idx))], index=idx

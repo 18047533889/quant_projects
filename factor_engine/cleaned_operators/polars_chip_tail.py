@@ -191,7 +191,7 @@ def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
             xv = x[lo : t + 1]
             sv = s[lo : t + 1]
             finite = np.isfinite(xv) & np.isfinite(sv)
-            if int(finite.sum()) < mp:
+            if int(finite.sum() < mp:
                 continue
             xs = xv[finite]
             ss = sv[finite]
@@ -244,14 +244,14 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
             if kind == "semivar":
                 # R3-113: true semivariance keeps the square (NO sqrt).
                 below = np.maximum(target - xv, 0.0)
-                res[t] = np.where(total) != 0, float(np.sum(wv * below * below) / total), np.nan)
+                res[t] = float(np.sum(wv * below * below) / total)
             elif kind == "downside":
                 # R3-113: sqrt'd variant = weighted downside deviation.
                 below = np.maximum(target - xv, 0.0)
-                res[t] = np.where(total)) != 0, float(np.sqrt(np.sum(wv * below * below) / total)), np.nan)
+                res[t] = float(np.sqrt(np.sum(wv * below * below) / total))
             elif kind == "drawdown":
                 pos = xv > 0.0
-                if int(pos.sum()) < 2:
+                if int(pos.sum() < 2:
                     continue
                 p = xv[pos]
                 wpos = wv[pos]
@@ -259,8 +259,8 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
                 if ttl <= _EPS:
                     continue
                 running_max = np.maximum.accumulate(p)
-                dd = np.where(running_max) != 0, np.maximum(0.0, 1.0 - p / running_max), np.nan)
-                res[t] = np.where(ttl) != 0, float(np.sum(wpos * dd) / ttl), np.nan)
+                dd = np.maximum(0.0, 1.0 - p / running_max)
+                res[t] = float(np.sum(wpos * dd) / ttl)
         out[c] = res
     return _rebuild(x_frame, out)
 

@@ -96,7 +96,7 @@ def test_abs_entropy_normalized_is_legacy_default_and_nats_is_log_scaled():
     # legacy default (normalize=True) is the dimensionless/normalized unit.
     assert np.isclose(legacy, norm)
     # normalized = nats / log(n) for a fully-finite window.
-    assert abs(norm - nats / np.log(5.0)) < 1e-9
+    assert abs(norm - nats / np.log(5.0) < 1e-9
     # nats >= normalized (log(5) > 1) for a concentrated distribution.
     assert nats > norm
 

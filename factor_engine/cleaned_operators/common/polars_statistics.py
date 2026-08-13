@@ -60,7 +60,7 @@ def _time_slope_col(col: pl.Expr, window: int) -> pl.Expr:
     denom = float(np.dot(t, t))
     if denom == 0.0:
         return pl.lit(None).cast(pl.Float64)
-    weights = t / denom if denom != 0 else np.nan
+    weights = t / denom
 
     def _dot(arr: np.ndarray) -> float:
         arr = np.asarray(arr, dtype=np.float64)
@@ -194,7 +194,7 @@ class KurtPolars(SeriesOperator):
             s = np.nanstd(arr, ddof=1)
             if s == 0 or not np.isfinite(s):
                 return np.nan
-            return np.where(s) ** 4) - 3.0) != 0, float(np.nanmean(((arr - m) / s) ** 4) - 3.0), np.nan)
+            return float(np.nanmean(((arr - m) / s) ** 4) - 3.0)
 
         cols = _numeric_cols(x)
         return x.with_columns([
@@ -242,7 +242,7 @@ class BetaPolars(SeriesOperator):
         w = max(int(kwargs.get("d", window)), 2)
 
         def _beta(a, b, n):
-            return np.where(b.rolling_var( != 0, pl.rolling_cov(a, b, window_size=n, min_samples=2) / b.rolling_var(, np.nan)
+            return pl.rolling_cov(a, b, window_size=n, min_samples=2) / b.rolling_var(
                 window_size=n, min_samples=2
             )
 
@@ -303,7 +303,7 @@ class InterceptPolars(SeriesOperator):
         for c in cols:
             cov = pl.rolling_cov(y[c], x[c], window_size=w, min_samples=2)
             var_x = x[c].rolling_var(window_size=w, min_samples=2)
-            slope = cov / var_x if var_x > 1e-10 else np.nan
+            slope = cov / var_x
             mean_y = y[c].rolling_mean(window_size=w, min_samples=2)
             mean_x = x[c].rolling_mean(window_size=w, min_samples=2)
             exprs.append((mean_y - slope * mean_x).alias(c))

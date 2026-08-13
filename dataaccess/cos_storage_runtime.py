@@ -19,7 +19,17 @@ _originals: dict[str, Any] = {}
 
 
 def _allow_full_sync() -> bool:
-    return os.environ.get("DATA_ACCESS_ALLOW_FULL_COS_SYNC", "").strip().lower() in {"1", "true", "yes", "on"}
+    """P1-6 FIX: Validate boolean env var at read time."""
+    raw = os.environ.get("DATA_ACCESS_ALLOW_FULL_COS_SYNC", "").strip().lower()
+    if not raw:
+        return False
+    allowed = {"0", "1", "true", "false", "yes", "no", "on", "off"}
+    if raw not in allowed:
+        raise ValueError(
+            f"DATA_ACCESS_ALLOW_FULL_COS_SYNC='{raw}' is invalid; "
+            f"allowed values: {', '.join(sorted(allowed))}"
+        )
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _local_dir(spec: Any) -> Path:

@@ -89,7 +89,7 @@ def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str, min_pe
                 est = xv[lo:r, c]
             else:
                 est = xv[lo : r + 1, c]
-            if int(np.isfinite(est).sum()) < min_periods:
+            if int(np.isfinite(est).sum() < min_periods:
                 continue
             thr = float(np.nanquantile(est, q if side == "lower" else 1.0 - q))
             if not np.isfinite(thr) or not np.isfinite(xv[r, c]):
@@ -158,7 +158,7 @@ def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, si
         run_cnt += day_cnt[r]
         for i in range(cols):
             if run_cnt[i] > 0:
-                out[r, i] = np.where(run_cnt[i] != 0, run_acc[i] / run_cnt[i], np.nan)
+                out[r, i] = run_acc[i] / run_cnt[i]
     return out
 
 
@@ -285,7 +285,7 @@ def _tail_lead_impl(
         for i in range(cols):
             eff_n[r, i] = cnt[i]
             if cnt[i] >= min_conditioning_events and base_cnt[i] > 0:
-                score[r, i] = np.where(cnt[i]) - (base[i] / base_cnt[i]) != 0, (acc[i] / cnt[i]) - (base[i] / base_cnt[i]), np.nan)
+                score[r, i] = (acc[i] / cnt[i]) - (base[i] / base_cnt[i])
     return score, eff_n
 
 
@@ -422,14 +422,14 @@ def _diffusion_series(xv: np.ndarray, gv: np.ndarray, alpha: float, steps: int) 
                 continue
             m = idx.size
             group_mean = float(np.mean(vals[finite_mask]))
-            c = np.where((m - 1) != 0, -1.0 / (m - 1), np.nan)
+            c = -1.0 / (m - 1)
             d = alpha * c
             if abs(d - 1.0) <= _EPS:
                 # Defensive: |d| < 1 for 0 < alpha < 1 and m >= 2, so this
                 # branch is unreachable; kept to avoid a 0/0.
                 geo_sum = float(K)
             else:
-                geo_sum = np.where((1.0 - d) != 0, (1.0 - d ** K) / (1.0 - d), np.nan)
+                geo_sum = (1.0 - d ** K) / (1.0 - d)
             coeff = (1.0 - alpha) * c * geo_sum + d ** K
             dev = vals[finite_mask] - group_mean
             result = group_mean + coeff * dev

@@ -434,7 +434,7 @@ class TestFactorIdHardGates:
         assert scoped_field_contract_hash(op("ts_mean", col("close"))) == scoped_field_contract_hash(
             op("ts_mean", col("close"))
         )
-        assert scoped_field_contract_hash(op("ts_mean", col("close"))) != scoped_field_contract_hash(
+        assert scoped_field_contract_hash(op("ts_mean", col("close")) != scoped_field_contract_hash(
             op("ts_mean", col("open"))
         )
 

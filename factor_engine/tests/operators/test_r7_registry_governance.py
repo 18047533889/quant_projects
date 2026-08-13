@@ -69,7 +69,7 @@ def test_impl_hash_is_deterministic():
 
 
 def test_impl_hash_distinguishes_direct_calculate():
-    assert _impl_source_hash(_DirectCalculateA()) != _impl_source_hash(_DirectCalculateB())
+    assert _impl_source_hash(_DirectCalculateA() != _impl_source_hash(_DirectCalculateB())
 
 
 def test_impl_hash_same_semantics_across_instances():
@@ -114,7 +114,7 @@ def test_impl_hash_closure_same_payload_same_hash():
 
 
 def test_impl_hash_closure_different_payload_different_hash():
-    assert _impl_source_hash(_ClosureA()) != _impl_source_hash(_ClosureB())
+    assert _impl_source_hash(_ClosureA() != _impl_source_hash(_ClosureB())
 
 
 def test_impl_hash_closure_stable_within_process():

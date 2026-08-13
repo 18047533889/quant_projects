@@ -791,9 +791,18 @@ class DataAccessSource(DataSource):
         #: 判断数据是否变化；与真实 DataSnapshot id 分开跟踪（格式不同，不能互比）。
         self._manifest_token: str | None = None
         self._snapshot_checked_at = 0.0
-        self._snapshot_ttl_seconds = float(
-            os.environ.get("FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS", "60") or 60
-        )
+        # P1-6 FIX: Validate env var at read time
+        raw_ttl = os.environ.get("FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS", "60") or "60"
+        try:
+            ttl_val = float(raw_ttl)
+            if ttl_val <= 0:
+                raise ValueError("must be positive")
+            self._snapshot_ttl_seconds = ttl_val
+        except ValueError as exc:
+            raise ValueError(
+                f"FACTOR_ENGINE_DATA_SNAPSHOT_TTL_SECONDS='{raw_ttl}' is invalid; "
+                f"must be a positive number (seconds): {exc}"
+            ) from exc
         self._max_cache_columns = _positive_int_env(
             "FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", 64
         )
@@ -1081,75 +1090,72 @@ class DataAccessSource(DataSource):
             except TypeError:
                 rows = []
             if rows:
-                # key 用 SemanticField.logical name（逐字段语义：按 name 对齐，
-                # 不按 position zip——避免顺序漂移错位）。
-                for row in rows:
-                    field_name = getattr(row, "name", None) or getattr(row, "logical_name", None)
-                    if field_name and field_name in names:
-                        catalog_by_name[str(field_name)] = row
-                if len(catalog_by_name) >= len(names):
+                # P1-1 FIX: Build a reverse map from requested names to returned rows.
+                # When an alias is requested, resolve_one returns a SemanticField whose
+                # logical_name is the canonical name, not the alias. We must match by
+                # position (zip) to preserve the requested-name → resolved-row mapping,
+                # otherwise alias requests are silently dropped and fall back to raw
+                # columns with wrong units (10000× scale error for A-share returns).
+                if len(rows) == len(names):
+                    # Full match: zip by position
+                    for requested_name, row in zip(names, rows):
+                        catalog_by_name[requested_name] = row
                     return catalog_by_name
-                # 部分命中：命中的直接用，未命中的**合并为一次批量重试**（N+1 修复）
+                else:
+                    # Partial match: use logical_name when it's in the request set,
+                    # but this can still drop aliases. Fall through to per-field path
+                    # for proper error classification and alias resolution.
+                    for row in rows:
+                        field_name = getattr(row, "name", None) or getattr(row, "logical_name", None)
+                        if field_name and field_name in names:
+                            catalog_by_name[str(field_name)] = row
                 missing_names = [n for n in names if n not in catalog_by_name]
             else:
                 missing_names = list(names)
 
-            # N+1 修复：合并 missing_names 重试一次批量查询
+            # P1-1 FIX: For missing names after batch, run the per-field path to
+            # preserve error classification (_is_clean_catalog_miss vs hard errors)
+            # and proper alias resolution. The old code debug-logged all still_missing
+            # as clean misses, silently bypassing strict_unknown_fields gates.
             if missing_names:
-                try:
-                    retry_result = _get_store().resolve_fields(missing_names, dataset=self.dataset)
-                    retry_rows = list(retry_result) if retry_result else []
-                    for row in retry_rows:
-                        field_name = getattr(row, "name", None) or getattr(row, "logical_name", None)
-                        if field_name and field_name in missing_names:
-                            catalog_by_name[str(field_name)] = row
-                    # 批量重试后仍未命中的，再逐字段处理（记录 clean miss）
-                    still_missing = [n for n in missing_names if n not in catalog_by_name]
-                    for name in still_missing:
-                        logger.debug(
-                            "semantic catalog clean miss after batch retry dataset=%s field=%s",
-                            self.dataset, name,
+                for name in missing_names:
+                    try:
+                        result = _get_store().resolve_fields([name], dataset=self.dataset)
+                    except Exception as inner_exc:
+                        if _is_clean_catalog_miss(inner_exc):
+                            logger.debug(
+                                "semantic catalog clean miss dataset=%s field=%s: %s",
+                                self.dataset, name, inner_exc,
+                            )
+                            continue
+                        self._raise_or_fallback(
+                            _catalog_resolution_error_kind(inner_exc), inner_exc, "semantic catalog resolution failed"
                         )
-                except Exception as exc:
-                    # 批量重试失败：回退逐字段（保留原错误分类语义）
-                    for name in missing_names:
-                        try:
-                            result = _get_store().resolve_fields([name], dataset=self.dataset)
-                        except Exception as inner_exc:
-                            if _is_clean_catalog_miss(inner_exc):
-                                logger.debug(
-                                    "semantic catalog clean miss dataset=%s field=%s: %s",
-                                    self.dataset, name, inner_exc,
-                                )
-                                continue
-                            self._raise_or_fallback(
-                                _catalog_resolution_error_kind(inner_exc), inner_exc, "semantic catalog resolution failed"
-                            )
-                            continue
-                        if result is None:
-                            continue
-                        try:
-                            resolved = list(result)
-                        except TypeError:
-                            self._raise_or_fallback(
-                                CatalogResolutionError,
-                                TypeError(
-                                    f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
-                                ),
-                                "semantic catalog resolution returned a non-iterable",
-                            )
-                            continue
-                        if len(resolved) != 1:
-                            self._raise_or_fallback(
-                                CatalogResolutionError,
-                                ValueError(
-                                    f"catalog resolve_fields returned {len(resolved)} rows for one "
-                                    f"request field={name!r} dataset={self.dataset!r}"
-                                ),
-                                "semantic catalog resolution length mismatch",
-                            )
-                            continue
-                        catalog_by_name[name] = resolved[0]
+                        continue
+                    if result is None:
+                        continue
+                    try:
+                        resolved = list(result)
+                    except TypeError:
+                        self._raise_or_fallback(
+                            CatalogResolutionError,
+                            TypeError(
+                                f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
+                            ),
+                            "semantic catalog resolution returned a non-iterable",
+                        )
+                        continue
+                    if len(resolved) != 1:
+                        self._raise_or_fallback(
+                            CatalogResolutionError,
+                            ValueError(
+                                f"catalog resolve_fields returned {len(resolved)} rows for one "
+                                f"request field={name!r} dataset={self.dataset!r}"
+                            ),
+                            "semantic catalog resolution length mismatch",
+                        )
+                        continue
+                    catalog_by_name[name] = resolved[0]
             return catalog_by_name
         # 批量不可用（catalog 层整体异常已 fallback）→ 旧逐字段路径。
         catalog_by_name = {}

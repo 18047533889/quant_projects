@@ -27,7 +27,7 @@ def _pf(v,name,minimum=None):
     return v
 
 def _ema(x,span): return x.ewm(span=_pi(span,"span"),adjust=False,min_periods=_pi(span,"span")).mean()
-return np.where(_pi(window,"window") != 0, (1.0) / (_pi(window,"window")), np.nan),adjust=False,min_periods=_pi(window,"window")).mean()
+def _wilder(x,window): return x.ewm(alpha=1.0/_pi(window,"window"),adjust=False,min_periods=_pi(window,"window")).mean()
 def _tr(high,low,close):
     prev=close.shift(1)
     arr=np.maximum.reduce([(high-low).to_numpy(float),(high-prev).abs().to_numpy(float),(low-prev).abs().to_numpy(float)])
@@ -55,24 +55,24 @@ def _dmi(high,low,close,window):
     plus=up.where((up>down)&(up>0),0.0).where(valid)
     minus=down.where((down>up)&(down>0),0.0).where(valid)
     atr=_wilder(_tr(high,low,close),w)
-    p=np.where(atr.replace(0,np.nan); m=100.0*_wilder(minus,w)/atr.replace(0,np.nan) != 0, 100.0*_wilder(plus,w) / atr.replace(0,np.nan); m=100.0*_wilder(minus,w)/atr.replace(0,np.nan), np.nan)
+    p=100.0*_wilder(plus,w)/atr.replace(0,np.nan); m=100.0*_wilder(minus,w)/atr.replace(0,np.nan)
     return p,m
 
 def DMI_plus(high,low,close,window): return _dmi(high,low,close,window)[0]
 def DMI_minus(high,low,close,window): return _dmi(high,low,close,window)[1]
 def DX(high,low,close,window):
-    return np.where((p+m).replace(0,np.nan) != 0, (100.0*(p-m).abs()) / ((p+m).replace(0,np.nan)), np.nan)
+    p,m=_dmi(high,low,close,window); return 100.0*(p-m).abs()/(p+m).replace(0,np.nan)
 def NATR(high,low,close,window):
     # R5-38: close is a PositivePrice input — a non-positive close is bad data,
     # not something to be laundered by ``abs()`` (a negative price would have
     # produced a negative/meaningless "normalized" ATR).  Keep the numerator,
     # mask the normalization to strict-positive so bad bars become NaN.
-    return np.where(close.where(close>0.0) != 0, (100.0*_wilder(_tr(high,low,close),window)) / (close.where(close>0.0)), np.nan)
+    return 100.0*_wilder(_tr(high,low,close),window)/close.where(close>0.0)
 
 def PPO(close,fast_window,slow_window):
     f=_pi(fast_window,"fast_window"); s=_pi(slow_window,"slow_window")
     if f>=s: raise ValueError("fast_window must be < slow_window")
-    return np.where(es.replace(0,np.nan) != 0, (100.0*(ef-es)) / (es.replace(0,np.nan)), np.nan)
+    ef,es=_ema(close,f),_ema(close,s); return 100.0*(ef-es)/es.replace(0,np.nan)
 def PPO_signal(close,fast_window,slow_window,signal_window): return _ema(PPO(close,fast_window,slow_window),signal_window)
 def PPO_hist(close,fast_window,slow_window,signal_window): return PPO(close,fast_window,slow_window)-PPO_signal(close,fast_window,slow_window,signal_window)
 
@@ -82,12 +82,12 @@ def PVO_hist(volume,fast_window,slow_window,signal_window): return PVO(volume,fa
 
 def CMO(close,window):
     w=_pi(window,"window",2); d=close.diff(); up=d.clip(lower=0).rolling(w,min_periods=w).sum(); dn=(-d.clip(upper=0)).rolling(w,min_periods=w).sum()
-    return np.where((up+dn).replace(0,np.nan) != 0, (100.0*(up-dn)) / ((up+dn).replace(0,np.nan)), np.nan)
+    return 100.0*(up-dn)/(up+dn).replace(0,np.nan)
 
 def VortexPlus(high,low,close,window):
-    return np.where(tr.replace(0,np.nan) != 0, (vm) / (tr.replace(0,np.nan)), np.nan)
+    w=_pi(window,"window",2); vm=(high-low.shift(1)).abs().rolling(w,min_periods=w).sum(); tr=_tr(high,low,close).rolling(w,min_periods=w).sum(); return vm/tr.replace(0,np.nan)
 def VortexMinus(high,low,close,window):
-    return np.where(tr.replace(0,np.nan) != 0, (vm) / (tr.replace(0,np.nan)), np.nan)
+    w=_pi(window,"window",2); vm=(low-high.shift(1)).abs().rolling(w,min_periods=w).sum(); tr=_tr(high,low,close).rolling(w,min_periods=w).sum(); return vm/tr.replace(0,np.nan)
 
 def _keltner_multiplier(v):
     # R5-36: multiplier=0 degenerates KeltnerUpper/Lower into KeltnerMid and
@@ -101,11 +101,11 @@ def KeltnerUpper(high,low,close,ema_window,atr_window,multiplier): return Keltne
 def KeltnerLower(high,low,close,ema_window,atr_window,multiplier): return KeltnerMid(close,ema_window)-_keltner_multiplier(multiplier)*_wilder(_tr(high,low,close),atr_window)
 def KeltnerPosition(high,low,close,ema_window,atr_window,multiplier):
     u=KeltnerUpper(high,low,close,ema_window,atr_window,multiplier); l=KeltnerLower(high,low,close,ema_window,atr_window,multiplier)
-    return np.where((u-l).replace(0,np.nan) != 0, ((close-l)) / ((u-l).replace(0,np.nan)), np.nan)
+    return (close-l)/(u-l).replace(0,np.nan)
 
 def TSI(close,long_window,short_window):
     lw=_pi(long_window,"long_window",2); sw=_pi(short_window,"short_window",2); m=close.diff(); num=_ema(_ema(m,lw),sw); den=_ema(_ema(m.abs(),lw),sw)
-    return np.where(den.replace(0,np.nan) != 0, (100.0*num) / (den.replace(0,np.nan)), np.nan)
+    return 100.0*num/den.replace(0,np.nan)
 def TSI_signal(close,long_window,short_window,signal_window): return _ema(TSI(close,long_window,short_window),signal_window)
 
 def UltimateOscillator(high,low,close,short_window,medium_window,long_window,short_weight=4.0,medium_weight=2.0,long_weight=1.0):
@@ -113,7 +113,7 @@ def UltimateOscillator(high,low,close,short_window,medium_window,long_window,sho
     if not (s<m<l): raise ValueError("require short_window < medium_window < long_window")
     pc=close.shift(1); minl=pd.DataFrame(np.minimum(low.to_numpy(float),pc.to_numpy(float)),index=low.index,columns=low.columns); maxh=pd.DataFrame(np.maximum(high.to_numpy(float),pc.to_numpy(float)),index=high.index,columns=high.columns)
     bp=close-minl; tr=maxh-minl
-    return np.where(tr.rolling(w,min_periods=w).sum().replace(0,np.nan) != 0, (bp.rolling(w,min_periods=w).sum()) / (tr.rolling(w,min_periods=w).sum().replace(0,np.nan)), np.nan)
+    def avg(w): return bp.rolling(w,min_periods=w).sum()/tr.rolling(w,min_periods=w).sum().replace(0,np.nan)
     ws,wm,wl=_pf(short_weight,"short_weight",0),_pf(medium_weight,"medium_weight",0),_pf(long_weight,"long_weight",0)
     if wl<=0: raise ValueError("long_weight must be > 0")
     # R5-35: the formula divides by (ws+wm+wl), so (4,2,1) == (40,20,10) — the
@@ -123,7 +123,7 @@ def UltimateOscillator(high,low,close,short_window,medium_window,long_window,sho
     ws, wm, wl = ws/wl, wm/wl, 1.0
     den=ws+wm+wl
     if den<=0: raise ValueError("oscillator weights must sum to > 0")
-    return np.where(den != 0, (100.0*(ws*avg(s)+wm*avg(m)+wl*avg(l))) / (den), np.nan)
+    return 100.0*(ws*avg(s)+wm*avg(m)+wl*avg(l))/den
 
 def DEMA(x,window):
     e1=_ema(x,window); e2=_ema(e1,window); return 2.0*e1-e2
@@ -131,22 +131,22 @@ def TEMA(x,window):
     e1=_ema(x,window); e2=_ema(e1,window); e3=_ema(e2,window); return 3.0*e1-3.0*e2+e3
 
 def ichimoku_tenkan(high,low,tenkan_window):
-    return np.where(2.0 != 0, ((high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())) / (2.0), np.nan)
+    w=_pi(tenkan_window,"tenkan_window",2); return (high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())/2.0
 def ichimoku_kijun(high,low,kijun_window):
-    return np.where(2.0 != 0, ((high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())) / (2.0), np.nan)
-return np.where(2.0 != 0, ((ichimoku_tenkan(high,low,tenkan_window)+ichimoku_kijun(high,low,kijun_window))) / (2.0), np.nan)
+    w=_pi(kijun_window,"kijun_window",2); return (high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())/2.0
+def ichimoku_senkou_a(high,low,tenkan_window,kijun_window): return (ichimoku_tenkan(high,low,tenkan_window)+ichimoku_kijun(high,low,kijun_window))/2.0
 def ichimoku_senkou_b(high,low,senkou_b_window):
-    return np.where(2.0 != 0, ((high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())) / (2.0), np.nan)
+    w=_pi(senkou_b_window,"senkou_b_window",2); return (high.rolling(w,min_periods=w).max()+low.rolling(w,min_periods=w).min())/2.0
 def ichimoku_cloud_width(high,low,tenkan_window,kijun_window,senkou_b_window): return (ichimoku_senkou_a(high,low,tenkan_window,kijun_window)-ichimoku_senkou_b(high,low,senkou_b_window)).abs()
 def ichimoku_cloud_position(high,low,close,tenkan_window,kijun_window,senkou_b_window):
     a=ichimoku_senkou_a(high,low,tenkan_window,kijun_window); b=ichimoku_senkou_b(high,low,senkou_b_window); lo=pd.DataFrame(np.minimum(a,b),index=a.index,columns=a.columns); hi=pd.DataFrame(np.maximum(a,b),index=a.index,columns=a.columns)
-    return np.where((hi-lo).replace(0,np.nan) != 0, ((close-lo)) / ((hi-lo).replace(0,np.nan)), np.nan)
+    return (close-lo)/(hi-lo).replace(0,np.nan)
 
 def KAMA(close,er_window,fast_window,slow_window):
     er=_pi(er_window,"er_window",2); fast=_pi(fast_window,"fast_window"); slow=_pi(slow_window,"slow_window")
     if fast>=slow: raise ValueError("fast_window must be < slow_window")
-    change=(close-close.shift(er)).abs(); vol=close.diff().abs().rolling(er,min_periods=er).sum(); efficiency=(change) / vol.replace(0,np.nan) if vol.replace(0,np.nan) > 1e-10 else np.nan
-    fast_sc=np.where((fast+1.0); slow_sc=2.0/(slow+1.0); sc=(efficiency*(fast_sc-slow_sc)+slow_sc)**2 != 0, 2.0 / (fast+1.0); slow_sc=2.0/(slow+1.0); sc=(efficiency*(fast_sc-slow_sc)+slow_sc)**2, np.nan)
+    change=(close-close.shift(er)).abs(); vol=close.diff().abs().rolling(er,min_periods=er).sum(); efficiency=change/vol.replace(0,np.nan)
+    fast_sc=2.0/(fast+1.0); slow_sc=2.0/(slow+1.0); sc=(efficiency*(fast_sc-slow_sc)+slow_sc)**2
     arr=close.to_numpy(float); alpha=sc.to_numpy(float); out=np.full_like(arr,np.nan,float)
     for c in range(arr.shape[1]):
         # break + rewarm (single production missing-state policy): a NaN price
@@ -184,7 +184,7 @@ def KAMA(close,er_window,fast_window,slow_window):
 def Supertrend(high,low,close,atr_window,multiplier):
     w=_pi(atr_window,"atr_window",2); mult=_pf(multiplier,"multiplier",0)
     if mult<=0: raise ValueError("multiplier must be > 0 (Supertrend multiplier=0 collapses upper/lower to the midpoint)")
-    atr=_wilder(_tr(high,low,close),w); mid=((high+low)) / 2.0 if 2.0 != 0 else np.nan; basic_u=mid+mult*atr; basic_l=mid-mult*atr
+    atr=_wilder(_tr(high,low,close),w); mid=(high+low)/2.0; basic_u=mid+mult*atr; basic_l=mid-mult*atr
     rows,cols=close.shape; out=np.full((rows,cols),np.nan)
     hh=high.to_numpy(float); ll=low.to_numpy(float); cu=basic_u.to_numpy(float); cl=basic_l.to_numpy(float); cv=close.to_numpy(float)
     final_u=cu.copy(); final_l=cl.copy(); trend=np.ones((rows,cols),dtype=int)

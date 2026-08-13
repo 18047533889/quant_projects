@@ -66,7 +66,7 @@ def _ssa_decompose(x: np.ndarray, L: int, n_components: int) -> np.ndarray:
             result[idx] += X_reconstructed[j, i]
             counts[idx] += 1
 
-    result = np.where(np.maximum(counts, 1) != 0, result / np.maximum(counts, 1), np.nan)
+    result = result / np.maximum(counts, 1)
     return result
 
 
@@ -172,11 +172,11 @@ class TsSsaDenoiseTrailing(SeriesOperator):
         param_specs={
             "window": ParamSpec(
                 dtype=int, min=5, searchable=True,
-                param_role=ParamRole.WINDOW, default=20,
+                param_role=ParamRole.ECONOMIC, default=20,
             ),
             "n_components": ParamSpec(
                 dtype=int, min=1, searchable=True,
-                param_role=ParamRole.SCALAR, default=3,
+                param_role=ParamRole.MODEL_ORDER, default=3,
             ),
         },
     )
@@ -250,11 +250,11 @@ class TsWaveletShrinkageTrailing(SeriesOperator):
         param_specs={
             "window": ParamSpec(
                 dtype=int, min=3, searchable=True,
-                param_role=ParamRole.WINDOW, default=20,
+                param_role=ParamRole.ECONOMIC, default=20,
             ),
             "threshold": ParamSpec(
                 dtype=float, min=0.0, searchable=True,
-                param_role=ParamRole.SCALAR, default=0.5,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=0.5,
             ),
         },
     )
@@ -325,11 +325,11 @@ class TsTotalVariationFilterTrailing(SeriesOperator):
         param_specs={
             "window": ParamSpec(
                 dtype=int, min=3, searchable=True,
-                param_role=ParamRole.WINDOW, default=20,
+                param_role=ParamRole.ECONOMIC, default=20,
             ),
             "lambda_tv": ParamSpec(
                 dtype=float, min=0.0, searchable=True,
-                param_role=ParamRole.SCALAR, default=0.1,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=0.1,
             ),
         },
     )
@@ -399,11 +399,11 @@ class TsL1TrendFilterTrailing(SeriesOperator):
         param_specs={
             "window": ParamSpec(
                 dtype=int, min=5, searchable=True,
-                param_role=ParamRole.WINDOW, default=30,
+                param_role=ParamRole.ECONOMIC, default=30,
             ),
             "lambda_l1": ParamSpec(
                 dtype=float, min=0.0, searchable=True,
-                param_role=ParamRole.SCALAR, default=0.1,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=0.1,
             ),
         },
     )

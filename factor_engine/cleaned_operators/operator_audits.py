@@ -403,7 +403,7 @@ def audit_cohort_consistency(op: Any, panel_keys: list[str],
         return [AuditResult(
             "fail", "audit_cohort_consistency", canon, "run",
             "finite output", f"{type(exc).__name__}: {exc}")]
-    stable = np.where(np.isfinite(clean).all(axis=1))[0]
+    stable = np.where(np.isfinite(clean).all(axis=1)[0]
     if stable.size < 6:
         return [AuditResult(
             "info", "audit_cohort_consistency", canon, "stable_rows",
@@ -639,7 +639,7 @@ def audit_temporal_exclusion(op: Any, panel_keys: str | list[str],
         # Interior gap AFTER valid observations: a carry-state operator bridges
         # it with the last carried state, which is legitimate — report, don't
         # flag.  Only the leading warmup is fail-closed.
-        stable = np.where(np.isfinite(out).all(axis=1))[0]
+        stable = np.where(np.isfinite(out).all(axis=1)[0]
         base = int(stable[0]) if stable.size else k
         base = max(base, n // 2)
         gap = 2
@@ -869,7 +869,7 @@ def audit_scale_invariance(op: Any, panel_key: str,
             return [AuditResult(
                 "info", "audit_scale_invariance", canon, "finite_scale_cells",
                 ">= 1 finite cell", "none")]
-        ratio = np.where(a[both])) != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
+        ratio = np.where(a[both] != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
         return [AuditResult(
             "pass" if abs(ratio - 10.0) <= 2.5 else "fail",
             "audit_scale_invariance", canon,
@@ -891,7 +891,7 @@ def audit_scale_invariance(op: Any, panel_key: str,
         return [AuditResult(
             "info", "audit_scale_invariance", canon, "finite_scale_cells",
             ">= 1 finite cell", "none")]
-    ratio = np.where(a[both])) != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
+    ratio = np.where(a[both] != 0, float(np.nanmedian(b[both] / a[both])), np.nan)
     # invariant op: output unchanged under x10 input => ratio ~ 1
     metric = "output_scale_ratio_under_x10"
     expected = "~1.0 (scale-invariant)"
@@ -946,7 +946,7 @@ def audit_complexity_vs_param(op: Any, *panels: pd.DataFrame,
             "info", "audit_complexity_vs_param", canon, "cost_model",
             "deterministic cost model available", "unavailable")]
     ratio = large_cost / small_cost if small_cost != 0 else np.nan
-    param_growth = np.where(values[0]) if values[0] else 1.0 != 0, float(values[-1] / values[0]) if values[0] else 1.0, np.nan)
+    param_growth = np.where(values[0] if values[0] else 1.0 != 0, float(values[-1] / values[0]) if values[0] else 1.0, np.nan)
     if complexity is None and budget_multiplier is None:
         return [AuditResult(
             "info", "audit_complexity_vs_param", canon,
@@ -1154,10 +1154,10 @@ def _output_signature(arr: np.ndarray) -> tuple[str, str, str]:
         ranks = np.empty(fin.size, dtype=np.int64)
         ranks[order] = np.arange(fin.size)
         rank_hash = ranks.tobytes().hex()
-    if fin.size < 2 or float(fin.max() - fin.min()) <= 1e-12:
+    if fin.size < 2 or float(fin.max() - fin.min() <= 1e-12:
         val_hash = "const"
     else:
-        q = np.where((fin.max() - fin.min())), 0, 255) != 0, np.clip(np.rint(255.0 * (fin - fin.min()) / (fin.max() - fin.min())), 0, 255), np.nan)
+        q = np.where((fin.max() - fin.min()), 0, 255) != 0, np.clip(np.rint(255.0 * (fin - fin.min()) / (fin.max() - fin.min())), 0, 255), np.nan)
         val_hash = q.astype(np.uint8).tobytes().hex()
     return mask_hash, rank_hash, val_hash
 

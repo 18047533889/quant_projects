@@ -731,7 +731,7 @@ class FactorCatalog:
 
     #: R32 catalog schema 版本。每个破坏性迁移递增一次；``catalog_schema_version``
     #: 表记录已应用版本 + checksum。
-    CATALOG_SCHEMA_VERSION = 2
+    CATALOG_SCHEMA_VERSION = 3
 
     def _run_versioned_migration(self) -> None:
         """从 ``catalog_schema_version`` 记录的当前版本顺序迁移到最新。
@@ -762,6 +762,8 @@ class FactorCatalog:
                 self._conn.execute("BEGIN IMMEDIATE")
                 if version == 2:
                     self._migrate_checkpoint_partition_key_not_null()
+                elif version == 3:
+                    self._add_performance_indexes()
                 migrated_at = datetime.now(timezone.utc).isoformat()
                 checksum = hashlib.sha256(
                     json.dumps(
@@ -822,6 +824,31 @@ class FactorCatalog:
         self._conn.execute(
             "ALTER TABLE factor_materialize_checkpoint__nn "
             "RENAME TO factor_materialize_checkpoint"
+        )
+
+    def _add_performance_indexes(self) -> None:
+        """Schema v3: Add covering indexes for hot query patterns.
+
+        Adds two indexes to accelerate frequent lookups:
+        1. factor_run(created_at DESC) - time-ordered queries
+        2. factor_run(factor_id, created_at DESC) - covering index for factor history
+
+        The composite index (factor_id, created_at DESC) also accelerates queries
+        filtering only on factor_id, so a separate single-column index would be
+        redundant and add unnecessary write overhead.
+
+        All use IF NOT EXISTS for idempotency.
+        """
+        # Index 1: time-ordered queries (line 1430)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_factor_run_created_at "
+            "ON factor_run(created_at DESC)"
+        )
+        # Index 2: covering index for factor history queries (line 1386)
+        # Also accelerates factor_id-only lookups (lines 1290, 1318, etc.)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_factor_run_factor_created "
+            "ON factor_run(factor_id, created_at DESC)"
         )
 
     def catalog_integrity_check(self) -> dict[str, Any]:
@@ -1691,6 +1718,42 @@ class FactorCatalog:
             "SELECT DISTINCT column_name FROM factor_column_dep ORDER BY column_name"
         ).fetchall()
         return [str(r[0]) for r in rows]
+
+    def get_factor_dependencies_batch(self, factor_ids: Iterable[str]) -> dict[str, dict]:
+        """Batch fetch factor dependencies by factor_id list (N+1 elimination).
+
+        Args:
+            factor_ids: Collection of factor IDs to fetch
+
+        Returns:
+            dict mapping factor_id -> dependency dict (with referenced_columns decoded)
+
+        Example:
+            deps = catalog.get_factor_dependencies_batch(['f1', 'f2', 'f3'])
+            # Single query instead of 3 separate queries
+
+        Note:
+            Chunks large lists to respect SQLite's SQLITE_MAX_VARIABLE_NUMBER limit
+            (default 999). For 500+ factors, issues 1-2 queries instead of 500.
+        """
+        id_list = list(factor_ids)
+        if not id_list:
+            return {}
+        result: dict[str, dict] = {}
+        # Chunk to stay under SQLite's host-parameter limit (default 999)
+        chunk_size = 900
+        for i in range(0, len(id_list), chunk_size):
+            chunk = id_list[i:i + chunk_size]
+            placeholders = ",".join("?" * len(chunk))
+            rows = self._conn.execute(
+                f"SELECT * FROM factor_dependency WHERE factor_id IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                item = dict(row)
+                item["referenced_columns"] = json.loads(item.pop("referenced_columns_json", "[]"))
+                result[str(item["factor_id"])] = item
+        return result
 
 
 class CatalogBatchTransaction:

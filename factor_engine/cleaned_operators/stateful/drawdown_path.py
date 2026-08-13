@@ -151,7 +151,7 @@ class TsCurrentDrawdownArea(SeriesOperator):
                 # current, not-yet-recovered episode.
                 new_high = np.r_[True, running_max[1:] > running_max[:-1]]
                 last_peak = int(np.flatnonzero(new_high)[-1])
-                dd = 1.0 - vals / running_max if running_max != 0 else np.nan
+                dd = 1.0 - vals / running_max
                 out[row, col] = float(np.sum(dd[last_peak:]))
         return frame_like(x, out)
 

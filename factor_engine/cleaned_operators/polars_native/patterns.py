@@ -73,7 +73,7 @@ class Pattern123Bear(SeriesOperator):
             window_data = h_vals[i-window:i+1]
             pivots, _ = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             # Need at least 3 pivot highs
             if len(pivot_indices) >= 3:
                 p1, p2, p3 = pivot_indices[-3:]
@@ -114,7 +114,7 @@ class Pattern123Bull(SeriesOperator):
             window_data = l_vals[i-window:i+1]
             _, pivots = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 3:
                 p1, p2, p3 = pivot_indices[-3:]
                 l1, l2, l3 = window_data[p1], window_data[p2], window_data[p3]
@@ -573,7 +573,7 @@ class PatternDoubleBottom(SeriesOperator):
             window_data = l_vals[i-window:i+1]
             _, pivots = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 2:
                 l1, l2 = window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
                 # Similar lows
@@ -612,7 +612,7 @@ class PatternDoubleTop(SeriesOperator):
             window_data = h_vals[i-window:i+1]
             pivots, _ = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 2:
                 h1, h2 = window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
                 if abs(h1 - h2) < 0.02 * h1:
@@ -733,7 +733,7 @@ class PatternHeadShoulders(SeriesOperator):
             window_data = h_vals[i-window:i+1]
             pivots, _ = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 3:
                 left, head, right = pivot_indices[-3:]
                 h_left = window_data[left]
@@ -776,7 +776,7 @@ class PatternInverseHeadShoulders(SeriesOperator):
             window_data = l_vals[i-window:i+1]
             _, pivots = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 3:
                 left, head, right = pivot_indices[-3:]
                 l_left = window_data[left]
@@ -1062,7 +1062,7 @@ class PatternTripleBottom(SeriesOperator):
             window_data = l_vals[i-window:i+1]
             _, pivots = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 3:
                 l1, l2, l3 = window_data[pivot_indices[-3]], window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
                 # Three similar lows
@@ -1102,7 +1102,7 @@ class PatternTripleTop(SeriesOperator):
             window_data = h_vals[i-window:i+1]
             pivots, _ = _find_pivots(window_data)
             pivot_indices = np.where(pivots)[0]
-            
+
             if len(pivot_indices) >= 3:
                 h1, h2, h3 = window_data[pivot_indices[-3]], window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
                 avg_high = (h1 + h2 + h3) / 3

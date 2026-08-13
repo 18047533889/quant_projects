@@ -157,7 +157,7 @@ class TSSignatureMahalanobisAnomalyPolarsNative(SeriesOperator):
         # Placeholder: standardized distance from rolling mean
         mean = feature.rolling_mean(window)
         std = feature.rolling_std(window)
-        return np.where((std + 1e-8)) != 0, (((feature - mean).abs()) / ((std + 1e-8))), np.nan)
+        return np.where((std + 1e-8) != 0, (((feature - mean).abs()) / ((std + 1e-8))), np.nan)
 
 
 @register_operator(name="ts_sma_cn", canonical="ts_sma_cn", backend="polars")
@@ -1440,7 +1440,7 @@ class TSVarianceRatioProxyPolarsNative(SeriesOperator):
         short_var = feature.rolling_var(short_window)
         long_var = feature.rolling_var(long_window)
         # Variance ratio scaled by window ratio
-        return np.where(short_var) * (short_window / long_window) != 0, ((long_var) / (short_var) * (short_window / long_window)), np.nan)
+        return np.where(short_var * (short_window / long_window) != 0, ((long_var) / (short_var) * (short_window / long_window)), np.nan)
 
 
 @register_operator(name="ts_variance_ratio_slope", canonical="ts_variance_ratio_slope", backend="polars")
@@ -1606,7 +1606,7 @@ class TSVectorStateMahalanobisPolarsNative(SeriesOperator):
         # Standardized distance from mean
         mean = feature.rolling_mean(window)
         std = feature.rolling_std(window)
-        return np.where((std + 1e-8)) != 0, (((feature - mean).abs()) / ((std + 1e-8))), np.nan)
+        return np.where((std + 1e-8) != 0, (((feature - mean).abs()) / ((std + 1e-8))), np.nan)
 
 
 @register_operator(name="ts_vector_turning_coherence", canonical="ts_vector_turning_coherence", backend="polars")
@@ -1742,7 +1742,7 @@ class TSVolScalingBreakPolarsNative(SeriesOperator):
         # Compare recent vs historical volatility scaling
         short_vol = feature.rolling_std(window // 2)
         long_vol = feature.rolling_std(window)
-        return np.where((long_vol + 1e-8) - 1.0).abs() != 0, ((short_vol) / ((long_vol + 1e-8) - 1.0).abs()), np.nan)
+        return np.where((long_vol + 1e-8) - 1.0.abs() != 0, ((short_vol) / ((long_vol + 1e-8) - 1.0).abs()), np.nan)
 
 
 @register_operator(name="ts_vol_shift_score", canonical="ts_vol_shift_score", backend="polars")

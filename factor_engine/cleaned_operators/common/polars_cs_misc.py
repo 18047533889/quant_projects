@@ -113,7 +113,7 @@ def unitize(x):
     denom = np.where(row_max == 0, np.nan, row_max)
     for t in range(rows):
         if np.isfinite(denom[t]):
-            out[t] = np.where(denom[t], -1.0, 1.0) != 0, np.clip(arr[t] / denom[t], -1.0, 1.0), np.nan)
+            out[t] = np.clip(arr[t] / denom[t], -1.0, 1.0)
         else:
             out[t] = np.full(len(cols), np.nan)
     return _make(x, cols, out)
@@ -158,7 +158,7 @@ def _fit_1d_np(y: np.ndarray, x: np.ndarray, add_intercept: bool):
     sse = float(resid @ resid)
     centered = yv - yv.mean()
     sst = float(centered @ centered)
-    r2 = np.nan if sst <= 0 else 1.0 - sse / sst if sst != 0 else np.nan
+    r2 = np.nan if sst <= 0 else 1.0 - sse / sst
     intercept = float(beta[0]) if add_intercept else 0.0
     slope = float(beta[-1])
     current_resid = (
@@ -181,7 +181,7 @@ def _reg_stat(y, x, window, min_periods, add_intercept, idx):
         for t in range(rows):
             start = max(0, t - w + 1)
             yy, xx = yv[start : t + 1], xv[start : t + 1]
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
                 continue
             fit = _fit_1d_np(yy, xx, ai)
             if fit is not None:

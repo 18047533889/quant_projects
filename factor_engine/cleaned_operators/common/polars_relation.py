@@ -71,7 +71,7 @@ class RelationHHINative(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             total = pl.col("_v").sum().over("_r")
-            share = (pl.col("_v")) / total if total != 0 else np.nan
+            share = pl.when(total != 0).then(pl.col("_v") / total).otherwise(None)
             hhi = (share * share).sum().over("_r")
             return long.with_columns(hhi.alias("_v"))
 
@@ -133,7 +133,7 @@ class RelationEntropyNative(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             total = pl.col("_v").sum().over("_r")
-            p = (pl.col("_v")) / total if total != 0 else np.nan
+            p = pl.when(total != 0).then(pl.col("_v") / total).otherwise(None)
             # -sum(p * log(p)), skip zeros
             entropy = pl.when(p > 0).then(-p * p.log()).otherwise(0.0).sum().over("_r")
             return long.with_columns(entropy.alias("_v"))

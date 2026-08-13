@@ -159,7 +159,7 @@ def _day_curvature(values: np.ndarray, buckets: int) -> float:
     # completion bar index (original session position) for each fraction k/B
     D = np.full(b, np.nan)
     for k in range(1, b + 1):
-        target = np.where(b * total != 0, float(k) / b * total, np.nan)
+        target = float(k) / b * total
         pos = np.flatnonzero(cum >= target)
         if pos.size == 0:
             return np.nan

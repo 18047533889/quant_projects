@@ -120,7 +120,7 @@ def test_sequence_permutation_entropy_heavily_tied_fails_closed():
     assert int(op.calculate(_frame(discrete), window=60, order=3).notna().to_numpy().sum()) == 0
     # Continuous random data: essentially no ties -> finite output.
     rnd = rng.normal(size=160)
-    assert int(op.calculate(_frame(rnd), window=60, order=3).notna().to_numpy().sum()) > 0
+    assert int(op.calculate(_frame(rnd), window=60, order=3).notna().to_numpy().sum() > 0
 
 
 def test_weighted_and_transition_entropy_drop_ties():
@@ -131,8 +131,8 @@ def test_weighted_and_transition_entropy_drop_ties():
     assert int(op_t.calculate(const, window=60, order=3).notna().to_numpy().sum()) == 0
     rng = np.random.default_rng(9)
     rnd = _frame(rng.normal(size=160))
-    assert int(op_w.calculate(rnd, window=60, order=3).notna().to_numpy().sum()) > 0
-    assert int(op_t.calculate(rnd, window=60, order=3).notna().to_numpy().sum()) > 0
+    assert int(op_w.calculate(rnd, window=60, order=3).notna().to_numpy().sum() > 0
+    assert int(op_t.calculate(rnd, window=60, order=3).notna().to_numpy().sum() > 0
 
 
 def test_ordinal_knob_params_declared_estimator_resolution():
@@ -324,7 +324,7 @@ def test_regime_ops_accept_transition_prob_kwarg():
     for name in ("ts_two_state_regime_probability", "ts_regime_duration", "ts_change_point_probability"):
         op = OperatorRegistry.get(name, "pandas_numpy")
         out = op.calculate(x, window=60, transition_prob=0.1)
-        assert int(out.notna().to_numpy().sum()) > 0, name
+        assert int(out.notna().to_numpy().sum() > 0, name
         # Default (no explicit transition_prob) still works.
         out2 = op.calculate(x, window=60)
-        assert int(out2.notna().to_numpy().sum()) > 0, name
+        assert int(out2.notna().to_numpy().sum() > 0, name

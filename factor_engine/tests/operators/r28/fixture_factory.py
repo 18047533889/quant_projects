@@ -53,7 +53,7 @@ def ohlcv(n: int = 240, instruments: int = 3, seed: int = 2) -> dict[str, pd.Dat
 def event_panel(n: int = 240, instruments: int = 3, seed: int = 3, density: float = 0.08) -> pd.DataFrame:
     """Sparse event process (0/1)."""
     rng = np.random.default_rng(seed)
-    ev = (rng.uniform(0, 1, (n, instruments)) < density).astype(float)
+    ev = (rng.uniform(0, 1, (n, instruments) < density).astype(float)
     return panel_from(ev)
 
 

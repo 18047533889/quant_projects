@@ -76,7 +76,7 @@ class _ExprBuilder:
         normalized=str(text)
         # R21-038/039: size budget BEFORE ast.parse allocates, and again after
         # LQTP normalization so normalization cannot expand the payload.
-        if len(normalized.encode("utf-8"))>self._budget.max_formula_bytes:
+        if len(normalized.encode("utf-8")) >self._budget.max_formula_bytes:
             raise DSLParseError(
                 f"expression bytes {len(normalized.encode('utf-8'))} exceed "
                 f"ComplexityBudget.max_formula_bytes={self._budget.max_formula_bytes}"
@@ -90,7 +90,7 @@ class _ExprBuilder:
             from api.lqtp_compat import normalize_lqtp_formula
             from api.derived_field_compat import normalize_lqtp_derived_fields
             normalized=normalize_lqtp_derived_fields(normalize_lqtp_formula(normalized))
-            if len(normalized.encode("utf-8"))>self._budget.max_formula_bytes:
+            if len(normalized.encode("utf-8")) >self._budget.max_formula_bytes:
                 raise DSLParseError(
                     f"normalized expression bytes {len(normalized.encode('utf-8'))} exceed "
                     f"ComplexityBudget.max_formula_bytes (LQTP expansion)"
@@ -132,7 +132,7 @@ class _ExprBuilder:
                 # a factor expression).
                 if isinstance(node.value,float) and not math.isfinite(node.value):
                     raise DSLParseError(f"Non-finite numeric literal is not allowed: {node.value!r}")
-                if not isinstance(node.value,bool) and abs(float(node.value))>self._budget.max_literal_magnitude:
+                if not isinstance(node.value,bool) and abs(float(node.value) >self._budget.max_literal_magnitude:
                     raise DSLParseError(
                         f"literal magnitude {node.value!r} exceeds ComplexityBudget."
                         f"max_literal_magnitude={self._budget.max_literal_magnitude}"
@@ -141,7 +141,7 @@ class _ExprBuilder:
             if isinstance(node.value,str):
                 # R21-040: a several-MB string is still one AST Constant — cap
                 # literal bytes so a huge string cannot bypass the node budget.
-                if len(node.value.encode("utf-8"))>self._budget.max_string_literal_bytes:
+                if len(node.value.encode("utf-8")) >self._budget.max_string_literal_bytes:
                     raise DSLParseError(
                         f"string literal bytes {len(node.value.encode('utf-8'))} exceed "
                         f"ComplexityBudget.max_string_literal_bytes="

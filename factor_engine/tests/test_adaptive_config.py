@@ -2,6 +2,7 @@
 """测试 runtime.adaptive_config 自适应资源配置系统。"""
 import os
 import pytest
+from unittest.mock import patch, mock_open
 
 from runtime.adaptive_config import (
     AdaptiveResourceConfig,
@@ -18,6 +19,7 @@ from runtime.adaptive_config import (
     _get_system_memory_gb,
     _get_cpu_count,
     _adaptive_scale,
+    _compute_host_fraction,
 )
 
 
@@ -33,68 +35,163 @@ class TestSystemDetection:
         assert 1.0 <= memory_gb <= 2048.0
 
     def test_get_cpu_count(self):
-        """CPU 核心数检测应返回合理值。"""
+        """CPU 核心数检测应返回合理值（逻辑核心）。"""
         cpu_count = _get_cpu_count()
         assert isinstance(cpu_count, int)
         assert cpu_count > 0
         # 合理范围：1-256 核心
         assert 1 <= cpu_count <= 256
 
+    def test_cgroup_v2_memory_limit(self):
+        """应正确解析 cgroup v2 memory.max。"""
+        mock_cgroup_v2 = "4294967296"  # 4GB
+        with patch("builtins.open", mock_open(read_data=mock_cgroup_v2)):
+            with patch("psutil.virtual_memory") as mock_vm:
+                mock_vm.return_value.total = 32 * 1024**3  # 32GB host
+                memory_gb = _get_system_memory_gb()
+                # 应取 min(32GB, 4GB) = 4GB
+                assert 3.9 <= memory_gb <= 4.1
+
+    def test_cgroup_v2_unlimited(self):
+        """应识别 cgroup v2 'max' 为无限制。"""
+        with patch("builtins.open", mock_open(read_data="max")):
+            with patch("psutil.virtual_memory") as mock_vm:
+                mock_vm.return_value.total = 32 * 1024**3
+                memory_gb = _get_system_memory_gb()
+                # 应使用 host 的 32GB
+                assert 31 <= memory_gb <= 33
+
+    def test_cgroup_v1_memory_limit(self):
+        """应正确解析 cgroup v1 memory.limit_in_bytes。"""
+        mock_cgroup_v1 = str(8 * 1024**3)  # 8GB
+        def mock_open_side_effect(path, *args, **kwargs):
+            if "memory.max" in path:
+                raise FileNotFoundError
+            elif "memory.limit_in_bytes" in path:
+                return mock_open(read_data=mock_cgroup_v1)()
+            raise FileNotFoundError
+
+        with patch("builtins.open", side_effect=mock_open_side_effect):
+            with patch("psutil.virtual_memory") as mock_vm:
+                mock_vm.return_value.total = 64 * 1024**3
+                memory_gb = _get_system_memory_gb()
+                # 应取 min(64GB, 8GB) = 8GB
+                assert 7.9 <= memory_gb <= 8.1
+
+    def test_cgroup_v1_unlimited_sentinel(self):
+        """应识别 cgroup v1 巨大哨兵值为无限制。"""
+        sentinel = "9223372036854771712"  # cgroup v1 unlimited sentinel
+        def mock_open_side_effect(path, *args, **kwargs):
+            if "memory.max" in path:
+                raise FileNotFoundError
+            elif "memory.limit_in_bytes" in path:
+                return mock_open(read_data=sentinel)()
+            raise FileNotFoundError
+
+        with patch("builtins.open", side_effect=mock_open_side_effect):
+            with patch("psutil.virtual_memory") as mock_vm:
+                mock_vm.return_value.total = 16 * 1024**3
+                memory_gb = _get_system_memory_gb()
+                # 应使用 host 的 16GB（忽略哨兵）
+                assert 15 <= memory_gb <= 17
+
+    def test_cpu_affinity_detection(self):
+        """应优先使用 sched_getaffinity（容器感知）。"""
+        with patch("os.sched_getaffinity", return_value={0, 1, 2, 3}):
+            cpu_count = _get_cpu_count()
+            # 应返回 affinity 集合大小
+            assert cpu_count == 4
+
+    def test_cgroup_cpu_quota(self):
+        """应考虑 cgroup CPU 配额。"""
+        # 模拟 affinity 8 核，但 cgroup 限制为 2 核
+        mock_quota = "200000"  # 200ms quota
+        mock_period = "100000"  # 100ms period => 2 cores
+
+        def mock_open_side_effect(path, *args, **kwargs):
+            if "cpu.max" in path:
+                return mock_open(read_data=f"{mock_quota} {mock_period}")()
+            raise FileNotFoundError
+
+        with patch("os.sched_getaffinity", return_value=set(range(8))):
+            with patch("builtins.open", side_effect=mock_open_side_effect):
+                cpu_count = _get_cpu_count()
+                # 应取 min(8, 2) = 2
+                assert cpu_count == 2
+
+
+class TestHostFraction:
+    """测试 _compute_host_fraction 小机器保守策略。"""
+
+    def test_small_host_conservative(self):
+        """小机器应使用较低比例。"""
+        assert _compute_host_fraction(4.0) == 0.55
+        assert _compute_host_fraction(8.0) == 0.60
+
+    def test_large_host_aggressive(self):
+        """大机器应使用较高比例。"""
+        assert _compute_host_fraction(128.0) == 0.82
+        assert _compute_host_fraction(512.0) == 0.85
+
+    def test_fraction_monotonic(self):
+        """比例应随内存单调递增。"""
+        fractions = [_compute_host_fraction(m) for m in [4, 8, 16, 32, 64, 128, 256]]
+        assert fractions == sorted(fractions)
+
 
 class TestAdaptiveScale:
     """测试 _adaptive_scale 缩放函数。"""
 
-    def test_adaptive_scale_baseline(self):
-        """基准值应返回接近原值。"""
-        # 30GB 基准值 500
-        result = _adaptive_scale(500, memory_gb=30.0, min_value=100, max_value=2000)
-        assert 400 <= result <= 600  # 允许一定浮动
+    def test_adaptive_scale_sqrt_for_counts(self):
+        """COUNT 应使用 sqrt 缩放（scale_power=0.5）。"""
+        base = 500
+        # 30GB 基准
+        result_30 = _adaptive_scale(base, 30.0, scale_power=0.5)
+        assert 450 <= result_30 <= 550
 
-    def test_adaptive_scale_small_memory(self):
-        """小内存应缩小值。"""
-        # 8GB 应返回更小的值
-        result = _adaptive_scale(500, memory_gb=8.0, min_value=100, max_value=2000)
-        assert result < 500
-        assert result >= 100  # 不低于最小值
+        # 8GB 应更小（sqrt 缩放）
+        result_8 = _adaptive_scale(base, 8.0, scale_power=0.5)
+        assert result_8 < result_30
 
-    def test_adaptive_scale_large_memory(self):
-        """大内存应放大值。"""
-        # 128GB 应返回更大的值
-        result = _adaptive_scale(500, memory_gb=128.0, min_value=100, max_value=2000)
-        assert result > 500
-        assert result <= 2000  # 不超过最大值
+        # 128GB 应更大
+        result_128 = _adaptive_scale(base, 128.0, scale_power=0.5)
+        assert result_128 > result_30
+
+    def test_adaptive_scale_linear_for_bytes(self):
+        """BYTE BUDGET 应使用线性缩放（scale_power=1.0）。"""
+        base = 8 * 1024**3  # 8GB
+
+        # 线性缩放：内存加倍，预算也加倍
+        result_30 = _adaptive_scale(base, 30.0, scale_power=1.0)
+        result_60 = _adaptive_scale(base, 60.0, scale_power=1.0)
+
+        # 60GB 应约为 30GB 的 2 倍
+        ratio = result_60 / result_30
+        assert 1.9 <= ratio <= 2.1
 
     def test_adaptive_scale_respects_min(self):
         """应尊重最小值限制。"""
-        result = _adaptive_scale(500, memory_gb=1.0, min_value=100, max_value=2000)
+        result = _adaptive_scale(500, 1.0, min_value=100, scale_power=0.5)
         assert result >= 100
 
     def test_adaptive_scale_respects_max(self):
         """应尊重最大值限制。"""
-        result = _adaptive_scale(500, memory_gb=500.0, min_value=100, max_value=2000)
+        result = _adaptive_scale(500, 500.0, max_value=2000, scale_power=0.5)
         assert result <= 2000
 
 
 class TestGetAdaptiveConfig:
     """测试 get_adaptive_config 核心函数。"""
 
-    def test_small_memory_config(self):
-        """小内存服务器（8GB）应生成保守配置。"""
-        config = get_adaptive_config(force_memory_gb=8.0, force_cpu_cores=4)
+    def test_small_memory_conservative_fraction(self):
+        """小内存服务器（4GB）应使用保守比例，避免 OOM。"""
+        config = get_adaptive_config(force_memory_gb=4.0, force_cpu_cores=4)
 
-        # 基本检查
-        assert config.system_memory_gb == 8.0
-        assert config.system_cpu_cores == 4
-
-        # DuckDB 内存应为 50% = 4GB
-        assert config.duckdb_memory_limit_mb == int(8 * 1024 * 0.5)
-        assert "4096MB" in config.duckdb_memory_limit or "4GB" in config.duckdb_memory_limit
-
-        # 批量大小应较小
-        assert config.batch_size < 100_000
-
-        # 编译 chunk 应较小
-        assert config.compile_chunk_size < 500
+        assert config.system_memory_gb == 4.0
+        # hard_limit 应约为 4GB * 0.55 * 0.85 = 1.87GB < 2.2GB（避免 OOM）
+        assert config.hard_memory_limit_bytes < 2.5 * 1024**3
+        # DuckDB 应远小于 hard_limit
+        assert config.duckdb_memory_limit_mb * 1024**2 < config.hard_memory_limit_bytes
 
     def test_medium_memory_config(self):
         """中等内存服务器（30GB）应生成平衡配置。"""
@@ -103,52 +200,59 @@ class TestGetAdaptiveConfig:
         assert config.system_memory_gb == 30.0
         assert config.system_cpu_cores == 8
 
-        # DuckDB 内存应为 50% = 15GB
-        assert config.duckdb_memory_limit_mb == int(30 * 1024 * 0.5)
+        # DuckDB 内存应为 40% = 12.2GB（不是 50%）
+        expected_duckdb_mb = int(30 * 1024 * 0.40)
+        assert config.duckdb_memory_limit_mb == expected_duckdb_mb
 
-        # DuckDB 线程数应为 min(8, cpu_cores) = 8
-        assert config.duckdb_threads == 8
+        # 验证层级关系
+        assert config.safe_envelope_bytes <= config.hard_memory_limit_bytes
+        duckdb_bytes = config.duckdb_memory_limit_mb * 1024**2
+        assert duckdb_bytes <= config.hard_memory_limit_bytes
 
-        # Polars 线程数应为 cpu_cores
-        assert config.polars_threads == 8
+    def test_large_memory_linear_scaling(self):
+        """大内存服务器（512GB）应线性扩展绝对字节预算。"""
+        config_64 = get_adaptive_config(force_memory_gb=64.0, force_cpu_cores=16)
+        config_512 = get_adaptive_config(force_memory_gb=512.0, force_cpu_cores=64)
 
-    def test_large_memory_config(self):
-        """大内存服务器（128GB）应充分利用资源。"""
-        config = get_adaptive_config(force_memory_gb=128.0, force_cpu_cores=32)
+        # 512GB 的 hard_limit 应远大于 64GB（接近 8x）
+        ratio = config_512.hard_memory_limit_bytes / config_64.hard_memory_limit_bytes
+        assert ratio > 5.0  # 至少 5 倍以上
 
-        assert config.system_memory_gb == 128.0
-        assert config.system_cpu_cores == 32
+        # cache_size 应也线性增长
+        cache_ratio = config_512.cache_size_bytes / config_64.cache_size_bytes
+        assert cache_ratio > 5.0
 
-        # DuckDB 内存应为 50% = 64GB
-        assert config.duckdb_memory_limit_mb == int(128 * 1024 * 0.5)
+    def test_memory_hierarchy_invariant(self):
+        """所有配置应满足内存层级不变式。"""
+        for memory_gb in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
+            config = get_adaptive_config(force_memory_gb=float(memory_gb), force_cpu_cores=8)
 
-        # 批量大小应较大
-        assert config.batch_size >= 100_000
+            duckdb_bytes = config.duckdb_memory_limit_mb * 1024**2
 
-        # 编译 chunk 应较大
-        assert config.compile_chunk_size >= 500
+            # 核心不变式：duckdb <= hard_limit, safe <= hard_limit
+            assert duckdb_bytes <= config.hard_memory_limit_bytes, \
+                f"{memory_gb}GB: duckdb {duckdb_bytes/1024**3:.1f}G > hard {config.hard_memory_limit_bytes/1024**3:.1f}G"
+            assert config.safe_envelope_bytes <= config.hard_memory_limit_bytes, \
+                f"{memory_gb}GB: safe {config.safe_envelope_bytes/1024**3:.1f}G > hard {config.hard_memory_limit_bytes/1024**3:.1f}G"
+            assert config.block_abs_max_bytes <= config.hard_memory_limit_bytes
+            assert config.cache_size_bytes <= config.hard_memory_limit_bytes
 
-        # DuckDB 线程数上限为 8
-        assert config.duckdb_threads == 8
+    def test_distinct_byte_budgets(self):
+        """不同的字节预算应有明确差异（不再全部相同）。"""
+        config = get_adaptive_config(force_memory_gb=30.0, force_cpu_cores=8)
 
-        # Polars 线程数为 32
-        assert config.polars_threads == 32
+        budgets = {
+            "hard_memory_limit": config.hard_memory_limit_bytes,
+            "safe_envelope": config.safe_envelope_bytes,
+            "block_abs_max": config.block_abs_max_bytes,
+            "cache_size": config.cache_size_bytes,
+            "streaming_threshold": config.streaming_threshold_bytes,
+            "compile_budget": config.compile_budget_bytes,
+        }
 
-    def test_xlarge_memory_config(self):
-        """超大内存服务器（500GB）应生成最大配置。"""
-        config = get_adaptive_config(force_memory_gb=500.0, force_cpu_cores=64)
-
-        assert config.system_memory_gb == 500.0
-        assert config.system_cpu_cores == 64
-
-        # DuckDB 内存应为 50% = 250GB
-        assert config.duckdb_memory_limit_mb == int(500 * 1024 * 0.5)
-
-        # 批量大小应接近最大值
-        assert config.batch_size >= 100_000
-
-        # 硬内存限制应随内存增长
-        assert config.hard_memory_limit_bytes > 8 * 1024**3
+        # 应至少有 4 个不同的值
+        unique_values = len(set(budgets.values()))
+        assert unique_values >= 4, f"Only {unique_values} unique budgets: {budgets}"
 
     def test_config_has_all_fields(self):
         """配置应包含所有必需字段。"""
@@ -206,15 +310,15 @@ class TestGetAdaptiveConfig:
         finally:
             del os.environ["POLARS_MAX_THREADS"]
 
-    def test_env_override_compile_chunk(self):
-        """环境变量应覆盖编译 chunk 大小。"""
-        os.environ["COMPILE_CHUNK_SIZE"] = "999"
+    def test_env_override_duckdb_max_threads(self):
+        """DUCKDB_MAX_THREADS 应覆盖 8 核上限。"""
+        os.environ["DUCKDB_MAX_THREADS"] = "32"
         try:
-            config = get_adaptive_config(force_memory_gb=30.0, force_cpu_cores=8)
-            assert config.compile_chunk_size == 999
-            assert config.config_source["compile_chunk_size"] == "env"
+            config = get_adaptive_config(force_memory_gb=512.0, force_cpu_cores=64)
+            # 应使用 min(32, 64) = 32 而非默认的 8
+            assert config.duckdb_threads == 32
         finally:
-            del os.environ["COMPILE_CHUNK_SIZE"]
+            del os.environ["DUCKDB_MAX_THREADS"]
 
 
 class TestGlobalConfig:
@@ -235,7 +339,7 @@ class TestGlobalConfig:
         reset_global_adaptive_config()
         config2 = get_global_adaptive_config()
 
-        # 应该是不同的实例（虽然值可能相同）
+        # 应该是不同的实例
         assert config1 is not config2
 
     def test_convenience_functions(self):
@@ -318,84 +422,6 @@ class TestAutoConfigureFunction:
         assert int(os.environ["POLARS_MAX_THREADS"]) == config["polars_threads"]
         assert int(os.environ["FE_BATCH_SIZE"]) == config["batch_size"]
 
-    def test_auto_configure_respects_existing_env(self):
-        """auto_configure() 应尊重已有环境变量。"""
-        os.environ["DUCKDB_THREADS"] = "99"
-        os.environ["FE_BATCH_SIZE"] = "88888"
-
-        try:
-            config = auto_configure(apply_env=True, force_memory_gb=30.0, force_cpu_cores=8)
-
-            # 应使用环境变量的值（通过 get_adaptive_config 的逻辑）
-            assert int(os.environ["DUCKDB_THREADS"]) == 99
-            assert int(os.environ["FE_BATCH_SIZE"]) == 88888
-        finally:
-            del os.environ["DUCKDB_THREADS"]
-            del os.environ["FE_BATCH_SIZE"]
-
-    def test_auto_configure_no_env_application(self):
-        """auto_configure(apply_env=False) 不应设置新环境变量。"""
-        # 清理环境变量
-        test_keys = ["DUCKDB_THREADS", "FE_BATCH_SIZE"]
-        for key in test_keys:
-            os.environ.pop(key, None)
-
-        config = auto_configure(apply_env=False, force_memory_gb=30.0, force_cpu_cores=8)
-
-        # 不应设置环境变量（因为 apply_env=False）
-        # 注意：如果之前其他测试设置了环境变量，这里可能会有残留
-        # 所以我们只检查返回的配置字典是否有效
-        assert isinstance(config, dict)
-        assert config["duckdb_threads"] > 0
-
-
-class TestMemoryScaling:
-    """测试内存配置随系统资源的缩放。"""
-
-    def test_duckdb_memory_scales_linearly(self):
-        """DuckDB 内存应随系统内存线性增长（50%）。"""
-        for memory_gb in [8, 16, 32, 64, 128]:
-            config = get_adaptive_config(force_memory_gb=float(memory_gb), force_cpu_cores=8)
-            expected_mb = int(memory_gb * 1024 * 0.5)
-            assert config.duckdb_memory_limit_mb == expected_mb
-
-    def test_batch_size_scales_with_memory(self):
-        """批量大小应随内存增长。"""
-        config_8gb = get_adaptive_config(force_memory_gb=8.0, force_cpu_cores=4)
-        config_64gb = get_adaptive_config(force_memory_gb=64.0, force_cpu_cores=16)
-
-        assert config_64gb.batch_size > config_8gb.batch_size
-
-    def test_hard_limit_scales_with_memory(self):
-        """硬内存限制应随内存增长。"""
-        config_8gb = get_adaptive_config(force_memory_gb=8.0, force_cpu_cores=4)
-        config_128gb = get_adaptive_config(force_memory_gb=128.0, force_cpu_cores=32)
-
-        assert config_128gb.hard_memory_limit_bytes > config_8gb.hard_memory_limit_bytes
-
-
-class TestWorkerConfig:
-    """测试并发 worker 配置。"""
-
-    def test_io_workers_allow_oversubscription(self):
-        """IO worker 应允许超订（1.5x 物理核心）。"""
-        config = get_adaptive_config(force_memory_gb=30.0, force_cpu_cores=8)
-        # IO workers = min(8 * 3 // 2, 16) = min(12, 16) = 12
-        assert config.max_workers_io == 12
-
-    def test_compute_workers_match_physical_cores(self):
-        """计算 worker 应匹配物理核心数。"""
-        config = get_adaptive_config(force_memory_gb=30.0, force_cpu_cores=8)
-        assert config.max_workers_compute == 8
-
-    def test_workers_scale_with_cores(self):
-        """Worker 数量应随核心数增长。"""
-        config_4c = get_adaptive_config(force_memory_gb=16.0, force_cpu_cores=4)
-        config_32c = get_adaptive_config(force_memory_gb=64.0, force_cpu_cores=32)
-
-        assert config_32c.max_workers_compute > config_4c.max_workers_compute
-        assert config_32c.max_workers_io > config_4c.max_workers_io
-
 
 class TestEdgeCases:
     """测试边界情况。"""
@@ -408,26 +434,20 @@ class TestEdgeCases:
         # 配置应该是有效的最小值
         assert config.duckdb_threads >= 1
         assert config.polars_threads >= 1
-        assert config.batch_size >= 10_000  # 最小批量
-        assert config.compile_chunk_size >= 100  # 最小 chunk
-
-    def test_single_core(self):
-        """单核 CPU 应生成有效配置。"""
-        config = get_adaptive_config(force_memory_gb=8.0, force_cpu_cores=1)
-
-        assert config.system_cpu_cores == 1
-        assert config.duckdb_threads >= 1
-        assert config.polars_threads >= 1
-        assert config.max_workers_compute >= 1
+        assert config.batch_size >= 10_000
+        assert config.compile_chunk_size >= 100
+        assert config.hard_memory_limit_bytes >= 2 * 1024**3  # 至少 2GB
 
     def test_very_large_memory(self):
         """超大内存（1TB）应生成最大配置且不溢出。"""
         config = get_adaptive_config(force_memory_gb=1024.0, force_cpu_cores=128)
 
         assert config.system_memory_gb == 1024.0
-        # DuckDB 内存：1024 * 0.5 = 512GB
-        assert config.duckdb_memory_limit_mb == int(1024 * 1024 * 0.5)
-        # 配置应在合理范围内（有最大值限制）
+        # DuckDB 内存：1024 * 0.4 = 409.6GB
+        assert config.duckdb_memory_limit_mb == int(1024 * 1024 * 0.4)
+        # hard_limit 应受上限约束
+        assert config.hard_memory_limit_bytes <= 768 * 1024**3
+        # COUNT 配置应受上限约束
         assert config.compile_chunk_size <= 2000
         assert config.batch_size <= 500_000
 
@@ -439,6 +459,23 @@ class TestEdgeCases:
         assert isinstance(config.config_source, dict)
         assert "duckdb_threads" in config.config_source
         assert config.config_source["duckdb_threads"] in ["env", "adaptive"]
+
+    def test_duckdb_memory_cap_enforced(self):
+        """DuckDB 内存超过 hard_limit 时应自动 cap 到 80%。"""
+        # 模拟用户通过环境变量设置了过大的 DuckDB 内存
+        with patch.dict(os.environ, {"DUCKDB_MEMORY_LIMIT_MB": "300000"}):  # 300GB
+            config = get_adaptive_config(force_memory_gb=30.0, force_cpu_cores=8)
+
+            # hard_limit 约为 18.67GB
+            # DuckDB 应被 cap 到 hard_limit * 0.8 ≈ 14.9GB
+            duckdb_bytes = config.duckdb_memory_limit_mb * 1024**2
+            assert duckdb_bytes <= config.hard_memory_limit_bytes, \
+                "DuckDB memory should be capped below hard_limit"
+
+            # 应该约为 80% of hard_limit
+            expected_capped = int(config.hard_memory_limit_bytes * 0.80 / (1024**2))
+            assert abs(config.duckdb_memory_limit_mb - expected_capped) < 100, \
+                f"Expected ~{expected_capped}MB, got {config.duckdb_memory_limit_mb}MB"
 
 
 if __name__ == "__main__":

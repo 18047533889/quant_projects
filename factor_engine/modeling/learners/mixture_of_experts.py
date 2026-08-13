@@ -171,7 +171,7 @@ class MixtureOfExpertsLearner(BaseLearner):
         expert_checks: list[dict] = []
         failures: list[tuple[int, str]] = []
         for e in range(self.n_experts):
-            n_e = int(np.count_nonzero(expert_idx == e))
+            n_e = int(np.count_nonzero(expert_idx) == e))
             full_rank = False
             cond: float | None = None
             reason: str | None = None
@@ -272,7 +272,7 @@ class MixtureOfExpertsLearner(BaseLearner):
         if dates is not None:
             metadata["n_unique_dates"] = n_unique_dates
             metadata["per_expert_unique_dates"] = [
-                int(len(np.unique(dates[expert_idx == e])))
+                int(len(np.unique(dates[expert_idx) == e])))
                 for e in range(self.n_experts)
             ]
         return FrozenModel(

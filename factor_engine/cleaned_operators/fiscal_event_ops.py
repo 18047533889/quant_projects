@@ -227,7 +227,7 @@ def pd_fiscal_perpetual_inventory(flow, period_id, depreciation=0.15, periods_pe
     warmup_periods = _nonnegative(warmup_periods, "warmup_periods")
     if not np.isfinite(depreciation) or not 0 <= depreciation < 1:
         raise ValueError("depreciation must satisfy 0 <= depreciation < 1")
-    retention = np.where(periods_per_year) != 0, (1.0 - depreciation) ** (1.0 / periods_per_year), np.nan)
+    retention = (1.0 - depreciation) ** (1.0 / periods_per_year)
     view = FiscalEventView.from_panel(flow, period_id, revision_policy=revision_policy)
     out = np.full(flow.shape, np.nan)
     for row in range(flow.shape[0]):
@@ -269,7 +269,7 @@ def pd_fiscal_standardized_surprise(x, period_id, seasonal_lag=4, lookback_perio
                 continue
             std = float(np.std(np.asarray(surprises), ddof=1)) if len(surprises) > 1 else np.nan
             if np.isfinite(std) and std > _EPS:
-                out[row, col] = (current - previous) / std if std > 1e-10 else np.nan
+                out[row, col] = (current - previous) / std
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -279,7 +279,7 @@ def _signal_consistency(history, periods=8, min_periods=3):
     if len(usable) < min_periods:
         return np.nan
     current = usable[-1]
-    return np.where(len(usable)) != 0, float(sum(sign == current for sign in usable) / len(usable)), np.nan)
+    return float(sum(sign == current for sign in usable) / len(usable))
 
 
 def pd_fiscal_sign_consistency(signal, period_id, periods=8, min_periods=3, require_consecutive=True, revision_policy="latest_available", **_):
@@ -446,13 +446,13 @@ def pd_fin_seasonal_zscore(x, period_end, fiscal_quarter, years=5, min_history=2
             prior = [
                 value for ordinal, value in history[:-1]
                 if (ordinal - int(current_ord)) % 4 == 0
-                and abs(ordinal - int(current_ord)) <= years * 4
+                and abs(ordinal - int(current_ord) <= years * 4
                 and _finite(value)
             ]
             if len(prior) >= min_history and _finite(history[-1][1]):
                 sd = float(np.std(prior, ddof=1)) if len(prior) > 1 else np.nan
                 if np.isfinite(sd) and sd > _EPS:
-                    out[row, col] = (history[-1][1] - float(np.mean(prior))) / sd if sd != 0 else np.nan
+                    out[row, col] = (history[-1][1] - float(np.mean(prior))) / sd
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -467,10 +467,10 @@ def pd_fin_seasonal_percentile(x, period_end, fiscal_quarter, years=5, min_histo
             current_ord = view.ordinals[row, col]
             if not np.isfinite(current_ord) or not history:
                 continue
-            prior = [value for ordinal, value in history[:-1] if (ordinal - int(current_ord)) % 4 == 0 and abs(ordinal - int(current_ord)) <= years * 4 and _finite(value)]
+            prior = [value for ordinal, value in history[:-1] if (ordinal - int(current_ord)) % 4 == 0 and abs(ordinal - int(current_ord) <= years * 4 and _finite(value)]
             if len(prior) >= min_history and _finite(history[-1][1]):
                 current = history[-1][1]
-                out[row, col] = np.where(len(prior) != 0, (sum(value < current for value in prior) + 0.5 * sum(value == current for value in prior)) / len(prior), np.nan)
+                out[row, col] = (sum(value < current for value in prior) + 0.5 * sum(value == current for value in prior)) / len(prior)
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -505,7 +505,7 @@ def pd_date_diff_days(left, right, **_):
     _align(left, right)
     lhs = left.apply(pd.to_datetime, errors="coerce")
     rhs = right.apply(pd.to_datetime, errors="coerce")
-    return np.where(86400.0) != 0, (lhs - rhs).apply(lambda column: column.dt.total_seconds() / 86400.0), np.nan)
+    return (lhs - rhs).apply(lambda column: column.dt.total_seconds() / 86400.0)
 
 
 def pd_cash_flow_lifecycle_stage(operating, investing, financing, **_):
@@ -615,7 +615,7 @@ def pd_relation_jaccard(entity_id, snapshot_id, periods=1, revision_policy="late
                 if not union:
                     out[row, col] = np.nan
                 else:
-                    out[row, col] = np.where(len(union) != 0, len(intersection) / len(union), np.nan)
+                    out[row, col] = len(intersection) / len(union)
 
     return pd.DataFrame(out, index=entity_id.index, columns=entity_id.columns)
 

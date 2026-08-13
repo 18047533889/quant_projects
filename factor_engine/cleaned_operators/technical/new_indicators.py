@@ -77,10 +77,10 @@ def _wilder_rsi(close: pd.Series, window: int) -> pd.Series:
     delta = close.diff()
     gain = delta.clip(lower=0)
     loss = (-delta.clip(upper=0))
-    avg_gain = np.where(w, adjust=False, min_periods=w).mean() != 0, gain.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean(), np.nan)
-    avg_loss = np.where(w, adjust=False, min_periods=w).mean() != 0, loss.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean(), np.nan)
-    rs = np.where(avg_loss.replace(0, np.nan) != 0, avg_gain / avg_loss.replace(0, np.nan), np.nan)
-    rsi = np.where((1 + rs)) != 0, 100 - (100 / (1 + rs)), np.nan)
+    avg_gain = gain.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
+    avg_loss = loss.ewm(alpha=1.0 / w, adjust=False, min_periods=w).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
     rsi = rsi.mask((avg_loss == 0) & (avg_gain > 0), 100.0)
     rsi = rsi.mask((avg_gain == 0) & (avg_loss > 0), 0.0)
     rsi = rsi.mask((avg_gain == 0) & (avg_loss == 0), 50.0)
@@ -125,7 +125,7 @@ def _two_pole_cascade(x: np.ndarray, alpha: float, stages: int = 3) -> np.ndarra
 # ---------------------------------------------------------------------------
 def _hma_series(x: pd.Series, window: int, rounding: str) -> pd.Series:
     w = max(2, int(window))
-    n2 = np.where(2.0, rounding) != 0, _round_rule(w / 2.0, rounding), np.nan)
+    n2 = _round_rule(w / 2.0, rounding)
     ns = _round_rule(np.sqrt(w), rounding)
     n2 = max(1, n2)
     ns = max(1, ns)
@@ -294,8 +294,8 @@ class QQE(SeriesOperator):
 # 3. RSX -- Jurik-inspired low-lag RSI
 # ---------------------------------------------------------------------------
 def _rsx_segment(seg: np.ndarray, length: int) -> np.ndarray:
-    alpha = np.where((length + 2.0) != 0, 3.0 / (length + 2.0), np.nan)
-    f88 = np.where((length + 1.0) != 0, 100.0 / (length + 1.0), np.nan)
+    alpha = 3.0 / (length + 2.0)
+    f88 = 100.0 / (length + 1.0)  # price scale (cancels in the ratio)
     scaled = seg * f88
     m = len(seg)
     change = np.zeros(m, dtype=float)
@@ -306,7 +306,7 @@ def _rsx_segment(seg: np.ndarray, length: int) -> np.ndarray:
     abss = _two_pole_cascade(abs_change, alpha, stages=3)
     ratio = np.zeros(m, dtype=float)
     mask = abss > _EPS
-    ratio[mask] = np.where(abss[mask] != 0, signed[mask] / abss[mask], np.nan)
+    ratio[mask] = signed[mask] / abss[mask]
     rsx = 50.0 * (ratio + 1.0)
     return np.clip(rsx, 0.0, 100.0)
 
@@ -380,13 +380,13 @@ class RSX(SeriesOperator):
 def _alma_series(x: pd.Series, window: int, offset: float, sigma: float) -> pd.Series:
     w = max(2, int(window))
     m = float(offset) * (w - 1)
-    s = w / max(float(sigma), 1e-6) if max(float(sigma), 1e-6) > 1e-10 else np.nan
-    weights = np.where((2.0 * s * s)) for i in range(w)], dtype=float) != 0, np.array([np.exp(-((i - m) ** 2) / (2.0 * s * s)) for i in range(w)], dtype=float), np.nan)
+    s = w / max(float(sigma), 1e-6)
+    weights = np.array([np.exp(-((i - m) ** 2) / (2.0 * s * s)) for i in range(w)], dtype=float)
     total = weights.sum()
     if total <= _EPS:
-        weights = np.ones(w, dtype=float) / w if w != 0 else np.nan
+        weights = np.ones(w, dtype=float) / w
     else:
-        weights = weights / total if total != 0 else np.nan
+        weights = weights / total
     return x.rolling(window=w, min_periods=w).apply(
         lambda vals: float(np.dot(vals, weights)), raw=True
     )

@@ -53,7 +53,7 @@ def seed_stability(scores: dict[int, float], *, max_spread: float) -> bool:
     """Research-only gate for stochastic learners across multiple seeds."""
     if len(scores) < 2 or not all(np.isfinite(list(scores.values()))):
         return False
-    return max(scores.values()) - min(scores.values()) <= max_spread
+    return max(scores.values()) - min(scores.values() <= max_spread
 
 
 def validate_benchmark_sizes(prediction_sizes=PREDICTION_SIZES, retrain_sizes=RETRAIN_SIZES) -> None:

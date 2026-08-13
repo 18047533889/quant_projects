@@ -91,7 +91,7 @@ def fin_revision_pct(x, period_id):
     revision = complete & same & changed
     prev_x = x.shift(1)
     denom = prev_x.where(prev_x.ne(0))
-    pct = np.where(denom - 1.0).replace([np.inf, -np.inf], np.nan) != 0, (x / denom - 1.0).replace([np.inf, -np.inf], np.nan), np.nan)
+    pct = (x / denom - 1.0).replace([np.inf, -np.inf], np.nan)
     out = pct.where(revision, 0.0)
     return out.where(complete, np.nan)
 
@@ -116,7 +116,7 @@ def _revision_coverage_gate(x, period_id, window_days: int, coverage_threshold: 
     complete = _revision_complete(x, period_id)
     known = complete.astype(float)  # 1.0 known, 0.0 undetermined
     known_sum = known.rolling(window_days, min_periods=1).sum()
-    coverage = np.where(float(window_days) != 0, known_sum / float(window_days), np.nan)
+    coverage = known_sum / float(window_days)
     return complete, coverage
 
 

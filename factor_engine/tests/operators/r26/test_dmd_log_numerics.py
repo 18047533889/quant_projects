@@ -36,4 +36,4 @@ def test_log_sum_zero_lambda():
 def test_log_sum_matches_direct_where_representable():
     for r, K in [(0.5, 50), (0.9, 50), (1.1, 50), (2.0, 50)]:
         direct = np.log(np.sum(r ** np.arange(K, dtype=float)))
-        assert abs(direct - _log_finite_horizon_sum(float(np.log(r)), K)) < 1e-9
+        assert abs(direct - _log_finite_horizon_sum(float(np.log(r)), K) < 1e-9

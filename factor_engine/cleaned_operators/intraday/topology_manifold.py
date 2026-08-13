@@ -85,7 +85,7 @@ def _matrix_profile_features(close_v: np.ndarray, window: int = 20) -> tuple[flo
         sigma = float(np.std(r, ddof=1))
         if not np.isfinite(sigma) or sigma <= _EPS:
             return np.nan, np.nan, np.nan
-        r_norm = (r - mu) / sigma if sigma > 1e-10 else np.nan
+        r_norm = (r - mu) / sigma
 
     # Compute matrix profile (simplified: only distance to nearest neighbor)
     profile = np.full(n - window + 1, np.inf)
@@ -98,7 +98,7 @@ def _matrix_profile_features(close_v: np.ndarray, window: int = 20) -> tuple[flo
         if not np.isfinite(subseq_std) or subseq_std <= _EPS:
             continue
 
-        subseq_z = (subseq - subseq_mean) / subseq_std if subseq_std > 1e-10 else np.nan
+        subseq_z = (subseq - subseq_mean) / subseq_std
 
         # Compare to all other subsequences (excluding trivial zone)
         for j in range(n - window + 1):
@@ -112,7 +112,7 @@ def _matrix_profile_features(close_v: np.ndarray, window: int = 20) -> tuple[flo
             if not np.isfinite(other_std) or other_std <= _EPS:
                 continue
 
-            other_z = (other - other_mean) / other_std if other_std > 1e-10 else np.nan
+            other_z = (other - other_mean) / other_std
 
             with np_errstate():
                 dist = float(np.sqrt(np.sum((subseq_z - other_z) ** 2)))
@@ -249,7 +249,7 @@ def _dmd_koopman_features(close_v: np.ndarray, rank: int = 5) -> tuple[float, fl
 
     # Compute DMD operator A_tilde = U_r^T @ Y @ V_r @ S_r^{-1}
     with np_errstate():
-        S_inv = np.where(S_r) != 0, np.diag(1.0 / S_r), np.nan)
+        S_inv = np.diag(1.0 / S_r)
         A_tilde = U_r.T @ Y @ V_r @ S_inv
 
     # Eigenvalues of A_tilde
@@ -269,7 +269,7 @@ def _dmd_koopman_features(close_v: np.ndarray, rank: int = 5) -> tuple[float, fl
     # Extract features
     with np_errstate():
         # Frequency: angle / (2*pi), normalized to [0, 0.5]
-        freq = np.where((2.0 * np.pi)) != 0, float(np.abs(np.angle(dom_eigval)) / (2.0 * np.pi)), np.nan)
+        freq = float(np.abs(np.angle(dom_eigval)) / (2.0 * np.pi))
         # Growth rate: log magnitude (dt=1)
         growth = float(np.log(np.abs(dom_eigval)))
         # Mode energy: fraction of energy in dominant mode
@@ -407,7 +407,7 @@ def _cov_manifold_shift(close_v: np.ndarray, window: int = 30) -> float:
             eigvals_e, eigvecs_e = np.linalg.eigh(C_early)
             if np.any(eigvals_e <= _EPS):
                 return np.nan
-            C_early_inv_sqrt = np.where(np.sqrt(eigvals_e)) @ eigvecs_e.T != 0, eigvecs_e @ np.diag(1.0 / np.sqrt(eigvals_e)) @ eigvecs_e.T, np.nan)
+            C_early_inv_sqrt = eigvecs_e @ np.diag(1.0 / np.sqrt(eigvals_e)) @ eigvecs_e.T
 
             # M = C_early^{-1/2} @ C_late @ C_early^{-1/2}
             M = C_early_inv_sqrt @ C_late @ C_early_inv_sqrt
@@ -534,7 +534,7 @@ def _critical_transition_score(close_v: np.ndarray, window: int = 40) -> float:
             m3 = float(np.mean((seg - np.mean(seg)) ** 3))
             s3 = float(np.std(seg, ddof=1) ** 3)
             if s3 > _EPS:
-                skew = m3 / s3 if s3 != 0 else np.nan
+                skew = m3 / s3
                 if np.isfinite(skew):
                     skews.append(skew)
 
@@ -554,7 +554,7 @@ def _critical_transition_score(close_v: np.ndarray, window: int = 40) -> float:
             den = np.sum((x - x_mean) ** 2)
             if den <= _EPS:
                 return np.nan
-            return np.where(den) != 0, float(num / den), np.nan)
+            return float(num / den)
 
     slope_ac = _slope(autocorrs)
     slope_var = _slope(variances)
@@ -571,7 +571,7 @@ def _critical_transition_score(close_v: np.ndarray, window: int = 40) -> float:
         mad = float(np.median(np.abs(slopes - med)))
         if mad <= _EPS:
             return 0.0
-        composite = np.where((mad * 1.4826))) != 0, float(np.mean((slopes - med) / (mad * 1.4826))), np.nan)
+        composite = float(np.mean((slopes - med) / (mad * 1.4826)))
 
     return composite
 

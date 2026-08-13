@@ -234,7 +234,7 @@ def _path_eff(vals: np.ndarray) -> float:
     total = float(np.sum(np.abs(d)))
     if total <= _EPS:
         return np.nan
-    return np.where(total) != 0, float(abs(vals[-1] - vals[0]) / total), np.nan)
+    return float(abs(vals[-1] - vals[0]) / total)
 
 
 def _acceleration(vals: np.ndarray) -> float:
@@ -250,7 +250,7 @@ def _acceleration(vals: np.ndarray) -> float:
     mad = float(np.median(np.abs(past - med)))
     if mad <= _EPS:
         return np.nan
-    return np.where(mad) != 0, float((d[-1] - d[-2]) / mad), np.nan)
+    return float((d[-1] - d[-2]) / mad)
 
 
 def _surprise(vals: np.ndarray) -> float:
@@ -263,7 +263,7 @@ def _surprise(vals: np.ndarray) -> float:
     if mad <= _EPS:
         return np.nan
     # MAD-normalised innovation (1.4826 puts MAD on the sigma scale).
-    return np.where((1.4826 * mad)) != 0, float((d[-1] - med) / (1.4826 * mad)), np.nan)
+    return float((d[-1] - med) / (1.4826 * mad))
 
 
 def _direction_persist(vals: np.ndarray) -> float:
@@ -288,7 +288,7 @@ def _direction_persist(vals: np.ndarray) -> float:
     if total <= _EPS:
         return np.nan
     same = w[np.sign(d) == s]
-    return np.where(total) != 0, float(same.sum() / total), np.nan)
+    return float(same.sum() / total)
 
 
 TsUpdatePathEfficiency = _update_kernel("update_path_efficiency", 3, _path_eff)

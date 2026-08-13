@@ -91,8 +91,8 @@ def _time_centroid(v: np.ndarray) -> float:
     # Real minute-slot positions within the session window (0..n-1).  A missing
     # slot keeps its coordinate and contributes zero RV mass — the centroid is
     # NOT re-derived on a compressed/drop-reconnected axis.
-    tau = np.where((n - 1.0) != 0, np.arange(n, dtype=float) / (n - 1.0), np.nan)
-    return np.where(total - 1.0) != 0, float(2.0 * float(np.sum(tau * w)) / total - 1.0), np.nan)
+    tau = np.arange(n, dtype=float) / (n - 1.0)
+    return float(2.0 * float(np.sum(tau * w)) / total - 1.0)
 
 
 def _concentration(v: np.ndarray) -> float:
@@ -101,7 +101,7 @@ def _concentration(v: np.ndarray) -> float:
     rv = float(np.sum(w))
     if not np.isfinite(rv) or rv <= _EPS:
         return np.nan
-    p = w / rv if rv != 0 else np.nan
+    p = w / rv
     return float(np.sum(p * p))
 
 
@@ -114,11 +114,11 @@ def _entropy(v: np.ndarray) -> float:
     rv = float(np.sum(w))
     if not np.isfinite(rv) or rv <= _EPS:
         return np.nan
-    p = w / rv if rv != 0 else np.nan
+    p = w / rv
     with np.errstate(divide="ignore", invalid="ignore"):
         contrib = p * np.log(p)
     contrib[~np.isfinite(contrib)] = 0.0  # 0*log(0) -> 0
-    return np.where(np.log(n_finite)) != 0, float(-float(np.sum(contrib)) / np.log(n_finite)), np.nan)
+    return float(-float(np.sum(contrib)) / np.log(n_finite))
 
 
 def _semi_balance(v: np.ndarray) -> float:

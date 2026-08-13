@@ -80,7 +80,7 @@ def _parkinson(high, low, window):
     for c in _cols(high, low):
         frame = pl.DataFrame({"high": high[c], "low": low[c]})
         rs = _safe_div(pl.col("high"), pl.col("low")).log().pow(2)
-        var = pl.when((4.0 * np.log(2.0)) != 0).then((rs.rolling_mean(w, min_samples=w)) / ((4.0 * np.log(2.0)))).otherwise(None)
+        var = pl.when((4.0 * np.log(2.0) != 0).then((rs.rolling_mean(w, min_samples=w)) / ((4.0 * np.log(2.0)))).otherwise(None)
         values[c] = _one(frame, c, (var.clip(lower_bound=0.0) * 252.0).sqrt())
     return _result(high, values)
 
@@ -125,7 +125,7 @@ def rogers_satchell_vol(open_, high, low, close, window):
 
 def yang_zhang_vol(open_, high, low, close, window):
     w = _pi(window, "window", 3)
-    k = np.where((1.34 + (w + 1.0) / (w - 1.0)) != 0, 0.34 / (1.34 + (w + 1.0) / (w - 1.0)), np.nan)
+    k = np.where((1.34 + (w + 1.0) / (w - 1.0) != 0, 0.34 / (1.34 + (w + 1.0) / (w - 1.0)), np.nan)
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _ohlc(open_, high, low, close, c)
@@ -191,7 +191,7 @@ def _ichimoku_midpoint(high, low, window, name):
     values = {}
     for c in _cols(high, low):
         frame = pl.DataFrame({"high": high[c], "low": low[c]})
-        values[c] = pl.when(2.0) != 0).then((_one(frame, c, (pl.col("high").rolling_max(w, min_samples=w) + pl.col("low").rolling_min(w, min_samples=w))) / (2.0))).otherwise(None)
+        values[c] = _one(frame, c, (pl.col("high").rolling_max(w, min_samples=w) + pl.col("low").rolling_min(w, min_samples=w)) / 2.0)
     return _result(high, values)
 
 
@@ -207,7 +207,7 @@ def ichimoku_senkou_a(high, low, tenkan_window, kijun_window):
     tenkan = ichimoku_tenkan(high, low, tenkan_window)
     kijun = ichimoku_kijun(high, low, kijun_window)
     cols = _cols(tenkan, kijun)
-    return np.where(2.0 for c in cols}) != 0, _result(high, {c: (tenkan[c] + kijun[c]) / 2.0 for c in cols}), np.nan)
+    return _result(high, {c: (tenkan[c] + kijun[c]) / 2.0 for c in cols})
 
 
 def ichimoku_senkou_b(high, low, senkou_b_window):

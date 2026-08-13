@@ -85,7 +85,7 @@ class IntraIntervalIlliquidityPolarsNative(SeriesOperator):
             )
             .group_by("date")
             .agg([
-                pl.when(pl.col("vol" != 0).then(pl.col("ret").abs() / pl.col("vol").otherwise(None)).mean().alias("returns")
+                (pl.col("ret").abs() / pl.col("vol")).mean().alias("returns")
             ])
             .to_series()
         )
@@ -434,7 +434,7 @@ class IntraVwapPathSlopePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when(pl.col("var" != 0).then(pl.col("cov") / pl.col("var").otherwise(None)).fill_null(0).alias("returns")
+                (pl.col("cov") / pl.col("var")).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -924,7 +924,7 @@ class IntraTailVolumeSharePolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("total_vol")
             ])
             .with_columns(
-                pl.when(pl.col("total_vol" != 0).then(pl.col("tail_vol") / pl.col("total_vol").otherwise(None)).fill_null(0).alias("returns")
+                (pl.col("tail_vol") / pl.col("total_vol")).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -961,7 +961,7 @@ class IntraSignedTailVariationRatioPolarsNative(SeriesOperator):
                 pl.when(pl.col("returns") < 0).then(pl.col("returns") ** 2).sum().alias("neg_var")
             ])
             .with_columns(
-                pl.when((pl.col("neg_var" != 0).then(pl.col("pos_var") / (pl.col("neg_var").otherwise(None) + 1e-10)).fill_null(1).alias("returns")
+                (pl.col("pos_var") / (pl.col("neg_var") + 1e-10)).fill_null(1).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -1058,7 +1058,7 @@ class IntraSameSlotZscorePolarsNative(SeriesOperator):
                 .alias("slot_std")
             ])
             .with_columns(
-                pl.when((pl.col("slot_std" != 0).then(pl.col("returns") - pl.col("slot_mean")) / (pl.col("slot_std").otherwise(None) + 1e-10)).alias("zscore")
+                ((pl.col("returns") - pl.col("slot_mean")) / (pl.col("slot_std") + 1e-10)).alias("zscore")
             )
             .group_by("date")
             .agg([
@@ -1088,7 +1088,7 @@ class IntraConsolidationQualityPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when(((pl.col("range" != 0).then(1.0 / ((pl.col("range").otherwise(None) / pl.col("mean_price")) + 1e-10)).alias("returns")
+                (1.0 / ((pl.col("range") / pl.col("mean_price")) + 1e-10)).alias("returns")
             )
             .select("returns")
             .to_series()

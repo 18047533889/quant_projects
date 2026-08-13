@@ -399,7 +399,7 @@ def test_concentration_trend_advances_by_snapshot_not_ffill_rows():
     legacy = _concentration_slope(conc, window=8)
     snap = _concentration_slope(conc, window=8, snapshot_date=sd)
     # Legacy daily rolling decays the rising trend to ~0 over the flat tail.
-    assert abs(float(legacy["A"].iloc[-1])) < 1e-9
+    assert abs(float(legacy["A"].iloc[-1]) < 1e-9
     # Snapshot-aligned trend is positive and holds constant after the 3rd report.
     assert float(snap["A"].iloc[-1]) > 0.0
     slope_tail = float(snap["A"].iloc[-1])
@@ -412,7 +412,7 @@ def test_concentration_trend_advances_by_snapshot_not_ffill_rows():
     _exp = float(np.sum((_sdates - _sdates.mean()) * (_svals - _svals.mean())) / np.sum((_sdates - _sdates.mean()) ** 2))
     assert abs(slope_tail - _exp) < 1e-6, f"snapshot slope {slope_tail} != expected {_exp}"
     # No slope before the 3rd snapshot (causal), then forward-filled daily.
-    assert int(snap["A"].notna().sum()) < n
+    assert int(snap["A"].notna().sum() < n
     assert snap["A"].notna().iloc[-1]
 
 

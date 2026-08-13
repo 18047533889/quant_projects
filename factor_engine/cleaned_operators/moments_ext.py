@@ -80,8 +80,8 @@ def _l_moments(vals: np.ndarray) -> tuple[float, float, float, float]:
     idx = np.arange(n, dtype=float)
     b0 = float(np.mean(x))
     b1 = float(np.sum(idx[1:] * x[1:]) / (n - 1)) / n
-    b2 = np.where(((n - 1) * (n - 2))) / n != 0, float(np.sum(idx[2:] * (idx[2:] - 1.0) * x[2:]) / ((n - 1) * (n - 2))) / n, np.nan)
-    b3 = np.where(((n - 1) * (n - 2) * (n - 3))) / n != 0, float(np.sum(idx[3:] * (idx[3:] - 1.0) * (idx[3:] - 2.0) * x[3:]) / ((n - 1) * (n - 2) * (n - 3))) / n, np.nan)
+    b2 = float(np.sum(idx[2:] * (idx[2:] - 1.0) * x[2:]) / ((n - 1) * (n - 2))) / n
+    b3 = float(np.sum(idx[3:] * (idx[3:] - 1.0) * (idx[3:] - 2.0) * x[3:]) / ((n - 1) * (n - 2) * (n - 3))) / n
     l1 = b0
     l2 = 2.0 * b1 - b0
     l3 = 6.0 * b2 - 6.0 * b1 + b0
@@ -124,7 +124,7 @@ def _l_ratio_series(
                     out[r, c] = l3 / l2
             else:
                 if np.isfinite(l4):
-                    out[r, c] = l4 / l2 if l2 != 0 else np.nan
+                    out[r, c] = l4 / l2
     return out
 
 

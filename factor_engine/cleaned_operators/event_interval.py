@@ -159,7 +159,7 @@ def _local_variation_series(event2d: np.ndarray, window: int, max_pre_window_age
             d = taus[1:] - taus[:-1]
             s = taus[1:] + taus[:-1]
             lv = float(np.sum((d / (s + _EPS)) ** 2))
-            out[r, c] = np.where((n - 1.0)) * lv != 0, (3.0 / (n - 1.0)) * lv, np.nan)
+            out[r, c] = (3.0 / (n - 1.0)) * lv
     return out
 
 
@@ -197,10 +197,10 @@ def _fano_factor_series(
                     continue  # unknown minute -> block count is not defined
                 counts[k] = float(np.count_nonzero(_event_mask(seg)))
                 valid[k] = True
-            if int(valid.sum()) < min_valid_blocks:
+            if int(valid.sum() < min_valid_blocks:
                 continue
             v = counts[valid]
-            if float(v.sum()) <= 0.0:  # degenerate: no events in the window
+            if float(v.sum() <= 0.0:  # degenerate: no events in the window
                 continue
             mean = float(v.mean())
             # N-67: sample variance (ddof=1); with a small number of blocks the

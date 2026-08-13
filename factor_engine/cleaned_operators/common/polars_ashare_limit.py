@@ -370,7 +370,7 @@ class AShareLimitUpVolumeRatioNative(SeriesOperator):
             vol = volume[c]
             touch = limit_up_touch[c] if c in limit_up_touch.columns else pl.lit(0)
             avg_vol = vol.rolling_mean(window_size=w)
-            ratio = (pl.when((touch > 0) & (avg_vol > 0)).then(vol) / avg_vol).otherwise(None) if avg_vol).otherwise(None) > 1e-10 else np.nan
+            ratio = pl.when((touch > 0) & (avg_vol > 0)).then(vol / avg_vol).otherwise(None)
             exprs.append(ratio.alias(c))
         result = volume.with_columns(exprs)
         return result
@@ -411,7 +411,7 @@ class AShareLimitDownVolumeRatioNative(SeriesOperator):
             vol = volume[c]
             touch = limit_down_touch[c] if c in limit_down_touch.columns else pl.lit(0)
             avg_vol = vol.rolling_mean(window_size=w)
-            ratio = (pl.when((touch > 0) & (avg_vol > 0)).then(vol) / avg_vol).otherwise(None) if avg_vol).otherwise(None) > 1e-10 else np.nan
+            ratio = pl.when((touch > 0) & (avg_vol > 0)).then(vol / avg_vol).otherwise(None)
             exprs.append(ratio.alias(c))
         result = volume.with_columns(exprs)
         return result
@@ -843,7 +843,7 @@ class AShareLimitEventDensityNative(SeriesOperator):
         exprs = []
         for c in cols:
             touch = limit_touch[c]
-            density = (touch.rolling_sum(window_size=w)) / (pl.lit(float(w))) if (pl.lit(float(w))) != 0 else np.nan
+            density = pl.when(pl.lit(float(w) != 0).then(touch.rolling_sum(window_size=w) / pl.lit(float(w))).otherwise(None)
             exprs.append(density.alias(c))
         result = limit_touch.with_columns(exprs)
         return result

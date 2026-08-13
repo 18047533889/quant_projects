@@ -86,7 +86,7 @@ def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
 
 def _has_spread(values: np.ndarray) -> bool:
     valid = values[np.isfinite(values)]
-    return valid.size >= 2 and float(np.std(valid, ddof=0)) >= 1e-12
+    return valid.size >= 2 and float(np.std(valid, ddof=0) >= 1e-12
 
 
 def _stack_id_panels(*panels: pd.DataFrame) -> np.ndarray:
@@ -137,7 +137,7 @@ def _id_value_map(
         if not np.isfinite(v):
             return None
         if key in out:
-            if abs(out[key] - float(v)) > 1e-12:
+            if abs(out[key] - float(v) > 1e-12:
                 return None
             continue
         out[key] = float(v)
@@ -222,7 +222,7 @@ class RelationTopkConcentration(SeriesOperator):
                 if total <= 0.0:
                     continue
                 top = float(np.sum(top_slots))
-                out[r, c] = top / total if total != 0 else np.nan
+                out[r, c] = top / total
         return frame_like(base, out)
 
 
@@ -232,7 +232,7 @@ def _skew(values: np.ndarray) -> float:
         return np.nan
     mean = float(np.mean(valid))
     std = float(np.std(valid, ddof=0))
-    return np.where((std ** 3)) != 0, float(np.mean((valid - mean) ** 3) / (std ** 3)), np.nan)
+    return float(np.mean((valid - mean) ** 3) / (std ** 3))
 
 
 def _kurtosis(values: np.ndarray) -> float:
@@ -241,7 +241,7 @@ def _kurtosis(values: np.ndarray) -> float:
         return np.nan
     mean = float(np.mean(valid))
     std = float(np.std(valid, ddof=0))
-    return np.where((std ** 4)) != 0, float(np.mean((valid - mean) ** 4) / (std ** 4)), np.nan)
+    return float(np.mean((valid - mean) ** 4) / (std ** 4))
 
 
 @register_operator(
@@ -811,7 +811,7 @@ class GroupTailRatio(SeriesOperator):
             q_hi = float(np.quantile(values, qh))
             if abs(q_lo) < 1e-12:
                 return np.nan
-            return np.where(abs(q_lo)) != 0, float(abs(q_hi) / abs(q_lo)), np.nan)
+            return float(abs(q_hi) / abs(q_lo))
 
         return _group_shape(x, group, _fn)
 

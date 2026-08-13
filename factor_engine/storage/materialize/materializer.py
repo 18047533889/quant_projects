@@ -2232,7 +2232,7 @@ class ParquetMaterializer:
                     manifest.base_rows = int(len(base))
                     manifest.merged_rows = int(len(base))
                     manifest.merged_valid_rows = int(
-                        (base["is_valid"] == 1).sum()
+                        (base["is_valid"]) == 1).sum()
                         if "is_valid" in base.columns
                         else len(base)
                     )
@@ -2601,14 +2601,14 @@ def compare_live_vs_materialized(
         }
     lv_nan = np.isnan(lv)
     mt_nan = np.isnan(mt)
-    nan_mismatch = int((lv_nan != mt_nan).sum())
+    nan_mismatch = int((lv_nan) != mt_nan).sum())
     # R32-P1-057: ±Inf mask 分开比较 —— 不能只靠 np.array_equal(equal_nan=True)。
     lv_pos_inf = np.isposinf(lv)
     mt_pos_inf = np.isposinf(mt)
     lv_neg_inf = np.isneginf(lv)
     mt_neg_inf = np.isneginf(mt)
-    pos_inf_mask_mismatch = int((lv_pos_inf != mt_pos_inf).sum())
-    neg_inf_mask_mismatch = int((lv_neg_inf != mt_neg_inf).sum())
+    pos_inf_mask_mismatch = int((lv_pos_inf) != mt_pos_inf).sum())
+    neg_inf_mask_mismatch = int((lv_neg_inf) != mt_neg_inf).sum())
     inf_mask_mismatch = pos_inf_mask_mismatch + neg_inf_mask_mismatch
     finite = ~lv_nan & ~mt_nan & ~lv_pos_inf & ~lv_neg_inf & ~mt_pos_inf & ~mt_neg_inf
     denom = np.where(np.abs(lv) > 0, np.abs(lv), 1.0)
@@ -2622,7 +2622,7 @@ def compare_live_vs_materialized(
     if finite.any():
         lv_s = np.sign(lv[finite])
         mt_s = np.sign(mt[finite])
-        sign_flips = int((lv_s != mt_s).sum())
+        sign_flips = int((lv_s) != mt_s).sum())
         threshold_flips = int(
             ((np.abs(lv[finite]) <= atol) != (np.abs(mt[finite]) <= atol)).sum()
         )

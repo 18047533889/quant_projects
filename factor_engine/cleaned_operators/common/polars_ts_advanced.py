@@ -320,7 +320,7 @@ class TSARInnovationZNative(SeriesOperator):
                 x_last = past[-p:][::-1]
                 forecast = np.dot(coef, x_last)
                 innov = current - forecast
-                return np.where(std) != 0, (float(innov) / (std)), np.nan)
+                return np.where(std != 0, (float(innov) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -698,7 +698,7 @@ class TSARPriorInnovationZNative(SeriesOperator):
                 x_last = past[-p:][::-1]
                 forecast = np.dot(coef, x_last)
                 innov = current - forecast
-                return np.where(std) != 0, (float(innov) / (std)), np.nan)
+                return np.where(std != 0, (float(innov) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -877,7 +877,7 @@ class TSPoly2ForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next + coef[2] * t_next**2
                 error = current - forecast
-                return np.where(std) != 0, (float(error) / (std)), np.nan)
+                return np.where(std != 0, (float(error) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -1228,7 +1228,7 @@ class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 error = current - forecast
-                return np.where(std) != 0, (float(error) / (std)), np.nan)
+                return np.where(std != 0, (float(error) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -1413,7 +1413,7 @@ class TSRidgeRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 current_resid = current - forecast
-                return np.where(std_resid) != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
             except:
                 return np.nan
 
@@ -1707,7 +1707,7 @@ class TSHuberRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 error = current - forecast
-                return np.where(std) != 0, (float(error) / (std)), np.nan)
+                return np.where(std != 0, (float(error) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -1925,7 +1925,7 @@ class TSHuberRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 current_resid = current - forecast
-                return np.where(std_resid) != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
             except:
                 return np.nan
 
@@ -2345,7 +2345,7 @@ class TSMultiRegressionR2Native(SeriesOperator):
                 ss_tot = np.sum((y - np.mean(y)) ** 2)
                 if ss_tot < 1e-12:
                     return np.nan
-                return np.where(ss_tot) != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
+                return np.where(ss_tot != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
             except:
                 return np.nan
 
@@ -2403,7 +2403,7 @@ class TSMultiRegressionR2PriorNative(SeriesOperator):
                 ss_tot = np.sum((y - np.mean(y)) ** 2)
                 if ss_tot < 1e-12:
                     return np.nan
-                return np.where(ss_tot) != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
+                return np.where(ss_tot != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
             except:
                 return np.nan
 
@@ -2531,7 +2531,7 @@ class TSMultiRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = sum(coef[i] * (t_next ** i) for i in range(len(coef)))
                 error = current - forecast
-                return np.where(std) != 0, (float(error) / (std)), np.nan)
+                return np.where(std != 0, (float(error) / (std)), np.nan)
             except:
                 return np.nan
 
@@ -2654,7 +2654,7 @@ class TSMultiRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = sum(coef[i] * (t_next ** i) for i in range(len(coef)))
                 current_resid = current - forecast
-                return np.where(std_resid) != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
             except:
                 return np.nan
 
@@ -2795,7 +2795,7 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
                 r2 = (1.0 - ss_res) / ss_tot if ss_tot != 0 else np.nan
                 if n <= p:
                     return np.nan
-                adj_r2 = (1.0 - (1.0 - r2) * (n - 1)) / ((n - p)) if ((n - p)) != 0 else np.nan
+                adj_r2 = (1.0 - (1.0 - r2) * (n - 1)) / ((n - p) if ((n - p) != 0 else np.nan
                 return float(adj_r2)
             except:
                 return np.nan

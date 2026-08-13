@@ -773,9 +773,19 @@ class DependencyCatalog:
         self._ensure_tables()
         field = event.field_id or event.column
         out: dict[str, dict[str, Any]] = {}
-        for edge in self.list_edges_for_field(field, dataset=event.dataset):
+        edges_list = list(self.list_edges_for_field(field, dataset=event.dataset))
+
+        # Batch fetch all dependencies at once (N+1 elimination)
+        factor_ids = [edge.factor_id for edge in edges_list]
+        if hasattr(self._catalog, 'get_factor_dependencies_batch'):
+            deps_batch = self._catalog.get_factor_dependencies_batch(factor_ids)
+        else:
+            # Fallback to one-by-one (legacy path)
+            deps_batch = {fid: self._catalog.get_factor_dependency(fid) for fid in factor_ids}
+
+        for edge in edges_list:
             fid = edge.factor_id
-            dep = self._catalog.get_factor_dependency(fid) or {}
+            dep = deps_batch.get(fid) or {}
             cur = out.setdefault(fid, {})
             cur["factor_id"] = fid
             cur["source_dataset"] = edge.source_dataset
@@ -985,9 +995,18 @@ class DependencyCatalog:
             rows = self._catalog.list_factors_for_dataset(dataset)
         else:
             rows = self._catalog.list_factors()
+            # Batch fetch dependencies to avoid N+1 (performance optimization)
+            factor_ids = [str(r.get("factor_id", "")) for r in rows]
+            if hasattr(self._catalog, 'get_factor_dependencies_batch'):
+                deps_batch = self._catalog.get_factor_dependencies_batch(factor_ids)
+            else:
+                # Fallback: one-by-one queries (legacy path)
+                deps_batch = {fid: self._catalog.get_factor_dependency(fid) for fid in factor_ids}
+
             out: list[dict[str, Any]] = []
             for row in rows:
-                dep = self._catalog.get_factor_dependency(str(row.get("factor_id", "")))
+                fid = str(row.get("factor_id", ""))
+                dep = deps_batch.get(fid)
                 if dep is None:
                     continue
                 if dep.get("source_dataset") == dataset:

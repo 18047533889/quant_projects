@@ -172,7 +172,7 @@ class CandleGapATR(SeriesOperator):
         for i in range(period, len(returns)):
             atr[i] = np.nanmean(np.abs(returns[i - period:i]), axis=0)
         
-        gap_atr = (gap) / ((atr + 1e-10)) if ((atr + 1e-10)) != 0 else np.nan
+        gap_atr = (gap) / ((atr + 1e-10) if ((atr + 1e-10) != 0 else np.nan
         
         return _result_df({col: gap_atr[:, idx] for idx, col in enumerate(cols)}, open)
 
@@ -288,7 +288,7 @@ class CandleOverlapRatio(SeriesOperator):
         overlap_low = np.maximum(body_low, body_low_prev)
         overlap = np.maximum(0, overlap_high - overlap_low)
         
-        ratio = (overlap) / ((body_size_prev + 1e-10)) if ((body_size_prev + 1e-10)) != 0 else np.nan
+        ratio = (overlap) / ((body_size_prev + 1e-10) if ((body_size_prev + 1e-10) != 0 else np.nan
         ratio[0] = np.nan
         
         return _result_df({col: ratio[:, idx] for idx, col in enumerate(cols)}, open)
@@ -329,7 +329,7 @@ class CandleRangeATR(SeriesOperator):
         for i in range(period, len(tr)):
             atr[i] = np.nanmean(tr[i - period:i], axis=0)
         
-        range_atr = (candle_range) / ((atr + 1e-10)) if ((atr + 1e-10)) != 0 else np.nan
+        range_atr = (candle_range) / ((atr + 1e-10) if ((atr + 1e-10) != 0 else np.nan
         
         return _result_df({col: range_atr[:, idx] for idx, col in enumerate(cols)}, high)
 
@@ -582,7 +582,7 @@ class CDL_Doji(SeriesOperator):
         
         body = np.abs(c - o)
         total_range = h - l
-        body_ratio = (body) / ((total_range + 1e-10)) if ((total_range + 1e-10)) != 0 else np.nan
+        body_ratio = (body) / ((total_range + 1e-10) if ((total_range + 1e-10) != 0 else np.nan
         
         pattern = (body_ratio < threshold).astype(float)
         

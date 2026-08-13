@@ -93,7 +93,7 @@ class FinPctChangeNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(p)
-            pct = (pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev)) / (prev.abs())) if (prev.abs())) != 0 else np.nan
+            pct = pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev) / prev.abs())
             exprs.append(pct.alias(c))
 
         return x.with_columns(exprs)
@@ -128,7 +128,7 @@ class FinGrowthNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(p)
-            growth = (pl.when(prev == 0).then(None).otherwise((pl.col(c) - prev)) / (prev)) if (prev)) != 0 else np.nan
+            growth = pl.when(prev == 0).then(None).otherwise((pl.col(c) - prev) / prev)
             exprs.append(growth.alias(c))
 
         return x.with_columns(exprs)
@@ -160,7 +160,7 @@ class FinYoYNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(4)  # 4 quarters ago
-            yoy = (pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev)) / (prev.abs())) if (prev.abs())) != 0 else np.nan
+            yoy = pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev) / prev.abs())
             exprs.append(yoy.alias(c))
 
         return x.with_columns(exprs)
@@ -192,7 +192,7 @@ class FinQoQNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(1)  # 1 quarter ago
-            qoq = (pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev)) / (prev.abs())) if (prev.abs())) != 0 else np.nan
+            qoq = pl.when(prev.abs() == 0).then(None).otherwise((pl.col(c) - prev) / prev.abs())
             exprs.append(qoq.alias(c))
 
         return x.with_columns(exprs)
@@ -297,7 +297,7 @@ class FinRatioNative(SeriesOperator):
         for c in cols:
             num = pl.col(c)
             denom = denominator[c] if c in denominator.columns else pl.lit(None)
-            ratio = (pl.when(denom == 0).then(None).otherwise(num) / (denom)) if (denom)) != 0 else np.nan
+            ratio = pl.when(denom == 0).then(None).otherwise(num / denom)
             exprs.append(ratio.alias(c))
 
         return numerator.with_columns(exprs)
@@ -337,7 +337,7 @@ class FinGrowthStabilityNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(1)
-            growth = ((pl.col(c) - prev)) / (prev.abs()) if (prev.abs()) != 0 else np.nan
+            growth = (pl.col(c) - prev) / prev.abs()
             stability = growth.rolling_std(window_size=w, min_samples=2)
             exprs.append(stability.alias(c))
 
@@ -370,7 +370,7 @@ class FinGrowthAccelerationNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(1)
-            growth = ((pl.col(c) - prev)) / (prev.abs()) if (prev.abs()) != 0 else np.nan
+            growth = (pl.col(c) - prev) / prev.abs()
             accel = growth - growth.shift(1)
             exprs.append(accel.alias(c))
 
@@ -406,7 +406,7 @@ class FinStalenessNative(SeriesOperator):
         exprs = []
         for c in cols:
             prev = pl.col(c).shift(1)
-            pct_change = (((pl.col(c) - prev)) / (prev.abs()).abs()) if (prev.abs()).abs()) != 0 else np.nan
+            pct_change = (pl.col(c) - prev) / prev.abs()
             changed = pct_change > thresh
 
             # Count periods since last change
@@ -479,7 +479,7 @@ class FinCVNative(SeriesOperator):
         for c in cols:
             mean = pl.col(c).rolling_mean(window_size=w, min_samples=2)
             std = pl.col(c).rolling_std(window_size=w, min_samples=2)
-            cv = (pl.when(mean == 0).then(None).otherwise(std) / (mean.abs())) if (mean.abs())) != 0 else np.nan
+            cv = pl.when(mean == 0).then(None).otherwise(std / mean.abs())
             exprs.append(cv.alias(c))
 
         return x.with_columns(exprs)

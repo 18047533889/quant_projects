@@ -79,7 +79,7 @@ def _rankdata(v: np.ndarray) -> np.ndarray:
         j = i
         while j + 1 < n and v[order[j + 1]] == v[order[i]]:
             j += 1
-        avg = np.where(2.0 != 0, (i + 1 + j + 1) / 2.0, np.nan)
+        avg = (i + 1 + j + 1) / 2.0
         ranks[order[i : j + 1]] = avg
         i = j + 1
     return ranks
@@ -101,7 +101,7 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
     n = xv.size
     if n < 3:
         return np.nan
-    if float(np.std(xv)) <= _EPS or float(np.std(yv)) <= _EPS:
+    if float(np.std(xv) <= _EPS or float(np.std(yv) <= _EPS:
         return np.nan
     # Tie-aware Chatterjee ξ (review R4-49, R26-005..007).  The no-tie formula
     # 1 - 3·Σ|Δr|/(n²-1) assumes continuous data; A-share series have many
@@ -123,7 +123,7 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
     denom = 2.0 * float(np.sum(l * (n - l)))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(1.0 - n * np.sum(np.abs(np.diff(r))) / denom), np.nan)
+    return float(1.0 - n * np.sum(np.abs(np.diff(r))) / denom)
 
 
 def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
@@ -145,7 +145,7 @@ def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
     sigma = float(np.median(pos))
     if sigma <= _EPS:
         return None
-    return np.where((2.0 * sigma * sigma)) != 0, np.exp(-(d * d) / (2.0 * sigma * sigma)), np.nan)
+    return np.exp(-(d * d) / (2.0 * sigma * sigma))
 
 
 def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
@@ -156,7 +156,7 @@ def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
     L = _rbf_kernel(yv)
     if K is None or L is None:
         return np.nan
-    H = np.eye(n) - np.ones((n, n)) / n if n > 0 else np.nan
+    H = np.eye(n) - np.ones((n, n)) / n
     # Centered kernel alignment (review R4-14): Kc = H K H, Lc = H L H and
     # HSIC_norm = <Kc,Lc>_F / (||Kc||_F·||Lc||_F).  For symmetric kernels,
     # <Kc,Lc>_F = tr(K H L H) and ||Kc||_F² = tr(K H K H) — the old denominator
@@ -165,7 +165,7 @@ def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
     denom = float(np.sqrt(np.trace(K @ H @ K @ H) * np.trace(L @ H @ L @ H)))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(num / denom), np.nan)
+    return float(num / denom)
 
 
 def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
@@ -193,7 +193,7 @@ def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
     cmi = hxz + hyz - hz - hxyz
     # Audit #54: after ties collapse the effective state space, the normalized
     # denominator must use the EFFECTIVE occupied cell counts — CMI <=
-    # min(H(X), H(Y)) <= min(log n_x_eff, log n_y_eff) — never log(requested
+    # min(H(X), H(Y) <= min(log n_x_eff, log n_y_eff) — never log(requested
     # bins).  A marginal that degenerated to a single occupied cell carries no
     # conditional information -> fail closed.
     n_x_eff = int(np.unique(bx).size)
@@ -201,7 +201,7 @@ def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
     eff = min(n_x_eff, n_y_eff)
     if eff < 2:
         return np.nan
-    return np.where(np.log(eff)) != 0, float(cmi / np.log(eff)), np.nan)
+    return float(cmi / np.log(eff))
 
 
 def _double_center(v: np.ndarray) -> np.ndarray:
@@ -212,12 +212,12 @@ def _double_center(v: np.ndarray) -> np.ndarray:
 def _normalized_dcov(A: np.ndarray, B: np.ndarray) -> float:
     """Normalized distance covariance: dcov/sqrt(dvar_x * dvar_y) (distance corr)."""
     n = A.shape[0]
-    dcov2 = np.where(float(n * n) != 0, float(np.sum(A * B)) / float(n * n), np.nan)
-    dvar2_a = np.where(float(n * n) != 0, float(np.sum(A * A)) / float(n * n), np.nan)
-    dvar2_b = np.where(float(n * n) != 0, float(np.sum(B * B)) / float(n * n), np.nan)
+    dcov2 = float(np.sum(A * B)) / float(n * n)
+    dvar2_a = float(np.sum(A * A)) / float(n * n)
+    dvar2_b = float(np.sum(B * B)) / float(n * n)
     if dvar2_a <= _EPS or dvar2_b <= _EPS:
         return np.nan
-    return np.where(np.sqrt(dvar2_a * dvar2_b))) != 0, float(np.sqrt(max(dcov2, 0.0) / np.sqrt(dvar2_a * dvar2_b))), np.nan)
+    return float(np.sqrt(max(dcov2, 0.0) / np.sqrt(dvar2_a * dvar2_b)))
 
 
 def _partial_dcor_proxy(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float:
@@ -254,7 +254,7 @@ def _partial_dcor_proxy(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float
     denom = float(np.sqrt(raw_denom2))
     if not np.isfinite(denom) or denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(num / denom), np.nan)
+    return float(num / denom)
 
 
 def _triple_series(a2d: np.ndarray, b2d: np.ndarray, c2d: np.ndarray, window: int, kernel: Any) -> np.ndarray:

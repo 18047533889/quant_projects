@@ -520,7 +520,7 @@ class RowBeta(SeriesOperator):
                 yv_centered = yv - yv_mean
                 denom = (xv_centered ** 2).sum()
                 if denom != 0:
-                    beta_val = (xv_centered * yv_centered).sum() / denom if denom != 0 else np.nan
+                    beta_val = (xv_centered * yv_centered).sum() / denom
                 else:
                     beta_val = np.nan
             else:
@@ -1116,7 +1116,7 @@ class CrossSectionalMadZscorePolars(SeriesOperator):
         med = np.nanmedian(arr, axis=1, keepdims=True)
         mad = np.nanmedian(np.abs(arr - med), axis=1, keepdims=True)
         mad = np.where(mad == 0, np.nan, mad)
-        z = (arr - med) / mad if mad != 0 else np.nan
+        z = (arr - med) / mad
         result = pl.DataFrame(z, schema=numeric_cols)
         if "date" in x.columns:
             result = result.with_columns([x["date"]])

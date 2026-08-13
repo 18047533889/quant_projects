@@ -247,7 +247,7 @@ def _finite_ratio(out: pd.DataFrame, warmup_rows: int = 0) -> float:
         arr = arr[warmup_rows:]
     if arr.size == 0:
         return 0.0
-    return np.where(arr.size) != 0, float(np.isfinite(arr).sum() / arr.size), np.nan)
+    return float(np.isfinite(arr).sum() / arr.size)
 
 
 def _unit_tag(op: Any) -> str | None:
@@ -584,7 +584,7 @@ def _mirror_symmetry(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     both = np.isfinite(ur) & np.isfinite(lr)
     if not np.any(both):
         return []
-    if float(np.median(np.abs(ur[both] - lr[both]))) > 0.25:
+    if float(np.median(np.abs(ur[both] - lr[both])) > 0.25:
         return [AuditFinding(
             "mirror_symmetry", op.metadata.name, "warning",
             "lower(-x) does not mirror upper(x): |Δ| median {:.3f} > 0.25".format(
@@ -847,7 +847,7 @@ def _group_migration(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     fin = np.isfinite(last)
     if not np.any(fin):
         return []
-    if float(np.nanmax(last[fin])) <= float(np.nanmax(last_c[fin])) + 1e-12:
+    if float(np.nanmax(last[fin]) <= float(np.nanmax(last_c[fin])) + 1e-12:
         return [AuditFinding(
             "group_migration", name, "error",
             "a stock's group move A->B does not increase the A-side churn/retention "
@@ -957,21 +957,21 @@ def _psd_geometry(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
         return []
     raw, projected, eigvals, eigvecs = bundle
     findings: list[AuditFinding] = []
-    if float(np.min(eigvals)) < -1e-8:
+    if float(np.min(eigvals) < -1e-8:
         findings.append(AuditFinding(
             "psd_geometry", name, "error",
             "projected correlation has a negative eigenvalue (not PSD)",
         ))
     # eigenpair consistency: A @ v == lambda * v for the projected matrix.
     resid = projected @ eigvecs - eigvecs * eigvals
-    if float(np.max(np.abs(resid))) > 1e-6:
+    if float(np.max(np.abs(resid)) > 1e-6:
         findings.append(AuditFinding(
             "psd_geometry", name, "error",
             "eigvals/eigvecs do not diagonalize the projected matrix (mismatched matrix)",
         ))
     # eigvecs orthonormal (the matrix they come from is symmetric PSD).
     gram = eigvecs.T @ eigvecs
-    if float(np.max(np.abs(gram - np.eye(gram.shape[0])))) > 1e-6:
+    if float(np.max(np.abs(gram - np.eye(gram.shape[0]))) > 1e-6:
         findings.append(AuditFinding(
             "psd_geometry", name, "warning",
             "eigvecs are not orthonormal",
@@ -1095,7 +1095,7 @@ def _default_searchability(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
             "default_searchability", op.metadata.name, "warning",
             "default parameters yield a constant output — no discriminating power",
         )]
-    if float(np.std(fin)) < 1e-12 and float(np.mean(np.abs(fin))) < 1e-12:
+    if float(np.std(fin) < 1e-12 and float(np.mean(np.abs(fin)) < 1e-12:
         return [AuditFinding(
             "default_searchability", op.metadata.name, "warning",
             "default parameters yield a near-zero constant output",

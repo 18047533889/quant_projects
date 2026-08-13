@@ -159,7 +159,7 @@ def _aligned_agg(
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
             vals = [np.asarray(group[k], dtype=float) for k in keys]
-            if int(np.sum(np.isfinite(vals[0]))) < int(min_finite):
+            if int(np.sum(np.isfinite(vals[0])) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             times = np.asarray(group.index, dtype="datetime64[ns]")
@@ -198,7 +198,7 @@ def _day_event_gaps(vals: np.ndarray, times: np.ndarray, target: Any) -> np.ndar
     empty array.
     """
     event = _target_mask(vals, target)
-    idx = np.where(event)[0]
+    idx = np.where(event[0]
     if len(idx) < 2:
         return np.array([])
     minutes = minute_of_day(times)
@@ -223,7 +223,7 @@ def _day_follow_pairs(
     minutes = minute_of_day(times)
     days = times.astype("datetime64[D]")
     event = _target_mask(sv, target)
-    idx = np.where(event)[0]
+    idx = np.where(event[0]
     xe: list[float] = []
     xl: list[float] = []
     for i in idx:
@@ -261,7 +261,7 @@ def _pearson(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
     if m.sum() < int(min_events):
         return np.nan
     a, b = xe[m], xl[m]
-    if float(np.std(a)) < _EPS or float(np.std(b)) < _EPS:
+    if float(np.std(a) < _EPS or float(np.std(b) < _EPS:
         return np.nan
     return float(np.corrcoef(a, b)[0, 1])
 
@@ -681,7 +681,7 @@ class IntraStatePairSameSlotCorr(SessionAggregationOperator):
                     continue
                 va = np.asarray(ca, dtype=float)
                 vb = np.asarray(cb, dtype=float)
-                if float(np.std(va)) < _EPS or float(np.std(vb)) < _EPS:
+                if float(np.std(va) < _EPS or float(np.std(vb) < _EPS:
                     per_day[day] = np.nan
                     continue
                 per_day[day] = float(np.corrcoef(va, vb)[0, 1])
@@ -722,7 +722,7 @@ class IntraStateDwellStats(SessionAggregationOperator):
             if output == "share":
                 if target_state is None:
                     return 1.0
-                target_bars = int(np.sum(finite & (vals == target_state)))
+                target_bars = int(np.sum(finite & (vals) == target_state)))
                 return np.where(float(valid_count) != 0, float(target_bars) / float(valid_count), np.nan)
             lengths = _dwell_runs(vals, times, target_state)
             if lengths.size == 0:

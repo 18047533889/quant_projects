@@ -43,14 +43,14 @@ def _bipower_var(r: np.ndarray) -> float:
     # axis* — |r_t| * |r_{t-1}| — never over the compressed array of finite
     # returns.  Compressing made the two sides of a missing minute neighbours,
     # fabricating a within-day cross-product where no real adjacent pair exists.
-    if int(np.isfinite(r).sum()) < 2:
+    if int(np.isfinite(r).sum() < 2:
         return np.nan
     with np_errstate():
         prod = np.abs(r[1:]) * np.abs(r[:-1])
         valid = np.isfinite(r[1:]) & np.isfinite(r[:-1])
         if not np.any(valid):
             return np.nan
-        return np.where(2.0) * np.nansum(prod)) != 0, float((np.pi / 2.0) * np.nansum(prod)), np.nan)
+        return float((np.pi / 2.0) * np.nansum(prod))
 
 
 def _check_scale(threshold_scale: float) -> float:
@@ -82,7 +82,7 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
     rv = float(np.sum(finite * finite))
     if not np.isfinite(rv) or rv <= _EPS:
         return mask
-    per_bar_vol = np.where(n)) != 0, float(np.sqrt(rv / n)), np.nan)
+    per_bar_vol = float(np.sqrt(rv / n))
     if per_bar_vol <= _EPS:
         return mask
     thresh = ts * per_bar_vol
@@ -107,7 +107,7 @@ def _realized_skewness(close_v: np.ndarray) -> float:
     if not np.isfinite(r2) or r2 <= _EPS:
         return np.nan
     r3 = np.nansum(r ** 3)
-    return np.where(r2 ** 1.5) != 0, float(np.sqrt(n) * r3 / r2 ** 1.5), np.nan)
+    return float(np.sqrt(n) * r3 / r2 ** 1.5)
 
 
 @register_operator(
@@ -139,7 +139,7 @@ def _realized_kurtosis(close_v: np.ndarray) -> float:
     if not np.isfinite(r2) or r2 <= _EPS:
         return np.nan
     r4 = np.nansum(r ** 4)
-    return np.where((r2 * r2)) != 0, float(n * r4 / (r2 * r2)), np.nan)
+    return float(n * r4 / (r2 * r2))
 
 
 @register_operator(
@@ -165,7 +165,7 @@ def _realized_quarticity(close_v: np.ndarray) -> float:
     n = int(np.sum(np.isfinite(r)))
     if n < 2:
         return np.nan
-    return np.where(3.0 * np.nansum(r ** 4)) != 0, float(n / 3.0 * np.nansum(r ** 4)), np.nan)
+    return float(n / 3.0 * np.nansum(r ** 4))
 
 
 @register_operator(
@@ -195,9 +195,9 @@ def _tripower_quarticity(close_v: np.ndarray) -> float:
     if n_finite < 4:
         return np.nan
     with np_errstate():
-        a = np.where(3.0) != 0, np.abs(r[2:]) ** (4.0 / 3.0), np.nan)
-        b = np.where(3.0) != 0, np.abs(r[1:-1]) ** (4.0 / 3.0), np.nan)
-        c = np.where(3.0) != 0, np.abs(r[:-2]) ** (4.0 / 3.0), np.nan)
+        a = np.abs(r[2:]) ** (4.0 / 3.0)
+        b = np.abs(r[1:-1]) ** (4.0 / 3.0)
+        c = np.abs(r[:-2]) ** (4.0 / 3.0)
         prod = a * b * c
         valid = np.isfinite(r[2:]) & np.isfinite(r[1:-1]) & np.isfinite(r[:-2])
         if not np.any(valid):
@@ -296,7 +296,7 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
     total = pos + neg
     concentration = np.nan
     if total > _EPS:
-        w = rj * rj / total if total != 0 else np.nan
+        w = rj * rj / total
         concentration = float(np.sum(w * w))
     idx = np.flatnonzero(mask)
     # P1-101: normalise by the *official* minute slot grid (len(r) - 1, i.e.
@@ -311,7 +311,7 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
         gaps = np.diff(idx).astype(float)
         mean_gap = float(np.mean(gaps))
         if mean_gap > _EPS:
-            cluster_cv = np.where(mean_gap) != 0, float(np.std(gaps) / mean_gap), np.nan)
+            cluster_cv = float(np.std(gaps) / mean_gap)
     return pos, neg, float(len(idx)), concentration, first_t, last_t, cluster_cv
 
 
@@ -397,7 +397,7 @@ class IntraSignedJumpRatio(SessionAggregationOperator):
             if not np.isfinite(pos) or not np.isfinite(neg):
                 return np.nan
             denom = pos + neg + _EPS
-            return np.where(denom) != 0, float((pos - neg) / denom), np.nan)
+            return float((pos - neg) / denom)
 
         return daily_agg(close, _fn)
 
@@ -637,7 +637,7 @@ def _rv_signature_slope(close_v: np.ndarray) -> float:
     denom = float(np.sum((xs - xs.mean()) ** 2))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom), np.nan)
+    return float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom)
 
 
 @register_operator(

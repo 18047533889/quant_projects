@@ -78,7 +78,7 @@ def _intraday_returns(cv: np.ndarray, times: np.ndarray, max_gap_minutes: int = 
     if len(cv) < 2:
         return r
     with np.errstate(divide="ignore", invalid="ignore"):
-        logr = np.where(cv[:-1]) != 0, np.log(cv[1:] / cv[:-1]), np.nan)
+        logr = np.log(cv[1:] / cv[:-1])
     gaps = (
         np.asarray(times[1:], dtype="datetime64[s]").astype(np.int64)
         - np.asarray(times[:-1], dtype="datetime64[s]").astype(np.int64)
@@ -182,7 +182,7 @@ def _ols_slope(y: np.ndarray, x: np.ndarray) -> float:
     denom = float(np.sum((x - x.mean()) ** 2))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(np.sum((x - x.mean()) * (y - y.mean())) / denom), np.nan)
+    return float(np.sum((x - x.mean()) * (y - y.mean())) / denom)
 
 
 def _ols_r2(y: np.ndarray, x: np.ndarray) -> float:
@@ -198,7 +198,7 @@ def _ols_r2(y: np.ndarray, x: np.ndarray) -> float:
     ss_tot = float(np.sum((y - y.mean()) ** 2))
     if ss_tot <= _EPS:
         return np.nan
-    return np.where(ss_tot != 0, 1.0 - ss_res / ss_tot, np.nan)
+    return 1.0 - ss_res / ss_tot
 
 
 def _quadratic_coef(y: np.ndarray, x: np.ndarray) -> float:
@@ -297,7 +297,7 @@ def _daily_with_times(
                 np.asarray(group[f"v{i}"], dtype=float) for i in range(len(frames))
             ]
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals[0]))) < int(min_finite):
+            if int(np.sum(np.isfinite(vals[0])) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -433,7 +433,7 @@ def _event_pre_post_contrast_day(
         pre_std = float(np.std(pre_v, ddof=1))
         if pre_std <= _EPS:
             return np.nan
-        return np.where(pre_std != 0, float(np.std(post_v, ddof=1)) / pre_std, np.nan)
+        return float(np.std(post_v, ddof=1)) / pre_std
     if metric == "slope_diff":
         pre_v2, pre_t = _finite_with_times(x, pre_w, times)
         post_v2, post_t = _finite_with_times(x, post_w, times)
@@ -446,12 +446,12 @@ def _event_pre_post_contrast_day(
         pre_range = float(np.max(pre_v) - np.min(pre_v))
         if pre_range <= _EPS:
             return np.nan
-        return np.where(pre_range != 0, float(np.max(post_v) - np.min(post_v)) / pre_range, np.nan)
+        return float(np.max(post_v) - np.min(post_v)) / pre_range
     if metric == "activity_ratio":
         pre_norm = float(np.sum(np.abs(pre_v)))
         if pre_norm <= _EPS:
             return np.nan
-        return np.where(pre_norm != 0, float(np.sum(np.abs(post_v))) / pre_norm, np.nan)
+        return float(np.sum(np.abs(post_v))) / pre_norm
     raise ValueError(f"unknown metric {metric!r}")
 
 
@@ -511,7 +511,7 @@ def _impulse_detector_day(
 ) -> float:
     r = _intraday_returns(cv, times)
     fin = np.isfinite(r)
-    if int(fin.sum()) < int(min_bars):
+    if int(fin.sum() < int(min_bars):
         return np.nan
     episodes, evmask = _detect_impulse_episodes(
         cv, times, direction=event, threshold=threshold, z=z, merge_gap=merge_gap,
@@ -536,9 +536,9 @@ def _impulse_detector_day(
     first = int(episodes[0][0])
     last = int(episodes[-1][1])
     if output == "first_time":
-        return np.where(nbars != 0, first / nbars, np.nan)
+        return first / nbars
     if output == "last_time":
-        return np.where(nbars != 0, last / nbars, np.nan)
+        return last / nbars
     if output == "duration":
         return float(last - first + 1)
     raise ValueError(f"unknown output {output!r}")
@@ -613,7 +613,7 @@ def _post_response_event(
         return np.nan
     pc = cv[pw]
     pc_ok = np.isfinite(pc)
-    if int(pc_ok.sum()) < 2:
+    if int(pc_ok.sum() < 2:
         return np.nan
     e_price = cv[e]
     if not np.isfinite(e_price) or e_price <= _EPS:
@@ -626,13 +626,13 @@ def _post_response_event(
     pre_r = pre_r[np.isfinite(pre_r)]
 
     if output == "retention":
-        return np.where(e_price - 1.0) != 0, float(pc_fin[-1] / e_price - 1.0), np.nan)
+        return float(pc_fin[-1] / e_price - 1.0)
 
     path = np.concatenate([[e_price], pc_fin])
     running = np.maximum.accumulate(path)
     if output == "max_drawdown":
         with np.errstate(divide="ignore", invalid="ignore"):
-            dd = np.where(running - 1.0 != 0, path / running - 1.0, np.nan)
+            dd = path / running - 1.0
         return float(np.min(dd))
     if output == "giveback":
         peak = float(np.max(path))
@@ -640,14 +640,14 @@ def _post_response_event(
         min_after = float(np.min(path[peak_idx:]))
         if peak <= _EPS:
             return np.nan
-        return np.where(peak - 1.0 != 0, min_after / peak - 1.0, np.nan)
+        return min_after / peak - 1.0
     if output == "vol_ratio":
         if len(pr_fin) < 2 or len(pre_r) < 2:
             return np.nan
         pre_std = float(np.std(pre_r, ddof=1))
         if pre_std <= _EPS:
             return np.nan
-        return np.where(pre_std != 0, float(np.std(pr_fin, ddof=1)) / pre_std, np.nan)
+        return float(np.std(pr_fin, ddof=1)) / pre_std
     if output == "volume_ratio":
         pv = vv[pw]
         pv = pv[np.isfinite(pv)]
@@ -656,7 +656,7 @@ def _post_response_event(
         pre_sum = float(np.sum(pre_v))
         if pre_sum <= _EPS:
             return np.nan
-        return np.where(pre_sum != 0, float(np.sum(pv)) / pre_sum, np.nan)
+        return float(np.sum(pv)) / pre_sum
     if output == "amount_ratio":
         pa = av[pw]
         pa = pa[np.isfinite(pa)]
@@ -665,20 +665,20 @@ def _post_response_event(
         pre_sum = float(np.sum(pre_a))
         if pre_sum <= _EPS:
             return np.nan
-        return np.where(pre_sum != 0, float(np.sum(pa)) / pre_sum, np.nan)
+        return float(np.sum(pa)) / pre_sum
     if output == "vwap_hold":
         pv = vv[pw]
         pa = av[pw]
         ok = np.isfinite(pv) & np.isfinite(pa) & (pv > 0)
         if int(ok.sum()) == 0:
             return np.nan
-        vwap = np.where(float(np.sum(pv[ok])) != 0, float(np.sum(pa[ok])) / float(np.sum(pv[ok])), np.nan)
+        vwap = float(np.sum(pa[ok])) / float(np.sum(pv[ok]))
         if vwap <= _EPS:
             return np.nan
-        return np.where(e_price - 1.0 != 0, vwap / e_price - 1.0, np.nan)
+        return vwap / e_price - 1.0
     if output == "recovery_half_life":
         with np.errstate(divide="ignore", invalid="ignore"):
-            dd = np.where(running - 1.0 != 0, path / running - 1.0, np.nan)
+            dd = path / running - 1.0
         trough_idx = int(np.argmin(dd))
         trough = path[trough_idx]
         peak_at_trough = running[trough_idx]
@@ -826,7 +826,7 @@ def _probe_outcome_score_day(
         sd = float(np.std(arr, ddof=1))
         if not np.isfinite(sd) or sd <= _EPS:
             return np.zeros_like(arr)
-        return np.where(sd != 0, (arr - arr.mean()) / sd, np.nan)
+        return (arr - arr.mean()) / sd
 
     s_z = _zscore(np.asarray(strength))
     g_z = _zscore(np.asarray(givebacks))
@@ -927,7 +927,7 @@ def _absorption_event(
         pa_sum = float(np.sum(pa))
         if pa_sum <= _EPS:
             return np.nan
-        return np.where(pa_sum != 0, float(np.sum(np.abs(pr))) / pa_sum, np.nan)
+        return float(np.sum(np.abs(pr))) / pa_sum
     if output == "downside_resilience":
         e_price = cv[e]
         pc = cv[pw]
@@ -937,23 +937,23 @@ def _absorption_event(
         path = np.concatenate([[e_price], pc])
         running = np.maximum.accumulate(path)
         with np.errstate(divide="ignore", invalid="ignore"):
-            dd = np.where(running - 1.0)) != 0, float(np.min(path / running - 1.0)), np.nan)
+            dd = float(np.min(path / running - 1.0))
         return 1.0 - dd
     if output == "absorption":
         pv_sum = float(np.sum(pv))
         if pv_sum <= _EPS:
             return np.nan
-        price_impact = float(np.sum(np.abs(pr))) / (pv_sum / session_mean_vol) if (pv_sum / session_mean_vol) > 1e-10 else np.nan
-        return np.where((1.0 + price_impact) != 0, 1.0 / (1.0 + price_impact), np.nan)
+        price_impact = float(np.sum(np.abs(pr))) / (pv_sum / session_mean_vol)
+        return 1.0 / (1.0 + price_impact)
     if output == "volume_no_drop":
         pre_w = _window_indices(e, seg, -horizon, -1)
         pre_v = vv[pre_w] if pre_w is not None else np.array([])
         pre_v = pre_v[np.isfinite(pre_v)]
-        if pre_v.size == 0 or float(np.mean(pre_v)) <= _EPS:
+        if pre_v.size == 0 or float(np.mean(pre_v) <= _EPS:
             return np.nan
         if pv.size == 0:
             return np.nan
-        return np.where(float(np.mean(pre_v)) != 0, float(np.mean(pv)) / float(np.mean(pre_v)), np.nan)
+        return float(np.mean(pv)) / float(np.mean(pre_v))
     raise ValueError(f"unknown output {output!r}")
 
 
@@ -1043,7 +1043,7 @@ def _consolidation_event(
         return np.nan
     pc = cv[pw]
     pc_ok = np.isfinite(pc)
-    if int(pc_ok.sum()) < 2:
+    if int(pc_ok.sum() < 2:
         return np.nan
     pc_fin = pc[pc_ok]
     e_price = cv[e]
@@ -1053,11 +1053,11 @@ def _consolidation_event(
     if post_mean <= _EPS:
         return np.nan
     post_range = float(np.max(pc_fin) - np.min(pc_fin))
-    tightness = 1.0 - post_range / post_mean if post_mean != 0 else np.nan
+    tightness = 1.0 - post_range / post_mean
     if output == "tightness":
         return tightness
     if output == "level":
-        return np.where(e_price - 1.0 != 0, post_mean / e_price - 1.0, np.nan)
+        return post_mean / e_price - 1.0
     pr = r[pw]
     pr = pr[np.isfinite(pr)]
     pre_w = _window_indices(e, seg, -horizon, -1)
@@ -1069,17 +1069,17 @@ def _consolidation_event(
         pre_std = float(np.std(pre_r, ddof=1))
         if pre_std <= _EPS:
             return np.nan
-        return np.where(pre_std != 0, float(np.std(pr, ddof=1)) / pre_std, np.nan)
+        return float(np.std(pr, ddof=1)) / pre_std
     pv = vv[pw]
     pv = pv[np.isfinite(pv)]
     pre_v = vv[pre_w] if pre_w is not None else np.array([])
     pre_v = pre_v[np.isfinite(pre_v)]
     if output == "volume_dryup":
-        if pre_v.size == 0 or float(np.mean(pre_v)) <= _EPS:
+        if pre_v.size == 0 or float(np.mean(pre_v) <= _EPS:
             return np.nan
         if pv.size == 0:
             return np.nan
-        return np.where(float(np.mean(pre_v)) != 0, float(np.mean(pv)) / float(np.mean(pre_v)), np.nan)
+        return float(np.mean(pv)) / float(np.mean(pre_v))
     pre_c = cv[pre_w] if pre_w is not None else np.array([])
     pre_c = pre_c[np.isfinite(pre_c)]
     if output == "rising_floor":
@@ -1087,13 +1087,13 @@ def _consolidation_event(
         min_post = float(np.min(pc_fin))
         if not np.isfinite(min_pre) or min_pre <= _EPS:
             return np.nan
-        return np.where(min_pre != 0, (min_post - min_pre) / min_pre, np.nan)
+        return (min_post - min_pre) / min_pre
     if output == "breakout_readiness":
         start = float(pc_fin[0])
         end = float(pc_fin[-1])
         if start <= _EPS:
             return np.nan
-        move = np.where(start - 1.0 != 0, end / start - 1.0, np.nan)
+        move = end / start - 1.0
         sign = 1.0 if move > 0 else (-1.0 if move < 0 else 0.0)
         return sign * tightness
     raise ValueError(f"unknown output {output!r}")
@@ -1185,9 +1185,9 @@ def _response_curve(
         return None
     pc = cv[pw]
     if curve == "price":
-        return np.where(e_price - 1.0 != 0, pc / e_price - 1.0, np.nan)
+        return pc / e_price - 1.0
     if curve == "drawdown":
-        y = np.where(e_price - 1.0 != 0, pc / e_price - 1.0, np.nan)
+        y = pc / e_price - 1.0
         run = np.minimum.accumulate(y)
         return np.minimum(run, 0.0)
     if curve == "volatility":
@@ -1336,14 +1336,14 @@ def _resilience_fit_event(
         return _ols_slope(a, np.arange(len(a), dtype=float))
     resid = a - a_inf
     usable = resid > _EPS
-    if int(usable.sum()) < 3:
+    if int(usable.sum() < 3:
         return np.nan
     k = np.arange(len(a), dtype=float)[usable]
     log_res = np.log(resid[usable])
     slope_fit = _ols_slope(log_res, k)
     if not np.isfinite(slope_fit) or slope_fit >= 0.0:
         return np.nan
-    tau = -1.0 / slope_fit if slope_fit != 0 else np.nan
+    tau = -1.0 / slope_fit
     if output == "half_life":
         return tau * np.log(2.0)
     if output == "r2":
@@ -1357,7 +1357,7 @@ def _liquidity_resilience_day(
 ) -> float:
     r = _intraday_returns(cv, times)
     fin = np.isfinite(r)
-    if int(fin.sum()) < 3:
+    if int(fin.sum() < 3:
         return np.nan
     session_std = float(np.std(r[fin], ddof=1))
     if not np.isfinite(session_std) or session_std <= _EPS:

@@ -106,7 +106,7 @@ class TSAbsEntropyPolarsNative(SeriesOperator):
                 continue
 
             hist, _ = np.histogram(window_data, bins=bins)
-            probs = (hist[hist > 0]) / (hist.sum()) if (hist.sum()) != 0 else np.nan
+            probs = hist[hist > 0] / hist.sum()
             result.iloc[i] = -np.sum(probs * np.log2(probs))
 
         return result
@@ -144,7 +144,7 @@ class TSAbsEntropyNatsPolarsNative(SeriesOperator):
                 continue
 
             hist, _ = np.histogram(window_data, bins=bins)
-            probs = (hist[hist > 0]) / (hist.sum()) if (hist.sum()) != 0 else np.nan
+            probs = hist[hist > 0] / hist.sum()
             result.iloc[i] = -np.sum(probs * np.log(probs))
 
         return result
@@ -182,7 +182,7 @@ class TSAbsEntropyNormalizedPolarsNative(SeriesOperator):
                 continue
 
             hist, _ = np.histogram(window_data, bins=bins)
-            probs = (hist[hist > 0]) / (hist.sum()) if (hist.sum()) != 0 else np.nan
+            probs = hist[hist > 0] / hist.sum()
             entropy = -np.sum(probs * np.log2(probs))
             result.iloc[i] = entropy / max_entropy if max_entropy > 0 else 0.0
 
@@ -779,7 +779,7 @@ class TSBestLagCorrExcessPolarsNative(SeriesOperator):
                 if pd.notna(lagged_corr) and abs(lagged_corr) > abs(best_corr):
                     best_corr = lagged_corr
             
-            result.iloc[i] = best_corr - corr_0 if pd.notna(corr_0) else np.nan
+            result.iloc[i] = best_corr - corr_0
         
         return result
 
@@ -856,11 +856,11 @@ class TSBetaBreakScorePolarsNative(SeriesOperator):
         # Beta = cov(x, y) / var(y)
         short_cov = x.rolling(short_window).cov(y)
         short_var = y.rolling(short_window).var()
-        short_beta = (short_cov) / short_var if short_var != 0 else np.nan
+        short_beta = short_cov / short_var
         
         long_cov = x.rolling(long_window).cov(y)
         long_var = y.rolling(long_window).var()
-        long_beta = (long_cov) / long_var if long_var != 0 else np.nan
+        long_beta = long_cov / long_var
         
         return short_beta - long_beta
 
@@ -1105,7 +1105,7 @@ class TSChatterjeeXiPolarsNative(SeriesOperator):
             # Compute xi
             n = len(y_ranks)
             rank_diffs = np.abs(np.diff(y_ranks.values))
-            xi = np.where((n**2 - 1) if n > 1 else np.nan != 0, 1 - (3 * np.sum(rank_diffs)) / (n**2 - 1) if n > 1 else np.nan, np.nan)
+            xi = 1 - (3 * np.sum(rank_diffs)) / (n**2 - 1) if n > 1 else np.nan
             
             result.iloc[i] = xi
         
@@ -1614,7 +1614,7 @@ class TSCrossingSpeedPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
         crossings = ((feature > threshold) != (feature.shift(1) > threshold)).astype(int)
-        return np.where(window != 0, (crossings.rolling(window).sum()) / (window), np.nan)
+        return crossings.rolling(window).sum() / window
 
 
 # ============================================================================
@@ -1643,7 +1643,7 @@ class TSCumulativeDeviationScorePolarsNative(SeriesOperator):
         cum_dev = deviation.rolling(window).sum()
         volatility = feature.rolling(window).std()
         
-        return np.where(volatility.replace(0, np.nan) != 0, (cum_dev) / (volatility.replace(0, np.nan)), np.nan)
+        return cum_dev / volatility.replace(0, np.nan)
 
 
 @register_operator(name="ts_cusum_pressure", canonical="ts_cusum_pressure", backend="polars")
@@ -1914,7 +1914,7 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, **kwargs):
         rolling_max = feature.rolling(window).max()
-        return np.where(rolling_max.replace(0, np.nan) != 0, ((feature - rolling_max)) / (rolling_max.replace(0, np.nan)), np.nan)
+        return (feature - rolling_max) / rolling_max.replace(0, np.nan)
 
 
 @register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars")
@@ -1935,7 +1935,7 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, **kwargs):
         rolling_min = feature.rolling(window).min()
-        return np.where(rolling_min.replace(0, np.nan) != 0, ((feature - rolling_min)) / (rolling_min.replace(0, np.nan)), np.nan)
+        return (feature - rolling_min) / rolling_min.replace(0, np.nan)
 
 
 # ============================================================================
@@ -2167,7 +2167,7 @@ class TSEffectiveTurningRatePolarsNative(SeriesOperator):
         
         # Turning point = sign change in first derivative with magnitude > threshold
         turns = ((diff1.shift(1) * diff1 < 0) & (diff1.abs() > threshold)).astype(int)
-        return np.where(window != 0, (turns.rolling(window).sum()) / (window), np.nan)
+        return turns.rolling(window).sum() / window
 
 
 # ============================================================================
@@ -2203,7 +2203,7 @@ class TSEndpointDeviationPolarsNative(SeriesOperator):
                 result.iloc[i] = np.nan
                 continue
             
-            endpoint_avg = ((window_data.iloc[0] + window_data.iloc[-1])) / 2 if 2 != 0 else np.nan
+            endpoint_avg = (window_data.iloc[0] + window_data.iloc[-1]) / 2
             result.iloc[i] = feature.iloc[i] - endpoint_avg
         
         return result
@@ -2233,7 +2233,7 @@ class TSEnergyBreakScorePolarsNative(SeriesOperator):
         short_energy = energy.rolling(short_window).mean()
         long_energy = energy.rolling(long_window).mean()
         
-        return np.where(long_energy.replace(0, np.nan) != 0, ((short_energy - long_energy)) / (long_energy.replace(0, np.nan)), np.nan)
+        return (short_energy - long_energy) / long_energy.replace(0, np.nan)
 
 
 # ============================================================================
@@ -2267,8 +2267,8 @@ class TSEnvelopeBoundaryDwellPolarsNative(SeriesOperator):
         
         # Distance to boundaries normalized by band width
         width = upper - lower
-        dist_to_upper = np.where(width.replace(0, np.nan) != 0, ((upper - feature)) / (width.replace(0, np.nan)), np.nan)
-        dist_to_lower = np.where(width.replace(0, np.nan) != 0, ((feature - lower)) / (width.replace(0, np.nan)), np.nan)
+        dist_to_upper = (upper - feature) / width.replace(0, np.nan)
+        dist_to_lower = (feature - lower) / width.replace(0, np.nan)
         
         # Count periods near boundaries
         near_boundary = ((dist_to_upper < boundary_threshold) | (dist_to_lower < boundary_threshold)).astype(int)
@@ -2322,7 +2322,7 @@ class TSEnvelopePressurePolarsNative(SeriesOperator):
         std = feature.rolling(window).std()
         
         # Position within bands: -1 (lower) to +1 (upper)
-        position = ((feature - mean)) / (num_std * std).replace(0, np.nan) if (num_std * std).replace(0, np.nan) > 1e-10 else np.nan
+        position = (feature - mean) / (num_std * std).replace(0, np.nan)
         
         # Momentum
         momentum = feature.pct_change()
@@ -2380,7 +2380,7 @@ class TSEventSpacingMeanPolarsNative(SeriesOperator):
         event_count = cond_series.rolling(window).sum()
         
         # Mean spacing = window / (event_count - 1) for events within window
-        return np.where((event_count - 1).replace(0, np.nan) != 0, (window) / ((event_count - 1).replace(0, np.nan)), np.nan)
+        return window / (event_count - 1).replace(0, np.nan)
 
 
 # ============================================================================
@@ -2434,7 +2434,7 @@ class TSExpectileBetaPolarsNative(SeriesOperator):
         # Placeholder: use regular rolling regression
         cov_xy = x.rolling(window).cov(y)
         var_y = y.rolling(window).var()
-        return np.where(var_y.replace(0, np.nan) != 0, (cov_xy) / (var_y.replace(0, np.nan)), np.nan)
+        return cov_xy / var_y.replace(0, np.nan)
 
 
 @register_operator(name="ts_expectile_beta_spread", canonical="ts_expectile_beta_spread", backend="polars")
@@ -2485,7 +2485,7 @@ class TSExpectileRegressionCoeffPolarsNative(SeriesOperator):
         # Placeholder: OLS
         cov_xy = x.rolling(window).cov(y)
         var_x = x.rolling(window).var()
-        return np.where(var_x.replace(0, np.nan) != 0, (cov_xy) / (var_x.replace(0, np.nan)), np.nan)
+        return cov_xy / var_x.replace(0, np.nan)
 
 
 @register_operator(name="ts_expectile_regression_coeff_prior", canonical="ts_expectile_regression_coeff_prior", backend="polars")
@@ -2509,7 +2509,7 @@ class TSExpectileRegressionCoeffPriorPolarsNative(SeriesOperator):
         # Shift result by 1 for PIT safety
         cov_xy = x.rolling(window).cov(y).shift(1)
         var_x = x.rolling(window).var().shift(1)
-        return np.where(var_x.replace(0, np.nan) != 0, (cov_xy) / (var_x.replace(0, np.nan)), np.nan)
+        return cov_xy / var_x.replace(0, np.nan)
 
 
 @register_operator(name="ts_expectile_regression_forecast_error", canonical="ts_expectile_regression_forecast_error", backend="polars")
@@ -2533,7 +2533,7 @@ class TSExpectileRegressionForecastErrorPolarsNative(SeriesOperator):
         # Compute coefficient from prior window
         cov_xy = x.rolling(window).cov(y).shift(1)
         var_x = x.rolling(window).var().shift(1)
-        coeff = np.where(var_x.replace(0, np.nan) != 0, (cov_xy) / (var_x.replace(0, np.nan)), np.nan)
+        coeff = cov_xy / var_x.replace(0, np.nan)
         
         # Forecast error = actual - predicted
         predicted = coeff * x
@@ -2848,7 +2848,7 @@ class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
             
             # Normalize squared values to sum to 1 (like eigenvalue distribution)
             squared = window_data.values ** 2
-            probs = (squared) / (squared.sum()) if (squared.sum()) != 0 else np.nan
+            probs = (squared) / (squared.sum() if (squared.sum() != 0 else np.nan
             probs = probs[probs > 0]
             
             # Entropy-based effective rank

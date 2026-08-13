@@ -136,7 +136,7 @@ def _signal_consistency(history, periods, min_periods):
     if len(usable) < min_periods:
         return np.nan
     current = usable[-1]
-    return np.where(len(usable)) != 0, float(sum(sign == current for sign in usable) / len(usable)), np.nan)
+    return float(sum(sign == current for sign in usable) / len(usable))
 
 
 def fiscal_sign_consistency(signal, period_id, periods=8, min_periods=3, require_consecutive=True, revision_policy="latest_available"):
@@ -231,7 +231,7 @@ def _surprise_calc(history, seasonal_lag, lookback, min_history):
         return np.nan
     std = float(np.std(np.asarray(surprises), ddof=1)) if len(surprises) > 1 else np.nan
     if np.isfinite(std) and std > _EPS:
-        return np.where(std) != 0, float((current - previous) / std), np.nan)
+        return float((current - previous) / std)
     return np.nan
 
 

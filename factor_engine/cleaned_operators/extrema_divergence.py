@@ -216,8 +216,8 @@ def _divergence_series(
             if q_pair is None:
                 continue
             q1, q2 = q_pair
-            dx = (x[p2] - x[p1]) / sx if sx != 0 else np.nan
-            dy = (y[q2] - y[q1]) / sy if sy != 0 else np.nan
+            dx = (x[p2] - x[p1]) / sx
+            dy = (y[q2] - y[q1]) / sy
             out[r, c] = (dx - dy) / (abs(dx) + abs(dy) + _EPS)
     return out
 
@@ -248,7 +248,7 @@ def _confirmation_rate_series(
             if not idx:
                 continue
             matched = sum(1 for p in idx if _match_y(ext_y, sgn, p, r, tol, conf) is not None)
-            out[r, c] = np.where(len(idx) != 0, matched / len(idx), np.nan)
+            out[r, c] = matched / len(idx)
     return out
 
 

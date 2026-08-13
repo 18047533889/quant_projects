@@ -172,7 +172,7 @@ def _spectrum_stats(
     total = float(s2.sum())
     if total <= _EPS:
         return None
-    p = s2 / total if total != 0 else np.nan
+    p = s2 / total
     mode_share = float(p[0])
     p_pos = p[p > 0.0]
     eff_rank = float(np.exp(-np.sum(p_pos * np.log(p_pos))))
@@ -183,14 +183,14 @@ def _spectrum_stats(
     s0 = float(S[0])
     s1 = float(S[1]) if S.shape[0] > 1 else 0.0
     rel_gap = (s0 - s1) / max(s0, _EPS) if s0 > _EPS else 0.0
-    spectral_gap = np.where(total) != 0, float((s2[0] - s2[1]) / total), np.nan)
+    spectral_gap = float((s2[0] - s2[1]) / total)
     u1 = U[:, 0]
     ipr1 = float(np.sum(u1 * u1 * u1 * u1))
     # P1 (round 7): normalize the first-mode IPR the same way mode 2 already is
     # — raw Σu^4 has a 1/N baseline that varies with group size; the [0,1]
     # standardized form keeps baselines comparable across group sizes.
     if n_members > 1:
-        localization = np.where((n_members - 1.0) != 0, (n_members * ipr1 - 1.0) / (n_members - 1.0), np.nan)
+        localization = (n_members * ipr1 - 1.0) / (n_members - 1.0)
     else:
         localization = np.nan
     if rel_gap < eigen_gap:
@@ -198,7 +198,7 @@ def _spectrum_stats(
     u2 = U[:, 1]
     ipr2 = float(np.sum(u2 * u2 * u2 * u2))
     if n_members > 1:
-        second_loc = np.where((n_members - 1.0) != 0, (n_members * ipr2 - 1.0) / (n_members - 1.0), np.nan)
+        second_loc = (n_members * ipr2 - 1.0) / (n_members - 1.0)
     else:
         second_loc = np.nan
     if rel_gap < eigen_gap:
@@ -287,7 +287,7 @@ def _group_spectrum_series(
             scale = np.where(mad > _EPS, mad, np.std(Zv, axis=0))
             if np.any(~np.isfinite(scale)) or np.any(scale <= _EPS):
                 continue
-            Zv = (Zv - med) / scale if scale != 0 else np.nan
+            Zv = (Zv - med) / scale
             stats = _spectrum_stats(Zv, eigen_gap=eigen_gap)
             if stats is None:
                 continue
@@ -330,7 +330,7 @@ def _group_membership_series(feats: np.ndarray, group: np.ndarray) -> tuple[np.n
             finite_members = np.all(np.isfinite(Z), axis=1)
             valid = int(finite_members.sum())
             cnt[t, idx] = valid
-            cov[t, idx] = np.where(idx.size != 0, valid / idx.size, np.nan)
+            cov[t, idx] = valid / idx.size
     return cnt, cov
 
 

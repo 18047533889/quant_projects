@@ -80,7 +80,7 @@ def aggregate_holder_rows(
 
     R24-019..022: the ratio unit is taken ONLY from the declared source
     contract (``ratio_unit``) — the data-value heuristic
-    (``max(abs(ratio)) > 1 → /100``) is deleted.  A value outside the declared
+    (``max(abs(ratio) > 1 → /100``) is deleted.  A value outside the declared
     unit's bounds raises a source-contract error instead of scaling the whole
     series.
 

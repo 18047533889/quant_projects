@@ -129,7 +129,7 @@ def _vwap_path_pct_common(close_v, amt_v, vol_v, degree: int, coeff_idx: int) ->
     if not np.isfinite(first) or first <= _EPS:
         return np.nan
     cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
-    pct = np.where(first - 1.0 != 0, cv / first - 1.0, np.nan)
+    pct = cv / first - 1.0
     return _path_slope(pct, degree, coeff_idx)
 
 
@@ -178,7 +178,7 @@ def _vwap_excursion(close_v, amt_v, vol_v, side: str) -> float:
     ok = np.isfinite(cv) & (cv > _EPS)
     if ok.sum() == 0:
         return np.nan
-    dev = np.where(cv[ok] - 1.0 != 0, c[ok] / cv[ok] - 1.0, np.nan)
+    dev = c[ok] / cv[ok] - 1.0
     return float(np.max(dev)) if side == "max" else float(np.min(dev))
 
 
@@ -318,12 +318,12 @@ def _vwap_reversion_speed(close_v, amt_v, vol_v) -> float:
     c = close_v[valid]
     cv = _cum_vwap(c, amt_v[valid], vol_v[valid])
     ok = np.isfinite(cv)
-    dev = np.where(cv[ok] - 1.0) != 0, (c[ok] / cv[ok] - 1.0), np.nan)
+    dev = (c[ok] / cv[ok] - 1.0)
     d = dev[1:]
     dprev = dev[:-1]
     if len(d) < 3 or np.std(dprev) <= _EPS:
         return np.nan
-    b = float(np.cov(d, dprev)[0, 1] / np.var(dprev)) if np.var(dprev)) > 1e-10 else np.nan
+    b = float(np.cov(d, dprev)[0, 1] / np.var(dprev))
     return b
 
 
@@ -354,10 +354,10 @@ def _max_drawdown(close_v: np.ndarray, side: str) -> float:
     with np_errstate():
         if side == "down":
             running = np.maximum.accumulate(finite)
-            path = np.where(running - 1.0 != 0, finite / running - 1.0, np.nan)
+            path = finite / running - 1.0
             return float(np.min(path))
         running = np.minimum.accumulate(finite)
-        path = np.where(running - 1.0 != 0, finite / running - 1.0, np.nan)
+        path = finite / running - 1.0
         return float(np.max(path))
 
 
@@ -410,7 +410,7 @@ def _drawdown_locate(finite: np.ndarray) -> tuple[int, int]:
     """
     running = np.maximum.accumulate(finite)
     with np.errstate(divide="ignore", invalid="ignore"):
-        dd = np.where(running - 1.0 != 0, finite / running - 1.0, np.nan)
+        dd = finite / running - 1.0
     trough_idx = int(np.argmin(dd))
     peak_idx = int(np.argmax(finite[: trough_idx + 1]))
     return trough_idx, peak_idx
@@ -423,7 +423,7 @@ def _drawdown_depth(close_v: np.ndarray) -> float:
     trough_idx, peak_idx = _drawdown_locate(finite)
     if finite[peak_idx] <= _EPS:
         return np.nan
-    return np.where(finite[peak_idx] - 1.0) != 0, float(finite[trough_idx] / finite[peak_idx] - 1.0), np.nan)
+    return float(finite[trough_idx] / finite[peak_idx] - 1.0)
 
 
 def _drawdown_duration(close_v: np.ndarray) -> float:

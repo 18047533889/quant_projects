@@ -1266,7 +1266,7 @@ class TSDecayLinearPolarsNative(SeriesOperator):
                 return None
             n = len(s)
             weights = np.arange(1, n + 1, dtype=np.float64)
-            weights = (weights) / (weights.sum()) if (weights.sum()) != 0 else np.nan
+            weights = (weights) / (weights.sum() if (weights.sum() != 0 else np.nan
             return (s.to_numpy() * weights).sum()
 
         return (
@@ -1337,7 +1337,7 @@ class TSDecayExpWindowPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, alpha=None, **kwargs):
         if alpha is None:
-            alpha = (2.0) / ((window + 1)) if ((window + 1)) != 0 else np.nan
+            alpha = (2.0) / ((window + 1) if ((window + 1) != 0 else np.nan
 
         return (
             feature.to_frame()
@@ -1680,7 +1680,10 @@ class TSDistanceToHighPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_max(window).alias("_max")
             ])
             .select([
-                pl.when(pl.col("_max" != 0).then(pl.col("_max") - pl.col(feature.name)) / pl.col("_max").otherwise(None)).alias("result")
+                pl.when(pl.col("_max") != 0)
+                .then((pl.col("_max") - pl.col(feature.name)) / pl.col("_max"))
+                .otherwise(None)
+                .alias("result")
             ])
             .collect()["result"]
         )
@@ -1709,7 +1712,10 @@ class TSDistanceToLowPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_min")
             ])
             .select([
-                pl.when(pl.col(feature.name != 0).then(pl.col(feature.name) - pl.col("_min")) / pl.col(feature.name).otherwise(None)).alias("result")
+                pl.when(pl.col(feature.name) != 0)
+                .then((pl.col(feature.name) - pl.col("_min")) / pl.col(feature.name))
+                .otherwise(None)
+                .alias("result")
             ])
             .collect()["result"]
         )
@@ -2267,7 +2273,7 @@ class TSRegressionR2PolarsNative(SeriesOperator):
             y_pred = slope * x_clean + intercept
             ss_res = ((y_clean - y_pred) ** 2).sum()
 
-            return np.where(ss_tot) != 0, (1 - (ss_res) / (ss_tot)), np.nan)
+            return np.where(ss_tot != 0, (1 - (ss_res) / (ss_tot)), np.nan)
 
         return (
             feature.to_frame()
@@ -2410,7 +2416,7 @@ class TSStalenessPolarsNative(SeriesOperator):
             if len(s) == 0:
                 return None
             n_unique = s.n_unique()
-            return np.where(len(s)) != 0, (1.0 - (n_unique) / (len(s))), np.nan)
+            return np.where(len(s) != 0, (1.0 - (n_unique) / (len(s))), np.nan)
 
         return (
             feature.to_frame()
@@ -2447,7 +2453,7 @@ class TSSignPersistencePolarsNative(SeriesOperator):
             signs = np.sign(s.to_numpy())
             changes = np.diff(signs) != 0
             n_streaks = changes.sum() + 1
-            return np.where(n_streaks if n_streaks > 0 else len(s) != 0, (len(s)) / (n_streaks if n_streaks > 0 else len(s)), np.nan)
+            return np.where((n_streaks if n_streaks > 0 else len(s) != 0, (len(s)) / (n_streaks if n_streaks > 0 else len(s)), np.nan)
 
         return (
             feature.to_frame()
@@ -2483,7 +2489,7 @@ class TSEwmCorrPolarsNative(SeriesOperator):
 
     def _calculate_series(self, x, y, span, **kwargs):
         df = pl.DataFrame({"x": x, "y": y})
-        alpha = (2.0) / ((span + 1)) if ((span + 1)) != 0 else np.nan
+        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
 
         return (
             df.lazy()
@@ -2501,7 +2507,9 @@ class TSEwmCorrPolarsNative(SeriesOperator):
                 (pl.col("y_dev") ** 2).ewm_mean(alpha=alpha).alias("var_y")
             ])
             .select([
-                pl.when((pl.col("var_x" != 0).then(pl.col("cov") / (pl.col("var_x").otherwise(None).sqrt() * pl.col("var_y").sqrt()))
+                pl.when(pl.col("var_x") != 0)
+                .then(pl.col("cov") / (pl.col("var_x").sqrt() * pl.col("var_y").sqrt()))
+                .otherwise(None)
                 .alias("result")
             ])
             .collect()["result"]
@@ -2525,7 +2533,7 @@ class TSEwmCovPolarsNative(SeriesOperator):
 
     def _calculate_series(self, x, y, span, **kwargs):
         df = pl.DataFrame({"x": x, "y": y})
-        alpha = (2.0) / ((span + 1)) if ((span + 1)) != 0 else np.nan
+        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
 
         return (
             df.lazy()
@@ -2574,8 +2582,8 @@ class TSKamaPolarsNative(SeriesOperator):
             er = change / volatility if volatility != 0 else 0
 
             # Smoothing constant
-            fast_sc = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-            slow_sc = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
+            fast_sc = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+            slow_sc = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
             sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
             # KAMA calculation (simplified - just return last value weighted)
@@ -2601,8 +2609,8 @@ class TSKamaPolarsNative(SeriesOperator):
                     er = change / volatility if volatility != 0 else 0
 
                     # Smoothing constant
-                    fast_sc = (2.0) / ((fast + 1)) if ((fast + 1)) != 0 else np.nan
-                    slow_sc = (2.0) / ((slow + 1)) if ((slow + 1)) != 0 else np.nan
+                    fast_sc = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
+                    slow_sc = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
                     sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
                     kama = kama + sc * (feature[i] - kama)
@@ -2843,7 +2851,9 @@ class TSSwingAmplitudePctPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_low")
             ])
             .select([
-                pl.when(pl.col(feature.name != 0).then(pl.col("_high") - pl.col("_low")) / pl.col(feature.name).otherwise(None))
+                pl.when(pl.col(feature.name) != 0)
+                .then((pl.col("_high") - pl.col("_low")) / pl.col(feature.name))
+                .otherwise(None)
                 .alias("result")
             ])
             .collect()["result"]
@@ -2991,7 +3001,7 @@ class TSScoreRankWeightedMeanPolarsNative(SeriesOperator):
             # Rank the scores
             ranks = score_s.rank()
             weights = ranks.to_numpy()
-            weights = (weights) / (weights.sum()) if (weights.sum()) != 0 else np.nan
+            weights = (weights) / (weights.sum() if (weights.sum() != 0 else np.nan
             return (feat_s.to_numpy() * weights).sum()
 
         df = pl.DataFrame({"feat": feature, "score": score})
@@ -3067,7 +3077,9 @@ class TSRobustZscorePriorPolarsNative(SeriesOperator):
                 pl.col(feature.name).shift(1).rolling_std(window).alias("_std")
             ])
             .select([
-                pl.when(pl.col("_std" != 0).then(pl.col(feature.name) - pl.col("_mean")) / pl.col("_std").otherwise(None))
+                pl.when(pl.col("_std") != 0)
+                .then((pl.col(feature.name) - pl.col("_mean")) / pl.col("_std"))
+                .otherwise(None)
                 .alias("result")
             ])
             .collect()["result"]
@@ -3250,7 +3262,7 @@ class TSRegressionTstatPolarsNative(SeriesOperator):
             if mse is None or denominator == 0:
                 return None
 
-            se_slope = np.where(denominator) != 0, (np.sqrt(mse) / (denominator)), np.nan)
+            se_slope = np.where(denominator != 0, (np.sqrt(mse) / (denominator)), np.nan)
             return np.where(se_slope if se_slope != 0 else None != 0, (slope) / (se_slope if se_slope != 0 else None), np.nan)
 
         return (
@@ -3441,7 +3453,10 @@ class TSTailRatioPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_quantile(lower, window_size=window).alias("_lower")
             ])
             .select([
-                pl.when(pl.col("_lower" != 0).then(pl.col("_upper") / pl.col("_lower").otherwise(None).abs()).alias("result")
+                pl.when(pl.col("_lower") != 0)
+                .then(pl.col("_upper") / pl.col("_lower").abs())
+                .otherwise(None)
+                .alias("result")
             ])
             .collect()["result"]
         )
@@ -3627,9 +3642,9 @@ class TSDistanceCorrPolarsNative(SeriesOperator):
                 dx_centered = dx - dx.mean(axis=0) - dx.mean(axis=1)[:, np.newaxis] + dx.mean()
                 dy_centered = dy - dy.mean(axis=0) - dy.mean(axis=1)[:, np.newaxis] + dy.mean()
 
-                dcov_xy = np.where((n * n)) != 0, (np.sqrt((dx_centered * dy_centered).sum()) / ((n * n))), np.nan)
-                dcov_xx = np.where((n * n)) != 0, (np.sqrt((dx_centered * dx_centered).sum()) / ((n * n))), np.nan)
-                dcov_yy = np.where((n * n)) != 0, (np.sqrt((dy_centered * dy_centered).sum()) / ((n * n))), np.nan)
+                dcov_xy = np.where((n * n) != 0, (np.sqrt((dx_centered * dy_centered).sum()) / ((n * n))), np.nan)
+                dcov_xx = np.where((n * n) != 0, (np.sqrt((dx_centered * dx_centered).sum()) / ((n * n))), np.nan)
+                dcov_yy = np.where((n * n) != 0, (np.sqrt((dy_centered * dy_centered).sum()) / ((n * n))), np.nan)
 
                 if dcov_xx * dcov_yy == 0:
                     return 0.0
@@ -3687,7 +3702,7 @@ class TSDistanceCovPolarsNative(SeriesOperator):
                 dx_centered = dx - dx.mean(axis=0) - dx.mean(axis=1)[:, np.newaxis] + dx.mean()
                 dy_centered = dy - dy.mean(axis=0) - dy.mean(axis=1)[:, np.newaxis] + dy.mean()
 
-                return np.where((n * n)) != 0, (np.sqrt((dx_centered * dy_centered).sum()) / ((n * n))), np.nan)
+                return np.where((n * n) != 0, (np.sqrt((dx_centered * dy_centered).sum()) / ((n * n))), np.nan)
             except:
                 return None
 
@@ -3834,7 +3849,7 @@ class TSRobustEmaPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, span, clip_std=3.0, **kwargs):
-        alpha = (2.0) / ((span + 1)) if ((span + 1)) != 0 else np.nan
+        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
 
         return (
             feature.to_frame()
@@ -4062,7 +4077,7 @@ class TSExpectilePolarsNative(SeriesOperator):
             for _ in range(10):  # Max iterations
                 residuals = arr - mu
                 weights = np.where(residuals > 0, tau, 1 - tau)
-                new_mu = ((weights * arr).sum()) / (weights.sum()) if (weights.sum()) != 0 else np.nan
+                new_mu = ((weights * arr).sum()) / (weights.sum() if (weights.sum() != 0 else np.nan
                 if abs(new_mu - mu) < 1e-6:
                     break
                 mu = new_mu
@@ -4165,7 +4180,9 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_support")
             ])
             .select([
-                pl.when(pl.col(feature.name != 0).then(pl.col(feature.name) - pl.col("_support")) / pl.col(feature.name).otherwise(None))
+                pl.when(pl.col(feature.name) != 0)
+                .then((pl.col(feature.name) - pl.col("_support")) / pl.col(feature.name))
+                .otherwise(None)
                 .alias("result")
             ])
             .collect()["result"]
@@ -4195,7 +4212,9 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_max(window).alias("_resistance")
             ])
             .select([
-                pl.when(pl.col(feature.name != 0).then(pl.col("_resistance") - pl.col(feature.name)) / pl.col(feature.name).otherwise(None))
+                pl.when(pl.col(feature.name) != 0)
+                .then((pl.col("_resistance") - pl.col(feature.name)) / pl.col(feature.name))
+                .otherwise(None)
                 .alias("result")
             ])
             .collect()["result"]

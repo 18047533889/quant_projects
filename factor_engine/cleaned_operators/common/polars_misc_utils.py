@@ -98,7 +98,7 @@ def ts_sma_cn(x, n, m):
     m_i = _pi(m, "m")
     if m_i > n_i:
         raise ValueError("sma m must satisfy 1 <= m <= n")
-    alpha = np.where(float(n_i) != 0, float(m_i) / float(n_i), np.nan)
+    alpha = float(m_i) / float(n_i)
     cols = _cols(x)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -129,7 +129,7 @@ def _rolling_sign_ratio_1d(x: np.ndarray, w: int, sign: int, threshold: float, m
             hits = float(np.sum(finite < threshold))
         else:
             hits = float(np.sum(np.abs(finite) <= threshold))
-        out[t] = np.where(float(finite.size) != 0, hits / float(finite.size), np.nan)
+        out[t] = hits / float(finite.size)
     return out
 
 

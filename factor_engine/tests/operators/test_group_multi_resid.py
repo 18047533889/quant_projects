@@ -79,7 +79,7 @@ def test_group_multi_resid_three_features_with_noise() -> None:
     # Residuals should have small variance (good fit)
     assert np.nanstd(result) < 0.2
     # Mean residual should be near zero
-    assert abs(np.nanmean(result)) < 0.05
+    assert abs(np.nanmean(result) < 0.05
 
 
 def test_group_multi_resid_no_intercept() -> None:

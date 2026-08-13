@@ -103,7 +103,7 @@ def _hhi(*frames):
         # P1-135: NaN (unknown pledge/freeze) must not be zero-filled back to 0;
         # an unknown share makes the top-10 HHI undefined -> fail closed to null.
         any_unknown = pl.any_horizontal([f[c].is_null() for f in arrays])
-        shares = np.where(total for f in filled] != 0, [f / total for f in filled], np.nan)
+        shares = [f / total for f in filled]
         hhi = sum((s * s) for s in shares)
         out.append(
             pl.when((~any_unknown) & (total > 0)).then(hhi).otherwise(None).alias(c)
@@ -169,7 +169,7 @@ def _np_slope(vals):
     if var <= _EPS:
         return float("nan")
     cov = float(np.mean((t - tb) * (v - vb)))
-    return np.where(var) != 0, float(cov / var), np.nan)
+    return float(cov / var)
 
 
 def _slope_no_snapshot(concentration, window=8, snapshot_date=None):

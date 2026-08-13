@@ -1260,7 +1260,7 @@ class FinDebtServiceCoverageProxyPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                pl.when((pl.col("int" != 0).then(pl.col("ocf") / (pl.col("int").otherwise(None) + pl.col("repay"))).alias("result")
+                (pl.col("ocf") / (pl.col("int") + pl.col("repay"))).alias("result")
             ])
             .collect()
             .to_series()
@@ -1316,7 +1316,7 @@ class FinCashBurnRunwayPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                pl.when(pl.col("ocf" != 0).then(pl.col("cash") / pl.col("ocf").otherwise(None).abs().clip(lower_bound=1e-9)).alias("result")
+                (pl.col("cash") / pl.col("ocf").abs().clip(lower_bound=1e-9)).alias("result")
             ])
             .collect()
             .to_series()
@@ -1488,7 +1488,7 @@ class FinAverageBalancePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                pl.when(2.0 != 0).then(pl.col(value.name) + pl.col(value.name).shift(periods)) / 2.0).otherwise(None)
+                ((pl.col(value.name) + pl.col(value.name).shift(periods)) / 2.0)
                 .alias(value.name)
             ])
             .collect()
@@ -1514,7 +1514,7 @@ class FinLogChangePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)).log()
+                (pl.col(value.name) / pl.col(value.name).shift(periods)).log()
                 .alias(value.name)
             ])
             .collect()
@@ -1815,7 +1815,7 @@ class FinTrendTstatPolarsNative(SeriesOperator):
                 pl.corr("idx", value.name).alias("corr"),
             ])
             .select([
-                pl.when((1 - pl.col("corr" != 0).then(pl.col("corr") * (window - 2).sqrt() / (1 - pl.col("corr").otherwise(None).pow(2)).sqrt())
+                (pl.col("corr") * (window - 2) ** 0.5 / (1 - pl.col("corr").pow(2)).sqrt())
                 .alias("result")
             ])
             .collect()

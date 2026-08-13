@@ -192,7 +192,7 @@ def _abs_concentration_fn(chunk, mp):
     total = float(abs_values.sum())
     if total <= 0.0 or not np.isfinite(total):
         return np.nan
-    shares = abs_values / total if total != 0 else np.nan
+    shares = abs_values / total
     return float(np.sum(shares * shares))
 
 
@@ -214,10 +214,10 @@ def _abs_entropy_fn(chunk, mp, normalize):
     total = float(abs_values.sum())
     if total <= 0.0 or not np.isfinite(total):
         return np.nan
-    shares = abs_values / total if total != 0 else np.nan
+    shares = abs_values / total
     entropy = float(-np.sum(shares * np.log(shares + 1e-300)))
     if normalize and shares.size > 1:
-        entropy = np.where(np.log(shares.size) != 0, entropy / np.log(shares.size), np.nan)
+        entropy = entropy / np.log(shares.size)
     return entropy
 
 
@@ -332,7 +332,7 @@ def ts_time_under_water(x, window, **kwargs):
                     peak = chunk[k]
                 running_peak[k] = peak
             under = np.sum((chunk < running_peak) & np.isfinite(chunk))
-            out[t, i] = np.where(float(valid.size) != 0, float(under) / float(valid.size), np.nan)
+            out[t, i] = float(under) / float(valid.size)
     return _make(x, cols, out)
 
 
@@ -369,7 +369,7 @@ def _circular_block_permute(arr, block, rng):
     b = max(1, min(int(block), n))
     off = int(rng.integers(0, n))
     rotated = np.concatenate([arr[off:], arr[:off]])
-    blocks = np.where(b)))] != 0, [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))], np.nan)
+    blocks = [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))]
     order = list(range(len(blocks)))
     rng.shuffle(order)
     return np.concatenate([blocks[i] for i in order])[:n]
@@ -474,7 +474,7 @@ def _price_delay(xv, row, window, max_lag):
     rss_full = min(errors)
     if rss_restricted <= 0.0 or rss_full <= 0.0:
         return np.nan
-    return np.where(rss_restricted) != 0, max(0.0, 1.0 - rss_full / rss_restricted), np.nan)
+    return max(0.0, 1.0 - rss_full / rss_restricted)
 
 
 def _price_delay_model(stock, bench, end, window, max_lag, min_periods):
@@ -506,13 +506,13 @@ def _price_delay_model(stock, bench, end, window, max_lag, min_periods):
         return np.nan
     beta_r, *_ = np.linalg.lstsq(xr, yv, rcond=None)
     rss_r = float(np.sum((yv - xr @ beta_r) ** 2))
-    r2_r = 1.0 - rss_r / sst if sst != 0 else np.nan
+    r2_r = 1.0 - rss_r / sst
     beta_f, *_ = np.linalg.lstsq(xf, yv, rcond=None)
     rss_f = float(np.sum((yv - xf @ beta_f) ** 2))
-    r2_f = 1.0 - rss_f / sst if sst != 0 else np.nan
+    r2_f = 1.0 - rss_f / sst
     if r2_f <= 0.0:
         return np.nan
-    return np.where(r2_f) != 0, max(0.0, 1.0 - r2_r / r2_f), np.nan)
+    return max(0.0, 1.0 - r2_r / r2_f)
 
 
 def ts_price_delay(stock_return, benchmark_return, window, max_lag=5, min_periods=3):
@@ -658,7 +658,7 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
                 var_x = float(np.var(xs))
                 if var_x > 0 and np.isfinite(var_x):
                     cov = float(np.mean((xs - np.mean(xs)) * (ys - np.mean(ys))))
-                    out[t, i] = cov / var_x if var_x > 1e-10 else np.nan
+                    out[t, i] = cov / var_x
     return _make(y if kind in ("beta", "resid") else x, cols, out)
 
 

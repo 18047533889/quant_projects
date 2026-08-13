@@ -150,7 +150,7 @@ def pd_fiscal_pct_change(
             if denom <= _EPS:
                 continue
 
-            out[row, col] = np.where(denom) != 0, float((current_val - lag_val) / denom), np.nan)
+            out[row, col] = float((current_val - lag_val) / denom)
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 
@@ -340,7 +340,7 @@ def pd_fiscal_direction_consistency(
             # Get current direction and compute agreement
             current_direction = np.sign(changes[-1])
             agreement = sum(np.sign(c) == current_direction for c in changes)
-            out[row, col] = np.where(len(changes)) != 0, float(agreement / len(changes)), np.nan)
+            out[row, col] = float(agreement / len(changes))
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 

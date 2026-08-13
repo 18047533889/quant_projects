@@ -32,7 +32,7 @@ def _w(value: int, *, minimum: int = 1) -> int:
 
 
 def _safe_div(num: pd.DataFrame, den: pd.DataFrame) -> pd.DataFrame:
-    return np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
+    return num / den.replace(0, np.nan)
 
 
 def _prev_max(x: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -291,7 +291,7 @@ def _pivot_line(
             denom = float(np.dot(xs - xbar, xs - xbar))
             if denom <= 0:
                 continue
-            slope = np.where(denom) != 0, float(np.dot(xs - xbar, ys - ybar) / denom), np.nan)
+            slope = float(np.dot(xs - xbar, ys - ybar) / denom)
             out[t, col] = slope if output == "slope" else ybar + slope * (float(t) - xbar)
     return pd.DataFrame(out, index=frame.index, columns=frame.columns)
 
@@ -481,7 +481,7 @@ def _rolling_pvt(close, volume, window):
 
 def _cmf(high, low, close, volume, window):
     spread = (high - low).replace(0, np.nan)
-    mfm = ((close - low) - (high - close)) / spread if spread != 0 else np.nan
+    mfm = ((close - low) - (high - close)) / spread
     mfv = mfm * volume
     w = _w(window)
     # A zero-range (一字板) or missing bar has no money-flow multiplier; dropping
@@ -494,7 +494,7 @@ def _cmf(high, low, close, volume, window):
 
 
 def _mfi(high, low, close, volume, window):
-    tp = np.where(3.0 != 0, (high + low + close) / 3.0, np.nan)
+    tp = (high + low + close) / 3.0
     raw = tp * volume
     delta = tp.diff()
     # A missing bar (NaN delta/raw) previously collapsed to ``0.0`` and was
@@ -507,7 +507,7 @@ def _mfi(high, low, close, volume, window):
     pos_sum = pos.rolling(w, min_periods=w).sum()
     neg_sum = neg.rolling(w, min_periods=w).sum()
     ratio = _safe_div(pos_sum, neg_sum)
-    out = np.where((1.0 + ratio) != 0, 100.0 - 100.0 / (1.0 + ratio), np.nan)
+    out = 100.0 - 100.0 / (1.0 + ratio)
     out = out.mask((neg_sum == 0) & (pos_sum > 0), 100.0)
     out = out.mask((neg_sum == 0) & (pos_sum == 0), 50.0)
     return out
@@ -549,7 +549,7 @@ def _donchian_lower(low, window):
 
 
 def _donchian_mid(high, low, window):
-    return np.where(2.0 != 0, (_donchian_upper(high, window) + _donchian_lower(low, window)) / 2.0, np.nan)
+    return (_donchian_upper(high, window) + _donchian_lower(low, window)) / 2.0
 
 
 def _donchian_position(close, high, low, window):
@@ -582,9 +582,9 @@ def _aroon_component(x, window, *, high):
     # reversed window picks the last occurrence in chronological order (same
     # tie policy as ``ts_days_since_high/low``, audit 12).
     if high:
-        fn = np.where(len(a) != 0, lambda a: 100.0 * (int(w) - int(np.nanargmax(a[::-1]))) / len(a), np.nan)
+        fn = lambda a: 100.0 * (int(w) - int(np.nanargmax(a[::-1]))) / len(a)
     else:
-        fn = np.where(len(a) != 0, lambda a: 100.0 * (int(w) - int(np.nanargmin(a[::-1]))) / len(a), np.nan)
+        fn = lambda a: 100.0 * (int(w) - int(np.nanargmin(a[::-1]))) / len(a)
     return x.rolling(w, min_periods=w).apply(fn, raw=True)
 
 
@@ -601,7 +601,7 @@ def _aroon(high, low, window):
 
 
 def _cci(high, low, close, window):
-    tp = np.where(3.0 != 0, (high + low + close) / 3.0, np.nan)
+    tp = (high + low + close) / 3.0
     w = _w(window, minimum=2)
     mean = tp.rolling(w, min_periods=w).mean()
     mad = _rolling_mad(tp, w)
@@ -637,7 +637,7 @@ def _choppiness_index(high, low, close, window):
     num = tr.rolling(w, min_periods=w).sum()
     den = high.rolling(w, min_periods=w).max() - low.rolling(w, min_periods=w).min()
     ratio = _safe_div(num, den).clip(lower=_EPS)
-    return np.where(np.log10(float(w)) != 0, 100.0 * np.log10(ratio) / np.log10(float(w)), np.nan)
+    return 100.0 * np.log10(ratio) / np.log10(float(w))
 
 
 for _name, _params, _fn, _desc in [
@@ -668,7 +668,7 @@ for _name, _params, _fn, _desc in [
 def _parkinson_vol(high, low, window):
     w = _w(window, minimum=2)
     rs = np.log(_safe_div(high, low)).pow(2)
-    var = np.where((4.0 * np.log(2.0)) != 0, rs.rolling(w, min_periods=w).mean() / (4.0 * np.log(2.0)), np.nan)
+    var = rs.rolling(w, min_periods=w).mean() / (4.0 * np.log(2.0))
     return np.sqrt(var.clip(lower=0.0) * 252.0)
 
 
@@ -700,7 +700,7 @@ def _yang_zhang_vol(open_, high, low, close, window):
     overnight = np.log(_safe_div(open_, prev_close))
     intraday = np.log(_safe_div(close, open_))
     rs = _rogers_satchell_daily(open_, high, low, close)
-    k = np.where((1.34 + (w + 1.0) / (w - 1.0)) != 0, 0.34 / (1.34 + (w + 1.0) / (w - 1.0)), np.nan)
+    k = 0.34 / (1.34 + (w + 1.0) / (w - 1.0))
     var = (
         overnight.rolling(w, min_periods=w).var(ddof=1)
         + k * intraday.rolling(w, min_periods=w).var(ddof=1)

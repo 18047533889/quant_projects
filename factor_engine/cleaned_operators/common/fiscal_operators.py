@@ -310,7 +310,7 @@ def pd_date_diff_days(left: pd.DataFrame, right: pd.DataFrame, **_) -> pd.DataFr
     _align(left, right)
     lhs = left.apply(pd.to_datetime, errors="coerce")
     rhs = right.apply(pd.to_datetime, errors="coerce")
-    return np.where(86400.0) != 0, ((lhs - rhs).apply(lambda column: column.dt.total_seconds()) / (86400.0)), np.nan)
+    return np.where(86400.0 != 0, ((lhs - rhs).apply(lambda column: column.dt.total_seconds()) / (86400.0)), np.nan)
 
 
 def pd_years_since_date(

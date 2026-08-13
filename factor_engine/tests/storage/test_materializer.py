@@ -736,7 +736,7 @@ class TestParquetMaterializer:
         series = _make_series(dates=["2024-01-15"], assets=["A"], values=[1.0])
         mat.materialize(factor_id="orphan_test", result=series, ast_hash="h1")
         assert not stale.exists()
-        assert list((factor_dir / "year=2024").glob("data.parquet")) != []
+        assert list((factor_dir / "year=2024").glob("data.parquet") != []
 
     def test_unique_temp_filenames_no_collision(self, tmp_path):
         """Review-8 #443: 连续写同分区不残留 temp，且不互相覆盖。"""

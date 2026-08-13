@@ -158,7 +158,7 @@ def scan_period_ledger(
                 observations=(PeriodObservation(row, float(value)),),
             )
             continue
-        if abs(entry.observations[-1].value - float(value)) > _EPS:
+        if abs(entry.observations[-1].value - float(value) > _EPS:
             entries[key] = PeriodLedgerEntry(
                 period_key=key,
                 first_seen_at=entry.first_seen_at,
@@ -187,7 +187,7 @@ def _period_restated_1d(xv: np.ndarray, pv: list, require_parseable: bool) -> np
             state[key] = {"latest": float(value), "revised": False}
             out[row] = 0.0
         else:
-            if abs(st["latest"] - float(value)) > _EPS:
+            if abs(st["latest"] - float(value) > _EPS:
                 st["latest"] = float(value)
                 st["revised"] = True
             out[row] = 1.0 if st["revised"] else 0.0
@@ -209,7 +209,7 @@ def _period_revision_count_1d(xv: np.ndarray, pv: list, require_parseable: bool)
             st = {"latest": float(value), "count": 0}
             state[key] = st
         else:
-            if abs(st["latest"] - float(value)) > _EPS:
+            if abs(st["latest"] - float(value) > _EPS:
                 st["latest"] = float(value)
                 st["count"] += 1
         out[row] = float(st["count"])
@@ -233,7 +233,7 @@ def _period_revision_age_1d(
             st = {"latest": float(value), "last_rev": None}
             state[key] = st
         else:
-            if abs(st["latest"] - float(value)) > _EPS:
+            if abs(st["latest"] - float(value) > _EPS:
                 st["latest"] = float(value)
                 st["last_rev"] = row
         if st["last_rev"] is None:

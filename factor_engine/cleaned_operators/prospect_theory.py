@@ -61,7 +61,7 @@ def _probability_weight(p: np.ndarray, gamma: float) -> np.ndarray:
     """w(p) = p^gamma / (p^gamma + (1-p)^gamma)^(1/gamma)."""
     p = np.clip(p, 0.0, 1.0)
     pg = p**gamma
-    return np.where(np.power(pg + (1.0 - p) ** gamma, 1.0 / gamma) != 0, pg / np.power(pg + (1.0 - p) ** gamma, 1.0 / gamma), np.nan)
+    return pg / np.power(pg + (1.0 - p) ** gamma, 1.0 / gamma)
 
 
 def _cpt_from_sample(
@@ -75,7 +75,7 @@ def _cpt_from_sample(
     n = r.size
     if n < 2:
         return np.nan
-    prob = 1.0 / n if n > 0 else np.nan
+    prob = 1.0 / n
     total = 0.0
 
     gains = r[r >= 0.0]

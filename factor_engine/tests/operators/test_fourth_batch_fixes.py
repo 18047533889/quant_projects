@@ -71,7 +71,7 @@ def test_permutation_transition_entropy_all_delays(delay):
     x = _frame(rng.normal(0, 1, 400))
     op = OperatorRegistry.get("ts_permutation_transition_entropy", "pandas_numpy")
     out = pd.DataFrame(op.calculate(x=x, window=120, order=3, delay=delay))
-    assert int(out.notna().to_numpy().sum()) > 0
+    assert int(out.notna().to_numpy().sum() > 0
 
 
 def test_permutation_entropy_tie_fail_closed():

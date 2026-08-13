@@ -411,7 +411,7 @@ def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_ite
             return None
         if not np.all(np.isfinite(beta_new)):
             return None
-        if np.max(np.abs(beta_new - beta)) <= tol * max(1.0, float(np.max(np.abs(beta)))):
+        if np.max(np.abs(beta_new - beta) <= tol * max(1.0, float(np.max(np.abs(beta)))):
             beta = beta_new
             break
         beta = beta_new

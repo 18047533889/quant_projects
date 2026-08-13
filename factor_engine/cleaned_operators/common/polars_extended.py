@@ -523,7 +523,7 @@ class RowBetaPolars(SeriesOperator):
             if mask.sum() >= 2:
                 var_b = np.var(b[mask])
                 if var_b > 0:
-                    out[i, :] = np.cov(a[mask], b[mask])[0, 1] / var_b if var_b > 1e-10 else np.nan
+                    out[i, :] = np.cov(a[mask], b[mask])[0, 1] / var_b
         result = pl.DataFrame(out, schema=cols)
         if "date" in y.columns:
             result = result.with_columns(y["date"])
@@ -555,7 +555,7 @@ class NormalizePolars(SeriesOperator):
         hi = np.nanmax(arr, axis=1, keepdims=True)
         rng = hi - lo
         rng = np.where(rng == 0, np.nan, rng)
-        out = (arr - lo) / rng if rng != 0 else np.nan
+        out = (arr - lo) / rng
         result = pl.DataFrame(out, schema=cols)
         if "date" in x.columns:
             result = result.with_columns(x["date"])
@@ -641,7 +641,7 @@ class RowSkewPolars(SeriesOperator):
         return _broadcast_row_stat(
             x,
             lambda row: float(scipy_stats.skew(row[~np.isnan(row)], bias=False))
-            if np.sum(~np.isnan(row)) > 2
+            if np.sum(~np.isnan(row) > 2
             else np.nan,
         )
 
@@ -660,6 +660,6 @@ class RowKurtPolars(SeriesOperator):
         return _broadcast_row_stat(
             x,
             lambda row: float(scipy_stats.kurtosis(row[~np.isnan(row)], bias=False))
-            if np.sum(~np.isnan(row)) > 3
+            if np.sum(~np.isnan(row) > 3
             else np.nan,
         )

@@ -168,9 +168,9 @@ def compute_partition_commit_stats(
 
     valid_before = 0
     if existing_df is not None and "is_valid" in existing_df.columns:
-        valid_before = int((existing_df["is_valid"] == 1).sum())
+        valid_before = int((existing_df["is_valid"]) == 1).sum())
     valid_after = (
-        int((combined_df["is_valid"] == 1).sum())
+        int((combined_df["is_valid"]) == 1).sum())
         if "is_valid" in combined_df.columns
         else rows_after
     )

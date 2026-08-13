@@ -38,24 +38,24 @@ def pattern_triple_top(high,low,left_window,right_window,history_window,toleranc
     tol=_pf(tolerance,"tolerance",1e-12)
     ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(True,False,True,False,True))
     hs=[prices[0],prices[2],prices[4]];trough=prices[3]
-    depth=np.where(3)/trough.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0)) != 0, ((sum(hs) / 3)/trough.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0)), np.nan)
+    depth=((sum(hs)/3)/trough.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0))
     spacing=positions[4]-positions[2]
     return (_similar(hs,tol)*depth.astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")))*ok.astype(float)
 def pattern_triple_bottom(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
     tol=_pf(tolerance,"tolerance",1e-12)
     ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(False,True,False,True,False))
     ls=[prices[0],prices[2],prices[4]];peak=prices[3]
-    depth=np.where((sum(ls)/3).replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0)) != 0, (peak / (sum(ls)/3).replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0)), np.nan)
+    depth=(peak/(sum(ls)/3).replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0))
     spacing=positions[4]-positions[2]
     return (_similar(ls,tol)*depth.astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")))*ok.astype(float)
 def pattern_123_bull(high,low,left_window,right_window,history_window,min_swing):
     ok,prices,_=_seq_features(high,low,left_window,right_window,history_window,3,(False,True,False))
     l2,h1,l1=prices[0],prices[1],prices[2]
-    return np.where(l1.replace(0,np.nan)-1 != 0, (h1) / (l1.replace(0,np.nan)-1), np.nan))>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
+    return ((l1>l2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
 def pattern_123_bear(high,low,left_window,right_window,history_window,min_swing):
     ok,prices,_=_seq_features(high,low,left_window,right_window,history_window,3,(True,False,True))
     h2,l1,h1=prices[0],prices[1],prices[2]
-    return np.where(l1.replace(0,np.nan)-1 != 0, (h1) / (l1.replace(0,np.nan)-1), np.nan))>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
+    return ((h1<h2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
 def _quadratic_score(close,window,up=True):
     w=_pi(window,"window",5);x=np.linspace(-1,1,w);out=pd.DataFrame(np.nan,index=close.index,columns=close.columns)
     for col in close.columns:
@@ -70,11 +70,11 @@ def _quadratic_score(close,window,up=True):
 def pattern_rounding_bottom(close,window,min_fit):return _quadratic_score(close,window,True).where(_quadratic_score(close,window,True)>=_pf(min_fit,"min_fit",0),0.0)
 def pattern_rounding_top(close,window,min_fit):return _quadratic_score(close,window,False).where(_quadratic_score(close,window,False)>=_pf(min_fit,"min_fit",0),0.0)
 def pattern_cup(close,window,min_depth,max_edge_diff,min_fit):
-    w=np.where(((close.abs()+left.abs())/2).replace(0,np.nan);center=close.shift(w//2);depth=((left+close)/2/center.replace(0,np.nan)-1);return score*edge.le(_pf(max_edge_diff,"max_edge_diff",0)).astype(float)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*score.ge(_pf(min_fit,"min_fit",0)).astype(float) != 0, _pi(window,"window",5);score=_quadratic_score(close,w,True);left=close.shift(w-1);edge=(close-left).abs() / ((close.abs()+left.abs())/2).replace(0,np.nan);center=close.shift(w//2);depth=((left+close)/2/center.replace(0,np.nan)-1);return score*edge.le(_pf(max_edge_diff,"max_edge_diff",0)).astype(float)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*score.ge(_pf(min_fit,"min_fit",0)).astype(float), np.nan)
+    w=_pi(window,"window",5);score=_quadratic_score(close,w,True);left=close.shift(w-1);edge=(close-left).abs()/((close.abs()+left.abs())/2).replace(0,np.nan);center=close.shift(w//2);depth=((left+close)/2/center.replace(0,np.nan)-1);return score*edge.le(_pf(max_edge_diff,"max_edge_diff",0)).astype(float)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*score.ge(_pf(min_fit,"min_fit",0)).astype(float)
 def pattern_cup_handle(close,high,low,cup_window,handle_window,min_depth,max_edge_diff,min_fit,max_handle_retracement):
-    cw=_pi(cup_window,"cup_window",5);hw=_pi(handle_window,"handle_window",2);cup=pattern_cup(close.shift(hw),cw,min_depth,max_edge_diff,min_fit);base=close.shift(hw);trough=low.rolling(hw,min_periods=hw).min();retr=np.where(base.abs().replace(0,np.nan) != 0, ((base-trough)) / (base.abs().replace(0,np.nan)), np.nan);return cup*retr.le(_pf(max_handle_retracement,"max_handle_retracement",0)).astype(float)
+    cw=_pi(cup_window,"cup_window",5);hw=_pi(handle_window,"handle_window",2);cup=pattern_cup(close.shift(hw),cw,min_depth,max_edge_diff,min_fit);base=close.shift(hw);trough=low.rolling(hw,min_periods=hw).min();retr=(base-trough)/base.abs().replace(0,np.nan);return cup*retr.le(_pf(max_handle_retracement,"max_handle_retracement",0)).astype(float)
 def _pennant(close,high,low,volume,impulse_window,pennant_window,min_impulse,max_width,volume_decay_threshold,bull):
-    iw=_pi(impulse_window,"impulse_window",2);pw=_pi(pennant_window,"pennant_window",3);imp=close.shift(pw) / close.shift(pw+iw)-1;width=ts_consolidation_width(high,low,pw)/close.abs().replace(0,np.nan);v=ts_consolidation_volume_decay(volume,pw);range_now=(high-low).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();range_old=(high-low).shift(max(2,pw//2)).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();compress=(range_now<range_old);direction=imp.ge(_pf(min_impulse,"min_impulse",0)) if bull else imp.le(-_pf(min_impulse,"min_impulse",0));return (direction&width.le(_pf(max_width,"max_width",0))&v.ge(_pf(volume_decay_threshold,"volume_decay_threshold"))&compress).astype(float) if close.shift(pw+iw)-1;width=ts_consolidation_width(high,low,pw)/close.abs().replace(0,np.nan);v=ts_consolidation_volume_decay(volume,pw);range_now=(high-low).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();range_old=(high-low).shift(max(2,pw//2)).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();compress=(range_now<range_old);direction=imp.ge(_pf(min_impulse,"min_impulse",0)) if bull else imp.le(-_pf(min_impulse,"min_impulse",0));return (direction&width.le(_pf(max_width,"max_width",0))&v.ge(_pf(volume_decay_threshold,"volume_decay_threshold"))&compress).astype(float) > 1e-10 else np.nan
+    iw=_pi(impulse_window,"impulse_window",2);pw=_pi(pennant_window,"pennant_window",3);imp=close.shift(pw)/close.shift(pw+iw)-1;width=ts_consolidation_width(high,low,pw)/close.abs().replace(0,np.nan);v=ts_consolidation_volume_decay(volume,pw);range_now=(high-low).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();range_old=(high-low).shift(max(2,pw//2)).rolling(max(2,pw//2),min_periods=max(2,pw//2)).mean();compress=(range_now<range_old);direction=imp.ge(_pf(min_impulse,"min_impulse",0)) if bull else imp.le(-_pf(min_impulse,"min_impulse",0));return (direction&width.le(_pf(max_width,"max_width",0))&v.ge(_pf(volume_decay_threshold,"volume_decay_threshold"))&compress).astype(float)
 def pattern_bull_pennant(close,high,low,volume,impulse_window,pennant_window,min_impulse,max_width,volume_decay_threshold):return _pennant(close,high,low,volume,impulse_window,pennant_window,min_impulse,max_width,volume_decay_threshold,True)
 def pattern_bear_pennant(close,high,low,volume,impulse_window,pennant_window,min_impulse,max_width,volume_decay_threshold):return _pennant(close,high,low,volume,impulse_window,pennant_window,min_impulse,max_width,volume_decay_threshold,False)
 def _retest(close,window,max_wait,tolerance,break_up):
@@ -85,7 +85,7 @@ def _retest(close,window,max_wait,tolerance,break_up):
             if bool(event.iloc[t][col]) and np.isfinite(level.iloc[t][col]):last_level=float(level.iloc[t][col]);age=0;continue
             age+=1
             if age<=wait and np.isfinite(last_level):
-                px=np.where(last_level-1 if last_level else np.nan != 0, float(close.iloc[t][col]);rel=px / last_level-1 if last_level else np.nan, np.nan)
+                px=float(close.iloc[t][col]);rel=px/last_level-1 if last_level else np.nan
                 ok=(-tol<=rel<=tol) and ((px>=last_level*(1-tol)) if break_up else (px<=last_level*(1+tol)))
                 out.iat[t,out.columns.get_loc(col)]=1.0 if ok else 0.0
     return out

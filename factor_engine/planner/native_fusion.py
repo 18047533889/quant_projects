@@ -271,7 +271,7 @@ def adaptive_fusion_block_size(
     root_count: int,
     expression_complexity: float = 1.0,
     estimated_output_bytes: int = 0,
-    backend_compile_budget_bytes: int = 2 * 1024**3,
+    backend_compile_budget_bytes: int | None = None,
     features: FusionSizeFeatures | None = None,
 ) -> int:
     """R27-222 + R39-P0-PERF-021：模型驱动的自适应 fusion block size。
@@ -283,6 +283,14 @@ def adaptive_fusion_block_size(
       模型（``backend_compile_budget_bytes`` 收缩编译成本权重 → 更小 block）；
     - 签名/返回契约保留：返回 32..256 的 int。
     """
+    # 使用自适应配置作为默认预算
+    if backend_compile_budget_bytes is None:
+        try:
+            from runtime.adaptive_config import get_global_adaptive_config
+            backend_compile_budget_bytes = get_global_adaptive_config().compile_budget_bytes
+        except ImportError:
+            backend_compile_budget_bytes = 2 * 1024**3  # 回退默认值
+
     if features is None:
         features = _features_from_legacy_scalars(
             expression_complexity, estimated_output_bytes, root_count

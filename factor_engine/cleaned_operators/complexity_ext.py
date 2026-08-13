@@ -177,7 +177,7 @@ def _symbolize_pit_trailing_quantile(chunk: np.ndarray, bins: int) -> np.ndarray
     if n < 2:
         return None
     order = np.sort(v)
-    frac_le = np.where(float(n) != 0, np.searchsorted(order, v, side="right") / float(n), np.nan)
+    frac_le = np.searchsorted(order, v, side="right") / float(n)  # in (0, 1]
     symbols = np.minimum((frac_le * bins).astype(np.int64), bins - 1)
     return symbols.astype(np.int64)
 
@@ -226,7 +226,7 @@ def _lz_complexity_series(
             # ``bins`` symbols has c(N) ~ N·ln(bins)/ln(N), so C_norm =
             # c(N)·ln(N)/(N·ln(bins)) → 1 for random data.  The old c(N)·ln(N)/N
             # made different ``bins`` incomparable and the binary baseline ≠ 1.
-            out[r, c] = np.where((float(n) * math.log(float(b))) != 0, c_lz * math.log(float(n)) / (float(n) * math.log(float(b))), np.nan)
+            out[r, c] = c_lz * math.log(float(n)) / (float(n) * math.log(float(b)))
     return out
 
 
@@ -307,8 +307,8 @@ def _forbidden_ordinal_ratio_series(
             # APPROXIMATION.  For a production (strictly-validated) null use a
             # permutation/surrogate null; this extended factor documents the
             # approximation honestly instead of pretending exactness.
-            f_obs = 1.0 - n_obs / fact if fact != 0 else np.nan
-            f_null = np.where(fact) ** n_valid) != 0, float((1.0 - 1.0 / fact) ** n_valid), np.nan)
+            f_obs = 1.0 - n_obs / fact
+            f_null = float((1.0 - 1.0 / fact) ** n_valid)
             if mode == "ratio":
                 out[r, c] = f_obs
             elif mode == "signed_excess":

@@ -576,7 +576,7 @@ class CSLocalDensity(SeriesOperator):
         median_expr = pl.col(feature_name).median()
 
         lf = lf.with_columns([
-            pl.when((1.0 + (pl.col(feature_name != 0).then(1.0 / (1.0 + (pl.col(feature_name).otherwise(None) - median_expr).abs()))
+            (1.0 / (1.0 + (pl.col(feature_name) - median_expr).abs()))
             .alias(feature_name)
         ])
 
@@ -613,7 +613,7 @@ class CSLocalDensityScore(SeriesOperator):
         lf = _to_polars_safe(feature)
 
         median_expr = pl.col(feature_name).median()
-        density_expr = (1.0) / ((1.0 + (pl.col(feature_name) - median_expr).abs())) if ((1.0 + (pl.col(feature_name) - median_expr).abs())) != 0 else np.nan
+        density_expr = 1.0 / (1.0 + (pl.col(feature_name) - median_expr).abs())
 
         # Standardize
         mean_density = density_expr.mean()
@@ -701,7 +701,7 @@ class CSRelativeDensityRatio(SeriesOperator):
         mad_expr = (pl.col(feature_name) - median_expr).abs().median()
 
         lf = lf.with_columns([
-            pl.when((1.0 + (pl.col(feature_name != 0).then(1.0 / (1.0 + (pl.col(feature_name).otherwise(None) - median_expr).abs() / mad_expr))
+            (1.0 / (1.0 + (pl.col(feature_name) - median_expr).abs() / mad_expr))
             .alias(feature_name)
         ])
 

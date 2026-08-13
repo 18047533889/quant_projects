@@ -150,7 +150,7 @@ def session_coverage_ok(present_mask: np.ndarray | None, policy: SessionCoverage
     mask = np.asarray(present_mask, dtype=bool)
     n_present = int(np.sum(mask))
     n_total = int(len(mask))
-    coverage = np.where(n_total if n_total else 0.0 != 0, n_present / n_total if n_total else 0.0, np.nan)
+    coverage = n_present / n_total if n_total else 0.0
     if policy is SessionCoveragePolicy.STRICT_FULL_SESSION:
         return n_present == n_total
     if policy is SessionCoveragePolicy.MIN_COVERAGE_095:
@@ -234,7 +234,7 @@ def log_returns(vals: np.ndarray) -> np.ndarray:
     out = np.full(len(vals), np.nan)
     if len(vals) > 1:
         with np.errstate(divide="ignore", invalid="ignore"):
-            out[1:] = np.where(vals[:-1]) != 0, np.log(vals[1:] / vals[:-1]), np.nan)
+            out[1:] = np.log(vals[1:] / vals[:-1])
     return out
 
 
@@ -286,7 +286,7 @@ def daily_agg(
         for day, group in col.groupby(col.index.normalize()):
             vals = np.asarray(group, dtype=float)
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals))) < int(min_finite):
+            if int(np.sum(np.isfinite(vals)) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -324,7 +324,7 @@ def daily_agg_two(
         for day, group in joined.groupby("day"):
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
-            if int(np.sum(np.isfinite(vals_a))) < int(min_finite):
+            if int(np.sum(np.isfinite(vals_a)) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -363,7 +363,7 @@ def daily_agg_three(
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
             vals_c = np.asarray(group["c"], dtype=float)
-            if int(np.sum(np.isfinite(vals_a))) < int(min_finite):
+            if int(np.sum(np.isfinite(vals_a)) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -423,9 +423,9 @@ def np_errstate():
 
 def mu_p(p: float) -> float:
     """E|Z|^p for a standard normal Z."""
-    return np.where(2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5)) != 0, float(2.0 ** (p / 2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5)), np.nan)
+    return float(2.0 ** (p / 2.0) * math.gamma((p + 1.0) / 2.0) / math.gamma(0.5))
 
 
 def tripower_scale() -> float:
     """mu_{4/3}^{-3} constant for tripower quarticity."""
-    return np.where(3.0) ** -3) != 0, float(mu_p(4.0 / 3.0) ** -3), np.nan)
+    return float(mu_p(4.0 / 3.0) ** -3)

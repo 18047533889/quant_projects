@@ -252,7 +252,7 @@ class BlomTransform(SeriesOperator):
         ranked = masked.rank(axis=1, method='average')
         n = valid.sum(axis=1).to_numpy(dtype=float)[:, None]
         with np.errstate(invalid="ignore"):
-            result = np.where((8) / (n + 1 / 4) != 0, sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4)), np.nan)
+            result = sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4))
         result = pd.DataFrame(result, index=x.index, columns=x.columns)
         result = result.where(valid, np.nan)
         return result.replace([np.inf, -np.inf], np.nan)
@@ -522,7 +522,7 @@ class Csc(SeriesOperator):
 
 
 
-# canonical=cube backend=pandas_numpy selected=cube source=(math) / utility_ops.py if utility_ops.py != 0 else np.nan
+# canonical=cube backend=pandas_numpy selected=cube source=math/utility_ops.py
 @register_operator(name="cube", category="math", business_category="elementwise_math", canonical="cube", source="factor_dsl_np")
 class Cube(SeriesOperator):
     """返回x的立方（已弃用：请使用 power(x, 3)）。保留注册仅为兼容显式引用。"""

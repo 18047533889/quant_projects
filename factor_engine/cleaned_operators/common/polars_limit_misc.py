@@ -65,7 +65,7 @@ def _rolling_max_1d(x: np.ndarray, w: int, min_periods: int = 1) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < min_periods:
+        if int(ok.sum() < min_periods:
             continue
         out[t] = float(np.max(seg[ok]))
     return out
@@ -244,7 +244,7 @@ def _date_diff_1d(d1: np.ndarray, d2: np.ndarray) -> np.ndarray:
     for t in range(n):
         if np.isnat(a_arr[t]) or np.isnat(b_arr[t]):
             continue
-        days = np.where(np.timedelta64(1, "D") != 0, (a_arr[t] - b_arr[t]) / np.timedelta64(1, "D"), np.nan)
+        days = (a_arr[t] - b_arr[t]) / np.timedelta64(1, "D")
         out[t] = float(days)
     return out
 
@@ -278,7 +278,7 @@ def event_decay_asof(event, half_life=20.0, missing_policy="carry", event_kind="
     kind = str(event_kind).lower()
     if kind not in {"bool", "marked"}:
         raise ValueError("event_kind must be 'bool' or 'marked'")
-    weight = np.where(hl) != 0, 0.5 ** (1.0 / hl), np.nan)
+    weight = 0.5 ** (1.0 / hl)
     cols = _cols(event)
     rows = event.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)

@@ -134,7 +134,7 @@ def _group_topk_mean(
             # (a high-score leader with a missing target would be dropped and
             # the top-k mean would describe a different peer set).
             score_finite = np.isfinite(scores)
-            if int(score_finite.sum()) < kk:
+            if int(score_finite.sum() < kk:
                 continue
             s = scores[score_finite]
             t = targets[score_finite]
@@ -319,7 +319,7 @@ def _group_distribution_js_divergence(
                 continue
             positions.setdefault(lab, []).append(i)
         market_mask = np.isfinite(xr)
-        if int(market_mask.sum()) < 2:
+        if int(market_mask.sum() < 2:
             continue
         market = xr[market_mask]
         if exclude_group_from_reference:

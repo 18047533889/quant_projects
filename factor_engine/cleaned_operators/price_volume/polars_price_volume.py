@@ -109,7 +109,7 @@ class VWAPPolars(SeriesOperator):
         cols = _align_cols(price, volume)
         # Volume is a count/amount and must be non-negative (review P1-126).
         for c in cols:
-            if int(volume[c].lt(0).sum()) > 0:
+            if int(volume[c].lt(0).sum() > 0:
                 raise ValueError("vwap: volume must be non-negative")
         mp = int(min_periods) if min_periods is not None else 1
         exprs = []
@@ -225,7 +225,7 @@ class MaxDrawdownPolars(SeriesOperator):
                 cum *= 1.0 + col[t]
                 if cum > peak:
                     peak = cum
-                dd[t] = (cum - peak) / peak if peak != 0 else np.nan
+                dd[t] = (cum - peak) / peak
             worst = np.empty(rows, dtype=float)
             running = 0.0
             for t in range(rows):
@@ -396,7 +396,7 @@ class IdioVolPolars(SeriesOperator):
         for c in cols:
             cov = pl.rolling_cov(ret[c], benchmark_ret[c], window_size=w, min_samples=3)
             var_x = benchmark_ret[c].rolling_var(window_size=w, min_samples=3)
-            slope = cov / var_x if var_x > 1e-10 else np.nan
+            slope = cov / var_x
             mean_y = ret[c].rolling_mean(window_size=w, min_samples=3)
             mean_x = benchmark_ret[c].rolling_mean(window_size=w, min_samples=3)
             intercept = mean_y - slope * mean_x

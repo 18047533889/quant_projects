@@ -65,8 +65,8 @@ def _qn_dn(n: int) -> float:
     if n in _QN_C_TABLE:
         return _QN_C_TABLE[n]
     if n % 2 == 1:
-        return np.where((1.0 + 1.60188 / n - 2.1284 / (n * n) - 5.172 / (n**3)) != 0, 1.0 / (1.0 + 1.60188 / n - 2.1284 / (n * n) - 5.172 / (n**3)), np.nan)
-    return np.where((1.0 + 3.67561 / n + 1.9654 / (n * n) + 6.987 / (n**3) - 77.0 / (n**4)) != 0, 1.0 / (1.0 + 3.67561 / n + 1.9654 / (n * n) + 6.987 / (n**3) - 77.0 / (n**4)), np.nan)
+        return 1.0 / (1.0 + 1.60188 / n - 2.1284 / (n * n) - 5.172 / (n**3))
+    return 1.0 / (1.0 + 3.67561 / n + 1.9654 / (n * n) + 6.987 / (n**3) - 77.0 / (n**4))
 
 
 def _pairwise_abs_diffs(v: np.ndarray) -> np.ndarray:

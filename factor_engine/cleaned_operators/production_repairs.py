@@ -152,7 +152,7 @@ class ProductionDigitalCount(SeriesOperator):
                 if i == 0 or not np.isfinite(value) or not np.isfinite(previous) or previous == 0:
                     streak = 0
                 else:
-                    change = np.where(previous - 1.0) != 0, abs(value / previous - 1.0), np.nan)
+                    change = abs(value / previous - 1.0)
                     streak = min(lookback, streak + 1) if change <= threshold else 0
                 out[i, col] = float(streak if streak >= minimum_run else 0)
                 previous = value

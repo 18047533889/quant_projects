@@ -583,7 +583,7 @@ class TsHysteresisAge(SeriesOperator):
                 if st == 0:
                     out[row, col] = 0.0
                 else:
-                    out[row, col] = np.where(float(cap_n) != 0, st * min(float(kernel.state_age), float(cap_n)) / float(cap_n), np.nan)
+                    out[row, col] = st * min(float(kernel.state_age), float(cap_n)) / float(cap_n)
         return frame_like(z, out)
 
 
@@ -771,9 +771,9 @@ class TsTransitionIntensity(SeriesOperator):
                     mad = float(np.median(np.abs(dx_arr - np.median(dx_arr))))
                     if not np.isfinite(mad) or mad < _EPS:
                         continue  # 常数 dx -> 归一化分母退化, 不产出虚假巨大值
-                    out[row, col] = np.where(float(n)) / mad != 0, (wsum / float(n)) / mad, np.nan)
+                    out[row, col] = (wsum / float(n)) / mad
                 else:
-                    out[row, col] = np.where(float(n) != 0, wsum / float(n), np.nan)
+                    out[row, col] = wsum / float(n)
         return frame_like(x, out)
 
 
@@ -809,7 +809,7 @@ class TsSignPersistence(SeriesOperator):
             s0 = sign[:-1]
             s1 = sign[1:]
             finite = np.isfinite(s0) & np.isfinite(s1)
-            if int(finite.sum()) < mp:
+            if int(finite.sum() < mp:
                 return np.nan
             a = s0[finite]
             b = s1[finite]
@@ -871,8 +871,8 @@ class TsSignClusterIndex(SeriesOperator):
             total = float(sum(runs))
             if total <= 0.0:
                 return np.nan
-            hhi = np.where(total) ** 2 for r in runs) != 0, sum((r / total) ** 2 for r in runs), np.nan)
-            return np.where(m) / (1.0 - 1.0 / m)) != 0, float((hhi - 1.0 / m) / (1.0 - 1.0 / m)), np.nan)
+            hhi = sum((r / total) ** 2 for r in runs)
+            return float((hhi - 1.0 / m) / (1.0 - 1.0 / m))
 
         return frame_like(x, map_rolling(xv, w, _fn))
 

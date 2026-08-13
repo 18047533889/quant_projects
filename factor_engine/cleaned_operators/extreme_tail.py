@@ -186,7 +186,7 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # tail is BOUNDED below by 0 — classic Hill (``z = -x`` mirror) does not
         # apply to it and produces a misleading negative ξ.  Such a window fails
         # closed to NaN (explicitly unsupported lower tail for positive levels).
-        if side == "lower" and float(np.min(valid)) >= 0.0:
+        if side == "lower" and float(np.min(valid) >= 0.0:
             continue
         z = valid if side == "upper" else -valid
         u = float(np.quantile(z, 1.0 - frac))
@@ -200,7 +200,7 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # ``log(negative)`` into the mean; that is undefined, not a valid
         # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
         # sign, same as the threshold) — otherwise the window is NaN.
-        ratios = exc / u if u != 0 else np.nan
+        ratios = exc / u
         if np.any(ratios <= 0.0) or not np.all(np.isfinite(ratios)):
             continue
         xi = float(np.mean(np.log(ratios)))
@@ -271,7 +271,7 @@ def _quantile_beta(x: np.ndarray, y: np.ndarray, q: float) -> float:
     if n < 3:
         return np.nan
     xc = x - x.mean()
-    if float(np.sum(xc * xc)) <= _EPS:
+    if float(np.sum(xc * xc) <= _EPS:
         return np.nan
     from scipy.optimize import linprog
 
@@ -311,7 +311,7 @@ def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -
             xw = x[lo : t + 1, c]
             yw = y[lo : t + 1, c]
             finite = np.isfinite(xw) & np.isfinite(yw)
-            if int(finite.sum()) < 3:
+            if int(finite.sum() < 3:
                 continue
             out[t, c] = _quantile_beta(xw[finite], yw[finite], q)
     return out
@@ -429,7 +429,7 @@ def _extremal_index_series(
                 gap += 1
         if count < mex:
             continue
-        out[t] = np.where(count) != 0, float(clusters / count), np.nan)
+        out[t] = float(clusters / count)
     return out
 
 
@@ -528,7 +528,7 @@ def _mean_excess_slope_series(
         denom = float(np.sum((ua - ua.mean()) ** 2))
         if denom <= _EPS:
             continue
-        slope = np.where(denom) != 0, float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom), np.nan)
+        slope = float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom)
         if np.isfinite(slope):
             out[t] = slope
     return out
@@ -617,12 +617,12 @@ def _gpd_shape_pwm_series(
         exc = np.sort(exc)
         m = exc.size
         b0 = float(exc.mean())
-        weights = np.where(max(m - 1, 1) != 0, np.arange(m, dtype=float) / max(m - 1, 1), np.nan)
-        b1 = np.where(m) != 0, float(np.sum(weights * exc) / m), np.nan)
+        weights = np.arange(m, dtype=float) / max(m - 1, 1)
+        b1 = float(np.sum(weights * exc) / m)
         denom = 2.0 * b1 - b0
         if abs(denom) <= _EPS:
             continue
-        xi = 2.0 - b0 / denom if denom != 0 else np.nan
+        xi = 2.0 - b0 / denom
         if np.isfinite(xi):
             out[t] = xi
     return out

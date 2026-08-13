@@ -91,7 +91,7 @@ class TestCSDemeanPolarsNative:
         result = op._calculate_series(sample_series)
 
         # 验证均值接近 0
-        assert abs(result.mean()) < 1e-10
+        assert abs(result.mean() < 1e-10
 
         # 验证索引保持不变
         assert result.index.equals(sample_series.index)
@@ -113,7 +113,7 @@ class TestCSZscorePolarsNative:
         result = op._calculate_series(sample_series)
 
         # 验证均值接近 0，标准差接近 1
-        assert abs(result.mean()) < 1e-10
+        assert abs(result.mean() < 1e-10
         assert abs(result.std() - 1.0) < 1e-10
 
         # 验证索引保持不变
@@ -253,7 +253,7 @@ class TestCSWeightedOperations:
         result = op._calculate_series(sample_series, weight=weights)
 
         # 验证加权 Z-score 均值接近 0
-        assert abs(result.mean()) < 1e-10
+        assert abs(result.mean() < 1e-10
 
 
 class TestCSResidualOperations:
@@ -284,7 +284,7 @@ class TestCSNeutralizePolarsNative:
         result = op._calculate_series(sample_series)
 
         # 中性化就是 demean
-        assert abs(result.mean()) < 1e-10
+        assert abs(result.mean() < 1e-10
 
 
 if __name__ == '__main__':

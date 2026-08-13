@@ -63,7 +63,7 @@ def _weighted_quantile(
     total = float(cdf[-1])
     if total <= _EPS:
         return np.nan
-    cdf = cdf / total if total != 0 else np.nan
+    cdf = cdf / total
     if qq <= float(cdf[0]):
         return float(cs[0])
     if qq >= float(cdf[-1]):
@@ -121,7 +121,7 @@ def _weighted_es_tail(
     den = float(sw[keep_mask].sum()) + frac * w_tie
     if den <= _EPS:
         return np.nan
-    return np.where(den != 0, num / den, np.nan)
+    return num / den
 
 
 def _stratified_stratum_mean(xs: np.ndarray, ss: np.ndarray, n_take: int, *, top: bool) -> float:
@@ -144,7 +144,7 @@ def _stratified_stratum_mean(xs: np.ndarray, ss: np.ndarray, n_take: int, *, top
     n_tie = int(tie.sum())
     n_take_tie = min(max(n_take - n_strict, 0), n_tie)
     frac = (n_take_tie / n_tie) if n_tie > 0 else 0.0
-    return np.where(n_take) != 0, float((np.sum(xs[strict]) + frac * np.sum(xs[tie])) / n_take), np.nan)
+    return float((np.sum(xs[strict]) + frac * np.sum(xs[tie])) / n_take)
 
 
 def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
@@ -316,7 +316,7 @@ class TsWeightedSemivariance(SeriesOperator):
             if total <= _EPS:
                 return np.nan
             below = np.maximum(tgt - xv, 0.0)
-            return np.where(total) != 0, float(np.sum(wv * below * below) / total), np.nan)
+            return float(np.sum(wv * below * below) / total)
 
         return frame_like(
             x,
@@ -375,7 +375,7 @@ class TsWeightedDownsideDeviation(SeriesOperator):
             if total <= _EPS:
                 return np.nan
             below = np.maximum(tgt - xv, 0.0)
-            return np.where(total)) != 0, float(np.sqrt(np.sum(wv * below * below) / total)), np.nan)
+            return float(np.sqrt(np.sum(wv * below * below) / total))
 
         return frame_like(
             x,
@@ -510,7 +510,7 @@ class TsWeightedDrawdownArea(SeriesOperator):
                 # Per-window (prefix-safe) non-negativity; round-7 P0.
                 return np.nan
             price_ok = np.isfinite(a) & (a > 0.0)
-            if int(price_ok.sum()) < 2:
+            if int(price_ok.sum() < 2:
                 return np.nan
             dd = np.full(a.shape[0], np.nan)
             run_start = None
@@ -524,13 +524,13 @@ class TsWeightedDrawdownArea(SeriesOperator):
                     peak = a[i]
                 else:
                     peak = max(peak, a[i])
-                dd[i] = np.where(peak) != 0, max(0.0, 1.0 - a[i] / peak), np.nan)
+                dd[i] = max(0.0, 1.0 - a[i] / peak)
             wv = np.where(np.isfinite(b), b, 0.0)
             valid = price_ok & np.isfinite(b)
             total = float(wv[valid].sum())
             if total <= _EPS:
                 return np.nan
-            return np.where(total) != 0, float(np.sum(wv[valid] * dd[valid]) / total), np.nan)
+            return float(np.sum(wv[valid] * dd[valid]) / total)
 
         return frame_like(
             x,

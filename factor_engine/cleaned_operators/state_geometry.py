@@ -162,7 +162,7 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
         # by the past robust scale to make the mining-facing output a
         # standardized, dimensionless local density — density in MAD units,
         # f̂(x)·s = mean(K)/bw (h = bw·s).
-        out[t] = float(np.mean(kern)) / bw if bw != 0 else np.nan
+        out[t] = float(np.mean(kern)) / bw
     return out
 
 
@@ -212,7 +212,7 @@ def _permutation_index(perm: np.ndarray) -> int:
     n = perm.shape[0]
     index = 0
     for i in range(n):
-        smaller = int(np.sum(perm[i + 1 :] < perm[i]))
+        smaller = int(np.sum(perm[i + 1 :]) < perm[i]))
         index += smaller * math.factorial(n - 1 - i)
     return index
 
@@ -240,7 +240,7 @@ def _distribution(codes: list[int], n_patterns: int) -> np.ndarray:
     total = float(counts.sum())
     if total <= _EPS:
         return counts
-    return np.where(total != 0, counts / total, np.nan)
+    return counts / total
 
 
 def _permutation_entropy(values: np.ndarray, order: int, delay: int) -> float:
@@ -253,7 +253,7 @@ def _permutation_entropy(values: np.ndarray, order: int, delay: int) -> float:
     p = _distribution(codes, n_patterns)
     p = p[p > 0.0]
     h = -float(np.sum(p * np.log(p)))
-    return np.where(math.log(n_patterns)) != 0, float(h / math.log(n_patterns)), np.nan)
+    return float(h / math.log(n_patterns))
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ def _kl(p: np.ndarray, q: np.ndarray) -> float:
         return 0.0
     pp = p[ok]
     qq = q[ok]
-    return np.where(qq))) != 0, float(np.sum(pp * np.log(pp / qq))), np.nan)
+    return float(np.sum(pp * np.log(pp / qq)))
 
 
 def _irreversibility_series(series: np.ndarray, window: int, order: int, delay: int, min_patterns: int) -> np.ndarray:
@@ -293,7 +293,7 @@ def _irreversibility_series(series: np.ndarray, window: int, order: int, delay: 
         m = 0.5 * (pf + pr)
         js = 0.5 * _kl(pf, m) + 0.5 * _kl(pr, m)
         js = max(js, 0.0)
-        out[t] = np.where(_LN2)) != 0, float(np.sqrt(js / _LN2)), np.nan)
+        out[t] = float(np.sqrt(js / _LN2))
     return out
 
 
@@ -406,7 +406,7 @@ def _multiscale_slope_series(series: np.ndarray, window: int, order: int, min_pa
             n_patterns = math.factorial(order)
             p = _distribution(codes, n_patterns)
             p = p[p > 0.0]
-            h = np.where(math.log(n_patterns) != 0, -float(np.sum(p * np.log(p))) / math.log(n_patterns), np.nan)
+            h = -float(np.sum(p * np.log(p))) / math.log(n_patterns)
             pts.append((math.log(s), h))
         if len(pts) < 3:
             continue
@@ -415,7 +415,7 @@ def _multiscale_slope_series(series: np.ndarray, window: int, order: int, min_pa
         var_x = float(np.sum((xs - xs.mean()) ** 2))
         if var_x <= _EPS:
             continue
-        slope = float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / var_x) if var_x) > 1e-10 else np.nan
+        slope = float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / var_x)
         out[t] = slope
     return out
 

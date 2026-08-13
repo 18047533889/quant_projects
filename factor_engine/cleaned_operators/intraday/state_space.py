@@ -90,7 +90,7 @@ def _kalman_filter_1d(observations: np.ndarray, process_var: float = 1e-5, obs_v
         x_pred = x[i-1]
         P_pred = P[i-1] + process_var
 
-        K = P_pred / (P_pred + obs_var) if (P_pred + obs_var) > 1e-10 else np.nan
+        K = P_pred / (P_pred + obs_var)
         innov = observations[i] - x_pred
         innovations.append(innov)
 
@@ -142,7 +142,7 @@ class IntraKalmanLatentPrice(SessionAggregationOperator):
             mean_price = float(np.mean(obs))
             if mean_price < _EPS:
                 return np.nan
-            return np.where(mean_price) != 0, float(np.sqrt(innov_var) / mean_price), np.nan)
+            return float(np.sqrt(innov_var) / mean_price)
 
         return daily_agg(close, _kernel, min_finite=1)
 
@@ -180,7 +180,7 @@ class IntraKalmanLatentPricePolars(SessionAggregationOperator):
             mean_price = float(np.mean(obs))
             if mean_price < _EPS:
                 return np.nan
-            return np.where(mean_price) != 0, float(np.sqrt(innov_var) / mean_price), np.nan)
+            return float(np.sqrt(innov_var) / mean_price)
 
         return daily_agg(close, _kernel, min_finite=1)
 
@@ -224,7 +224,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
 
             # Simple trend extraction: moving average window = n//4
             w = max(3, n // 4)
-            trend = np.where(w, mode='same') != 0, np.convolve(v, np.ones(w) / w, mode='same'), np.nan)
+            trend = np.convolve(v, np.ones(w) / w, mode='same')
             cycle = v - trend
 
             trend_energy = float(np.sum(trend ** 2))
@@ -233,7 +233,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
 
             if total_energy < _EPS:
                 return np.nan
-            return np.where(total_energy != 0, cycle_energy / total_energy, np.nan)
+            return cycle_energy / total_energy
 
         return daily_agg(volume, _kernel, min_finite=1)
 
@@ -268,7 +268,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
             n = len(v)
 
             w = max(3, n // 4)
-            trend = np.where(w, mode='same') != 0, np.convolve(v, np.ones(w) / w, mode='same'), np.nan)
+            trend = np.convolve(v, np.ones(w) / w, mode='same')
             cycle = v - trend
 
             trend_energy = float(np.sum(trend ** 2))
@@ -277,7 +277,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
 
             if total_energy < _EPS:
                 return np.nan
-            return np.where(total_energy != 0, cycle_energy / total_energy, np.nan)
+            return cycle_energy / total_energy
 
         return daily_agg(volume, _kernel, min_finite=1)
 
@@ -327,7 +327,7 @@ class IntraFunctionalMotifScore(SessionAggregationOperator):
             v_norm = (v - v.min()) / (v.max() - v.min() + _EPS)
 
             # Standard motifs: up (linear increase) and down (linear decrease)
-            t = np.where((n - 1) != 0, np.arange(n, dtype=float) / (n - 1), np.nan)
+            t = np.arange(n, dtype=float) / (n - 1)
             up_motif = t
             down_motif = 1.0 - t
 
@@ -380,7 +380,7 @@ class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
             p_norm = (p - p.min()) / (p.max() - p.min() + _EPS)
             v_norm = (v - v.min()) / (v.max() - v.min() + _EPS)
 
-            t = np.where((n - 1) != 0, np.arange(n, dtype=float) / (n - 1), np.nan)
+            t = np.arange(n, dtype=float) / (n - 1)
             up_motif = t
             down_motif = 1.0 - t
 

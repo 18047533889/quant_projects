@@ -106,7 +106,7 @@ class EventFrequency(SeriesOperator):
             if n < mp:
                 return np.nan
             hits = float(np.sum(finite != 0.0))
-            return np.where(n != 0, hits / n, np.nan)
+            return hits / n
 
         return frame_like(condition, map_rolling(cv, w, _fn))
 
@@ -299,7 +299,7 @@ def _make_change_z(periods: int):
         mad = float(np.median(np.abs(arr - med)))
         if not np.isfinite(mad) or mad <= _EPS:
             return np.nan
-        return np.where((_MAD_CONST * mad) != 0, (chg - med) / (_MAD_CONST * mad), np.nan)
+        return (chg - med) / (_MAD_CONST * mad)
 
     return calc
 
@@ -324,7 +324,7 @@ def _report_change_breadth(f1, f2, f3, period_id, periods=1, eps=0.5):
     K = a.shape[0]
     pos = np.sum(a > eps_v, axis=0)
     neg = np.sum(a < -eps_v, axis=0)
-    breadth = (pos - neg) / K if K != 0 else np.nan
+    breadth = (pos - neg) / K
     breadth[np.isnan(a).any(axis=0)] = np.nan
     return pd.DataFrame(breadth, index=f1.index, columns=f1.columns, dtype=float)
 
@@ -341,7 +341,7 @@ def _report_change_coherence(f1, f2, f3, period_id, periods=1):
     sgn = np.sign(med)
     agree = np.sum(np.sign(a) == sgn[None, :, :], axis=0)
     coh = np.full(a.shape[1:], np.nan)
-    coh[ok] = agree[ok] / K if K != 0 else np.nan
+    coh[ok] = agree[ok] / K
     return pd.DataFrame(coh, index=f1.index, columns=f1.columns, dtype=float)
 
 

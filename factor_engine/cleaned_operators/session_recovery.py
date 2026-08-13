@@ -237,7 +237,7 @@ def _recovery_day(
         # The DEFAULT (``min_events=3``) is the reviewed floor; the doc no
         # longer claims single-shock output while the default allows it.
         return np.nan
-    return np.where((H + 1)) != 0, float(np.median(taus) / (H + 1)), np.nan)
+    return float(np.median(taus) / (H + 1))
 
 
 @register_operator(

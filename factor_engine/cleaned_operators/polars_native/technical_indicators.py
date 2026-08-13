@@ -33,7 +33,7 @@ def _ema_expr(col: pl.Expr, span: int) -> pl.Expr:
 
 def _wilder_ema_expr(col: pl.Expr, period: int) -> pl.Expr:
     """Wilder's smoothing (alpha = 1/period)"""
-    alpha = (1.0) / period if period != 0 else np.nan
+    alpha = 1.0 / period
     return col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
 
 
@@ -64,8 +64,8 @@ class RSI_WILDER(SeriesOperator):
             loss = (-delta).clip(lower_bound=0)
             avg_gain = _wilder_ema_expr(gain, period)
             avg_loss = _wilder_ema_expr(loss, period)
-            rs = (avg_gain) / avg_loss if avg_loss != 0 else np.nan
-            rsi = (100 - (100) / ((1 + rs))) if ((1 + rs))) != 0 else np.nan
+            rs = avg_gain / avg_loss
+            rsi = 100 - 100 / (1 + rs)
             return rsi.alias(col_name)
 
         return _apply_to_panel(close, lambda c: rsi_expr(c.meta.output_name()))
@@ -197,7 +197,7 @@ class ATR_WILDER(SeriesOperator):
         tr = np.maximum(np.maximum(tr1, tr2), tr3)
 
         # Wilder's EMA
-        alpha = (1.0) / period if period != 0 else np.nan
+        alpha = 1.0 / period
         atr = np.full_like(tr, np.nan)
         for i in range(len(tr)):
             if i == 0:
@@ -238,7 +238,7 @@ class BollingerWidth(SeriesOperator):
             std = pl.col(col_name).rolling_std(window)
             upper = sma + num_std * std
             lower = sma - num_std * std
-            width = ((upper - lower)) / sma if sma != 0 else np.nan
+            width = (upper - lower) / sma
             return width.alias(col_name)
 
         return _apply_to_panel(close, lambda c: bb_width_expr(c.meta.output_name()))
@@ -270,7 +270,7 @@ class BollingerPctB(SeriesOperator):
             std = c.rolling_std(window)
             upper = sma + num_std * std
             lower = sma - num_std * std
-            pct_b = ((c - lower)) / ((upper - lower)) if ((upper - lower)) != 0 else np.nan
+            pct_b = (c - lower) / (upper - lower)
             return pct_b.alias(col_name)
 
         return _apply_to_panel(close, lambda c: pct_b_expr(c.meta.output_name()))
@@ -359,7 +359,7 @@ class CMO(SeriesOperator):
             delta = pl.col(col_name).diff()
             gain = delta.clip(lower_bound=0).rolling_sum(period)
             loss = (-delta).clip(lower_bound=0).rolling_sum(period)
-            cmo = (100 * (gain - loss)) / ((gain + loss)) if ((gain + loss)) != 0 else np.nan
+            cmo = 100 * (gain - loss) / (gain + loss)
             return cmo.alias(col_name)
 
         return _apply_to_panel(close, lambda c: cmo_expr(c.meta.output_name()))
@@ -389,7 +389,7 @@ class PPO(SeriesOperator):
         def ppo_expr(col_name):
             ema_fast = _ema_expr(pl.col(col_name), fast)
             ema_slow = _ema_expr(pl.col(col_name), slow)
-            ppo = (100 * (ema_fast - ema_slow)) / ema_slow if ema_slow != 0 else np.nan
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
             return ppo.alias(col_name)
 
         return _apply_to_panel(close, lambda c: ppo_expr(c.meta.output_name()))
@@ -418,7 +418,7 @@ class PPO_signal(SeriesOperator):
         def ppo_signal_expr(col_name):
             ema_fast = _ema_expr(pl.col(col_name), fast)
             ema_slow = _ema_expr(pl.col(col_name), slow)
-            ppo = (100 * (ema_fast - ema_slow)) / ema_slow if ema_slow != 0 else np.nan
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
             return _ema_expr(ppo, signal).alias(col_name)
 
         return _apply_to_panel(close, lambda c: ppo_signal_expr(c.meta.output_name()))
@@ -447,7 +447,7 @@ class PPO_hist(SeriesOperator):
         def ppo_hist_expr(col_name):
             ema_fast = _ema_expr(pl.col(col_name), fast)
             ema_slow = _ema_expr(pl.col(col_name), slow)
-            ppo = (100 * (ema_fast - ema_slow)) / ema_slow if ema_slow != 0 else np.nan
+            ppo = 100 * (ema_fast - ema_slow) / ema_slow
             signal_line = _ema_expr(ppo, signal)
             return (ppo - signal_line).alias(col_name)
 
@@ -486,7 +486,7 @@ class NATR(SeriesOperator):
         for col in cols:
             atr_val = atr_df[col].to_numpy()
             close_val = close[col].to_numpy()
-            natr = (100 * atr_val) / close_val if close_val != 0 else np.nan
+            natr = 100 * atr_val / close_val
             result_data[col] = natr
 
         result_df = pl.DataFrame(result_data)

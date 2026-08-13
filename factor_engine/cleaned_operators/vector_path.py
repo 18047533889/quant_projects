@@ -69,7 +69,7 @@ def _standardize(f1: np.ndarray, f2: np.ndarray) -> tuple[np.ndarray, np.ndarray
     s1, s2 = float(np.std(f1)), float(np.std(f2))
     if s1 <= _EPS or s2 <= _EPS:
         return None
-    return np.where(s1, (f2 - f2.mean()) / s2 != 0, (f1 - f1.mean()) / s1, (f2 - f2.mean()) / s2, np.nan)
+    return (f1 - f1.mean()) / s1, (f2 - f2.mean()) / s2
 
 
 def _path_efficiency(f1: np.ndarray, f2: np.ndarray) -> float:
@@ -185,7 +185,7 @@ def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
             p3, p4 = segs[j]
             if _segments_properly_intersect(p1, p2, p3, p4):
                 inter += 1
-    return np.where(float(total) != 0, float(inter) / float(total), np.nan)
+    return float(inter) / float(total)
 
 
 def _pair_series(a2d: np.ndarray, b2d: np.ndarray, window: int, kernel: Callable[[np.ndarray, np.ndarray], float]) -> np.ndarray:

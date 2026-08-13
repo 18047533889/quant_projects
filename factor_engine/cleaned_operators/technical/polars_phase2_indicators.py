@@ -52,7 +52,7 @@ def _ema(expr: pl.Expr, span: int) -> pl.Expr:
 
 def _wilder(expr: pl.Expr, window: int) -> pl.Expr:
     window = _pi(window, "window")
-    return np.where(window, adjust=False, min_samples=window).fill_null(strategy="forward") != 0, (expr.fill_nan(None).ewm_mean(alpha=1.0) / (window, adjust=False, min_samples=window).fill_null(strategy="forward")), np.nan)
+    return expr.fill_nan(None).ewm_mean(alpha=1.0 / window, adjust=False, min_samples=window).fill_null(strategy="forward")
 
 
 def _tr_expr() -> pl.Expr:
@@ -85,8 +85,8 @@ def ts_rsi(x, window=14):
         delta = pl.col(column).diff().fill_nan(None)
         gain = delta.clip(lower_bound=0.0).rolling_mean(window, min_samples=1)
         loss = (-delta).clip(lower_bound=0.0).rolling_mean(window, min_samples=1)
-        rs = (pl.when(loss != 0).then(gain) / (loss).otherwise(None)) if (loss).otherwise(None)) != 0 else np.nan
-        rsi = (pl.when(rs.is_not_null()).then(100.0 - 100.0) / ((1.0 + rs)).otherwise(None)) if ((1.0 + rs)).otherwise(None)) != 0 else np.nan
+        rs = pl.when(loss != 0).then(gain / loss).otherwise(None)
+        rsi = pl.when(rs.is_not_null()).then(100.0 - 100.0 / (1.0 + rs)).otherwise(None)
         # Edge cases: all gains -> 100, all losses -> 0, no movement -> 50
         rsi = pl.when((loss == 0) & (gain > 0)).then(100.0).when((gain == 0) & (loss > 0)).then(0.0).when((gain == 0) & (loss == 0)).then(50.0).otherwise(rsi)
         values[column] = _one(x, column, rsi)
@@ -139,10 +139,10 @@ def ts_adx(high, low, close, window=14):
         plus = pl.when(valid).then(pl.when((up > down) & (up > 0)).then(up).otherwise(0.0)).otherwise(None)
         minus = pl.when(valid).then(pl.when((down > up) & (down > 0)).then(down).otherwise(0.0)).otherwise(None)
         atr = _wilder(_tr_expr(), window)
-        dmi_plus = (pl.when(atr != 0).then(100.0 * _wilder(plus, window)) / (atr).otherwise(None)) if (atr).otherwise(None)) != 0 else np.nan
-        dmi_minus = (pl.when(atr != 0).then(100.0 * _wilder(minus, window)) / (atr).otherwise(None)) if (atr).otherwise(None)) != 0 else np.nan
+        dmi_plus = pl.when(atr != 0).then(100.0 * _wilder(plus, window) / atr).otherwise(None)
+        dmi_minus = pl.when(atr != 0).then(100.0 * _wilder(minus, window) / atr).otherwise(None)
         denominator = dmi_plus + dmi_minus
-        dx = (pl.when(denominator != 0).then(100.0 * (dmi_plus - dmi_minus).abs()) / (denominator).otherwise(None)) if (denominator).otherwise(None)) != 0 else np.nan
+        dx = pl.when(denominator != 0).then(100.0 * (dmi_plus - dmi_minus).abs() / denominator).otherwise(None)
         adx = _wilder(dx, window)
         values[column] = _one(frame, column, adx)
     return _result(close, values)
@@ -158,7 +158,7 @@ def ts_cci(high, low, close, window=20):
         sma = tp.rolling_mean(window, min_samples=1)
         # MAD: mean absolute deviation
         mad = (tp - sma).abs().rolling_mean(window, min_samples=1)
-        values[column] = np.where((0.015 * mad)).otherwise(None)) != 0, (_one(frame, column, pl.when(mad != 0).then((tp - sma)) / ((0.015 * mad)).otherwise(None))), np.nan)
+        values[column] = np.where((0.015 * mad).otherwise(None) != 0, (_one(frame, column, pl.when(mad != 0).then((tp - sma)) / ((0.015 * mad)).otherwise(None))), np.nan)
     return _result(close, values)
 
 
@@ -168,7 +168,7 @@ def ts_roc(price, window=10):
     values = {}
     for column in _cols(price):
         prev = pl.col(column).shift(window)
-        roc = (pl.when((prev.is_not_null()) & (prev != 0)).then((pl.col(column)) / (prev - 1.0) * 100.0).otherwise(None)) if (prev - 1.0) * 100.0).otherwise(None)) != 0 else np.nan
+        roc = pl.when((prev.is_not_null()) & (prev != 0)).then((pl.col(column) / prev - 1.0) * 100.0).otherwise(None)
         values[column] = _one(price, column, roc)
     return _result(price, values)
 
@@ -191,7 +191,7 @@ def ts_stoch(high, low, close, window=14):
         lowest = pl.col("low").rolling_min(window, min_samples=1)
         highest = pl.col("high").rolling_max(window, min_samples=1)
         denominator = highest - lowest
-        values[column] = np.where(denominator).otherwise(None)) != 0, (_one(frame, column, pl.when(denominator != 0).then(100.0 * (pl.col("close") - lowest)) / (denominator).otherwise(None))), np.nan)
+        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(100.0 * (pl.col("close") - lowest)) / (denominator).otherwise(None))), np.nan)
     return _result(close, values)
 
 
@@ -204,7 +204,7 @@ def ts_williams_r(high, low, close, window=14):
         highest = pl.col("high").rolling_max(window, min_samples=1)
         lowest = pl.col("low").rolling_min(window, min_samples=1)
         denominator = highest - lowest
-        values[column] = np.where(denominator).otherwise(None)) != 0, (_one(frame, column, pl.when(denominator != 0).then(-100.0 * (highest - pl.col("close"))) / (denominator).otherwise(None))), np.nan)
+        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(-100.0 * (highest - pl.col("close"))) / (denominator).otherwise(None))), np.nan)
     return _result(close, values)
 
 
@@ -248,7 +248,7 @@ def ts_trix(close, window=12):
         ema2 = _ema(ema1, window)
         ema3 = _ema(ema2, window)
         prev = ema3.shift(1)
-        values[column] = np.where(prev * 100.0).otherwise(None)) != 0, (_one(close, column, pl.when((prev.is_not_null()) & (prev != 0)).then((ema3 - prev)) / (prev * 100.0).otherwise(None))), np.nan)
+        values[column] = np.where(prev * 100.0.otherwise(None) != 0, (_one(close, column, pl.when((prev.is_not_null()) & (prev != 0)).then((ema3 - prev)) / (prev * 100.0).otherwise(None))), np.nan)
     return _result(close, values)
 
 
@@ -274,9 +274,9 @@ def ts_kama(close, er_window=10, fast_window=2, slow_window=30):
     for column in _cols(close):
         direction = (pl.col(column) - pl.col(column).shift(er_window)).abs()
         volatility = pl.col(column).diff().abs().rolling_sum(er_window, min_samples=er_window)
-        er = (pl.when(volatility != 0).then(direction) / volatility).otherwise(None) if volatility).otherwise(None) > 1e-10 else np.nan
-        fast_sc = (2.0) / ((fast + 1.0)) if ((fast + 1.0)) != 0 else np.nan
-        slow_sc = (2.0) / ((slow + 1.0)) if ((slow + 1.0)) != 0 else np.nan
+        er = pl.when(volatility != 0).then(direction / volatility).otherwise(None)
+        fast_sc = 2.0 / (fast + 1.0)
+        slow_sc = 2.0 / (slow + 1.0)
         sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
         # Use EMA with dynamic alpha (approximation for Polars)
         kama = _ema(pl.col(column), er_window)
@@ -329,7 +329,7 @@ def ts_vwma(x, volume, window):
         pv = pl.col("price") * pl.col("volume")
         numerator = pv.fill_nan(None).rolling_sum(window, min_samples=window)
         denominator = pl.col("volume").fill_nan(None).rolling_sum(window, min_samples=window)
-        values[column] = np.where(denominator).otherwise(None)) != 0, (_one(frame, column, pl.when(denominator != 0).then(numerator) / (denominator).otherwise(None))), np.nan)
+        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(numerator) / (denominator).otherwise(None))), np.nan)
     return _result(x, values)
 
 
@@ -371,7 +371,7 @@ def ts_rolling_corr(x, y, window):
         cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window, min_samples=window)
         x_std = x_col.rolling_std(window, min_samples=window)
         y_std = y_col.rolling_std(window, min_samples=window)
-        corr = (pl.when((x_std != 0) & (y_std != 0)).then(cov) / (x_std * y_std)).otherwise(None) if (x_std * y_std)).otherwise(None) > 1e-10 else np.nan
+        corr = pl.when((x_std != 0) & (y_std != 0)).then(cov / (x_std * y_std)).otherwise(None)
         values[column] = _one(frame, column, corr)
     return _result(x, values)
 
@@ -403,7 +403,7 @@ def ts_rolling_beta(x, y, window):
         y_mean = y_col.rolling_mean(window, min_samples=window)
         cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window, min_samples=window)
         var_y = ((y_col - y_mean) ** 2).rolling_mean(window, min_samples=window)
-        beta = (pl.when(var_y != 0).then(cov) / (var_y).otherwise(None)) if (var_y).otherwise(None)) != 0 else np.nan
+        beta = pl.when(var_y != 0).then(cov / var_y).otherwise(None)
         values[column] = _one(frame, column, beta)
     return _result(x, values)
 
@@ -420,7 +420,7 @@ def ts_rolling_alpha(x, y, window):
         y_mean = y_col.rolling_mean(window, min_samples=window)
         cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window, min_samples=window)
         var_y = ((y_col - y_mean) ** 2).rolling_mean(window, min_samples=window)
-        beta = (pl.when(var_y != 0).then(cov) / (var_y).otherwise(None)) if (var_y).otherwise(None)) != 0 else np.nan
+        beta = pl.when(var_y != 0).then(cov / var_y).otherwise(None)
         alpha = x_mean - beta * y_mean
         values[column] = _one(frame, column, alpha)
     return _result(x, values)
@@ -435,7 +435,7 @@ def ts_rolling_sharpe(x, window, risk_free=0.0):
         excess = pl.col(column) - risk_free
         mean_excess = excess.rolling_mean(window, min_samples=window)
         std_excess = excess.rolling_std(window, min_samples=window)
-        values[column] = (_one(x, column, pl.when(std_excess != 0).then(mean_excess) / std_excess).otherwise(None)) if std_excess).otherwise(None)) > 1e-10 else np.nan
+        values[column] = _one(x, column, pl.when(std_excess != 0).then(mean_excess / std_excess).otherwise(None))
     return _result(x, values)
 
 
@@ -446,7 +446,7 @@ def ts_rolling_zscore(x, window):
     for column in _cols(x):
         mean = pl.col(column).rolling_mean(window, min_samples=window)
         std = pl.col(column).rolling_std(window, min_samples=window)
-        values[column] = (_one(x, column, pl.when(std != 0).then((pl.col(column) - mean)) / std).otherwise(None)) if std).otherwise(None)) > 1e-10 else np.nan
+        values[column] = _one(x, column, pl.when(std != 0).then((pl.col(column) - mean) / std).otherwise(None))
     return _result(x, values)
 
 
@@ -529,7 +529,7 @@ def ts_rolling_autocorr(x, window, lag=1):
         cov = ((x_col - x_mean) * (x_lag - x_lag_mean)).rolling_mean(window, min_samples=window)
         std_x = x_col.rolling_std(window, min_samples=window)
         std_lag = x_lag.rolling_std(window, min_samples=window)
-        autocorr = (pl.when((std_x != 0) & (std_lag != 0)).then(cov) / (std_x * std_lag)).otherwise(None) if (std_x * std_lag)).otherwise(None) > 1e-10 else np.nan
+        autocorr = pl.when((std_x != 0) & (std_lag != 0)).then(cov / (std_x * std_lag)).otherwise(None)
         values[column] = _one(frame, column, autocorr)
     return _result(x, values)
 
@@ -556,7 +556,7 @@ def ts_rolling_r2(x, window):
         mean = pl.col(column).rolling_mean(window, min_samples=window)
         var = ((pl.col(column) - mean) ** 2).rolling_mean(window, min_samples=window)
         # Simplified: use correlation with time trend
-        r2_approx = (1.0 - (var) / ((var + 1e-9))) if ((var + 1e-9))) != 0 else np.nan
+        r2_approx = 1.0 - var / (var + 1e-9)
         values[column] = _one(x, column, r2_approx)
     return _result(x, values)
 
@@ -565,7 +565,7 @@ def ts_expanding_mean(x):
     """Expanding mean."""
     values = {}
     for column in _cols(x):
-        values[column] = np.where((pl.col(column).cum_count())) != 0, (_one(x, column, pl.col(column).cum_sum()) / ((pl.col(column).cum_count()))), np.nan)
+        values[column] = np.where((pl.col(column).cum_count() != 0, (_one(x, column, pl.col(column).cum_sum()) / ((pl.col(column).cum_count()))), np.nan)
     return _result(x, values)
 
 

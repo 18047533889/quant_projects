@@ -42,10 +42,10 @@ class _FrozenCfg:
 
 
 def test_frozen_dataclass_different_fields_different_hash():
-    assert _freeze_value(_FrozenCfg(window=20, name="a")) != _freeze_value(
+    assert _freeze_value(_FrozenCfg(window=20, name="a") != _freeze_value(
         _FrozenCfg(window=21, name="a")
     )
-    assert _freeze_value(_FrozenCfg(window=20, name="a")) != _freeze_value(
+    assert _freeze_value(_FrozenCfg(window=20, name="a") != _freeze_value(
         _FrozenCfg(window=20, name="b")
     )
 

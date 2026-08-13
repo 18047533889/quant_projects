@@ -359,7 +359,7 @@ def pd_fiscal_direction_consistency(
             # Get current direction and compute agreement
             current_direction = np.sign(changes[-1])
             agreement = sum(np.sign(c) == current_direction for c in changes)
-            out[row, col] = (float(agreement) / len(changes)) if len(changes)) != 0 else np.nan
+            out[row, col] = (float(agreement) / len(changes)) if len(changes) != 0 else np.nan
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 
@@ -729,7 +729,7 @@ def pd_fiscal_logit_score(
                     continue
                 # Clamp to avoid log(0) or log(negative)
                 clamped = max(0.001, min(0.999, value))
-                logit_val = np.where((1.0 - clamped)) != 0, (np.log(clamped) / ((1.0 - clamped))), np.nan)
+                logit_val = np.where((1.0 - clamped) != 0, (np.log(clamped) / ((1.0 - clamped))), np.nan)
                 if _finite(logit_val):
                     logit_values.append(logit_val)
 

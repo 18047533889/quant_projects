@@ -71,7 +71,7 @@ def _rolling_beta(y: np.ndarray, x: np.ndarray, window: int, min_periods: int) -
         ys = y[start : t + 1]
         xs = x[start : t + 1]
         valid = np.isfinite(ys) & np.isfinite(xs)
-        if int(valid.sum()) < min_periods:
+        if int(valid.sum() < min_periods:
             continue
         yv = ys[valid]
         xv = xs[valid]
@@ -80,7 +80,7 @@ def _rolling_beta(y: np.ndarray, x: np.ndarray, window: int, min_periods: int) -
         if varx <= _EPS:
             continue
         ybar = float(np.mean(yv))
-        out[t] = float(np.mean((xv - xbar) * (yv - ybar)) / varx) if varx) > 1e-10 else np.nan
+        out[t] = float(np.mean((xv - xbar) * (yv - ybar)) / varx)
     return out
 
 
@@ -167,7 +167,7 @@ def _pastor_stambaugh_beta(
             seg_r = rv[start : t + 1, c]
 
             valid = np.isfinite(seg_m) & np.isfinite(seg_l) & np.isfinite(seg_r)
-            if int(valid.sum()) < min_periods:
+            if int(valid.sum() < min_periods:
                 continue
 
             m_v = seg_m[valid]
@@ -181,7 +181,7 @@ def _pastor_stambaugh_beta(
                 continue
 
             lbar = float(np.mean(l_v))
-            beta_lm = float(np.mean((m_v - mbar) * (l_v - lbar)) / var_m) if var_m) > 1e-10 else np.nan
+            beta_lm = float(np.mean((m_v - mbar) * (l_v - lbar)) / var_m)
             l_orth = l_v - beta_lm * (m_v - mbar)
 
             # Beta on orthogonalized liquidity
@@ -191,7 +191,7 @@ def _pastor_stambaugh_beta(
                 continue
 
             rbar = float(np.mean(r_v))
-            out[t, c] = float(np.mean((l_orth - l_orth_bar) * (r_v - rbar)) / var_l) if var_l) > 1e-10 else np.nan
+            out[t, c] = float(np.mean((l_orth - l_orth_bar) * (r_v - rbar)) / var_l)
 
     return _frame_like(ret, out)
 
@@ -308,7 +308,7 @@ def _price_delay_score(
             beta_res = np.linalg.lstsq(X_res_centered, y_centered, rcond=None)[0]
             y_pred_res = X_res_centered @ beta_res + ybar
             ssr_res = float(np.sum((y - y_pred_res) ** 2))
-            r2_res = np.where(sst) != 0, max(0.0, 1.0 - ssr_res / sst), np.nan)
+            r2_res = max(0.0, 1.0 - ssr_res / sst)
 
             # OLS for unrestricted
             X_unres_centered = X_unres - X_unres.mean(axis=0)
@@ -319,7 +319,7 @@ def _price_delay_score(
             beta_unres = np.linalg.lstsq(X_unres_centered, y_centered, rcond=None)[0]
             y_pred_unres = X_unres_centered @ beta_unres + ybar
             ssr_unres = float(np.sum((y - y_pred_unres) ** 2))
-            r2_unres = np.where(sst) != 0, max(0.0, 1.0 - ssr_unres / sst), np.nan)
+            r2_unres = max(0.0, 1.0 - ssr_unres / sst)
 
             # Delay score = unrestricted - restricted R²
             out[t, c] = max(0.0, r2_unres - r2_res)

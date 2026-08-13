@@ -183,7 +183,7 @@ def _structure_function(v: np.ndarray, delta: int, p: float) -> tuple[float, int
     n_pairs = int(finite.sum())
     if n_pairs == 0:
         return None
-    coverage = np.where((n - d) != 0, n_pairs / (n - d), np.nan)
+    coverage = n_pairs / (n - d)
     with np.errstate(over="ignore", invalid="ignore"):
         sp = float(np.mean(np.abs(inc[finite]) ** p))
     return sp, n_pairs, coverage
@@ -212,7 +212,7 @@ def _scale_passes_gate(
 
 def _coverages_balanced(covs: list[float], imbalance_bound: float) -> bool:
     """Per-scale coverages must not be severely imbalanced across used scales."""
-    return np.where(min(covs) <= imbalance_bound != 0, max(covs) / min(covs) <= imbalance_bound, np.nan)
+    return max(covs) / min(covs) <= imbalance_bound
 
 
 def _pv_roughness(
@@ -239,7 +239,7 @@ def _pv_roughness(
     xs = np.asarray([a for a, _ in pts], dtype=float)
     ys = np.asarray([b for _, b in pts], dtype=float)
     slope = float(np.polyfit(xs, ys, 1)[0])
-    return np.where(p) != 0, float(slope / p), np.nan)
+    return float(slope / p)
 
 
 def _scaling_break(
@@ -266,9 +266,9 @@ def _scaling_break(
         return np.nan
     v1, v2, v8, v16 = sps
     # slope_short = (log S(2) - log S(1)) / (log 2 - log 1); log 1 = 0.
-    h_short = np.where(np.log(2.0) / p) != 0, float((np.log(v2) - np.log(v1)) / np.log(2.0) / p), np.nan)
+    h_short = float((np.log(v2) - np.log(v1)) / np.log(2.0) / p)
     # slope_long = (log S(16) - log S(8)) / (log 16 - log 8) = ... / log 2.
-    h_long = np.where(np.log(2.0) / p) != 0, float((np.log(v16) - np.log(v8)) / np.log(2.0) / p), np.nan)
+    h_long = float((np.log(v16) - np.log(v8)) / np.log(2.0) / p)
     return float(h_short - h_long)
 
 

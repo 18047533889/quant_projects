@@ -24,7 +24,7 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
 
 
 def _safe_div(num, den):
-    out = np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
+    out = num / den.replace(0, np.nan)
     return out.replace([np.inf, -np.inf], np.nan)
 
 

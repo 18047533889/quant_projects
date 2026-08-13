@@ -42,7 +42,7 @@ class ExpandingMeanPolars(SeriesOperator):
         exprs = []
         for c in cols:
             cnt = pl.col(c).is_not_null().cast(pl.Float64).cum_sum()
-            mu = pl.col(c).cum_sum() / cnt if cnt > 0 else np.nan
+            mu = pl.col(c).cum_sum() / cnt
             exprs.append(mu.alias(c))
         return x.with_columns(exprs)
 
@@ -60,8 +60,8 @@ class ExpandingStdPolars(SeriesOperator):
         exprs = []
         for c in cols:
             cnt = pl.col(c).is_not_null().cast(pl.Float64).cum_sum()
-            mu = pl.col(c).cum_sum() / cnt if cnt > 0 else np.nan
-            mean_sq = (pl.col(c).pow(2).cum_sum()) / cnt if cnt > 0 else np.nan
+            mu = pl.col(c).cum_sum() / cnt
+            mean_sq = (pl.col(c).pow(2).cum_sum()) / cnt
             var_pop = mean_sq - mu.pow(2)
             var_sample = (
                 pl.when(cnt <= 1)
@@ -85,8 +85,8 @@ class ExpandingZscorePolars(SeriesOperator):
         exprs = []
         for c in cols:
             cnt = pl.col(c).is_not_null().cast(pl.Float64).cum_sum()
-            mu = pl.col(c).cum_sum() / cnt if cnt > 0 else np.nan
-            mean_sq = (pl.col(c).pow(2).cum_sum()) / cnt if cnt > 0 else np.nan
+            mu = pl.col(c).cum_sum() / cnt
+            mean_sq = (pl.col(c).pow(2).cum_sum()) / cnt
             sd = (mean_sq - mu.pow(2)).sqrt()
             exprs.append(((pl.col(c) - mu) / sd).alias(c))
         return x.with_columns(exprs)

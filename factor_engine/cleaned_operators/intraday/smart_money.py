@@ -113,11 +113,11 @@ def _common_trading_intensity(vol_v: np.ndarray, amt_v: np.ndarray) -> float:
     if total_vol <= _EPS:
         return np.nan
 
-    vol_shares = v / total_vol if total_vol > 1e-10 else np.nan
+    vol_shares = v / total_vol
     concentration = float(np.sum(vol_shares ** 2))
 
     # Intensity = peak/mean ratio * concentration
-    intensity = (max_vol / mean_vol) * concentration if mean_vol) * concentration > 1e-10 else np.nan
+    intensity = (max_vol / mean_vol) * concentration
     return intensity
 
 
@@ -182,12 +182,12 @@ def _local_conditional_entropy(close_v: np.ndarray, vol_v: np.ndarray) -> float:
         mask = (vol_state == vs)
         if mask.sum() < 2:
             continue
-        p_vs = mask.sum() / len(vol_state) if len(vol_state) > 1e-10 else np.nan
+        p_vs = mask.sum() / len(vol_state)
         dir_subset = direction[mask]
 
         # P(direction | volume_state)
         for d in [-1, 0, 1]:
-            p_d_given_vs = np.where(len(dir_subset) != 0, (dir_subset == d).sum() / len(dir_subset), np.nan)
+            p_d_given_vs = (dir_subset == d).sum() / len(dir_subset)
             if p_d_given_vs > _EPS:
                 entropy -= p_vs * p_d_given_vs * np.log(p_d_given_vs)
 
@@ -242,7 +242,7 @@ def _smart_money_vwap_ratio(close_v: np.ndarray, amt_v: np.ndarray, vol_v: np.nd
     total_vol = np.sum(v)
     if total_vol <= _EPS:
         return np.nan
-    session_vwap = total_amt / total_vol if total_vol > 1e-10 else np.nan
+    session_vwap = total_amt / total_vol
 
     # Large-trade threshold: top 25% by amount
     amt_threshold = np.percentile(a, 75)
@@ -257,12 +257,12 @@ def _smart_money_vwap_ratio(close_v: np.ndarray, amt_v: np.ndarray, vol_v: np.nd
     if large_vol <= _EPS:
         return np.nan
 
-    large_vwap = large_amt / large_vol if large_vol > 1e-10 else np.nan
+    large_vwap = large_amt / large_vol
 
     if session_vwap <= _EPS:
         return np.nan
 
-    ratio = large_vwap / session_vwap if session_vwap != 0 else np.nan
+    ratio = large_vwap / session_vwap
     return float(ratio)
 
 

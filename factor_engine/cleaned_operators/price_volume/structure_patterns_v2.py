@@ -206,7 +206,7 @@ def ts_swing_amplitude(high,low,left_window,right_window,history_window):
     return amp
 
 def ts_swing_amplitude_pct(high,low,close,left_window,right_window,history_window):
-    return np.where(close.abs().replace(0,np.nan) != 0, (ts_swing_amplitude(high,low,left_window,right_window,history_window)) / (close.abs().replace(0,np.nan)), np.nan)
+    return ts_swing_amplitude(high,low,left_window,right_window,history_window)/close.abs().replace(0,np.nan)
 
 def ts_swing_duration(high,low,left_window,right_window,history_window):
     _, dur, _ = _swing_segment(high,low,left_window,right_window,history_window)
@@ -223,7 +223,7 @@ def _true_range(high,low,close):
 
 def ts_swing_amplitude_atr(high,low,close,left_window,right_window,history_window,atr_window):
     atr=_true_range(high,low,close).rolling(_pi(atr_window,"atr_window"),min_periods=_pi(atr_window,"atr_window")).mean()
-    return np.where(atr.replace(0,np.nan) != 0, (ts_swing_amplitude(high,low,left_window,right_window,history_window)) / (atr.replace(0,np.nan)), np.nan)
+    return ts_swing_amplitude(high,low,left_window,right_window,history_window)/atr.replace(0,np.nan)
 
 
 def ts_channel_width(high,low,left_window,right_window,history_window,points):
@@ -232,16 +232,16 @@ def ts_channel_width(high,low,left_window,right_window,history_window,points):
     return r-s
 
 def ts_channel_width_pct(close,high,low,left_window,right_window,history_window,points):
-    return np.where(close.abs().replace(0,np.nan) != 0, (ts_channel_width(high,low,left_window,right_window,history_window,points)) / (close.abs().replace(0,np.nan)), np.nan)
+    return ts_channel_width(high,low,left_window,right_window,history_window,points)/close.abs().replace(0,np.nan)
 
 def ts_channel_width_atr(high,low,close,left_window,right_window,history_window,points,atr_window):
     atr=_true_range(high,low,close).rolling(_pi(atr_window,"atr_window"),min_periods=_pi(atr_window,"atr_window")).mean()
-    return np.where(atr.replace(0,np.nan) != 0, (ts_channel_width(high,low,left_window,right_window,history_window,points)) / (atr.replace(0,np.nan)), np.nan)
+    return ts_channel_width(high,low,left_window,right_window,history_window,points)/atr.replace(0,np.nan)
 
 def ts_channel_width_slope(high,low,left_window,right_window,history_window,points,window):
     width=ts_channel_width(high,low,left_window,right_window,history_window,points)
     w=_pi(window,"window",2); x=np.arange(w,dtype=float); xb=x.mean(); den=np.sum((x-xb)**2)
-    return np.where(den != 0, (np.sum((x-xb)*(a-a.mean()))) / (den), np.nan)),raw=True)
+    return width.rolling(w,min_periods=w).apply(lambda a: float(np.sum((x-xb)*(a-a.mean()))/den),raw=True)
 
 def ts_line_convergence(high,low,left_window,right_window,history_window,points):
     rs=_bounded_line(high,left_window,right_window,history_window,points,high=True,output="slope")
@@ -267,7 +267,7 @@ def _fit_r2(frame,left,right,history,points,high):
             selected=ev[-k:]; x=np.asarray([z[1] for z in selected],float); y=np.asarray([z[2] for z in selected],float)
             xb,yb=x.mean(),y.mean(); den=np.sum((x-xb)**2)
             if den<=_EPS: continue
-            slope=(np.sum((x-xb)*(y-yb))) / den if den != 0 else np.nan; fit=yb+slope*(x-xb)
+            slope=np.sum((x-xb)*(y-yb))/den; fit=yb+slope*(x-xb)
             ss_tot=np.sum((y-yb)**2); ss_res=np.sum((y-fit)**2)
             arr[t,c]=1.0-ss_res/ss_tot if ss_tot>_EPS else 1.0
     return pd.DataFrame(arr,index=frame.index,columns=frame.columns)
@@ -279,8 +279,8 @@ def ts_pattern_symmetry(high,low,left_window,right_window,history_window):
     h1=ts_nth_pivot_high(high,left_window,right_window,history_window,1); h2=ts_nth_pivot_high(high,left_window,right_window,history_window,2)
     l1=ts_nth_pivot_low(low,left_window,right_window,history_window,1); l2=ts_nth_pivot_low(low,left_window,right_window,history_window,2)
     hs=(h1-h2).abs()/((h1.abs()+h2.abs())/2).replace(0,np.nan)
-    ls=np.where(((l1.abs()+l2.abs())/2).replace(0,np.nan) != 0, (l1-l2).abs() / ((l1.abs()+l2.abs())/2).replace(0,np.nan), np.nan)
-    return np.where((1.0+hs+ls) != 0, (1.0) / ((1.0+hs+ls)), np.nan)
+    ls=(l1-l2).abs()/((l1.abs()+l2.abs())/2).replace(0,np.nan)
+    return 1.0/(1.0+hs+ls)
 
 
 def ts_impulse_return(close,window): return close/close.shift(_pi(window,"window"))-1.0
@@ -310,7 +310,7 @@ def _closeness(a,b,tol):
     tol=_pf(tol,"tolerance",0.0)
     if tol<=0: raise ValueError("tolerance must be > 0")
     rel=(a-b).abs()/((a.abs()+b.abs())/2).replace(0,np.nan)
-    return np.where(tol != 0, (1.0-rel) / (tol), np.nan)).clip(lower=0.0,upper=1.0)
+    return (1.0-rel/tol).clip(lower=0.0,upper=1.0)
 
 def _between(v,lo,hi): return v.ge(lo).astype(float)*v.le(hi).astype(float)
 
@@ -344,8 +344,8 @@ def pattern_head_shoulders(high,low,left_window,right_window,history_window,shou
     shoulder_l, neckline_l1, head, neckline_l2, shoulder_r = prices
     shoulders=_closeness(shoulder_l,shoulder_r,shoulder_tolerance)
     base=((shoulder_l.abs()+shoulder_r.abs())/2).replace(0,np.nan)
-    prom=(np.where(base-1.0 != 0, (head) / (base-1.0), np.nan))
-    neckline=np.where((positions[3]-positions[1]).replace(0,np.nan) != 0, ((neckline_l2-neckline_l1)) / ((positions[3]-positions[1]).replace(0,np.nan)), np.nan)
+    prom=(head/base-1.0)
+    neckline=(neckline_l2-neckline_l1)/(positions[3]-positions[1]).replace(0,np.nan)
     score=shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.abs().le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
     return score*ok.astype(float)
 
@@ -356,8 +356,8 @@ def pattern_inverse_head_shoulders(high,low,left_window,right_window,history_win
     shoulder_l, neckline_h1, head, neckline_h2, shoulder_r = prices
     shoulders=_closeness(shoulder_l,shoulder_r,shoulder_tolerance)
     base=((shoulder_l.abs()+shoulder_r.abs())/2).replace(0,np.nan)
-    prom=(np.where(head.abs().replace(0,np.nan)-1.0 != 0, (base) / (head.abs().replace(0,np.nan)-1.0), np.nan))
-    neckline=np.where((positions[3]-positions[1]).replace(0,np.nan) != 0, ((neckline_h2-neckline_h1)) / ((positions[3]-positions[1]).replace(0,np.nan)), np.nan)
+    prom=(base/head.abs().replace(0,np.nan)-1.0)
+    neckline=(neckline_h2-neckline_h1)/(positions[3]-positions[1]).replace(0,np.nan)
     score=shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.abs().le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
     return score*ok.astype(float)
 
@@ -398,16 +398,16 @@ def pattern_broadening(high,low,left_window,right_window,history_window,points,s
 def pattern_bull_flag(close,high,low,volume,impulse_window,flag_window,min_impulse,max_retracement,max_width,volume_decay_threshold):
     iw=_pi(impulse_window,"impulse_window",2); fw=_pi(flag_window,"flag_window",2)
     impulse=close.shift(fw)/close.shift(fw+iw)-1.0
-    peak=close.shift(fw); trough=low.rolling(fw,min_periods=fw).min(); retr=np.where(peak.abs().replace(0,np.nan) != 0, ((peak-trough)) / (peak.abs().replace(0,np.nan)), np.nan)
-    width=np.where(close.abs().replace(0,np.nan) != 0, (ts_consolidation_width(high,low,fw)) / (close.abs().replace(0,np.nan)), np.nan)
+    peak=close.shift(fw); trough=low.rolling(fw,min_periods=fw).min(); retr=(peak-trough)/peak.abs().replace(0,np.nan)
+    width=ts_consolidation_width(high,low,fw)/close.abs().replace(0,np.nan)
     vdec=ts_consolidation_volume_decay(volume,fw)
     return (impulse.ge(_pf(min_impulse,"min_impulse",0))&retr.le(_pf(max_retracement,"max_retracement",0))&width.le(_pf(max_width,"max_width",0))&vdec.ge(_pf(volume_decay_threshold,"volume_decay_threshold"))).astype(float)
 
 def pattern_bear_flag(close,high,low,volume,impulse_window,flag_window,min_impulse,max_retracement,max_width,volume_decay_threshold):
     iw=_pi(impulse_window,"impulse_window",2); fw=_pi(flag_window,"flag_window",2)
     impulse=close.shift(fw)/close.shift(fw+iw)-1.0
-    base=close.shift(fw); rebound=high.rolling(fw,min_periods=fw).max(); retr=np.where(base.abs().replace(0,np.nan) != 0, ((rebound-base)) / (base.abs().replace(0,np.nan)), np.nan)
-    width=np.where(close.abs().replace(0,np.nan) != 0, (ts_consolidation_width(high,low,fw)) / (close.abs().replace(0,np.nan)), np.nan); vdec=ts_consolidation_volume_decay(volume,fw)
+    base=close.shift(fw); rebound=high.rolling(fw,min_periods=fw).max(); retr=(rebound-base)/base.abs().replace(0,np.nan)
+    width=ts_consolidation_width(high,low,fw)/close.abs().replace(0,np.nan); vdec=ts_consolidation_volume_decay(volume,fw)
     return (impulse.le(-_pf(min_impulse,"min_impulse",0))&retr.le(_pf(max_retracement,"max_retracement",0))&width.le(_pf(max_width,"max_width",0))&vdec.ge(_pf(volume_decay_threshold,"volume_decay_threshold"))).astype(float)
 
 

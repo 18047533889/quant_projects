@@ -150,7 +150,7 @@ class DividePolars(SeriesOperator):
         name="divide", category="elementwise_math", description="逐元素除法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
     )
-    _calculate_series = lambda self, a, b, **kw: np.where(b != 0, _binary_colwise(lambda a, b: a / b)(a, b), np.nan)
+    _calculate_series = _binary_colwise(lambda a, b: a / b)
 
 
 def _unary(expr_fn):
@@ -348,7 +348,7 @@ class TSPctPolars(SeriesOperator):
         periods = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
         return x.with_columns([
-            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(periods) - 1.0).alias(c) for c in cols
+            (pl.col(c) / pl.col(c).shift(periods) - 1.0).alias(c) for c in cols
         ])
 
 
@@ -364,7 +364,7 @@ class LogReturnsPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = _numeric_cols(x)
         return x.with_columns([
-            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(1)).log().alias(c) for c in cols
+            (pl.col(c) / pl.col(c).shift(1)).log().alias(c) for c in cols
         ])
 
 

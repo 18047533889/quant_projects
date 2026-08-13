@@ -135,7 +135,7 @@ def _wasserstein_shift_series(
             continue
         q_hist = np.quantile(hist, _PHI_GRID)
         q_today = np.quantile(today, _PHI_GRID)
-        out[i] = float(np.mean(np.abs(q_today - q_hist))) / mad if mad != 0 else np.nan
+        out[i] = float(np.mean(np.abs(q_today - q_hist))) / mad
     return out
 
 
@@ -155,7 +155,7 @@ def _equal_volume_vpin(vol: np.ndarray, of: np.ndarray, buckets: int) -> float:
     total_v = float(np.sum(np.where(vol > 0.0, vol, 0.0)))
     if total_v <= _EPS:
         return np.nan
-    target = total_v / buckets if buckets != 0 else np.nan
+    target = total_v / buckets
     bucket_capacity = target
     bucket_flow = 0.0
     abs_of = 0.0
@@ -182,7 +182,7 @@ def _equal_volume_vpin(vol: np.ndarray, of: np.ndarray, buckets: int) -> float:
                 bucket_capacity = target
     if bucket_capacity < target:  # close the final partial bucket.
         abs_of += abs(bucket_flow)
-    return np.where(total_v != 0, abs_of / total_v, np.nan)
+    return abs_of / total_v
 
 
 def _vpin_series(
@@ -289,7 +289,7 @@ class IntradayBvcImbalance(SeriesOperator):
                 if total_v <= _EPS:
                     per_day[day] = np.nan
                 else:
-                    per_day[day] = float(of.sum()) / total_v if total_v != 0 else np.nan
+                    per_day[day] = float(of.sum()) / total_v
             out[inst] = pd.Series(per_day, dtype=float)
         if not out:
             return pd.DataFrame(dtype=float)
@@ -339,7 +339,7 @@ class IntradayImpactBeta(SeriesOperator):
             var = float(np.sum(qc * qc))
             if var <= _EPS:
                 return np.nan
-            return np.where(var) != 0, float(np.sum(qc * (r - r.mean())) / var), np.nan)
+            return float(np.sum(qc * (r - r.mean())) / var)
 
         return _daily_agg_two(returns, flow, _fn)
 
@@ -385,7 +385,7 @@ class IntradayImpactAsymmetry(SeriesOperator):
             var = float(np.sum(qc * qc))
             if var <= _EPS:
                 return None
-            return np.where(var) != 0, float(np.sum(qc * (r - r.mean())) / var), np.nan)
+            return float(np.sum(qc * (r - r.mean())) / var)
 
         def _fn(r_vals: np.ndarray, q_vals: np.ndarray) -> float:
             finite = np.isfinite(r_vals) & np.isfinite(q_vals)
@@ -400,7 +400,7 @@ class IntradayImpactAsymmetry(SeriesOperator):
             if lam_plus is None or lam_minus is None:
                 return np.nan
             denom = abs(lam_plus) + abs(lam_minus) + _EPS
-            return np.where(denom) != 0, float((lam_plus - abs(lam_minus)) / denom), np.nan)
+            return float((lam_plus - abs(lam_minus)) / denom)
 
         return _daily_agg_two(returns, flow, _fn)
 

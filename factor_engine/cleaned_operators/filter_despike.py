@@ -145,7 +145,7 @@ class TSHampelFilterCausal(SeriesOperator):
                     recent_range = float(np.ptp(finite_vals))  # peak-to-peak
                     if recent_range > 1e-12:
                         # Non-trivial range despite zero MAD (discrete values)
-                        s_t = np.where(4.0, scale_floor) != 0, max(MAD_SCALE * recent_range / 4.0, scale_floor), np.nan)
+                        s_t = max(MAD_SCALE * recent_range / 4.0, scale_floor)
                     else:
                         # Truly flat: bypass filter (accept current value)
                         out[row, col] = curr

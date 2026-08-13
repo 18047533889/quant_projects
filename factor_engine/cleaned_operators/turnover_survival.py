@@ -183,7 +183,7 @@ def _column_stats(
         old_mass[t] = float(suf[0])
         if float(suf[0]) > _MAX_OLD_MASS:
             continue
-        wn = w / total if total != 0 else np.nan
+        wn = w / total
 
         # Zero-weight rows carry NaN prices; ``0 * NaN == NaN`` would poison
         # the weighted mean, so evaluate over a masked price vector.
@@ -228,7 +228,7 @@ def _column_stats(
             bmax = int(np.argmax(mass))
             sel = bins_idx == bmax
             sel_w = wn[sel]
-            if float(sel_w.sum()) > _EPS:
+            if float(sel_w.sum() > _EPS:
                 pmode = float(
                     np.sum(wn[sel] * np.where(price_ok, prices, 0.0)[sel]) / float(np.sum(wn[sel]))
                 )
@@ -275,7 +275,7 @@ def _column_stats(
         # value space (weight 0 but still interpolated against), which could
         # turn the quantile distance into NaN or a wrong level.
         qmask = price_ok & (wn > 0.0)
-        if int(qmask.sum()) < 2:
+        if int(qmask.sum() < 2:
             continue
         qs = prices[qmask]
         qw = wn[qmask]

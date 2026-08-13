@@ -221,7 +221,7 @@ def _lyapunov_series(
             L = np.nanmean(Lstack, axis=0)
             ks = np.arange(H + 1, dtype=float)
             ok = np.isfinite(L)
-            if int(ok.sum()) < 2:
+            if int(ok.sum() < 2:
                 continue
             kk = ks[ok]
             LL = L[ok]

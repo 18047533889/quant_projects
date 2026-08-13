@@ -59,7 +59,7 @@ def _intraday_returns(cv: np.ndarray, times: np.ndarray, max_gap_minutes: int = 
     if len(cv) < 2:
         return r
     with np.errstate(divide="ignore", invalid="ignore"):
-        logr = np.where(cv[:-1]) != 0, np.log(cv[1:] / cv[:-1]), np.nan)
+        logr = np.log(cv[1:] / cv[:-1])
     gaps = (
         np.asarray(times[1:], dtype="datetime64[s]").astype(np.int64)
         - np.asarray(times[:-1], dtype="datetime64[s]").astype(np.int64)
@@ -91,7 +91,7 @@ def _daily_pair_with_times(
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals_a))) < 2:
+            if int(np.sum(np.isfinite(vals_a)) < 2:
                 per_day[day] = np.nan
                 continue
             try:
@@ -156,7 +156,7 @@ def _slot_daily_metric(values: pd.DataFrame, window: int, metric: str) -> pd.Dat
                 if na <= _EPS or nb <= _EPS:
                     day_scores[day] = np.nan
                     continue
-                day_scores[day] = np.where((na * nb)) != 0, float(np.dot(va, vb) / (na * nb)), np.nan)
+                day_scores[day] = float(np.dot(va, vb) / (na * nb))
             elif metric == "mean_diff":
                 day_scores[day] = float(np.mean(va - vb))
             else:  # mean_abs_diff
@@ -185,7 +185,7 @@ def _corr_skipna(a: np.ndarray, b: np.ndarray, min_obs: int = 10) -> float:
     if m.sum() < int(min_obs):
         return np.nan
     va, vb = a[m], b[m]
-    if float(np.std(va)) < 1e-12 or float(np.std(vb)) < 1e-12:
+    if float(np.std(va) < 1e-12 or float(np.std(vb) < 1e-12:
         return np.nan
     return float(np.corrcoef(va, vb)[0, 1])
 
@@ -367,7 +367,7 @@ class IntraTailVolumeShare(SessionAggregationOperator):
             total = float(np.sum(v2))
             if total <= _EPS:
                 return np.nan
-            return np.where(total != 0, float(np.sum(v2[tail])) / total, np.nan)
+            return float(np.sum(v2[tail])) / total
 
         return _daily_pair_with_times(close, volume, _fn)
 
@@ -397,7 +397,7 @@ class IntraVolumePriceAlignment(SessionAggregationOperator):
             if m.sum() < 10:
                 return np.nan
             rr, v2 = r[m], vv[m]
-            if float(np.std(rr)) < _EPS or float(np.std(v2)) < _EPS:
+            if float(np.std(rr) < _EPS or float(np.std(v2) < _EPS:
                 return np.nan
             return float(np.corrcoef(rr, v2)[0, 1])
 
@@ -446,7 +446,7 @@ class IntraUteHigh(SessionAggregationOperator):
             open_mask = (minutes >= s_open) & (minutes <= s_open + eff_edge)
             close_mask = (minutes >= s_close - eff_edge) & (minutes <= s_close)
             edge_rv = float(np.nansum(r2[open_mask])) + float(np.nansum(r2[close_mask]))
-            return np.where(total != 0, edge_rv / total, np.nan)
+            return edge_rv / total
 
         return daily_agg(close, _fn)
 
@@ -480,7 +480,7 @@ class IntraUteLow(SessionAggregationOperator):
                 return np.nan
             minutes = minute_of_day(times)
             mid = (minutes >= ms) & (minutes <= me)
-            return np.where(total != 0, float(np.nansum(r2[mid])) / total, np.nan)
+            return float(np.nansum(r2[mid])) / total
 
         return daily_agg(close, _fn)
 
@@ -640,7 +640,7 @@ class IntraSessionReturnAsymmetry(SessionAggregationOperator):
             denom = m + a
             if denom <= _EPS:
                 return np.nan
-            return np.where(denom != 0, (m - a) / denom, np.nan)
+            return (m - a) / denom
 
         return daily_agg(close, _fn)
 
@@ -679,7 +679,7 @@ class IntraCloseParticipation(SessionAggregationOperator):
             total = float(np.nansum(vv))
             if total <= _EPS:
                 return np.nan
-            return np.where(total != 0, float(np.nansum(vv[mask])) / total, np.nan)
+            return float(np.nansum(vv[mask])) / total
 
         return daily_agg(volume, _fn)
 
@@ -718,8 +718,8 @@ class IntraHighLowAffinity(SessionAggregationOperator):
                 if not all(np.isfinite(v) for v in vals):
                     scores[day] = np.nan
                     continue
-                dev = np.where(120.0 != 0, (abs(vals[0] - vals[1]) + abs(vals[2] - vals[3])) / 120.0, np.nan)
-                scores[day] = np.where((1.0 + dev) != 0, 1.0 / (1.0 + dev), np.nan)
+                dev = (abs(vals[0] - vals[1]) + abs(vals[2] - vals[3])) / 120.0
+                scores[day] = 1.0 / (1.0 + dev)
             out[inst] = pd.Series(scores, dtype=float)
         return pd.DataFrame(out).sort_index()
 

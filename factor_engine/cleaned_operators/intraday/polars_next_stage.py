@@ -34,7 +34,7 @@ def _melt(df: pl.DataFrame, value_name: str) -> pl.DataFrame:
 
 def _returns(long: pl.DataFrame, close_col: str = "close") -> pl.DataFrame:
     return long.with_columns(
-        pl.when(pl.col(close_col != 0).then(pl.col(close_col) / pl.col(close_col).otherwise(None).shift(1).over(["date", "instrument"]))
+        (pl.col(close_col) / pl.col(close_col).shift(1).over(["date", "instrument"]))
         .log()
         .alias("r")
     )
@@ -89,11 +89,11 @@ def _realized_moment(close: pl.DataFrame, kind: str) -> pl.DataFrame:
         (r * r * r * r).sum().alias("r4"),
     )
     if kind == "skewness":
-        out = pl.when(pl.col("r2").pow(1.5)).alias("v")) != 0).then((agg.with_columns(((pl.col("r3") * pl.col("n").sqrt())) / (pl.col("r2").pow(1.5)).alias("v")))).otherwise(None)
+        out = agg.with_columns(((pl.col("r3") * pl.col("n").sqrt()) / pl.col("r2").pow(1.5)).alias("v"))
     elif kind == "kurtosis":
-        out = pl.when((pl.col("r2") * pl.col("r2"))).alias("v")) != 0).then((agg.with_columns(((pl.col("r4") * pl.col("n"))) / ((pl.col("r2") * pl.col("r2"))).alias("v")))).otherwise(None)
+        out = agg.with_columns(((pl.col("r4") * pl.col("n")) / (pl.col("r2") * pl.col("r2"))).alias("v"))
     else:  # quarticity
-        out = pl.when(3.0).alias("v")) != 0).then((agg.with_columns(((pl.col("r4") * pl.col("n"))) / (3.0).alias("v")))).otherwise(None)
+        out = agg.with_columns(((pl.col("r4") * pl.col("n")) / 3.0).alias("v"))
     return _pivot(out, "v")
 
 
@@ -119,7 +119,7 @@ def _cont_jump(close: pl.DataFrame, side: str) -> pl.DataFrame:
     )
     agg = long.group_by(["date", "instrument"]).agg(
         (r * r).sum().alias("rv"),
-        pl.when(2.0 != 0).then(pl.col("absprod") * (math.pi / 2.0).otherwise(None)).sum()).alias("bv"),
+        ((pl.col("absprod") * (math.pi / 2.0)).sum()).alias("bv"),
     )
     if side == "continuous":
         out = agg.with_columns(pl.min_horizontal("rv", "bv").alias("v"))
@@ -210,7 +210,7 @@ def _interval_ret(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
         pl.col("close").first().alias("open"),
         pl.col("close").last().alias("last"),
     )
-    out = pl.when(pl.col("open")) - 1.0).alias("v")) != 0).then((seg.with_columns(((pl.col("last")) / (pl.col("open")) - 1.0).alias("v")))).otherwise(None)
+    out = seg.with_columns(((pl.col("last") / pl.col("open")) - 1.0).alias("v"))
     return _pivot(out, "v")
 
 
@@ -228,7 +228,7 @@ def _interval_share(value: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     mask = (pl.col("mod") >= int(start)) & (pl.col("mod") <= int(end))
     seg = long.filter(mask).group_by(["date", "instrument"]).agg(pl.col("value").sum().alias("seg"))
     merged = seg.join(total, on=["date", "instrument"])
-    out = pl.when(pl.col("total")).alias("v")) != 0).then((merged.with_columns((pl.col("seg")) / (pl.col("total")).alias("v")))).otherwise(None)
+    out = merged.with_columns((pl.col("seg") / pl.col("total")).alias("v"))
     return _pivot(out, "v")
 
 

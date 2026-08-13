@@ -167,7 +167,7 @@ class ReturnVolumeBetaNative(SeriesOperator):
             if c not in volume.columns:
                 exprs.append(pl.lit(None).alias(c))
                 continue
-            vol_change = ((volume[c] - volume[c].shift(1))) / volume[c].shift(1) if volume[c].shift(1) > 1e-10 else np.nan
+            vol_change = pl.when(volume[c].shift(1) > 1e-10).then((volume[c] - volume[c].shift(1)) / volume[c].shift(1)).otherwise(None)
             mean_ret = pl.col(c).rolling_mean(window_size=w)
             mean_vol = vol_change.rolling_mean(window_size=w)
             cov = ((pl.col(c) - mean_ret) * (vol_change - mean_vol)).rolling_mean(window_size=w)
@@ -261,7 +261,7 @@ class ReturnTurnoverBetaNative(SeriesOperator):
             if c not in turnover.columns:
                 exprs.append(pl.lit(None).alias(c))
                 continue
-            to_change = ((turnover[c] - turnover[c].shift(1))) / (turnover[c].shift(1)) if (turnover[c].shift(1)) != 0 else np.nan
+            to_change = pl.when(turnover[c].shift(1) != 0).then((turnover[c] - turnover[c].shift(1)) / turnover[c].shift(1)).otherwise(None)
             mean_ret = pl.col(c).rolling_mean(window_size=w)
             mean_to = to_change.rolling_mean(window_size=w)
             cov = ((pl.col(c) - mean_ret) * (to_change - mean_to)).rolling_mean(window_size=w)
@@ -358,10 +358,10 @@ class PriceVolumeDivergenceNative(SeriesOperator):
                 continue
             # Price momentum
             price_ma = pl.col(c).rolling_mean(window_size=w)
-            price_trend = ((pl.col(c) - price_ma)) / price_ma if price_ma != 0 else np.nan
+            price_trend = pl.when(price_ma != 0).then((pl.col(c) - price_ma) / price_ma).otherwise(None)
             # Volume momentum
             vol_ma = volume[c].rolling_mean(window_size=w)
-            vol_trend = ((volume[c] - vol_ma)) / vol_ma if vol_ma > 1e-10 else np.nan
+            vol_trend = pl.when(vol_ma > 1e-10).then((volume[c] - vol_ma) / vol_ma).otherwise(None)
             # Divergence = price up but volume down, or vice versa
             exprs.append((price_trend - vol_trend).alias(c))
         return price.with_columns(exprs)
@@ -402,10 +402,10 @@ class PriceTurnoverDivergenceNative(SeriesOperator):
                 continue
             # Price momentum
             price_ma = pl.col(c).rolling_mean(window_size=w)
-            price_trend = ((pl.col(c) - price_ma)) / price_ma if price_ma != 0 else np.nan
+            price_trend = pl.when(price_ma != 0).then((pl.col(c) - price_ma) / price_ma).otherwise(None)
             # Turnover momentum
             to_ma = turnover[c].rolling_mean(window_size=w)
-            to_trend = ((turnover[c] - to_ma)) / to_ma if to_ma != 0 else np.nan
+            to_trend = pl.when(to_ma != 0).then((turnover[c] - to_ma) / to_ma).otherwise(None)
             # Divergence
             exprs.append((price_trend - to_trend).alias(c))
         return price.with_columns(exprs)

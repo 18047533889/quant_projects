@@ -105,7 +105,7 @@ def _kalman_filter_1d(observations: np.ndarray, process_var: float = 1e-5, obs_v
         x_pred = x[i-1]
         P_pred = P[i-1] + process_var
 
-        K = (P_pred) / ((P_pred + obs_var)) if ((P_pred + obs_var)) != 0 else np.nan
+        K = (P_pred) / ((P_pred + obs_var) if ((P_pred + obs_var) != 0 else np.nan
         innov = observations[i] - x_pred
         innovations.append(innov)
 
@@ -157,7 +157,7 @@ class IntraKalmanLatentPrice(SessionAggregationOperator):
             mean_price = float(np.mean(obs))
             if mean_price < _EPS:
                 return np.nan
-            return np.where(mean_price) != 0, (float(np.sqrt(innov_var)) / (mean_price)), np.nan)
+            return np.where(mean_price != 0, (float(np.sqrt(innov_var)) / (mean_price)), np.nan)
 
         return daily_agg(close, _kernel, min_finite=1)
 
@@ -195,7 +195,7 @@ class IntraKalmanLatentPricePolars(SessionAggregationOperator):
             mean_price = float(np.mean(obs))
             if mean_price < _EPS:
                 return np.nan
-            return np.where(mean_price) != 0, (float(np.sqrt(innov_var)) / (mean_price)), np.nan)
+            return np.where(mean_price != 0, (float(np.sqrt(innov_var)) / (mean_price)), np.nan)
 
         return daily_agg(close, _kernel, min_finite=1)
 
@@ -239,7 +239,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
 
             # Simple trend extraction: moving average window = n//4
             w = max(3, n // 4)
-            trend = np.where(w, mode='same') != 0, (np.convolve(v, np.ones(w)) / (w, mode='same')), np.nan)
+            trend = np.convolve(v, np.ones(w), mode='same') / w
             cycle = v - trend
 
             trend_energy = float(np.sum(trend ** 2))
@@ -248,7 +248,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
 
             if total_energy < _EPS:
                 return np.nan
-            return np.where(total_energy != 0, (cycle_energy) / (total_energy), np.nan)
+            return cycle_energy / total_energy
 
         return daily_agg(volume, _kernel, min_finite=1)
 
@@ -283,7 +283,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
             n = len(v)
 
             w = max(3, n // 4)
-            trend = np.where(w, mode='same') != 0, (np.convolve(v, np.ones(w)) / (w, mode='same')), np.nan)
+            trend = np.convolve(v, np.ones(w), mode='same') / w
             cycle = v - trend
 
             trend_energy = float(np.sum(trend ** 2))
@@ -292,7 +292,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
 
             if total_energy < _EPS:
                 return np.nan
-            return np.where(total_energy != 0, (cycle_energy) / (total_energy), np.nan)
+            return cycle_energy / total_energy
 
         return daily_agg(volume, _kernel, min_finite=1)
 
@@ -338,11 +338,11 @@ class IntraFunctionalMotifScore(SessionAggregationOperator):
             n = len(p)
 
             # Normalize price and volume to [0, 1]
-            p_norm = ((p - p.min())) / ((p.max() - p.min() + _EPS)) if ((p.max() - p.min() + _EPS)) != 0 else np.nan
-            v_norm = ((v - v.min())) / ((v.max() - v.min() + _EPS)) if ((v.max() - v.min() + _EPS)) != 0 else np.nan
+            p_norm = (p - p.min()) / (p.max() - p.min() + _EPS)
+            v_norm = (v - v.min()) / (v.max() - v.min() + _EPS)
 
             # Standard motifs: up (linear increase) and down (linear decrease)
-            t = np.where((n - 1) != 0, (np.arange(n, dtype=float)) / ((n - 1)), np.nan)
+            t = np.arange(n, dtype=float) / (n - 1)
             up_motif = t
             down_motif = 1.0 - t
 
@@ -392,10 +392,10 @@ class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
             v = vv[finite]
             n = len(p)
 
-            p_norm = ((p - p.min())) / ((p.max() - p.min() + _EPS)) if ((p.max() - p.min() + _EPS)) != 0 else np.nan
-            v_norm = ((v - v.min())) / ((v.max() - v.min() + _EPS)) if ((v.max() - v.min() + _EPS)) != 0 else np.nan
+            p_norm = (p - p.min()) / (p.max() - p.min() + _EPS)
+            v_norm = (v - v.min()) / (v.max() - v.min() + _EPS)
 
-            t = np.where((n - 1) != 0, (np.arange(n, dtype=float)) / ((n - 1)), np.nan)
+            t = np.arange(n, dtype=float) / (n - 1)
             up_motif = t
             down_motif = 1.0 - t
 
@@ -585,11 +585,11 @@ class IntraSmartMoneyFcmScore(SessionAggregationOperator):
                     l = lv[finite]
 
                     # 1. VWAP deviation: (close - vwap) / range
-                    vwap = np.where(np.sum(v)) != 0, (float(np.sum(p * v)) / (np.sum(v))), np.nan)
+                    vwap = float(np.sum(p * v) / np.sum(v))
                     price_range = float(np.max(h) - np.min(l))
                     if price_range < _EPS:
                         raise DataDegeneracy("zero price range")
-                    vwap_dev = ((float(p[-1]) - vwap)) / price_range if price_range != 0 else np.nan
+                    vwap_dev = (float(p[-1]) - vwap) / price_range
 
                     # 2. Volume concentration at extremes (top/bottom 10% price bins)
                     price_min, price_max = float(np.min(p)), float(np.max(p))
@@ -611,7 +611,7 @@ class IntraSmartMoneyFcmScore(SessionAggregationOperator):
                     else:
                         sign = np.sign(overall_direction)
                         aligned = np.sum(np.sign(returns) == sign)
-                        persistence = (float(aligned)) / (len(returns)) if (len(returns)) != 0 else np.nan
+                        persistence = float(aligned) / len(returns)
 
                     # Composite: weighted combination
                     score = vwap_dev * (0.5 * vol_concentration + 0.5 * persistence)
@@ -682,11 +682,11 @@ class IntraSmartMoneyFcmScorePolars(SessionAggregationOperator):
                     h = hv[finite]
                     l = lv[finite]
 
-                    vwap = np.where(np.sum(v)) != 0, (float(np.sum(p * v)) / (np.sum(v))), np.nan)
+                    vwap = float(np.sum(p * v) / np.sum(v))
                     price_range = float(np.max(h) - np.min(l))
                     if price_range < _EPS:
                         raise DataDegeneracy("zero price range")
-                    vwap_dev = ((float(p[-1]) - vwap)) / price_range if price_range != 0 else np.nan
+                    vwap_dev = (float(p[-1]) - vwap) / price_range
 
                     price_min, price_max = float(np.min(p)), float(np.max(p))
                     if price_max - price_min < _EPS:
@@ -706,7 +706,7 @@ class IntraSmartMoneyFcmScorePolars(SessionAggregationOperator):
                     else:
                         sign = np.sign(overall_direction)
                         aligned = np.sum(np.sign(returns) == sign)
-                        persistence = (float(aligned)) / (len(returns)) if (len(returns)) != 0 else np.nan
+                        persistence = float(aligned) / len(returns)
 
                     score = vwap_dev * (0.5 * vol_concentration + 0.5 * persistence)
                     per_day[day] = score
@@ -767,7 +767,7 @@ class IntraMarketProfileCorrExSelf(SessionAggregationOperator):
                     # Normalize to profile (sum=1)
                     v_sum = float(np.sum(v))
                     if v_sum > _EPS:
-                        per_day[day] = (v) / v_sum if v_sum != 0 else np.nan
+                        per_day[day] = v / v_sum
                     else:
                         per_day[day] = np.array([])
             inst_day_profiles[inst] = per_day
@@ -861,7 +861,7 @@ class IntraMarketProfileCorrExSelfPolars(SessionAggregationOperator):
                     v = vals[finite]
                     v_sum = float(np.sum(v))
                     if v_sum > _EPS:
-                        per_day[day] = (v) / v_sum if v_sum != 0 else np.nan
+                        per_day[day] = v / v_sum
                     else:
                         per_day[day] = np.array([])
             inst_day_profiles[inst] = per_day
@@ -1176,7 +1176,7 @@ class IntradayValueAtExtremeState(SessionAggregationOperator):
             if total_value < _EPS:
                 return np.nan
 
-            return np.where((2 * total_value)) != 0, (float((value_at_high_price + value_at_high_vol)) / ((2 * total_value))), np.nan)
+            return np.where((2 * total_value) != 0, (float((value_at_high_price + value_at_high_vol)) / ((2 * total_value))), np.nan)
 
         return daily_agg_three(close, volume, close, _kernel, min_finite=1)
 
@@ -1230,7 +1230,7 @@ class IntradayValueAtExtremeStatePolars(SessionAggregationOperator):
             if total_value < _EPS:
                 return np.nan
 
-            return np.where((2 * total_value)) != 0, (float((value_at_high_price + value_at_high_vol)) / ((2 * total_value))), np.nan)
+            return np.where((2 * total_value) != 0, (float((value_at_high_price + value_at_high_vol)) / ((2 * total_value))), np.nan)
 
         return daily_agg_three(close, volume, close, _kernel, min_finite=1)
 

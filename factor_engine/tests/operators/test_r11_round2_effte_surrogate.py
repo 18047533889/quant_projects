@@ -81,8 +81,8 @@ def test_independent_source_internal_gap_excess_is_zero():
     assert vals.size > 0
     # Old compressed-shift surrogate broke the gap topology and left a spurious
     # bias; the structure-matched null corrects it back to ~ 0.
-    assert abs(float(np.nanmean(vals))) < 0.02
-    assert abs(float(np.nanmedian(vals))) < 0.02
+    assert abs(float(np.nanmean(vals)) < 0.02
+    assert abs(float(np.nanmedian(vals)) < 0.02
 
 
 def test_independent_source_without_gap_still_zero():
@@ -98,7 +98,7 @@ def test_independent_source_without_gap_still_zero():
     vals = out.to_numpy(dtype=float)
     vals = vals[np.isfinite(vals)]
     assert vals.size > 0
-    assert abs(float(np.nanmean(vals))) < 0.02
+    assert abs(float(np.nanmean(vals)) < 0.02
 
 
 # ---------------------------------------------------------------------------
@@ -122,8 +122,8 @@ def test_genuine_dependence_internal_gap_excess_positive():
     vals = vals[np.isfinite(vals)]
     assert vals.size > 0
     # Strong directional coupling: median excess well above the ~0 null floor.
-    assert float(np.nanmedian(vals)) > 0.1
-    assert float(np.nanmean(vals)) > 0.1
+    assert float(np.nanmedian(vals) > 0.1
+    assert float(np.nanmean(vals) > 0.1
 
 
 # ---------------------------------------------------------------------------

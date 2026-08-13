@@ -54,7 +54,7 @@ def _p(n: int = 120, m: int = 6, seed: int = 11) -> dict[str, pd.DataFrame]:
     logr = np.vstack([np.zeros(m), np.diff(np.log(close.to_numpy()), axis=0)])
     ret = pd.DataFrame(logr, index=idx, columns=cols)
     vol = pd.DataFrame(1.0e4 + rng.integers(0, 3.0e4, (n, m)), index=idx, columns=cols).astype(float)
-    event = pd.DataFrame((rng.uniform(size=(n, m)) < 0.02).astype(float), index=idx, columns=cols)
+    event = pd.DataFrame((rng.uniform(size=(n, m) < 0.02).astype(float), index=idx, columns=cols)
     return {"close": close, "ret": ret, "vol": vol, "event": event,
             "high": close * 1.02, "low": close * 0.98}
 
@@ -239,7 +239,7 @@ def test_dmd_known_linear_system(_loaded):
     assert res is not None
     lam0 = res["eig"][0]
     assert abs(abs(lam0) - 0.9) < 1e-6, abs(lam0)
-    assert abs(np.log(abs(lam0)) - np.log(0.9)) < 1e-6
+    assert abs(np.log(abs(lam0)) - np.log(0.9) < 1e-6
     # a single-mode oscillation: x_t = 0.95^t * sin(2*pi*0.1*t)
     t = np.arange(80, dtype=float)
     x2 = (0.95 ** t) * np.sin(2.0 * np.pi * 0.1 * t)
@@ -247,8 +247,8 @@ def test_dmd_known_linear_system(_loaded):
     assert res2 is not None
     lam2 = res2["eig"]
     freqs = np.abs(np.angle(lam2)) / (2.0 * np.pi)
-    assert np.min(np.abs(freqs - 0.1)) < 0.02, freqs
-    assert np.min(np.abs(np.abs(lam2) - 0.95)) < 0.02
+    assert np.min(np.abs(freqs - 0.1) < 0.02, freqs
+    assert np.min(np.abs(np.abs(lam2) - 0.95) < 0.02
 
 
 def test_dmd_rank_infeasible_rejected(_loaded):
@@ -307,7 +307,7 @@ def test_bds_iid_gaussian_small_stat(_loaded):
     stats = np.asarray([s for s in stats if np.isfinite(s)])
     assert stats.size >= 10
     # under IID the BDS statistic is ~N(0,1) — mean near 0, spread bounded
-    assert abs(np.mean(stats)) < 0.6, stats
+    assert abs(np.mean(stats) < 0.6, stats
     assert np.std(stats) < 2.5, stats
 
 

@@ -491,7 +491,7 @@ def _semantic_duplicates(canonicals: list[str], reg) -> dict[str, object]:
                 u, v = va[both], vb[both]
                 if np.allclose(u, v, rtol=1e-9, atol=1e-12):
                     kind = "exact"
-                elif abs(u.mean()) > 1e-12 and np.allclose(
+                elif abs(u.mean() > 1e-12 and np.allclose(
                         u / u.mean(), v / v.mean(), rtol=1e-9, atol=1e-12):
                     kind = "affine"
                 elif np.corrcoef(u, v)[0, 1] > 0.9999:

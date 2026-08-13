@@ -75,7 +75,7 @@ def _bures2(a: np.ndarray, b: np.ndarray) -> float:
 
 def _corr_window(xv: np.ndarray, yv: np.ndarray, min_pairs: int) -> float | None:
     finite = np.isfinite(xv) & np.isfinite(yv)
-    if int(finite.sum()) < min_pairs:
+    if int(finite.sum() < min_pairs:
         return None
     x = xv[finite]
     y = yv[finite]
@@ -225,7 +225,7 @@ class TsKramersMoyalDrift(SeriesOperator):
         if w <= lg:
             raise ValueError("ts_kramers_moyal_drift requires window > lag")
         if min_bin_count is None:
-            mbc = np.where(b * 0.25))) != 0, max(3, int(np.ceil(w / b * 0.25))), np.nan)
+            mbc = max(3, int(np.ceil(w / b * 0.25)))
         else:
             mbc = max(1, int(min_bin_count))
         return _frame_like(x, _km_series(x.to_numpy(dtype=float), w, b, lg, 1, mbc))
@@ -265,7 +265,7 @@ class TsKramersMoyalDiffusion(SeriesOperator):
         if w <= lg:
             raise ValueError("ts_kramers_moyal_diffusion requires window > lag")
         if min_bin_count is None:
-            mbc = np.where(b * 0.25))) != 0, max(3, int(np.ceil(w / b * 0.25))), np.nan)
+            mbc = max(3, int(np.ceil(w / b * 0.25)))
         else:
             mbc = max(1, int(min_bin_count))
         return _frame_like(x, _km_series(x.to_numpy(dtype=float), w, b, lg, 2, mbc))
@@ -307,9 +307,9 @@ def _rank_copula_proj(row: np.ndarray, thetas: np.ndarray) -> np.ndarray | None:
         ranks, m = _average_rank_masked(col)
         if m < 2:
             continue
-        u[np.isfinite(col), k] = (ranks[np.isfinite(col)] + 0.5) / m if m != 0 else np.nan
+        u[np.isfinite(col), k] = (ranks[np.isfinite(col)] + 0.5) / m
     ok = np.isfinite(u).all(axis=1)
-    if int(ok.sum()) < 2:
+    if int(ok.sum() < 2:
         return None
     return u[ok] @ thetas.T
 
@@ -394,7 +394,7 @@ class CsSlicedWassersteinCopulaShift(SeriesOperator):
 
 def _robust_z_col(col: np.ndarray) -> np.ndarray | None:
     finite = np.isfinite(col)
-    if int(finite.sum()) < 2:
+    if int(finite.sum() < 2:
         return None
     med = float(np.median(col[finite]))
     mad = float(np.median(np.abs(col[finite] - med))) * 1.4826
@@ -402,7 +402,7 @@ def _robust_z_col(col: np.ndarray) -> np.ndarray | None:
     if spread <= _EPS:
         return None
     out = np.full_like(col, np.nan, dtype=float)
-    out[finite] = (col[finite] - med) / spread if spread != 0 else np.nan
+    out[finite] = (col[finite] - med) / spread
     return out
 
 
@@ -418,14 +418,14 @@ def _spd_log_matrix(feat_block: np.ndarray, d: int, lam: float, min_rows: int) -
     # Complete-case: one stock's one missing feature must not NaN the whole
     # group's covariance.  Drop incomplete rows first, then require enough peers.
     complete = np.isfinite(Z).all(axis=1)
-    if int(complete.sum()) < min_rows:
+    if int(complete.sum() < min_rows:
         return None
     Z = Z[complete]
     cov = np.cov(Z, rowvar=False)
     if not np.all(np.isfinite(cov)):
         return None
     sd = np.sqrt(np.maximum(np.diag(cov), _EPS))
-    corr = np.where(np.outer(sd, sd) != 0, cov / np.outer(sd, sd), np.nan)
+    corr = cov / np.outer(sd, sd)
     corr = np.clip(corr, -1.0, 1.0)
     r = (1.0 - lam) * corr + lam * np.eye(d)
     w, v = np.linalg.eigh(r)
@@ -589,7 +589,7 @@ def _js_distance(p: np.ndarray, q: np.ndarray) -> float:
         kl_pm = float(np.sum(pm * np.log(rp)))
         kl_qm = float(np.sum(qm * np.log(rq)))
     js = 0.5 * (kl_pm + kl_qm)
-    return np.where(_LN2)) != 0, float(np.sqrt(max(js, 0.0) / _LN2)), np.nan)
+    return float(np.sqrt(max(js, 0.0) / _LN2))
 
 
 def _holder_js_cell(current: np.ndarray, previous: np.ndarray) -> float:
@@ -619,7 +619,7 @@ def _holder_js_cell(current: np.ndarray, previous: np.ndarray) -> float:
     sp = float(pv.sum())
     if sc <= _EPS or sp <= _EPS:
         return np.nan
-    return np.where(sc, pv / sp) != 0, _js_distance(cu / sc, pv / sp), np.nan)
+    return _js_distance(cu / sc, pv / sp)
 
 
 @register_operator(

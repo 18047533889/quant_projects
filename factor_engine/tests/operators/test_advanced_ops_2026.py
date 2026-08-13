@@ -149,7 +149,7 @@ def test_transfer_entropy_independent_is_small():
     assert vals.size > 0
     # Finite-sample quantile-binning bias (Jeffreys smoothing) keeps TE small
     # but nonzero for independent series; ~0.08 here, bound at 0.12.
-    assert float(np.nanmean(vals)) < 0.12
+    assert float(np.nanmean(vals) < 0.12
 
 
 def test_effective_transfer_entropy_finite_deterministic():
@@ -197,7 +197,7 @@ def test_bures_shift_constant_corr_is_zero():
     vals = out.to_numpy(dtype=float)
     vals = vals[np.isfinite(vals)]
     assert vals.size > 0
-    assert float(np.nanmax(vals)) < 1e-6  # same correlation in both windows
+    assert float(np.nanmax(vals) < 1e-6  # same correlation in both windows
 
 
 def test_bures_shift_corr_flip_is_positive():
@@ -262,7 +262,7 @@ def test_pair_wasserstein_identical_and_different():
     v2 = out2.to_numpy(dtype=float)
     v2 = v2[np.isfinite(v2)]
     assert v2.size > 0
-    assert float(np.nanmean(v2)) > 0.0
+    assert float(np.nanmean(v2) > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -342,18 +342,18 @@ def test_rips_h1_geometry_ground_truth():
 
     th = np.linspace(0.0, 2.0 * np.pi, 10, endpoint=False)
     circle = np.column_stack([np.cos(th), np.sin(th)])
-    assert _max_persistence(_rips_h1_pairs(circle)) > 0.5  # one genuine loop
+    assert _max_persistence(_rips_h1_pairs(circle) > 0.5  # one genuine loop
 
     t = np.arange(20.0)
     line2 = np.column_stack([t, np.zeros_like(t)])
-    assert _max_persistence(_rips_h1_pairs(line2)) < 1e-6  # no H1 on a line
+    assert _max_persistence(_rips_h1_pairs(line2) < 1e-6  # no H1 on a line
 
     s = np.sin(2.0 * np.pi * t / 6.0)
     line3 = np.column_stack([s, s, s])  # collinear in 3D — NOT a loop
-    assert _max_persistence(_rips_h1_pairs(line3)) < 1e-6
+    assert _max_persistence(_rips_h1_pairs(line3) < 1e-6
 
     blob = np.random.default_rng(0).normal(size=(10, 3))
-    assert _max_persistence(_rips_h1_pairs(blob)) < 0.5  # small vs the unit circle
+    assert _max_persistence(_rips_h1_pairs(blob) < 0.5  # small vs the unit circle
 
 
 def test_betti_and_diagram_shift_panels():
@@ -386,7 +386,7 @@ def test_fisher_information_shift_same_vs_different():
     dvals = out_diff.to_numpy(dtype=float)
     dvals = dvals[np.isfinite(dvals)]
     assert dvals.size > 0
-    assert float(np.nanmedian(dvals)) > same_med + 0.1
+    assert float(np.nanmedian(dvals) > same_med + 0.1
 
 
 def test_quantile_pca_constant_returns_are_degenerate_nan():

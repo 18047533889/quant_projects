@@ -156,7 +156,7 @@ class GroupWeightedZscorePolarsNative(SeriesOperator):
             result = result.with_columns([
                 (pl.col("_weight") * (pl.col("_value") - pl.col("_wmean")).pow(2)).sum().over("_group").alias("_wvar_num"),
             ]).with_columns([
-                pl.when(pl.col("_wtotal" != 0).then(pl.col("_wvar_num") / pl.col("_wtotal").otherwise(None)).sqrt().alias("_wstd")
+                (pl.col("_wvar_num") / pl.col("_wtotal")).sqrt().alias("_wstd")
             ])
 
             # Z-score
@@ -747,7 +747,7 @@ class GroupFeatureCoverageRatioPolarsNative(SeriesOperator):
                 pl.col("_value").count().over("_group").alias("_valid_count"),
                 pl.lit(1).count().over("_group").alias("_total_count"),
             ]).with_columns([
-                pl.when(pl.col("_total_count" != 0).then(pl.col("_valid_count").cast(pl.Float64) / pl.col("_total_count").otherwise(None)).alias(col)
+                (pl.col("_valid_count").cast(pl.Float64) / pl.col("_total_count")).alias(col)
             ])
 
             result_frames.append(result.select(col))

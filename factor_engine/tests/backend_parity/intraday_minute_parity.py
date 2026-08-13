@@ -857,7 +857,7 @@ def sql_path_efficiency(con, table: str):
     q = f"""
     SELECT date, inst,
            CASE WHEN COUNT(close) < 2 THEN NULL
-                WHEN SUM(ABS(d)) <= 1e-12 THEN 0.0
+                WHEN SUM(ABS(d) <= 1e-12 THEN 0.0
                 ELSE ABS(MAX(close) - MIN(close)) / SUM(ABS(d)) END AS value
     FROM (
       SELECT date, inst, close,
@@ -870,7 +870,7 @@ def sql_path_efficiency(con, table: str):
     q = f"""
     SELECT date, inst,
            CASE WHEN COUNT(*) < 2 THEN NULL
-                WHEN SUM(ABS(d)) <= 1e-12 THEN 0.0
+                WHEN SUM(ABS(d) <= 1e-12 THEN 0.0
                 ELSE ABS(LAST(close) - FIRST(close)) / SUM(ABS(d)) END AS value
     FROM (
       SELECT date, inst, ts, close,
@@ -951,7 +951,7 @@ def sql_signed_imbalance_proxy(con, table: str, name: str = "volume"):
       FROM {table} WHERE close IS NOT NULL
     )
     SELECT date, inst,
-           CASE WHEN SUM(COALESCE({name},0)) <= 1e-12 THEN NULL
+           CASE WHEN SUM(COALESCE({name},0) <= 1e-12 THEN NULL
                 ELSE SUM(CASE WHEN r IS NOT NULL THEN SIGN(r)*COALESCE({name},0) ELSE 0.0 END)
                      / SUM(COALESCE({name},0))
            END AS value

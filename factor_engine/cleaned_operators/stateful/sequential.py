@@ -104,7 +104,7 @@ class TsCusumPressure(SeriesOperator):
                     sm = 0.0
                     continue
                 scale = 1.4826 * mad
-                z = (float(xt) - med) / scale if scale != 0 else np.nan
+                z = (float(xt) - med) / scale
                 sp = max(0.0, sp + z - k)
                 sm = min(0.0, sm + z + k)
                 out[row, col] = sp + sm
@@ -166,7 +166,7 @@ class TsRankIf(SeriesOperator):
                     continue
                 less = float(np.sum(sel < xt))
                 equal = float(np.sum(sel == xt))
-                out[row, col] = np.where(sel.size != 0, (less + 0.5 * equal) / sel.size, np.nan)
+                out[row, col] = (less + 0.5 * equal) / sel.size
         return frame_like(x, out)
 
 
@@ -205,7 +205,7 @@ class StateEwmIf(SeriesOperator):
         # every update) — that is a degenerate EWM, not a meaningful parameter.
         if not np.isfinite(hl) or hl <= 0.0:
             raise ValueError("half_life must be a finite number > 0")
-        alpha = np.where(hl) != 0, 1.0 - np.exp(-np.log(2.0) / hl), np.nan)
+        alpha = 1.0 - np.exp(-np.log(2.0) / hl)
         x, condition = _aligned(x, condition)
         assert_condition_bool(condition)
         xv = x.to_numpy(dtype=float)
@@ -283,7 +283,7 @@ class TsLagOfPeakCorr(SeriesOperator):
                     xs = xv[s_lo : row + 1, col]
                     ys = yv[s_lo - kk : row + 1 - kk, col]
                     valid = np.isfinite(xs) & np.isfinite(ys)
-                    if int(valid.sum()) < mp:
+                    if int(valid.sum() < mp:
                         continue
                     a = xs[valid]
                     b = ys[valid]
@@ -293,7 +293,7 @@ class TsLagOfPeakCorr(SeriesOperator):
                     if best is None or abs(corr) > abs(best[0]):
                         best = (corr, kk)
                 if best is not None:
-                    out[row, col] = np.where(float(ml) != 0, best[1] / float(ml), np.nan)
+                    out[row, col] = best[1] / float(ml)
         return frame_like(x, out)
 
 

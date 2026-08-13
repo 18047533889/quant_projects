@@ -156,7 +156,7 @@ class RegimeLearner(BaseLearner):
 
         # §6.1 double gate (2): every regime has enough observations.
         counts = [
-            int(np.count_nonzero(regime_idx == r)) for r in range(self.n_regimes)
+            int(np.count_nonzero(regime_idx) == r)) for r in range(self.n_regimes)
         ]
         unsupported = [
             (r, counts[r])
@@ -219,7 +219,7 @@ class RegimeLearner(BaseLearner):
         if dates is not None:
             metadata["n_unique_dates"] = n_unique_dates
             metadata["per_regime_unique_dates"] = [
-                int(len(np.unique(dates[regime_idx == r])))
+                int(len(np.unique(dates[regime_idx) == r])))
                 for r in range(self.n_regimes)
             ]
         return FrozenModel(

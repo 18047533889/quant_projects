@@ -316,7 +316,7 @@ class CsEmpiricalBayesShrinkagePolars(SeriesOperator):
             cs_var = pl.col(col).var().over(tc) if tc else pl.col(col).var()
 
             variance_ratio = (pl.col(col + "_std_err").pow(2)) / cs_var if cs_var != 0 else np.nan
-            weight = (1.0) / ((1.0 + shrinkage_factor * variance_ratio)) if ((1.0 + shrinkage_factor * variance_ratio)) != 0 else np.nan
+            weight = (1.0) / ((1.0 + shrinkage_factor * variance_ratio) if ((1.0 + shrinkage_factor * variance_ratio) != 0 else np.nan
             weight = weight.clip(0.0, 1.0)
 
             shrunk = cs_mean + (pl.col(col) - cs_mean) * weight

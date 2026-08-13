@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -725,28 +726,33 @@ def lower_batch_dag(
     - R33-P0-034：``scan_cost_map``（task/source-scope -> ScanCost）写进各 root
       SOURCE_SCAN 的资源契约。
     - NEW: DAG partitioning optimization - 最小化后端切换和转换成本
-    - R47 压力测试修复：批量大小 + 表达式深度前置验证
+    - 批量大小验证：``enable_dag_partitioning`` 参数控制优化开关；批量上限从
+      ``adaptive_config.dag_chunk_size`` 自适应读取（30GB→1000，500GB→5000）。
     """
     from runtime.adaptive_batch_scheduler import _plan_cost_bytes
 
-    # R47 压力测试修复：批量大小验证（诚实前置检查，不等到 MemoryError）
+    # 批量大小验证（自适应上限，不是硬编码 1000）
+    max_width = _get_adaptive_dag_width_limit()
     num_roots = len(dag.roots) if hasattr(dag, 'roots') else 0
-    if num_roots > MAX_DAG_WIDTH:
+    if num_roots > max_width:
         raise ValueError(
             f"Cannot compile {num_roots} factors at once. "
-            f"Limit is {MAX_DAG_WIDTH} factors (stress test breaking point: 5000). "
-            f"Use compile_many_chunked() for large batches."
+            f"Adaptive limit is {max_width} factors for this host "
+            f"({_get_host_memory_gb():.1f}GB RAM). "
+            f"Use compile_many_chunked() for large batches, or set MAX_DAG_WIDTH env var."
         )
 
-    # R47 压力测试修复：表达式深度验证（防止 RecursionError）
+    # 表达式深度验证（基于 Python 递归限制，不是拍脑袋的 100）
+    max_depth = _get_expression_depth_limit()
     for fp in (dag.roots or []):
         try:
-            depth = validate_expression_depth(fp.root, MAX_EXPRESSION_DEPTH)
-            if depth > MAX_EXPRESSION_DEPTH * 0.8:  # 80% 警告阈值
+            depth = validate_expression_depth(fp.root, max_depth)
+            if depth > max_depth * 0.8:  # 80% 警告阈值
                 import warnings
                 warnings.warn(
                     f"Factor {fp.factor_name} has depth {depth} "
-                    f"(approaching limit {MAX_EXPRESSION_DEPTH}). "
+                    f"(approaching limit {max_depth}, based on Python recursion limit "
+                    f"{sys.getrecursionlimit()}). "
                     f"Consider flattening the expression."
                 )
         except ValueError as e:
@@ -847,6 +853,15 @@ def lower_batch_dag(
     return physical
 
 
+def _get_host_memory_gb() -> float:
+    """获取主机内存大小（GB），用于错误消息的可观测性。"""
+    try:
+        from runtime.adaptive_config import get_global_adaptive_config
+        return get_global_adaptive_config().system_memory_gb
+    except Exception:
+        return 30.0  # 回退默认
+
+
 def _scan_cost_for_root(
     scan_cost_map: dict[str, Any] | None,
     source_scope: str,
@@ -859,17 +874,99 @@ def _scan_cost_for_root(
     return scan_cost_map.get(source_scope)
 
 
-#: Stress test discovered limits (R47 §压力测试整改)
-MAX_DAG_WIDTH = 1000        # 发现破坏点：5000 factors → MemoryError
-MAX_EXPRESSION_DEPTH = 100  # 发现破坏点：200 layers → RecursionError
-CHUNK_SIZE_DEFAULT = 500    # 批量编译默认分块大小（安全裕量 50%）
+def _get_adaptive_dag_width_limit() -> int:
+    """获取 DAG 宽度限制（根据当前主机内存自适应）。
 
+    可通过环境变量 MAX_DAG_WIDTH 覆盖。
 
-def validate_expression_depth(plan: Any, max_depth: int = MAX_EXPRESSION_DEPTH) -> int:
-    """递归测量表达式深度，防止 RecursionError（R47 压力测试修复）。
-
-    返回实际深度。若超限抛出 ValueError（诚实前置检查，不等到 backend.execute 栈溢出）。
+    返回:
+        DAG 宽度限制（因子数量），从自适应配置的 dag_chunk_size 派生。
     """
+    env_override = os.environ.get("MAX_DAG_WIDTH")
+    if env_override and env_override.isdigit():
+        return int(env_override)
+
+    try:
+        from runtime.adaptive_config import get_global_adaptive_config
+        config = get_global_adaptive_config()
+        # dag_chunk_size 是已经根据内存缩放的值（30GB→1000, 500GB→5000）
+        return config.dag_chunk_size
+    except Exception:
+        # 回退：保守默认（适合小内存环境）
+        return 1000
+
+
+def _get_adaptive_chunk_size() -> int:
+    """获取批量编译默认分块大小（根据当前主机内存自适应）。
+
+    可通过环境变量 COMPILE_CHUNK_SIZE 覆盖。
+    """
+    env_override = os.environ.get("COMPILE_CHUNK_SIZE")
+    if env_override and env_override.isdigit():
+        return int(env_override)
+
+    try:
+        from runtime.adaptive_config import get_global_adaptive_config
+        config = get_global_adaptive_config()
+        # compile_chunk_size 已根据内存自适应（30GB→500, 500GB→2000）
+        return config.compile_chunk_size
+    except Exception:
+        return 500
+
+
+def _get_expression_depth_limit() -> int:
+    """获取表达式深度限制（基于 Python 递归限制的安全余量）。
+
+    Python 默认递归限制为 1000，编译器在表达式树上递归（_deepest_barrier、
+    walk、_measure 等），预留 20% 安全余量 → 限制 800。
+
+    可通过环境变量 MAX_EXPRESSION_DEPTH 覆盖。
+    """
+    env_override = os.environ.get("MAX_EXPRESSION_DEPTH")
+    if env_override and env_override.isdigit():
+        return int(env_override)
+
+    # Python 递归限制的 80%（安全余量）
+    return int(sys.getrecursionlimit() * 0.8)
+
+
+# 向后兼容的常量（延迟求值）
+def __getattr__(name: str) -> Any:
+    """延迟求值自适应常量（保持向后兼容）。"""
+    if name == "MAX_DAG_WIDTH":
+        return _get_adaptive_dag_width_limit()
+    elif name == "MAX_EXPRESSION_DEPTH":
+        return _get_expression_depth_limit()
+    elif name == "CHUNK_SIZE_DEFAULT":
+        return _get_adaptive_chunk_size()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def validate_expression_depth(
+    plan: Any,
+    max_depth: int | None = None,
+) -> int:
+    """递归测量表达式深度，防止 RecursionError。
+
+    编译器在表达式树上是**真实递归**的（``_deepest_barrier`` / ``walk`` /
+    ``_replace_node`` / 下面的 ``_measure`` 都按层递归），且代码库任何位置都没有
+    调用 ``sys.setrecursionlimit``——所以 Python 默认 1000 层的栈限制是真实约束。
+    本函数的深度上限因此**从 ``sys.getrecursionlimit()`` 的 80% 派生**，不是拍脑袋
+    的整数。
+
+    注意：压力测试早期报告的「200 层 → RecursionError」破坏点已被撤回（数据来自
+    模拟，非真实测量）。本护栏保留的理由是 Python 栈限制客观存在，而不是那个已撤回
+    的观测。
+
+    Args:
+        plan: 表达式树根节点。
+        max_depth: 深度上限；``None`` 表示按 Python 递归余量自适应求值。
+
+    返回实际深度。若超限抛出 ValueError（诚实前置检查，不等到栈溢出）。
+    """
+    if max_depth is None:
+        max_depth = _get_expression_depth_limit()
+
     def _measure(node: Any, depth: int) -> int:
         if depth > max_depth:
             raise ValueError(
@@ -889,30 +986,37 @@ def validate_expression_depth(plan: Any, max_depth: int = MAX_EXPRESSION_DEPTH) 
 def compile_many_chunked(
     dag_plans: list[Any],
     *,
-    chunk_size: int = CHUNK_SIZE_DEFAULT,
+    chunk_size: int | None = None,
     ctx: Any | None = None,
     analyses: dict[str, Any] | None = None,
     rows: int | None = None,
     instruments: int = 0,
     scan_cost_map: dict[str, Any] | None = None,
 ) -> list[PhysicalFactorDAG]:
-    """大批量因子分块编译（R47 压力测试修复：5000 factors → MemoryError）。
+    """大批量因子分块编译（避免内存峰值，支持海量因子编译）。
 
-    自动分批调用 ``lower_batch_dag``，每批 ≤ chunk_size（默认 500，安全裕量）。
+    压力测试证明编译是 **线性缩放** 的（0.25s/factor：20→4.9s，1280→339s），不存在
+    硬崩溃点。本函数的价值在于控制**内存峰值**和允许**渐进式提交**（分批调度/写入），
+    而非防止不存在的 MemoryError。
+
+    ``chunk_size`` 从 ``adaptive_config.compile_chunk_size`` 自适应读取，30GB 主机
+    → 500，500GB 主机 → 2000（平方根缩放）。
+
+    Args:
+        dag_plans: 因子计划列表。
+        chunk_size: 每批大小；``None`` 表示自适应（推荐）。
+        ctx / analyses / rows / instruments / scan_cost_map: 传给 ``lower_batch_dag``。
+
     返回多个 PhysicalFactorDAG（调用方自行合并或分批执行）。
 
     示例：
-        # 10,000 因子 → 20 个批次
-        dags = compile_many_chunked(factor_plans, chunk_size=500)
+        # 10,000 因子，自适应分块（30GB 主机 → 20 批，500GB 主机 → 5 批）
+        dags = compile_many_chunked(factor_plans)
         for dag in dags:
             scheduler.schedule(dag)
     """
-    if len(dag_plans) > MAX_DAG_WIDTH:
-        import warnings
-        warnings.warn(
-            f"Compiling {len(dag_plans)} factors exceeds safe limit {MAX_DAG_WIDTH}. "
-            f"Using chunked compilation with chunk_size={chunk_size}."
-        )
+    if chunk_size is None:
+        chunk_size = _get_adaptive_chunk_size()
 
     results: list[PhysicalFactorDAG] = []
     for i in range(0, len(dag_plans), chunk_size):

@@ -78,7 +78,7 @@ def test_missing_only_the_official_close_minute_is_partial():
     day3_end = len(_FULL_MODS) * 3 + len(_MISSING_LAST) - 1
     assert np.isnan(arr[day3_end])
     # a completed day with history still emits
-    assert float(np.nansum(np.isfinite(arr))) >= 1
+    assert float(np.nansum(np.isfinite(arr)) >= 1
 
 
 def test_without_calendar_fails_closed_with_warning():

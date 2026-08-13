@@ -160,7 +160,7 @@ def _ratio_map(
         if not np.isfinite(r):
             return out, False
         if key in out:
-            if abs(out[key] - float(r)) > _EPS:
+            if abs(out[key] - float(r) > _EPS:
                 return out, False
             continue
         out[key] = float(r)
@@ -205,7 +205,7 @@ def _id_matched(*args, stat: str) -> pd.DataFrame:
                 if not ids:
                     out[row, col] = np.nan
                 else:
-                    out[row, col] = np.where(len(ids) != 0, len(set(cur) & set(prev)) / len(ids), np.nan)
+                    out[row, col] = len(set(cur) & set(prev)) / len(ids)
             elif stat == "rank_migration":
                 common = [i for i in ids if i in cur and i in prev]
                 if not common:
@@ -222,7 +222,7 @@ def _id_matched(*args, stat: str) -> pd.DataFrame:
                     if rc is None or rp is None:
                         continue
                     num += min(cur[i], prev[i]) * abs(rc - rp)
-                out[row, col] = num / denom if denom != 0 else np.nan
+                out[row, col] = num / denom
     return _frame_like(args[0], out)
 
 
@@ -235,7 +235,7 @@ _ID_PARAMS = [
 
 
 def _safe_div(num, den):
-    out = np.where(den.replace(0, np.nan) != 0, num / den.replace(0, np.nan), np.nan)
+    out = num / den.replace(0, np.nan)
     return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -356,7 +356,7 @@ def _rank_stability(*args):
             b = prev_v[:, row, col]
             keep = (a != 0.0) | (b != 0.0)
             a_s, b_s = a[keep], b[keep]
-            if len(a_s) < 3 or float(np.std(a_s)) <= _EPS or float(np.std(b_s)) <= _EPS:
+            if len(a_s) < 3 or float(np.std(a_s) <= _EPS or float(np.std(b_s) <= _EPS:
                 continue
             out[row, col] = float(pd.Series(a_s).corr(pd.Series(b_s), method="spearman"))
     return _frame_like(args[0], out)
@@ -542,7 +542,7 @@ def _slope_of(vals: np.ndarray, x: np.ndarray | None = None) -> float:
     if var <= _EPS:
         return np.nan
     cov = float(np.mean((t - tb) * (v - vb)))
-    return np.where(var != 0, cov / var, np.nan)
+    return cov / var
 
 
 def _concentration_slope(concentration, window=8, snapshot_date=None):
@@ -582,7 +582,7 @@ def _snapshot_aligned_slope(concentration, snapshot_date, window):
             continue
         # Snapshot dates as epoch DAYS (not ns) — ns ~1.7e18 loses float64
         # precision in the centred dot product and collapses the slope to ~0.
-        sdates = np.where(8.64e13 != 0, snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13, np.nan)
+        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
         svalues = snapshots.to_numpy(dtype=float)
         n = len(svalues)
         slopes = np.full(n, np.nan, dtype=float)
@@ -651,7 +651,7 @@ def _snapshot_aligned_acceleration(concentration, snapshot_date, window):
         )
         if len(snapshots) < 3:
             continue
-        sdates = np.where(8.64e13 != 0, snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13, np.nan)
+        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
         svalues = snapshots.to_numpy(dtype=float)
         n = len(svalues)
         slopes = np.full(n, np.nan, dtype=float)

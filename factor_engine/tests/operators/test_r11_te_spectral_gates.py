@@ -74,8 +74,8 @@ def test_miller_madow_matches_hand_built_contingency_table():
         for j in range(bins):
             if p[i, j] > 0 and p_row[i, 0] > 0 and p_col[0, j] > 0:
                 mi += p[i, j] * np.log(p[i, j] / (p_row[i, 0] * p_col[0, j]))
-    r_occ = int((p_row[:, 0] > 0).sum())
-    c_occ = int((p_col[0, :] > 0).sum())
+    r_occ = int((p_row[:, 0]) > 0).sum())
+    c_occ = int((p_col[0, :]) > 0).sum())
     hand = max(0.0, mi - (r_occ - 1) * (c_occ - 1) / (2.0 * n))
     impl = _quantile_hist_mi(a, b, bins, False, bias_correction=True)
     assert impl == pytest.approx(hand, abs=1e-12)
@@ -288,7 +288,7 @@ def test_spectral_q_single_bin_does_not_explode():
     vals = out.to_numpy(dtype=float)
     vals = vals[np.isfinite(vals)]
     assert vals.size > 0
-    assert float(np.max(vals)) < 64  # bounded by the one-bin resolution (<= n/2)
+    assert float(np.max(vals) < 64  # bounded by the one-bin resolution (<= n/2)
     # a pure tone still yields a large-but-finite, resolvable Q
     t = np.arange(200.0)
     tone = _frame(np.sin(2.0 * np.pi * t / 8.0).reshape(-1, 1))

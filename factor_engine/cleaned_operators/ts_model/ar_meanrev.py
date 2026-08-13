@@ -125,7 +125,7 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
             resid[valid] = seg[valid] - design[valid] @ beta
             sd = float(np.nanstd(resid))
             if sd is not None and np.isfinite(sd) and sd > 0.0:
-                out[row] = innov / sd if sd != 0 else np.nan
+                out[row] = innov / sd
         elif stat == "coeff":
             out[row] = float(beta[1])  # first lag coefficient (index 0 is the intercept)
         elif stat == "coeff_stability":
@@ -223,7 +223,7 @@ def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -
     phi = 1.0 + b
     if not np.isfinite(phi) or not (0.0 < phi < 1.0):
         return np.nan
-    return np.where(np.log(phi)) != 0, float(np.log(0.5) / np.log(phi)), np.nan)
+    return float(np.log(0.5) / np.log(phi))
 
 
 def _warn_if_trending_input(panel: np.ndarray, operator_name: str) -> None:
@@ -251,13 +251,13 @@ def _warn_if_trending_input(panel: np.ndarray, operator_name: str) -> None:
         denom = float(np.dot(xc, xc))
         if denom <= 0.0:
             continue
-        slope = np.where(denom) != 0, float(np.dot(xc, finite - finite.mean()) / denom), np.nan)
+        slope = float(np.dot(xc, finite - finite.mean()) / denom)
         pred = finite.mean() + slope * xc
         ss_res = float(np.sum((finite - pred) ** 2))
         ss_tot = float(np.sum((finite - finite.mean()) ** 2))
         if ss_tot <= 0.0:
             continue
-        r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else np.nan
+        r2 = 1.0 - ss_res / ss_tot
         diffs = np.diff(finite)
         mad = float(np.mean(np.abs(diffs))) if diffs.size else 0.0
         drift = abs(float(np.mean(finite))) / mad if mad > 0.0 else 0.0
@@ -332,7 +332,7 @@ def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int
     # OU continuous-time approximation -ln(2)/b (audit P1-E: kept under an
     # explicit _ou_approx name; the production canonical is the exact discrete
     # AR(1) half-life above).
-    return np.where(b) != 0, float(-np.log(2.0) / b), np.nan)
+    return float(-np.log(2.0) / b)
 
 
 @register_operator(
@@ -421,7 +421,7 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
     denom = float(np.dot(lx, lx))
     if denom <= 0.0:
         return np.nan
-    return np.where(denom) != 0, float(np.dot(lx, ly) / denom), np.nan)
+    return float(np.dot(lx, ly) / denom)
 
 
 @register_operator(

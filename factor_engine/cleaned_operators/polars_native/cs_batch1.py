@@ -464,7 +464,7 @@ class CSCoverageRatioPolarsNative(SeriesOperator):
 
         # 计算覆盖率: count(non-null) / count(*)
         lf = lf.with_columns([
-            pl.when(pl.col(feature_name != 0).then(pl.col(feature_name).count() / pl.col(feature_name).otherwise(None).len())
+            (pl.col(feature_name).count() / pl.col(feature_name).len())
             .alias(feature_name)
         ])
 
@@ -549,7 +549,7 @@ class CSWeightedDemeanPolarsNative(SeriesOperator):
         df = pd.DataFrame({feature_name: feature, weight_name: weight})
         lf = pl.from_pandas(df.reset_index(drop=False)).lazy()
 
-        weighted_mean = ((pl.col(feature_name) * pl.col(weight_name)).sum()) / (pl.col(weight_name).sum()) if (pl.col(weight_name).sum()) != 0 else np.nan
+        weighted_mean = (pl.col(feature_name) * pl.col(weight_name)).sum() / pl.col(weight_name).sum()
         lf = lf.with_columns([
             (pl.col(feature_name) - weighted_mean).alias(feature_name)
         ])
@@ -594,7 +594,7 @@ class CSWeightedZscorePolarsNative(SeriesOperator):
         df = pd.DataFrame({feature_name: feature, weight_name: weight})
         lf = pl.from_pandas(df.reset_index(drop=False)).lazy()
 
-        weighted_mean = ((pl.col(feature_name) * pl.col(weight_name)).sum()) / (pl.col(weight_name).sum()) if (pl.col(weight_name).sum()) != 0 else np.nan
+        weighted_mean = (pl.col(feature_name) * pl.col(weight_name)).sum() / pl.col(weight_name).sum()
         weighted_var = (
             (pl.col(weight_name) * (pl.col(feature_name) - weighted_mean).pow(2)).sum() /
             pl.col(weight_name).sum()
@@ -648,7 +648,7 @@ class CSWeightedPercentileRankPolarsNative(SeriesOperator):
         lf = (
             lf.sort(feature_name)
             .with_columns([
-                pl.when(pl.col(weight_name != 0).then(pl.col(weight_name).cum_sum() / pl.col(weight_name).otherwise(None).sum())
+                (pl.col(weight_name).cum_sum() / pl.col(weight_name).sum())
                 .alias("weighted_rank")
             ])
         )

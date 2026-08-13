@@ -215,7 +215,7 @@ def test_sink_backpressure_reduces_compute_admission():
     class _High:
         backpressure_ratio = 0.95
 
-    assert sched._dynamic_concurrency_limit(_High()) < sched._dynamic_concurrency_limit(_Mid())
+    assert sched._dynamic_concurrency_limit(_High() < sched._dynamic_concurrency_limit(_Mid())
 
 
 # ---------------------------------------------------------------------------

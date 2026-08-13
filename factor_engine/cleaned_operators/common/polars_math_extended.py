@@ -89,7 +89,7 @@ class TanPolars(SeriesOperator):
 class CbrtPolars(SeriesOperator):
     """Polars 立方根"""
     metadata = OperatorMetadata(name="cbrt", category="math", description="立方根", param_names=["x"], tags=["math", "polars"])
-    _calculate_series = np.where(3.0)) != 0, _unary(lambda c: c.sign() * c.abs().pow(1.0 / 3.0)), np.nan)
+    _calculate_series = _unary(lambda c: c.sign() * c.abs().pow(1.0 / 3.0))
 
 
 @register_operator(name="ceil", category="math", business_category="elementwise_math", canonical="ceil", source="factor_dsl_polars")
@@ -135,14 +135,14 @@ class TruncatePolars(SeriesOperator):
         value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         scale = 10.0 ** value
         cols = numeric_cols(x)
-        return pl.when(scale).alias(c) for c in cols]) != 0).then(x.with_columns([((pl.col(c) * scale).truncate() / scale).alias(c) for c in cols])).otherwise(None)
+        return x.with_columns([((pl.col(c) * scale).truncate() / scale).alias(c) for c in cols])
 
 
 @register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_polars")
 class InvPolars(SeriesOperator):
     """Polars 倒数"""
     metadata = OperatorMetadata(name="inv", category="math", description="倒数", param_names=["x"], tags=["math", "polars"])
-    _calculate_series = np.where(c) != 0, _unary(lambda c: 1.0 / c), np.nan)
+    _calculate_series = _unary(lambda c: 1.0 / c)
 
 
 @register_operator(name="inverse", category="elementwise_math", business_category="elementwise_math", canonical="inverse", source="factor_dsl_polars")

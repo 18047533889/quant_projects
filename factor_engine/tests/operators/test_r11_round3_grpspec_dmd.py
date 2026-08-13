@@ -215,7 +215,7 @@ def test_dmd_log_finite_horizon_sum_stable():
     # matches the direct sum wherever the direct sum is representable
     for r, K in [(0.5, 50), (0.9, 50), (1.1, 50), (2.0, 50), (5.0, 20), (0.5, 200)]:
         direct = np.log(np.sum(r ** np.arange(K, dtype=float)))
-        assert abs(direct - _log_finite_horizon_sum(float(np.log(r)), K)) < 1e-9, (r, K)
+        assert abs(direct - _log_finite_horizon_sum(float(np.log(r)), K) < 1e-9, (r, K)
     # rho near 1: no catastrophic cancellation (compare against the exact direct
     # finite sum, which is representable here)
     r_near = 1.0000005

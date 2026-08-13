@@ -79,7 +79,7 @@ def test_kernel_granger_independent_x_y_score_about_zero() -> None:
         scores.append(float(s))
     scores_arr = np.asarray(scores, dtype=float)
     # about zero (loose tolerance)
-    assert abs(scores_arr.mean()) < 0.35, scores_arr
+    assert abs(scores_arr.mean() < 0.35, scores_arr
     # NOT systematically positive: the mean must not be positive and the
     # majority of individual draws must be non-positive.
     assert scores_arr.mean() <= 0.1, scores_arr
@@ -125,7 +125,7 @@ def test_kernel_granger_full_kernel_trace_fair_and_own_x_bandwidth() -> None:
     Kf = (Kr + eta * Kx) / (1.0 + eta)
     # P1-12: trace-normalised full kernel has exactly the same trace as the
     # restricted kernel, so the shared ridge regularises both models equally.
-    assert abs(np.trace(Kf) - np.trace(Kr)) < 1e-9
+    assert abs(np.trace(Kf) - np.trace(Kr) < 1e-9
     # The operator itself still runs and is finite for wildly different scales.
     score = _kernel_granger_score(y, x, lag=2)
     assert np.isfinite(score)
@@ -158,7 +158,7 @@ def test_residualized_hsic_accepts_purge_gap_comparable_magnitude() -> None:
         v = _residualized_hsic(x, y, z, purge_gap=pg)
         assert np.isfinite(v) and v >= 0.0
         assert v / max(base, 1e-12) < 3.0, (base, v)
-    assert abs(_residualized_hsic(x, y, z, purge_gap=1) - _residualized_hsic(x, y, z, purge_gap=8)) > 1e-6
+    assert abs(_residualized_hsic(x, y, z, purge_gap=1) - _residualized_hsic(x, y, z, purge_gap=8) > 1e-6
     # A genuine residual dependence (y still depends on x beyond z) shows up.
     y_dep = 0.5 * z + 0.8 * x + _ar1(240, 0.2, 0.3, 53)
     assert _residualized_hsic(x, y_dep, z, purge_gap=3) > _residualized_hsic(x, y, z, purge_gap=3)
@@ -288,4 +288,4 @@ def test_bicoherence_top_decile_excess_registered() -> None:
     out = op.calculate(df, window=120, n_segments=4).to_numpy()
     fin = out[np.isfinite(out)]
     assert fin.size > 0
-    assert abs(float(np.mean(fin))) < 0.15
+    assert abs(float(np.mean(fin)) < 0.15

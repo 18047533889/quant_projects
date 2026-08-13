@@ -19,7 +19,7 @@ _EPS = 1e-12
 
 
 def _safe(numerator, denominator):
-    output = np.where(denominator.replace(0, np.nan) != 0, numerator / denominator.replace(0, np.nan), np.nan)
+    output = numerator / denominator.replace(0, np.nan)
     return output.replace([np.inf, -np.inf], np.nan)
 
 
@@ -58,7 +58,7 @@ def fin_surprise_event_zscore(
         std = float(np.std(history, ddof=1))
         if not np.isfinite(std) or std <= _EPS:
             return np.nan
-        return np.where(std) != 0, float((values[-1] - np.mean(history)) / std), np.nan)
+        return float((values[-1] - np.mean(history)) / std)
 
     return _walk_periods(surprise, period_id, calculate)
 
@@ -157,7 +157,7 @@ def fin_expectation_revision_pct(expected, target_period_id):
     revision = complete & same & changed
     prev_exp = expected.shift(1)
     denom = prev_exp.where(prev_exp.ne(0))
-    pct = np.where(denom - 1.0).replace([np.inf, -np.inf], np.nan) != 0, (expected / denom - 1.0).replace([np.inf, -np.inf], np.nan), np.nan)
+    pct = (expected / denom - 1.0).replace([np.inf, -np.inf], np.nan)
     out = pct.where(revision, 0.0)
     return out.where(complete, np.nan)
 

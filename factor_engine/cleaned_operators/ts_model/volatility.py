@@ -237,7 +237,7 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         for t in range(1, len(rets)):
             h[t] = w + a * rets[t - 1] ** 2 + b * h[t - 1]
         with np.errstate(divide="ignore", invalid="ignore"):
-            return np.where(h)) != 0, float(np.sum(np.log(h) + rets ** 2 / h)), np.nan)
+            return float(np.sum(np.log(h) + rets ** 2 / h))
     try:
         res = _minimize(_nll, np.array([0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 200, "xatol": 1e-4, "fatol": 1e-6})
@@ -368,7 +368,7 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     # standardized shock of the last return uses the variance that governed it
     if not np.isfinite(seg[-1]):
         return np.nan
-    return np.where(np.sqrt(max(h_last, 1e-12))) != 0, float(seg[-1] / np.sqrt(max(h_last, 1e-12))), np.nan)
+    return float(seg[-1] / np.sqrt(max(h_last, 1e-12)))
 
 
 def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
@@ -388,7 +388,7 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
             lev = g if rets[t - 1] < 0 else 0.0
             h[t] = w + (a + lev) * rets[t - 1] ** 2 + b * h[t - 1]
         with np.errstate(divide="ignore", invalid="ignore"):
-            return np.where(h)) != 0, float(np.sum(np.log(h) + rets ** 2 / h)), np.nan)
+            return float(np.sum(np.log(h) + rets ** 2 / h))
     try:
         res = _minimize(_nll, np.array([0.03, 0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 300, "xatol": 1e-4, "fatol": 1e-6})
@@ -499,7 +499,7 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
     h_last = _variance_path(seg, w, a, b, float(np.var(seg[:-1])))
     if not np.isfinite(seg[-1]) or h_last <= 1e-12:
         return np.nan
-    return np.where(h_last - 1.0) != 0, float(seg[-1] ** 2 / h_last - 1.0), np.nan)
+    return float(seg[-1] ** 2 / h_last - 1.0)
 
 
 def _gjr_leverage(vals: np.ndarray, window: int) -> float:
@@ -613,7 +613,7 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     sd = float(np.std(y - Xs @ beta))
     if not np.isfinite(sd) or sd <= 1e-12:
         return np.nan
-    return np.where(sd) != 0, float((seg[-1] - pred_t) / sd), np.nan)
+    return float((seg[-1] - pred_t) / sd)
 
 
 def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:

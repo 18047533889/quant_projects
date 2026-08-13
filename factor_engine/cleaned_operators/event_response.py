@@ -187,7 +187,7 @@ def _event_episode_metrics_series(
         raw = int(ev.size)
         firsts = _collapse_events(ev, refr) if refr > 0 else ev
         eff[t] = int(firsts.size)
-        ovr[t] = 1.0 - firsts.size / raw if raw != 0 else np.nan
+        ovr[t] = 1.0 - firsts.size / raw
     return eff, ovr
 
 
@@ -395,7 +395,7 @@ def _hawkes_branching_ratio_series(event: np.ndarray, window: int, max_lag: int,
     L = strict_int(max_lag, "max_lag", lower=1)
     me = strict_int(min_events, "min_events", lower=2)
     # beta chosen so the exponential kernel support is ~ max_lag bars.
-    beta = np.where(max(L, 1) != 0, 3.0 / max(L, 1), np.nan)
+    beta = 3.0 / max(L, 1)
     out = np.full(n, np.nan)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
     # P1 (round 7): observed-event-clock / exposure mask — a NaN row is NOT

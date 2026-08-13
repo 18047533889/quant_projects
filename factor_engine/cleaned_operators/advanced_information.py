@@ -299,7 +299,7 @@ def _transfer_entropy_window(
     y_t = sw[:-lag]
     x_next = tw[lag:]
     mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-    if int(mask.sum()) < max(lag + 2, min_transitions):
+    if int(mask.sum() < max(lag + 2, min_transitions):
         return np.nan
     xs = x_t[mask]
     ys = y_t[mask]
@@ -422,7 +422,7 @@ def _effective_transfer_entropy_window(
     y_t = sw[:-lag]
     x_next = tw[lag:]
     mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-    if int(mask.sum()) < max(lag + 2, min_transitions):
+    if int(mask.sum() < max(lag + 2, min_transitions):
         return np.nan
     xs = x_t[mask]
     ys = y_t[mask]
@@ -471,7 +471,7 @@ def _effective_transfer_entropy_window(
         # the same valid mask (missing positions are unchanged by construction).
         y_t_s = y_shifted[:-lag]
         mask_s = np.isfinite(x_t) & np.isfinite(y_t_s) & np.isfinite(x_next)
-        if int(mask_s.sum()) < max(lag + 2, min_transitions):
+        if int(mask_s.sum() < max(lag + 2, min_transitions):
             continue
         xs_s = x_t[mask_s]
         ys_s = y_t_s[mask_s]
@@ -647,7 +647,7 @@ def _benford_js(vals: np.ndarray) -> float:
     digits = np.clip(digits, 1, 9).astype(np.int64)
     counts = np.bincount(digits, minlength=10)[1:].astype(np.float64)
     p = counts / counts.sum()
-    benford = np.where(np.arange(1, 10, dtype=float)) != 0, np.log10(1.0 + 1.0 / np.arange(1, 10, dtype=float)), np.nan)
+    benford = np.log10(1.0 + 1.0 / np.arange(1, 10, dtype=float))
     m = 0.5 * (p + benford)
     ok = m > 0.0
     pm = p[ok]
@@ -752,7 +752,7 @@ def _te_peak_window(
         y_t = sw[:-lag]
         x_next = tw[lag:]
         mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-        if int(mask.sum()) < max(lag + 2, min_transitions):
+        if int(mask.sum() < max(lag + 2, min_transitions):
             continue
         xs = x_t[mask]
         ys = y_t[mask]
@@ -818,7 +818,7 @@ def _te_peak_window_excess(
             y_t = y_series[:-lag]
             x_next = tw[lag:]
             mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-            if int(mask.sum()) < max(lag + 2, min_transitions):
+            if int(mask.sum() < max(lag + 2, min_transitions):
                 continue
             xs = x_t[mask]
             ys = y_t[mask]

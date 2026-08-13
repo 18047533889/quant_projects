@@ -107,7 +107,7 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         if m < 2:
             continue
         ranks = _avg_tie_ranks(col[fin])
-        U[fin, j] = (ranks + 0.5) / m if m != 0 else np.nan
+        U[fin, j] = (ranks + 0.5) / m
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
 
@@ -123,7 +123,7 @@ def _zscore_cross(vals: np.ndarray) -> np.ndarray:
     sd = float(vals[fin].std(ddof=0))
     if not np.isfinite(sd) or sd <= _EPS:
         return z
-    z[fin] = (vals[fin] - mean) / sd if sd != 0 else np.nan
+    z[fin] = (vals[fin] - mean) / sd
     return z
 
 
@@ -143,7 +143,7 @@ def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.nda
         # z-scores (population std, ddof=0) this is identically 1, but it is
         # computed explicitly so the statistic is the standard one and stays
         # correct if the z-score normalisation ever changes.
-        m2 = np.where(m) != 0, float(np.sum(z[fin] ** 2) / m), np.nan)
+        m2 = float(np.sum(z[fin] ** 2) / m)
         if not np.isfinite(m2) or m2 <= _EPS:
             continue
         # R6-134: neighbour candidates must be feature-valid AND target-valid
@@ -162,7 +162,7 @@ def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.nda
             nz = z[nbrs]
             # Row-standardised weights w_ij = 1/|NN(i)|  (Σ_j w_ij = 1), so
             # Σ_j w_ij·z_j = mean(z_NN);  I_i = z_i · Σ_j w_ij z_j / m2.
-            out[t, i] = np.where(m2) != 0, float(z[i] * np.mean(nz) / m2), np.nan)
+            out[t, i] = float(z[i] * np.mean(nz) / m2)
     return out
 
 
@@ -179,7 +179,7 @@ def _rankdata(arr: np.ndarray) -> np.ndarray:
         j = i
         while j + 1 < n and arr[order[j + 1]] == arr[order[i]]:
             j += 1
-        avg = np.where(2.0 + 1.0 != 0, (i + j) / 2.0 + 1.0, np.nan)
+        avg = (i + j) / 2.0 + 1.0
         for k in range(i, j + 1):
             ranks[order[k]] = avg
         i = j + 1
@@ -195,7 +195,7 @@ def _spearman(xs: np.ndarray, ys: np.ndarray) -> float:
     denom = np.sqrt(float((dx * dx).sum()) * float((dy * dy).sum()))
     if denom <= _EPS:
         return 0.0
-    return np.where(denom) != 0, float((dx * dy).sum() / denom), np.nan)
+    return float((dx * dy).sum() / denom)
 
 
 def _pava_weighted(vals: np.ndarray, weights: np.ndarray) -> np.ndarray:
@@ -215,7 +215,7 @@ def _pava_weighted(vals: np.ndarray, weights: np.ndarray) -> np.ndarray:
     while i < len(means) - 1:
         if means[i] > means[i + 1] + _EPS:  # violation → pool i and i+1
             total = counts[i] + counts[i + 1]
-            means[i] = (means[i] * counts[i] + means[i + 1] * counts[i + 1]) / total if total != 0 else np.nan
+            means[i] = (means[i] * counts[i] + means[i + 1] * counts[i + 1]) / total
             counts[i] = total
             members[i] = members[i] + members[i + 1]
             del means[i + 1]
@@ -251,7 +251,7 @@ def _iso_fit(y_vals: np.ndarray, x_vals: np.ndarray, *, decreasing: bool) -> np.
     unique_x, inv, counts = np.unique(xs, return_inverse=True, return_counts=True)
     wsum = np.zeros(unique_x.size, dtype=float)
     np.add.at(wsum, inv, ys)
-    y_level = np.where(counts.astype(float) != 0, wsum / counts.astype(float), np.nan)
+    y_level = wsum / counts.astype(float)
     sign = -1.0 if decreasing else 1.0
     fit_level = _pava_weighted(sign * y_level, counts.astype(float))
     if decreasing:
@@ -400,9 +400,9 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
                         continue
                     ei = (E[lo : t + 1, i] == 1.0) & aligned
                     ej = (E[lo : t + 1, j] == 1.0) & aligned
-                    p_i = float(ei.sum()) / cnt if cnt > 0 else np.nan
-                    p_j = float(ej.sum()) / cnt if cnt > 0 else np.nan
-                    p_ij = float((ei & ej).sum()) / cnt if cnt > 0 else np.nan
+                    p_i = float(ei.sum()) / cnt
+                    p_j = float(ej.sum()) / cnt
+                    p_ij = float((ei & ej).sum()) / cnt
                     # R9-OP-019 (empirical independence baseline): a fixed
                     # ``(1-q)²`` assumes P(tail) == 1-q for BOTH stocks, which
                     # breaks with ties / discrete values / idiosyncratic tail
@@ -418,7 +418,7 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
             # and depressed the factor as data went missing.  Average over the
             # valid pairs only, and gate on the pair-coverage ratio: if too many
             # pairs cannot be estimated, emit NaN instead of a biased value.
-            pair_coverage = len(pair_excess) / total_pairs if total_pairs != 0 else np.nan
+            pair_coverage = len(pair_excess) / total_pairs
             if pair_coverage < _MIN_PAIR_COVERAGE:
                 continue
             tc = float(np.mean(pair_excess))
@@ -439,7 +439,7 @@ def _pearson(a: np.ndarray, b: np.ndarray) -> float:
     denom = np.sqrt(float((da * da).sum()) * float((db * db).sum()))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float((da * db).sum() / denom), np.nan)
+    return float((da * db).sum() / denom)
 
 
 def _prim_mean(D: np.ndarray) -> float:
@@ -470,7 +470,7 @@ def _prim_mean(D: np.ndarray) -> float:
                 min_edge[v] = D[u, v]
     if edges != n - 1:
         return np.nan
-    return np.where((n - 1) != 0, total / (n - 1), np.nan)
+    return total / (n - 1)
 
 
 def _mst_length_series(x2d: np.ndarray, g2d: np.ndarray, window: int) -> np.ndarray:

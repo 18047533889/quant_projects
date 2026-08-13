@@ -86,4 +86,4 @@ def test_us_catalog_registers_cleanly() -> None:
     # R17-019: the dual-schema StockCapitalDaily is split into
     # USStockCapitalSplitEvent + USTickerSharesPITEvent (net +1 table).
     assert len(US_FIELD_REGISTRY.tables()) == 17
-    assert len(US_FIELD_REGISTRY.fields()) >= 70
+    assert len(US_FIELD_REGISTRY.fields() >= 70

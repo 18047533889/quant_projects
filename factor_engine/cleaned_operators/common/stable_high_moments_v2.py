@@ -19,7 +19,7 @@ def _unbiased_excess_kurtosis(values) -> float:
     if second <= 0.0:
         return np.nan
     fourth = float(np.sum(centered ** 4))
-    biased_excess = np.where((second * second) - 3.0 != 0, count * fourth / (second * second) - 3.0, np.nan)
+    biased_excess = count * fourth / (second * second) - 3.0
     return float(
         (count - 1)
         / ((count - 2) * (count - 3))

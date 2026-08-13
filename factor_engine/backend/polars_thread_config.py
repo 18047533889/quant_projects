@@ -160,13 +160,16 @@ def configure_polars_for_execution(
         max_workers = get_physical_cores()
 
     # 2. 流式块大小
-    # 策略：
-    # - 低内存环境（<2GB）：小块（50k 行）减少峰值
-    # - 正常环境：大块（100k 行）提高吞吐
+    # 策略：使用自适应配置（基于系统内存自动调整）
     if memory_mb is not None and memory_mb < 2000:
         chunk_size = 50_000
     else:
-        chunk_size = 100_000
+        # 使用自适应配置
+        try:
+            from runtime.adaptive_config import get_global_adaptive_config
+            chunk_size = get_global_adaptive_config().polars_streaming_chunk_size
+        except ImportError:
+            chunk_size = 100_000  # 回退默认值
 
     # 应用配置
     if hasattr(pl, "Config"):

@@ -2559,7 +2559,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
         current = _compile_layer(node.inputs[0], dialect=dialect)
-        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1 if op != "yoy_by_period" else 4)))
+        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1 if op) != "yoy_by_period" else 4)))
         previous = _compile_layer(
             PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": periods}),
             dialect=dialect,
@@ -2599,7 +2599,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     if op in {"period_average", "ttm_from_quarterly"}:
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
-        count = int(node.attrs.get("periods", _raw_literal(node, 2, 2 if op == "period_average" else 4)))
+        count = int(node.attrs.get("periods", _raw_literal(node, 2, 2 if op) == "period_average" else 4)))
         if count < 1:
             return None
         layers = [_compile_layer(node.inputs[0], dialect=dialect)]

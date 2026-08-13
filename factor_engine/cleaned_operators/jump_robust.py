@@ -38,8 +38,8 @@ _EPS = 1e-12
 # Standard MedRV constant (Andersen–Dobrev–Schaumburg 2012): pi/(6-4√3+pi).
 # The sqrt(2) variant was a transcription error and changed the estimator's
 # level by ~35% (1.4195 vs 0.9016) — 3rd-round audit P0-01.
-_MEDRV_CONST = np.where((6.0 - 4.0 * np.sqrt(3.0) + np.pi) != 0, np.pi / (6.0 - 4.0 * np.sqrt(3.0) + np.pi), np.nan)
-_MINRV_CONST = np.where((np.pi - 2.0) != 0, np.pi / (np.pi - 2.0), np.nan)
+_MEDRV_CONST = np.pi / (6.0 - 4.0 * np.sqrt(3.0) + np.pi)  # ~1.4195
+_MINRV_CONST = np.pi / (np.pi - 2.0)                        # ~2.7516
 # Barndorff-Nielsen–Shephard (2006) linear jump-test variance factor:
 # Var(sqrt(N)(RV-BV)) -> (θ-2)·IQ with θ = mu1^-4 + 2 mu1^-2 - 5,
 # mu1 = E|Z| = sqrt(2/pi)  =>  θ-2 = (π/2)² + π - 5 ≈ 0.6090.  With the
@@ -47,7 +47,7 @@ _MINRV_CONST = np.where((np.pi - 2.0) != 0, np.pi / (np.pi - 2.0), np.nan)
 #   Z = sqrt(N)(RV-BV)/sqrt((θ-2)·RQ) = (RV-BV)/sqrt((θ-2)/3·Σr⁴).
 # 3rd-round audit P0-02: the previous (π/2)²·TQ denominator was ~2√N too large
 # (a ~30x deflation at N=240) and was not a standard BNS statistic.
-_THETA_MINUS_2 = np.where(2.0) ** 2 + np.pi - 5.0 != 0, (np.pi / 2.0) ** 2 + np.pi - 5.0, np.nan)
+_THETA_MINUS_2 = (np.pi / 2.0) ** 2 + np.pi - 5.0  # ~0.6090
 _MIN_FINITE = 5
 
 
@@ -104,7 +104,7 @@ def _medrv(v: np.ndarray) -> float:
     med = np.empty(n - 2, dtype=float)
     for i in range(2, n):
         med[i - 2] = float(np.median(a[i - 2 : i + 1]))
-    return np.where((n - 2)) * float(np.sum(med * med))) != 0, float(_MEDRV_CONST * (n / (n - 2)) * float(np.sum(med * med))), np.nan)
+    return float(_MEDRV_CONST * (n / (n - 2)) * float(np.sum(med * med)))
 
 
 def _minrv(v: np.ndarray) -> float:
@@ -112,7 +112,7 @@ def _minrv(v: np.ndarray) -> float:
     if n < 2:
         return np.nan
     a = np.abs(v)
-    return np.where((n - 1)) * float(np.sum(np.minimum(a[1:], a[:-1]) ** 2))) != 0, float(_MINRV_CONST * (n / (n - 1)) * float(np.sum(np.minimum(a[1:], a[:-1]) ** 2))), np.nan)
+    return float(_MINRV_CONST * (n / (n - 1)) * float(np.sum(np.minimum(a[1:], a[:-1]) ** 2)))
 
 
 def _jump_z(v: np.ndarray) -> float:
@@ -120,10 +120,10 @@ def _jump_z(v: np.ndarray) -> float:
     if n < 2:
         return np.nan
     rv = float(np.sum(v * v))
-    bv = np.where(2.0) * np.sum(np.abs(v[1:]) * np.abs(v[:-1]))) != 0, float((np.pi / 2.0) * np.sum(np.abs(v[1:]) * np.abs(v[:-1]))), np.nan)
+    bv = float((np.pi / 2.0) * np.sum(np.abs(v[1:]) * np.abs(v[:-1])))
     rq4 = float(np.sum(v ** 4))  # raw quarticity sum Σr⁴
     denom2 = max(_THETA_MINUS_2 / 3.0 * rq4, _EPS)
-    return np.where(np.sqrt(denom2)) != 0, float((rv - bv) / np.sqrt(denom2)), np.nan)
+    return float((rv - bv) / np.sqrt(denom2))
 
 
 @register_operator(

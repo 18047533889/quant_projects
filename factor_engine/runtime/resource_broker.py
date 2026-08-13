@@ -776,9 +776,15 @@ class ResourceBroker:
         if stage in {STAGE_PRESSURE_3, STAGE_PRESSURE_2}:
             return max(1, self.hard_cpu_slots // 4)
         headroom = max(0, snap.live_headroom - self._reserve_bytes())
-        # 至少 1；最多 CPU slots。内存余量不充足时按 2GB/worker 估算上限。
+        # 至少 1；最多 CPU slots。内存余量不充足时按 block_abs_max 估算上限。
         by_cpu = self.hard_cpu_slots
-        by_mem = max(1, headroom // (2 * 1024**3))
+        # 使用自适应配置的 block_abs_max
+        try:
+            from runtime.adaptive_config import get_global_adaptive_config
+            block_size = get_global_adaptive_config().block_abs_max_bytes
+        except ImportError:
+            block_size = 2 * 1024**3  # 回退默认值
+        by_mem = max(1, headroom // block_size)
         return max(1, min(by_cpu, by_mem))
 
     # -- 校准（R27-200..203） --

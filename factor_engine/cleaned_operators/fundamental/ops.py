@@ -126,7 +126,7 @@ class OperatingMarginOp(TwoVarOperator):
 
     def _calculate_series(self, operating_income: pd.DataFrame, revenue: pd.DataFrame, **kwargs) -> pd.DataFrame:
         den = revenue.replace(0, np.nan) if hasattr(revenue, "replace") else revenue
-        out = operating_income / den if den != 0 else np.nan
+        out = operating_income / den
         return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -158,7 +158,7 @@ class CurrentRatioOp(TwoVarOperator):
             if hasattr(current_liabilities, "replace")
             else current_liabilities
         )
-        out = current_assets / den if den != 0 else np.nan
+        out = current_assets / den
         return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -199,7 +199,7 @@ class QuickRatioOp(SeriesOperator):
             if hasattr(current_liabilities, "replace")
             else current_liabilities
         )
-        out = num / den if den != 0 else np.nan
+        out = num / den
         return out.replace([np.inf, -np.inf], np.nan)
 
 
@@ -227,7 +227,7 @@ class DebtToEquityOp(TwoVarOperator):
         self, total_debt: pd.DataFrame, total_equity: pd.DataFrame, **kwargs
     ) -> pd.DataFrame:
         den = total_equity.replace(0, np.nan) if hasattr(total_equity, "replace") else total_equity
-        out = total_debt / den if den != 0 else np.nan
+        out = total_debt / den
         return out.replace([np.inf, -np.inf], np.nan)
 
 

@@ -133,7 +133,7 @@ class OvernightVolatilityNative(SeriesOperator):
                 exprs.append(pl.lit(None).alias(c))
             else:
                 prev_close = close[c].shift(1)
-                overnight_ret = ((pl.col(c) - prev_close)) / prev_close if prev_close != 0 else np.nan
+                overnight_ret = pl.when(prev_close.is_null() | (prev_close == 0)).then(None).otherwise((pl.col(c) - prev_close) / prev_close)
                 exprs.append(overnight_ret.rolling_std(window_size=w).alias(c))
         return open.with_columns(exprs)
 
@@ -211,8 +211,8 @@ class GarmanKlassVolNative(SeriesOperator):
             if c not in low.columns or c not in open.columns or c not in close.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
-                hl = ((pl.col(c)) / (low[c]).log() ** 2) if (low[c]).log() ** 2) != 0 else np.nan
-                co = ((close[c]) / (open[c]).log() ** 2) if (open[c]).log() ** 2) != 0 else np.nan
+                hl = (pl.col(c) / low[c]).log() ** 2
+                co = (close[c] / open[c]).log() ** 2
                 gk = (0.5 * hl - (2 * 2.0 ** 0.5 - 1) * co).rolling_mean(window_size=w).sqrt()
                 exprs.append(gk.alias(c))
         return high.with_columns(exprs)
@@ -246,14 +246,14 @@ class ParkinsonVolNative(SeriesOperator):
         import math
 
         w = strict_integer(d, "d", minimum=2)
-        factor = (1.0) / ((4 * math.log(2))) if ((4 * math.log(2))) != 0 else np.nan
+        factor = 1.0 / (4 * math.log(2))
         cols = _numeric_cols(high)
         exprs = []
         for c in cols:
             if c not in low.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
-                log_hl = ((pl.col(c)) / (low[c]).log()) if (low[c]).log()) != 0 else np.nan
+                log_hl = (pl.col(c) / low[c]).log()
                 pv = (log_hl ** 2 * factor).rolling_mean(window_size=w).sqrt()
                 exprs.append(pv.alias(c))
         return high.with_columns(exprs)
@@ -292,10 +292,10 @@ class RogersSatchellVolNative(SeriesOperator):
             if c not in low.columns or c not in open.columns or c not in close.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
-                hc = ((pl.col(c)) / (close[c]).log()) if (close[c]).log()) != 0 else np.nan
-                ho = ((pl.col(c)) / (open[c]).log()) if (open[c]).log()) != 0 else np.nan
-                lc = ((low[c]) / (close[c]).log()) if (close[c]).log()) != 0 else np.nan
-                lo = ((low[c]) / (open[c]).log()) if (open[c]).log()) != 0 else np.nan
+                hc = (pl.col(c) / close[c]).log()
+                ho = (pl.col(c) / open[c]).log()
+                lc = (low[c] / close[c]).log()
+                lo = (low[c] / open[c]).log()
                 rs = (hc * ho + lc * lo).rolling_mean(window_size=w).sqrt()
                 exprs.append(rs.alias(c))
         return high.with_columns(exprs)
@@ -336,11 +336,11 @@ class YangZhangVolNative(SeriesOperator):
             else:
                 # Simplified: use combination of overnight and RS
                 prev_close = close[c].shift(1)
-                overnight = ((open[c]) / (prev_close).log() ** 2) if (prev_close).log() ** 2) != 0 else np.nan
-                hc = ((pl.col(c)) / (close[c]).log()) if (close[c]).log()) != 0 else np.nan
-                ho = ((pl.col(c)) / (open[c]).log()) if (open[c]).log()) != 0 else np.nan
-                lc = ((low[c]) / (close[c]).log()) if (close[c]).log()) != 0 else np.nan
-                lo = ((low[c]) / (open[c]).log()) if (open[c]).log()) != 0 else np.nan
+                overnight = (open[c] / prev_close).log() ** 2
+                hc = (pl.col(c) / close[c]).log()
+                ho = (pl.col(c) / open[c]).log()
+                lc = (low[c] / close[c]).log()
+                lo = (low[c] / open[c]).log()
                 rs_sq = hc * ho + lc * lo
                 yz = (overnight + rs_sq).rolling_mean(window_size=w).sqrt()
                 exprs.append(yz.alias(c))
@@ -380,7 +380,7 @@ class RangeVolatilityNative(SeriesOperator):
             if c not in low.columns or c not in close.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
-                range_pct = ((pl.col(c) - low[c])) / (close[c]) if (close[c]) != 0 else np.nan
+                range_pct = (pl.col(c) - low[c]) / close[c]
                 exprs.append(range_pct.rolling_std(window_size=w).alias(c))
         return high.with_columns(exprs)
 
@@ -865,7 +865,7 @@ class CandleBodyPositionNative(SeriesOperator):
             if c not in low.columns or c not in open.columns or c not in close.columns:
                 exprs.append(pl.lit(None).alias(c))
             else:
-                body_mid = ((open[c] + close[c])) / 2 if 2 != 0 else np.nan
+                body_mid = (open[c] + close[c]) / 2
                 range_val = pl.col(c) - low[c]
                 exprs.append(
                     pl.when(range_val.is_null() | (range_val == 0))

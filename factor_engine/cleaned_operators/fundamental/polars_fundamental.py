@@ -63,7 +63,7 @@ def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFra
 def _safe_div(a: float, b: float) -> float:
     if not np.isfinite(a) or not np.isfinite(b) or abs(b) <= _EPS:
         return np.nan
-    return np.where(b) != 0, float(a / b), np.nan)
+    return float(a / b)
 
 
 def _period_insert(order: list, key) -> None:
@@ -187,7 +187,7 @@ def _rolling_sum_1d(x: np.ndarray, w: int, min_periods: int = 1) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < min_periods:
+        if int(ok.sum() < min_periods:
             continue
         out[t] = float(np.sum(seg[ok]))
     return out
@@ -200,7 +200,7 @@ def _rolling_mean_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < w:
+        if int(ok.sum() < w:
             continue
         out[t] = float(np.mean(seg[ok]))
     return out
@@ -213,7 +213,7 @@ def _rolling_std_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum()) < w:
+        if int(ok.sum() < w:
             continue
         out[t] = float(np.std(seg[ok], ddof=1))
     return out
@@ -345,7 +345,7 @@ def fin_cagr(x, period_id, periods=4, periods_per_year=4, flow_type=None):
             cur = float(v[cc])
             if cur <= 0 or old <= 0:
                 return np.nan
-            return np.where(old) ** (ppy / p) - 1.0) != 0, float((cur / old) ** (ppy / p) - 1.0), np.nan)
+            return float((cur / old) ** (ppy / p) - 1.0)
         out[:, i] = _walk_1d(xv, pv, calc)
     return _make(x, cols, out)
 
@@ -483,7 +483,7 @@ def _trend_stat_1d(xv, pv, periods, which):
         if n <= 2:
             return np.nan
         mse = ss_res / (n - 2)
-        se = np.where(den)) if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
+        se = np.where(den if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
         return slope / se if np.isfinite(se) and se > _EPS else np.nan
     return _walk_1d(xv, pv, calc)
 

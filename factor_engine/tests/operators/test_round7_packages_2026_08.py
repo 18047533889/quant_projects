@@ -133,7 +133,7 @@ def test_markov_stationary_surprisal_rare_state_high():
     out = op.calculate(x, window=380, bins=3, lag=1)
     last = out.dropna()
     assert not last.empty
-    assert float(last.to_numpy().max()) > 1.5  # the rare 100-state has high surprisal
+    assert float(last.to_numpy().max() > 1.5  # the rare 100-state has high surprisal
 
 
 def test_markov_entropy_production_finite():
@@ -195,7 +195,7 @@ def test_candlestick_zero_range_bar_never_classified():
     for name in ("cdl_gravestone_doji", "cdl_dragonfly_doji", "cdl_hanging_man"):
         op = _get(name)
         out = op.calculate(flat, flat, flat, flat).to_numpy(dtype=float)
-        assert not bool(np.nanmax(np.abs(out)) > 0), f"{name} must not fire on a flat bar"
+        assert not bool(np.nanmax(np.abs(out) > 0), f"{name} must not fire on a flat bar"
 
 
 def test_candlestick_real_gravestone_fires():

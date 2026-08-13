@@ -331,7 +331,7 @@ class CSBucketHistoricalNative(SeriesOperator):
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            quantiles = ([pl.col(c).rolling_quantile(i) / (bins, window_size=window) for i in range(1, bins)]) if (bins, window_size=window) for i in range(1, bins)]) != 0 else np.nan
+            quantiles = [pl.col(c).rolling_quantile(i / bins, window_size=window) for i in range(1, bins)]
             bucket_expr = pl.lit(0.0)
             for i, q in enumerate(quantiles):
                 bucket_expr = pl.when(pl.col(c) > q).then(pl.lit(float(i + 2))).otherwise(bucket_expr)
@@ -524,7 +524,7 @@ class CSWeightedDemeanNative(SeriesOperator):
             w = weights[c].fill_nan(None)
             weighted_sum = (pl.col(c) * w).sum()
             weight_sum = w.sum()
-            weighted_mean = (weighted_sum) / weight_sum if weight_sum != 0 else np.nan
+            weighted_mean = pl.when(weight_sum != 0).then(weighted_sum / weight_sum).otherwise(None)
             exprs.append((pl.col(c) - weighted_mean).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
@@ -593,8 +593,8 @@ class CSWeightedZscoreNative(SeriesOperator):
             w = weights[c].fill_nan(None)
             weighted_sum = (pl.col(c) * w).sum()
             weight_sum = w.sum()
-            weighted_mean = (weighted_sum) / weight_sum if weight_sum != 0 else np.nan
-            weighted_var = (((pl.col(c) - weighted_mean) ** 2 * w).sum()) / weight_sum if weight_sum != 0 else np.nan
+            weighted_mean = pl.when(weight_sum != 0).then(weighted_sum / weight_sum).otherwise(None)
+            weighted_var = pl.when(weight_sum != 0).then(((pl.col(c) - weighted_mean) ** 2 * w).sum() / weight_sum).otherwise(None)
             weighted_std = weighted_var.sqrt()
             exprs.append(
                 pl.when(weighted_std.is_null() | (weighted_std == 0))
@@ -798,7 +798,7 @@ class CSRankGaussianNative(SeriesOperator):
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             rank = pl.col("_v").rank(method="average").over("_r")
             count = pl.col("_v").is_not_null().cast(pl.Float64).sum().over("_r")
-            pct = (rank) / ((count + 1)) if ((count + 1)) != 0 else np.nan
+            pct = pl.when(count + 1 != 0).then(rank / (count + 1)).otherwise(None)
             # Approximate inverse normal: 6 * (pct - 0.5)
             return long.with_columns((6.0 * (pct - 0.5)).alias("_v"))
 
@@ -831,7 +831,7 @@ class CSResidualPercentileNative(SeriesOperator):
             resid = pl.col("_v") - mean
             rank = resid.rank(method="average").over("_r")
             count = resid.is_not_null().cast(pl.Float64).sum().over("_r")
-            return np.where(count).alias("_v")) != 0, (long.with_columns((rank) / (count).alias("_v"))), np.nan)
+            return np.where(count.alias("_v") != 0, (long.with_columns((rank) / (count).alias("_v"))), np.nan)
 
         return _cs_long_transform(x, _xform)
 
@@ -867,7 +867,7 @@ class CSTailBreadthNative(SeriesOperator):
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             mean = pl.col("_v").mean().over("_r")
             std = pl.col("_v").std().over("_r")
-            zscore = ((pl.col("_v") - mean)) / std if std > 1e-10 else np.nan
+            zscore = pl.when(std > 1e-10).then((pl.col("_v") - mean) / std).otherwise(None)
             in_tail = (zscore.abs() > th).cast(pl.Float64)
             return long.with_columns(in_tail.mean().over("_r").alias("_v"))
 
@@ -905,7 +905,7 @@ class CSTailRetentionNative(SeriesOperator):
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             mean = pl.col("_v").mean().over("_r")
             std = pl.col("_v").std().over("_r")
-            zscore = ((pl.col("_v") - mean)) / std if std > 1e-10 else np.nan
+            zscore = pl.when(std > 1e-10).then((pl.col("_v") - mean) / std).otherwise(None)
             return long.with_columns(
                 pl.when(zscore.abs() > th).then(pl.col("_v")).otherwise(None).alias("_v")
             )

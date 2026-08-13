@@ -355,7 +355,7 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
     shared_keys = {
         k
         for k, c in counts.items()
-        if c > 1 and cse_benefit(c, costs[k], _memory_cost(first_seen[k])) > 0
+        if c > 1 and cse_benefit(c, costs[k], _memory_cost(first_seen[k]) > 0
     }
 
     shared_nodes: dict[str, PlanNode] = {}

@@ -140,7 +140,7 @@ def welford_rolling_var_(
         for v in valid[1:]:
             k += 1
             d = v - m
-            m = m + d / k if k != 0 else np.nan
+            m = m + d / k
             q = q + d * (v - m)
         out[i] = float(q / (k - ddof)) if k - ddof > 0 else np.nan
     return out
@@ -509,7 +509,7 @@ def ts_regression_slope_(x, y, d: int) -> np.ndarray:
         xw = x_arr[i - d + 1:i + 1]
         yw = y_arr[i - d + 1:i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum()) >= 3:
+        if int(valid.sum() >= 3:
             xv = xw[valid]
             yv = yw[valid]
             xc = xv - xv.mean()
@@ -567,7 +567,7 @@ def ts_rank_corr_(x, y, window: int, method: str = "average") -> np.ndarray:
         xw = x_arr[i - window + 1:i + 1]
         yw = y_arr[i - window + 1:i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         rx = rank_(xw[valid], method=method)
         ry = rank_(yw[valid], method=method)
@@ -597,7 +597,7 @@ def cs_rank_corr_(x, y) -> np.ndarray:
         rx = rank_(x_arr[i])
         ry = rank_(y_arr[i])
         valid = np.isfinite(rx) & np.isfinite(ry)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         corr = np.corrcoef(rx[valid], ry[valid])[0, 1]
         out[i] = corr if np.isfinite(corr) else np.nan
@@ -643,7 +643,7 @@ def ts_poly2_coeff_(x, d: int) -> np.ndarray:
     for i in range(d - 1, len(arr)):
         y = arr[i - d + 1:i + 1]
         valid = np.isfinite(y)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         coeffs = np.polyfit(t[valid], y[valid], 2)
         result[i] = coeffs[0]
@@ -668,7 +668,7 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
         yw = y_arr[i - d + 1:i + 1]
         xw = x_arr[i - d + 1:i + 1]
         valid = np.isfinite(yw) & np.isfinite(xw)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         coeffs = np.polyfit(xw[valid], yw[valid], 2)
         a, b, c = coeffs
@@ -697,7 +697,7 @@ def ts_poly2_prior_coeff_(x, d: int) -> np.ndarray:
     for i in range(d, len(arr)):
         past = arr[i - d:i]
         valid = np.isfinite(past)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         coeffs = np.polyfit(t[valid], past[valid], 2)
         result[i] = coeffs[0]
@@ -717,7 +717,7 @@ def ts_poly2_forecast_error_(x, d: int) -> np.ndarray:
     for i in range(d, len(arr)):
         past = arr[i - d:i]
         valid = np.isfinite(past)
-        if int(valid.sum()) < 3:
+        if int(valid.sum() < 3:
             continue
         coeffs = np.polyfit(t[valid], past[valid], 2)
         pred = coeffs[0] * d * d + coeffs[1] * d + coeffs[2]
@@ -738,7 +738,7 @@ def ts_poly2_forecast_error_z_(x, d: int) -> np.ndarray:
     for i in range(d, len(arr)):
         past = arr[i - d:i]
         valid = np.isfinite(past)
-        if int(valid.sum()) < 4:
+        if int(valid.sum() < 4:
             continue
         tv = t[valid]
         pv = past[valid]
@@ -892,7 +892,7 @@ def downside_beta_(ret, index_ret, window: int) -> np.ndarray:
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
         mask = valid & (m < 0)
-        if int(mask.sum()) >= 3:
+        if int(mask.sum() >= 3:
             # R19-021/022: centered sums，avoid np.cov(n-1)/np.var(n) ddof mix
             mv = m[mask]
             mc = mv - mv.mean()
@@ -922,9 +922,9 @@ def tail_beta_(ret, index_ret, window: int, q: float = 0.05) -> np.ndarray:
         r = ret_arr[i - window + 1:i + 1]
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
-        threshold = np.percentile(m[valid], q * 100) if int(valid.sum()) > 0 else 0
+        threshold = np.percentile(m[valid], q * 100) if int(valid.sum() > 0 else 0
         mask = valid & (m <= threshold)
-        if int(mask.sum()) >= 3:
+        if int(mask.sum() >= 3:
             # R19-021/022: centered sums，avoid np.cov(n-1)/np.var(n) ddof mix
             mv = m[mask]
             mc = mv - mv.mean()
@@ -953,7 +953,7 @@ def residual_momentum_capm_(ret, index_ret, window: int) -> np.ndarray:
         r = ret_arr[i - window + 1:i + 1]
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
-        if int(valid.sum()) < 5:
+        if int(valid.sum() < 5:
             continue
         A = np.vstack([m[valid], np.ones(int(valid.sum()))]).T
         try:
@@ -983,7 +983,7 @@ def coskewness_to_market_(ret, index_ret, window: int) -> np.ndarray:
         r = ret_arr[i - window + 1:i + 1]
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
-        if int(valid.sum()) < 5:
+        if int(valid.sum() < 5:
             continue
         rv = r[valid]
         mv = m[valid]
@@ -1013,7 +1013,7 @@ def idio_vol_(ret, index_ret, window: int) -> np.ndarray:
         r = ret_arr[i - window + 1:i + 1]
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
-        if int(valid.sum()) < 5:
+        if int(valid.sum() < 5:
             continue
         A = np.vstack([m[valid], np.ones(int(valid.sum()))]).T
         try:
@@ -1043,7 +1043,7 @@ def idio_skew_(ret, index_ret, window: int) -> np.ndarray:
         r = ret_arr[i - window + 1:i + 1]
         m = idx_arr[i - window + 1:i + 1]
         valid = np.isfinite(r) & np.isfinite(m)
-        if int(valid.sum()) < 5:
+        if int(valid.sum() < 5:
             continue
         A = np.vstack([m[valid], np.ones(int(valid.sum()))]).T
         try:

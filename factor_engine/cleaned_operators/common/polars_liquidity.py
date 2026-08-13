@@ -192,9 +192,9 @@ class CorwinSchultzSpreadNative(SeriesOperator):
             beta = (hl.log() ** 2).rolling_mean(window_size=2, min_samples=2)
             # Gamma = [ln(H2/L2)]^2 where H2=max(H_t, H_{t-1}), L2=min(L_t, L_{t-1})
             # For simplicity, approximate with 2-day range
-            spread_est = ((pl.lit(2.0) * (pl.lit(2.0).exp() - pl.lit(1.0)).sqrt() - pl.lit(1.0))) / (() if (() != 0 else np.nan
+            spread_est = ((pl.lit(2.0) * (pl.lit(2.0).exp() - pl.lit(1.0)).sqrt() - pl.lit(1.0)) / (
                 pl.lit(3.0) - pl.lit(2.0) * pl.lit(2.0).sqrt()
-            ) * beta.sqrt()
+            )) * beta.sqrt()
             exprs.append(
                 pl.when(beta <= 0).then(None).otherwise(spread_est).alias(c)
             )
@@ -230,7 +230,7 @@ class OHLCCorwinSchultzSpreadNative(SeriesOperator):
         for c in cols:
             h = high[c]
             lo = low[c] if c in low.columns else pl.lit(None)
-            hl_ratio = (h) / lo if lo != 0 else np.nan
+            hl_ratio = pl.when(lo != 0).then(h / lo).otherwise(None)
             beta = (hl_ratio.log() ** 2).rolling_mean(window_size=2, min_samples=2)
             alpha = (
                 (pl.lit(2.0).sqrt() - pl.lit(1.0))
@@ -272,7 +272,7 @@ class HighLowSpreadProxyNative(SeriesOperator):
         for c in cols:
             h = high[c]
             lo = low[c] if c in low.columns else pl.lit(None)
-            mid = ((h + lo)) / (pl.lit(2.0)) if (pl.lit(2.0)) != 0 else np.nan
+            mid = (h + lo) / pl.lit(2.0)
             exprs.append(
                 pl.when((mid.is_null()) | (mid == 0))
                 .then(None)

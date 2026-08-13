@@ -249,7 +249,7 @@ class StateEwmIfNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=1)
         cols = _numeric_cols(x)
-        alpha = (2.0) / ((w + 1)) if ((w + 1)) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         if condition is None:
             raise ValueError("state_ewm_if requires condition")
@@ -485,8 +485,8 @@ class DirectionalChangeStateNative(SeriesOperator):
             roll_min = pl.col(c).rolling_min(window_size=20, min_samples=1)
 
             # Drawdown/drawup from extremes
-            drawdown = ((roll_max - pl.col(c))) / roll_max if roll_max != 0 else np.nan
-            drawup = ((pl.col(c) - roll_min)) / roll_min if roll_min != 0 else np.nan
+            drawdown = pl.when(roll_max != 0).then((roll_max - pl.col(c)) / roll_max).otherwise(None)
+            drawup = pl.when(roll_min != 0).then((pl.col(c) - roll_min) / roll_min).otherwise(None)
 
             state = pl.when(drawup > thresh).then(1.0).when(drawdown > thresh).then(-1.0).otherwise(0.0)
             exprs.append(state.alias(c))

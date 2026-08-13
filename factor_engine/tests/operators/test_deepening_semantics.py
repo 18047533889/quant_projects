@@ -32,7 +32,7 @@ def test_markov_committor_upper_biased():
     out = _get("ts_markov_committor").calculate(x, window=80, bins=3, lag=1).to_numpy(dtype=float)
     late = out[150:, 0]
     late = late[np.isfinite(late)]
-    assert float(np.mean(late)) > 0.85
+    assert float(np.mean(late) > 0.85
 
 
 def test_markov_mean_first_passage_time_upper_small_for_high_state():
@@ -41,7 +41,7 @@ def test_markov_mean_first_passage_time_upper_small_for_high_state():
     out = _get("ts_markov_mean_first_passage_time").calculate(x, window=80, bins=3, lag=1, target="upper").to_numpy(dtype=float)
     late = out[150:, 0]
     late = late[np.isfinite(late)]
-    assert float(np.mean(late)) < 60.0  # expected first passage stays bounded
+    assert float(np.mean(late) < 60.0  # expected first passage stays bounded
 
 
 def test_markov_spectral_gap_persistent_lower_than_random():
@@ -52,7 +52,7 @@ def test_markov_spectral_gap_persistent_lower_than_random():
     gap_p = _get("ts_markov_spectral_gap").calculate(persistent, window=120, bins=3, lag=1).to_numpy(dtype=float)
     gap_r = _get("ts_markov_spectral_gap").calculate(random, window=120, bins=3, lag=1).to_numpy(dtype=float)
     # Strong periodicity -> strong second eigenvalue -> small spectral gap.
-    assert float(np.nanmean(gap_p[200:])) < float(np.nanmean(gap_r[200:]))
+    assert float(np.nanmean(gap_p[200:]) < float(np.nanmean(gap_r[200:]))
 
 
 def test_markov_stationary_surprisal_rare_state():
@@ -78,7 +78,7 @@ def test_km_equilibrium_distance_attractor():
     late = out[200:][np.isfinite(out[200:])]
     # x* ~ 0, so the distance tracks the current level; the attractor-centred
     # z must be bounded and mean-reverting (not a raw drift).
-    assert abs(float(np.nanmean(late))) < 1.0
+    assert abs(float(np.nanmean(late)) < 1.0
 
 
 def test_first_passage_hit_probability_certain():
@@ -90,7 +90,7 @@ def test_first_passage_hit_probability_certain():
     out = _get("ts_first_passage_hit_probability").calculate(x, s, window=120, barrier=1.0, horizon=5, side="upper").to_numpy(dtype=float)
     late = out[100:]
     late = late[np.isfinite(late)]
-    assert float(np.mean(late)) > 0.5
+    assert float(np.mean(late) > 0.5
 
 
 def test_first_passage_conditional_time_between_0_and_1():
@@ -111,8 +111,8 @@ def test_extremal_index_isolated_vs_clustered():
     x2 = pd.DataFrame(clu, index=pd.date_range("2024-01-01", periods=n))
     t1 = _get("ts_extremal_index").calculate(x1, window=300, q=0.9).to_numpy(dtype=float)
     t2 = _get("ts_extremal_index").calculate(x2, window=300, q=0.9).to_numpy(dtype=float)
-    assert float(np.nanmean(t1[300:])) > 0.9   # isolated -> theta ~ 1
-    assert float(np.nanmean(t2[300:])) < 0.5   # clustered -> theta small
+    assert float(np.nanmean(t1[300:]) > 0.9   # isolated -> theta ~ 1
+    assert float(np.nanmean(t2[300:]) < 0.5   # clustered -> theta small
 
 
 def test_gpd_shape_pwm_recovers_known_shape():
@@ -135,7 +135,7 @@ def test_quantile_transport_slope_positive_on_tail_spread():
     out = _get("ts_quantile_transport_slope").calculate(x, recent_window=40, old_window=120).to_numpy(dtype=float)
     late = out[160:]
     late = late[np.isfinite(late)]
-    assert float(np.nanmean(late)) > 0.0  # upper tail expanding -> positive slope
+    assert float(np.nanmean(late) > 0.0  # upper tail expanding -> positive slope
 
 
 def test_mmd_identical_vs_shifted():
@@ -147,8 +147,8 @@ def test_mmd_identical_vs_shifted():
     y = pd.DataFrame(x.to_numpy() + off[:, None], index=x.index)
     same = _get("ts_mmd_rbf_shift").calculate(x, recent_window=40, old_window=120).to_numpy(dtype=float)
     diff = _get("ts_mmd_rbf_shift").calculate(y, recent_window=40, old_window=120).to_numpy(dtype=float)
-    assert float(np.nanmean(same[160:])) < 0.02
-    assert float(np.nanmean(diff[160:])) > float(np.nanmean(same[160:]))
+    assert float(np.nanmean(same[160:]) < 0.02
+    assert float(np.nanmean(diff[160:]) > float(np.nanmean(same[160:]))
 
 
 def test_chord_excursion_area_hump_positive_dip_negative():
@@ -183,8 +183,8 @@ def test_recurrence_rate_periodic_beats_random():
     rr_r = _get("ts_recurrence_rate").calculate(rnd, window=40).to_numpy(dtype=float)
     div_p = _get("ts_recurrence_divergence").calculate(per, window=40).to_numpy(dtype=float)
     div_r = _get("ts_recurrence_divergence").calculate(rnd, window=40).to_numpy(dtype=float)
-    assert float(np.nanmean(rr_p[100:])) > float(np.nanmean(rr_r[100:]))
-    assert float(np.nanmean(div_p[100:])) < float(np.nanmean(div_r[100:]))
+    assert float(np.nanmean(rr_p[100:]) > float(np.nanmean(rr_r[100:]))
+    assert float(np.nanmean(div_p[100:]) < float(np.nanmean(div_r[100:]))
 
 
 def test_transfer_entropy_peak_lag_detects_coupled_lag():
@@ -225,8 +225,8 @@ def test_report_change_breadth_all_rising():
     c = _get("report_change_coherence").calculate(f1, f2, f3, period, periods=1).to_numpy(dtype=float)
     fin_b = b[np.isfinite(b)]
     fin_c = c[np.isfinite(c)]
-    assert float(np.nanmean(fin_b)) > 0.5   # all rising -> breadth near +1
-    assert float(np.nanmean(fin_c)) > 0.9   # dominant direction shared
+    assert float(np.nanmean(fin_b) > 0.5   # all rising -> breadth near +1
+    assert float(np.nanmean(fin_c) > 0.9   # dominant direction shared
 
 
 def test_intraday_rv_signature_slope_noise_negative():
@@ -238,5 +238,5 @@ def test_intraday_rv_signature_slope_noise_negative():
     idx = pd.date_range("2024-01-02 09:30", periods=n_min, freq="min")
     x = pd.DataFrame(np.column_stack([clean, noisy]), index=idx)
     out = _get("intraday_rv_signature_slope").calculate(x).to_numpy(dtype=float)
-    assert abs(float(out[0, 0])) < 0.3            # diffusion ~ flat signature
+    assert abs(float(out[0, 0]) < 0.3            # diffusion ~ flat signature
     assert float(out[0, 1]) < -0.3                # noise inflates 1-min RV

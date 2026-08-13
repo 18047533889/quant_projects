@@ -104,7 +104,7 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
     bnd[0] = u[0]
     bnd[-1] = u[-1]
     for j in range(1, k):
-        b = np.where(k)) != 0, int(np.floor(j * n_distinct / k)), np.nan)
+        b = int(np.floor(j * n_distinct / k))
         b = max(1, min(n_distinct - 1, b))
         bnd[j] = 0.5 * (u[b - 1] + u[b])
     return np.unique(bnd)
@@ -139,7 +139,7 @@ def _conditional_te_window(
     c_t = cw[:-lag]  # c_s
     t_next = tw[lag:]  # t_{s+lag}
     mask = np.isfinite(t_t) & np.isfinite(s_t) & np.isfinite(c_t) & np.isfinite(t_next)
-    if int(mask.sum()) < max(lag + 2, min_transitions):
+    if int(mask.sum() < max(lag + 2, min_transitions):
         return np.nan
     xs = t_t[mask]
     ys = s_t[mask]
@@ -334,7 +334,7 @@ def _haar_detail(v: np.ndarray, level: int, band: int) -> np.ndarray:
             return np.full(a.shape, np.nan, dtype=float)
         prev = np.concatenate([np.zeros(dil), a[:-dil]])  # causal boundary (no lookahead)
         detail = (prev - a) / np.sqrt(2.0)
-        smooth = np.where(np.sqrt(2.0) != 0, (prev + a) / np.sqrt(2.0), np.nan)
+        smooth = (prev + a) / np.sqrt(2.0)
         a = smooth
         if j == band:
             return detail
@@ -354,7 +354,7 @@ def _modwt_band_corr_chunk(xc: np.ndarray, yc: np.ndarray, level: int, band: int
     dx = dx[n_coi:]
     dy = dy[n_coi:]
     ok = np.isfinite(dx) & np.isfinite(dy)
-    if int(ok.sum()) < level + 3:
+    if int(ok.sum() < level + 3:
         return np.nan
     xx = dx[ok]
     yy = dy[ok]

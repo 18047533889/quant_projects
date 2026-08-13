@@ -130,11 +130,11 @@ class IntraSmartMoneyFcmScore(SessionAggregationOperator):
                     l = lv[finite]
 
                     # 1. VWAP deviation: (close - vwap) / range
-                    vwap = np.where(np.sum(v)) != 0, float(np.sum(p * v) / np.sum(v)), np.nan)
+                    vwap = float(np.sum(p * v) / np.sum(v))
                     price_range = float(np.max(h) - np.min(l))
                     if price_range < _EPS:
                         raise DataDegeneracy("zero price range")
-                    vwap_dev = (float(p[-1]) - vwap) / price_range if price_range != 0 else np.nan
+                    vwap_dev = (float(p[-1]) - vwap) / price_range
 
                     # 2. Volume concentration at extremes (top/bottom 10% price bins)
                     price_min, price_max = float(np.min(p)), float(np.max(p))
@@ -156,7 +156,7 @@ class IntraSmartMoneyFcmScore(SessionAggregationOperator):
                     else:
                         sign = np.sign(overall_direction)
                         aligned = np.sum(np.sign(returns) == sign)
-                        persistence = np.where(len(returns) != 0, float(aligned) / len(returns), np.nan)
+                        persistence = float(aligned) / len(returns)
 
                     # Composite: weighted combination
                     score = vwap_dev * (0.5 * vol_concentration + 0.5 * persistence)
@@ -394,7 +394,7 @@ class IntradayValueAtExtremeState(SessionAggregationOperator):
                     if vol_total < _EPS:
                         raise DataDegeneracy("zero total volume")
 
-                    per_day[day] = vol_at_extremes / vol_total if vol_total > 1e-10 else np.nan
+                    per_day[day] = vol_at_extremes / vol_total
                 except (DataDegeneracy, ZeroDivisionError, OverflowError):
                     per_day[day] = np.nan
 

@@ -148,7 +148,7 @@ def pl_period_average(x, period_id, periods=2, require_consecutive=True, **_):
 
 def pl_period_cagr(x, period_id, periods=12, periods_per_year=4, sign_policy="strict", require_consecutive=True, **_):
     lag = positive_int(periods, "periods")
-    exponent = np.where(float(lag) != 0, positive_int(periods_per_year, "periods_per_year") / float(lag), np.nan)
+    exponent = positive_int(periods_per_year, "periods_per_year") / float(lag)
     previous = pl_period_lag(x, period_id, lag)
     policy = str(sign_policy).lower()
     if policy == "strict":
@@ -245,7 +245,7 @@ def pd_yoy_by_period(
     else:
         raise ValueError("denominator must be 'signed' or 'absolute'")
     valid = finite_pd(x) & finite_pd(denom) & denom.abs().gt(EPS)
-    return np.where(denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan) != 0, ((x - previous) / denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan), np.nan)
+    return ((x - previous) / denom.where(valid)).where(valid).replace([np.inf, -np.inf], np.nan)
 
 
 def register() -> None:

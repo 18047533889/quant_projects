@@ -277,7 +277,7 @@ def _close(logs: np.ndarray, i0: int, i1: int) -> np.ndarray:
     """Closure of parts [i0, i1) -> probability vector (P, R, C)."""
     sub = logs[i0:i1]
     w = np.exp(sub - sub.max(axis=0, keepdims=True))
-    return np.where(w.sum(axis=0, keepdims=True) != 0, w / w.sum(axis=0, keepdims=True), np.nan)
+    return w / w.sum(axis=0, keepdims=True)
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +363,7 @@ def _composition_normalized_entropy(
     out = np.full(logs.shape[1:], np.nan, dtype=float)
     n_parts = len(parts)
     if n_parts > 1:
-        norm = np.where(np.log(n_parts) != 0, ent / np.log(n_parts), np.nan)
+        norm = ent / np.log(n_parts)
         out[valid] = norm[valid]
     # n_parts <= 1 -> ln(P) <= 0 -> output stays NaN (P1-18 degenerate gate)
     return frame_like(x1, out)
@@ -435,7 +435,7 @@ def _composition_ilr_balance(
     # P1-32: the parts are strictly positive (zero_policy="reject" fails closed on
     # non-positive parts), so ``gmean_a/gmean_b > 0`` and the log is well-defined
     # WITHOUT an arbitrary ``+ EPS`` floor.
-    balance = np.where((r + s)) * np.log(gmean_a / gmean_b) != 0, np.sqrt(r * s / (r + s)) * np.log(gmean_a / gmean_b), np.nan)
+    balance = np.sqrt(r * s / (r + s)) * np.log(gmean_a / gmean_b)
     out = np.full(logs.shape[1:], np.nan, dtype=float)
     out[valid] = balance[valid]
     return frame_like(x1, out)

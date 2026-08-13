@@ -104,7 +104,7 @@ def _cross_spectrum_window(
     Syy = np.zeros(i_max, dtype=float)
     Sxy = np.zeros(i_max, dtype=complex)
     t = np.arange(seg_len, dtype=float)
-    hann = np.where((seg_len - 1.0))) if seg_len > 1 else np.ones(seg_len) != 0, 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg_len - 1.0))) if seg_len > 1 else np.ones(seg_len), np.nan)
+    hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg_len - 1.0))) if seg_len > 1 else np.ones(seg_len)
     for s in range(n_seg):
         i0 = s * hop
         xs = x[i0 : i0 + seg_len]

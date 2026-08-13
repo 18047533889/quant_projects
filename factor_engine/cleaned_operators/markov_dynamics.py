@@ -257,14 +257,14 @@ def _stationary_distribution(P: np.ndarray) -> np.ndarray | None:
     s = float(pi.sum())
     if not np.isfinite(s) or abs(s) <= _EPS:
         return None
-    pi = pi / s if s != 0 else np.nan
-    if float(pi.min()) < -1e-8:
+    pi = pi / s
+    if float(pi.min() < -1e-8:
         return None
     pi = np.clip(pi, 0.0, None)
     s2 = float(pi.sum())
     if not np.isfinite(s2) or s2 <= _EPS:
         return None
-    return np.where(s2 != 0, pi / s2, np.nan)
+    return pi / s2
 
 
 def _observed_reachable(N_obs: np.ndarray, start: int, target: int) -> bool:
@@ -409,7 +409,7 @@ def _state_dynamics_series(
         valid_states = states_past >= 0
         counts[t] = np.bincount(states_past[valid_states], minlength=B).astype(float)
         total = float(int(valid_states.sum()))
-        pi_empirical[t] = np.where(max(total, 1.0) != 0, counts[t] / max(total, 1.0), np.nan)
+        pi_empirical[t] = counts[t] / max(total, 1.0)
         n_states_obs[t] = float(int(np.count_nonzero(counts[t])))
 
         d1_row = np.full(B, np.nan)
@@ -439,14 +439,14 @@ def _state_dynamics_series(
             if mature:
                 for bbin in range(B):
                     sel = trans_ok & (base_bin == bbin)
-                    if int(sel.sum()) < mss:
+                    if int(sel.sum() < mss:
                         continue
                     dx = inc[sel]
                     if dx.size == 0:
                         continue
                     # audit P0: D1 is a drift *rate* — divide by the lag step.
-                    d1_row[bbin] = float(np.mean(dx)) / lg if lg != 0 else np.nan
-                    d2_row[bbin] = np.where((2.0 * lg) != 0, float(np.mean(dx * dx)) / (2.0 * lg), np.nan)
+                    d1_row[bbin] = float(np.mean(dx)) / lg
+                    d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
         N_obs[t] = N
         D1[t] = d1_row
         D2[t] = d2_row
@@ -469,7 +469,7 @@ def _state_dynamics_series(
         # spectral consumers (committor, MFPT, spectral gap, entropy production).
         if mature and n_trans >= mc:
             row_sum = N.sum(axis=1)
-            P_smooth = np.where((row_sum[:, None] + 0.5 * B) != 0, (N + 0.5) / (row_sum[:, None] + 0.5 * B), np.nan)
+            P_smooth = (N + 0.5) / (row_sum[:, None] + 0.5 * B)
             P_smooth[(counts[t] > 0) & (row_sum == 0), :] = np.nan
             P[t] = P_smooth
             # audit P0: stationary measure as the left eigenvector of the
@@ -656,7 +656,7 @@ def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: i
         s = float(row.sum())
         if not np.isfinite(s) or s <= _EPS:
             continue
-        row = row / s if s != 0 else np.nan
+        row = row / s
         h = -float(np.sum(row * np.log(row)))
         out[t] = float(h / log_b)
     return out
@@ -950,7 +950,7 @@ def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int,
         # Window-maturity: AIS is a histogram estimate; require at least
         # ``min_history`` finite observations in the strictly-past window before
         # estimating, so an immature window never emits a prior-dominated value.
-        if int(np.count_nonzero(np.isfinite(past))) < mh:
+        if int(np.count_nonzero(np.isfinite(past)) < mh:
             continue
         edges = _quantile_edges(past, B)
         S = _bin(past, edges)
@@ -1071,7 +1071,7 @@ def _committor_series(res: dict[str, np.ndarray], col: int, min_state_support: i
         # upper target actually visited in the window, (c) an observed-support
         # path from the current state to the target.
         N_obs = res["N_obs"][t, col]
-        if int(np.count_nonzero(N_obs)) < 2:
+        if int(np.count_nonzero(N_obs) < 2:
             continue
         if int(res["counts"][t, col, B - 1]) < 1:
             continue
@@ -1183,7 +1183,7 @@ def _mfpt_series(res: dict[str, np.ndarray], col: int, min_state_support: int, t
         # one target state actually visited in the window, (c) an observed-
         # support path from the current state to some target.
         N_obs = res["N_obs"][t, col]
-        if int(np.count_nonzero(N_obs)) < 2:
+        if int(np.count_nonzero(N_obs) < 2:
             continue
         if not any(int(res["counts"][t, col, a]) >= 1 for a in A):
             continue

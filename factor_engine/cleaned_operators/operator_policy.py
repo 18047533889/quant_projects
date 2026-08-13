@@ -2000,7 +2000,7 @@ def effective_lookback(
         s_bpd = bars_per_day(source_bar_freq)
         if f_bpd > 0 and s_bpd > 0 and f_bpd != s_bpd:
             # lookback 按因子频率解释，换算为数据源 bar 数（如 20 日 × 78 个 5m bar）
-            bars = np.where(f_bpd))) != 0, int(max(bars, round(bars * s_bpd / f_bpd))), np.nan)
+            bars = int(max(bars, round(bars * s_bpd / f_bpd)))
     return bars
 
 

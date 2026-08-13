@@ -87,8 +87,8 @@ def _looks_like_return(vals: np.ndarray) -> bool:
         return False  # constant -> neither a return nor a level
     sd_diff = float(np.std(np.diff(finite)))
     ratio = sd_level / max(sd_diff, _EPS)
-    centred = abs(float(np.mean(finite))) <= 0.5 * sd_level
-    both_signs = float(np.min(finite)) < 0.0 < float(np.max(finite))
+    centred = abs(float(np.mean(finite)) <= 0.5 * sd_level
+    both_signs = float(np.min(finite) < 0.0 < float(np.max(finite))
     return ratio <= _PRICE_LEVEL_RATIO_THRESHOLD and centred and both_signs
 
 
@@ -158,12 +158,12 @@ def _spectral_entropy_series(x2d: np.ndarray, window: int) -> np.ndarray:
             total = float(p.sum())
             if total <= _EPS or not np.isfinite(total):
                 continue
-            pn = p / total if total != 0 else np.nan
+            pn = p / total
             pn = pn[pn > 0.0]
             if pn.size < 2 or i_max < 2:
                 continue
             h = float(-np.sum(pn * np.log(pn)))
-            out[r, c] = np.where(np.log(float(i_max))) != 0, float(h / np.log(float(i_max))), np.nan)
+            out[r, c] = float(h / np.log(float(i_max)))
     return out
 
 
@@ -197,7 +197,7 @@ def _dominant_cycle_period_series(
             if peak / total < gate:
                 continue
             j = int(np.argmax(p))
-            period = np.where(float(j + 1) != 0, float(n) / float(j + 1), np.nan)
+            period = float(n) / float(j + 1)
             if period < 2.0 or not np.isfinite(period):
                 continue
             out[r, c] = period

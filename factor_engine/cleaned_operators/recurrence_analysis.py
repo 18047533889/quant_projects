@@ -139,7 +139,7 @@ def _recurrence_stats_window(
     total_pairs = M * (M - 1)
     if total_pairs <= 0:
         return None
-    rate = float(R.sum()) / total_pairs if total_pairs != 0 else np.nan
+    rate = float(R.sum()) / total_pairs
 
     # Diagonal line lengths (upper triangle, off the main diagonal).
     diag_lengths: list[int] = []
@@ -162,7 +162,7 @@ def _recurrence_stats_window(
     if diag_lengths:
         lens = np.asarray(diag_lengths, dtype=float)
         uniq, counts = np.unique(lens, return_counts=True)
-        p = np.where(counts.sum() != 0, counts / counts.sum(), np.nan)
+        p = counts / counts.sum()
         ent = -float(np.sum(p * np.log(p)))
         # R6-115: the previous normalisation divided by log(#unique lengths seen
         # in THIS window), so two windows with identical probability structure

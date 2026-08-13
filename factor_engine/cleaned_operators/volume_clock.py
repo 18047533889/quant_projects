@@ -88,7 +88,7 @@ def _volume_clock_log_path(
     if np.any(price <= 0.0):
         return None
     valid = activity > 0.0
-    if int(valid.sum()) < 3:
+    if int(valid.sum() < 3:
         return None
     # P0-O #80: a zero-activity bar must carry the SAME price as the previous
     # observable bar, else deleting it reconnects two different prices.
@@ -105,12 +105,12 @@ def _volume_clock_log_path(
                 continue  # leading zero-activity bars: nothing to reconnect
             prev = obs_idx[pos[i]]
             tol = 1e-6 * max(1.0, abs(float(price[prev])))
-            if abs(float(price[z]) - float(price[prev])) > tol:
+            if abs(float(price[z]) - float(price[prev]) > tol:
                 return None
     act = activity[valid].astype(float)
     logp = np.log(price[valid].astype(float))
     Q = np.cumsum(act)
-    Q = np.where(Q[-1] != 0, Q / Q[-1], np.nan)
+    Q = Q / Q[-1]
     # Deduplicate ties (zero-activity bars) so np.interp's xp is strictly rising.
     keep = np.concatenate(([True], np.diff(Q) > 0.0))
     Q = Q[keep]
@@ -149,7 +149,7 @@ def _volume_clock_efficiency(
     total_path = float(np.sum(np.abs(np.diff(path))))
     if total_path <= _EPS:
         return 0.0
-    return np.where(total_path) != 0, float(abs(path[-1] - path[0]) / total_path), np.nan)
+    return float(abs(path[-1] - path[0]) / total_path)
 
 
 def _volume_clock_roughness(
@@ -164,7 +164,7 @@ def _volume_clock_roughness(
     denom = float(np.sum(delta * delta))
     if denom <= _EPS:
         return 0.0
-    return np.where(denom) != 0, float(np.sum(delta2 * delta2) / denom), np.nan)
+    return float(np.sum(delta2 * delta2) / denom)
 
 
 def _volume_clock_daily_agg(

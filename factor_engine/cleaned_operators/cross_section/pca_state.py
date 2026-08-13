@@ -61,7 +61,7 @@ def _fit(
     sd_sub = np.nanstd(sub, axis=0)
     sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
     Xc = np.where(np.isfinite(sub), sub, mu_sub)
-    Xs = (Xc - mu_sub) / sd_sub if sd_sub != 0 else np.nan
+    Xs = (Xc - mu_sub) / sd_sub
     if rank_policy == "regression":
         k = int(min(n_components, n_active, Xs.shape[0] - 1))
     else:
@@ -71,7 +71,7 @@ def _fit(
     _U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
     total_var = float(np.sum(s * s))
     explained = s[:k] ** 2 / max(total_var, _EPS)
-    coverage = np.where(float(window) != 0, finite_count[active].astype(float) / float(window), np.nan)
+    coverage = finite_count[active].astype(float) / float(window)
     return {
         "active": active,
         "k": k,
@@ -177,7 +177,7 @@ def pca_commonality(X: np.ndarray, pca: dict[str, Any]) -> np.ndarray:
     n_rows, n_cols = X.shape
     Xa = X[:, pca["active"]]
     Xa_imp = np.where(np.isfinite(Xa), Xa, pca["mu"][None, :])
-    z = np.where(pca["sd"] != 0, (Xa_imp - pca["mu"]) / pca["sd"], np.nan)
+    z = (Xa_imp - pca["mu"]) / pca["sd"]                    # (n_rows, n_active)
     score = pca["loadings"] @ z.T                           # (k, n_rows)
     recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T
     resid = Xa - recon

@@ -244,7 +244,7 @@ def _pair_condition_rolling(
                 var_x = float(np.var(xs))
                 if var_x > 0 and np.isfinite(var_x):
                     cov = float(np.mean((xs - np.mean(xs)) * (ys - np.mean(ys))))
-                    out[row, col] = cov / var_x if var_x > 1e-10 else np.nan
+                    out[row, col] = cov / var_x
     return out
 
 

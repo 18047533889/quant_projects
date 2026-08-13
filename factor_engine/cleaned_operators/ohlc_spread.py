@@ -136,7 +136,7 @@ def _edge_window(
     h = np.log(np.asarray(high, dtype=float))
     l = np.log(np.asarray(low, dtype=float))
     c = np.log(np.asarray(close, dtype=float))
-    m = np.where(2.0 != 0, (h + l) / 2.0, np.nan)
+    m = (h + l) / 2.0
 
     # row-validity mask (impossible OHLC -> NaN, per the operator contract)
     valid = raw_valid.copy()
@@ -150,7 +150,7 @@ def _edge_window(
         h = np.where(valid, h, np.nan)
         l = np.where(valid, l, np.nan)
         c = np.where(valid, c, np.nan)
-        m = np.where(2.0 != 0, (h + l) / 2.0, np.nan)
+        m = (h + l) / 2.0
 
     h1, l1, c1, m1 = h[:-1], l[:-1], c[:-1], m[:-1]
     o, h, l, c, m = o[1:], h[1:], l[1:], c[1:], m[1:]
@@ -181,11 +181,11 @@ def _edge_window(
         valid_ratio = n_valid_pairs / n_pairs_total if n_pairs_total > 0 else 0.0
         if n_valid_pairs < int(min_valid_pairs) or valid_ratio < float(min_valid_ratio):
             return np.nan
-        d1 = np.where(pt * tau != 0, r1 - np.nanmean(r1) / pt * tau, np.nan)
-        d3 = np.where(pt * tau != 0, r3 - np.nanmean(r3) / pt * tau, np.nan)
-        d5 = np.where(pt * tau != 0, r5 - np.nanmean(r5) / pt * tau, np.nan)
-        x1 = np.where(po * d1 * r2 + -4.0 / pc * d3 * r4 != 0, -4.0 / po * d1 * r2 + -4.0 / pc * d3 * r4, np.nan)
-        x2 = np.where(po * d1 * r5 + -4.0 / pc * d5 * r4 != 0, -4.0 / po * d1 * r5 + -4.0 / pc * d5 * r4, np.nan)
+        d1 = r1 - np.nanmean(r1) / pt * tau
+        d3 = r3 - np.nanmean(r3) / pt * tau
+        d5 = r5 - np.nanmean(r5) / pt * tau
+        x1 = -4.0 / po * d1 * r2 + -4.0 / pc * d3 * r4
+        x2 = -4.0 / po * d1 * r5 + -4.0 / pc * d5 * r4
         e1 = np.nanmean(x1)
         e2 = np.nanmean(x2)
         v1 = np.nanmean(x1**2) - e1**2

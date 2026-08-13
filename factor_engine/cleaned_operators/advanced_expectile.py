@@ -97,7 +97,7 @@ def _expectile(vals: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> flo
         if s <= _EPS:
             converged = True
             break
-        e_new = float(np.sum(w * v)) / s if s != 0 else np.nan
+        e_new = float(np.sum(w * v)) / s
         if abs(e_new - e) <= _CONV_TOL * max(1.0, abs(e)):
             e = e_new
             converged = True
@@ -202,7 +202,7 @@ def _expectile_slope(yv: np.ndarray, xv: np.ndarray, tau: float, n_min: int = _D
             beta_new = np.linalg.lstsq(A * W[:, None], yy * W, rcond=None)[0]
         except np.linalg.LinAlgError:
             return np.nan
-        if float(np.max(np.abs(beta_new - beta))) <= _CONV_TOL * max(1.0, float(np.max(np.abs(beta)))):
+        if float(np.max(np.abs(beta_new - beta)) <= _CONV_TOL * max(1.0, float(np.max(np.abs(beta)))):
             beta = beta_new
             converged = True
             break

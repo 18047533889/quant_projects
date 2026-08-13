@@ -121,7 +121,7 @@ def _dip_statistic(sorted_x: np.ndarray) -> float:
                 sign = 2 * is_maj - 1
                 denom = X[ii] - X[i1]
                 if denom != 0.0:
-                    dx = np.where(denom) != 0, sign * ((jj - i1 + sign) - (X[jj] - X[i1]) * (ii - i1) / denom), np.nan)
+                    dx = sign * ((jj - i1 + sign) - (X[jj] - X[i1]) * (ii - i1) / denom)
                 else:
                     dx = -1.0
                 gy -= 1 - is_maj
@@ -149,7 +149,7 @@ def _dip_statistic(sorted_x: np.ndarray) -> float:
             j_start = gcm[j + 1]
             j_end = gcm[j]
             if j_end - j_start > 1 and X[j_end] != X[j_start]:
-                c_ = np.where((X[j_end] - X[j_start]) != 0, (j_end - j_start) / (X[j_end] - X[j_start]), np.nan)
+                c_ = (j_end - j_start) / (X[j_end] - X[j_start])
                 x_js = X[j_start]
                 for jj in range(j_start, j_end + 1):
                     dd = (jj - j_start + 1) - (X[jj] - x_js) * c_
@@ -164,7 +164,7 @@ def _dip_statistic(sorted_x: np.ndarray) -> float:
             j_start = lcm[j]
             j_end = lcm[j + 1]
             if j_end - j_start > 1 and X[j_end] != X[j_start]:
-                c_ = np.where((X[j_end] - X[j_start]) != 0, (j_end - j_start) / (X[j_end] - X[j_start]), np.nan)
+                c_ = (j_end - j_start) / (X[j_end] - X[j_start])
                 x_js = X[j_start]
                 for jj in range(j_start, j_end + 1):
                     dd = -((jj - j_start - 1) - (X[jj] - x_js) * c_)
@@ -181,7 +181,7 @@ def _dip_statistic(sorted_x: np.ndarray) -> float:
         high = lcm[lcm_x]
         if flag:
             break
-    return np.where((2.0 * n)) != 0, float(dip / (2.0 * n)), np.nan)
+    return float(dip / (2.0 * n))
 
 
 def _ts_cs_hartigan_dip(x: pd.DataFrame, min_cross: int = 100) -> pd.DataFrame:
@@ -206,7 +206,7 @@ _GRID = 200
 
 
 def _quantiles(v: np.ndarray) -> np.ndarray:
-    return np.where(_GRID, 1.0 - 0.5 / _GRID, _GRID)) != 0, np.quantile(v, np.linspace(0.5 / _GRID, 1.0 - 0.5 / _GRID, _GRID)), np.nan)
+    return np.quantile(v, np.linspace(0.5 / _GRID, 1.0 - 0.5 / _GRID, _GRID))
 
 
 def _wasserstein_pool(me_q: np.ndarray, pool_q: np.ndarray) -> float:
@@ -310,7 +310,7 @@ def _cs_physical_panel_coverage(x: pd.DataFrame, **_: Any) -> pd.DataFrame:
     if cols == 0:
         return frame_like(x, out)
     for r in range(rows):
-        out[r, :] = np.where(float(cols) != 0, float(np.isfinite(arr[r]).sum()) / float(cols), np.nan)
+        out[r, :] = float(np.isfinite(arr[r]).sum()) / float(cols)
     return frame_like(x, out)
 
 

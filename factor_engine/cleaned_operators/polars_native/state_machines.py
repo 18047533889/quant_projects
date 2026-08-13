@@ -182,7 +182,7 @@ class StateConfidenceWeightedEmaPolarsNative(SeriesOperator):
         ], axis=1))
 
         col_name = signal.name
-        base_alpha = np.where(base_halflife) != 0, (1.0 - np.exp(-np.log(2)) / (base_halflife)), np.nan)
+        base_alpha = np.where(base_halflife != 0, (1.0 - np.exp(-np.log(2)) / (base_halflife)), np.nan)
 
         vals = df[col_name].to_numpy()
         conf_vals = df["_conf"].to_numpy()
@@ -278,7 +278,7 @@ class StateCostAwareSlewPolarsNative(SeriesOperator):
         Max change decreases as cost_factor increases
         effective_rate = base_rate / (1 + cost_factor)
         """
-        effective_rate = (base_rate) / ((1.0 + cost_factor)) if ((1.0 + cost_factor)) != 0 else np.nan
+        effective_rate = (base_rate) / ((1.0 + cost_factor) if ((1.0 + cost_factor) != 0 else np.nan
 
         vals = signal.to_numpy()
         output = np.full(len(vals), np.nan)
@@ -997,7 +997,7 @@ class StateSinceTrendTstatPolarsNative(SeriesOperator):
                         y_pred = slope * (x - x_mean) + y_mean
                         residuals = y - y_pred
                         mse = np.where((n - 2) != 0, (np.sum(residuals ** 2)) / ((n - 2)), np.nan)
-                        se_slope = np.where(denominator) != 0, (np.sqrt(mse) / (denominator)), np.nan)
+                        se_slope = np.where(denominator != 0, (np.sqrt(mse) / (denominator)), np.nan)
 
                         if se_slope > 1e-12:
                             t_stat = (slope) / se_slope if se_slope != 0 else np.nan

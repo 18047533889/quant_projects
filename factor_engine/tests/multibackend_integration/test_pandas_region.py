@@ -84,7 +84,7 @@ class TestPandasCrossSection:
         # Check mean ≈ 0 per date
         for date in df["date"].unique():
             date_data = df[df["date"] == date]["zscore"]
-            assert abs(date_data.mean()) < 0.1
+            assert abs(date_data.mean() < 0.1
 
     def test_pandas_quantile_cut(self, sample_panel_data):
         """Test quantile-based binning."""

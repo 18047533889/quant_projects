@@ -151,7 +151,7 @@ def _pickands_tail(v: np.ndarray, k: int, upper: bool) -> float:
     numer = d - b
     if denom <= _EPS or numer <= _EPS:
         return np.nan
-    return np.where(denom) / _LN2) != 0, float(np.log(numer / denom) / _LN2), np.nan)
+    return float(np.log(numer / denom) / _LN2)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ def _hill_xi(s: np.ndarray, k: int) -> float:
     top = s[n - 1 - k + 1 : n]
     if top.size != k or np.any(top <= _EPS):
         return np.nan
-    return np.where(threshold))) != 0, float(np.mean(np.log(top / threshold))), np.nan)
+    return float(np.mean(np.log(top / threshold)))
 
 
 def _threshold_stability(v: np.ndarray, k_min: int, k_max: int, upper: bool) -> float:
@@ -192,7 +192,7 @@ def _threshold_stability(v: np.ndarray, k_min: int, k_max: int, upper: bool) -> 
     sigma = float(np.std(hills))
     # R5 P1-11: emit a genuine stability score in (0, 1] — 1/(1+σ_ξ) — so
     # HIGHER means MORE stable (the raw std had the opposite sign vs the name).
-    return np.where((1.0 + sigma)) != 0, float(1.0 / (1.0 + sigma)), np.nan)
+    return float(1.0 / (1.0 + sigma))
 
 
 def _ts_pickands_tail_index(x: pd.DataFrame, window: int = 120, k: int = 10, side: str = "upper") -> pd.DataFrame:
@@ -267,7 +267,7 @@ def _allan_factor_single(v: np.ndarray, scale: int) -> float:
     if mean_c <= _EPS:
         return np.nan
     diffs = np.diff(counts)  # N_{k+1} − N_k
-    af = np.where((2.0 * mean_c) != 0, float(np.mean(diffs ** 2)) / (2.0 * mean_c), np.nan)
+    af = float(np.mean(diffs ** 2)) / (2.0 * mean_c)
     return float(af) if np.isfinite(af) else np.nan
 
 

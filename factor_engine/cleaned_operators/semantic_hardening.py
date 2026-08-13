@@ -97,7 +97,7 @@ def _rolling_numpy_panel(
         for row in range(rows):
             start = max(0, row - window + 1)
             values = series[start : row + 1]
-            if np.count_nonzero(~np.isnan(values)) < min_periods:
+            if np.count_nonzero(~np.isnan(values) < min_periods:
                 continue
             out[row, col] = func(values)
     return out
@@ -297,7 +297,7 @@ class DivOrNullAudited(TwoVarOperator):
     ) -> pd.DataFrame:
         eps = abs(float(epsilon))
         valid = x.notna() & y.notna() & (y.abs() > eps)
-        out = np.where(y.where(valid)).where(valid) != 0, (x / y.where(valid)).where(valid), np.nan)
+        out = (x / y.where(valid)).where(valid)
         return out.replace([np.inf, -np.inf], np.nan)
 
 

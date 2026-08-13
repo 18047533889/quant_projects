@@ -76,7 +76,7 @@ def _rankdata(v: np.ndarray) -> np.ndarray:
         j = i
         while j + 1 < n and v[order[j + 1]] == v[order[i]]:
             j += 1
-        avg = np.where(2.0 != 0, (i + 1 + j + 1) / 2.0, np.nan)
+        avg = (i + 1 + j + 1) / 2.0
         ranks[order[i : j + 1]] = avg
         i = j + 1
     return ranks
@@ -88,7 +88,7 @@ def _spearman(a: np.ndarray, b: np.ndarray) -> float:
     denom = float(np.sqrt(np.dot(ra, ra) * np.dot(rb, rb)))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(np.dot(ra, rb) / denom), np.nan)
+    return float(np.dot(ra, rb) / denom)
 
 
 def _quantile_groups(xv: np.ndarray, bins: int) -> np.ndarray:
@@ -123,7 +123,7 @@ def _binned_empirical_medians(yv: np.ndarray, xv: np.ndarray, bins: int) -> tupl
     """
     b = _quantile_groups(xv, bins)
     ranks = _rankdata(xv)          # 1-based average ranks; ties share the mean
-    pct = np.where(xv.size != 0, ranks / xv.size, np.nan)
+    pct = ranks / xv.size          # empirical percentile within the window
     medians = np.full(bins, np.nan, dtype=float)
     centers = np.full(bins, np.nan, dtype=float)
     counts = np.zeros(bins, dtype=float)
@@ -151,7 +151,7 @@ def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: in
                 continue
             medians, counts = _binned_medians(yv, xv, b)
             usable = counts >= mpb
-            if int(usable.sum()) < 3:
+            if int(usable.sum() < 3:
                 continue
             gi = np.arange(1, b + 1, dtype=float)[usable]
             out[r, c] = _spearman(gi, medians[usable])
@@ -171,7 +171,7 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, 
                 continue
             medians, centers, counts = _binned_empirical_medians(yv, xv, b)
             usable = counts >= mpb
-            if int(usable.sum()) < 3:
+            if int(usable.sum() < 3:
                 continue
             # P1-18: fit curvature against the groups' EMPIRICAL percentile
             # centres (where the samples actually are), not nominal quantile
@@ -200,7 +200,7 @@ def _ols_beta(xv: np.ndarray, yv: np.ndarray) -> float:
     sxx = float(np.dot(xv - xm, xv - xm))
     if sxx <= _EPS:
         return np.nan
-    return np.where(sxx) != 0, float(np.dot(xv - xm, yv - ym) / sxx), np.nan)
+    return float(np.dot(xv - xm, yv - ym) / sxx)
 
 
 def _balanced_quantile_split(xv: np.ndarray, qq: float) -> tuple[np.ndarray, np.ndarray]:
@@ -252,10 +252,10 @@ def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split
             # β/residual-RMSE.  The old denominator mixed residual-volatility
             # asymmetry into the "slope asymmetry": β_L == β_H with different
             # residual spreads produced a spurious non-zero asymmetry.
-            bLn = bL * sxL / syL if syL != 0 else np.nan
-            bHn = bH * sxH / syH if syH != 0 else np.nan
+            bLn = bL * sxL / syL
+            bHn = bH * sxH / syH
             denom = abs(bHn) + abs(bLn) + _EPS
-            out[r, c] = (bHn - bLn) / denom if denom != 0 else np.nan
+            out[r, c] = (bHn - bLn) / denom
     return out
 
 

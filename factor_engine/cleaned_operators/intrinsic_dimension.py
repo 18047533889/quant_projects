@@ -142,8 +142,8 @@ def _distinct_count_scale_robust(pts: np.ndarray, rel_tol: float = 1e-8) -> int:
     mad = np.median(np.abs(pts - med), axis=0)
     scale = np.where(mad > 0.0, mad, pts.std(axis=0))
     scale = np.where(scale > 0.0, scale, 1.0)
-    norm = (pts - med) / scale if scale != 0 else np.nan
-    grid = np.where(rel_tol) != 0, np.rint(norm / rel_tol), np.nan)
+    norm = (pts - med) / scale
+    grid = np.rint(norm / rel_tol)
     return int(np.unique(grid, axis=0).shape[0])
 
 
@@ -192,7 +192,7 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theile
     t_k_v = t_k[valid]
     t_j_v = t_j[valid]
     log_term = np.sum(np.log(t_k_v[:, None] / t_j_v), axis=1)
-    dims = (k - 1) / log_term if log_term != 0 else np.nan
+    dims = (k - 1) / log_term
     dims = dims[np.isfinite(dims) & (dims > 0.0)]
     if dims.size == 0:
         return np.nan

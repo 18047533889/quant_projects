@@ -160,7 +160,7 @@ class ACF(SeriesOperator):
             if lag == 0:
                 return 1.0
             finite_mask = np.isfinite(s)
-            if int(finite_mask.sum()) <= lag:
+            if int(finite_mask.sum() <= lag:
                 return np.nan
             mean = float(s[finite_mask].mean())
             var = float(((s[finite_mask] - mean) ** 2).sum())
@@ -169,10 +169,10 @@ class ACF(SeriesOperator):
             a = s[:-lag]
             b = s[lag:]
             paired = np.isfinite(a) & np.isfinite(b)
-            if int(paired.sum()) <= lag:  # NEW-030: at least lag+1 valid pairs
+            if int(paired.sum() <= lag:  # NEW-030: at least lag+1 valid pairs
                 return np.nan
             cov = float(((a[paired] - mean) * (b[paired] - mean)).sum())
-            return np.where(var != 0, cov / var, np.nan)
+            return cov / var
 
         # NEW-030: min_periods must be at least lag+1 (a fixed-window ACF
         # cannot be a "statistic" when N grows 2->W while the window is fixed).
@@ -1071,12 +1071,12 @@ class Lasso(SeriesOperator):
         def _lasso_trend(x_vals):
             n = len(x_vals)
             valid = np.isfinite(x_vals)
-            if int(valid.sum()) < 3:
+            if int(valid.sum() < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
             if y is None:
-                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)]) if (idx.std() + 1e-10)]) > 1e-10 else np.nan
+                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)])
                 try:
                     from sklearn.linear_model import Lasso as LassoCV
                     model = LassoCV(alpha=alpha, max_iter=1000)
@@ -1085,7 +1085,7 @@ class Lasso(SeriesOperator):
                 except ImportError:
                     coeffs = np.linalg.lstsq(X, xv, rcond=None)[0]
                     l1_penalty = alpha * np.sum(np.abs(coeffs))
-                    return np.where((1 + l1_penalty) != 0, coeffs[-1] / (1 + l1_penalty), np.nan)
+                    return coeffs[-1] / (1 + l1_penalty)
             return np.nan
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
@@ -1469,12 +1469,12 @@ class Ridge(SeriesOperator):
         def _ridge_trend(x_vals):
             n = len(x_vals)
             valid = np.isfinite(x_vals)
-            if int(valid.sum()) < 3:
+            if int(valid.sum() < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
             if y is None:
-                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)]) if (idx.std() + 1e-10)]) > 1e-10 else np.nan
+                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)])
                 try:
                     XtX = X.T @ X + alpha * np.eye(X.shape[1])
                     XtX_inv = np.linalg.inv(XtX)
@@ -1714,7 +1714,7 @@ class wavg(SeriesOperator):
             w_v = w_vals[valid]
             if len(x_v) == 0 or w_v.sum() == 0:
                 return np.nan
-            return np.where(w_v.sum()) != 0, float((x_v * w_v).sum() / w_v.sum()), np.nan)
+            return float((x_v * w_v).sum() / w_v.sum())
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:

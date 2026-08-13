@@ -238,7 +238,7 @@ def test_pls_coefficients_match_score_ols_oracle(n_components):
 
     ref_std = _pls_reference_predict(Xs, W, P, ys)
     my_std = (learner.predict(frozen, X) - my) / (sy if sy > 0 else 1.0)
-    assert np.max(np.abs(my_std - ref_std)) < 1e-9
+    assert np.max(np.abs(my_std - ref_std) < 1e-9
 
 
 def test_pls_scale_transformed_input_oracle():
@@ -258,7 +258,7 @@ def test_pls_scale_transformed_input_oracle():
     ys = (y - y.mean()) / y.std()
     ref = _pls_reference_predict(Xs, W, P, ys)
     mine = (learner.predict(frozen, X) - y.mean()) / y.std()
-    assert np.max(np.abs(mine - ref)) < 1e-9
+    assert np.max(np.abs(mine - ref) < 1e-9
 
 
 def test_pls_ill_conditioned_input_finite_or_fails_closed():
@@ -307,7 +307,7 @@ def test_pls_matches_sklearn_plsregression_oracle(n_components):
     sk_std = sk.predict(Xs).ravel()
     sk_raw = my + sy * sk_std
     mine = learner.predict(frozen, X)
-    assert np.max(np.abs(mine - sk_raw)) < 1e-6, (
+    assert np.max(np.abs(mine - sk_raw) < 1e-6, (
         f"PLS n_components={n_components} deviates from sklearn PLSRegression "
         f"(max {np.max(np.abs(mine - sk_raw)):.2e})"
     )

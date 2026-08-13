@@ -164,7 +164,7 @@ def _linear_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarra
         else:
             s = seg[mask]
             w = ww[mask]
-            out[i] = np.where(w.sum() != 0, np.dot(s, w) / w.sum(), np.nan)
+            out[i] = np.dot(s, w) / w.sum()
     return out
 
 
@@ -238,7 +238,7 @@ NEW-022: ``residual`` 保留为"当前窗口同 cohort 样本内残差的滚动�
     r_mean_y = y_m.rolling(window=window, min_periods=min_periods).mean()
     r_mean_x = x_m.rolling(window=window, min_periods=min_periods).mean()
 
-    slope = r_cov / r_var_x.replace(0, np.nan) if r_var_x.replace(0, np.nan) > 1e-10 else np.nan
+    slope = r_cov / r_var_x.replace(0, np.nan)
     if retval == "slope":
         return slope
 
@@ -292,14 +292,14 @@ NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
             start = max(0, i - w + 1)
             seg = col[start : i + 1]
             valid = np.isfinite(seg)
-            if int(valid.sum()) < mp:
+            if int(valid.sum() < mp:
                 continue
             t = np.arange(start, i + 1, dtype=np.float64)[valid]
             v = seg[valid]
             tc = t - t.mean()
             denom = float(np.dot(tc, tc))
             if denom > 0.0:
-                out[i, j] = np.where(denom) != 0, float(np.dot(tc, v - v.mean()) / denom), np.nan)
+                out[i, j] = float(np.dot(tc, v - v.mean()) / denom)
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -467,7 +467,7 @@ def _age_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarray:
         else:
             s = seg[mask]
             w = ww[mask]
-            out[i] = np.where(w.sum() != 0, np.dot(s, w) / w.sum(), np.nan)
+            out[i] = np.dot(s, w) / w.sum()
     return out
 
 
@@ -517,7 +517,7 @@ NEW-024: 生产默认 ``min_periods=5`` —— 2 个点的斜率在统计上没�
     x_m = x.where(valid)
     cov = y_m.rolling(window=window, min_periods=min_periods).cov(x_m)
     var = x_m.rolling(window=window, min_periods=min_periods).var()
-    return np.where(var.replace(0, np.nan)).where(valid) != 0, (cov / var.replace(0, np.nan)).where(valid), np.nan)
+    return (cov / var.replace(0, np.nan)).where(valid)
 
 
 def _rolling_top_bottom_1d_numpy(

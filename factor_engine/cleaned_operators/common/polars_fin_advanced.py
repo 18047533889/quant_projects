@@ -98,7 +98,7 @@ class FinSurpriseZscoreNative(SeriesOperator):
             surprise = pl.col(c) - expected[c]
             mean = surprise.rolling_mean(window_size=w, min_samples=w)
             std = surprise.rolling_std(window_size=w, min_samples=w)
-            z = (pl.when((std.is_not_null()) & (std > 1e-12)).then((surprise - mean)) / std).otherwise(None) if std).otherwise(None) > 1e-10 else np.nan
+            z = pl.when((std.is_not_null()) & (std > 1e-12)).then((surprise - mean) / std).otherwise(None)
             exprs.append(z.alias(c))
         return actual.with_columns(exprs) if exprs else actual
 
@@ -146,7 +146,7 @@ class FinSurpriseEventZscoreNative(SeriesOperator):
             std = np.std(past, ddof=1)
             if std < 1e-12:
                 return np.nan
-            return np.where(std) != 0, (float((current - mean)) / (std)), np.nan)
+            return float(current - mean) / std
 
         exprs = []
         for c in cols:
@@ -198,7 +198,7 @@ class FinSurpriseEventPercentileNative(SeriesOperator):
             current = arr[-1]
             past = arr[:-1]
             rank = np.sum(past < current) + 0.5 * np.sum(past == current)
-            return np.where(len(past)) != 0, (float(rank) / (len(past))), np.nan)
+            return float(rank) / len(past)
 
         exprs = []
         for c in cols:
@@ -278,7 +278,7 @@ class FinExpectationRevisionPctNative(SeriesOperator):
         for c in cols:
             prior = pl.col(c).shift(d)
             rev_pct = pl.when((prior.is_not_null()) & (prior.abs() > 1e-12)).then(
-                pl.when(prior.abs( != 0).then(pl.col(c) - prior) / prior.abs().otherwise(None)
+                (pl.col(c) - prior) / prior.abs()
             ).otherwise(None)
             exprs.append(rev_pct.alias(c))
         return expectation.with_columns(exprs)
@@ -559,7 +559,7 @@ class FinRevisionPctNative(SeriesOperator):
         for c in cols:
             prior = pl.col(c).shift(d)
             rev_pct = pl.when((prior.is_not_null()) & (prior.abs() > 1e-12)).then(
-                pl.when(prior.abs( != 0).then(pl.col(c) - prior) / prior.abs().otherwise(None)
+                (pl.col(c) - prior) / prior.abs()
             ).otherwise(None)
             exprs.append(rev_pct.alias(c))
         return x.with_columns(exprs)
@@ -1060,7 +1060,7 @@ class FinSeasonalZscoreNative(SeriesOperator):
             std = np.std(seasonal, ddof=1)
             if std < 1e-12:
                 return np.nan
-            return np.where(std) != 0, (float((current - mean)) / (std)), np.nan)
+            return float(current - mean) / std
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_seasonal_z, window_size=p * n + 1, min_samples=p * 2).alias(c)
@@ -1113,7 +1113,7 @@ class FinSeasonalPercentileNative(SeriesOperator):
             if len(seasonal) < 1:
                 return np.nan
             rank = np.sum(np.array(seasonal) < current) + 0.5 * np.sum(np.array(seasonal) == current)
-            return np.where(len(seasonal)) != 0, (float(rank) / (len(seasonal))), np.nan)
+            return float(rank) / len(seasonal)
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_seasonal_pct, window_size=p * n + 1, min_samples=p + 1).alias(c)
@@ -1207,7 +1207,7 @@ class FinZscoreVsPriorHistoryNative(SeriesOperator):
             std = np.std(past, ddof=1)
             if std < 1e-12:
                 return np.nan
-            return np.where(std) != 0, (float((current - mean)) / (std)), np.nan)
+            return float(current - mean) / std
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_prior_z, window_size=w, min_samples=3).alias(c)
@@ -1298,7 +1298,7 @@ class FinPercentileVsPriorHistoryNative(SeriesOperator):
                 return np.nan
             past = past[valid]
             rank = np.sum(past < current) + 0.5 * np.sum(past == current)
-            return np.where(len(past)) != 0, (float(rank) / (len(past))), np.nan)
+            return float(rank) / len(past)
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_prior_pct, window_size=w, min_samples=2).alias(c)

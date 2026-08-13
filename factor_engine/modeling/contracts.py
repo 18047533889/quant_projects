@@ -422,7 +422,7 @@ class PredictionBatch:
         )
         if self.timestamps and len(self.timestamps) != len(self.row_ids):
             raise ValueError("prediction timestamps are not row-aligned")
-        if tuple(sorted(self.row_ids, key=str)) != self.row_ids:
+        if tuple(sorted(self.row_ids, key=str) != self.row_ids:
             raise ValueError("prediction rows must be deterministic and sorted")
         if self.status != "ok":
             raise ValueError(f"prediction batch status is {self.status!r}")

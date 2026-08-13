@@ -167,7 +167,7 @@ def _check_scale_unit_consistency(x: pd.DataFrame, scale: pd.DataFrame, canonica
     if xf.size == 0 or sf.size == 0:
         return
     x_level = float(np.median(np.abs(xf)))
-    if not (float(xf.min()) > 0.0 and x_level > 1.0):
+    if not (float(xf.min() > 0.0 and x_level > 1.0):
         return  # not a price-like level (returns / log series with a negative leg)
     dx = np.diff(xf)
     if dx.size == 0:
@@ -240,7 +240,7 @@ def _first_passage_series(
             if not fully_observed:
                 continue  # no information: exclude the anchor entirely
             if tau > 0:
-                wgt = (H + 1 - tau) / H if H != 0 else np.nan
+                wgt = (H + 1 - tau) / H
                 signs.append(d * wgt)
             else:
                 # Full-observed non-hit anchor contributes 0, so the mean is the
@@ -372,8 +372,8 @@ def _fp_stats_series(
                     break
         if n_obs < ma:
             continue
-        up_frac[t] = n_up / n_obs if n_obs != 0 else np.nan
-        dn_frac[t] = n_dn / n_obs if n_obs != 0 else np.nan
+        up_frac[t] = n_up / n_obs
+        dn_frac[t] = n_dn / n_obs
         if len(tau_up) >= ma:
             up_ct[t] = float(np.mean(tau_up))
         if len(tau_dn) >= ma:

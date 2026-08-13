@@ -134,7 +134,7 @@ def test_tier1_operators_have_explicit_policy():
 
     missing = sorted(k for k in tier1_policy_keys() if k not in _EXPLICIT_POLICIES)
     assert not missing, f"Tier-1 缺少显式 OperatorPolicy: {missing}"
-    assert len(tier1_policy_keys()) >= 50, "Tier-1 policy 键数量低于 50"
+    assert len(tier1_policy_keys() >= 50, "Tier-1 policy 键数量低于 50"
 
 
 def test_examples_yaml_no_legacy_data_source_types():

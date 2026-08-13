@@ -52,7 +52,7 @@ def _eigen_gap_unstable(s: np.ndarray, k: int) -> bool:
     sk = float(s[k - 1])
     if sk <= _EPS:
         return False
-    return np.where(sk < _EIGEN_GAP_MIN != 0, (sk - float(s[k])) / sk < _EIGEN_GAP_MIN, np.nan)
+    return (sk - float(s[k])) / sk < _EIGEN_GAP_MIN
 
 
 def _infer_session_tz(index: pd.DatetimeIndex) -> str:
@@ -92,7 +92,7 @@ def _numerical_rank(s: np.ndarray, tol: float = 1e-9) -> int:
     smax = float(s[0])
     if smax <= _EPS:
         return 0
-    return int(np.sum(s > tol * smax))
+    return int(np.sum(s) > tol * smax))
 
 
 _QGRID_PAIR = np.linspace(0.01, 0.99, 99)
@@ -146,7 +146,7 @@ def _pair_w1(a: np.ndarray, b: np.ndarray) -> float:
         return np.nan  # degenerate (constant) baseline -> undefined scale, fail closed.
     qa = np.quantile(av, _QGRID_PAIR)
     qb = np.quantile(bv, _QGRID_PAIR)
-    return np.where(mad != 0, float(np.mean(np.abs(qa - qb))) / mad, np.nan)
+    return float(np.mean(np.abs(qa - qb))) / mad
 
 
 @register_operator(
@@ -226,9 +226,9 @@ def _barrier_approach(day_vals: np.ndarray, b_up: float, b_dn: float, lookback: 
         if not np.isfinite(limit_price) or limit_price <= 0.0:
             continue
         if is_upper:
-            h = 1.0 - day_vals / limit_price if limit_price != 0 else np.nan
+            h = 1.0 - day_vals / limit_price
         else:
-            h = 1.0 - limit_price / day_vals if day_vals != 0 else np.nan
+            h = 1.0 - limit_price / day_vals
         h = np.where(np.isfinite(h) & (day_vals > 0.0), h, np.nan)
         v = np.full(h.shape, np.nan, dtype=float)
         v[1:] = h[1:] - h[:-1]
@@ -607,7 +607,7 @@ def _subsampled_rv_dispersion(day_vals: np.ndarray, sampling: int) -> float:
     mu = float(np.mean(per_off))
     if mu <= _EPS:
         return np.nan
-    return np.where(mu) != 0, float(np.std(per_off) / mu), np.nan)
+    return float(np.std(per_off) / mu)
 
 
 @register_operator(
@@ -667,7 +667,7 @@ def _vol_signature_slope(day_vals: np.ndarray, max_interval: int) -> float:
     denom = float(np.sum((xs - xs.mean()) ** 2))
     if denom <= _EPS:
         return np.nan
-    return np.where(denom) != 0, float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom), np.nan)
+    return float(np.sum((xs - xs.mean()) * (ys - ys.mean())) / denom)
 
 
 @register_operator(
@@ -781,7 +781,7 @@ def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int, 
             a = cur[: len(cur) + k]
             b = med[-k:]
         ok = np.isfinite(a) & np.isfinite(b)
-        if int(ok.sum()) < 3:
+        if int(ok.sum() < 3:
             continue
         aa = a[ok]
         bb = b[ok]
@@ -803,7 +803,7 @@ def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int, 
     # negative = peak delayed", so the reported shift is ``-k/n_slots``.  This
     # unifies implementation, doc and semantic version (the pre-R26 sign was
     # reversed).
-    return np.where(int(n_slots)) != 0, float(-best_k / int(n_slots)), np.nan)
+    return float(-best_k / int(n_slots))
 
 
 def _profile_series(day_vals: list[np.ndarray], history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int) -> list[float]:
@@ -821,7 +821,7 @@ def _profile_series(day_vals: list[np.ndarray], history_days: int, n_slots: int,
                 if phase:
                     out[i] = _best_phase(cur, med, int(max_shift), int(n_slots))
                 else:
-                    z = (cur - med) / scale if scale != 0 else np.nan
+                    z = (cur - med) / scale
                     out[i] = float(np.mean(np.minimum(z * z, float(cap))))
         p = _day_profile_equal_count(day_vals[i], n_slots)
         if p is not None:

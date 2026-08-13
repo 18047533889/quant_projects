@@ -117,7 +117,7 @@ def session_cum_vwap(price: pd.Series, volume: pd.Series) -> pd.Series:
     v = pd.Series(volume, index=p.index).astype(float)
     if session is None:
         pv = p * v
-        return np.where(v.cumsum().replace(0, np.nan) != 0, pv.cumsum() / v.cumsum().replace(0, np.nan), np.nan)
+        return pv.cumsum() / v.cumsum().replace(0, np.nan)
 
     out = pd.Series(np.nan, index=p.index, dtype=float)
     for key in session.dropna().unique():
@@ -132,4 +132,4 @@ def session_cum_vwap(price: pd.Series, volume: pd.Series) -> pd.Series:
 def session_vwap_deviation(close: pd.Series, price: pd.Series, volume: pd.Series) -> pd.Series:
     """close 相对 session 累计 VWAP 的偏差：close / vwap - 1。"""
     vwap = session_cum_vwap(price, volume)
-    return np.where(vwap.replace(0, np.nan) - 1.0 != 0, close / vwap.replace(0, np.nan) - 1.0, np.nan)
+    return close / vwap.replace(0, np.nan) - 1.0

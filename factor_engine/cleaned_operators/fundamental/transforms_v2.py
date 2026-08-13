@@ -106,7 +106,7 @@ def _pos_int(value, name: str, minimum: int = 1) -> int:
 def _safe_div(a: float, b: float) -> float:
     if not np.isfinite(a) or not np.isfinite(b) or abs(b) <= _EPS:
         return np.nan
-    return np.where(b) != 0, float(a / b), np.nan)
+    return float(a / b)
 
 
 def _period_key(value):
@@ -504,7 +504,7 @@ def fin_cagr(x, period_id, periods=4, periods_per_year=4, flow_type=None):
         old = _lag_value(o, v, c, p); cur = float(v[c])
         if cur <= 0 or old <= 0:
             return np.nan
-        return np.where(old) ** (ppy / p) - 1.0) != 0, float((cur / old) ** (ppy / p) - 1.0), np.nan)
+        return float((cur / old) ** (ppy / p) - 1.0)
     return _walk_periods(x, period_id, calc)
 
 
@@ -677,7 +677,7 @@ def _trend_stat(x, period_id, periods, which: str, require_consecutive: bool = T
         if n <= 2:
             return np.nan
         mse = ss_res/(n-2)
-        se = np.where(den)) if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
+        se = np.where(den if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
         return slope/se if np.isfinite(se) and se > _EPS else np.nan
     return _walk_periods(x, period_id, calc)
 

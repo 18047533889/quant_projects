@@ -442,7 +442,7 @@ class GroupWeightedMeanNative(SeriesOperator):
         key = ["_r", "_g"]
         weighted_sum = (pl.col("_v") * pl.col("_w")).sum().over(key)
         weight_sum = pl.col("_w").sum().over(key)
-        wm = (pl.when(weight_sum > 1e-12).then(weighted_sum) / (weight_sum).otherwise(None)) if (weight_sum).otherwise(None)) != 0 else np.nan
+        wm = pl.when(weight_sum > 1e-12).then(weighted_sum / weight_sum).otherwise(None)
 
         long = long.with_columns(wm.alias("_v"))
 
@@ -512,7 +512,7 @@ class GroupWeightedZscoreNative(SeriesOperator):
         key = ["_r", "_g"]
         weighted_sum = (pl.col("_v") * pl.col("_w")).sum().over(key)
         weight_sum = pl.col("_w").sum().over(key)
-        wm = (pl.when(weight_sum > 1e-12).then(weighted_sum) / (weight_sum).otherwise(None)) if (weight_sum).otherwise(None)) != 0 else np.nan
+        wm = pl.when(weight_sum > 1e-12).then(weighted_sum / weight_sum).otherwise(None)
         std = pl.col("_v").std().over(key)
 
         z = pl.when((std.is_not_null()) & (std > 1e-12) & (wm.is_not_null())).then(
@@ -748,7 +748,7 @@ class GroupTsDecayLinearNative(SeriesOperator):
             weight_sum = np.sum(weights[~np.isnan(arr)])
             if weight_sum < 1e-12:
                 return np.nan
-            return np.where(weight_sum) != 0, (float(weighted_sum) / (weight_sum)), np.nan)
+            return np.where(weight_sum != 0, (float(weighted_sum) / (weight_sum)), np.nan)
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_decay_mean, window_size=w, min_samples=1).alias(c)
@@ -956,7 +956,7 @@ class GroupLeaderLaggardExposureNative(SeriesOperator):
             rank = pl.col("_v").rank(method="average").over(key)
             count = pl.col("_v").count().over(key)
 
-            pct = (pl.when(count > 0).then(rank) / (count).otherwise(None)) if (count).otherwise(None)) != 0 else np.nan
+            pct = pl.when(count > 0).then(rank / count).otherwise(None)
             exposure = pct - 0.5
 
             return long.with_columns(exposure.alias("_v"))

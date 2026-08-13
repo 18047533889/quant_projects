@@ -77,7 +77,7 @@ def test_missing_state_fails_on_unknown_state_yielding_finite():
         return pd.DataFrame(np.ones_like(condition), index=condition.index, columns=condition.columns)
 
     op = _fake_op("fake_state_latch", param_names=["condition", "window"], calculate=calculate)
-    cond = (np.random.default_rng(1).normal(0, 1, (80, 3)) > 0).astype(float)
+    cond = (np.random.default_rng(1).normal(0, 1, (80, 3) > 0).astype(float)
     cond = pd.DataFrame(cond, index=pd.date_range("2024-01-01", periods=80, freq="B"))
     cond.iloc[20, 0] = np.nan
     ctx, report = _ctx()
@@ -92,7 +92,7 @@ def test_missing_state_clean_when_unknown_state_is_censored():
 
     op = _fake_op("fake_state_censor", param_names=["condition", "window"], calculate=calculate)
     cond = pd.DataFrame(
-        (np.random.default_rng(1).normal(0, 1, (80, 3)) > 0).astype(float),
+        (np.random.default_rng(1).normal(0, 1, (80, 3) > 0).astype(float),
         index=pd.date_range("2024-01-01", periods=80, freq="B"),
     )
     cond.iloc[20, 0] = np.nan

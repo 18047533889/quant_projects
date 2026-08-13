@@ -290,7 +290,7 @@ def _numba_rolling_mean_2d(arr: np.ndarray, window: int) -> np.ndarray:
                     sum_val += arr[j, col]
                     count += 1
             if count > 0:
-                result[i, col] = sum_val / count if count > 0 else np.nan
+                result[i, col] = sum_val / count
 
     return result
 
@@ -320,9 +320,9 @@ def _numba_rolling_std_2d(arr: np.ndarray, window: int) -> np.ndarray:
                     sum_sq += arr[j, col] * arr[j, col]
                     count += 1
             if count > 1:
-                mean = sum_val / count if count > 0 else np.nan
-                variance = (sum_sq / count) - (mean * mean) if count > 0 else np.nan
-                result[i, col] = np.sqrt(max(variance, 0.0)) if variance >= 0 else np.nan
+                mean = sum_val / count
+                variance = (sum_sq / count) - (mean * mean)
+                result[i, col] = np.sqrt(max(variance, 0.0))
 
     return result
 
@@ -429,7 +429,7 @@ def _numba_zscore_2d(arr: np.ndarray) -> np.ndarray:
         if count == 0:
             continue
 
-        mean = sum_val / count if count > 0 else np.nan
+        mean = sum_val / count
 
         # 计算标准差
         sum_sq = 0.0
@@ -445,7 +445,7 @@ def _numba_zscore_2d(arr: np.ndarray) -> np.ndarray:
         # 计算 Z-Score
         for col in range(cols):
             if not np.isnan(arr[row, col]):
-                result[row, col] = (arr[row, col] - mean) / std if std > 1e-10 else np.nan
+                result[row, col] = (arr[row, col] - mean) / std
 
     return result
 
@@ -483,7 +483,7 @@ def _numba_rank_2d(arr: np.ndarray) -> np.ndarray:
 
         # 归一化到 0-1
         for idx, col in enumerate(valid_indices):
-            result[row, col] = ranks[idx] / m if m != 0 else np.nan
+            result[row, col] = ranks[idx] / m
 
     return result
 

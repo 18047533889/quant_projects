@@ -95,7 +95,7 @@ def _bounded_line(frame, left_window, right_window, history_window, points, *, h
             denom = float(np.dot(xs-xbar, xs-xbar))
             if denom <= 0:
                 continue
-            slope = np.where(denom) != 0, float(np.dot(xs-xbar, ys-ybar) / denom), np.nan)
+            slope = float(np.dot(xs-xbar, ys-ybar) / denom)
             out[t, col] = slope if output == "slope" else ybar + slope*(float(t)-xbar)
     return pd.DataFrame(out, index=frame.index, columns=frame.columns)
 
@@ -145,10 +145,10 @@ def _sup_slope(low,left_window,right_window,history_window,points):
     return _bounded_line(low,left_window,right_window,history_window,points,high=False,output="slope")
 def _dist_res(close,high,left_window,right_window,history_window,points):
     level=_res_level(high,left_window,right_window,history_window,points)
-    return np.where(level.replace(0,np.nan)-1.0 != 0, (close) / (level.replace(0,np.nan)-1.0), np.nan)
+    return close/level.replace(0,np.nan)-1.0
 def _dist_sup(close,low,left_window,right_window,history_window,points):
     level=_sup_level(low,left_window,right_window,history_window,points)
-    return np.where(level.replace(0,np.nan)-1.0 != 0, (close) / (level.replace(0,np.nan)-1.0), np.nan)
+    return close/level.replace(0,np.nan)-1.0
 def _break_res(close,high,left_window,right_window,history_window,points):
     return _dist_res(close,high,left_window,right_window,history_window,points).clip(lower=0.0)
 def _break_sup(close,low,left_window,right_window,history_window,points):

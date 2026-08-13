@@ -113,7 +113,7 @@ def pd_fiscal_capital_stock(
         raise ValueError("depreciation must satisfy 0 <= depreciation < 1")
 
     policy = _policy(revision_policy)
-    retention = np.where(periods_per_year) != 0, (1.0 - depreciation) ** (1.0 / periods_per_year), np.nan)
+    retention = (1.0 - depreciation) ** (1.0 / periods_per_year)
     view = FiscalEventView.from_panel(capex, period_id, revision_policy=policy)
     out = np.full(capex.shape, np.nan, dtype=float)
 
@@ -346,11 +346,11 @@ def pd_laborforce_efficiency(
                 continue
 
             # CAGR: (last/first)^(1/years) - 1
-            n_years = np.where(4.0 != 0, len(rpe_pairs) / 4.0, np.nan)
+            n_years = len(rpe_pairs) / 4.0  # assume quarterly
             if n_years <= 0:
                 continue
 
-            cagr = np.where(first_rpe) ** (1.0 / n_years) - 1.0 != 0, (last_rpe / first_rpe) ** (1.0 / n_years) - 1.0, np.nan)
+            cagr = (last_rpe / first_rpe) ** (1.0 / n_years) - 1.0
             if _finite(cagr):
                 out[row, col] = cagr
 
@@ -420,7 +420,7 @@ def pd_years_since_date(
                 current_date = pd.Timestamp(year=current_year, month=current_month, day=1) + pd.offsets.MonthEnd(0)
                 event_ts = pd.Timestamp(event_dt)
                 delta_days = (current_date - event_ts).days
-                years = np.where(365.25 != 0, delta_days / 365.25, np.nan)
+                years = delta_days / 365.25
                 if years >= 0:
                     out[row, col] = years
             except (ValueError, OverflowError):

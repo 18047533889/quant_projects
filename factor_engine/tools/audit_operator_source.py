@@ -9,7 +9,7 @@
   22.1 参数静默变形       int( / max(*int( / min(*int( / np.clip( / .clip(
   22.2 time-axis 压缩     dropna( / [np.isfinite( / valid_values( / aligned_pairs(
   22.3 silent reindex     .reindex( / pd.concat( / set_axis(
-  22.4 truthiness         != 0 / bool( / astype(bool) / .ne(0)
+  22.4 truthiness        ) != 0 / bool( / astype(bool) / .ne(0)
   22.5 hidden parameter   (inspect.signature 对比 - 单独脚本, 这里只扫 kwargs)
   22.6 EPS               1e-12 / EPS / + EPS / np.finfo / 1.4826 / 1.345
   22.7 hidden constant   0.05 0.1 0.3 0.5 0.8 20 60 120 252 512 200

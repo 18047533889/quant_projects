@@ -95,7 +95,7 @@ def _sign_ratio(values: np.ndarray, sign: int, threshold: float, min_periods: in
         hits = float(np.sum(finite < threshold))
     else:
         hits = float(np.sum(np.abs(finite) <= threshold))
-    return np.where(finite.size != 0, hits / finite.size, np.nan)
+    return hits / finite.size
 
 
 @register_operator(

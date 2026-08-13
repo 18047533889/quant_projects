@@ -43,7 +43,7 @@ class LqtpRealturnoverrateOp(TwoVarOperator):
 
     def _calculate_series(self, volume, float_shares, **kwargs):
         denom = float_shares.replace(0, np.nan) if hasattr(float_shares, "replace") else float_shares
-        return np.where(denom != 0, volume / denom, np.nan)
+        return volume / denom
 
 
 @register_operator(
@@ -142,7 +142,7 @@ class MicroSpreadOp(SeriesOperator):
     )
 
     def _calculate_series(self, high, low, close, **kwargs):
-        spread = np.where(close.replace(0, np.nan) != 0, (high - low) / close.replace(0, np.nan), np.nan)
+        spread = (high - low) / close.replace(0, np.nan)
         if hasattr(spread, "apply"):
             return spread
         return spread
@@ -176,7 +176,7 @@ class MicroAmihudHfOp(SeriesOperator):
         else:
             ret = pct_change_by_session(pd.Series(close)).abs()
         denom = close * volume
-        return np.where(denom.replace(0, np.nan) != 0, ret / denom.replace(0, np.nan), np.nan)
+        return ret / denom.replace(0, np.nan)
 
 
 @register_operator(
@@ -202,7 +202,7 @@ class MicroMidReturnOp(SeriesOperator):
     def _calculate_series(self, high, low, **kwargs):
         from cleaned_operators.microstructure.session import pct_change_by_session
 
-        mid = np.where(2.0 != 0, (high + low) / 2.0, np.nan)
+        mid = (high + low) / 2.0
         if hasattr(mid, "apply"):
             return mid.apply(lambda s: pct_change_by_session(pd.Series(s)))
         return pct_change_by_session(pd.Series(mid))
@@ -226,8 +226,8 @@ def _bipower_bv(
     prod = r.abs() * r.abs().shift(1)
     ret_cnt = rolling_by_session(r.notna().astype(float), window, "sum", min_periods=1)
     rolled_sum = rolling_by_session(prod, window, "sum", min_periods=min_periods)
-    correction = np.where((ret_cnt - 1.0) != 0, ret_cnt / (ret_cnt - 1.0), np.nan)
-    return np.where(2.0) * correction * rolled_sum != 0, (np.pi / 2.0) * correction * rolled_sum, np.nan)
+    correction = ret_cnt / (ret_cnt - 1.0)
+    return (np.pi / 2.0) * correction * rolled_sum
 
 
 @register_operator(
@@ -340,7 +340,7 @@ class MicroTradeImbalanceOp(SeriesOperator):
         signed = np.sign(ret) * volume
         num = rolling_by_session(signed, w, "sum", min_periods=mp)
         den = rolling_by_session(volume, w, "sum", min_periods=mp).replace(0, np.nan)
-        return np.where(den != 0, num / den, np.nan)
+        return num / den
 
 
 @register_operator(
@@ -379,7 +379,7 @@ class MicroVpinOp(SeriesOperator):
             r = pct_change_by_session(pd.Series(c)).abs()
             num = rolling_by_session(r * v, w, "sum", min_periods=mp)
             den = rolling_by_session(v, w, "sum", min_periods=mp).replace(0, np.nan)
-            return np.where(den != 0, num / den, np.nan)
+            return num / den
 
         if hasattr(close, "columns"):
             out = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
@@ -429,7 +429,7 @@ class MicroKyleLambdaOp(SeriesOperator):
             r = pct_change_by_session(pd.Series(c)).abs()
             cov = rolling_cov_by_session(r, v, w, min_periods=mp)
             var = rolling_var_by_session(v, w, min_periods=mp).replace(0, np.nan)
-            return np.where(var != 0, cov / var, np.nan)
+            return cov / var
 
         if hasattr(close, "columns"):
             out = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)

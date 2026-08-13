@@ -58,7 +58,7 @@ def _aligned_market(
     raw = close.to_numpy(dtype=float)
     with np_errstate():
         logr = np.full_like(raw, np.nan, dtype=float)
-        logr[1:, :] = np.where(raw[:-1, :]) != 0, np.log(raw[1:, :] / raw[:-1, :]), np.nan)
+        logr[1:, :] = np.log(raw[1:, :] / raw[:-1, :])
         # P0: hard-break at calendar-day boundaries only; the am/pm lunch-break
         # policy stays governed by the session contract (no invented break).
         days = close.index.normalize().to_numpy()
@@ -120,7 +120,7 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
         for day, group in joined.groupby("day"):
             rr = np.asarray(group["r"], dtype=float)
             mm = np.asarray(group["m"], dtype=float)
-            if int(np.sum(np.isfinite(mm))) < 2:
+            if int(np.sum(np.isfinite(mm)) < 2:
                 per_day[day] = np.nan
                 continue
             try:
@@ -142,7 +142,7 @@ def _realized_beta(r: np.ndarray, m: np.ndarray) -> float:
     if var_m <= _EPS:
         return np.nan
     cov = float(np.mean((r - np.mean(r)) * (m - np.mean(m))))
-    return np.where(var_m != 0, cov / var_m, np.nan)
+    return cov / var_m
 
 
 def _realized_corr(r: np.ndarray, m: np.ndarray) -> float:
@@ -161,7 +161,7 @@ def _quadrant_beta(r: np.ndarray, m: np.ndarray, r_cond: np.ndarray, m_cond: np.
     den = float(np.sum(m[den_mask] * m[den_mask]))
     if den <= _EPS:
         return np.nan
-    return np.where(den != 0, num / den, np.nan)
+    return num / den
 
 
 def _down_down(r: np.ndarray, m: np.ndarray) -> float:
@@ -199,7 +199,7 @@ def _market_model(r: np.ndarray, m: np.ndarray) -> tuple[float, float, np.ndarra
     if var_m <= _EPS:
         return None
     cov = float(np.mean((r - rbar) * (m - mbar)))
-    b = cov / var_m if var_m > 1e-10 else np.nan
+    b = cov / var_m
     a = rbar - b * mbar
     with np_errstate():
         e = r - (a + b * m)
@@ -221,7 +221,7 @@ def _idio_skewness(r: np.ndarray, m: np.ndarray) -> float:
     sd = float(np.std(e))
     if sd <= _EPS:
         return np.nan
-    return np.where(sd) ** 3)) != 0, float(np.mean(((e - np.mean(e)) / sd) ** 3)), np.nan)
+    return float(np.mean(((e - np.mean(e)) / sd) ** 3))
 
 
 def _idio_kurtosis(r: np.ndarray, m: np.ndarray) -> float:
@@ -232,7 +232,7 @@ def _idio_kurtosis(r: np.ndarray, m: np.ndarray) -> float:
     sd = float(np.std(e))
     if sd <= _EPS:
         return np.nan
-    return np.where(sd) ** 4)) != 0, float(np.mean(((e - np.mean(e)) / sd) ** 4)), np.nan)
+    return float(np.mean(((e - np.mean(e)) / sd) ** 4))
 
 
 def _market_r2(r: np.ndarray, m: np.ndarray) -> float:
@@ -244,7 +244,7 @@ def _market_r2(r: np.ndarray, m: np.ndarray) -> float:
     ss_tot = float(np.sum((r - np.mean(r)) ** 2))
     if ss_tot <= _EPS:
         return np.nan
-    return np.where(ss_tot)) != 0, float(max(0.0, 1.0 - ss_res / ss_tot)), np.nan)
+    return float(max(0.0, 1.0 - ss_res / ss_tot))
 
 
 def _op(name: str, description: str, unit: str):

@@ -57,7 +57,7 @@ def test_markov_kernel_nan_not_a_state():
             continue
         c = res["counts"][t]
         assert np.isfinite(c).all()
-        assert float(c.sum()) <= min(6, t)
+        assert float(c.sum() <= min(6, t)
 
 
 # ---------------------------------------------------------------------------

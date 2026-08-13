@@ -572,7 +572,7 @@ class FinRatioPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods))
+                (pl.col(value.name) / pl.col(value.name).shift(periods))
                 .alias(value.name)
             ])
             .collect()

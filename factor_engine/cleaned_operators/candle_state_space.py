@@ -296,7 +296,7 @@ def _local_density_series(
             sd = valid.std(axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
             z = (valid - mu) / sd
-            zc = (curv - mu) / sd if sd != 0 else np.nan
+            zc = (curv - mu) / sd
             dists = np.linalg.norm(z - zc, axis=1)
             rk = float(np.partition(dists, kk - 1)[kk - 1])  # k-th nearest distance
             # R6-146: an exact duplicate state (r_k == 0, common in A-share

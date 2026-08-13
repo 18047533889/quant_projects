@@ -49,14 +49,14 @@ def _fit_1d(
     sse = float(resid @ resid)
     centered = yv - yv.mean()
     sst = float(centered @ centered)
-    r2 = np.nan if sst <= 0 else 1.0 - sse / sst if sst != 0 else np.nan
+    r2 = np.nan if sst <= 0 else 1.0 - sse / sst
     dof = yv.size - design.shape[1]
     tstat = np.nan
     if dof > 0:
-        sigma2 = sse / dof if dof != 0 else np.nan
+        sigma2 = sse / dof
         slope_var = sigma2 * np.linalg.pinv(design.T @ design)[-1, -1]
         if np.isfinite(slope_var) and slope_var > 0:
-            tstat = float(beta[-1] / np.sqrt(slope_var)) if np.sqrt(slope_var)) > 1e-10 else np.nan
+            tstat = float(beta[-1] / np.sqrt(slope_var))
     intercept = float(beta[0]) if add_intercept else 0.0
     slope = float(beta[-1])
     current_resid = (
@@ -84,7 +84,7 @@ def _rolling_regression(
         for row in range(y.shape[0]):
             start = max(0, row - w + 1)
             yy, xx = yv[start : row + 1, col], xv[start : row + 1, col]
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
                 continue
             fit = _fit_1d(yy, xx, bool(add_intercept))
             if fit is not None:
@@ -129,7 +129,7 @@ def _rolling_forecast_error(
         for row in range(y.shape[0]):
             start = max(0, row - w + 1)
             yy, xx = yv[start:row, col], xv[start:row, col]  # 训练数据：t-window 至 t-1
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
                 continue
             fit = _fit_1d(yy, xx, bool(add_intercept))
             if fit is None:
@@ -184,7 +184,7 @@ def pd_time_slope(x, window=20, min_periods=None, **_):
             t -= t.mean()
             denom = float(t @ t)
             if denom > 0:
-                out[row, col] = np.where(denom) != 0, float(t @ (y - y.mean()) / denom), np.nan)
+                out[row, col] = float(t @ (y - y.mean()) / denom)
     return frame_pd(x, out)
 
 
@@ -200,7 +200,7 @@ def pl_time_slope(x, window=20, min_periods=None, **_):
         y = values[mask]
         t -= t.mean()
         denom = float(t @ t)
-        return np.where(denom) != 0, np.nan if denom <= 0 else float(t @ (y - y.mean()) / denom), np.nan)
+        return np.nan if denom <= 0 else float(t @ (y - y.mean()) / denom)
 
     return pl_unary_rolling_map(x, w, 1, fn)
 
@@ -247,7 +247,7 @@ def pd_max_drawdown(x, window, min_periods=2, **_):
             if valid.size < mp or np.any(valid <= 0):
                 continue
             peaks = np.maximum.accumulate(valid)
-            out[row, col] = np.where(peaks - 1.0)) != 0, float(np.min(valid / peaks - 1.0)), np.nan)
+            out[row, col] = float(np.min(valid / peaks - 1.0))
     return frame_pd(x, out)
 
 

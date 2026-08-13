@@ -316,7 +316,7 @@ def _ols_residual(
         mask &= np.isfinite(weights) & (weights > 0)
     k = len(features)
     required = max(k + 2, 2) if min_obs is None else _positive_int(min_obs, "min_obs")
-    if int(mask.sum()) < required:
+    if int(mask.sum() < required:
         return out
     design = np.column_stack([feature[mask] for feature in features])
     if add_intercept:
@@ -481,12 +481,12 @@ def _slope_tstat(y: np.ndarray, x: np.ndarray, add_intercept: bool) -> float:
     dof = yv.size - design.shape[1]
     if dof <= 0:
         return np.nan
-    sigma2 = float(residual @ residual) / dof if dof != 0 else np.nan
+    sigma2 = float(residual @ residual) / dof
     xtx_inv = np.linalg.pinv(design.T @ design)
     slope_var = sigma2 * xtx_inv[-1, -1]
     if not np.isfinite(slope_var) or slope_var <= 0:
         return np.nan
-    return np.where(np.sqrt(slope_var)) != 0, float(beta[-1] / np.sqrt(slope_var)), np.nan)
+    return float(beta[-1] / np.sqrt(slope_var))
 
 
 def ts_regression_tstat(
@@ -510,7 +510,7 @@ def ts_regression_tstat(
             mask = np.isfinite(yv[start : row + 1, col]) & np.isfinite(
                 xv[start : row + 1, col]
             )
-            if int(mask.sum()) >= mp:
+            if int(mask.sum() >= mp:
                 out[row, col] = _slope_tstat(
                     yv[start : row + 1, col],
                     xv[start : row + 1, col],
@@ -535,7 +535,7 @@ def ts_trend_tstat(
             start = max(0, row - w + 1)
             vals = xv[start : row + 1, col]
             valid = np.isfinite(vals)
-            if int(valid.sum()) >= mp:
+            if int(valid.sum() >= mp:
                 time = np.arange(vals.size, dtype=float)
                 out[row, col] = _slope_tstat(vals, time, True)
     return _frame_like(x, out)
@@ -559,7 +559,7 @@ def ts_max_drawdown(
         if valid.size < mp or np.any(valid <= 0):
             return np.nan
         peaks = np.maximum.accumulate(valid)
-        return np.where(peaks - 1.0)) != 0, float(np.min(valid / peaks - 1.0)), np.nan)
+        return float(np.min(valid / peaks - 1.0))
 
     return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, drawdown))
 
@@ -585,7 +585,7 @@ def ts_partial_corr(
                 arr[start : row + 1, col] for arr in (xa, ya, za)
             )
             mask = np.isfinite(xv) & np.isfinite(yv) & np.isfinite(zv)
-            if int(mask.sum()) < mp or np.var(zv[mask]) <= 0:
+            if int(mask.sum() < mp or np.var(zv[mask]) <= 0:
                 continue
             design = np.column_stack((np.ones(mask.sum()), zv[mask]))
             rx = xv[mask] - design @ np.linalg.lstsq(design, xv[mask], rcond=None)[0]

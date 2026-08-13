@@ -323,7 +323,7 @@ def test_multi_robust_resid_reference(_loaded):
     op = OperatorRegistry.get("cs_multi_robust_resid", "pandas_numpy")
     out = op.calculate(y, x1, x2, add_intercept=True)
     # mild ridge keeps residuals small for near-perfect linear structure
-    assert float(np.nanmax(np.abs(out.to_numpy()))) < 0.05
+    assert float(np.nanmax(np.abs(out.to_numpy())) < 0.05
 
 
 # ---------------------------------------------------------------------------

@@ -104,7 +104,7 @@ class CirculatingCapRatioChangeNative(SeriesOperator):
         for c in cols:
             c_cap = circulating_cap[c]
             t_cap = total_cap[c] if c in total_cap.columns else pl.lit(None)
-            ratio = (pl.when((t_cap.is_null()) | (t_cap == 0)).then(None).otherwise(c_cap) / (t_cap)) if (t_cap)) != 0 else np.nan
+            ratio = pl.when((t_cap.is_null()) | (t_cap == 0)).then(None).otherwise(c_cap / t_cap)
             change = ratio - ratio.shift(n)
             exprs.append(change.alias(c))
         result = circulating_cap.with_columns(exprs)
@@ -139,7 +139,7 @@ class CirculatingCapUnlockProxyNative(SeriesOperator):
         for c in cols:
             c_cap = circulating_cap[c]
             t_cap = total_cap[c] if c in total_cap.columns else pl.lit(None)
-            ratio = (pl.when((t_cap.is_null()) | (t_cap == 0)).then(None).otherwise(c_cap) / (t_cap)) if (t_cap)) != 0 else np.nan
+            ratio = pl.when((t_cap.is_null()) | (t_cap == 0)).then(None).otherwise(c_cap / t_cap)
             change = ratio - ratio.shift(1)
             unlock = pl.when(change > 0).then(change).otherwise(0)
             exprs.append(unlock.alias(c))
@@ -255,7 +255,7 @@ class SuspensionFrequencyNative(SeriesOperator):
         exprs = []
         for c in cols:
             sus = suspension_indicator[c]
-            freq = (sus.rolling_sum(window_size=w)) / (pl.lit(float(w))) if (pl.lit(float(w))) != 0 else np.nan
+            freq = sus.rolling_sum(window_size=w) / pl.lit(float(w))
             exprs.append(freq.alias(c))
         result = suspension_indicator.with_columns(exprs)
         return result
@@ -365,7 +365,7 @@ class CapitalChangeMagnitudeNative(SeriesOperator):
         for c in cols:
             ts = total_shares[c]
             prev = ts.shift(1)
-            change = (pl.when((prev.is_null()) | (prev == 0)).then(None).otherwise((ts - prev)) / (prev)) if (prev)) != 0 else np.nan
+            change = pl.when((prev.is_null()) | (prev == 0)).then(None).otherwise((ts - prev) / prev)
             exprs.append(change.alias(c))
         result = total_shares.with_columns(exprs)
         return result
@@ -610,7 +610,7 @@ class IndexEventDecayNative(SeriesOperator):
         import math
 
         hl = strict_integer(halflife, "halflife", minimum=1)
-        decay_factor = (math.exp(-math.log(2)) / (hl)) if (hl)) != 0 else np.nan
+        decay_factor = math.exp(-math.log(2) / hl)
 
         cols = _numeric_cols(membership)
         exprs = []

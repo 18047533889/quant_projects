@@ -84,7 +84,7 @@ def _pagerank_series(
             total = float(np.sum(np.maximum(sig, _EPS)))
             if total <= _EPS:
                 continue
-            teleport = (1.0 - damping) / m if m != 0 else np.nan
+            teleport = (1.0 - damping) / m
             # Analytic complete-graph PageRank: pr[i] = (1-d)/m + d*sig[i]/S.
             pr = teleport + damping * (np.maximum(sig, _EPS) / total)
             for pos, i in enumerate(idx):

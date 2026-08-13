@@ -150,7 +150,7 @@ def _common_trading_intensity(volume: pl.DataFrame, amount: pl.DataFrame) -> pl.
 
     # Concentration: need per-bar shares squared
     long = long.join(agg.select(["date", "instrument", "total_vol"]), on=["date", "instrument"])
-    long = long.with_columns((pl.col("volume") / pl.col("total_vol")).alias("share")) if pl.col("total_vol")).alias("share")) > 1e-10 else np.nan
+    long = long.with_columns((pl.col("volume") / pl.col("total_vol")).alias("share"))
 
     conc = long.group_by(["date", "instrument"]).agg(
         (pl.col("share") ** 2).sum().alias("concentration")

@@ -171,7 +171,7 @@ def _h0_persistence_pairs(chunk: np.ndarray, tau: int, dim: int) -> list[tuple[f
     spread = mad if mad > 1e-12 else float(np.std(finite))
     if spread <= 1e-12:
         return []
-    z = (chunk - med) / spread if spread != 0 else np.nan
+    z = (chunk - med) / spread
     n = int(chunk.shape[0])
     lag = tau * (dim - 1)
     if n < lag + 3:
@@ -222,11 +222,11 @@ def _persistence_entropy(pairs: list[tuple[float, float]]) -> float:
     total = float(lifetimes.sum())
     if not np.isfinite(total) or total <= 0.0:
         return np.nan
-    p = np.where(total, 0.0, 1.0) != 0, np.clip(lifetimes / total, 0.0, 1.0), np.nan)
+    p = np.clip(lifetimes / total, 0.0, 1.0)
     ent = -float(np.sum(p * np.log(np.clip(p, 1e-15, 1.0))))
     count = int(lifetimes.size)
     if count > 1:
-        ent = np.where(np.log(count) != 0, ent / np.log(count), np.nan)
+        ent = ent / np.log(count)
     return float(max(ent, 0.0))
 
 

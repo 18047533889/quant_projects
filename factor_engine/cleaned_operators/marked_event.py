@@ -90,7 +90,7 @@ def _mark_autocorr_1d(marks: np.ndarray, event_lag: int) -> float:
     a = marks[event_lag:]
     b = marks[: n - event_lag]
     ok = np.isfinite(a) & np.isfinite(b)
-    if int(ok.sum()) <= event_lag + 2:
+    if int(ok.sum() <= event_lag + 2:
         return np.nan
     aa = a[ok]
     bb = b[ok]
@@ -248,7 +248,7 @@ def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | No
         b = int(ends[j])
         if b - a > 1 and np.isnan(evc[a + 1 : b]).any():
             ok[j] = False
-    if int(ok.sum()) < 4:
+    if int(ok.sum() < 4:
         return np.nan
     if mark_missing_policy == "censor":
         return _corr_trailing_run(intervals, marks_after, ok, min_pairs=4)

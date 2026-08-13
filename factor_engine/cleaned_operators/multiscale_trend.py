@@ -89,7 +89,7 @@ def _normalise_scales(scales: Any) -> list[int]:
         raise ValueError("scales must contain at least one scale")
     # Duplicate scales would double-weight one horizon and silently change the
     # statistic — reject them (P1-43).
-    if len(set(out)) != len(out):
+    if len(set(out) != len(out):
         raise ValueError("scales must be unique (duplicate scales are rejected)")
     return out
 
@@ -105,7 +105,7 @@ def _scale_trend(chunk: np.ndarray, s: int) -> tuple[float, float]:
     denom = float(np.dot(xs - xbar, xs - xbar))
     if denom <= 0.0:
         return np.nan, np.nan
-    slope = np.where(denom) != 0, float(np.dot(xs - xbar, ys - ybar) / denom), np.nan)
+    slope = float(np.dot(xs - xbar, ys - ybar) / denom)
     resid = ys - (ybar + slope * (xs - xbar))
     rs = float(np.sqrt(np.mean(resid ** 2)))
     return slope, rs
@@ -169,7 +169,7 @@ def _curvature_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
                 continue
             ls = np.asarray([np.log(float(s)) for s, _T in pairs], dtype=float)
             y = np.asarray([T for _s, T in pairs], dtype=float)
-            if len(np.unique(np.round(ls, 10))) < 3:
+            if len(np.unique(np.round(ls, 10)) < 3:
                 continue
             X = np.column_stack([np.ones(len(ls)), ls, ls ** 2])
             beta, *_ = np.linalg.lstsq(X, y, rcond=None)
