@@ -56,7 +56,6 @@ class AshareOnePriceLimitStreak(SeriesOperator):
             "low_limit": pl.DataFrame,
             "side": str,
         },
-        timing_kind="SAME_DAY",
         tags=["ashare", "limit", "trading_state", "polars_native"],
     )
 
@@ -153,7 +152,6 @@ class CashFlowLifecycleStage(SeriesOperator):
             "investing_cf": pl.DataFrame,
             "financing_cf": pl.DataFrame,
         },
-        timing_kind="LAGGED",
         tags=["fundamental", "cash_flow", "lifecycle", "polars_native", "pit_safe"],
     )
 
@@ -222,7 +220,6 @@ class QuarterFromCumulative(SeriesOperator):
         description="Extract quarterly value from cumulative YTD data",
         param_names=["cumulative"],
         param_types={"cumulative": pl.DataFrame},
-        timing_kind="SAME_DAY",
         tags=["fundamental", "quarterly", "transform", "polars_native", "pit_safe"],
     )
 
@@ -279,7 +276,6 @@ class RevisionDelta(SeriesOperator):
             "current_estimate": pl.DataFrame,
             "prior_estimate": pl.DataFrame,
         },
-        timing_kind="LAGGED",
         tags=["fundamental", "estimates", "revision", "polars_native", "pit_safe"],
     )
 
@@ -329,7 +325,6 @@ class IndustryFiscalResid(SeriesOperator):
         description="Fiscal metric residual vs. industry mean",
         param_names=["metric", "industry"],
         param_types={"metric": pl.DataFrame, "industry": pl.DataFrame},
-        timing_kind="LAGGED",
         tags=["cross_section", "industry", "fundamental", "polars_native"],
     )
 
@@ -380,7 +375,6 @@ class IndustryRollingPCALoading(SeriesOperator):
             "industry": pl.DataFrame,
             "window": int,
         },
-        timing_kind="SAME_DAY",
         tags=["cross_section", "industry", "pca", "model", "polars_native"],
     )
 
@@ -438,7 +432,6 @@ class SessionEventRecoveryScore(SeriesOperator):
             "low": pl.DataFrame,
             "close": pl.DataFrame,
         },
-        timing_kind="SAME_DAY",
         tags=["intraday", "session", "recovery", "polars_native"],
     )
 
@@ -506,7 +499,6 @@ class TurnoverChipAgeCostSurface(SeriesOperator):
             "volume": pl.DataFrame,
             "window": int,
         },
-        timing_kind="SAME_DAY",
         tags=["microstructure", "turnover", "chip", "distribution", "polars_native"],
     )
 
@@ -574,7 +566,6 @@ class TurnoverChipOverhangSurface(SeriesOperator):
             "volume": pl.DataFrame,
             "window": int,
         },
-        timing_kind="SAME_DAY",
         tags=["microstructure", "turnover", "chip", "overhang", "polars_native"],
     )
 
