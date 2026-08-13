@@ -9,11 +9,35 @@ from cleaned_operators import load_all
 from cleaned_operators.operator_policy import POLARS_PRODUCTION_SAFE
 from cleaned_operators.registry import OperatorRegistry
 from backend.operator_capability import (
+    ExecutionKind,
     build_capability_matrix,
     get_best_backend,
     resolve_canonical,
     summarize_operator,
 )
+
+
+def test_execution_kind_has_single_authority():
+    from backend.polars_backend_kind import (
+        BackendKind as PolarsBackendKind,
+        ExecutionKind as PolarsExecutionKind,
+        PhysicalImplementationSpec,
+        polars_backend_kind,
+    )
+
+    assert PolarsExecutionKind is ExecutionKind
+    assert ExecutionKind.POLARS_NATIVE_KERNEL is ExecutionKind.POLARS_NUMPY_KERNEL
+    assert ExecutionKind.SQL_NATIVE is ExecutionKind.DUCKDB_NATIVE_SQL
+
+    class DeclaredPolarsKernel:
+        canonical = "declared_polars_kernel"
+        _physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        )
+
+    assert polars_backend_kind(DeclaredPolarsKernel()) is PolarsBackendKind.POLARS_NATIVE
 
 
 @pytest.fixture(scope="module")

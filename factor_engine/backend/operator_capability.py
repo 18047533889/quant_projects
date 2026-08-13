@@ -53,14 +53,35 @@ class CapabilityLevel(str, Enum):
 
 
 class ExecutionKind(str, Enum):
-    """How a backend executes an operator (merged from capability_registry)."""
+    """Canonical physical execution taxonomy for every backend.
+
+    The generic members are retained for compatibility with the deprecated
+    capability-registry record API. New physical declarations should use the
+    backend-specific members so execution topology is explicit.
+    """
+
     UNSUPPORTED = "unsupported"
+
+    PANDAS_REFERENCE = "pandas_reference"
+    POLARS_NATIVE_EXPR = "polars_native_expr"
+    POLARS_NUMPY_KERNEL = "polars_numpy_kernel"
+    POLARS_PANDAS_DELEGATE = "polars_pandas_delegate"
+    DUCKDB_NATIVE_SQL = "duckdb_native_sql"
+    SQL_PYTHON_UDF = "sql_python_udf"
+    DUCKDB_PYTHON_REPLACEMENT = "duckdb_python_replacement"
+    Q_NATIVE = "q_native"
+
+    # Compatibility vocabulary used by BackendCapabilityRecord.
     NATIVE_EXPR = "native_expr"
     NATIVE_GROUP = "native_group"
     NATIVE_STREAMING = "native_streaming"
     DELEGATE_PYTHON = "delegate_python"
     DELEGATE_PANDAS = "delegate_pandas"
     REFERENCE = "reference"
+
+    # Compatibility aliases for the former polars_backend_kind authority.
+    POLARS_NATIVE_KERNEL = POLARS_NUMPY_KERNEL
+    SQL_NATIVE = DUCKDB_NATIVE_SQL
 
 
 class UnsupportedOperatorBackendError(RuntimeError):

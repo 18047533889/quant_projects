@@ -35,56 +35,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-
-class ExecutionKind(str, Enum):
-    """How a backend physically executes an operator implementation.
-
-    This enum defines the execution taxonomy for operator implementations.
-    Operators should declare their ExecutionKind explicitly via
-    PhysicalImplementationSpec; source inspection is a fallback only.
-
-    Taxonomy:
-
-    * ``PANDAS_REFERENCE`` — Certified pandas_numpy reference implementation.
-      The gold standard for correctness. Always materializes full panels.
-
-    * ``POLARS_NATIVE_EXPR`` — Pure Polars expression building (pl.col(), pl.when(),
-      arithmetic/logical ops). No Python callbacks, no pandas round-trip.
-      Supports lazy evaluation and streaming when query allows.
-
-    * ``POLARS_NATIVE_KERNEL`` — Per-column numpy UDF over Polars columns
-      (``df.select(pl.col("x").map_batches(lambda s: ...))``) with no pandas
-      round-trip. Materializes the selected column(s) but stays in Polars memory.
-
-    * ``POLARS_PANDAS_DELEGATE`` — Polars → to_pandas() → pandas reference →
-      from_pandas() round-trip. Used for gap coverage when no native Polars
-      implementation exists. Materializes full panel in pandas.
-
-    * ``SQL_NATIVE`` — Native SQL lowering (DuckDB/ClickHouse dialect).
-      Pushed down to query engine; supports lazy/streaming when engine allows.
-
-    * ``SQL_PYTHON_UDF`` — SQL with Python scalar/aggregate UDFs registered
-      into the query engine. Less efficient than pure SQL; materializes UDF args.
-
-    * ``DUCKDB_PYTHON_REPLACEMENT`` — DuckDB replacement scan over Python objects
-      (pandas DataFrame → DuckDB via zero-copy Arrow when possible, copy otherwise).
-
-    * ``UNSUPPORTED`` — No implementation available for this backend.
-
-    Design note: This is the *execution* taxonomy, not the *capability* level.
-    A POLARS_PANDAS_DELEGATE implementation may still be production_safe if the
-    reference it delegates to is certified. ExecutionKind describes HOW it runs,
-    CapabilityLevel describes WHETHER it's safe to use.
-    """
-
-    PANDAS_REFERENCE = "pandas_reference"
-    POLARS_NATIVE_EXPR = "polars_native_expr"
-    POLARS_NATIVE_KERNEL = "polars_native_kernel"
-    POLARS_PANDAS_DELEGATE = "polars_pandas_delegate"
-    SQL_NATIVE = "sql_native"
-    SQL_PYTHON_UDF = "sql_python_udf"
-    DUCKDB_PYTHON_REPLACEMENT = "duckdb_python_replacement"
-    UNSUPPORTED = "unsupported"
+from backend.operator_capability import ExecutionKind
 
 
 @dataclass(frozen=True)
@@ -291,13 +242,13 @@ def polars_backend_kind(
             return BackendKind.POLARS_UDF_PANDAS_DELEGATE
         elif spec.execution_kind in {
             ExecutionKind.POLARS_NATIVE_EXPR,
-            ExecutionKind.POLARS_NATIVE_KERNEL,
+            ExecutionKind.POLARS_NUMPY_KERNEL,
         }:
             return BackendKind.POLARS_NATIVE
         elif spec.execution_kind == ExecutionKind.PANDAS_REFERENCE:
             return BackendKind.PANDAS_REFERENCE
         elif spec.execution_kind in {
-            ExecutionKind.SQL_NATIVE,
+            ExecutionKind.DUCKDB_NATIVE_SQL,
             ExecutionKind.SQL_PYTHON_UDF,
         }:
             return BackendKind.SQL_NATIVE
@@ -384,7 +335,7 @@ def capability_quality(canonical: str, backend: str) -> str:
                 if spec is not None:
                     if spec.execution_kind == ExecutionKind.POLARS_NATIVE_EXPR:
                         return "polars_native_expression"
-                    elif spec.execution_kind == ExecutionKind.POLARS_NATIVE_KERNEL:
+                    elif spec.execution_kind == ExecutionKind.POLARS_NUMPY_KERNEL:
                         return "polars_native_kernel"
                     elif spec.execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE:
                         return "polars_pandas_delegate"
