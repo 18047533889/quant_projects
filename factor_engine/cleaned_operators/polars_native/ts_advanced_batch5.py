@@ -1358,12 +1358,12 @@ class TSLevelShiftScorePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_leverage_effect", canonical="ts_leverage_effect", backend="polars")
 class TSLeverageEffectPolarsNative(SeriesOperator):
-    """Leverage effect: correlation(return, future_volatility)"""
+    """Causal leverage effect: correlation of lagged return and trailing volatility."""
 
     metadata = OperatorMetadata(
         name="ts_leverage_effect",
         category="time_series",
-        description="Correlation between returns and subsequent volatility",
+        description="Causal correlation between lagged returns and current trailing volatility",
         param_names=["feature", "window"],
         return_type="series",
         tags=["time_series", "rolling", "volatility", "asymmetry", "pit_safe"],
@@ -1373,10 +1373,19 @@ class TSLeverageEffectPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, window, **kwargs):
-        # Correlation between returns and future squared returns
+        # Pair r[t-1] with volatility known at t: the PIT-safe historical form
+        # of corr(r[tau], vol[tau+1]).
         ret = feature.diff()
-        fut_vol = (ret.shift(-1) ** 2).rolling_mean(window)
-        return ret.rolling_corr(fut_vol, window_size=window)
+        lagged_ret = ret.shift(1)
+        trailing_vol = ret.rolling_std(window)
+        cross_mean = (lagged_ret * trailing_vol).rolling_mean(window)
+        covariance = cross_mean - (
+            lagged_ret.rolling_mean(window) * trailing_vol.rolling_mean(window)
+        )
+        scale = lagged_ret.rolling_std(window, ddof=0) * trailing_vol.rolling_std(
+            window, ddof=0
+        )
+        return covariance / scale
 
 
 @register_operator(name="ts_line_convergence", canonical="ts_line_convergence", backend="polars")

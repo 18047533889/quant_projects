@@ -52,8 +52,6 @@ class ElderRay(SeriesOperator):
         description="Elder Ray Index: measures buying and selling pressure",
         param_names=["high", "low", "close", "period"],
         param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(
@@ -100,8 +98,6 @@ class FisherTransform(SeriesOperator):
         description="Fisher Transform for turning price into Gaussian distribution",
         param_names=["close", "period"],
         param_types={"close": pl.DataFrame, "period": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(self, close: pl.DataFrame, period: int = 10, **kwargs) -> pl.DataFrame:
@@ -148,8 +144,6 @@ class PSAR(SeriesOperator):
             "af_increment": float,
             "af_max": float,
         },
-        timing_kind="INTRADAY_BARS",
-        production_ready=False,  # Complex stateful logic
     )
 
     def _calculate_series(
@@ -246,8 +240,6 @@ class QQE(SeriesOperator):
         description="QQE indicator based on smoothed RSI",
         param_names=["close", "rsi_period", "smoothing"],
         param_types={"close": pl.DataFrame, "rsi_period": int, "smoothing": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(
@@ -292,8 +284,6 @@ class RSX(SeriesOperator):
         description="RSX - smoother version of RSI with reduced noise",
         param_names=["close", "period"],
         param_types={"close": pl.DataFrame, "period": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(self, close: pl.DataFrame, period: int = 14, **kwargs) -> pl.DataFrame:
@@ -350,8 +340,6 @@ class SupertrendDirection(SeriesOperator):
             "period": int,
             "multiplier": float,
         },
-        timing_kind="INTRADAY_BARS",
-        production_ready=False,  # Requires stateful trend tracking
     )
 
     def _calculate_series(
@@ -431,8 +419,6 @@ class TSI(SeriesOperator):
         description="True Strength Index - double smoothed momentum",
         param_names=["close", "long", "short"],
         param_types={"close": pl.DataFrame, "long": int, "short": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(self, close: pl.DataFrame, long: int = 25, short: int = 13, **kwargs) -> pl.DataFrame:
@@ -473,8 +459,6 @@ class TSI_signal(SeriesOperator):
         description="TSI signal line - EMA smoothing of TSI",
         param_names=["close", "long", "short", "signal"],
         param_types={"close": pl.DataFrame, "long": int, "short": int, "signal": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(
@@ -518,8 +502,6 @@ class VortexMinus(SeriesOperator):
         description="Vortex Indicator Minus component",
         param_names=["high", "low", "close", "period"],
         param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(
@@ -576,8 +558,6 @@ class VortexPlus(SeriesOperator):
         description="Vortex Indicator Plus component",
         param_names=["high", "low", "close", "period"],
         param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
-        timing_kind="INTRADAY_BARS",
-        production_ready=True,
     )
 
     def _calculate_series(
