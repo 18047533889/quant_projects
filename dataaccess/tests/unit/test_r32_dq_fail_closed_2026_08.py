@@ -60,6 +60,32 @@ def test_data_quality_service_external_checker_exception_blocks(monkeypatch):
     assert any("synthetic checker crash" in problem for problem in result.problems)
 
 
+def test_data_quality_service_missing_failures_contract_blocks(monkeypatch):
+    """A checker report without failures cannot be interpreted as PASS."""
+    import data_access.quality.contracts as contracts
+
+    table = pa.table({"value": [1.0, 2.0]})
+
+    class Store:
+        def read(self, dataset, **params):
+            return table
+
+    class IncompleteReport:
+        pass
+
+    monkeypatch.setattr(
+        contracts,
+        "run_quality_checks",
+        lambda dataset, checked_table, *, options=None: IncompleteReport(),
+    )
+
+    result = DataQualityService().run(Store(), "incomplete-report")
+
+    assert result.severity == BLOCK
+    assert result.checks["quality_contracts"] == BLOCK
+    assert any("no failures field" in problem for problem in result.problems)
+
+
 def test_data_quality_service_ohlc_exception_blocks():
     """DataQualityService._check_ohlc 异常 → BLOCK（R32）。"""
     service = DataQualityService()

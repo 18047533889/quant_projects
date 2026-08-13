@@ -163,7 +163,22 @@ class DataQualityService:
                 {"quality_contracts": BLOCK},
                 [f"quality_contracts check failed: {exc}"],
             )
-        failures = list(getattr(report, "failures", ()) or ())
+        # A checker result without an explicit failures collection is not a
+        # quality contract: treating it as PASS would silently approve an
+        # unvalidated source.  Require the report shape before interpreting it.
+        failures = getattr(report, "failures", None)
+        if failures is None:
+            return (
+                {"quality_contracts": BLOCK},
+                ["quality_contracts check failed: report has no failures field"],
+            )
+        try:
+            failures = list(failures or ())
+        except Exception as exc:
+            return (
+                {"quality_contracts": BLOCK},
+                [f"quality_contracts check failed: invalid failures field: {exc}"],
+            )
         checks = {
             "quality_contracts": BLOCK if failures else PASS,
         }
