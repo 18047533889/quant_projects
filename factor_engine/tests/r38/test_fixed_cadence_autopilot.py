@@ -23,6 +23,7 @@ from runtime.resource_autopilot_service import (
     start_resource_autopilot,
 )
 from runtime.resource_broker import ResourceBroker
+from runtime.resource_monitor import HostResourceEnvelope, ResourceSignals
 
 
 @pytest.fixture(autouse=True)
@@ -110,3 +111,39 @@ def test_budget_low_headroom_does_not_exceed_safe():
     a = MemoryBudgetAllocator().allocate(safe, active_live_bytes=active)
     live = a.read_wave_bytes + a.factor_block_bytes + a.result_queue_bytes + a.cache_bytes
     assert live + a.emergency_reserve_bytes <= safe - active
+
+
+def test_job_lease_caps_all_memory_budgets(monkeypatch):
+    """A small job on a large host must not receive host-sized memory targets."""
+    from runtime.resource_autopilot import ResourceController
+
+    lease = 384 * 1024**2
+    broker = ResourceBroker(
+        hard_memory_limit=64 * 1024**3,
+        cpu_slots=8,
+        min_host_reserve_gb=1,
+    )
+    monkeypatch.setattr(broker, "pressure_stage", lambda: "NORMAL")
+    decision = ResourceController(broker).tick(
+        ResourceSignals(),
+        HostResourceEnvelope(
+            hard_memory_bytes=64 * 1024**3,
+            safe_memory_bytes=32 * 1024**3,
+            emergency_reserve_bytes=2 * 1024**3,
+            hard_cpu_tokens=8,
+            target_cpu_tokens=8,
+            io_capacity_score=1.0,
+            remote_capacity_score=1.0,
+            spill_free_bytes=0,
+        ),
+        job_memory_lease_bytes=lease,
+    )
+
+    live = (
+        decision.read_wave_bytes
+        + decision.factor_block_bytes
+        + decision.result_queue_bytes
+        + decision.cache_budget_bytes
+    )
+    assert live <= lease
+    assert decision.read_wave_bytes <= lease

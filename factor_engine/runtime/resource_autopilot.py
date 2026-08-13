@@ -263,15 +263,17 @@ class ResourceController:
         #    （不再各预算独立 clamp 导致总和超 safe）。
         from runtime.memory_budget_allocator import MemoryBudgetAllocator
 
-        safe = max(0, envelope.safe_memory_bytes)
+        host_safe = max(0, envelope.safe_memory_bytes)
+        # A job lease is a hard per-job ceiling. Derive every in-memory budget
+        # from the tighter envelope so small jobs never receive host-sized targets.
+        safe = host_safe
+        if job_memory_lease_bytes is not None:
+            safe = min(safe, max(0, int(job_memory_lease_bytes)))
         hard = max(1, envelope.hard_memory_bytes)
-        active_live = 0
-        if job_memory_lease_bytes:
-            active_live = max(0, int(job_memory_lease_bytes) - max(0, safe))
         alloc = MemoryBudgetAllocator().allocate(
             safe,
             pressure_stage=stage,
-            active_live_bytes=active_live,
+            active_live_bytes=0,
             spill_free_bytes=max(0, envelope.spill_free_bytes),
             spill_reserve_bytes=max(
                 int(getattr(envelope, "spill_reserve_bytes", 0) or 0),
@@ -281,8 +283,8 @@ class ResourceController:
         wave = alloc.read_wave_bytes
         block = alloc.factor_block_bytes
         sink_q = alloc.result_queue_bytes
-        if job_memory_lease_bytes:
-            sink_q = min(sink_q, max(SINK_ABS_MIN, int(job_memory_lease_bytes * SINK_JOB_LEASE_FRACTION)))
+        if job_memory_lease_bytes is not None:
+            sink_q = min(sink_q, max(0, int(job_memory_lease_bytes * SINK_JOB_LEASE_FRACTION)))
         cache_budget = alloc.cache_bytes
         spill_budget = alloc.spill_bytes
 
