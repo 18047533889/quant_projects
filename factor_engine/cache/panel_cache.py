@@ -77,6 +77,10 @@ def series_panel_cache_key(series: Any) -> str:
     h = hashlib.sha256()
     h.update(values_bytes.encode("utf-8"))
     h.update(index_hash.encode("utf-8"))
+    # Raw value bytes do not identify dtype: int64 ``1`` and float64 ``1.0``
+    # can share a byte representation.  Bind dtype so cached panels preserve
+    # downstream missing-value and arithmetic semantics.
+    h.update(str(getattr(series, "dtype", "")).encode("utf-8"))
     h.update(str(name if name is not None else "").encode("utf-8"))
     h.update(str(len(series)).encode("utf-8"))
     return h.hexdigest()
