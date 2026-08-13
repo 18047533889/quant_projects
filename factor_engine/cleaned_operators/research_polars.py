@@ -33,7 +33,7 @@ class PriceSpreadDeviationPolars(SeriesOperator):
         window = _positive(kwargs.get("window", d), "d")
         cols = _numeric_cols(x)
         return x.with_columns([
-            (pl.col(c) / pl.col(c).rolling_mean(window_size=window, min_samples=1)).sub(1.0).alias(c)
+            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).rolling_mean(window_size=window, min_samples=1)).sub(1.0).alias(c)
             for c in cols
         ])
 

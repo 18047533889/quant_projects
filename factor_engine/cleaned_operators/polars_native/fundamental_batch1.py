@@ -95,7 +95,7 @@ class FinPctChangePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -147,7 +147,7 @@ class FinGrowthPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -177,7 +177,7 @@ class FinYoYPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -203,7 +203,7 @@ class FinQoQPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -430,7 +430,7 @@ class FinGrowthAccelerationPolarsNative(SeriesOperator):
                 pl.col(col_name).alias("value")
             ])
             .select([
-                ((pl.col("value") / pl.col("value").shift(periods)) - 1).alias("growth")
+                pl.when(pl.col("value" != 0).then(pl.col("value") / pl.col("value").otherwise(None).shift(periods)) - 1).alias("growth")
             ])
             .select([
                 (pl.col("growth") - pl.col("growth").shift(periods)).alias(col_name)
@@ -458,7 +458,7 @@ class FinGrowthChangePolarsNative(SeriesOperator):
         col_name = value.name
         return (
             df.select([
-                ((pl.col(col_name) / pl.col(col_name).shift(periods)) - 1).alias("growth")
+                pl.when(pl.col(col_name != 0).then(pl.col(col_name) / pl.col(col_name).otherwise(None).shift(periods)) - 1).alias("growth")
             ])
             .select([
                 (pl.col("growth") - pl.col("growth").shift(periods)).alias(col_name)
@@ -486,7 +486,7 @@ class FinGrowthVolatilityPolarsNative(SeriesOperator):
         col_name = value.name
         return (
             df.select([
-                ((pl.col(col_name) / pl.col(col_name).shift(periods)) - 1).alias("growth")
+                pl.when(pl.col(col_name != 0).then(pl.col(col_name) / pl.col(col_name).otherwise(None).shift(periods)) - 1).alias("growth")
             ])
             .select([
                 pl.col("growth").rolling_std(window_size=window, min_periods=2).alias(col_name)
@@ -514,7 +514,7 @@ class FinGrowthStabilityPolarsNative(SeriesOperator):
         col_name = value.name
         return (
             df.select([
-                ((pl.col(col_name) / pl.col(col_name).shift(periods)) - 1).alias("growth")
+                pl.when(pl.col(col_name != 0).then(pl.col(col_name) / pl.col(col_name).otherwise(None).shift(periods)) - 1).alias("growth")
             ])
             .select([
                 (-pl.col("growth").rolling_std(window_size=window, min_periods=2)).alias(col_name)
@@ -542,7 +542,7 @@ class FinCAGRPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)).pow(1.0 / periods) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)).pow(1.0 / periods) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -572,7 +572,7 @@ class FinRatioPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                (pl.col(value.name) / pl.col(value.name).shift(periods))
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods))
                 .alias(value.name)
             ])
             .collect()
@@ -997,7 +997,7 @@ class FiscalPctChangePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -1023,7 +1023,7 @@ class FiscalAccelerationPolarsNative(SeriesOperator):
         col_name = value.name
         return (
             df.select([
-                ((pl.col(col_name) / pl.col(col_name).shift(periods)) - 1).alias("growth")
+                pl.when(pl.col(col_name != 0).then(pl.col(col_name) / pl.col(col_name).otherwise(None).shift(periods)) - 1).alias("growth")
             ])
             .select([
                 (pl.col("growth") - pl.col("growth").shift(periods)).alias(col_name)
@@ -1294,7 +1294,7 @@ class FinSurpriseZScorePolarsNative(SeriesOperator):
                 pl.col(col_name).shift(1).rolling_std(window_size=window, min_periods=2).alias("volatility")
             ])
             .select([
-                ((pl.col("current") - pl.col("expectation")) / pl.col("volatility")).alias(col_name)
+                pl.when(pl.col("volatility" != 0).then(pl.col("current") - pl.col("expectation")) / pl.col("volatility").otherwise(None)).alias(col_name)
             ])
             .collect()
             .to_series()

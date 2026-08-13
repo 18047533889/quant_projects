@@ -49,7 +49,7 @@ class FinAcquisitionCashIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("acq") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("acq") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -77,7 +77,7 @@ class FinBorrowingIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("borrow") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("borrow") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -105,7 +105,7 @@ class FinCapexIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("capex") / pl.col("rev")).alias("result")
+                pl.when(pl.col("rev") != 0).then(pl.col("capex") / pl.col("rev")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -133,7 +133,7 @@ class FinGoodwillIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("gw") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("gw") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -161,7 +161,7 @@ class FinImpairmentIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("imp") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("imp") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -189,7 +189,7 @@ class FinLeaseIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("lease") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("lease") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -217,7 +217,7 @@ class FinRdTotalIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("rd") / pl.col("rev")).alias("result")
+                pl.when(pl.col("rev") != 0).then(pl.col("rd") / pl.col("rev")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -246,7 +246,7 @@ class FinDebtRepaymentIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("repay") / pl.col("ocf")).alias("result")
+                pl.when(pl.col("ocf") != 0).then(pl.col("repay") / pl.col("ocf")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -274,7 +274,7 @@ class FinContractAssetIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("ca") / pl.col("assets")).alias("result")
+                pl.when(pl.col("assets") != 0).then(pl.col("ca") / pl.col("assets")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -302,7 +302,7 @@ class FinContractLiabilityIntensityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("cl") / pl.col("liab")).alias("result")
+                pl.when(pl.col("liab") != 0).then(pl.col("cl") / pl.col("liab")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -331,7 +331,7 @@ class FinCapexGrowthPolarsNative(SeriesOperator):
             capex.to_frame()
             .lazy()
             .select([
-                ((pl.col(capex.name) / pl.col(capex.name).shift(periods)) - 1)
+                pl.when(pl.col(capex.name != 0).then(pl.col(capex.name) / pl.col(capex.name).otherwise(None).shift(periods)) - 1)
                 .alias(capex.name)
             ])
             .collect()
@@ -357,7 +357,7 @@ class FinEquityCapitalGrowthPolarsNative(SeriesOperator):
             equity.to_frame()
             .lazy()
             .select([
-                ((pl.col(equity.name) / pl.col(equity.name).shift(periods)) - 1)
+                pl.when(pl.col(equity.name != 0).then(pl.col(equity.name) / pl.col(equity.name).otherwise(None).shift(periods)) - 1)
                 .alias(equity.name)
             ])
             .collect()
@@ -383,7 +383,7 @@ class FinContractAssetGrowthPolarsNative(SeriesOperator):
             contract_assets.to_frame()
             .lazy()
             .select([
-                ((pl.col(contract_assets.name) / pl.col(contract_assets.name).shift(periods)) - 1)
+                pl.when(pl.col(contract_assets.name != 0).then(pl.col(contract_assets.name) / pl.col(contract_assets.name).otherwise(None).shift(periods)) - 1)
                 .alias(contract_assets.name)
             ])
             .collect()
@@ -409,7 +409,7 @@ class FinContractLiabilityGrowthPolarsNative(SeriesOperator):
             contract_liabilities.to_frame()
             .lazy()
             .select([
-                ((pl.col(contract_liabilities.name) / pl.col(contract_liabilities.name).shift(periods)) - 1)
+                pl.when(pl.col(contract_liabilities.name != 0).then(pl.col(contract_liabilities.name) / pl.col(contract_liabilities.name).otherwise(None).shift(periods)) - 1)
                 .alias(contract_liabilities.name)
             ])
             .collect()
@@ -435,7 +435,7 @@ class FinCagrPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)).pow(1.0 / periods) - 1)
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)).pow(1.0 / periods) - 1)
                 .alias(value.name)
             ])
             .collect()
@@ -469,7 +469,7 @@ class FinActualExpectationDivergencePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                ((pl.col("actual") - pl.col("expected")) / pl.col("expected").abs()).alias("result")
+                pl.when(pl.col("expected" != 0).then(pl.col("actual") - pl.col("expected")) / pl.col("expected").otherwise(None).abs()).alias("result")
             ])
             .collect()
             .to_series()
@@ -527,8 +527,8 @@ class FinCashSalesDivergencePolarsNative(SeriesOperator):
             .select([
                 pl.col("ocf"),
                 pl.col("rev"),
-                ((pl.col("ocf") / pl.col("ocf").shift(periods)) - 1).alias("ocf_growth"),
-                ((pl.col("rev") / pl.col("rev").shift(periods)) - 1).alias("rev_growth"),
+                pl.when(pl.col("ocf" != 0).then(pl.col("ocf") / pl.col("ocf").otherwise(None).shift(periods)) - 1).alias("ocf_growth"),
+                pl.when(pl.col("rev" != 0).then(pl.col("rev") / pl.col("rev").otherwise(None).shift(periods)) - 1).alias("rev_growth"),
             ])
             .select([
                 (pl.col("ocf_growth") - pl.col("rev_growth")).alias("result")
@@ -621,8 +621,8 @@ class FinExpenseSalesDivergencePolarsNative(SeriesOperator):
             .select([
                 pl.col("opex"),
                 pl.col("rev"),
-                ((pl.col("opex") / pl.col("opex").shift(periods)) - 1).alias("opex_growth"),
-                ((pl.col("rev") / pl.col("rev").shift(periods)) - 1).alias("rev_growth"),
+                pl.when(pl.col("opex" != 0).then(pl.col("opex") / pl.col("opex").otherwise(None).shift(periods)) - 1).alias("opex_growth"),
+                pl.when(pl.col("rev" != 0).then(pl.col("rev") / pl.col("rev").otherwise(None).shift(periods)) - 1).alias("rev_growth"),
             ])
             .select([
                 (pl.col("opex_growth") - pl.col("rev_growth")).alias("result")
@@ -655,8 +655,8 @@ class FinInventorySalesDivergencePolarsNative(SeriesOperator):
             .select([
                 pl.col("inv"),
                 pl.col("rev"),
-                ((pl.col("inv") / pl.col("inv").shift(periods)) - 1).alias("inv_growth"),
-                ((pl.col("rev") / pl.col("rev").shift(periods)) - 1).alias("rev_growth"),
+                pl.when(pl.col("inv" != 0).then(pl.col("inv") / pl.col("inv").otherwise(None).shift(periods)) - 1).alias("inv_growth"),
+                pl.when(pl.col("rev" != 0).then(pl.col("rev") / pl.col("rev").otherwise(None).shift(periods)) - 1).alias("rev_growth"),
             ])
             .select([
                 (pl.col("inv_growth") - pl.col("rev_growth")).alias("result")
@@ -689,8 +689,8 @@ class FinReceivableSalesDivergencePolarsNative(SeriesOperator):
             .select([
                 pl.col("ar"),
                 pl.col("rev"),
-                ((pl.col("ar") / pl.col("ar").shift(periods)) - 1).alias("ar_growth"),
-                ((pl.col("rev") / pl.col("rev").shift(periods)) - 1).alias("rev_growth"),
+                pl.when(pl.col("ar" != 0).then(pl.col("ar") / pl.col("ar").otherwise(None).shift(periods)) - 1).alias("ar_growth"),
+                pl.when(pl.col("rev" != 0).then(pl.col("rev") / pl.col("rev").otherwise(None).shift(periods)) - 1).alias("rev_growth"),
             ])
             .select([
                 (pl.col("ar_growth") - pl.col("rev_growth")).alias("result")
@@ -805,7 +805,7 @@ class FinDivergencePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                ((pl.col("m1") - pl.col("m2")) / pl.col("m2").abs()).alias("result")
+                pl.when(pl.col("m2" != 0).then(pl.col("m1") - pl.col("m2")) / pl.col("m2").otherwise(None).abs()).alias("result")
             ])
             .collect()
             .to_series()
@@ -838,7 +838,7 @@ class FinCoreEarningsRatioPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("core") / pl.col("reported")).alias("result")
+                pl.when(pl.col("reported") != 0).then(pl.col("core") / pl.col("reported")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -866,7 +866,7 @@ class FinDiscontinuedOperationRatioPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("disc") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("disc") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -894,7 +894,7 @@ class FinNoncoreIncomeRatioPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("noncore") / pl.col("total")).alias("result")
+                pl.when(pl.col("total") != 0).then(pl.col("noncore") / pl.col("total")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -922,7 +922,7 @@ class FinMinorityProfitSharePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("minority") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("minority") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -950,7 +950,7 @@ class FinFairValueIncomeDependencePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("fv") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("fv") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -978,7 +978,7 @@ class FinInvestmentIncomeDependencePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("inv_inc") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("inv_inc") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1006,7 +1006,7 @@ class FinOtherEarningsDependencePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("other") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("other") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1034,7 +1034,7 @@ class FinGoodwillRiskScorePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("gw") / pl.col("mcap")).alias("result")
+                pl.when(pl.col("mcap") != 0).then(pl.col("gw") / pl.col("mcap")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1121,7 +1121,7 @@ class FinCashConversionPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("ocf") / pl.col("ni")).alias("result")
+                pl.when(pl.col("ni") != 0).then(pl.col("ocf") / pl.col("ni")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1260,7 +1260,7 @@ class FinDebtServiceCoverageProxyPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("ocf") / (pl.col("int") + pl.col("repay"))).alias("result")
+                pl.when((pl.col("int" != 0).then(pl.col("ocf") / (pl.col("int").otherwise(None) + pl.col("repay"))).alias("result")
             ])
             .collect()
             .to_series()
@@ -1288,7 +1288,7 @@ class FinInterestCoverageProxyPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("ebit") / pl.col("int")).alias("result")
+                pl.when(pl.col("int") != 0).then(pl.col("ebit") / pl.col("int")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1316,7 +1316,7 @@ class FinCashBurnRunwayPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("cash") / pl.col("ocf").abs().clip(lower_bound=1e-9)).alias("result")
+                pl.when(pl.col("ocf" != 0).then(pl.col("cash") / pl.col("ocf").otherwise(None).abs().clip(lower_bound=1e-9)).alias("result")
             ])
             .collect()
             .to_series()
@@ -1348,7 +1348,7 @@ class FinCommonSizePolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("item") / pl.col("total")).alias("result")
+                pl.when(pl.col("total") != 0).then(pl.col("item") / pl.col("total")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1402,7 +1402,7 @@ class FinFundamentalStrengthScorePolarsNative(SeriesOperator):
             score_components.to_frame()
             .lazy()
             .select([
-                (pl.col(score_components.name) / max_score).alias(score_components.name)
+                pl.when(max_score != 0).then(pl.col(score_components.name) / max_score).otherwise(None).alias(score_components.name)
             ])
             .collect()
             .to_series()
@@ -1488,7 +1488,7 @@ class FinAverageBalancePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) + pl.col(value.name).shift(periods)) / 2.0)
+                pl.when(2.0 != 0).then(pl.col(value.name) + pl.col(value.name).shift(periods)) / 2.0).otherwise(None)
                 .alias(value.name)
             ])
             .collect()
@@ -1514,7 +1514,7 @@ class FinLogChangePolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                (pl.col(value.name) / pl.col(value.name).shift(periods)).log()
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)).log()
                 .alias(value.name)
             ])
             .collect()
@@ -1541,7 +1541,7 @@ class FinGrowthChangePolarsNative(SeriesOperator):
             .lazy()
             .select([
                 pl.col(value.name),
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1).alias("growth"),
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1).alias("growth"),
             ])
             .select([
                 (pl.col("growth") - pl.col("growth").shift(1)).alias("result")
@@ -1569,7 +1569,7 @@ class FinGrowthVolatilityPolarsNative(SeriesOperator):
             value.to_frame()
             .lazy()
             .select([
-                ((pl.col(value.name) / pl.col(value.name).shift(periods)) - 1).alias("growth"),
+                pl.when(pl.col(value.name != 0).then(pl.col(value.name) / pl.col(value.name).otherwise(None).shift(periods)) - 1).alias("growth"),
             ])
             .select([
                 pl.col("growth").rolling_std(window_size=window).alias("result")
@@ -1632,7 +1632,7 @@ class FinStabilityPolarsNative(SeriesOperator):
                 pl.col(value.name).rolling_std(window_size=window).alias("std"),
             ])
             .select([
-                (pl.col("mean") / pl.col("std")).alias("result")
+                pl.when(pl.col("std") != 0).then(pl.col("mean") / pl.col("std")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -1815,7 +1815,7 @@ class FinTrendTstatPolarsNative(SeriesOperator):
                 pl.corr("idx", value.name).alias("corr"),
             ])
             .select([
-                (pl.col("corr") * (window - 2).sqrt() / (1 - pl.col("corr").pow(2)).sqrt())
+                pl.when((1 - pl.col("corr" != 0).then(pl.col("corr") * (window - 2).sqrt() / (1 - pl.col("corr").otherwise(None).pow(2)).sqrt())
                 .alias("result")
             ])
             .collect()
@@ -2014,7 +2014,7 @@ class FinOciToEquityPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("oci") / pl.col("equity")).alias("result")
+                pl.when(pl.col("equity") != 0).then(pl.col("oci") / pl.col("equity")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -2043,8 +2043,8 @@ class FinRoeCashGapPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("ni") / pl.col("equity")).alias("roe"),
-                (pl.col("ocf") / pl.col("equity")).alias("cash_roe"),
+                pl.when(pl.col("equity") != 0).then(pl.col("ni") / pl.col("equity")).otherwise(None).alias("roe"),
+                pl.when(pl.col("equity") != 0).then(pl.col("ocf") / pl.col("equity")).otherwise(None).alias("cash_roe"),
             ])
             .select([
                 (pl.col("roe") - pl.col("cash_roe")).alias("result")
@@ -2125,7 +2125,7 @@ class FinRdCapitalizationRatioPolarsNative(SeriesOperator):
             })
             .lazy()
             .select([
-                (pl.col("cap") / pl.col("total")).alias("result")
+                pl.when(pl.col("total") != 0).then(pl.col("cap") / pl.col("total")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()
@@ -2257,10 +2257,10 @@ class FinTurnoverPolarsNative(SeriesOperator):
             .lazy()
             .select([
                 pl.col("asset"),
-                ((pl.col("asset") + pl.col("asset").shift(1)) / 2.0).alias("avg_asset"),
+                pl.when(2.0 != 0).then((pl.col("asset") + pl.col("asset").shift(1)) / 2.0).otherwise(None).alias("avg_asset"),
             ])
             .select([
-                (pl.col("rev") / pl.col("avg_asset")).alias("result")
+                pl.when(pl.col("avg_asset") != 0).then(pl.col("rev") / pl.col("avg_asset")).otherwise(None).alias("result")
             ])
             .collect()
             .to_series()

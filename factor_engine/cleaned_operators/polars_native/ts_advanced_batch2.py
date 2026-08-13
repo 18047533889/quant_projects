@@ -193,11 +193,11 @@ class TSGapFillRatioPolarsNative(SeriesOperator):
             df.select([
                 pl.when((pl.col("open") > pl.col("close_prev")))  # Gap up
                 .then(
-                    (pl.col("high") - pl.col("open")) / (pl.col("open") - pl.col("close_prev"))
+                    pl.when((pl.col("open" != 0).then(pl.col("high") - pl.col("open")) / (pl.col("open").otherwise(None) - pl.col("close_prev"))
                 )
                 .when((pl.col("open") < pl.col("close_prev")))  # Gap down
                 .then(
-                    (pl.col("open") - pl.col("low")) / (pl.col("close_prev") - pl.col("open"))
+                    pl.when((pl.col("close_prev" != 0).then(pl.col("open") - pl.col("low")) / (pl.col("close_prev").otherwise(None) - pl.col("open"))
                 )
                 .otherwise(None)
             ])
@@ -228,7 +228,7 @@ class TSGapReversionRatioPolarsNative(SeriesOperator):
 
         return (
             df.select([
-                (pl.col("open") - pl.col("close")) / (pl.col("open") - pl.col("close_prev"))
+                pl.when((pl.col("open" != 0).then(pl.col("open") - pl.col("close")) / (pl.col("open").otherwise(None) - pl.col("close_prev"))
             ])
             .collect()
             .to_series()
@@ -2014,7 +2014,7 @@ class TSKAMAPolarsNative(SeriesOperator):
                 pl.col(col).diff().abs().rolling_sum(window).alias("_volatility"),
             ])
             .with_columns([
-                (pl.col("_change") / (pl.col("_volatility") + 1e-8)).alias("_er")
+                pl.when((pl.col("_volatility" != 0).then(pl.col("_change") / (pl.col("_volatility").otherwise(None) + 1e-8)).alias("_er")
             ])
             .with_columns([
                 ((pl.col("_er") * (2.0/(fast+1) - 2.0/(slow+1)) + 2.0/(slow+1)) ** 2).alias("_sc")

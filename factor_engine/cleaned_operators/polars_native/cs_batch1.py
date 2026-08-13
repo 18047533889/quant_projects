@@ -464,7 +464,7 @@ class CSCoverageRatioPolarsNative(SeriesOperator):
 
         # 计算覆盖率: count(non-null) / count(*)
         lf = lf.with_columns([
-            (pl.col(feature_name).count() / pl.col(feature_name).len())
+            pl.when(pl.col(feature_name != 0).then(pl.col(feature_name).count() / pl.col(feature_name).otherwise(None).len())
             .alias(feature_name)
         ])
 
@@ -602,7 +602,7 @@ class CSWeightedZscorePolarsNative(SeriesOperator):
         weighted_std = weighted_var.sqrt()
 
         lf = lf.with_columns([
-            ((pl.col(feature_name) - weighted_mean) / weighted_std).alias(feature_name)
+            pl.when(weighted_std != 0).then((pl.col(feature_name) - weighted_mean) / weighted_std).otherwise(None).alias(feature_name)
         ])
 
         result_df = lf.collect().to_pandas()
@@ -648,7 +648,7 @@ class CSWeightedPercentileRankPolarsNative(SeriesOperator):
         lf = (
             lf.sort(feature_name)
             .with_columns([
-                (pl.col(weight_name).cum_sum() / pl.col(weight_name).sum())
+                pl.when(pl.col(weight_name != 0).then(pl.col(weight_name).cum_sum() / pl.col(weight_name).otherwise(None).sum())
                 .alias("weighted_rank")
             ])
         )

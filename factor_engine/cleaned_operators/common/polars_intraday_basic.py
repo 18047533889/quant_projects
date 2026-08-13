@@ -1250,7 +1250,7 @@ class IntraHighLowAffinityNative(SeriesOperator):
                 )
                 .then(None)
                 .otherwise(
-                    (pl.col(c) - pl.col(c).from_(low)) / (pl.col(c).from_(high) - pl.col(c).from_(low))
+                    pl.when((pl.col(c != 0).then(pl.col(c) - pl.col(c).from_(low)) / (pl.col(c).otherwise(None).from_(high) - pl.col(c).from_(low))
                 )
                 .alias(c)
                 for c in cols

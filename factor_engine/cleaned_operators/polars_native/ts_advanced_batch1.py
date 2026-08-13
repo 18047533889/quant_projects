@@ -63,7 +63,7 @@ class TSAbsConcentrationPolarsNative(SeriesOperator):
                 (pl.col("_abs").rolling_sum(window)).alias("_sum"),
             ])
             .with_columns([
-                ((pl.col("_abs") / pl.col("_sum")).pow(2).rolling_sum(window)).alias(feature.name)
+                pl.when(pl.col("_sum" != 0).then(pl.col("_abs") / pl.col("_sum").otherwise(None)).pow(2).rolling_sum(window)).alias(feature.name)
             ])
             .select([feature.name])
             .collect()

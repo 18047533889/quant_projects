@@ -69,12 +69,15 @@ class NativeCSECache:
     cached result and serving in native form when possible.
     """
 
-    def __init__(self, max_size_bytes: int = 2 * 1024**3):  # 2 GB
+    def __init__(self, max_size_bytes: int | None = None):
         """Initialize native CSE cache.
 
         Args:
-            max_size_bytes: Maximum cache size (bytes)
+            max_size_bytes: Maximum cache size (bytes). If None, uses adaptive config.
         """
+        if max_size_bytes is None:
+            from runtime.adaptive_config import get_global_adaptive_config
+            max_size_bytes = get_global_adaptive_config().cache_size_bytes
         self._cache: dict[NativeCSEKey, CSEEntry] = {}
         self._max_size_bytes = max_size_bytes
         self._current_size_bytes = 0

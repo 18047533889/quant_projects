@@ -387,7 +387,7 @@ class ROCPolars(SeriesOperator):
         w = int(kwargs.get("d", window))
         cols = _numeric_cols(price)
         return price.with_columns([
-            ((pl.col(c) / pl.col(c).shift(w) - 1.0) * 100.0).alias(c) for c in cols
+            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(w) - 1.0) * 100.0).alias(c) for c in cols
         ])
 
 
@@ -425,7 +425,7 @@ class TRIXPolars(SeriesOperator):
         ema3 = _ewm_mean(_ewm_mean(_ewm_mean(close, w), w), w)
         cols = _numeric_cols(ema3)
         return ema3.with_columns([
-            ((pl.col(c) / pl.col(c).shift(1) - 1.0) * 100.0).alias(c) for c in cols
+            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(1) - 1.0) * 100.0).alias(c) for c in cols
         ])
 
 
@@ -629,7 +629,7 @@ class ADXRPolars(SeriesOperator):
         adx = ADXPolars()._calculate_series(high, low, close, window=w, **kwargs)
         cols = _numeric_cols(adx)
         return adx.with_columns([
-            ((pl.col(c) + pl.col(c).shift(w)) / 2.0).alias(c) for c in cols
+            pl.when(2.0 != 0).then((pl.col(c) + pl.col(c).shift(w)) / 2.0).otherwise(None).alias(c) for c in cols
         ])
 
 

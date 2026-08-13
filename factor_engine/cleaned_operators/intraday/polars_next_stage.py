@@ -34,7 +34,7 @@ def _melt(df: pl.DataFrame, value_name: str) -> pl.DataFrame:
 
 def _returns(long: pl.DataFrame, close_col: str = "close") -> pl.DataFrame:
     return long.with_columns(
-        (pl.col(close_col) / pl.col(close_col).shift(1).over(["date", "instrument"]))
+        pl.when(pl.col(close_col != 0).then(pl.col(close_col) / pl.col(close_col).otherwise(None).shift(1).over(["date", "instrument"]))
         .log()
         .alias("r")
     )
@@ -119,7 +119,7 @@ def _cont_jump(close: pl.DataFrame, side: str) -> pl.DataFrame:
     )
     agg = long.group_by(["date", "instrument"]).agg(
         (r * r).sum().alias("rv"),
-        ((pl.col("absprod") * (math.pi / 2.0)).sum()).alias("bv"),
+        pl.when(2.0 != 0).then(pl.col("absprod") * (math.pi / 2.0).otherwise(None)).sum()).alias("bv"),
     )
     if side == "continuous":
         out = agg.with_columns(pl.min_horizontal("rv", "bv").alias("v"))
@@ -143,7 +143,7 @@ def _jump_stats(close: pl.DataFrame, stat: str, threshold_scale: float) -> pl.Da
         pl.col("r").count().alias("n"),
         (r * r).sum().alias("rv"),
     ).with_columns(
-        ((pl.col("rv") / pl.col("n")).sqrt() * float(threshold_scale)).alias("thresh")
+        pl.when(pl.col("n" != 0).then(pl.col("rv") / pl.col("n").otherwise(None)).sqrt() * float(threshold_scale)).alias("thresh")
     )
     long = long.join(rv, on=["date", "instrument"])
     long = long.with_columns((r.abs() > pl.col("thresh")).alias("jump"))
@@ -251,11 +251,11 @@ def _max_path(close: pl.DataFrame, side: str) -> pl.DataFrame:
     )
     if side == "down":
         out = long.group_by(["date", "instrument"]).agg(
-            ((pl.col("close") / pl.col("run_max")) - 1.0).min().alias("v")
+            pl.when(pl.col("run_max" != 0).then(pl.col("close") / pl.col("run_max").otherwise(None)) - 1.0).min().alias("v")
         )
     else:
         out = long.group_by(["date", "instrument"]).agg(
-            ((pl.col("close") / pl.col("run_min")) - 1.0).max().alias("v")
+            pl.when(pl.col("run_min" != 0).then(pl.col("close") / pl.col("run_min").otherwise(None)) - 1.0).max().alias("v")
         )
     return _pivot(out, "v")
 

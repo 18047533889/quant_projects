@@ -278,7 +278,7 @@ class FinExpectationRevisionPctNative(SeriesOperator):
         for c in cols:
             prior = pl.col(c).shift(d)
             rev_pct = pl.when((prior.is_not_null()) & (prior.abs() > 1e-12)).then(
-                (pl.col(c) - prior) / prior.abs()
+                pl.when(prior.abs( != 0).then(pl.col(c) - prior) / prior.abs().otherwise(None)
             ).otherwise(None)
             exprs.append(rev_pct.alias(c))
         return expectation.with_columns(exprs)
@@ -559,7 +559,7 @@ class FinRevisionPctNative(SeriesOperator):
         for c in cols:
             prior = pl.col(c).shift(d)
             rev_pct = pl.when((prior.is_not_null()) & (prior.abs() > 1e-12)).then(
-                (pl.col(c) - prior) / prior.abs()
+                pl.when(prior.abs( != 0).then(pl.col(c) - prior) / prior.abs().otherwise(None)
             ).otherwise(None)
             exprs.append(rev_pct.alias(c))
         return x.with_columns(exprs)

@@ -1178,7 +1178,7 @@ class TSRatioPolarsNative(SeriesOperator):
 
         return (
             df.select([
-                (pl.col(feature.name) / denominator).alias("result")
+                pl.when(denominator != 0).then(pl.col(feature.name) / denominator).otherwise(None).alias("result")
             ])
             .collect()["result"]
         )
@@ -1680,7 +1680,7 @@ class TSDistanceToHighPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_max(window).alias("_max")
             ])
             .select([
-                ((pl.col("_max") - pl.col(feature.name)) / pl.col("_max")).alias("result")
+                pl.when(pl.col("_max" != 0).then(pl.col("_max") - pl.col(feature.name)) / pl.col("_max").otherwise(None)).alias("result")
             ])
             .collect()["result"]
         )
@@ -1709,7 +1709,7 @@ class TSDistanceToLowPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_min")
             ])
             .select([
-                ((pl.col(feature.name) - pl.col("_min")) / pl.col(feature.name)).alias("result")
+                pl.when(pl.col(feature.name != 0).then(pl.col(feature.name) - pl.col("_min")) / pl.col(feature.name).otherwise(None)).alias("result")
             ])
             .collect()["result"]
         )
@@ -2501,7 +2501,7 @@ class TSEwmCorrPolarsNative(SeriesOperator):
                 (pl.col("y_dev") ** 2).ewm_mean(alpha=alpha).alias("var_y")
             ])
             .select([
-                (pl.col("cov") / (pl.col("var_x").sqrt() * pl.col("var_y").sqrt()))
+                pl.when((pl.col("var_x" != 0).then(pl.col("cov") / (pl.col("var_x").otherwise(None).sqrt() * pl.col("var_y").sqrt()))
                 .alias("result")
             ])
             .collect()["result"]
@@ -2843,7 +2843,7 @@ class TSSwingAmplitudePctPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_low")
             ])
             .select([
-                ((pl.col("_high") - pl.col("_low")) / pl.col(feature.name))
+                pl.when(pl.col(feature.name != 0).then(pl.col("_high") - pl.col("_low")) / pl.col(feature.name).otherwise(None))
                 .alias("result")
             ])
             .collect()["result"]
@@ -3067,7 +3067,7 @@ class TSRobustZscorePriorPolarsNative(SeriesOperator):
                 pl.col(feature.name).shift(1).rolling_std(window).alias("_std")
             ])
             .select([
-                ((pl.col(feature.name) - pl.col("_mean")) / pl.col("_std"))
+                pl.when(pl.col("_std" != 0).then(pl.col(feature.name) - pl.col("_mean")) / pl.col("_std").otherwise(None))
                 .alias("result")
             ])
             .collect()["result"]
@@ -3405,7 +3405,7 @@ class TSBetaIfPolarsNative(SeriesOperator):
                 (pl.col("y_dm") ** 2).rolling_mean(window).alias("var_y")
             ])
             .select([
-                (pl.col("cov") / pl.col("var_y")).alias("result")
+                pl.when(pl.col("var_y") != 0).then(pl.col("cov") / pl.col("var_y")).otherwise(None).alias("result")
             ])
             .collect()["result"]
         )
@@ -3441,7 +3441,7 @@ class TSTailRatioPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_quantile(lower, window_size=window).alias("_lower")
             ])
             .select([
-                (pl.col("_upper") / pl.col("_lower").abs()).alias("result")
+                pl.when(pl.col("_lower" != 0).then(pl.col("_upper") / pl.col("_lower").otherwise(None).abs()).alias("result")
             ])
             .collect()["result"]
         )
@@ -4165,7 +4165,7 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_min(window).alias("_support")
             ])
             .select([
-                ((pl.col(feature.name) - pl.col("_support")) / pl.col(feature.name))
+                pl.when(pl.col(feature.name != 0).then(pl.col(feature.name) - pl.col("_support")) / pl.col(feature.name).otherwise(None))
                 .alias("result")
             ])
             .collect()["result"]
@@ -4195,7 +4195,7 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
                 pl.col(feature.name).rolling_max(window).alias("_resistance")
             ])
             .select([
-                ((pl.col("_resistance") - pl.col(feature.name)) / pl.col(feature.name))
+                pl.when(pl.col(feature.name != 0).then(pl.col("_resistance") - pl.col(feature.name)) / pl.col(feature.name).otherwise(None))
                 .alias("result")
             ])
             .collect()["result"]

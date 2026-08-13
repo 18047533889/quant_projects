@@ -42,7 +42,7 @@ class IntraRealizedBetaPolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("value")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -98,7 +98,7 @@ class IntraIdiosyncraticVariancePolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("beta")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("beta")
             )
             .with_columns(
                 pl.max_horizontal(
@@ -129,7 +129,7 @@ class IntraIdiosyncraticSkewnessPolarsNative(PanelOperator):
             df.lazy()
             .group_by(["date", "asset_id"])
             .agg([
-                (pl.cov("returns", "mkt_ret") / pl.var("mkt_ret")).fill_null(0).alias("beta")
+                pl.when(pl.var("mkt_ret" != 0).then(pl.cov("returns", "mkt_ret") / pl.var("mkt_ret").otherwise(None)).fill_null(0).alias("beta")
             ])
             .collect()
         )
@@ -146,7 +146,7 @@ class IntraIdiosyncraticSkewnessPolarsNative(PanelOperator):
                 (pl.col("resid") ** 2).sum().alias("m2")
             ])
             .with_columns(
-                (pl.col("m3") / (pl.col("m2") ** 1.5)).fill_null(0).alias("value")
+                pl.when((pl.col("m2" != 0).then(pl.col("m3") / (pl.col("m2").otherwise(None) ** 1.5)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -171,7 +171,7 @@ class IntraIdiosyncraticKurtosisPolarsNative(PanelOperator):
             df.lazy()
             .group_by(["date", "asset_id"])
             .agg([
-                (pl.cov("returns", "mkt_ret") / pl.var("mkt_ret")).fill_null(0).alias("beta")
+                pl.when(pl.var("mkt_ret" != 0).then(pl.cov("returns", "mkt_ret") / pl.var("mkt_ret").otherwise(None)).fill_null(0).alias("beta")
             ])
             .collect()
         )
@@ -188,7 +188,7 @@ class IntraIdiosyncraticKurtosisPolarsNative(PanelOperator):
                 (pl.col("resid") ** 2).sum().alias("m2")
             ])
             .with_columns(
-                (pl.col("m4") / (pl.col("m2") ** 2)).fill_null(0).alias("value")
+                pl.when((pl.col("m2" != 0).then(pl.col("m4") / (pl.col("m2").otherwise(None) ** 2)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -250,7 +250,7 @@ class IntraUpUpSemibetaPolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("value")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -280,7 +280,7 @@ class IntraDownDownSemibetaPolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("value")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -310,7 +310,7 @@ class IntraUpDownSemibetaPolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("value")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -340,7 +340,7 @@ class IntraDownUpSemibetaPolarsNative(PanelOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("mkt_var")).fill_null(0).alias("value")
+                pl.when(pl.col("mkt_var" != 0).then(pl.col("cov") / pl.col("mkt_var").otherwise(None)).fill_null(0).alias("value")
             )
             .select(["date", "asset_id", "value"])
         )
@@ -366,7 +366,7 @@ class IntraBetaAsymmetryPolarsNative(PanelOperator):
             .lazy()
             .group_by(["date", "asset_id"])
             .agg([
-                (pl.cov("returns", "mkt_ret") / pl.var("mkt_ret")).fill_null(0).alias("beta_down")
+                pl.when(pl.var("mkt_ret" != 0).then(pl.cov("returns", "mkt_ret") / pl.var("mkt_ret").otherwise(None)).fill_null(0).alias("beta_down")
             ])
             .collect()
         )
@@ -377,7 +377,7 @@ class IntraBetaAsymmetryPolarsNative(PanelOperator):
             .lazy()
             .group_by(["date", "asset_id"])
             .agg([
-                (pl.cov("returns", "mkt_ret") / pl.var("mkt_ret")).fill_null(0).alias("beta_up")
+                pl.when(pl.var("mkt_ret" != 0).then(pl.cov("returns", "mkt_ret") / pl.var("mkt_ret").otherwise(None)).fill_null(0).alias("beta_up")
             ])
             .collect()
         )
@@ -443,7 +443,7 @@ class IntraLunchGapReturnPolarsNative(SeriesOperator):
         return (
             df.join(daily_count, on="date")
             .with_columns(
-                (pl.col("seq") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq") / pl.col("total")).otherwise(None).alias("pct")
             )
             .with_columns([
                 pl.when(pl.col("pct") < lunch_start_pct)
@@ -492,7 +492,7 @@ class IntraSessionReturnAsymmetryPolarsNative(SeriesOperator):
         return (
             df.join(daily_count, on="date")
             .with_columns(
-                (pl.col("seq") < pl.col("total") / 2).alias("is_morning")
+                pl.when(2 != 0).then(pl.col("seq") < pl.col("total") / 2).otherwise(None).alias("is_morning")
             )
             .group_by("date")
             .agg([
@@ -608,7 +608,7 @@ class IntraDrawdownRecoveryHalfLifePolarsNative(SeriesOperator):
             df.join(max_dd, on="date")
             .filter(pl.col("seq") >= pl.col("dd_seq"))
             .with_columns(
-                (pl.col("drawdown") <= pl.col("max_dd") / 2).alias("recovered_half")
+                pl.when(2 != 0).then(pl.col("drawdown") <= pl.col("max_dd") / 2).otherwise(None).alias("recovered_half")
             )
             .filter(pl.col("recovered_half"))
             .group_by("date")
@@ -642,7 +642,7 @@ class IntraKyleLambdaProxyPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("vol_var")).fill_null(0).alias("returns")
+                pl.when(pl.col("vol_var" != 0).then(pl.col("cov") / pl.col("vol_var").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -725,7 +725,7 @@ class IntraStateTransitionEntropyPolarsNative(SeriesOperator):
                 pl.col("count").sum().over("date").alias("total")
             )
             .with_columns(
-                (pl.col("count") / pl.col("total")).alias("prob")
+                pl.when(pl.col("total") != 0).then(pl.col("count") / pl.col("total")).otherwise(None).alias("prob")
             )
             .with_columns(
                 pl.when(pl.col("prob") > 0)
@@ -771,12 +771,12 @@ class IntraJumpFirstTimePolarsNative(SeriesOperator):
         return (
             df.join(stats, on="date")
             .with_columns(
-                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").sqrt())).alias("is_jump")
+                pl.when(pl.col("total" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").otherwise(None).sqrt())).alias("is_jump")
             )
             .filter(pl.col("is_jump"))
             .group_by("date")
             .agg([
-                (pl.col("seq").min() / pl.col("total").first()).alias("returns")
+                pl.when(pl.col("total" != 0).then(pl.col("seq").min() / pl.col("total").otherwise(None).first()).alias("returns")
             ])
             .to_series()
         )
@@ -808,12 +808,12 @@ class IntraJumpLastTimePolarsNative(SeriesOperator):
         return (
             df.join(stats, on="date")
             .with_columns(
-                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").sqrt())).alias("is_jump")
+                pl.when(pl.col("total" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").otherwise(None).sqrt())).alias("is_jump")
             )
             .filter(pl.col("is_jump"))
             .group_by("date")
             .agg([
-                (pl.col("seq").max() / pl.col("total").first()).alias("returns")
+                pl.when(pl.col("total" != 0).then(pl.col("seq").max() / pl.col("total").otherwise(None).first()).alias("returns")
             ])
             .to_series()
         )
@@ -845,7 +845,7 @@ class IntraJumpClusteringPolarsNative(SeriesOperator):
         jump_df = (
             df.join(stats, on="date")
             .with_columns(
-                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").sqrt())).alias("is_jump")
+                pl.when(pl.col("total" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("total").otherwise(None).sqrt())).alias("is_jump")
             )
             .filter(pl.col("is_jump"))
             .with_columns(
@@ -859,7 +859,7 @@ class IntraJumpClusteringPolarsNative(SeriesOperator):
                 pl.col("spacing").filter(pl.col("spacing").is_not_null()).mean().alias("avg_spacing")
             ])
             .with_columns(
-                (1.0 / pl.col("avg_spacing")).fill_null(0).alias("returns")
+                pl.when(pl.col("avg_spacing" != 0).then(1.0 / pl.col("avg_spacing").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -934,7 +934,7 @@ class IntraSignedJumpRatioPolarsNative(SeriesOperator):
         jump_stats = (
             df.join(stats, on="date")
             .with_columns(
-                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").sqrt())).alias("is_jump")
+                pl.when(pl.col("n" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").otherwise(None).sqrt())).alias("is_jump")
             )
             .filter(pl.col("is_jump"))
             .group_by("date")
@@ -947,7 +947,7 @@ class IntraSignedJumpRatioPolarsNative(SeriesOperator):
         return (
             jump_stats
             .with_columns(
-                (pl.col("pos_var") / (pl.col("neg_var") + 1e-10)).fill_null(1).alias("returns")
+                pl.when((pl.col("neg_var" != 0).then(pl.col("pos_var") / (pl.col("neg_var").otherwise(None) + 1e-10)).fill_null(1).alias("returns")
             )
             .select("returns")
             .to_series()

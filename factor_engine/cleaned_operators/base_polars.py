@@ -321,8 +321,8 @@ def _numba_rolling_std_2d(arr: np.ndarray, window: int) -> np.ndarray:
                     count += 1
             if count > 1:
                 mean = sum_val / count if count > 0 else np.nan
-                variance = np.where(count) - (mean * mean) != 0, (sum_sq / count) - (mean * mean), np.nan)
-                result[i, col] = np.sqrt(max(variance, 0.0))
+                variance = (sum_sq / count) - (mean * mean) if count > 0 else np.nan
+                result[i, col] = np.sqrt(max(variance, 0.0)) if variance >= 0 else np.nan
 
     return result
 

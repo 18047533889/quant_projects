@@ -11,6 +11,8 @@
     - 动态 budgets（§35..39/49）：read wave / factor block / sink queue / spill /
       cache 全部从 Safe Envelope 派生，不再固定 4GB。
     - 决策可解释（§166/167）：每次变动记录 why/before/after/signal。
+
+2026-08-13: 使用自适应配置替代硬编码 BLOCK_ABS_MAX/SINK_ABS_MAX。
 """
 from __future__ import annotations
 
@@ -34,6 +36,23 @@ from runtime.resource_monitor import (
     ResourceSignals,
 )
 
+
+def _get_adaptive_bounds() -> dict[str, int]:
+    """获取自适应内存边界。"""
+    try:
+        from runtime.adaptive_config import get_global_adaptive_config
+        config = get_global_adaptive_config()
+        return {
+            "BLOCK_ABS_MAX": config.block_abs_max_bytes,
+            "SINK_ABS_MAX": config.block_abs_max_bytes * 4,
+        }
+    except ImportError:
+        return {
+            "BLOCK_ABS_MAX": 2 * 1024**3,
+            "SINK_ABS_MAX": 8 * 1024**3,
+        }
+
+
 #: 双向控制器默认参数（§66/67/68）。
 _DOWN_FACTOR = 0.5            # 压力升高 → target ×0.5（fast down）
 _UP_STEP = 1                  # 稳定 → +1（slow up）
@@ -48,13 +67,29 @@ SINK_JOB_LEASE_FRACTION = 0.10
 CACHE_FRACTION = 0.15
 SPILL_FRACTION = 0.15
 
-#: 绝对 bounds。
+#: 绝对 bounds（自适应，延迟初始化）。
 WAVE_ABS_MIN = 256 * 1024**2       # 256MB
 WAVE_ABS_MAX = 16 * 1024**3        # 16GB
 BLOCK_ABS_MIN = 64 * 1024**2       # 64MB
-BLOCK_ABS_MAX = 2 * 1024**3        # 2GB
 SINK_ABS_MIN = 128 * 1024**2       # 128MB
-SINK_ABS_MAX = 8 * 1024**3         # 8GB
+
+# 自适应上限（延迟初始化）
+_adaptive_bounds: dict[str, int] | None = None
+
+
+def _get_bounds() -> dict[str, int]:
+    """获取或初始化自适应边界。"""
+    global _adaptive_bounds
+    if _adaptive_bounds is None:
+        _adaptive_bounds = _get_adaptive_bounds()
+    return _adaptive_bounds
+
+
+# 向后兼容：保留原常量名
+def __getattr__(name: str) -> int:
+    if name in ("BLOCK_ABS_MAX", "SINK_ABS_MAX"):
+        return _get_bounds()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 #: 预测性压力阈值（§69/70）。
 _MEM_SLOPE_THROTTLE_BPS = -1 * 1024**3      # -1GB/s → 提前 throttle

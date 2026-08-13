@@ -37,7 +37,7 @@ class IntraIntervalAmountSharePolarsNative(SeriesOperator):
             .collect()
             .explode(["amt", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -48,7 +48,7 @@ class IntraIntervalAmountSharePolarsNative(SeriesOperator):
                 pl.col("total_amt").first().alias("total_amt")
             ])
             .with_columns(
-                (pl.col("interval_amt") / pl.col("total_amt")).alias("returns")
+                pl.when(pl.col("total_amt") != 0).then(pl.col("interval_amt") / pl.col("total_amt")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -78,14 +78,14 @@ class IntraIntervalIlliquidityPolarsNative(SeriesOperator):
             .collect()
             .explode(["ret", "vol", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
             )
             .group_by("date")
             .agg([
-                (pl.col("ret").abs() / pl.col("vol")).mean().alias("returns")
+                pl.when(pl.col("vol" != 0).then(pl.col("ret").abs() / pl.col("vol").otherwise(None)).mean().alias("returns")
             ])
             .to_series()
         )
@@ -117,7 +117,7 @@ class IntraIntervalVwapDeviationPolarsNative(SeriesOperator):
         interval_df = (
             df.join(daily_count, on="date")
             .with_columns(
-                (pl.col("seq") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -132,7 +132,7 @@ class IntraIntervalVwapDeviationPolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("v")
             ])
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -149,7 +149,7 @@ class IntraIntervalVwapDeviationPolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("total_dev") / pl.col("total_vol")).alias("returns")
+                pl.when(pl.col("total_vol") != 0).then(pl.col("total_dev") / pl.col("total_vol")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -185,7 +185,7 @@ class IntraSegmentReturnPolarsNative(SeriesOperator):
             .collect()
             .explode(["ret", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -222,7 +222,7 @@ class IntraSegmentRealizedVolPolarsNative(SeriesOperator):
             .collect()
             .explode(["ret", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -260,7 +260,7 @@ class IntraSegmentVolumeSharePolarsNative(SeriesOperator):
             .collect()
             .explode(["vol", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -271,7 +271,7 @@ class IntraSegmentVolumeSharePolarsNative(SeriesOperator):
                 pl.col("total_vol").first().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("seg_vol") / pl.col("total_vol")).alias("returns")
+                pl.when(pl.col("total_vol") != 0).then(pl.col("seg_vol") / pl.col("total_vol")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -303,7 +303,7 @@ class IntraSegmentAmountSharePolarsNative(SeriesOperator):
             .collect()
             .explode(["amt", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -314,7 +314,7 @@ class IntraSegmentAmountSharePolarsNative(SeriesOperator):
                 pl.col("total_amt").first().alias("total_amt")
             ])
             .with_columns(
-                (pl.col("seg_amt") / pl.col("total_amt")).alias("returns")
+                pl.when(pl.col("total_amt") != 0).then(pl.col("seg_amt") / pl.col("total_amt")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -350,7 +350,7 @@ class IntraSegmentVwapDeviationPolarsNative(SeriesOperator):
         segment_df = (
             df.join(daily_count, on="date")
             .with_columns(
-                (pl.col("seq") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -364,7 +364,7 @@ class IntraSegmentVwapDeviationPolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("v")
             ])
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -380,7 +380,7 @@ class IntraSegmentVwapDeviationPolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("total_dev") / pl.col("total_vol")).alias("returns")
+                pl.when(pl.col("total_vol") != 0).then(pl.col("total_dev") / pl.col("total_vol")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -415,7 +415,7 @@ class IntraVwapPathSlopePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -434,7 +434,7 @@ class IntraVwapPathSlopePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cov") / pl.col("var")).fill_null(0).alias("returns")
+                pl.when(pl.col("var" != 0).then(pl.col("cov") / pl.col("var").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -464,7 +464,7 @@ class IntraVwapPathCurvaturePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -511,7 +511,7 @@ class IntraVwapReversionSpeedPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -557,7 +557,7 @@ class IntraTimeAboveVwapPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -597,7 +597,7 @@ class IntraLongestAboveVwapStreakPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -650,7 +650,7 @@ class IntraLongestBelowVwapStreakPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -703,7 +703,7 @@ class IntraPriceVwapMaxPositiveExcursionPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -711,7 +711,7 @@ class IntraPriceVwapMaxPositiveExcursionPolarsNative(SeriesOperator):
         return (
             df.join(vwap_df, on="date")
             .with_columns(
-                ((pl.col("price") - pl.col("vwap")) / pl.col("vwap")).alias("dev_pct")
+                pl.when(pl.col("vwap" != 0).then(pl.col("price") - pl.col("vwap")) / pl.col("vwap").otherwise(None)).alias("dev_pct")
             )
             .group_by("date")
             .agg([
@@ -743,7 +743,7 @@ class IntraPriceVwapMaxNegativeExcursionPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -751,7 +751,7 @@ class IntraPriceVwapMaxNegativeExcursionPolarsNative(SeriesOperator):
         return (
             df.join(vwap_df, on="date")
             .with_columns(
-                ((pl.col("price") - pl.col("vwap")) / pl.col("vwap")).alias("dev_pct")
+                pl.when(pl.col("vwap" != 0).then(pl.col("price") - pl.col("vwap")) / pl.col("vwap").otherwise(None)).alias("dev_pct")
             )
             .group_by("date")
             .agg([
@@ -924,7 +924,7 @@ class IntraTailVolumeSharePolarsNative(SeriesOperator):
                 pl.col("volume").sum().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("tail_vol") / pl.col("total_vol")).fill_null(0).alias("returns")
+                pl.when(pl.col("total_vol" != 0).then(pl.col("tail_vol") / pl.col("total_vol").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -961,7 +961,7 @@ class IntraSignedTailVariationRatioPolarsNative(SeriesOperator):
                 pl.when(pl.col("returns") < 0).then(pl.col("returns") ** 2).sum().alias("neg_var")
             ])
             .with_columns(
-                (pl.col("pos_var") / (pl.col("neg_var") + 1e-10)).fill_null(1).alias("returns")
+                pl.when((pl.col("neg_var" != 0).then(pl.col("pos_var") / (pl.col("neg_var").otherwise(None) + 1e-10)).fill_null(1).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -1058,7 +1058,7 @@ class IntraSameSlotZscorePolarsNative(SeriesOperator):
                 .alias("slot_std")
             ])
             .with_columns(
-                ((pl.col("returns") - pl.col("slot_mean")) / (pl.col("slot_std") + 1e-10)).alias("zscore")
+                pl.when((pl.col("slot_std" != 0).then(pl.col("returns") - pl.col("slot_mean")) / (pl.col("slot_std").otherwise(None) + 1e-10)).alias("zscore")
             )
             .group_by("date")
             .agg([
@@ -1088,7 +1088,7 @@ class IntraConsolidationQualityPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (1.0 / ((pl.col("range") / pl.col("mean_price")) + 1e-10)).alias("returns")
+                pl.when(((pl.col("range" != 0).then(1.0 / ((pl.col("range").otherwise(None) / pl.col("mean_price")) + 1e-10)).alias("returns")
             )
             .select("returns")
             .to_series()

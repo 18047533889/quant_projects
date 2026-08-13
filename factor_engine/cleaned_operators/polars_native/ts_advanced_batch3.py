@@ -1076,7 +1076,7 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
                 pl.col(feature.name).diff().abs().rolling_sum(window).alias("_path_len"),
             ])
             .with_columns([
-                ((pl.col("_end") - pl.col("_start")).abs() / (pl.col("_path_len") + 1e-10)).alias("efficiency")
+                pl.when((pl.col("_path_len" != 0).then(pl.col("_end") - pl.col("_start")).abs() / (pl.col("_path_len").otherwise(None) + 1e-10)).alias("efficiency")
             ])
             .select("efficiency")
             .collect()
@@ -1713,7 +1713,7 @@ class TSRangeExpansionPolarsNative(SeriesOperator):
                 (pl.col("high") - pl.col("low")).alias("_range"),
             ])
             .with_columns([
-                (pl.col("_range") / pl.col("_range").rolling_mean(window) - 1).alias("expansion")
+                pl.when(pl.col("_range" != 0).then(pl.col("_range") / pl.col("_range").otherwise(None).rolling_mean(window) - 1).alias("expansion")
             ])
             .select("expansion")
             .collect()["expansion"]
@@ -2293,7 +2293,7 @@ class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
                 (pl.col(feature.name) - pl.col(feature.name).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
             ])
             .with_columns([
-                ((pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad") * 1.4826 + 1e-10)).alias("robust_z")
+                pl.when((pl.col("_mad" != 0).then(pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad").otherwise(None) * 1.4826 + 1e-10)).alias("robust_z")
             ])
             .select("robust_z")
             .collect()
@@ -2326,7 +2326,7 @@ class TSRobustZscorePriorPolarsNative(SeriesOperator):
                 (pl.col(feature.name).shift(1) - pl.col(feature.name).shift(1).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
             ])
             .with_columns([
-                ((pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad") * 1.4826 + 1e-10)).alias("robust_z")
+                pl.when((pl.col("_mad" != 0).then(pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad").otherwise(None) * 1.4826 + 1e-10)).alias("robust_z")
             ])
             .select("robust_z")
             .collect()

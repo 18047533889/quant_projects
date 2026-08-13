@@ -242,7 +242,7 @@ class IntraRealizedSkewnessPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("m3") / (pl.col("m2") ** 1.5)).alias("returns")
+                pl.when((pl.col("m2" != 0).then(pl.col("m3") / (pl.col("m2").otherwise(None) ** 1.5)).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -265,7 +265,7 @@ class IntraRealizedKurtosisPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("m4") / (pl.col("m2") ** 2)).alias("returns")
+                pl.when((pl.col("m2" != 0).then(pl.col("m4") / (pl.col("m2").otherwise(None) ** 2)).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -334,7 +334,7 @@ class IntraJumpCountPolarsNative(SeriesOperator):
                 on="date"
             )
             .with_columns(
-                (pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").sqrt())).alias("is_jump")
+                pl.when(pl.col("n" != 0).then(pl.col("returns").abs() > (threshold * pl.col("std") / pl.col("n").otherwise(None).sqrt())).alias("is_jump")
             )
             .group_by("date")
             .agg([
@@ -450,7 +450,7 @@ class IntraJumpRatioPolarsNative(SeriesOperator):
         return (
             stats_df.join(jump_df, on="date")
             .with_columns(
-                (pl.col("jump_var") / pl.col("rv")).fill_null(0).alias("returns")
+                pl.when(pl.col("rv" != 0).then(pl.col("jump_var") / pl.col("rv").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -535,7 +535,7 @@ class IntraPathEfficiencyPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("net") / pl.col("total")).fill_null(0).alias("returns")
+                pl.when(pl.col("total" != 0).then(pl.col("net") / pl.col("total").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -565,7 +565,7 @@ class IntraHighTimePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("high_seq") / pl.col("total")).alias("returns")
+                pl.when(pl.col("total") != 0).then(pl.col("high_seq") / pl.col("total")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -591,7 +591,7 @@ class IntraLowTimePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("low_seq") / pl.col("total")).alias("returns")
+                pl.when(pl.col("total") != 0).then(pl.col("low_seq") / pl.col("total")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -616,7 +616,7 @@ class IntraAmihudPolarsNative(SeriesOperator):
             .lazy()
             .group_by("date")
             .agg([
-                (pl.col("returns").abs() / pl.col("volume")).mean().alias("returns")
+                pl.when(pl.col("volume" != 0).then(pl.col("returns").abs() / pl.col("volume").otherwise(None)).mean().alias("returns")
             ])
             .collect()
             .to_series()
@@ -635,7 +635,7 @@ class IntraConcentrationPolarsNative(SeriesOperator):
             .group_by("date")
             .agg([
                 pl.col("volume").sum().alias("total"),
-                ((pl.col("volume") / pl.col("volume").sum()) ** 2).sum().alias("hhi")
+                pl.when(pl.col("volume" != 0).then(pl.col("volume") / pl.col("volume").otherwise(None).sum()) ** 2).sum().alias("hhi")
             ])
             .collect()
             .select("hhi")
@@ -659,7 +659,7 @@ class IntraEntropyPolarsNative(SeriesOperator):
             .collect()
             .explode("vol")
             .with_columns(
-                (pl.col("vol") / pl.col("vol").sum().over("date")).alias("prob")
+                pl.when(pl.col("vol" != 0).then(pl.col("vol") / pl.col("vol").otherwise(None).sum().over("date")).alias("prob")
             )
             .with_columns(
                 pl.when(pl.col("prob") > 0)
@@ -703,7 +703,7 @@ class IntraIntervalReturnPolarsNative(SeriesOperator):
             .collect()
             .explode(["ret", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -737,7 +737,7 @@ class IntraIntervalRealizedVariancePolarsNative(SeriesOperator):
             .collect()
             .explode(["ret", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -772,7 +772,7 @@ class IntraIntervalVolumeSharePolarsNative(SeriesOperator):
             .collect()
             .explode(["vol", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(
                 (pl.col("pct") >= start_pct) & (pl.col("pct") < end_pct)
@@ -783,7 +783,7 @@ class IntraIntervalVolumeSharePolarsNative(SeriesOperator):
                 pl.col("total_vol").first().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("interval_vol") / pl.col("total_vol")).alias("returns")
+                pl.when(pl.col("total_vol") != 0).then(pl.col("interval_vol") / pl.col("total_vol")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -814,7 +814,7 @@ class IntraVwapAboveRatioPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .explode("price_list")
             .with_columns(
@@ -851,7 +851,7 @@ class IntraVwapCrossCountPolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("pv") / pl.col("v")).alias("vwap")
+                pl.when(pl.col("v") != 0).then(pl.col("pv") / pl.col("v")).otherwise(None).alias("vwap")
             )
             .select(["date", "vwap"])
         )
@@ -895,7 +895,7 @@ class IntraCloseParticipationPolarsNative(SeriesOperator):
             .collect()
             .explode(["vol", "seq_list"])
             .with_columns(
-                (pl.col("seq_list") / pl.col("total")).alias("pct")
+                pl.when(pl.col("total") != 0).then(pl.col("seq_list") / pl.col("total")).otherwise(None).alias("pct")
             )
             .filter(pl.col("pct") >= (1 - close_pct))
             .group_by("date")
@@ -904,7 +904,7 @@ class IntraCloseParticipationPolarsNative(SeriesOperator):
                 pl.col("total_vol").first().alias("total_vol")
             ])
             .with_columns(
-                (pl.col("close_vol") / pl.col("total_vol")).alias("returns")
+                pl.when(pl.col("total_vol") != 0).then(pl.col("close_vol") / pl.col("total_vol")).otherwise(None).alias("returns")
             )
             .select("returns")
             .to_series()
@@ -956,7 +956,7 @@ class IntraSignedReturnProfileCosinePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                (pl.col("cross") / pl.col("ss")).fill_null(0).alias("returns")
+                pl.when(pl.col("ss" != 0).then(pl.col("cross") / pl.col("ss").otherwise(None)).fill_null(0).alias("returns")
             )
             .select("returns")
             .to_series()

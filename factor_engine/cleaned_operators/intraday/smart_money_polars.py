@@ -226,8 +226,8 @@ def _local_conditional_entropy(close: pl.DataFrame, volume: pl.DataFrame) -> pl.
     counts = counts.join(state_totals, on=["date", "instrument", "vol_state"])
 
     counts = counts.with_columns(
-        (pl.col("state_count") / pl.col("total")).alias("p_vs"),
-        (pl.col("count") / pl.col("state_count")).alias("p_d_given_vs"),
+        pl.when(pl.col("total") != 0).then(pl.col("state_count") / pl.col("total")).otherwise(None).alias("p_vs"),
+        pl.when(pl.col("state_count") != 0).then(pl.col("count") / pl.col("state_count")).otherwise(None).alias("p_d_given_vs"),
     )
 
     # Entropy: -sum(p_vs * p_d_given_vs * log(p_d_given_vs))
@@ -279,7 +279,7 @@ def _smart_money_vwap_ratio(close: pl.DataFrame, amount: pl.DataFrame, volume: p
     )
 
     session = session.with_columns(
-        (pl.col("total_amt") / pl.col("total_vol")).alias("session_vwap")
+        pl.when(pl.col("total_vol") != 0).then(pl.col("total_amt") / pl.col("total_vol")).otherwise(None).alias("session_vwap")
     )
 
     # Join threshold back
@@ -296,7 +296,7 @@ def _smart_money_vwap_ratio(close: pl.DataFrame, amount: pl.DataFrame, volume: p
     )
 
     large_agg = large_agg.with_columns(
-        (pl.col("large_amt") / pl.col("large_vol")).alias("large_vwap")
+        pl.when(pl.col("large_vol") != 0).then(pl.col("large_amt") / pl.col("large_vol")).otherwise(None).alias("large_vwap")
     )
 
     out = large_agg.with_columns(

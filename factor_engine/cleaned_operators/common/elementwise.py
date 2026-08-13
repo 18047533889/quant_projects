@@ -252,7 +252,7 @@ class BlomTransform(SeriesOperator):
         ranked = masked.rank(axis=1, method='average')
         n = valid.sum(axis=1).to_numpy(dtype=float)[:, None]
         with np.errstate(invalid="ignore"):
-            result = np.where(8) / (n + 1 / 4)) != 0, sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4)), np.nan)
+            result = np.where((8) / (n + 1 / 4) != 0, sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4)), np.nan)
         result = pd.DataFrame(result, index=x.index, columns=x.columns)
         result = result.where(valid, np.nan)
         return result.replace([np.inf, -np.inf], np.nan)

@@ -348,7 +348,7 @@ class TSPctPolars(SeriesOperator):
         periods = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
         return x.with_columns([
-            (pl.col(c) / pl.col(c).shift(periods) - 1.0).alias(c) for c in cols
+            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(periods) - 1.0).alias(c) for c in cols
         ])
 
 
@@ -364,7 +364,7 @@ class LogReturnsPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = _numeric_cols(x)
         return x.with_columns([
-            (pl.col(c) / pl.col(c).shift(1)).log().alias(c) for c in cols
+            pl.when(pl.col(c != 0).then(pl.col(c) / pl.col(c).otherwise(None).shift(1)).log().alias(c) for c in cols
         ])
 
 

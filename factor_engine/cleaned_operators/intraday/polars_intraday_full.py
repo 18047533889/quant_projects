@@ -121,7 +121,7 @@ def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None
 def _log_returns_long(long: pl.DataFrame) -> pl.DataFrame:
     """r_t = log(close_t / close_{t-1}) within (date, instrument), order by ts."""
     long = long.sort(["date", "instrument", "ts"]).with_columns(
-        (pl.col("close") / pl.col("close").shift(1).over(["date", "instrument"])).log().alias("r")
+        pl.when(pl.col("close" != 0).then(pl.col("close") / pl.col("close").otherwise(None).shift(1).over(["date", "instrument"])).log().alias("r")
     )
     return long
 
@@ -350,7 +350,7 @@ def _vwap_excursion(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.DataFr
     )
     long = _cum_vwap_long(long)
     long = long.with_columns(
-        (pl.col("close") / pl.col("cum_vwap") - 1.0).alias("dev"),
+        pl.when(pl.col("cum_vwap" != 0).then(pl.col("close") / pl.col("cum_vwap").otherwise(None) - 1.0).alias("dev"),
         (pl.col("cum_vwap") > _EPS).fill_null(False).alias("ok"),
     )
     long = long.filter(pl.col("ok"))
@@ -421,7 +421,7 @@ def _vwap_reversion_speed(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.
     )
     long = _cum_vwap_long(long).filter(pl.col("cum_vwap").is_not_null())
     long = long.sort(["date", "instrument", "ts"]).with_columns(
-        (pl.col("close") / pl.col("cum_vwap") - 1.0).alias("d")
+        pl.when(pl.col("cum_vwap" != 0).then(pl.col("close") / pl.col("cum_vwap").otherwise(None) - 1.0).alias("d")
     ).with_columns(
         pl.col("d").shift(1).over(["date", "instrument"]).alias("dprev")
     ).filter(pl.col("dprev").is_not_null() & pl.col("d").is_not_null())
@@ -434,7 +434,7 @@ def _vwap_reversion_speed(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.
     ).with_columns(
         pl.col("n").cast(pl.Float64).alias("nf")
     ).with_columns(
-        ((pl.col("nf") * (pl.col("sdpd") - pl.col("sd") * pl.col("sdp") / pl.col("nf")))
+        pl.when(pl.col("nf" != 0).then(pl.col("nf") * (pl.col("sdpd") - pl.col("sd") * pl.col("sdp") / pl.col("nf").otherwise(None)))
          / ((pl.col("nf") - 1.0) * (pl.col("sdp2") - pl.col("sdp") * pl.col("sdp") / pl.col("nf")))).alias("beta")
     )
     out = g.with_columns(
@@ -467,7 +467,7 @@ def _vwap_path_common(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.Data
     # t = (idx - 1) / (n - 1); sums are computed from idx via t = (idx1-1)/(n-1)
     # Use sums of t, t^2..t^4 and t^k*y for k=0..2.
     g2 = long.join(g, on=["date", "instrument"]).with_columns(
-        ((pl.col("idx1") - 1.0) / (pl.col("nf") - 1.0)).alias("t"),
+        pl.when((pl.col("nf" != 0).then(pl.col("idx1") - 1.0) / (pl.col("nf").otherwise(None) - 1.0)).alias("t"),
         pl.col("cum_vwap").alias("y"),
     ).group_by(["date", "instrument"]).agg(
         pl.col("y").count().alias("n"),
@@ -520,7 +520,7 @@ def _concentration(value: pl.DataFrame) -> pl.DataFrame:
     long = _with_date(_melt(value, "value")).with_columns(pl.col("value").fill_nan(0.0).abs())
     total = long.group_by(["date", "instrument"]).agg(pl.col("value").sum().alias("total"))
     long = long.join(total, on=["date", "instrument"]).with_columns(
-        (pl.col("value") / pl.col("total")).alias("w")
+        pl.when(pl.col("total") != 0).then(pl.col("value") / pl.col("total")).otherwise(None).alias("w")
     )
     out = long.group_by(["date", "instrument"]).agg(
         (pl.col("w") * pl.col("w")).sum().alias("v"),
@@ -542,7 +542,7 @@ def _entropy(value: pl.DataFrame, normalize: bool) -> pl.DataFrame:
         pl.col("value").count().alias("n"),
     )
     long = long.join(total, on=["date", "instrument"]).with_columns(
-        (pl.col("value") / pl.col("total")).alias("w")
+        pl.when(pl.col("total") != 0).then(pl.col("value") / pl.col("total")).otherwise(None).alias("w")
     )
     e = long.group_by(["date", "instrument"]).agg(
         (-(pl.col("w") * pl.col("w").log())).sum().alias("H"),
@@ -623,7 +623,7 @@ def _kyle_lambda_proxy(close: pl.DataFrame, amount: pl.DataFrame) -> pl.DataFram
     long = _log_returns_long(long).with_columns(pl.col("amount").fill_nan(0.0))
     total = long.group_by(["date", "instrument"]).agg(pl.col("amount").sum().alias("total"))
     long = long.join(total, on=["date", "instrument"]).with_columns(
-        (pl.col("r").sign() * pl.col("amount") / pl.col("total")).alias("s")
+        pl.when(pl.col("total" != 0).then(pl.col("r").sign() * pl.col("amount") / pl.col("total").otherwise(None)).alias("s")
     ).filter(pl.col("r").is_finite() & pl.col("s").is_finite())
     g = long.group_by(["date", "instrument"]).agg(
         pl.col("r").count().alias("n"),
@@ -634,7 +634,7 @@ def _kyle_lambda_proxy(close: pl.DataFrame, amount: pl.DataFrame) -> pl.DataFram
     ).with_columns(pl.col("n").cast(pl.Float64).alias("nf"))
     g = g.with_columns(
         # pandas np.cov (ddof=1) / np.var (ddof=0) ratio carries a n/(n-1) factor
-        ((pl.col("srs") - pl.col("sr") * pl.col("ss") / pl.col("nf"))
+        pl.when(pl.col("nf" != 0).then(pl.col("srs") - pl.col("sr") * pl.col("ss") / pl.col("nf").otherwise(None))
          / (pl.col("ss2") - pl.col("ss") * pl.col("ss") / pl.col("nf"))
          * pl.col("nf") / (pl.col("nf") - 1.0)).alias("beta")
     )
@@ -806,7 +806,7 @@ def _slot_frame(close: pl.DataFrame) -> pl.DataFrame:
     long = _melt(close, "close")
     long = _with_mod(_with_date(long)).rename({"mod": "slot"})
     long = long.sort(["instrument", "ts"]).with_columns(
-        (pl.col("close") / pl.col("close").shift(1).over(["instrument"])).log().alias("r")
+        pl.when(pl.col("close" != 0).then(pl.col("close") / pl.col("close").otherwise(None).shift(1).over(["instrument"])).log().alias("r")
     )
     return long.filter(pl.col("r").is_finite()).group_by(["date", "slot", "instrument"]).agg(
         pl.col("r").mean().alias("r")
@@ -902,8 +902,8 @@ def _profile_jsd(values: pl.DataFrame, window: int) -> pl.DataFrame:
         pl.col("pa").count().alias("n"),
     )
     joined = joined.join(sums, on=["date", "instrument"]).with_columns(
-        (pl.col("pa") / pl.col("sum_pa")).alias("pa"),
-        (pl.col("pb") / pl.col("sum_pb")).alias("pb"),
+        pl.when(pl.col("sum_pa") != 0).then(pl.col("pa") / pl.col("sum_pa")).otherwise(None).alias("pa"),
+        pl.when(pl.col("sum_pb") != 0).then(pl.col("pb") / pl.col("sum_pb")).otherwise(None).alias("pb"),
     ).with_columns((0.5 * (pl.col("pa") + pl.col("pb"))).alias("m"))
     out = joined.group_by(["date", "instrument"]).agg(
         pl.col("n").first().alias("n"),
@@ -929,8 +929,8 @@ def _profile_emd(values: pl.DataFrame, window: int) -> pl.DataFrame:
         pl.col("pa").count().alias("n"),
     )
     joined = joined.join(sums, on=["date", "instrument"]).with_columns(
-        (pl.col("pa") / pl.col("sum_pa")).alias("pa"),
-        (pl.col("pb") / pl.col("sum_pb")).alias("pb"),
+        pl.when(pl.col("sum_pa") != 0).then(pl.col("pa") / pl.col("sum_pa")).otherwise(None).alias("pa"),
+        pl.when(pl.col("sum_pb") != 0).then(pl.col("pb") / pl.col("sum_pb")).otherwise(None).alias("pb"),
     )
     joined = joined.sort(["date", "instrument", "slot"]).with_columns(
         pl.col("pa").cum_sum().over(["date", "instrument"]).alias("cdf_a"),
@@ -1144,8 +1144,8 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         (pl.col("m") * pl.col("m")).sum().alias("sm2"),
         (pl.col("r") * pl.col("m")).sum().alias("srm"),
     ).with_columns(pl.col("n").cast(pl.Float64).alias("nf")).with_columns(
-        (pl.col("srm") - pl.col("sr") * pl.col("sm") / pl.col("nf")).alias("cov_num"),
-        (pl.col("sm2") - pl.col("sm") * pl.col("sm") / pl.col("nf")).alias("var_m_num"),
+        pl.when(pl.col("nf" != 0).then(pl.col("srm") - pl.col("sr") * pl.col("sm") / pl.col("nf").otherwise(None)).alias("cov_num"),
+        pl.when(pl.col("nf" != 0).then(pl.col("sm2") - pl.col("sm") * pl.col("sm") / pl.col("nf").otherwise(None)).alias("var_m_num"),
     )
     if kind == "realized_beta":
         out = g.with_columns(
@@ -1204,7 +1204,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         return _pivot(out, "v")
     # r2 = max(0, 1 - ss_res/ss_tot); ss_tot from the raw return series.
     out = g2.with_columns(
-        ((pl.col("sr2") - pl.col("sr").pow(2) / pl.col("nf"))).alias("ss_tot"),
+        pl.when(pl.col("nf" != 0).then(pl.col("sr2") - pl.col("sr").pow(2) / pl.col("nf").otherwise(None))).alias("ss_tot"),
     ).with_columns(
         pl.when((pl.col("ss_tot") > _EPS))
         .then((1.0 - pl.col("se2") / pl.col("ss_tot")).clip(lower_bound=0.0))
