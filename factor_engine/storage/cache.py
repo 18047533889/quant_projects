@@ -233,16 +233,23 @@ class CacheManager:
             return 512 * 1024 * 1024
 
     def _scoped_key(self, key: str) -> str:
-        """_scoped_key。
+        """生成防碰撞的 scoped key。
 
         参数:
             key: 缓存键
 
         返回:
             str
+
+        修复：使用 JSON 编码的 [scope, key] 对避免分隔符碰撞。旧实现
+        ``f"{scope}:{key}"`` 对 ``(scope="a", key="b:c")`` 与
+        ``(scope="a:b", key="c")`` 产生相同字符串 ``"a:b:c"``，导致不同逻辑
+        缓存条目共享同一磁盘文件。新实现生成可区分的 scoped key：
+            - ``(scope="a", key="b:c")`` → ``'["a","b:c"]'``
+            - ``(scope="a:b", key="c")`` → ``'["a:b","c"]'``
         """
         if self.data_scope:
-            return f"{self.data_scope}:{key}"
+            return json.dumps([self.data_scope, key], separators=(",", ":"), sort_keys=False)
         return key
 
     def get(self, key: str):
@@ -574,6 +581,7 @@ def _save_value(path: Path, value: Any, *, cache_key: str | None = None) -> None
     参数:
         path: 文件或目录路径
         value: 缓存值
+        cache_key: 可选的 scoped cache key（用于 cache_key_digest 验证）
 
     返回:
         无
@@ -641,6 +649,7 @@ def _load_value(path: Path, *, cache_key: str | None = None) -> Any | None:
 
     参数:
         path: 文件或目录路径
+        cache_key: 可选的 scoped cache key（用于 cache_key_digest 验证）
 
     返回:
         Any | None
@@ -732,6 +741,10 @@ def _frame_to_series(frame: pd.DataFrame, meta: dict[str, Any] | None = None) ->
         return frame[value_col]
     out = frame.set_index(idx_cols)[value_col]
     out.name = None
+    # Fix: set_index with single-element list creates index.name from column name;
+    # reset to None to match original Series that had unnamed index.
+    if len(idx_cols) == 1:
+        out.index.name = None
     return out
 
 
