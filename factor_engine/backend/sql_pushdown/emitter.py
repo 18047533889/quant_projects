@@ -12,6 +12,7 @@ from enum import Enum
 import hashlib
 import json
 import math
+import re
 import threading
 from collections import OrderedDict
 from contextvars import ContextVar
@@ -490,6 +491,36 @@ def _const_fill_value(node: PlanNode, *, default: float | None = None) -> float 
         if isinstance(raw, (int, float)) and not isinstance(raw, bool):
             return float(raw)
     return default
+
+
+#: SQL identifier validation pattern (alphanumeric, underscore, non-leading digit).
+_SAFE_IDENTIFIER_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+
+def _validate_sql_identifier(name: str, *, context: str = "identifier") -> None:
+    """Validate SQL identifier is injection-safe (fail-closed).
+
+    Raises ValueError if identifier contains special chars that could enable
+    injection (spaces, semicolons, quotes, braces, slashes, etc.).
+
+    Args:
+        name: Identifier to validate (dataset/table/column name).
+        context: Human-readable context for error message.
+
+    Raises:
+        ValueError: If identifier is unsafe or exceeds length limit.
+    """
+    if not name:
+        raise ValueError(f"SQL {context} cannot be empty")
+    if len(name) > 128:
+        raise ValueError(
+            f"SQL {context} too long (max 128 chars): {name!r}"
+        )
+    if not _SAFE_IDENTIFIER_PATTERN.match(name):
+        raise ValueError(
+            f"SQL {context} contains unsafe characters (only alphanumeric and "
+            f"underscore allowed, no leading digit): {name!r}"
+        )
 
 
 def _quote_ident(name: str) -> str:
@@ -1964,7 +1995,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         return _compile_layer(wma_node, dialect=dialect)
 
     if op == "column":
-        col = node.attrs.get("name")
+        col = node.attrs.get("name") or node.attrs.get("column")
         if not col:
             return None
         c = _quote_ident(str(col))
@@ -10345,7 +10376,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
 def _collect_columns(node: PlanNode, out: set[str]) -> None:
     """递归收集计划树引用的列名到 ``out`` 集合。"""
     if node.op == "column":
-        name = node.attrs.get("name")
+        name = node.attrs.get("name") or node.attrs.get("column")
         if name:
             out.add(str(name))
     for child in node.inputs:
@@ -10394,7 +10425,11 @@ def _build_filter_clause(
 
 
 def _duckdb_dataset_ref(dataset: str) -> str:
-    """DuckDB sql() 要求 ``{{dataset}}`` 占位符。"""
+    """DuckDB sql() 要求 ``{{dataset}}`` 占位符。
+
+    Validates dataset name before interpolation to prevent injection.
+    """
+    _validate_sql_identifier(dataset, context="dataset")
     return f"{{{{{dataset}}}}}"
 
 
@@ -10407,7 +10442,11 @@ def _build_base_cte(
     filt: SqlPushdownFilter | None,
     dialect: SqlDialect,
 ) -> str:
-    """构造 base CTE：标准化 ``ts``/``inst`` 轴列并应用过滤。"""
+    """构造 base CTE：标准化 ``ts``/``inst`` 轴列并应用过滤。
+
+    注意：source_from 在调用前已由 compile_plan_to_sql 验证
+    （通过 _duckdb_dataset_ref 或直接表名验证）。
+    """
     col_list = ", ".join(_quote_ident(c) for c in sorted(columns))
     where = _build_filter_clause(filt, dialect=dialect)
     return (
@@ -10508,6 +10547,12 @@ def compile_plan_to_sql(
     if cached is not None:
         _record_compile_status(CompileStatus.SUPPORTED)
         return cached
+
+    # Validate dataset/table names BEFORE compilation (fail-closed, always raise).
+    if dialect == SqlDialect.DUCKDB and dataset:
+        _validate_sql_identifier(dataset, context="dataset")
+    if dialect == SqlDialect.CLICKHOUSE and table:
+        _validate_sql_identifier(table, context="table")
 
     try:
         use_counts = _structural_use_counts(plan)
@@ -10671,6 +10716,12 @@ def compile_plans_batch_to_sql(
 
     if not cols:
         return None
+
+    # Validate dataset/table names before FROM clause interpolation (fail-closed).
+    if dialect == SqlDialect.DUCKDB and dataset:
+        _validate_sql_identifier(dataset, context="dataset")
+    if dialect == SqlDialect.CLICKHOUSE and table:
+        _validate_sql_identifier(table, context="table")
 
     source_from = table if dialect == SqlDialect.CLICKHOUSE else (dataset or table)
     if source_from and dialect == SqlDialect.DUCKDB and dataset:
