@@ -172,3 +172,14 @@ def _assert_parity(name, args, kwargs, rtol=1e-8, atol=1e-8):
 )
 def test_native_polars_fundamental_matches_pandas(fiscal, name, inputs, kwargs):
     _assert_parity(name, tuple(fiscal[index] for index in inputs), kwargs)
+
+
+def test_polars_fin_lag_fails_closed_for_unparseable_period_ids():
+    """PIT period ordering must not fall back to first-seen IDs."""
+    from cleaned_operators.fundamental.polars_fundamental import _lag_walk_1d
+
+    values = np.array([10.0, 20.0, 30.0])
+    period_id = ["not-a-period", "2024Q1", "2024Q2"]
+    result = _lag_walk_1d(values, period_id, 1)
+
+    np.testing.assert_allclose(result, [np.nan, np.nan, 20.0], equal_nan=True)

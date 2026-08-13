@@ -66,23 +66,23 @@ def _safe_div(a: float, b: float) -> float:
     return float(a / b)
 
 
-def _period_insert(order: list, key) -> None:
-    """Insert ``key`` into ``order`` keeping fiscal-ordinal sorted order.
+def _period_insert(order: list, key) -> bool:
+    """Insert ``key`` in fiscal order, rejecting unparseable period IDs.
 
-    Mirrors the pandas ``_period_insert``: report periods advance by fiscal
-    ordinal, so a late-disclosed revision or back-filled older period must not
-    reorder the lag / TTM / growth sequence (audit §4.1).
+    Production pandas semantics fail closed when a report period has no fiscal
+    ordinal. Returning ``False`` lets the walk skip that observation instead of
+    silently treating first appearance as chronology.
     """
     target = period_ordinal(key)
     if target is None:
-        order.append(key)
-        return
+        return False
     for position, existing in enumerate(order):
         existing_ord = period_ordinal(existing)
         if existing_ord is not None and existing_ord > target:
             order.insert(position, key)
-            return
+            return True
     order.append(key)
+    return True
 
 
 def _window_keys(
@@ -155,8 +155,11 @@ def _walk_1d(xv: np.ndarray, pv: list, fn: Callable) -> np.ndarray:
         key = _period_key(raw_period)
         if key is not None and np.isfinite(value):
             if key not in visible:
-                _period_insert(order, key)
-            visible[key] = float(value)
+                if not _period_insert(order, key):
+                    continue
+                visible[key] = float(value)
+            else:
+                visible[key] = float(value)
         if key is None or key not in visible:
             continue
         try:
