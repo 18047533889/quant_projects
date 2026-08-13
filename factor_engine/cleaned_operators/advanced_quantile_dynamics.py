@@ -134,7 +134,7 @@ def _pearson_lag(a: np.ndarray, lag: int) -> float:
     x = a[lag:]
     y = a[: m - lag]
     ok = np.isfinite(x) & np.isfinite(y)
-    if int(ok.sum() < lag + 2:
+    if int(ok.sum()) < lag + 2:
         return np.nan
     xx = x[ok]
     yy = y[ok]
@@ -227,7 +227,7 @@ def _cross_quantilogram_chunk(
     x = Ht[lag:]  # target hit at t
     y = Hs[: m - lag]  # source hit at t-lag
     ok = np.isfinite(x) & np.isfinite(y)
-    if int(ok.sum() < lag + 2:
+    if int(ok.sum()) < lag + 2:
         return np.nan
     xx = x[ok]
     yy = y[ok]
@@ -308,7 +308,7 @@ def _hit_spectral_concentration_chunk(
     # R5 P1-40(a): censoring, not manufacture — missing hits are excluded from
     # the periodogram entirely (they must NOT contribute a zero "no-event"
     # sample), and mostly-missing windows fail closed via the coverage gate.
-    if int(fin.sum() < max(8, int(np.ceil(0.5 * n))):
+    if int(fin.sum()) < max(8, int(np.ceil(0.5 * n))):
         return np.nan
     # Round-7 P0 (review §32): a spectral estimate requires a *contiguous* time
     # axis.  Compressing the observed hits across gaps ("event, gap, no-event"
@@ -401,7 +401,7 @@ def _extremogram_excess_chunk(
     x = E[lag:]  # E_{t+lag}
     y = E[: m - lag]  # E_t
     ok = np.isfinite(x) & np.isfinite(y)
-    if int(ok.sum() < 3:
+    if int(ok.sum()) < 3:
         return np.nan
     yy = y[ok]
     xx = x[ok]
@@ -486,7 +486,7 @@ def _cross_extremogram_chunk(
     s_past = Es[: m - lag]  # source extreme at t-lag
     t_fut = Et[lag:]  # target extreme at t
     ok = np.isfinite(s_past) & np.isfinite(t_fut)
-    if int(ok.sum() < 3:
+    if int(ok.sum()) < 3:
         return np.nan
     sp = s_past[ok]
     tf = t_fut[ok]
@@ -574,7 +574,7 @@ def _extremal_decay_chunk(
         y = E[: m - h]
         x = E[h:]
         ok = np.isfinite(y) & np.isfinite(x)
-        if int(ok.sum() < 3:
+        if int(ok.sum()) < 3:
             continue
         yy = y[ok]
         xx = x[ok]

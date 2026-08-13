@@ -88,7 +88,7 @@ def _volume_clock_log_path(
     if np.any(price <= 0.0):
         return None
     valid = activity > 0.0
-    if int(valid.sum() < 3:
+    if int(valid.sum()) < 3:
         return None
     # P0-O #80: a zero-activity bar must carry the SAME price as the previous
     # observable bar, else deleting it reconnects two different prices.
@@ -105,7 +105,7 @@ def _volume_clock_log_path(
                 continue  # leading zero-activity bars: nothing to reconnect
             prev = obs_idx[pos[i]]
             tol = 1e-6 * max(1.0, abs(float(price[prev])))
-            if abs(float(price[z]) - float(price[prev]) > tol:
+            if abs(float(price[z]) - float(price[prev])) > tol:
                 return None
     act = activity[valid].astype(float)
     logp = np.log(price[valid].astype(float))

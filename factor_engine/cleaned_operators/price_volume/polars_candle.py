@@ -552,7 +552,7 @@ def candle_inside_ratio(high, low):
     for c in _cols(high, low):
         frame = _frame(None, high, low, None, c)
         h, l = pl.col("high"), pl.col("low")
-        prev = pl.when((h.shift(1) - l.shift(1) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
+        prev = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         current = h - l
         ratio = current / prev
         inside = (h <= h.shift(1)) & (l >= l.shift(1))
@@ -707,8 +707,8 @@ def cdl_morning_star(open_, high, low, close):
         o1, c1 = o.shift(1), cl.shift(1)
         body2 = (c2 - o2).abs()
         body1 = (c1 - o1).abs()
-        range2 = pl.when((h.shift(2) - l.shift(2) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
-        range1 = pl.when((h.shift(1) - l.shift(1) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
+        range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
+        range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         midpoint2 = (o2 + c2) / 2.0
         flag = _flag((c2 < o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl > o) & (cl > midpoint2))
         valid = _validate_ohlc(o, h, l, cl)
@@ -726,8 +726,8 @@ def cdl_evening_star(open_, high, low, close):
         o1, c1 = o.shift(1), cl.shift(1)
         body2 = (c2 - o2).abs()
         body1 = (c1 - o1).abs()
-        range2 = pl.when((h.shift(2) - l.shift(2) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
-        range1 = pl.when((h.shift(1) - l.shift(1) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
+        range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
+        range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         midpoint2 = (o2 + c2) / 2.0
         flag = -_flag((c2 > o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl < o) & (cl < midpoint2))
         valid = _validate_ohlc(o, h, l, cl)

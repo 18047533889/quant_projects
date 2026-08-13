@@ -831,7 +831,8 @@ class CSResidualPercentileNative(SeriesOperator):
             resid = pl.col("_v") - mean
             rank = resid.rank(method="average").over("_r")
             count = resid.is_not_null().cast(pl.Float64).sum().over("_r")
-            return np.where(count.alias("_v") != 0, (long.with_columns((rank) / (count).alias("_v"))), np.nan)
+            pct = pl.when(count != 0).then(rank / count).otherwise(None)
+            return long.with_columns(pct.alias("_v"))
 
         return _cs_long_transform(x, _xform)
 

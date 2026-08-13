@@ -224,7 +224,7 @@ def _rolling_max_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.max(seg[ok]))
     return out
@@ -237,7 +237,7 @@ def _rolling_min_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.min(seg[ok]))
     return out
@@ -265,7 +265,7 @@ def _rolling_mean_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.mean(seg[ok]))
     return out
@@ -1181,7 +1181,7 @@ def _retest_1d(close, window, max_wait, tolerance, break_up):
     for t in range(n):
         seg = close[max(0, t - window) : t]
         ok = np.isfinite(seg)
-        if int(ok.sum() >= window:
+        if int(ok.sum()) >= window:
             level[t] = float(np.max(seg[ok]) if break_up else np.min(seg[ok]))
     event = close > level if break_up else close < level
     last_level = np.nan

@@ -283,7 +283,7 @@ class TsLagOfPeakCorr(SeriesOperator):
                     xs = xv[s_lo : row + 1, col]
                     ys = yv[s_lo - kk : row + 1 - kk, col]
                     valid = np.isfinite(xs) & np.isfinite(ys)
-                    if int(valid.sum() < mp:
+                    if int(valid.sum()) < mp:
                         continue
                     a = xs[valid]
                     b = ys[valid]

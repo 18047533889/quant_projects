@@ -316,7 +316,7 @@ def _ols_residual(
         mask &= np.isfinite(weights) & (weights > 0)
     k = len(features)
     required = max(k + 2, 2) if min_obs is None else _positive_int(min_obs, "min_obs")
-    if int(mask.sum() < required:
+    if int(mask.sum()) < required:
         return out
     design = np.column_stack([feature[mask] for feature in features])
     if add_intercept:
@@ -510,7 +510,7 @@ def ts_regression_tstat(
             mask = np.isfinite(yv[start : row + 1, col]) & np.isfinite(
                 xv[start : row + 1, col]
             )
-            if int(mask.sum() >= mp:
+            if int(mask.sum()) >= mp:
                 out[row, col] = _slope_tstat(
                     yv[start : row + 1, col],
                     xv[start : row + 1, col],
@@ -535,7 +535,7 @@ def ts_trend_tstat(
             start = max(0, row - w + 1)
             vals = xv[start : row + 1, col]
             valid = np.isfinite(vals)
-            if int(valid.sum() >= mp:
+            if int(valid.sum()) >= mp:
                 time = np.arange(vals.size, dtype=float)
                 out[row, col] = _slope_tstat(vals, time, True)
     return _frame_like(x, out)
@@ -585,7 +585,7 @@ def ts_partial_corr(
                 arr[start : row + 1, col] for arr in (xa, ya, za)
             )
             mask = np.isfinite(xv) & np.isfinite(yv) & np.isfinite(zv)
-            if int(mask.sum() < mp or np.var(zv[mask]) <= 0:
+            if int(mask.sum()) < mp or np.var(zv[mask]) <= 0:
                 continue
             design = np.column_stack((np.ones(mask.sum()), zv[mask]))
             rx = xv[mask] - design @ np.linalg.lstsq(design, xv[mask], rcond=None)[0]

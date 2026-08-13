@@ -548,7 +548,7 @@ def _is_panel_like(value: Any) -> bool:
     if columns is None:
         return False
     try:
-        return len(list(columns) > 0
+        return len(list(columns)) > 0
     except TypeError:
         return False
 

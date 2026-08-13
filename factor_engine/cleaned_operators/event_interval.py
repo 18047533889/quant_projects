@@ -197,10 +197,10 @@ def _fano_factor_series(
                     continue  # unknown minute -> block count is not defined
                 counts[k] = float(np.count_nonzero(_event_mask(seg)))
                 valid[k] = True
-            if int(valid.sum() < min_valid_blocks:
+            if int(valid.sum()) < min_valid_blocks:
                 continue
             v = counts[valid]
-            if float(v.sum() <= 0.0:  # degenerate: no events in the window
+            if float(v.sum()) <= 0.0:  # degenerate: no events in the window
                 continue
             mean = float(v.mean())
             # N-67: sample variance (ddof=1); with a small number of blocks the

@@ -109,7 +109,7 @@ class VWAPPolars(SeriesOperator):
         cols = _align_cols(price, volume)
         # Volume is a count/amount and must be non-negative (review P1-126).
         for c in cols:
-            if int(volume[c].lt(0).sum() > 0:
+            if int(volume[c].lt(0).sum()) > 0:
                 raise ValueError("vwap: volume must be non-negative")
         mp = int(min_periods) if min_periods is not None else 1
         exprs = []

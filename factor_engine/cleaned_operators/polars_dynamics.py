@@ -187,7 +187,7 @@ def _markov_series(
             # upper target must be visited, reachable via observed edges, and
             # the window must hold a minimum observed edge count.
             N_obs = res["N_obs"][t]
-            if int(np.count_nonzero(N_obs) < 2:
+            if int(np.count_nonzero(N_obs)) < 2:
                 continue
             if int(res["counts"][t, B - 1]) < 1:
                 continue
@@ -236,7 +236,7 @@ def _markov_series(
             # observed edge count, at least one target visited, and an observed-
             # support path from the current state to some target.
             N_obs = res["N_obs"][t]
-            if int(np.count_nonzero(N_obs) < 2:
+            if int(np.count_nonzero(N_obs)) < 2:
                 continue
             if not any(int(res["counts"][t, a]) >= 1 for a in A):
                 continue

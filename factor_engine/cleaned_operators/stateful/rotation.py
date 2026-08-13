@@ -120,14 +120,14 @@ def _exact_tail_weights(values: np.ndarray, q: float, top: bool) -> np.ndarray:
     if top:
         boundary_idx = m - k
         bval = vals[order[boundary_idx]]
-        above = int(np.sum(vals) > bval))
-        at = int(np.sum(vals) == bval))
+        above = int(np.sum(vals > bval))
+        at = int(np.sum(vals == bval))
         frac = (k - above) / at if at else 0.0
     else:
         boundary_idx = k - 1
         bval = vals[order[boundary_idx]]
-        below = int(np.sum(vals) < bval))
-        at = int(np.sum(vals) == bval))
+        below = int(np.sum(vals < bval))
+        at = int(np.sum(vals == bval))
         frac = (k - below) / at if at else 0.0
     for j, vi in zip(pos, vals):
         if top:
@@ -528,14 +528,14 @@ class CsTailBreadth(SeriesOperator):
             g_row = gv[r] if gv is not None else None
             if g_row is None:
                 w = _exact_tail_weights(xv[r], q, top)
-                if float(np.sum(w) > _EPS:
+                if float(np.sum(w)) > _EPS:
                     out[r] = float(np.sum(w))
             else:
                 labels = {v for v in g_row if _valid_label(v)}
                 for lab in labels:
                     mask = g_row == lab
                     w = _exact_tail_weights(xv[r][mask], q, top)
-                    if float(np.sum(w) > _EPS:
+                    if float(np.sum(w)) > _EPS:
                         out[r][mask] = float(np.sum(w))
         return frame_like(x, out)
 

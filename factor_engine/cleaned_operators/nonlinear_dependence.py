@@ -245,8 +245,8 @@ def _quantile_hist_mi(
             if p[i, j] > 0 and p_row[i, 0] > 0 and p_col[0, j] > 0:
                 mi += p[i, j] * np.log(p[i, j] / (p_row[i, 0] * p_col[0, j]))
     if bias_correction:
-        r_occ = int((p_row[:, 0]) > 0).sum())
-        c_occ = int((p_col[0, :]) > 0).sum())
+        r_occ = int((p_row[:, 0] > 0).sum())
+        c_occ = int((p_col[0, :] > 0).sum())
         mi = max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n))
     hx = -float(np.sum(p_row * np.log(np.where(p_row > 0, p_row, 1.0))))
     hy = -float(np.sum(p_col * np.log(np.where(p_col > 0, p_col, 1.0))))

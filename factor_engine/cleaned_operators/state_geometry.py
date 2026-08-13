@@ -212,7 +212,7 @@ def _permutation_index(perm: np.ndarray) -> int:
     n = perm.shape[0]
     index = 0
     for i in range(n):
-        smaller = int(np.sum(perm[i + 1 :]) < perm[i]))
+        smaller = int(np.sum(perm[i + 1 :] < perm[i]))
         index += smaller * math.factorial(n - 1 - i)
     return index
 

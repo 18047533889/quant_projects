@@ -159,7 +159,7 @@ def design_is_well_conditioned(design: np.ndarray) -> bool:
     # Rank check: singular values above the standard numerical floor
     # (S.max() * max(M, N) * eps), the same tolerance numpy.matrix_rank uses.
     floor = s_max * max(n, p) * np.finfo(float).eps
-    if int(np.sum(s) > floor) < p:
+    if int(np.sum(s > floor)) < p:
         return False
     return True
 
@@ -239,7 +239,7 @@ def huber_fit(
         beta_new = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
         if beta_new is None:
             return None
-        if np.max(np.abs(beta_new - beta) < tolerance:
+        if np.max(np.abs(beta_new - beta)) < tolerance:
             converged = True
             beta = beta_new
             break
@@ -314,7 +314,7 @@ def quantile_fit(
         beta_new = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
         if beta_new is None:
             return None
-        if np.max(np.abs(beta_new - beta) < tolerance:
+        if np.max(np.abs(beta_new - beta)) < tolerance:
             _set_fit_status(True, "converged")
             return beta_new
         beta = beta_new
@@ -440,7 +440,7 @@ def rolling_fit(
             pred = design @ b
             e = vy - pred
             ddof = max(design.shape[1], 1)
-            sd = np.where(max(len(e) - ddof, 1) if len(e) > ddof else np.nan != 0, float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1))) if len(e) > ddof else np.nan, np.nan)
+            sd = float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1))) if len(e) > ddof else np.nan
         beta[row] = b
         resid_std[row] = sd
         # Residual at the current row uses current x values, only if current

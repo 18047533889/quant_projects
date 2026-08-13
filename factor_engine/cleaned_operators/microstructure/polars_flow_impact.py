@@ -96,7 +96,7 @@ def _bvc_imbalance_polars(
     long = _with_date(lc.join(lv, on=["ts", "instrument"], how="inner"))
     long = long.sort(["date", "instrument", "ts"])
     long = long.with_columns(
-        pl.when(pl.col("close" != 0).then(pl.col("close") / pl.col("close").otherwise(None).shift(1).over(["date", "instrument"])).log().alias("r")
+        (pl.col("close") / pl.col("close").shift(1).over(["date", "instrument"])).log().alias("r")
     )
     long = long.with_columns(
         # NaN -> null so the rolling window (which skips nulls, not NaNs)

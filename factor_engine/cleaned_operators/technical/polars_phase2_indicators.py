@@ -154,11 +154,11 @@ def ts_cci(high, low, close, window=20):
     values = {}
     for column in _cols(high, low, close):
         frame = _ohlc(high[column], low[column], close[column])
-        tp = ((pl.col("high") + pl.col("low") + pl.col("close"))) / 3.0 if 3.0 != 0 else np.nan
+        tp = (pl.col("high") + pl.col("low") + pl.col("close")) / 3.0
         sma = tp.rolling_mean(window, min_samples=1)
         # MAD: mean absolute deviation
         mad = (tp - sma).abs().rolling_mean(window, min_samples=1)
-        values[column] = np.where((0.015 * mad).otherwise(None) != 0, (_one(frame, column, pl.when(mad != 0).then((tp - sma)) / ((0.015 * mad)).otherwise(None))), np.nan)
+        values[column] = _one(frame, column, pl.when(mad != 0).then((tp - sma) / (0.015 * mad)).otherwise(None))
     return _result(close, values)
 
 
@@ -191,7 +191,7 @@ def ts_stoch(high, low, close, window=14):
         lowest = pl.col("low").rolling_min(window, min_samples=1)
         highest = pl.col("high").rolling_max(window, min_samples=1)
         denominator = highest - lowest
-        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(100.0 * (pl.col("close") - lowest)) / (denominator).otherwise(None))), np.nan)
+        values[column] = _one(frame, column, pl.when(denominator != 0).then(100.0 * (pl.col("close") - lowest) / denominator).otherwise(None))
     return _result(close, values)
 
 
@@ -204,7 +204,7 @@ def ts_williams_r(high, low, close, window=14):
         highest = pl.col("high").rolling_max(window, min_samples=1)
         lowest = pl.col("low").rolling_min(window, min_samples=1)
         denominator = highest - lowest
-        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(-100.0 * (highest - pl.col("close"))) / (denominator).otherwise(None))), np.nan)
+        values[column] = _one(frame, column, pl.when(denominator != 0).then(-100.0 * (highest - pl.col("close")) / denominator).otherwise(None))
     return _result(close, values)
 
 
@@ -225,7 +225,7 @@ def ts_mfi(high, low, close, volume, window=14):
     values = {}
     for column in _cols(high, low, close, volume):
         frame = _ohlcv(high[column], low[column], close[column], volume[column])
-        typical = ((pl.col("high") + pl.col("low") + pl.col("close"))) / 3.0 if 3.0 != 0 else np.nan
+        typical = (pl.col("high") + pl.col("low") + pl.col("close")) / 3.0
         raw = typical * pl.col("volume")
         delta = typical.diff().fill_nan(None)
         positive = pl.when(delta > 0).then(raw).otherwise(0.0).rolling_sum(window, min_samples=window)
@@ -248,7 +248,7 @@ def ts_trix(close, window=12):
         ema2 = _ema(ema1, window)
         ema3 = _ema(ema2, window)
         prev = ema3.shift(1)
-        values[column] = np.where(prev * 100.0.otherwise(None) != 0, (_one(close, column, pl.when((prev.is_not_null()) & (prev != 0)).then((ema3 - prev)) / (prev * 100.0).otherwise(None))), np.nan)
+        values[column] = _one(close, column, pl.when((prev.is_not_null()) & (prev != 0)).then((ema3 - prev) / prev * 100.0).otherwise(None))
     return _result(close, values)
 
 
@@ -329,7 +329,7 @@ def ts_vwma(x, volume, window):
         pv = pl.col("price") * pl.col("volume")
         numerator = pv.fill_nan(None).rolling_sum(window, min_samples=window)
         denominator = pl.col("volume").fill_nan(None).rolling_sum(window, min_samples=window)
-        values[column] = np.where(denominator.otherwise(None) != 0, (_one(frame, column, pl.when(denominator != 0).then(numerator) / (denominator).otherwise(None))), np.nan)
+        values[column] = _one(frame, column, pl.when(denominator != 0).then(numerator / denominator).otherwise(None))
     return _result(x, values)
 
 
@@ -565,7 +565,9 @@ def ts_expanding_mean(x):
     """Expanding mean."""
     values = {}
     for column in _cols(x):
-        values[column] = np.where((pl.col(column).cum_count() != 0, (_one(x, column, pl.col(column).cum_sum()) / ((pl.col(column).cum_count()))), np.nan)
+        count = pl.col(column).cum_count()
+        mean = pl.when(count != 0).then(pl.col(column).cum_sum() / count).otherwise(None)
+        values[column] = _one(x, column, mean)
     return _result(x, values)
 
 
@@ -575,8 +577,8 @@ def ts_expanding_std(x):
     for column in _cols(x):
         # Use rolling with expanding window
         count = pl.col(column).cum_count()
-        mean = (pl.col(column).cum_sum()) / count if count > 0 else np.nan
-        var = (((pl.col(column) - mean) ** 2).cum_sum()) / count if count > 0 else np.nan
+        mean = pl.when(count != 0).then(pl.col(column).cum_sum() / count).otherwise(None)
+        var = pl.when(count != 0).then(((pl.col(column) - mean) ** 2).cum_sum() / count).otherwise(None)
         values[column] = _one(x, column, var.sqrt())
     return _result(x, values)
 

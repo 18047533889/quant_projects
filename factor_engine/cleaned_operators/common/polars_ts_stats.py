@@ -69,7 +69,7 @@ class TSSkewNative(SeriesOperator):
             mean = val.rolling_mean(window_size=w)
             std = val.rolling_std(window_size=w)
             m3 = ((val - mean) ** 3).rolling_mean(window_size=w)
-            skew = (pl.when((std.is_null()) | (std == 0)).then(None).otherwise(m3) / (std ** 3) if (std ** 3) > 1e-10 else np.nan
+            skew = pl.when((std.is_null()) | (std == 0)).then(None).otherwise(m3 / (std ** 3))
             exprs.append(skew.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -194,7 +194,7 @@ class TSQnScaleNative(SeriesOperator):
             q25 = val.rolling_quantile(quantile=0.25, window_size=w, interpolation="linear")
             q75 = val.rolling_quantile(quantile=0.75, window_size=w, interpolation="linear")
             iqr = q75 - q25
-            qn = (iqr) / (pl.lit(1.349) if (pl.lit(1.349) != 0 else np.nan
+            qn = iqr / pl.lit(1.349)
             exprs.append(qn.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -281,7 +281,7 @@ class TSQuantileKurtosisNative(SeriesOperator):
             q875 = val.rolling_quantile(quantile=0.875, window_size=w, interpolation="linear")
             iqr = q75 - q25
             tail_range = q875 - q125
-            kurt = (pl.when((iqr.is_null()) | (iqr == 0)).then(None).otherwise(tail_range / iqr)
+            kurt = pl.when((iqr.is_null()) | (iqr == 0)).then(None).otherwise(tail_range / iqr)
             exprs.append(kurt.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -324,7 +324,7 @@ class TSQuantileSkewNative(SeriesOperator):
             q50 = val.rolling_quantile(quantile=0.50, window_size=w, interpolation="linear")
             q75 = val.rolling_quantile(quantile=0.75, window_size=w, interpolation="linear")
             iqr = q75 - q25
-            skew = (pl.when((iqr.is_null()) | (iqr == 0)).then(None).otherwise((q75 + q25 - pl.lit(2.0) * q50)) / (iqr) if (iqr) != 0 else np.nan
+            skew = (pl.when((iqr.is_null()) | (iqr == 0)).then(None).otherwise((q75 + q25 - pl.lit(2.0) * q50)) / iqr)
             exprs.append(skew.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -508,7 +508,7 @@ class TSExpectedShortfallAsymmetryNative(SeriesOperator):
             es_down = below.rolling_mean(window_size=w).abs()
             es_up = above.rolling_mean(window_size=w)
             total = es_up + es_down
-            asymmetry = (pl.when((total.is_null()) | (total == 0)).then(None).otherwise((es_up - es_down)) / (total) if (total) != 0 else np.nan
+            asymmetry = (pl.when((total.is_null()) | (total == 0)).then(None).otherwise((es_up - es_down)) / total)
             exprs.append(asymmetry.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -640,7 +640,7 @@ class TSSemivarianceBalanceNative(SeriesOperator):
             down_var = downside.rolling_mean(window_size=w)
             up_var = upside.rolling_mean(window_size=w)
             total = up_var + down_var
-            balance = (pl.when((total.is_null()) | (total == 0)).then(None).otherwise((up_var - down_var)) / (total) if (total) != 0 else np.nan
+            balance = (pl.when((total.is_null()) | (total == 0)).then(None).otherwise((up_var - down_var)) / total)
             exprs.append(balance.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -770,7 +770,7 @@ class TSTailImbalanceNative(SeriesOperator):
             q05 = val.rolling_quantile(quantile=0.05, window_size=w, interpolation="linear")
             q95 = val.rolling_quantile(quantile=0.95, window_size=w, interpolation="linear")
             tail_range = q95 - q05
-            imbalance = (pl.when((tail_range.is_null()) | (tail_range == 0)).then(None).otherwise((q95 + q05)) / (tail_range) if (tail_range) != 0 else np.nan
+            imbalance = (pl.when((tail_range.is_null()) | (tail_range == 0)).then(None).otherwise((q95 + q05)) / tail_range)
             exprs.append(imbalance.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -816,7 +816,7 @@ class TSMaxDrawdownNative(SeriesOperator):
         for c in cols:
             val = x[c]
             peak = val.rolling_max(window_size=w)
-            drawdown = (pl.when((peak.is_null()) | (peak == 0)).then(None).otherwise((val - peak)) / (peak) if (peak) != 0 else np.nan
+            drawdown = (pl.when((peak.is_null()) | (peak == 0)).then(None).otherwise((val - peak)) / peak)
             max_dd = drawdown.rolling_min(window_size=w)
             exprs.append(max_dd.alias(c))
         result = x.with_columns(exprs)
@@ -890,7 +890,7 @@ class TSCurrentDrawdownAreaNative(SeriesOperator):
             val = x[c]
             cummax = val.cum_max()
             is_peak = (val == cummax)
-            drawdown = (pl.when((cummax.is_null()) | (cummax == 0)).then(None).otherwise((val - cummax)) / (cummax) if (cummax) != 0 else np.nan
+            drawdown = (pl.when((cummax.is_null()) | (cummax == 0)).then(None).otherwise((val - cummax)) / cummax)
             # Sum drawdown since last peak
             block = is_peak.cum_sum()
             area = drawdown.cum_sum() - drawdown.cum_sum().shift(1).fill_null(0).over(block)
@@ -1014,7 +1014,7 @@ class TSMaxBuildupNative(SeriesOperator):
         for c in cols:
             val = x[c]
             trough = val.rolling_min(window_size=w)
-            buildup = (pl.when((trough.is_null()) | (trough == 0)).then(None).otherwise((val - trough)) / (trough) if (trough) != 0 else np.nan
+            buildup = (pl.when((trough.is_null()) | (trough == 0)).then(None).otherwise((val - trough)) / trough)
             max_bu = buildup.rolling_max(window_size=w)
             exprs.append(max_bu.alias(c))
         result = x.with_columns(exprs)
@@ -1094,7 +1094,7 @@ class UlcerIndexNative(SeriesOperator):
         for c in cols:
             val = x[c]
             peak = val.rolling_max(window_size=w)
-            pct_dd = (pl.when((peak.is_null()) | (peak == 0)).then(0.0).otherwise((val - peak)) / (peak * 100.0) if (peak * 100.0) != 0 else np.nan
+            pct_dd = (pl.when((peak.is_null()) | (peak == 0)).then(0.0).otherwise((val - peak)) / peak * 100.0)
             ulcer = (pct_dd ** 2).rolling_mean(window_size=w).sqrt()
             exprs.append(ulcer.alias(c))
         result = x.with_columns(exprs)
@@ -1181,7 +1181,7 @@ class TSDistanceToHighNative(SeriesOperator):
         for c in cols:
             val = x[c]
             high = val.rolling_max(window_size=w)
-            dist = (pl.when((high.is_null()) | (high == 0)).then(None).otherwise((high - val)) / (high) if (high) != 0 else np.nan
+            dist = (pl.when((high.is_null()) | (high == 0)).then(None).otherwise((high - val)) / high)
             exprs.append(dist.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1221,7 +1221,7 @@ class TSDistanceToLowNative(SeriesOperator):
         for c in cols:
             val = x[c]
             low = val.rolling_min(window_size=w)
-            dist = (pl.when((low.is_null()) | (low == 0)).then(None).otherwise((val - low)) / (low) if (low) != 0 else np.nan
+            dist = (pl.when((low.is_null()) | (low == 0)).then(None).otherwise((val - low)) / low)
             exprs.append(dist.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1423,7 +1423,7 @@ class TSChannelPositionNative(SeriesOperator):
             low = val.rolling_min(window_size=w)
             high = val.rolling_max(window_size=w)
             channel_range = high - low
-            pos = (pl.when((channel_range.is_null()) | (channel_range == 0)).then(pl.lit(0.5)).otherwise((val - low)) / (channel_range) if (channel_range) != 0 else np.nan
+            pos = (pl.when((channel_range.is_null()) | (channel_range == 0)).then(pl.lit(0.5)).otherwise((val - low)) / channel_range)
             exprs.append(pos.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1505,7 +1505,7 @@ class TSChannelWidthPctNative(SeriesOperator):
             val = x[c]
             low = val.rolling_min(window_size=w)
             high = val.rolling_max(window_size=w)
-            width_pct = (pl.when((low.is_null()) | (low == 0)).then(None).otherwise((high - low)) / (low) if (low) != 0 else np.nan
+            width_pct = (pl.when((low.is_null()) | (low == 0)).then(None).otherwise((high - low)) / low)
             exprs.append(width_pct.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1684,7 +1684,7 @@ class TSSwingAmplitudePctNative(SeriesOperator):
             low = val.rolling_min(window_size=w)
             high = val.rolling_max(window_size=w)
             avg = val.rolling_mean(window_size=w)
-            amplitude_pct = (pl.when((avg.is_null()) | (avg == 0)).then(None).otherwise((high - low)) / (avg) if (avg) != 0 else np.nan
+            amplitude_pct = (pl.when((avg.is_null()) | (avg == 0)).then(None).otherwise((high - low)) / avg)
             exprs.append(amplitude_pct.alias(c))
         result = x.with_columns(exprs)
         return result
@@ -1766,7 +1766,7 @@ class TSSwingDurationNative(SeriesOperator):
         exprs = []
         for c in cols:
             val = x[c]
-            change = ((val - val.shift(1))) / (val.shift(1).abs()) if (val.shift(1).abs() != 0 else np.nan
+            change = (val - val.shift(1)) / val.shift(1).abs()
             is_swing = (change.abs() > thresh)
             block = is_swing.cum_sum()
             duration = pl.int_range(0, pl.len()).over(block) - pl.int_range(0, pl.len()).shift(1).fill_null(0).over(block)
@@ -1812,7 +1812,7 @@ class TSSwingVelocityNative(SeriesOperator):
             high = val.rolling_max(window_size=w)
             amplitude = high - low
             # Velocity = amplitude / window (time proxy)
-            velocity = (amplitude) / (pl.lit(float(w))) if (pl.lit(float(w)) != 0 else np.nan
+            velocity = amplitude / pl.lit(float(w))
             exprs.append(velocity.alias(c))
         result = x.with_columns(exprs)
         return result

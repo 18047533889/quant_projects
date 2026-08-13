@@ -86,7 +86,7 @@ def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
 
 def _has_spread(values: np.ndarray) -> bool:
     valid = values[np.isfinite(values)]
-    return valid.size >= 2 and float(np.std(valid, ddof=0) >= 1e-12
+    return valid.size >= 2 and float(np.std(valid, ddof=0)) >= 1e-12
 
 
 def _stack_id_panels(*panels: pd.DataFrame) -> np.ndarray:
@@ -137,7 +137,7 @@ def _id_value_map(
         if not np.isfinite(v):
             return None
         if key in out:
-            if abs(out[key] - float(v) > 1e-12:
+            if abs(out[key] - float(v)) > 1e-12:
                 return None
             continue
         out[key] = float(v)

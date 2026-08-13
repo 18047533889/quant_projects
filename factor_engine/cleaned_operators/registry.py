@@ -870,7 +870,7 @@ def _logical_field_equal(field: str, left: Any, right: Any) -> bool:
     object identities.  Scalar/``None`` fields compare directly.
     """
     if isinstance(left, dict) and isinstance(right, dict):
-        if set(left.keys() != set(right.keys()):
+        if set(left.keys()) != set(right.keys()):
             return False
         return all(_logical_field_equal(field, left[k], right[k]) for k in left)
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):

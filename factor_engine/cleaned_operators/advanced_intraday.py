@@ -92,7 +92,7 @@ def _numerical_rank(s: np.ndarray, tol: float = 1e-9) -> int:
     smax = float(s[0])
     if smax <= _EPS:
         return 0
-    return int(np.sum(s) > tol * smax))
+    return int(np.sum(s > tol * smax))
 
 
 _QGRID_PAIR = np.linspace(0.01, 0.99, 99)
@@ -781,7 +781,7 @@ def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int, 
             a = cur[: len(cur) + k]
             b = med[-k:]
         ok = np.isfinite(a) & np.isfinite(b)
-        if int(ok.sum() < 3:
+        if int(ok.sum()) < 3:
             continue
         aa = a[ok]
         bb = b[ok]

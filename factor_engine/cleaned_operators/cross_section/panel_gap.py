@@ -68,7 +68,7 @@ def _cs_rank_pct(row: np.ndarray) -> np.ndarray:
 
 def _rank_ic(a: np.ndarray, b: np.ndarray) -> float:
     valid = np.isfinite(a) & np.isfinite(b)
-    if int(valid.sum() < 2:
+    if int(valid.sum()) < 2:
         return np.nan
     ra = pd.Series(a[valid]).rank(method="average").to_numpy()
     rb = pd.Series(b[valid]).rank(method="average").to_numpy()
@@ -115,7 +115,7 @@ def _async_beta_column(
         seg_r = r[start : anchor + 1]
         seg_m = mkt[start : anchor + 1]
         valid = np.isfinite(seg_r) & np.isfinite(seg_m)
-        if int(valid.sum() < min_periods:
+        if int(valid.sum()) < min_periods:
             continue
         x = seg_m[valid]
         y = seg_r[valid]
@@ -218,7 +218,7 @@ def _pocket_strength_panel(
         for c in range(cols):
             col_seg = seg[:, c]
             valid = np.isfinite(col_seg)
-            if int(valid.sum() < min_periods:
+            if int(valid.sum()) < min_periods:
                 continue
             out[t, c] = float(np.mean(col_seg[valid]))
     return _frame_like(ret, out)
@@ -300,7 +300,7 @@ def _mosaic_kernel(
         ret_s = realized_return[s]
         for b in range(clusters):
             mask = labels[s] == b
-            if int(mask.sum() < 2:
+            if int(mask.sum()) < 2:
                 continue
             ic[s, b] = _rank_ic(sig_s[mask], ret_s[mask])
     out = np.full((rows, cols), np.nan)
@@ -312,7 +312,7 @@ def _mosaic_kernel(
                 continue
             ic_series = ic[start : t + 1, b]
             valid_ic = np.isfinite(ic_series)
-            if int(valid_ic.sum() < min_history:
+            if int(valid_ic.sum()) < min_history:
                 continue
             out[t, c] = float(np.mean(ic_series[valid_ic]))
     return out
@@ -427,7 +427,7 @@ class PanelPredictabilityMosaicScore(SeriesOperator):
         for t in range(rows):
             row = mv[t]
             valid = np.isfinite(row)
-            if int(valid.sum() < 1:
+            if int(valid.sum()) < 1:
                 continue
             out[t, :] = float(np.mean(row[valid]))
         return _frame_like(base_signal, out)

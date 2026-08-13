@@ -2795,7 +2795,7 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
                 r2 = (1.0 - ss_res) / ss_tot if ss_tot != 0 else np.nan
                 if n <= p:
                     return np.nan
-                adj_r2 = (1.0 - (1.0 - r2) * (n - 1)) / ((n - p) if ((n - p) != 0 else np.nan
+                adj_r2 = (1.0 - (1.0 - r2) * (n - 1)) / ((n - p) if (n - p) != 0 else np.nan)
                 return float(adj_r2)
             except:
                 return np.nan

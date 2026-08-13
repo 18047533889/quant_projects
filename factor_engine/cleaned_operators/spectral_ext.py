@@ -87,8 +87,8 @@ def _looks_like_return(vals: np.ndarray) -> bool:
         return False  # constant -> neither a return nor a level
     sd_diff = float(np.std(np.diff(finite)))
     ratio = sd_level / max(sd_diff, _EPS)
-    centred = abs(float(np.mean(finite)) <= 0.5 * sd_level
-    both_signs = float(np.min(finite) < 0.0 < float(np.max(finite))
+    centred = abs(float(np.mean(finite))) <= 0.5 * sd_level
+    both_signs = float(np.min(finite)) < 0.0 < float(np.max(finite))
     return ratio <= _PRICE_LEVEL_RATIO_THRESHOLD and centred and both_signs
 
 

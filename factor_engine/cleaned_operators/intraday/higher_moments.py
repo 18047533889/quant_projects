@@ -43,7 +43,7 @@ def _bipower_var(r: np.ndarray) -> float:
     # axis* — |r_t| * |r_{t-1}| — never over the compressed array of finite
     # returns.  Compressing made the two sides of a missing minute neighbours,
     # fabricating a within-day cross-product where no real adjacent pair exists.
-    if int(np.isfinite(r).sum() < 2:
+    if int(np.isfinite(r).sum()) < 2:
         return np.nan
     with np_errstate():
         prod = np.abs(r[1:]) * np.abs(r[:-1])
@@ -304,8 +304,8 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
     # returns.  Using the finite count made first/last time exceed 1 whenever a
     # missing minute shrank the denominator below the raw index.
     n_slots = len(r)
-    first_t = np.where((n_slots - 1) if n_slots > 1 else np.nan != 0, float(idx[0]) / (n_slots - 1) if n_slots > 1 else np.nan, np.nan)
-    last_t = np.where((n_slots - 1) if n_slots > 1 else np.nan != 0, float(idx[-1]) / (n_slots - 1) if n_slots > 1 else np.nan, np.nan)
+    first_t = float(idx[0]) / (n_slots - 1) if n_slots > 1 else np.nan
+    last_t = float(idx[-1]) / (n_slots - 1) if n_slots > 1 else np.nan
     cluster_cv = np.nan
     if len(idx) > 2:
         gaps = np.diff(idx).astype(float)

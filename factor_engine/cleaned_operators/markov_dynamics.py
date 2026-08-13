@@ -258,7 +258,7 @@ def _stationary_distribution(P: np.ndarray) -> np.ndarray | None:
     if not np.isfinite(s) or abs(s) <= _EPS:
         return None
     pi = pi / s
-    if float(pi.min() < -1e-8:
+    if float(pi.min()) < -1e-8:
         return None
     pi = np.clip(pi, 0.0, None)
     s2 = float(pi.sum())
@@ -439,7 +439,7 @@ def _state_dynamics_series(
             if mature:
                 for bbin in range(B):
                     sel = trans_ok & (base_bin == bbin)
-                    if int(sel.sum() < mss:
+                    if int(sel.sum()) < mss:
                         continue
                     dx = inc[sel]
                     if dx.size == 0:
@@ -950,7 +950,7 @@ def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int,
         # Window-maturity: AIS is a histogram estimate; require at least
         # ``min_history`` finite observations in the strictly-past window before
         # estimating, so an immature window never emits a prior-dominated value.
-        if int(np.count_nonzero(np.isfinite(past)) < mh:
+        if int(np.count_nonzero(np.isfinite(past))) < mh:
             continue
         edges = _quantile_edges(past, B)
         S = _bin(past, edges)
@@ -1071,7 +1071,7 @@ def _committor_series(res: dict[str, np.ndarray], col: int, min_state_support: i
         # upper target actually visited in the window, (c) an observed-support
         # path from the current state to the target.
         N_obs = res["N_obs"][t, col]
-        if int(np.count_nonzero(N_obs) < 2:
+        if int(np.count_nonzero(N_obs)) < 2:
             continue
         if int(res["counts"][t, col, B - 1]) < 1:
             continue
@@ -1183,7 +1183,7 @@ def _mfpt_series(res: dict[str, np.ndarray], col: int, min_state_support: int, t
         # one target state actually visited in the window, (c) an observed-
         # support path from the current state to some target.
         N_obs = res["N_obs"][t, col]
-        if int(np.count_nonzero(N_obs) < 2:
+        if int(np.count_nonzero(N_obs)) < 2:
             continue
         if not any(int(res["counts"][t, col, a]) >= 1 for a in A):
             continue

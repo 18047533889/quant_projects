@@ -372,7 +372,7 @@ def _quantile_transport_fit(recent: np.ndarray, old: np.ndarray) -> tuple[float,
     qo = np.quantile(oa, _Q_GRID)
     dq = qr - qo
     z = _Q_GRID - 0.5
-    if float(np.sum(z * z) <= _EPS:
+    if float(np.sum(z * z)) <= _EPS:
         return None
     # OLS on [1, z, z^2] (well conditioned, 9 points).
     A = np.column_stack([np.ones_like(z), z, z * z])

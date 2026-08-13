@@ -133,7 +133,7 @@ def _cost_age_slope(mass: np.ndarray) -> float:
             means.append(float(np.dot(row, bins) / total))
     means = np.asarray(means, dtype=float)
     valid = np.isfinite(means)
-    if int(valid.sum() < 2:
+    if int(valid.sum()) < 2:
         return np.nan
     x = np.flatnonzero(valid).astype(float)
     y = means[valid]
@@ -320,7 +320,7 @@ def _overhang_column(
         for j in range(cur_bin + 1, bins):
             if dist[j] >= peak_thresh:
                 intervening = dist[cur_bin + 1 : j]
-                if intervening.size == 0 or float(np.max(intervening) < peak_thresh:
+                if intervening.size == 0 or float(np.max(intervening)) < peak_thresh:
                     out["supply_vacuum"][t] = (bin_prices[j] - p) / p
                 break
         dwo = 0.0

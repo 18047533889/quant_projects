@@ -65,7 +65,7 @@ def _rolling_max_1d(x: np.ndarray, w: int, min_periods: int = 1) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < min_periods:
+        if int(ok.sum()) < min_periods:
             continue
         out[t] = float(np.max(seg[ok]))
     return out

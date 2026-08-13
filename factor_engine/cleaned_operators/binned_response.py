@@ -151,7 +151,7 @@ def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: in
                 continue
             medians, counts = _binned_medians(yv, xv, b)
             usable = counts >= mpb
-            if int(usable.sum() < 3:
+            if int(usable.sum()) < 3:
                 continue
             gi = np.arange(1, b + 1, dtype=float)[usable]
             out[r, c] = _spearman(gi, medians[usable])
@@ -171,7 +171,7 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, 
                 continue
             medians, centers, counts = _binned_empirical_medians(yv, xv, b)
             usable = counts >= mpb
-            if int(usable.sum() < 3:
+            if int(usable.sum()) < 3:
                 continue
             # P1-18: fit curvature against the groups' EMPIRICAL percentile
             # centres (where the samples actually are), not nominal quantile

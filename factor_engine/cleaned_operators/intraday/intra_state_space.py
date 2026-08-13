@@ -105,7 +105,7 @@ def _kalman_filter_1d(observations: np.ndarray, process_var: float = 1e-5, obs_v
         x_pred = x[i-1]
         P_pred = P[i-1] + process_var
 
-        K = (P_pred) / ((P_pred + obs_var) if ((P_pred + obs_var) != 0 else np.nan
+        K = P_pred / (P_pred + obs_var) if (P_pred + obs_var) != 0 else np.nan
         innov = observations[i] - x_pred
         innovations.append(innov)
 

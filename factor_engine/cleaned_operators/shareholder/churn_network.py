@@ -160,7 +160,7 @@ def _ratio_map(
         if not np.isfinite(r):
             return out, False
         if key in out:
-            if abs(out[key] - float(r) > _EPS:
+            if abs(out[key] - float(r)) > _EPS:
                 return out, False
             continue
         out[key] = float(r)
@@ -356,7 +356,7 @@ def _rank_stability(*args):
             b = prev_v[:, row, col]
             keep = (a != 0.0) | (b != 0.0)
             a_s, b_s = a[keep], b[keep]
-            if len(a_s) < 3 or float(np.std(a_s) <= _EPS or float(np.std(b_s) <= _EPS:
+            if len(a_s) < 3 or float(np.std(a_s)) <= _EPS or float(np.std(b_s)) <= _EPS:
                 continue
             out[row, col] = float(pd.Series(a_s).corr(pd.Series(b_s), method="spearman"))
     return _frame_like(args[0], out)

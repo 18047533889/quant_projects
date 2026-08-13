@@ -268,7 +268,7 @@ def _betti_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.nd
             # upper-triangular pairwise distances.
             triu = pd_pairwise[np.triu_indices(pd_pairwise.shape[0], k=1)]
             finite = triu[np.isfinite(triu)]
-            if finite.size == 0 or float(np.median(finite) <= _EPS:
+            if finite.size == 0 or float(np.median(finite)) <= _EPS:
                 continue
             pairs = _rips_h1_pairs(pts)
             out[row, col] = _max_persistence(pairs) / float(np.median(finite))

@@ -91,7 +91,7 @@ def _daily_pair_with_times(
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals_a)) < 2:
+            if int(np.sum(np.isfinite(vals_a))) < 2:
                 per_day[day] = np.nan
                 continue
             try:
@@ -185,7 +185,7 @@ def _corr_skipna(a: np.ndarray, b: np.ndarray, min_obs: int = 10) -> float:
     if m.sum() < int(min_obs):
         return np.nan
     va, vb = a[m], b[m]
-    if float(np.std(va) < 1e-12 or float(np.std(vb) < 1e-12:
+    if float(np.std(va)) < 1e-12 or float(np.std(vb)) < 1e-12:
         return np.nan
     return float(np.corrcoef(va, vb)[0, 1])
 
@@ -397,7 +397,7 @@ class IntraVolumePriceAlignment(SessionAggregationOperator):
             if m.sum() < 10:
                 return np.nan
             rr, v2 = r[m], vv[m]
-            if float(np.std(rr) < _EPS or float(np.std(v2) < _EPS:
+            if float(np.std(rr)) < _EPS or float(np.std(v2)) < _EPS:
                 return np.nan
             return float(np.corrcoef(rr, v2)[0, 1])
 

@@ -169,7 +169,7 @@ def pd_fiscal_pct_change(
             if denom <= _EPS:
                 continue
 
-            out[row, col] = (float((current_val - lag_val)) / denom) if denom) != 0 else np.nan
+            out[row, col] = (float(current_val - lag_val) / denom) if denom != 0 else np.nan
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 

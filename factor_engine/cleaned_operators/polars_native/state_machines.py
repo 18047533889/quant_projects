@@ -278,7 +278,7 @@ class StateCostAwareSlewPolarsNative(SeriesOperator):
         Max change decreases as cost_factor increases
         effective_rate = base_rate / (1 + cost_factor)
         """
-        effective_rate = (base_rate) / ((1.0 + cost_factor) if ((1.0 + cost_factor) != 0 else np.nan
+        effective_rate = base_rate / (1.0 + cost_factor)
 
         vals = signal.to_numpy()
         output = np.full(len(vals), np.nan)

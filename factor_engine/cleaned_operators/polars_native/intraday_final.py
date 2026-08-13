@@ -304,7 +304,7 @@ class IntradayRealizedSemivarianceBalancePolarsNative(SeriesOperator):
             ])
             .collect()
             .with_columns(
-                pl.when((pl.col("up_var") + pl.col("down_var") != 0)
+                pl.when(pl.col("up_var") + pl.col("down_var") != 0)
                 .then((pl.col("up_var") - pl.col("down_var")) / (pl.col("up_var") + pl.col("down_var")))
                 .otherwise(None)
                 .alias("returns")

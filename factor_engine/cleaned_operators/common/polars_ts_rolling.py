@@ -76,7 +76,7 @@ class TSCorrNative(SeriesOperator):
 
             cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
 
-            corr = (pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov) / (x_std * y_std) if (x_std * y_std) > 1e-10 else np.nan
+            corr = pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov / (x_std * y_std))
             exprs.append(corr.alias(c))
 
         return x.lazy().with_columns(exprs).collect()
@@ -152,7 +152,7 @@ class TSEwmCorrNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=2)
         cols = _numeric_cols(x)
-        alpha = (2.0) / ((w + 1) if ((w + 1) != 0 else np.nan
+        alpha = 2.0 / (w + 1)
 
         if y is None:
             raise ValueError("ts_ewm_corr requires y")
@@ -172,7 +172,7 @@ class TSEwmCorrNative(SeriesOperator):
             x_std = x_var.sqrt()
             y_std = y_var.sqrt()
 
-            corr = (pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov) / (x_std * y_std) if (x_std * y_std) > 1e-10 else np.nan
+            corr = pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov / (x_std * y_std))
             exprs.append(corr.alias(c))
 
         return x.lazy().with_columns(exprs).collect()
@@ -224,7 +224,7 @@ class TSRegressionSlopeNative(SeriesOperator):
             cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
             var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
 
-            slope = (pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
+            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
             exprs.append(slope.alias(c))
 
         return y.with_columns(exprs)
@@ -272,7 +272,7 @@ class TSRegressionInterceptNative(SeriesOperator):
             var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
 
             # Numerical stability: avoid division by zero
-            slope = (pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
+            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
             intercept = y_mean - slope * x_mean
             exprs.append(intercept.alias(c))
 
@@ -321,7 +321,7 @@ class TSRegressionResidNative(SeriesOperator):
             var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
 
             # Numerical stability: avoid division by zero
-            slope = (pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
+            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
             intercept = y_mean - slope * x_mean
             fitted = intercept + slope * x_col
             resid = y_col - fitted
@@ -413,7 +413,7 @@ class TSDecayLinearNative(SeriesOperator):
         cols = _numeric_cols(x)
 
         # Linear decay: weight[i] = w - i for i in 0..w-1
-        weight_sum = (w * (w + 1)) / 2.0 if 2.0 != 0 else np.nan
+        weight_sum = (w * (w + 1)) / 2.0
 
         exprs = []
         for c in cols:
@@ -454,8 +454,8 @@ class TSTrendSlopeNative(SeriesOperator):
         cols = _numeric_cols(x)
 
         # Time index: 0, 1, 2, ..., w-1
-        t_mean = ((w - 1)) / 2.0 if 2.0 != 0 else np.nan
-        var_t = (sum((i - t_mean) ** 2 for i in range(w))) / w if w != 0 else np.nan
+        t_mean = (w - 1) / 2.0
+        var_t = sum((i - t_mean) ** 2 for i in range(w)) / w
 
         exprs = []
         for c in cols:
@@ -468,8 +468,8 @@ class TSTrendSlopeNative(SeriesOperator):
                 y_dev = pl.col(c).shift(w - 1 - i) - y_mean
                 cov_sum = cov_sum + t_dev * y_dev
 
-            cov_t_y = (cov_sum) / w if w != 0 else np.nan
-            slope = (cov_t_y) / var_t if var_t != 0 else np.nan
+            cov_t_y = cov_sum / w
+            slope = cov_t_y / var_t if var_t != 0 else np.nan
 
             exprs.append(slope.alias(c))
 
@@ -540,7 +540,7 @@ class TSExpandingRankNative(SeriesOperator):
             # expanding rank
             rank = pl.col(c).fill_nan(None).rank(method="average")
             count = pl.col(c).fill_nan(None).is_not_null().cast(pl.Float64).cum_sum()
-            pct_rank = (pl.when(count == 0).then(None).otherwise(rank / count)
+            pct_rank = pl.when(count == 0).then(None).otherwise(rank / count)
             exprs.append(pct_rank.alias(c))
 
         return x.lazy().with_columns(exprs).collect()

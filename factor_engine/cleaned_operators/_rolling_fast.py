@@ -292,7 +292,7 @@ NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
             start = max(0, i - w + 1)
             seg = col[start : i + 1]
             valid = np.isfinite(seg)
-            if int(valid.sum() < mp:
+            if int(valid.sum()) < mp:
                 continue
             t = np.arange(start, i + 1, dtype=np.float64)[valid]
             v = seg[valid]

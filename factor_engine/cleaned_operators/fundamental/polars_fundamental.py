@@ -187,7 +187,7 @@ def _rolling_sum_1d(x: np.ndarray, w: int, min_periods: int = 1) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < min_periods:
+        if int(ok.sum()) < min_periods:
             continue
         out[t] = float(np.sum(seg[ok]))
     return out
@@ -200,7 +200,7 @@ def _rolling_mean_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.mean(seg[ok]))
     return out
@@ -213,7 +213,7 @@ def _rolling_std_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.std(seg[ok], ddof=1))
     return out
@@ -483,7 +483,7 @@ def _trend_stat_1d(xv, pv, periods, which):
         if n <= 2:
             return np.nan
         mse = ss_res / (n - 2)
-        se = np.where(den if mse >= 0 else np.nan != 0, float(np.sqrt(mse / den)) if mse >= 0 else np.nan, np.nan)
+        se = float(np.sqrt(mse / den)) if mse >= 0 else np.nan
         return slope / se if np.isfinite(se) and se > _EPS else np.nan
     return _walk_1d(xv, pv, calc)
 

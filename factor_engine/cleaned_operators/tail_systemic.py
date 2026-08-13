@@ -89,7 +89,7 @@ def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str, min_pe
                 est = xv[lo:r, c]
             else:
                 est = xv[lo : r + 1, c]
-            if int(np.isfinite(est).sum() < min_periods:
+            if int(np.isfinite(est).sum()) < min_periods:
                 continue
             thr = float(np.nanquantile(est, q if side == "lower" else 1.0 - q))
             if not np.isfinite(thr) or not np.isfinite(xv[r, c]):

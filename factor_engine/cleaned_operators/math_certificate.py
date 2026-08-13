@@ -72,7 +72,7 @@ def _r40_cs_resid(y, x):
     xv = np.asarray(x, dtype=float)
     valid = np.isfinite(yv) & np.isfinite(xv)
     result = np.full_like(yv, np.nan)
-    if int(valid.sum() < 3:
+    if int(valid.sum()) < 3:
         return result
     xv = xv[valid]
     yv = yv[valid]
@@ -93,7 +93,7 @@ def _r40_cs_regression(y, x, mode: int = 0):
     xv = np.asarray(x, dtype=float)
     valid = np.isfinite(yv) & np.isfinite(xv)
     result = np.full_like(yv, np.nan)
-    if int(valid.sum() < 3:
+    if int(valid.sum()) < 3:
         return result
     xv = xv[valid]
     yv = yv[valid]
@@ -124,7 +124,7 @@ def _r40_ts_regression_slope(x, y, d: int) -> np.ndarray:
         xw = x[i - d + 1 : i + 1]
         yw = y[i - d + 1 : i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum() >= 3:
+        if int(valid.sum()) >= 3:
             xv = xw[valid]
             yv = yw[valid]
             xc = xv - xv.mean()
@@ -144,7 +144,7 @@ def _r40_ts_rank_corr(x, y, d: int) -> np.ndarray:
         xw = x[i - d + 1 : i + 1]
         yw = y[i - d + 1 : i + 1]
         valid = np.isfinite(xw) & np.isfinite(yw)
-        if int(valid.sum() >= 3:
+        if int(valid.sum()) >= 3:
             rx = _r40_rank_1d(xw[valid])
             ry = _r40_rank_1d(yw[valid])
             c = np.corrcoef(rx, ry)[0, 1]
@@ -446,7 +446,7 @@ def ts_poly2_coeff_centered_(
     for i in range(d - 1, n):
         y = arr[i - d + 1 : i + 1]
         valid = np.isfinite(y)
-        if int(valid.sum() < 3:
+        if int(valid.sum()) < 3:
             continue
         # Vandermonde: [t_c^2, t_c, 1] — centered design。
         A = np.column_stack([t_c[valid] ** 2, t_c[valid], np.ones(int(valid.sum()))])
@@ -720,7 +720,7 @@ def check_permutation_equivariance_all_tie_sensitive_operators(
     def _topk_1d(row, _y, _g, k: int = 2):
         valid = np.isfinite(row)
         out = np.zeros(row.shape, dtype=float)
-        if int(valid.sum() >= k:
+        if int(valid.sum()) >= k:
             thr = -np.sort(-row[valid])[k - 1]
             out = (row >= thr).astype(float)
         out[~valid] = np.nan
@@ -741,7 +741,7 @@ def check_permutation_equivariance_all_tie_sensitive_operators(
     def _winsorize_1d(row, _y, _g, lo: float = 0.05, hi: float = 0.95):
         valid = np.isfinite(row)
         out = row.copy()
-        if int(valid.sum() >= 3:
+        if int(valid.sum()) >= 3:
             qlo, qhi = np.nanquantile(row, [lo, hi])
             out = np.clip(row, qlo, qhi)
         out[~valid] = np.nan
@@ -1166,7 +1166,7 @@ def _rolling_corr_ref(x: np.ndarray, y: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum() < min_periods:
+        if int(m.sum()) < min_periods:
             continue
         xc = xw[m] - xw[m].mean()
         yc = yw[m] - yw[m].mean()
@@ -1190,7 +1190,7 @@ def _rolling_cov_ref(x: np.ndarray, y: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum() <= 1:
+        if int(m.sum()) <= 1:
             continue
         xc = xw[m] - xw[m].mean()
         yc = yw[m] - yw[m].mean()
@@ -1218,7 +1218,7 @@ def _rolling_beta_ref(y: np.ndarray, x: np.ndarray, window: int,
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum() < min_periods:
+        if int(m.sum()) < min_periods:
             continue
         xv = xw[m]
         yv = yw[m]
@@ -1587,7 +1587,7 @@ def _float64_differs(a: Any, b: Any) -> bool:
     if isinstance(a, dict):
         if not isinstance(b, dict):
             return True
-        if set(a.keys() != set(b.keys()):
+        if set(a.keys()) != set(b.keys()):
             return True
         return any(_float64_differs(a[k], b[k]) for k in a)
     if isinstance(a, (list, tuple)):

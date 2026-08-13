@@ -573,7 +573,7 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
             for i in range(N_m):
                 seg_i = v[i : i + dim]
                 for j in range(i + 1, N_m):
-                    if np.max(np.abs(seg_i - v[j : j + dim]) < eps:
+                    if np.max(np.abs(seg_i - v[j : j + dim])) < eps:
                         count += 1
         return 2.0 * count / (N_m * (N_m - 1))
 

@@ -520,7 +520,7 @@ def _concentration(value: pl.DataFrame) -> pl.DataFrame:
     long = _with_date(_melt(value, "value")).with_columns(pl.col("value").fill_nan(0.0).abs())
     total = long.group_by(["date", "instrument"]).agg(pl.col("value").sum().alias("total"))
     long = long.join(total, on=["date", "instrument"]).with_columns(
-        pl.when(pl.col("total") != 0).then(pl.col("value") / pl.col("total")).otherwise(None).alias("w")
+        (pl.col("value") / pl.col("total")).alias("w")
     )
     out = long.group_by(["date", "instrument"]).agg(
         (pl.col("w") * pl.col("w")).sum().alias("v"),
@@ -542,7 +542,7 @@ def _entropy(value: pl.DataFrame, normalize: bool) -> pl.DataFrame:
         pl.col("value").count().alias("n"),
     )
     long = long.join(total, on=["date", "instrument"]).with_columns(
-        pl.when(pl.col("total") != 0).then(pl.col("value") / pl.col("total")).otherwise(None).alias("w")
+        (pl.col("value") / pl.col("total")).alias("w")
     )
     e = long.group_by(["date", "instrument"]).agg(
         (-(pl.col("w") * pl.col("w").log())).sum().alias("H"),
@@ -639,7 +639,7 @@ def _kyle_lambda_proxy(close: pl.DataFrame, amount: pl.DataFrame) -> pl.DataFram
          * pl.col("nf") / (pl.col("nf") - 1.0)).alias("beta")
     )
     out = g.with_columns(
-        pl.when((pl.col("n") >= 3) & ((pl.col("ss2") - pl.col("ss") * pl.col("ss") / pl.col("nf") > _EPS * pl.col("nf")))
+        pl.when((pl.col("n") >= 3) & ((pl.col("ss2") - pl.col("ss") * pl.col("ss") / pl.col("nf")) > _EPS * pl.col("nf")))
         .then(pl.col("beta"))
         .otherwise(None)
         .alias("v")
@@ -902,8 +902,8 @@ def _profile_jsd(values: pl.DataFrame, window: int) -> pl.DataFrame:
         pl.col("pa").count().alias("n"),
     )
     joined = joined.join(sums, on=["date", "instrument"]).with_columns(
-        pl.when(pl.col("sum_pa") != 0).then(pl.col("pa") / pl.col("sum_pa")).otherwise(None).alias("pa"),
-        pl.when(pl.col("sum_pb") != 0).then(pl.col("pb") / pl.col("sum_pb")).otherwise(None).alias("pb"),
+        (pl.col("pa") / pl.col("sum_pa")).alias("pa"),
+        (pl.col("pb") / pl.col("sum_pb")).alias("pb"),
     ).with_columns((0.5 * (pl.col("pa") + pl.col("pb"))).alias("m"))
     out = joined.group_by(["date", "instrument"]).agg(
         pl.col("n").first().alias("n"),
@@ -929,8 +929,8 @@ def _profile_emd(values: pl.DataFrame, window: int) -> pl.DataFrame:
         pl.col("pa").count().alias("n"),
     )
     joined = joined.join(sums, on=["date", "instrument"]).with_columns(
-        pl.when(pl.col("sum_pa") != 0).then(pl.col("pa") / pl.col("sum_pa")).otherwise(None).alias("pa"),
-        pl.when(pl.col("sum_pb") != 0).then(pl.col("pb") / pl.col("sum_pb")).otherwise(None).alias("pb"),
+        (pl.col("pa") / pl.col("sum_pa")).alias("pa"),
+        (pl.col("pb") / pl.col("sum_pb")).alias("pb"),
     )
     joined = joined.sort(["date", "instrument", "slot"]).with_columns(
         pl.col("pa").cum_sum().over(["date", "instrument"]).alias("cdf_a"),
@@ -1186,25 +1186,25 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         pl.len().alias("n"),
     ).with_columns(pl.col("n").cast(pl.Float64).alias("nf"))
     if kind == "idio_skew":
-        mean_e = pl.when(pl.col("nf") != 0).then((pl.col("se")) / (pl.col("nf"))).otherwise(None)
-        var_e = pl.when(pl.col("nf") - mean_e.pow(2) != 0).then((pl.col("se2")) / (pl.col("nf") - mean_e.pow(2))).otherwise(None)
-        m3 = pl.when(pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3) != 0).then((pl.col("se3")) / (pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3))).otherwise(None)
+        mean_e = pl.col("se") / pl.col("nf")
+        var_e = pl.col("se2") / pl.col("nf") - mean_e.pow(2)
+        m3 = pl.col("se3") / pl.col("nf") - 3.0 * mean_e * pl.col("se2") / pl.col("nf") + 2.0 * mean_e.pow(3)
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m3 / var_e.pow(1.5)).otherwise(None).alias("v")
         )
         return _pivot(out, "v")
     if kind == "idio_kurt":
         # E[((e-e_mean)/sd)^4]
-        mean_e = pl.when(pl.col("nf") != 0).then((pl.col("se")) / (pl.col("nf"))).otherwise(None)
-        var_e = pl.when(pl.col("nf") - mean_e.pow(2) != 0).then((pl.col("se2")) / (pl.col("nf") - mean_e.pow(2))).otherwise(None)
-        m4 = pl.when(pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4) != 0).then((pl.col("se4")) / (pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4))).otherwise(None)
+        mean_e = pl.col("se") / pl.col("nf")
+        var_e = pl.col("se2") / pl.col("nf") - mean_e.pow(2)
+        m4 = pl.col("se4") / pl.col("nf") - 4 * mean_e * pl.col("se3") / pl.col("nf") + 6 * mean_e.pow(2) * pl.col("se2") / pl.col("nf") - 3 * mean_e.pow(4)
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m4 / var_e.pow(2)).otherwise(None).alias("v")
         )
         return _pivot(out, "v")
     # r2 = max(0, 1 - ss_res/ss_tot); ss_tot from the raw return series.
     out = g2.with_columns(
-        pl.when(pl.col("nf" != 0).then(pl.col("sr2") - pl.col("sr").pow(2) / pl.col("nf").otherwise(None))).alias("ss_tot"),
+        ((pl.col("sr2") - pl.col("sr").pow(2) / pl.col("nf"))).alias("ss_tot"),
     ).with_columns(
         pl.when((pl.col("ss_tot") > _EPS))
         .then((1.0 - pl.col("se2") / pl.col("ss_tot")).clip(lower_bound=0.0))

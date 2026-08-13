@@ -101,7 +101,7 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
     n = xv.size
     if n < 3:
         return np.nan
-    if float(np.std(xv) <= _EPS or float(np.std(yv) <= _EPS:
+    if float(np.std(xv)) <= _EPS or float(np.std(yv)) <= _EPS:
         return np.nan
     # Tie-aware Chatterjee ξ (review R4-49, R26-005..007).  The no-tie formula
     # 1 - 3·Σ|Δr|/(n²-1) assumes continuous data; A-share series have many
@@ -193,7 +193,7 @@ def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
     cmi = hxz + hyz - hz - hxyz
     # Audit #54: after ties collapse the effective state space, the normalized
     # denominator must use the EFFECTIVE occupied cell counts — CMI <=
-    # min(H(X), H(Y) <= min(log n_x_eff, log n_y_eff) — never log(requested
+    # min(H(X), H(Y)) <= min(log n_x_eff, log n_y_eff) — never log(requested
     # bins).  A marginal that degenerated to a single occupied cell carries no
     # conditional information -> fail closed.
     n_x_eff = int(np.unique(bx).size)

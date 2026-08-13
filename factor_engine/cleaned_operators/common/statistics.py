@@ -160,7 +160,7 @@ class ACF(SeriesOperator):
             if lag == 0:
                 return 1.0
             finite_mask = np.isfinite(s)
-            if int(finite_mask.sum() <= lag:
+            if int(finite_mask.sum()) <= lag:
                 return np.nan
             mean = float(s[finite_mask].mean())
             var = float(((s[finite_mask] - mean) ** 2).sum())
@@ -169,7 +169,7 @@ class ACF(SeriesOperator):
             a = s[:-lag]
             b = s[lag:]
             paired = np.isfinite(a) & np.isfinite(b)
-            if int(paired.sum() <= lag:  # NEW-030: at least lag+1 valid pairs
+            if int(paired.sum()) <= lag:  # NEW-030: at least lag+1 valid pairs
                 return np.nan
             cov = float(((a[paired] - mean) * (b[paired] - mean)).sum())
             return cov / var
@@ -1071,7 +1071,7 @@ class Lasso(SeriesOperator):
         def _lasso_trend(x_vals):
             n = len(x_vals)
             valid = np.isfinite(x_vals)
-            if int(valid.sum() < 3:
+            if int(valid.sum()) < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
@@ -1469,7 +1469,7 @@ class Ridge(SeriesOperator):
         def _ridge_trend(x_vals):
             n = len(x_vals)
             valid = np.isfinite(x_vals)
-            if int(valid.sum() < 3:
+            if int(valid.sum()) < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]

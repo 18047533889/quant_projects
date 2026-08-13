@@ -403,13 +403,13 @@ def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
         vi = run[i : i + m + 1]
         for j in range(i + 1, n - m):
             vj = run[j : j + m + 1]
-            if np.max(np.abs(vi - vj) <= r:
+            if np.max(np.abs(vi - vj)) <= r:
                 matches_m_plus_1 += 1
     for i in range(n - m):
         vi = run[i : i + m]
         for j in range(i + 1, n - m + 1):
             vj = run[j : j + m]
-            if np.max(np.abs(vi - vj) <= r:
+            if np.max(np.abs(vi - vj)) <= r:
                 matches_m += 1
     if matches_m == 0 or matches_m_plus_1 == 0:
         return np.nan

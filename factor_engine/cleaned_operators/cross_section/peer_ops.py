@@ -265,7 +265,7 @@ def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any, target
     idx = np.flatnonzero(g_row == gvalue)
     if len(idx) < 3:
         return np.nan
-    pos = int(np.where(idx) == target_col)[0][0]) if target_col in idx else -1
+    pos = int(np.where(idx == target_col)[0][0]) if target_col in idx else -1
     if pos < 0:
         return np.nan
     vals = x_row[idx]
@@ -278,8 +278,8 @@ def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any, target
     if finite.size < 3:
         return np.nan
     target = vals[pos]
-    below = int(np.sum(finite) < target))
-    equal = int(np.sum(finite) == target))  # includes the target itself
+    below = int(np.sum(finite < target))
+    equal = int(np.sum(finite == target))  # includes the target itself
     avg_rank_zero_based = below + (equal - 1) / 2.0
     return float(avg_rank_zero_based / (finite.size - 1))
 

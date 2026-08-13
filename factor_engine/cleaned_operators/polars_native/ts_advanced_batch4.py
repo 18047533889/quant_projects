@@ -2122,7 +2122,7 @@ class TSWeightedTimeCentroidPolarsNative(SeriesOperator):
         # TODO: Implement proper time-weighted centroid
         # Placeholder: exponentially weighted mean emphasizes recent values
         # The span controls how much weight recent observations get
-        return np.where(2.0, ignore_nulls=True) != 0, (feature.ewm_mean(span=window) / (2.0, ignore_nulls=True)), np.nan)
+        return feature.ewm_mean(span=window / 2.0, ignore_nulls=True)
 
 
 # ============================================================================

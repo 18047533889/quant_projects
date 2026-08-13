@@ -122,7 +122,7 @@ def _same_clock_lag_pandas(
 
         # Find rows in x that match (target_date, clock_key)
         target_mask = (dates == target_date) & (clock_keys == clock_key)
-        target_indices = np.where(target_mask[0]
+        target_indices = np.where(target_mask)[0]
 
         if len(target_indices) > 0:
             # Take the first matching row (should be exactly one per symbol)

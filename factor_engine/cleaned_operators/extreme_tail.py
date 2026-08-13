@@ -186,7 +186,7 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # tail is BOUNDED below by 0 — classic Hill (``z = -x`` mirror) does not
         # apply to it and produces a misleading negative ξ.  Such a window fails
         # closed to NaN (explicitly unsupported lower tail for positive levels).
-        if side == "lower" and float(np.min(valid) >= 0.0:
+        if side == "lower" and float(np.min(valid)) >= 0.0:
             continue
         z = valid if side == "upper" else -valid
         u = float(np.quantile(z, 1.0 - frac))
@@ -271,7 +271,7 @@ def _quantile_beta(x: np.ndarray, y: np.ndarray, q: float) -> float:
     if n < 3:
         return np.nan
     xc = x - x.mean()
-    if float(np.sum(xc * xc) <= _EPS:
+    if float(np.sum(xc * xc)) <= _EPS:
         return np.nan
     from scipy.optimize import linprog
 
@@ -311,7 +311,7 @@ def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -
             xw = x[lo : t + 1, c]
             yw = y[lo : t + 1, c]
             finite = np.isfinite(xw) & np.isfinite(yw)
-            if int(finite.sum() < 3:
+            if int(finite.sum()) < 3:
                 continue
             out[t, c] = _quantile_beta(xw[finite], yw[finite], q)
     return out

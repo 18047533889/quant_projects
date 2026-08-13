@@ -95,7 +95,7 @@ def _rolling_max_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.max(seg[ok]))
     return out
@@ -108,7 +108,7 @@ def _rolling_min_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.min(seg[ok]))
     return out
@@ -121,7 +121,7 @@ def _rolling_sum_1d(x: np.ndarray, w: int) -> np.ndarray:
         lo = max(0, t - w + 1)
         seg = x[lo : t + 1]
         ok = np.isfinite(seg)
-        if int(ok.sum() < w:
+        if int(ok.sum()) < w:
             continue
         out[t] = float(np.sum(seg[ok]))
     return out

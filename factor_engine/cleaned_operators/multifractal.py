@@ -124,7 +124,7 @@ def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
     # Audit #89: raise the sample floor as |q| grows — higher moments are
     # dominated by extreme increments and need more observations to be stable.
     required = max(_MIN_PAIRS_PER_LAG, int(np.ceil(_MIN_PAIRS_PER_LAG * abs(float(q)))))
-    if int(m.sum() < required:
+    if int(m.sum()) < required:
         return np.nan
     d = np.abs(x[m] - y[m])
     s = float(np.mean(d ** q))
@@ -244,7 +244,7 @@ def _spectrum_width_series(x2d: np.ndarray, window: int) -> np.ndarray:
             ok = np.isfinite(hs)
             # Audit #90-style floor: a quadratic tau(q) has 3 parameters; fitting
             # to only 3 q-points leaves zero residual DOF.  Require >= 4.
-            if int(ok.sum() < 4:
+            if int(ok.sum()) < 4:
                 continue
             q_ok = qs[ok]
             tau = q_ok * hs[ok] - 1.0
@@ -281,7 +281,7 @@ def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
             # Audit #90: a quadratic fit has 3 parameters; fitting to only 3
             # q-points leaves zero residual DOF (the fit is exactly
             # interpolated, not estimated).  Require >= 4 valid q points.
-            if int(ok.sum() < 4:
+            if int(ok.sum()) < 4:
                 continue
             coeffs = np.polyfit(qs[ok], hs[ok], 2)
             if np.isfinite(coeffs[0]):

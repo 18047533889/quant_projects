@@ -317,7 +317,7 @@ def return_volume_beta(ret, volume, window):
             lo = max(0, i - w + 1)
             seg = y[lo:i + 1]
             ok = np.isfinite(seg)
-            if int(ok.sum() < w:
+            if int(ok.sum()) < w:
                 continue
             seg2 = seg[ok]
             var_out[i] = float(np.sum((seg2 - seg2.mean()) ** 2) / (len(seg2) - 1))
@@ -689,7 +689,7 @@ def ts_consolidation_slope(close, window):
         for i in range(n):
             lo = max(0, i - w + 1)
             seg = arr[lo:i + 1]
-            if int(np.isfinite(seg).sum() < w:
+            if int(np.isfinite(seg).sum()) < w:
                 continue
             out[i] = _slope_1d(seg)
         values[c] = pl.Series(name=c, values=out)

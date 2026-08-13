@@ -89,7 +89,7 @@ def _normalise_scales(scales: Any) -> list[int]:
         raise ValueError("scales must contain at least one scale")
     # Duplicate scales would double-weight one horizon and silently change the
     # statistic — reject them (P1-43).
-    if len(set(out) != len(out):
+    if len(set(out)) != len(out):
         raise ValueError("scales must be unique (duplicate scales are rejected)")
     return out
 
@@ -169,7 +169,7 @@ def _curvature_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
                 continue
             ls = np.asarray([np.log(float(s)) for s, _T in pairs], dtype=float)
             y = np.asarray([T for _s, T in pairs], dtype=float)
-            if len(np.unique(np.round(ls, 10)) < 3:
+            if len(np.unique(np.round(ls, 10))) < 3:
                 continue
             X = np.column_stack([np.ones(len(ls)), ls, ls ** 2])
             beta, *_ = np.linalg.lstsq(X, y, rcond=None)

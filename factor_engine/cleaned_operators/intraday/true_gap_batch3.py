@@ -232,7 +232,7 @@ def _volume_imbalance_kernel(
     if total_vol <= _EPS:
         raise DataDegeneracy("zero total volume")
 
-    vwap = (float(np.sum(prices * vols)) / total_vol) if total_vol) > 1e-10 else np.nan
+    vwap = (float(np.sum(prices * vols)) / total_vol) if total_vol > 1e-10 else np.nan
 
     # Volume above and below VWAP
     above_mask = prices > vwap

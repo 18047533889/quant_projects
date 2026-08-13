@@ -109,7 +109,7 @@ def build_typed_fixtures(
     fixtures["ties"] = frame(np.round(rng.normal(size=(rows, cols)), 0))
 
     gaps = rng.normal(size=(rows, cols))
-    gaps[rng.random(size=(rows, cols) < 0.10] = np.nan
+    gaps[rng.random(size=(rows, cols)) < 0.10] = np.nan
     # R10 #21: "gaps" also models MISSING ROWS — whole no-trading days (suspension /
     # limit-across-the-board), so the per-date path must SKIP them, never invent data.
     if rows > 3:
@@ -123,7 +123,7 @@ def build_typed_fixtures(
     # (a) a boolean event mask, (b) signed event intensity and (c) positive
     # event intensity — an EventBool consumer must not misinterpret Gaussian
     # magnitudes as 0/1, and a signed-intensity consumer must not see only 0/1.
-    ev_bool = (rng.random(size=(rows, cols) < 0.02).astype(float)
+    ev_bool = (rng.random(size=(rows, cols)) < 0.02).astype(float)
     fixtures["event_mask"] = frame(ev_bool)
     fixtures["event_bool"] = frame(ev_bool.copy())
     ev_signed = np.zeros((rows, cols))
@@ -175,7 +175,7 @@ def build_ashare_fixture(
     for i in range(1, rows):
         vol = 0.94 * vol + 0.06 * 0.01 * np.abs(rng.normal(size=(1, cols)))
         shocks = rng.normal(size=(1, cols)) * vol
-        jumps = rng.random(size=(1, cols) < 0.012
+        jumps = rng.random(size=(1, cols)) < 0.012
         shocks += jumps * rng.standard_normal(size=(1, cols)) * 0.06
         returns[i] = shocks
     price = np.exp(np.cumsum(returns, axis=0))
@@ -599,7 +599,7 @@ def _date_rhos(ra: np.ndarray, rb: np.ndarray, *, min_peers: int) -> list[float]
     for t in range(ra.shape[0]):
         a, b = ra[t], rb[t]
         mask = np.isfinite(a) & np.isfinite(b)
-        if int(mask.sum() < min_peers:
+        if int(mask.sum()) < min_peers:
             continue
         r = np.corrcoef(a[mask], b[mask])[0, 1]
         if np.isfinite(r):
@@ -626,11 +626,11 @@ def _per_date_duplicates(
     if not rhos:
         return False
     arr = np.asarray(rhos, dtype=float)
-    if float(np.median(arr) < rho_threshold:
+    if float(np.median(arr)) < rho_threshold:
         return False
-    if float(np.percentile(arr, 10) < 0.9:
+    if float(np.percentile(arr, 10)) < 0.9:
         return False
-    if float((arr > 0.999).mean() < 0.9:
+    if float((arr > 0.999).mean()) < 0.9:
         return False
     return True
 
@@ -891,7 +891,7 @@ def _exact_value_days(ra: np.ndarray, rb: np.ndarray, *, min_peers: int) -> floa
         a = np.asarray(ra[t], dtype=float)
         b = np.asarray(rb[t], dtype=float)
         mask = np.isfinite(a) & np.isfinite(b)
-        if int(mask.sum() < min_peers:
+        if int(mask.sum()) < min_peers:
             continue
         n += 1
         if bool((np.isnan(a) == np.isnan(b)).all()) and np.array_equal(a[mask], b[mask]):
@@ -1188,7 +1188,7 @@ def transition_signature(
     h.update(_matrix_bytes(labels.astype(np.int8)))
     diffs = np.diff(labels, axis=0)
     for delta in sorted(set(np.unique(diffs))):
-        h.update(f"{int(delta)}:{int((diffs) == delta).sum())}".encode("utf-8"))
+        h.update(f"{int(delta)}:{int((diffs == delta).sum())}".encode("utf-8"))
     return h.hexdigest()[:20]
 
 

@@ -184,7 +184,7 @@ def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.nda
             # from 4 trades is misleading).  Require ``min_periods`` valid
             # pairs; otherwise fail closed to NaN (esp. for suspended/missing
             # bars).
-            if int(ok.sum() < min_periods:
+            if int(ok.sum()) < min_periods:
                 continue
             cov = float(np.cov(a[ok], b[ok], ddof=1)[0, 1])
             if not np.isfinite(cov):

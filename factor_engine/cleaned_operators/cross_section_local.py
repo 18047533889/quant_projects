@@ -234,7 +234,7 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
             y = y_t[nbrs]
             # all neighbours are target-finite by construction; keep the guard.
             fin = np.isfinite(y)
-            if int(fin.sum() < target_k:
+            if int(fin.sum()) < target_k:
                 continue
             Z = Z[fin]
             y = y[fin]
@@ -292,7 +292,7 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
             Z = U[nbrs]
             y = y_t[nbrs]
             fin = np.isfinite(y)
-            if int(fin.sum() < target_k:
+            if int(fin.sum()) < target_k:
                 continue
             Z = Z[fin]
             y = y[fin]

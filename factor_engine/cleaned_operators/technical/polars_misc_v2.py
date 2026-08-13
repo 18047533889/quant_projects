@@ -80,7 +80,7 @@ def _parkinson(high, low, window):
     for c in _cols(high, low):
         frame = pl.DataFrame({"high": high[c], "low": low[c]})
         rs = _safe_div(pl.col("high"), pl.col("low")).log().pow(2)
-        var = pl.when((4.0 * np.log(2.0) != 0).then((rs.rolling_mean(w, min_samples=w)) / ((4.0 * np.log(2.0)))).otherwise(None)
+        var = rs.rolling_mean(w, min_samples=w) / (4.0 * np.log(2.0))
         values[c] = _one(frame, c, (var.clip(lower_bound=0.0) * 252.0).sqrt())
     return _result(high, values)
 
@@ -125,7 +125,7 @@ def rogers_satchell_vol(open_, high, low, close, window):
 
 def yang_zhang_vol(open_, high, low, close, window):
     w = _pi(window, "window", 3)
-    k = np.where((1.34 + (w + 1.0) / (w - 1.0) != 0, 0.34 / (1.34 + (w + 1.0) / (w - 1.0)), np.nan)
+    k = 0.34 / (1.34 + (w + 1.0) / (w - 1.0))
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _ohlc(open_, high, low, close, c)

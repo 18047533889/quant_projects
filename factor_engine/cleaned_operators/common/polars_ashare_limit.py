@@ -843,7 +843,7 @@ class AShareLimitEventDensityNative(SeriesOperator):
         exprs = []
         for c in cols:
             touch = limit_touch[c]
-            density = pl.when(pl.lit(float(w) != 0).then(touch.rolling_sum(window_size=w) / pl.lit(float(w))).otherwise(None)
+            density = pl.when(pl.lit(float(w)) != 0).then(touch.rolling_sum(window_size=w) / pl.lit(float(w))).otherwise(None)
             exprs.append(density.alias(c))
         result = limit_touch.with_columns(exprs)
         return result

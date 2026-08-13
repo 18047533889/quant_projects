@@ -97,7 +97,7 @@ def _rolling_numpy_panel(
         for row in range(rows):
             start = max(0, row - window + 1)
             values = series[start : row + 1]
-            if np.count_nonzero(~np.isnan(values) < min_periods:
+            if np.count_nonzero(~np.isnan(values)) < min_periods:
                 continue
             out[row, col] = func(values)
     return out

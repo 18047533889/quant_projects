@@ -71,7 +71,7 @@ def _rolling_beta(y: np.ndarray, x: np.ndarray, window: int, min_periods: int) -
         ys = y[start : t + 1]
         xs = x[start : t + 1]
         valid = np.isfinite(ys) & np.isfinite(xs)
-        if int(valid.sum() < min_periods:
+        if int(valid.sum()) < min_periods:
             continue
         yv = ys[valid]
         xv = xs[valid]
@@ -167,7 +167,7 @@ def _pastor_stambaugh_beta(
             seg_r = rv[start : t + 1, c]
 
             valid = np.isfinite(seg_m) & np.isfinite(seg_l) & np.isfinite(seg_r)
-            if int(valid.sum() < min_periods:
+            if int(valid.sum()) < min_periods:
                 continue
 
             m_v = seg_m[valid]

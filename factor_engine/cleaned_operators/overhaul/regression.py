@@ -84,7 +84,7 @@ def _rolling_regression(
         for row in range(y.shape[0]):
             start = max(0, row - w + 1)
             yy, xx = yv[start : row + 1, col], xv[start : row + 1, col]
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
                 continue
             fit = _fit_1d(yy, xx, bool(add_intercept))
             if fit is not None:
@@ -129,7 +129,7 @@ def _rolling_forecast_error(
         for row in range(y.shape[0]):
             start = max(0, row - w + 1)
             yy, xx = yv[start:row, col], xv[start:row, col]  # 训练数据：t-window 至 t-1
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
                 continue
             fit = _fit_1d(yy, xx, bool(add_intercept))
             if fit is None:

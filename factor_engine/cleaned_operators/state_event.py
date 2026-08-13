@@ -299,7 +299,7 @@ class TsEventSpacingCv(SeriesOperator):
                 gaps = _gaps_censored(valid_col, positions, start)
                 if gaps is None:
                     continue  # censored: an interval crossed an unknown row
-                if gaps.size and float(np.mean(gaps) > 0:
+                if gaps.size and float(np.mean(gaps)) > 0:
                     out[row, col] = float(np.std(gaps) / np.mean(gaps))
         return _frame_like(condition, out)
 

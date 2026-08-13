@@ -181,7 +181,7 @@ def _reg_stat(y, x, window, min_periods, add_intercept, idx):
         for t in range(rows):
             start = max(0, t - w + 1)
             yy, xx = yv[start : t + 1], xv[start : t + 1]
-            if int(np.sum(np.isfinite(yy) & np.isfinite(xx)) < mp:
+            if int(np.sum(np.isfinite(yy) & np.isfinite(xx))) < mp:
                 continue
             fit = _fit_1d_np(yy, xx, ai)
             if fit is not None:

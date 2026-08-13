@@ -99,7 +99,7 @@ def _robust_scale(col: np.ndarray) -> float | None:
 def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: int) -> np.ndarray | None:
     F = np.stack([c1, c2, c3], axis=1)
     complete = np.isfinite(F).all(axis=1)
-    if int(complete.sum() < min_rows:
+    if int(complete.sum()) < min_rows:
         return None
     Z = F[complete]
     z = np.empty_like(Z)
@@ -127,7 +127,7 @@ def _biweight_midcorr(a: np.ndarray, b: np.ndarray) -> float:
     if a.size < 3 or b.size < 3:
         return np.nan
     ok = np.isfinite(a) & np.isfinite(b)
-    if int(ok.sum() < 3:
+    if int(ok.sum()) < 3:
         return np.nan
     a = a[ok]
     b = b[ok]
@@ -145,7 +145,7 @@ def _biweight_midcorr(a: np.ndarray, b: np.ndarray) -> float:
     v = (b - mb) / (9.0 * madb)
     wu = np.where(np.abs(u) < 1.0, (1.0 - u * u) ** 2, 0.0)
     wv = np.where(np.abs(v) < 1.0, (1.0 - v * v) ** 2, 0.0)
-    if float(np.sum(wu * wv) <= _EPS:
+    if float(np.sum(wu * wv)) <= _EPS:
         return np.nan
     da = (a - ma) * wu
     db = (b - mb) * wv
@@ -300,7 +300,7 @@ def _dominant_direction(z: np.ndarray, eigen_gap: float = _MIN_EIGENGAP) -> np.n
     # the output and is reflected in the operator's param_specs / semantic
     # identity.
     gap = float(w[-1] - (w[-2] if w.size >= 2 else 0.0))
-    if gap / float(w.sum() < eigen_gap:
+    if gap / float(w.sum()) < eigen_gap:
         return None
     _, v = np.linalg.eigh(c)
     v1 = v[:, -1]
@@ -368,7 +368,7 @@ def _true_beta(yy: np.ndarray, xx: np.ndarray, min_pairs: int) -> float | None:
     beta unit — so the relative change stays scale-aware.
     """
     ok = np.isfinite(yy) & np.isfinite(xx)
-    if int(ok.sum() < min_pairs:
+    if int(ok.sum()) < min_pairs:
         return None
     yy = yy[ok]
     xx = xx[ok]

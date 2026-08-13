@@ -120,7 +120,7 @@ class RobustEMAOperator(SeriesOperator):
         if scale_floor <= 0:
             raise ValueError(f"scale_floor must be positive, got {scale_floor}")
 
-        alpha = np.where((span + 1) != 0, 2.0 / (span + 1), np.nan)
+        alpha = 2.0 / (span + 1)
 
         # Process each column independently
         result = x.copy()
@@ -245,14 +245,14 @@ class TSSuperSmoother(SeriesOperator):
 
         sqrt2_pi = np.sqrt(2.0) * np.pi
         a = np.exp(-sqrt2_pi / period)
-        b = np.where(period != 0, 2.0 * a * np.cos(sqrt2_pi / period), np.nan)
+        b = 2.0 * a * np.cos(sqrt2_pi / period)
 
         c2 = b
         c3 = -(a * a)
         c1 = 1.0 - c2 - c3  # Ensures DC gain = 1
 
         for col in range(cols):
-            finite_indices = np.where(np.isfinite(xv[:, col])[0]
+            finite_indices = np.where(np.isfinite(xv[:, col]))[0]
 
             if len(finite_indices) == 0:
                 continue

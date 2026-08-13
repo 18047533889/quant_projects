@@ -371,7 +371,7 @@ class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
             ])
             .with_columns([
                 # Half-life = -ln(2) / ln(phi), only when 0 < phi < 1
-                pl.when(pl.col("_phi") > 0) & (pl.col("_phi") < 1))
+                pl.when((pl.col("_phi") > 0) & (pl.col("_phi") < 1))
                 .then(-0.693147 / pl.col("_phi").log())
                 .otherwise(None)
                 .alias("_half_life")
@@ -2255,7 +2255,7 @@ class TSRobustEMAPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, **kwargs):
         # Simplified: use rolling median instead of mean in EMA
-        alpha = (2.0) / ((window + 1) if ((window + 1) != 0 else np.nan
+        alpha = 2.0 / (window + 1)
         return (
             feature.to_frame()
             .lazy()

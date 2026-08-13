@@ -1266,7 +1266,7 @@ class TSDecayLinearPolarsNative(SeriesOperator):
                 return None
             n = len(s)
             weights = np.arange(1, n + 1, dtype=np.float64)
-            weights = (weights) / (weights.sum() if (weights.sum() != 0 else np.nan
+            weights = weights / weights.sum()
             return (s.to_numpy() * weights).sum()
 
         return (
@@ -1337,7 +1337,7 @@ class TSDecayExpWindowPolarsNative(SeriesOperator):
 
     def _calculate_series(self, feature, window, alpha=None, **kwargs):
         if alpha is None:
-            alpha = (2.0) / ((window + 1) if ((window + 1) != 0 else np.nan
+            alpha = 2.0 / (window + 1)
 
         return (
             feature.to_frame()
@@ -2453,7 +2453,7 @@ class TSSignPersistencePolarsNative(SeriesOperator):
             signs = np.sign(s.to_numpy())
             changes = np.diff(signs) != 0
             n_streaks = changes.sum() + 1
-            return np.where((n_streaks if n_streaks > 0 else len(s) != 0, (len(s)) / (n_streaks if n_streaks > 0 else len(s)), np.nan)
+            return len(s) / n_streaks if n_streaks > 0 else len(s)
 
         return (
             feature.to_frame()
@@ -2489,7 +2489,7 @@ class TSEwmCorrPolarsNative(SeriesOperator):
 
     def _calculate_series(self, x, y, span, **kwargs):
         df = pl.DataFrame({"x": x, "y": y})
-        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
+        alpha = 2.0 / (span + 1)
 
         return (
             df.lazy()
@@ -2533,7 +2533,7 @@ class TSEwmCovPolarsNative(SeriesOperator):
 
     def _calculate_series(self, x, y, span, **kwargs):
         df = pl.DataFrame({"x": x, "y": y})
-        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
+        alpha = 2.0 / (span + 1)
 
         return (
             df.lazy()
@@ -2582,8 +2582,8 @@ class TSKamaPolarsNative(SeriesOperator):
             er = change / volatility if volatility != 0 else 0
 
             # Smoothing constant
-            fast_sc = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-            slow_sc = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+            fast_sc = 2.0 / (fast + 1)
+            slow_sc = 2.0 / (slow + 1)
             sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
             # KAMA calculation (simplified - just return last value weighted)
@@ -2609,8 +2609,8 @@ class TSKamaPolarsNative(SeriesOperator):
                     er = change / volatility if volatility != 0 else 0
 
                     # Smoothing constant
-                    fast_sc = (2.0) / ((fast + 1) if ((fast + 1) != 0 else np.nan
-                    slow_sc = (2.0) / ((slow + 1) if ((slow + 1) != 0 else np.nan
+                    fast_sc = 2.0 / (fast + 1)
+                    slow_sc = 2.0 / (slow + 1)
                     sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
                     kama = kama + sc * (feature[i] - kama)
@@ -3001,7 +3001,7 @@ class TSScoreRankWeightedMeanPolarsNative(SeriesOperator):
             # Rank the scores
             ranks = score_s.rank()
             weights = ranks.to_numpy()
-            weights = (weights) / (weights.sum() if (weights.sum() != 0 else np.nan
+            weights = weights / weights.sum()
             return (feat_s.to_numpy() * weights).sum()
 
         df = pl.DataFrame({"feat": feature, "score": score})
@@ -3849,7 +3849,7 @@ class TSRobustEmaPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, span, clip_std=3.0, **kwargs):
-        alpha = (2.0) / ((span + 1) if ((span + 1) != 0 else np.nan
+        alpha = 2.0 / (span + 1)
 
         return (
             feature.to_frame()
@@ -4077,7 +4077,7 @@ class TSExpectilePolarsNative(SeriesOperator):
             for _ in range(10):  # Max iterations
                 residuals = arr - mu
                 weights = np.where(residuals > 0, tau, 1 - tau)
-                new_mu = ((weights * arr).sum()) / (weights.sum() if (weights.sum() != 0 else np.nan
+                new_mu = (weights * arr).sum() / weights.sum()
                 if abs(new_mu - mu) < 1e-6:
                     break
                 mu = new_mu

@@ -297,7 +297,7 @@ def _daily_with_times(
                 np.asarray(group[f"v{i}"], dtype=float) for i in range(len(frames))
             ]
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals[0])) < int(min_finite):
+            if int(np.sum(np.isfinite(vals[0]))) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -511,7 +511,7 @@ def _impulse_detector_day(
 ) -> float:
     r = _intraday_returns(cv, times)
     fin = np.isfinite(r)
-    if int(fin.sum() < int(min_bars):
+    if int(fin.sum()) < int(min_bars):
         return np.nan
     episodes, evmask = _detect_impulse_episodes(
         cv, times, direction=event, threshold=threshold, z=z, merge_gap=merge_gap,
@@ -613,7 +613,7 @@ def _post_response_event(
         return np.nan
     pc = cv[pw]
     pc_ok = np.isfinite(pc)
-    if int(pc_ok.sum() < 2:
+    if int(pc_ok.sum()) < 2:
         return np.nan
     e_price = cv[e]
     if not np.isfinite(e_price) or e_price <= _EPS:
@@ -949,7 +949,7 @@ def _absorption_event(
         pre_w = _window_indices(e, seg, -horizon, -1)
         pre_v = vv[pre_w] if pre_w is not None else np.array([])
         pre_v = pre_v[np.isfinite(pre_v)]
-        if pre_v.size == 0 or float(np.mean(pre_v) <= _EPS:
+        if pre_v.size == 0 or float(np.mean(pre_v)) <= _EPS:
             return np.nan
         if pv.size == 0:
             return np.nan
@@ -1043,7 +1043,7 @@ def _consolidation_event(
         return np.nan
     pc = cv[pw]
     pc_ok = np.isfinite(pc)
-    if int(pc_ok.sum() < 2:
+    if int(pc_ok.sum()) < 2:
         return np.nan
     pc_fin = pc[pc_ok]
     e_price = cv[e]
@@ -1075,7 +1075,7 @@ def _consolidation_event(
     pre_v = vv[pre_w] if pre_w is not None else np.array([])
     pre_v = pre_v[np.isfinite(pre_v)]
     if output == "volume_dryup":
-        if pre_v.size == 0 or float(np.mean(pre_v) <= _EPS:
+        if pre_v.size == 0 or float(np.mean(pre_v)) <= _EPS:
             return np.nan
         if pv.size == 0:
             return np.nan
@@ -1336,7 +1336,7 @@ def _resilience_fit_event(
         return _ols_slope(a, np.arange(len(a), dtype=float))
     resid = a - a_inf
     usable = resid > _EPS
-    if int(usable.sum() < 3:
+    if int(usable.sum()) < 3:
         return np.nan
     k = np.arange(len(a), dtype=float)[usable]
     log_res = np.log(resid[usable])
@@ -1357,7 +1357,7 @@ def _liquidity_resilience_day(
 ) -> float:
     r = _intraday_returns(cv, times)
     fin = np.isfinite(r)
-    if int(fin.sum() < 3:
+    if int(fin.sum()) < 3:
         return np.nan
     session_std = float(np.std(r[fin], ddof=1))
     if not np.isfinite(session_std) or session_std <= _EPS:

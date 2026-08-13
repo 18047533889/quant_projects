@@ -167,7 +167,7 @@ def _check_scale_unit_consistency(x: pd.DataFrame, scale: pd.DataFrame, canonica
     if xf.size == 0 or sf.size == 0:
         return
     x_level = float(np.median(np.abs(xf)))
-    if not (float(xf.min() > 0.0 and x_level > 1.0):
+    if not (float(xf.min()) > 0.0 and x_level > 1.0):
         return  # not a price-like level (returns / log series with a negative leg)
     dx = np.diff(xf)
     if dx.size == 0:

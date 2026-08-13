@@ -64,7 +64,7 @@ def _rolling_time_slope_1d(arr: np.ndarray, window: int, min_periods: int) -> np
         start = max(0, i - window + 1)
         seg = values[start : i + 1]
         valid = np.isfinite(seg)
-        if int(valid.sum() < min_periods:
+        if int(valid.sum()) < min_periods:
             continue
         t = np.arange(seg.size, dtype=float)[valid]
         v = seg[valid]

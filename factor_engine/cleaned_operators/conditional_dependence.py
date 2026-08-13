@@ -139,7 +139,7 @@ def _conditional_te_window(
     c_t = cw[:-lag]  # c_s
     t_next = tw[lag:]  # t_{s+lag}
     mask = np.isfinite(t_t) & np.isfinite(s_t) & np.isfinite(c_t) & np.isfinite(t_next)
-    if int(mask.sum() < max(lag + 2, min_transitions):
+    if int(mask.sum()) < max(lag + 2, min_transitions):
         return np.nan
     xs = t_t[mask]
     ys = s_t[mask]
@@ -354,7 +354,7 @@ def _modwt_band_corr_chunk(xc: np.ndarray, yc: np.ndarray, level: int, band: int
     dx = dx[n_coi:]
     dy = dy[n_coi:]
     ok = np.isfinite(dx) & np.isfinite(dy)
-    if int(ok.sum() < level + 3:
+    if int(ok.sum()) < level + 3:
         return np.nan
     xx = dx[ok]
     yy = dy[ok]

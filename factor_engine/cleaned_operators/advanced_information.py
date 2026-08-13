@@ -299,7 +299,7 @@ def _transfer_entropy_window(
     y_t = sw[:-lag]
     x_next = tw[lag:]
     mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-    if int(mask.sum() < max(lag + 2, min_transitions):
+    if int(mask.sum()) < max(lag + 2, min_transitions):
         return np.nan
     xs = x_t[mask]
     ys = y_t[mask]
@@ -422,7 +422,7 @@ def _effective_transfer_entropy_window(
     y_t = sw[:-lag]
     x_next = tw[lag:]
     mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-    if int(mask.sum() < max(lag + 2, min_transitions):
+    if int(mask.sum()) < max(lag + 2, min_transitions):
         return np.nan
     xs = x_t[mask]
     ys = y_t[mask]
@@ -471,7 +471,7 @@ def _effective_transfer_entropy_window(
         # the same valid mask (missing positions are unchanged by construction).
         y_t_s = y_shifted[:-lag]
         mask_s = np.isfinite(x_t) & np.isfinite(y_t_s) & np.isfinite(x_next)
-        if int(mask_s.sum() < max(lag + 2, min_transitions):
+        if int(mask_s.sum()) < max(lag + 2, min_transitions):
             continue
         xs_s = x_t[mask_s]
         ys_s = y_t_s[mask_s]
@@ -752,7 +752,7 @@ def _te_peak_window(
         y_t = sw[:-lag]
         x_next = tw[lag:]
         mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-        if int(mask.sum() < max(lag + 2, min_transitions):
+        if int(mask.sum()) < max(lag + 2, min_transitions):
             continue
         xs = x_t[mask]
         ys = y_t[mask]
@@ -818,7 +818,7 @@ def _te_peak_window_excess(
             y_t = y_series[:-lag]
             x_next = tw[lag:]
             mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
-            if int(mask.sum() < max(lag + 2, min_transitions):
+            if int(mask.sum()) < max(lag + 2, min_transitions):
                 continue
             xs = x_t[mask]
             ys = y_t[mask]

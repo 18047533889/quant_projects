@@ -446,7 +446,7 @@ def pd_fin_seasonal_zscore(x, period_end, fiscal_quarter, years=5, min_history=2
             prior = [
                 value for ordinal, value in history[:-1]
                 if (ordinal - int(current_ord)) % 4 == 0
-                and abs(ordinal - int(current_ord) <= years * 4
+                and abs(ordinal - int(current_ord)) <= years * 4
                 and _finite(value)
             ]
             if len(prior) >= min_history and _finite(history[-1][1]):
@@ -467,7 +467,7 @@ def pd_fin_seasonal_percentile(x, period_end, fiscal_quarter, years=5, min_histo
             current_ord = view.ordinals[row, col]
             if not np.isfinite(current_ord) or not history:
                 continue
-            prior = [value for ordinal, value in history[:-1] if (ordinal - int(current_ord)) % 4 == 0 and abs(ordinal - int(current_ord) <= years * 4 and _finite(value)]
+            prior = [value for ordinal, value in history[:-1] if (ordinal - int(current_ord)) % 4 == 0 and abs(ordinal - int(current_ord)) <= years * 4 and _finite(value)]
             if len(prior) >= min_history and _finite(history[-1][1]):
                 current = history[-1][1]
                 out[row, col] = (sum(value < current for value in prior) + 0.5 * sum(value == current for value in prior)) / len(prior)

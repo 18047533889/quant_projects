@@ -570,7 +570,7 @@ def _enet_predict(X: np.ndarray, y: np.ndarray, alpha: float, l1_ratio: float, x
                 1.0 + float(alpha) * (1.0 - float(l1_ratio))
             )
             beta[j] = z
-        if float(np.max(np.abs(beta - beta_old)) <= tol:
+        if float(np.max(np.abs(beta - beta_old))) <= tol:
             converged = True
             break
     if not converged:

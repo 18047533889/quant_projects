@@ -63,7 +63,7 @@ class TSFeatureModeSharePolarsNative(SeriesOperator):
             .select([
                 pl.col(x.name)
                 .rolling_map(
-                    lambda s: (s.mode()[0] == s).sum() / len(s) if len(s) > 0 and len(s.mode() > 0 else None,
+                    lambda s: (s.mode()[0] == s).sum() / len(s) if len(s) > 0 and len(s.mode()) > 0 else None,
                     window_size=window
                 )
             ])
@@ -820,9 +820,10 @@ class TSHampelFilterCausalPolarsNative(SeriesOperator):
                 (pl.col(col) - pl.col(col).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
             ])
             .select([
-                pl.when(pl.col(col) - pl.col("_med")).abs() > n_sigma * 1.4826 * pl.col("_mad"))
+                pl.when((pl.col(col) - pl.col("_med")).abs() > n_sigma * 1.4826 * pl.col("_mad"))
                 .then(pl.col("_med"))
                 .otherwise(pl.col(col))
+                .alias("result")
             ])
             .collect()
             .to_series()
@@ -1239,7 +1240,7 @@ def _compute_markov_persistence(arr: np.ndarray, n_states: int) -> float:
     # Normalize rows
     row_sums = trans_matrix.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1  # Avoid division by zero
-    trans_matrix = (trans_matrix) / row_sums if row_sums != 0 else np.nan
+    trans_matrix = trans_matrix / row_sums
 
     # Return average diagonal
     return np.mean(np.diag(trans_matrix))
@@ -2020,7 +2021,7 @@ class TSKAMAPolarsNative(SeriesOperator):
                 pl.col(col).diff().abs().rolling_sum(window).alias("_volatility"),
             ])
             .with_columns([
-                pl.when(pl.col("_volatility") != 0.then(pl.col("_change") / (pl.col("_volatility").otherwise(None) + 1e-8)).alias("_er")
+                pl.when(pl.col("_volatility") != 0).then(pl.col("_change") / (pl.col("_volatility") + 1e-8)).otherwise(None).alias("_er")
             ])
             .with_columns([
                 ((pl.col("_er") * (2.0/(fast+1) - 2.0/(slow+1)) + 2.0/(slow+1)) ** 2).alias("_sc")
@@ -2167,10 +2168,11 @@ class TSLastPivotHighPolarsNative(SeriesOperator):
                 pl.col(col).rolling_max(window).shift(-window+1).alias("_next_max"),
             ])
             .with_columns([
-                pl.when(pl.col(col) >= pl.col("_prev_max")) & (pl.col(col) >= pl.col("_next_max")))
+                pl.when((pl.col(col) >= pl.col("_prev_max")) & (pl.col(col) >= pl.col("_next_max")))
                 .then(pl.col(col))
                 .otherwise(None)
                 .forward_fill()
+                .alias("result")
             ])
             .select([pl.col(col)])
             .collect()
@@ -2204,10 +2206,11 @@ class TSLastPivotLowPolarsNative(SeriesOperator):
                 pl.col(col).rolling_min(window).shift(-window+1).alias("_next_min"),
             ])
             .with_columns([
-                pl.when(pl.col(col) <= pl.col("_prev_min")) & (pl.col(col) <= pl.col("_next_min")))
+                pl.when((pl.col(col) <= pl.col("_prev_min")) & (pl.col(col) <= pl.col("_next_min")))
                 .then(pl.col(col))
                 .otherwise(None)
                 .forward_fill()
+                .alias("result")
             ])
             .select([pl.col(col)])
             .collect()

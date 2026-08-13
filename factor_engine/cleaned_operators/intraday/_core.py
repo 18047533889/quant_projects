@@ -286,7 +286,7 @@ def daily_agg(
         for day, group in col.groupby(col.index.normalize()):
             vals = np.asarray(group, dtype=float)
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if int(np.sum(np.isfinite(vals)) < int(min_finite):
+            if int(np.sum(np.isfinite(vals))) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -324,7 +324,7 @@ def daily_agg_two(
         for day, group in joined.groupby("day"):
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
-            if int(np.sum(np.isfinite(vals_a)) < int(min_finite):
+            if int(np.sum(np.isfinite(vals_a))) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:
@@ -363,7 +363,7 @@ def daily_agg_three(
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
             vals_c = np.asarray(group["c"], dtype=float)
-            if int(np.sum(np.isfinite(vals_a)) < int(min_finite):
+            if int(np.sum(np.isfinite(vals_a))) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:

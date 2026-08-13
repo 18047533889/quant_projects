@@ -160,9 +160,9 @@ class DX(SeriesOperator):
             dm_minus = pl.when(dm_minus > dm_plus).then(dm_minus).otherwise(0)
             tr = (pl.col(h_col) - pl.col(l_col)).abs()
 
-            di_plus = (100 * _wilder_ema_expr(dm_plus, period)) / (_wilder_ema_expr(tr, period) if (_wilder_ema_expr(tr, period) != 0 else np.nan
-            di_minus = (100 * _wilder_ema_expr(dm_minus, period)) / (_wilder_ema_expr(tr, period) if (_wilder_ema_expr(tr, period) != 0 else np.nan
-            dx = (100 * (di_plus - di_minus).abs()) / ((di_plus + di_minus) if ((di_plus + di_minus) != 0 else np.nan
+            di_plus = 100 * _wilder_ema_expr(dm_plus, period) / _wilder_ema_expr(tr, period)
+            di_minus = 100 * _wilder_ema_expr(dm_minus, period) / _wilder_ema_expr(tr, period)
+            dx = 100 * (di_plus - di_minus).abs() / (di_plus + di_minus)
             return dx.alias(h_col)
 
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
@@ -389,7 +389,7 @@ class donchian_position(SeriesOperator):
         def donchian_expr(col_name):
             high = pl.col(col_name).rolling_max(window_size=period)
             low = pl.col(col_name).rolling_min(window_size=period)
-            position = ((pl.col(col_name) - low)) / ((high - low) if ((high - low) != 0 else np.nan
+            position = (pl.col(col_name) - low) / (high - low)
             return position.alias(col_name)
 
         return _apply_to_panel(close, lambda c: donchian_expr(c.meta.output_name()))
@@ -961,7 +961,7 @@ class panel_async_beta_ex_self(SeriesOperator):
             # Market = cross-sectional mean excluding self
             cs_sum = col.sum().over("date")
             cs_count = col.count().over("date")
-            market_ex_self = ((cs_sum - col)) / ((cs_count - 1) if ((cs_count - 1) != 0 else np.nan
+            market_ex_self = (cs_sum - col) / (cs_count - 1)
 
             # Rolling beta
             col_demean = col - col.rolling_mean(window_size=period)
@@ -1590,7 +1590,7 @@ class group_spd_feature_structure_shift(SeriesOperator):
             col = pl.col(col_name)
             current_var = col.var().over("group")
             past_var = col.var().over("group").shift(period)
-            shift = ((current_var - past_var)) / ((past_var + 1e-8) if ((past_var + 1e-8) != 0 else np.nan
+            shift = (current_var - past_var) / (past_var + 1e-8)
             return shift.alias(col_name)
 
         return _apply_to_panel(x, lambda c: structure_shift_expr(c.meta.output_name()))
@@ -1650,7 +1650,7 @@ class volume_price_range_density(SeriesOperator):
         def density_expr(v_col, h_col, l_col):
             vol = pl.col(v_col)
             price_range = pl.col(h_col) - pl.col(l_col)
-            density = (vol) / ((price_range + 1e-8) if ((price_range + 1e-8) != 0 else np.nan
+            density = vol / (price_range + 1e-8)
             return density.rolling_mean(window_size=period).alias(v_col)
 
         cols = [c for c in volume.columns if c not in PANEL_SKIP_COLUMNS]
@@ -2131,7 +2131,7 @@ class rolling_adl_flow(SeriesOperator):
             v = pl.col(v_col)
 
             # Money Flow Multiplier = ((C - L) - (H - C)) / (H - L)
-            mfm = (((c - l) - (h - c))) / ((h - l + 1e-8) if ((h - l + 1e-8) != 0 else np.nan
+            mfm = ((c - l) - (h - c)) / (h - l + 1e-8)
             # Money Flow Volume = MFM * Volume
             mfv = mfm * v
             # Rolling ADL
@@ -2165,7 +2165,7 @@ class rolling_pvt(SeriesOperator):
             v = pl.col(v_col)
 
             # PVT = volume * (close - close_prev) / close_prev
-            pct_change = ((c - c.shift(1))) / (c.shift(1) if (c.shift(1) != 0 else np.nan
+            pct_change = (c - c.shift(1)) / c.shift(1)
             pvt_increment = v * pct_change
             pvt = pvt_increment.rolling_sum(window_size=period)
             return pvt.alias(c_col)
@@ -2197,7 +2197,7 @@ class accounting_comparability_score(SeriesOperator):
             # Measure consistency with cross-sectional median
             cs_median = col.median().over("date")
             deviation = (col - cs_median).abs()
-            comparability = (1) / ((1 + deviation) if ((1 + deviation) != 0 else np.nan
+            comparability = 1 / (1 + deviation)
             return comparability.rolling_mean(window_size=period).alias(col_name)
 
         return _apply_to_panel(x, lambda c: comparability_expr(c.meta.output_name()))
@@ -2227,7 +2227,7 @@ class baseline_scaled_wasserstein_distance(SeriesOperator):
             b_val = pl.col(b_col)
             distance = (x_val - b_val).abs()
             baseline_scale = b_val.abs().rolling_mean(window_size=period)
-            scaled = (distance) / ((baseline_scale + 1e-8) if ((baseline_scale + 1e-8) != 0 else np.nan
+            scaled = distance / (baseline_scale + 1e-8)
             return scaled.alias(x_col)
 
         cols = [c for c in x.columns if c not in PANEL_SKIP_COLUMNS]
@@ -2262,10 +2262,10 @@ class EaseOfMovement(SeriesOperator):
             distance = mid - mid.shift(1)
 
             # Box ratio = volume / (high - low)
-            box_ratio = (v) / ((h - l + 1e-8) if ((h - l + 1e-8) != 0 else np.nan
+            box_ratio = v / (h - l + 1e-8)
 
             # EMV = distance / box_ratio
-            emv = (distance) / ((box_ratio + 1e-8) if ((box_ratio + 1e-8) != 0 else np.nan
+            emv = distance / (box_ratio + 1e-8)
 
             return emv.rolling_mean(window_size=period).alias(h_col)
 
@@ -2388,7 +2388,7 @@ class KeltnerPosition(SeriesOperator):
             upper = middle + multiplier * atr
             lower = middle - multiplier * atr
 
-            position = ((c - lower)) / ((upper - lower + 1e-8) if ((upper - lower + 1e-8) != 0 else np.nan
+            position = (c - lower) / (upper - lower + 1e-8)
             return position.alias(c_col)
 
         cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]

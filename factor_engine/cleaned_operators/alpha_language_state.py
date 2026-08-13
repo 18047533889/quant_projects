@@ -809,7 +809,7 @@ class TsSignPersistence(SeriesOperator):
             s0 = sign[:-1]
             s1 = sign[1:]
             finite = np.isfinite(s0) & np.isfinite(s1)
-            if int(finite.sum() < mp:
+            if int(finite.sum()) < mp:
                 return np.nan
             a = s0[finite]
             b = s1[finite]

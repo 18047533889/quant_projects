@@ -870,7 +870,7 @@ def _practical_usability(op: Any, ctx: dict[str, Any]) -> tuple[list[AuditFindin
     per_col_mean = np.nanmean(tail, axis=0)
     denom = np.where(np.abs(per_col_mean) > 1e-9, np.abs(per_col_mean), 1.0)
     constant_cols = np.where(np.isfinite(per_col_std) & (per_col_std / denom < 1e-9), 1, 0)
-    if float(constant_cols.sum() > 0.3 * _USABILITY_COLS:
+    if float(constant_cols.sum()) > 0.3 * _USABILITY_COLS:
         findings.append(
             AuditFinding(
                 "practical_usability", meta.name, "error",

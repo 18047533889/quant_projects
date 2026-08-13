@@ -748,7 +748,7 @@ class GroupTsDecayLinearNative(SeriesOperator):
             weight_sum = np.sum(weights[~np.isnan(arr)])
             if weight_sum < 1e-12:
                 return np.nan
-            return np.where(weight_sum != 0, (float(weighted_sum) / (weight_sum)), np.nan)
+            return float(weighted_sum) / weight_sum
 
         exprs = [
             pl.col(c).fill_nan(None).rolling_map(_decay_mean, window_size=w, min_samples=1).alias(c)

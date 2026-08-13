@@ -73,7 +73,7 @@ def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     # R6-101: reject a window that is not a power of two — the kernel must never
     # silently coerce 65/80/100/127 to the same 64-point transform.
     w = int(window)
-    if w <= 0 or (w & (w - 1) != 0:
+    if w <= 0 or (w & (w - 1)) != 0:
         raise ValueError(
             "ts_wavelet_lowpass_reconstruct requires window to be a power of two "
             f"(32/64/128/256), got {w}"

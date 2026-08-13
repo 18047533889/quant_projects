@@ -641,7 +641,7 @@ class RowSkewPolars(SeriesOperator):
         return _broadcast_row_stat(
             x,
             lambda row: float(scipy_stats.skew(row[~np.isnan(row)], bias=False))
-            if np.sum(~np.isnan(row) > 2
+            if np.sum(~np.isnan(row)) > 2
             else np.nan,
         )
 
@@ -660,6 +660,6 @@ class RowKurtPolars(SeriesOperator):
         return _broadcast_row_stat(
             x,
             lambda row: float(scipy_stats.kurtosis(row[~np.isnan(row)], bias=False))
-            if np.sum(~np.isnan(row) > 3
+            if np.sum(~np.isnan(row)) > 3
             else np.nan,
         )

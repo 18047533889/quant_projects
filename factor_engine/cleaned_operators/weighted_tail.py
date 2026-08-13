@@ -510,7 +510,7 @@ class TsWeightedDrawdownArea(SeriesOperator):
                 # Per-window (prefix-safe) non-negativity; round-7 P0.
                 return np.nan
             price_ok = np.isfinite(a) & (a > 0.0)
-            if int(price_ok.sum() < 2:
+            if int(price_ok.sum()) < 2:
                 return np.nan
             dd = np.full(a.shape[0], np.nan)
             run_start = None

@@ -191,7 +191,7 @@ def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
             xv = x[lo : t + 1]
             sv = s[lo : t + 1]
             finite = np.isfinite(xv) & np.isfinite(sv)
-            if int(finite.sum() < mp:
+            if int(finite.sum()) < mp:
                 continue
             xs = xv[finite]
             ss = sv[finite]
@@ -251,7 +251,7 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
                 res[t] = float(np.sqrt(np.sum(wv * below * below) / total))
             elif kind == "drawdown":
                 pos = xv > 0.0
-                if int(pos.sum() < 2:
+                if int(pos.sum()) < 2:
                     continue
                 p = xv[pos]
                 wpos = wv[pos]

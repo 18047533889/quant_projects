@@ -159,7 +159,7 @@ def _aligned_agg(
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
             vals = [np.asarray(group[k], dtype=float) for k in keys]
-            if int(np.sum(np.isfinite(vals[0])) < int(min_finite):
+            if int(np.sum(np.isfinite(vals[0]))) < int(min_finite):
                 per_day[day] = np.nan
                 continue
             times = np.asarray(group.index, dtype="datetime64[ns]")
@@ -186,8 +186,8 @@ def _moment_of(x: np.ndarray, moment: str) -> float:
     m3 = float(np.mean((x - mu) ** 3))
     m4 = float(np.mean((x - mu) ** 4))
     if moment == "skew":
-        return np.where((sd ** 3) != 0, m3 / (sd ** 3), np.nan)
-    return np.where(m2^2 != 0, (m4) / (m2^2), np.nan), not excess)
+        return m3 / (sd ** 3)
+    return m4 / (sd ** 4)  # kurtosis (Pearson m4/m2^2, not excess)
 
 
 def _day_event_gaps(vals: np.ndarray, times: np.ndarray, target: Any) -> np.ndarray:
@@ -198,7 +198,7 @@ def _day_event_gaps(vals: np.ndarray, times: np.ndarray, target: Any) -> np.ndar
     empty array.
     """
     event = _target_mask(vals, target)
-    idx = np.where(event[0]
+    idx = np.where(event)[0]
     if len(idx) < 2:
         return np.array([])
     minutes = minute_of_day(times)
@@ -223,7 +223,7 @@ def _day_follow_pairs(
     minutes = minute_of_day(times)
     days = times.astype("datetime64[D]")
     event = _target_mask(sv, target)
-    idx = np.where(event[0]
+    idx = np.where(event)[0]
     xe: list[float] = []
     xl: list[float] = []
     for i in idx:
@@ -252,7 +252,7 @@ def _ols_slope(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
     if va <= _EPS:
         return np.nan
     cov = float(np.mean((a - np.mean(a)) * (b - np.mean(b))))
-    return np.where(va != 0, cov / va, np.nan)
+    return cov / va
 
 
 def _pearson(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
@@ -261,7 +261,7 @@ def _pearson(xe: np.ndarray, xl: np.ndarray, min_events: int) -> float:
     if m.sum() < int(min_events):
         return np.nan
     a, b = xe[m], xl[m]
-    if float(np.std(a) < _EPS or float(np.std(b) < _EPS:
+    if float(np.std(a)) < _EPS or float(np.std(b)) < _EPS:
         return np.nan
     return float(np.corrcoef(a, b)[0, 1])
 
@@ -556,7 +556,7 @@ class IntraStateFollowRatio(SessionAggregationOperator):
             den = float(np.sum(xe))
             if den <= _EPS:
                 return np.nan
-            return np.where(den != 0, float(np.sum(xl)) / den, np.nan)
+            return float(np.sum(xl)) / den
 
         return _follow_pooled(x, state, target, lb, wd, _ratio)
 
@@ -681,7 +681,7 @@ class IntraStatePairSameSlotCorr(SessionAggregationOperator):
                     continue
                 va = np.asarray(ca, dtype=float)
                 vb = np.asarray(cb, dtype=float)
-                if float(np.std(va) < _EPS or float(np.std(vb) < _EPS:
+                if float(np.std(va)) < _EPS or float(np.std(vb)) < _EPS:
                     per_day[day] = np.nan
                     continue
                 per_day[day] = float(np.corrcoef(va, vb)[0, 1])
@@ -722,8 +722,8 @@ class IntraStateDwellStats(SessionAggregationOperator):
             if output == "share":
                 if target_state is None:
                     return 1.0
-                target_bars = int(np.sum(finite & (vals) == target_state)))
-                return np.where(float(valid_count) != 0, float(target_bars) / float(valid_count), np.nan)
+                target_bars = int(np.sum(finite & (vals == target_state)))
+                return float(target_bars) / float(valid_count)
             lengths = _dwell_runs(vals, times, target_state)
             if lengths.size == 0:
                 return np.nan
@@ -735,7 +735,7 @@ class IntraStateDwellStats(SessionAggregationOperator):
                 mean = float(np.mean(lengths))
                 if mean <= _EPS:
                     return np.nan
-                return np.where(mean != 0, float(np.std(lengths)) / mean, np.nan)
+                return float(np.std(lengths)) / mean
             return float(lengths[-1])  # last
 
         return daily_agg(state, _kernel, min_finite=1)
@@ -793,11 +793,11 @@ class IntraStateTransitionEntropy(SessionAggregationOperator):
             total = float(T.sum())
             if total <= _EPS:
                 return np.nan
-            p = T / total if total != 0 else np.nan
+            p = T / total
             with np.errstate(divide="ignore", invalid="ignore"):
                 H = -float(np.sum(p[p > 0] * np.log(p[p > 0])))
             if normalize:
-                H = np.where(np.log(k) != 0, H / np.log(k), np.nan)
+                H = H / np.log(k)
             return H
 
         return daily_agg(state, _kernel, min_finite=1)

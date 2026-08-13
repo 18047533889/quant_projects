@@ -434,8 +434,8 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                             continue
                         is_conj = (
                             eig[i] != eig[j]
-                            and abs(abs(eig[i]) - abs(eig[j]) < 1e-6
-                            and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j])) < 1e-6
+                            and abs(abs(eig[i]) - abs(eig[j])) < 1e-6
+                            and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j]))) < 1e-6
                         )
                         if is_conj:
                             m = max(pair_log, float(log_energy[j]))

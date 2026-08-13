@@ -75,7 +75,7 @@ def _bures2(a: np.ndarray, b: np.ndarray) -> float:
 
 def _corr_window(xv: np.ndarray, yv: np.ndarray, min_pairs: int) -> float | None:
     finite = np.isfinite(xv) & np.isfinite(yv)
-    if int(finite.sum() < min_pairs:
+    if int(finite.sum()) < min_pairs:
         return None
     x = xv[finite]
     y = yv[finite]
@@ -309,7 +309,7 @@ def _rank_copula_proj(row: np.ndarray, thetas: np.ndarray) -> np.ndarray | None:
             continue
         u[np.isfinite(col), k] = (ranks[np.isfinite(col)] + 0.5) / m
     ok = np.isfinite(u).all(axis=1)
-    if int(ok.sum() < 2:
+    if int(ok.sum()) < 2:
         return None
     return u[ok] @ thetas.T
 
@@ -394,7 +394,7 @@ class CsSlicedWassersteinCopulaShift(SeriesOperator):
 
 def _robust_z_col(col: np.ndarray) -> np.ndarray | None:
     finite = np.isfinite(col)
-    if int(finite.sum() < 2:
+    if int(finite.sum()) < 2:
         return None
     med = float(np.median(col[finite]))
     mad = float(np.median(np.abs(col[finite] - med))) * 1.4826
@@ -418,7 +418,7 @@ def _spd_log_matrix(feat_block: np.ndarray, d: int, lam: float, min_rows: int) -
     # Complete-case: one stock's one missing feature must not NaN the whole
     # group's covariance.  Drop incomplete rows first, then require enough peers.
     complete = np.isfinite(Z).all(axis=1)
-    if int(complete.sum() < min_rows:
+    if int(complete.sum()) < min_rows:
         return None
     Z = Z[complete]
     cov = np.cov(Z, rowvar=False)

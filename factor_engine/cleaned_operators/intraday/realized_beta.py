@@ -120,7 +120,7 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
         for day, group in joined.groupby("day"):
             rr = np.asarray(group["r"], dtype=float)
             mm = np.asarray(group["m"], dtype=float)
-            if int(np.sum(np.isfinite(mm)) < 2:
+            if int(np.sum(np.isfinite(mm))) < 2:
                 per_day[day] = np.nan
                 continue
             try:

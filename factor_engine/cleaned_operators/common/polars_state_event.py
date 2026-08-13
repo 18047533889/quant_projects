@@ -347,7 +347,7 @@ def ts_event_spacing_cv(condition, window=60, min_events=3):
             gaps = _gaps_censored(valid, positions, start)
             if gaps is None:
                 continue  # censored: an interval crossed an unknown row
-            if gaps.size and float(np.mean(gaps) > 0:
+            if gaps.size and float(np.mean(gaps)) > 0:
                 out[row, i] = float(np.std(gaps) / np.mean(gaps))
     return _make(condition, cols, out)
 
