@@ -87,6 +87,9 @@ class SourceWaveExecutor:
         self._source = source
         self._ctx = ctx
         self._lock = threading.Lock()
+        # Serialize check, scan, and publication so concurrent callers cannot
+        # both observe a missing wave and perform duplicate reads.
+        self._execution_lock = threading.Lock()
         self._executed: dict[int, SourceBufferRef] = {}
         self._events: list[dict[str, Any]] = []
 
@@ -95,6 +98,18 @@ class SourceWaveExecutor:
         return self._source
 
     def execute_wave(
+        self,
+        wave: Any,
+        *,
+        consumer_ids: Iterable[str] = (),
+    ) -> SourceBufferRef | None:
+        """Execute a wave at most once, including under concurrent callers."""
+        with self._execution_lock:
+            return self._execute_wave(
+                wave, consumer_ids=consumer_ids
+            )
+
+    def _execute_wave(
         self,
         wave: Any,
         *,
