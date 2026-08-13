@@ -186,11 +186,22 @@ class DatasetManifest:
 
     @property
     def is_fresh_epoch(self) -> bool:
-        """双 epoch 新鲜判定：source == built 才新鲜。"""
-        if self.source_epoch is None or self.manifest_built_epoch is None:
-            # 只有单 epoch 的内存对象：等价老语义（存在即 trust）。
-            return self.manifest_epoch is not None
-        return self.source_epoch == self.manifest_built_epoch
+        """双 epoch 新鲜判定：source == built 才新鲜（fail-closed on partial state）。
+
+        #P0-FRESHNESS-AUDIT：partial dual-epoch state (任一为 None、另一非 None) 必须
+        fail-closed。只有两者都存在时才比较；都缺失时退回老单 epoch 语义（兼容）。
+        例：source_epoch="42" 但 manifest_built_epoch=None → 部分写入/损坏 → False。
+        """
+        src_exists = self.source_epoch is not None
+        built_exists = self.manifest_built_epoch is not None
+        if src_exists != built_exists:
+            # Partial dual-epoch state: 必须 fail-closed（一侧存在另一侧缺失 → 损坏）
+            return False
+        if src_exists and built_exists:
+            # 完整双 epoch：按相等判定
+            return self.source_epoch == self.manifest_built_epoch
+        # 两者都缺失：老单 epoch 格式（存在即 trust）
+        return self.manifest_epoch is not None
 
     def _typed(self, value: str | None, *, ints: bool = False) -> Any:
         """把 manifest 里存的 min/max 按 time_dtype 还原成可比较类型。"""
@@ -614,8 +625,9 @@ def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> b
     mutation 后 ``source_epoch`` 递增但 ``manifest_built_epoch`` 不动 → 立刻 dirty，
     读路径不会再拿旧 ``_manifest.parquet`` 做 prune（避免 min/max 过期的错误裁剪）。
 
-    只有完全无 epoch 的极老 ``_manifest.json`` 才退回文件名 glob 比对。单 epoch
-    老格式（无 split）视为 source==built（建好后未 mutation）。
+    #P0-FRESHNESS-AUDIT：partial dual-epoch state (任一为 None、另一非 None) 必须
+    fail-closed → False。只有完全无 epoch 的极老 ``_manifest.json`` 才退回文件名
+    glob 比对。单 epoch 老格式（无 split）视为 source==built（建好后未 mutation）。
     """
     root = manifest_root_for_paths(list(glob_paths) if glob_paths else [])
     if root is not None:
@@ -623,10 +635,17 @@ def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> b
         if meta is not None:
             src = meta.get("source_epoch")
             built = meta.get("manifest_built_epoch")
-            if src is not None and built is not None:
+            src_exists = src is not None
+            built_exists = built is not None
+            # Partial dual-epoch state 必须 fail-closed
+            if src_exists != built_exists:
+                return False
+            if src_exists and built_exists:
                 return src == built
+            # 完全无双 epoch：退回单 epoch 老格式（存在即 trust）
             if meta.get("manifest_epoch") is not None:
                 return True
+    # 完全无 epoch metadata：退回文件名 glob 比对（极老格式）
     count = _count_data_files(glob_paths)
     if count is None:
         return True
