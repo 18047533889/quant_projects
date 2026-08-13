@@ -360,6 +360,9 @@ class AdaptiveBatchScheduler:
         # R39-PERF-016：critical-path 成本图缓存（避免每 ready task 重走整棵 DAG
         # 构建 cost_ms；DAG 被 shard/OOM replan 时置 None 强制重建）。
         self._cost_ms_cache: dict[str, float] | None = None
+        # Cache the reverse-DAG critical-path DP as well.  Recomputing it for
+        # every ready task makes a wide ready queue O(V * (V + E)).
+        self._critical_path_cache: tuple[int, dict[str, float]] | None = None
         # R39-PERF-018/019：结构化性能计数（run() 开始时重置）。
         self._perf_metrics: dict[str, Any] = {
             "future_count": 0,
@@ -430,6 +433,7 @@ class AdaptiveBatchScheduler:
         # plan cost，固化成 frozen 证书，运行期 O(1) 读取，不再重走 DAG。
         self._certificates = {}
         self._cost_ms_cache = None
+        self._critical_path_cache = None
         for tid, task in physical.tasks.items():
             plan_cost = (
                 task.estimated_cost
@@ -1742,11 +1746,42 @@ class AdaptiveBatchScheduler:
             "scheduler_stats": self._scheduler_stats,
         }
 
-    def _priority_score(self, dag: PhysicalFactorDAG, task: PhysicalFactorTask) -> float:
-        """R33-P0-039：ready queue 优先级 = critical path + reuse + fanout - memory。
+    def _critical_path_scores(
+        self, dag: PhysicalFactorDAG, cost_ms: dict[str, float]
+    ) -> dict[str, float]:
+        """Return all critical-path scores with one reverse-DAG pass per run.
 
-        R39-PERF-016：cost_ms 从证书 O(1) 读取并缓存——不再每 ready task 重走整棵
-        DAG 构造 cost map（DAG 被 shard/OOM replan 时缓存已置 None 强制重建）。
+        ``_priority_score`` is called once per ready task.  Calling the DAG's
+        single-task helper there repeated a full topological traversal for every
+        candidate, which is quadratic for a wide batch.  The DAG is immutable
+        during normal scheduling; OOM/shard replan explicitly invalidates this
+        cache below.
+        """
+        cache = self._critical_path_cache
+        dag_key = id(dag)
+        if cache is not None and cache[0] == dag_key:
+            return cache[1]
+        try:
+            order = dag.topological_order()
+        except RuntimeError:
+            order = list(dag.tasks)
+        scores: dict[str, float] = {}
+        for tid in reversed(order):
+            task = dag.tasks.get(tid)
+            consumers = (
+                [c for c in task.consumers if c in dag.tasks]
+                if task is not None else []
+            )
+            own = float(cost_ms.get(tid, 0.0))
+            scores[tid] = own + (max(scores[c] for c in consumers) if consumers else 0.0)
+        self._critical_path_cache = (dag_key, scores)
+        return scores
+
+    def _priority_score(self, dag: PhysicalFactorDAG, task: PhysicalFactorTask) -> float:
+        """R33-P0-039：ready queue 优先级 = critical path + reuse + fanout - memory.
+
+        R39-PERF-016：cost_ms 从证书 O(1) 读取并缓存；critical-path DP 也只
+        计算一次 per DAG（而不是每个 ready task 重走整棵 DAG）。
         """
         cost_ms = self._cost_ms_cache
         if cost_ms is None:
@@ -1761,10 +1796,9 @@ class AdaptiveBatchScheduler:
                         if t.resource_contract else 0.0
                     )
             self._cost_ms_cache = cost_ms
-        try:
-            critical = dag.critical_path_remaining_ms(task.task_id, cost_ms)
-        except Exception:
-            critical = 0.0
+        critical = self._critical_path_scores(dag, cost_ms).get(
+            task.task_id, float(cost_ms.get(task.task_id, 0.0))
+        )
         reuse = self._reuse_counts.get(task.task_id, len(task.consumers))
         fanout = len(task.consumers)
         cert = self._certificates.get(task.task_id)
@@ -2054,6 +2088,7 @@ class AdaptiveBatchScheduler:
         self._shard_shape_of[original_task_id] = sig
         # R39-PERF-016：DAG 被真实改造（shard/merge 新 task）→ 强制重建成本图缓存。
         self._cost_ms_cache = None
+        self._critical_path_cache = None
         self._explain(
             f"R38_REAL_AUTOSHARD: {original_task_id} -> {len(plan.shards)} "
             f"{plan.dimension} shards + merge (sig {sig[:8]})"

@@ -253,9 +253,24 @@ def test_priority_score_consumes_certificate_cost(monkeypatch):
     assert score > 0  # critical/reuse/fanout 仍主导
 
 
-# ---------------------------------------------------------------------------
-# PERF-018：MicroBatchTask
-# ---------------------------------------------------------------------------
+def test_priority_scores_share_one_critical_path_pass(monkeypatch):
+    """A wide ready queue computes critical paths once, not once per root."""
+    dag = _bare_dag(64)
+    sched = _make_scheduler()
+    calls = 0
+
+    def fail_if_recomputed(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("per-task critical-path traversal regressed")
+
+    monkeypatch.setattr(dag, "critical_path_remaining_ms", fail_if_recomputed)
+    for task in dag.tasks.values():
+        sched._priority_score(dag, task)
+    assert calls == 0
+    assert sched._critical_path_cache is not None
+
+
 
 
 def test_micro_batch_coalesces_cheap_roots(monkeypatch):
