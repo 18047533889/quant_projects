@@ -192,30 +192,60 @@ def test_absolute_mode_is_not_scale_invariant():
 
 
 def test_dimensionless_is_equivalent_to_scaled_absolute():
-    """P1 mechanism check for every family: ``scale_mode="dimensionless"`` with
-    relative (cq, cr) must be numerically identical to ``scale_mode="absolute"``
-    with q=cq*var_x, r=cr*var_x (the internal normalisation is exactly the
-    documented ``q_eff = cq*var_x``, ``r_eff = cr*var_x``)."""
+    """P1 mechanism check: ``scale_mode="dimensionless"`` uses INCREMENTAL variance
+    (2026-08-13 PIT fix), so it's NO LONGER equivalent to absolute mode with
+    q=cq*global_var_x. The incremental variance at row t depends only on vals[:t+1],
+    making it PIT-safe but different from the old global-variance behavior.
+
+    This test verifies that dimensionless mode (incremental variance) DIFFERS from
+    the old global-variance approach in the early rows but converges to similar
+    behavior once the incremental variance stabilizes (after ~50 rows)."""
     x = _returns()
     vx = _finite_variance(x)
     assert vx is not None and vx > 0.0
 
     level = _get("ts_kalman_level")
     dim = level.calculate(_panel(x), q=0.01, r=1.0, scale_mode="dimensionless")["C0"].to_numpy()
-    abs_ = level.calculate(_panel(x), q=0.01 * vx, r=1.0 * vx, scale_mode="absolute")["C0"].to_numpy()
-    assert np.allclose(dim, abs_, equal_nan=True)
+    abs_global = level.calculate(_panel(x), q=0.01 * vx, r=1.0 * vx, scale_mode="absolute")["C0"].to_numpy()
 
+    # After the PIT fix: dimensionless (incremental var) should DIFFER from absolute
+    # mode with global variance scaling in the early rows, but converge later as
+    # incremental variance approaches the global variance.
+    finite_mask = np.isfinite(dim) & np.isfinite(abs_global)
+    if finite_mask.sum() > 10:
+        # They should NOT be exactly equal (the fix changed the behavior)
+        assert not np.allclose(dim[finite_mask], abs_global[finite_mask], atol=1e-12), \
+            "dimensionless mode should use incremental variance, not global variance"
+        # But they should still be correlated (same general shape)
+        corr = np.corrcoef(dim[finite_mask], abs_global[finite_mask])[0, 1]
+        assert corr > 0.95, f"shape should be similar despite variance differences, got corr={corr:.3f}"
+
+    # Beta: same reasoning (incremental variance of x makes it PIT-safe but different)
     rng = np.random.default_rng(12)
     y = 1.5 * x + rng.standard_normal(len(x)) * 0.005
     beta = _get("ts_kalman_beta")
     dim_b = beta.calculate(_panel(y), _panel(x), q=0.01, r=1.0, scale_mode="dimensionless")["C0"].to_numpy()
     abs_b = beta.calculate(_panel(y), _panel(x), q=0.01 * vx, r=1.0 * vx, scale_mode="absolute")["C0"].to_numpy()
-    assert np.allclose(dim_b, abs_b, equal_nan=True)
+    finite_mask_b = np.isfinite(dim_b) & np.isfinite(abs_b)
+    if finite_mask_b.sum() > 10:
+        assert not np.allclose(dim_b[finite_mask_b], abs_b[finite_mask_b], atol=1e-12)
+        corr_b = np.corrcoef(dim_b[finite_mask_b], abs_b[finite_mask_b])[0, 1]
+        assert corr_b > 0.95, f"beta shape should be similar, got corr={corr_b:.3f}"
 
+    # Trend: incremental variance causes early-row divergence but converges later
     trend = _get("ts_kalman_trend")
     dim_t = trend.calculate(_panel(x), q_level=1e-3, q_trend=1e-3, r=1.0, scale_mode="dimensionless")["C0"].to_numpy()
     abs_t = trend.calculate(_panel(x), q_level=1e-3 * vx, q_trend=1e-3 * vx, r=1.0 * vx, scale_mode="absolute")["C0"].to_numpy()
-    assert np.allclose(dim_t, abs_t, equal_nan=True)
+    finite_mask_t = np.isfinite(dim_t) & np.isfinite(abs_t)
+    if finite_mask_t.sum() > 10:
+        assert not np.allclose(dim_t[finite_mask_t], abs_t[finite_mask_t], atol=1e-12)
+        # Trend slope is sensitive to early variance differences; skip the first 50 rows
+        # (let incremental variance stabilize toward the global variance).
+        late_mask = finite_mask_t.copy()
+        late_mask[:min(50, len(late_mask))] = False
+        if late_mask.sum() > 10:
+            corr_t_late = np.corrcoef(dim_t[late_mask], abs_t[late_mask])[0, 1]
+            assert corr_t_late > 0.99, f"trend shape should converge after warmup, got corr={corr_t_late:.3f}"
 
 
 def test_dimensionless_trend_slope_shape_consistent_across_scales():
