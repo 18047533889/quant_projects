@@ -142,6 +142,47 @@ def test_compiled_request_immutable_direct():
         c.transforms["a"] = "pct"  # type: ignore[index]
 
 
+class _UncopyableMutable:
+    def __init__(self, value):
+        self.value = value
+
+    def __deepcopy__(self, memo):
+        raise RuntimeError("deepcopy disabled")
+
+    def __copy__(self):
+        raise RuntimeError("copy disabled")
+
+
+def test_compiled_request_rejects_uncopyable_mutable_value():
+    value = _UncopyableMutable("live")
+    with pytest.raises(
+        ValidationError,
+        match="cannot be canonically encoded or detached: dict",
+    ):
+        compile_data_request(DataRequest(fields=["a"], filters={"value": value}))
+
+
+def test_compiled_request_detaches_mutable_value_before_plan():
+    value = {"nested": ["before"]}
+    compiled = compile_data_request(DataRequest(fields=["a"], filters=value))
+    value["nested"].append("after")
+    assert compiled.filters["nested"] == ("before",)  # type: ignore[index]
+
+
+def test_compiled_request_accepts_immutable_canonical_values():
+    compiled = compile_data_request(
+        DataRequest(
+            fields=["a"],
+            start="2024-01-01",
+            end=3,
+            filters={"flag": True, "name": "stable", "coords": (1, 2)},
+        )
+    )
+    assert compiled.start == "2024-01-01"
+    assert compiled.end == 3
+    assert compiled.filters["flag"] is True  # type: ignore[index]
+
+
 # ---------------------------------------------------------------------------
 # B. engine/result strict enum + DataRequest typed
 # ---------------------------------------------------------------------------
