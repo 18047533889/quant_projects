@@ -26,13 +26,15 @@ def compute_autocorrelation(
         acf: shape (max_lag+1,) or (max_lag+1, F)
         acf[0] is always 1.0 (correlation with self)
     """
-    if series.ndim == 1:
+    one_dimensional = series.ndim == 1
+    if one_dimensional:
         series = series.reshape(-1, 1)
 
     T, F = series.shape
 
     if T < min_obs:
-        return np.full((max_lag + 1, F), np.nan, dtype=np.float64).squeeze()
+        acf = np.full((max_lag + 1, F), np.nan, dtype=np.float64)
+        return acf[:, 0] if one_dimensional else acf
 
     acf = np.full((max_lag + 1, F), np.nan, dtype=np.float64)
 
@@ -60,7 +62,7 @@ def compute_autocorrelation(
             cov = np.mean((valid_ts[:-lag] - mean_ts) * (valid_ts[lag:] - mean_ts))
             acf[lag, f] = cov / var_ts
 
-    return acf.squeeze()
+    return acf[:, 0] if one_dimensional else acf
 
 
 def compute_ic_autocorrelation(

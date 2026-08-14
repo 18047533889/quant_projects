@@ -78,6 +78,34 @@ class TestAutocorrelation:
 
         assert np.all(np.isnan(acf))
 
+    def test_acf_singleton_time_and_factor_axes_are_preserved(self):
+        """Two-dimensional inputs preserve singleton T and F axes."""
+        series = np.array([[2.0]])
+
+        acf = compute_autocorrelation(series, max_lag=3, min_obs=1)
+
+        assert acf.shape == (4, 1)
+        assert acf[0, 0] == 1.0
+        assert np.all(np.isnan(acf[1:, 0]))
+
+    def test_acf_singleton_factor_warmup_shape_and_nans(self):
+        """Insufficient two-dimensional input keeps factor shape and NaNs."""
+        series = np.array([[2.0]])
+
+        acf = compute_autocorrelation(series, max_lag=3, min_obs=2)
+
+        assert acf.shape == (4, 1)
+        assert np.all(np.isnan(acf))
+
+    def test_acf_one_dimensional_max_lag_zero_returns_vector(self):
+        """A one-dimensional input never collapses to a scalar."""
+        series = np.arange(5.0)
+
+        acf = compute_autocorrelation(series, max_lag=0, min_obs=2)
+
+        assert acf.shape == (1,)
+        assert acf[0] == 1.0
+
     def test_acf_with_nans(self):
         """NaN values are filtered."""
         np.random.seed(42)
