@@ -98,11 +98,8 @@ def estimate_shared_benefits(
             # Estimate scan bytes from node attributes
             attrs = getattr(node, "attrs", None) or {}
             scan_bytes = int(attrs.get("estimated_bytes", 0) or 0)
-            if scan_bytes == 0:
-                # Fallback estimate
-                rows = int(attrs.get("estimated_rows", 0) or 10000)
-                cols = int(attrs.get("projected_columns", 0) or 10)
-                scan_bytes = rows * cols * 8
+            if scan_bytes < 0:
+                scan_bytes = 0
             avoided_scan_bytes = scan_bytes * (consumers - 1)
 
         scan_benefit = avoided_scan_bytes / 1_000_000.0 * scan_cost_per_mb
@@ -132,6 +129,8 @@ class BatchOptimizationResult:
     shared_benefits: dict[str, SharedNodeBenefit]
     total_shared_benefit_ms: float
     optimization_basis: str  # "dp_global" | "per_root_fallback"
+    production_ready: bool = True
+    readiness_reason: str = ""
 
 
 class BatchGlobalOptimizer:
@@ -176,22 +175,45 @@ class BatchGlobalOptimizer:
         Returns:
             BatchOptimizationResult with physical plan and choices
         """
-        from backend.plan_cost_router import estimate_plan_rows, plan_occurrences
+        from backend.plan_cost_router import plan_occurrences
         from backend.operator_cost import estimate_backend_cost
 
-        # Build complete node map
-        all_nodes: dict[str, PlanNode] = dict(shared_nodes)
-        for fid, root in roots.items():
-            all_nodes[fid] = root
+        # Discover the complete graph from PlanNode.inputs.  Caller-supplied
+        # adjacency maps are compatibility hints, not a complete source of truth.
+        all_nodes: dict[str, PlanNode] = {}
+        discovered_graph: dict[str, list[str]] = {}
+        object_names = {id(node): node_id for node_id, node in shared_nodes.items()}
+        object_names.update({id(node): root_id for root_id, node in roots.items()})
+        used_ids: set[str] = set()
+
+        def discover(node: PlanNode, preferred: str | None = None) -> str:
+            key = preferred or object_names.get(id(node)) or getattr(node, "node_id", None)
+            key = str(key or f"node_{id(node)}")
+            if key in used_ids and all_nodes.get(key) is not node:
+                key = f"{key}_{id(node)}"
+            if key in all_nodes:
+                return key
+            used_ids.add(key)
+            all_nodes[key] = node
+            discovered_graph[key] = [discover(child) for child in (getattr(node, "inputs", ()) or ())]
+            return key
+
+        for factor_id, root in roots.items():
+            discover(root, factor_id)
+        for shared_id, shared_node in shared_nodes.items():
+            discover(shared_node, shared_id)
+        node_graph = discovered_graph
 
         # Count consumers for shared benefit calculation
         consumer_counts: dict[str, int] = {}
-        for node_id, children in node_graph.items():
+        for children in node_graph.values():
             for child_id in children:
                 consumer_counts[child_id] = consumer_counts.get(child_id, 0) + 1
 
-        # Estimate compute costs
-        rows = estimate_plan_rows(ctx)
+        # Unknown estimates must not drive production routing.
+        rows = self._known_rows(ctx)
+        estimates_known = rows is not None
+        estimate_rows = rows if rows is not None else 0
         node_costs: dict[str, float] = {}
         for node_id, node in all_nodes.items():
             occurrences = plan_occurrences(node)
@@ -201,7 +223,7 @@ class BatchGlobalOptimizer:
                 cost = estimate_backend_cost(
                     occ.canonical,
                     "pandas_numpy",
-                    row_count_estimate=rows,
+                    row_count_estimate=estimate_rows,
                 )
                 node_costs[node_id] = cost
             else:
@@ -220,16 +242,15 @@ class BatchGlobalOptimizer:
             self.scan_cost_per_mb,
         )
 
-        # Run DP optimization for each root
-        per_node_choices: dict[str, NodeBackendChoice] = {}
-        total_compute = 0.0
-        total_transfer = 0.0
-
+        # Run DP optimization for every discovered node.  Persisting only roots
+        # loses nested assignments and makes shared children un-routable.
+        self.memo.clear()
+        self._choices: dict[str, NodeBackendChoice] = {}
         for root_id, root in roots.items():
-            choice = self._optimize_tree(root_id, root, node_graph, all_nodes, rows, ctx)
-            per_node_choices[root_id] = choice
-            total_compute += choice.compute_cost_ms
-            total_transfer += choice.transfer_from_children_ms
+            self._optimize_tree(root_id, root, node_graph, all_nodes, estimate_rows, ctx)
+        per_node_choices = dict(self._choices)
+        total_compute = sum(choice.compute_cost_ms for choice in per_node_choices.values())
+        total_transfer = sum(choice.transfer_from_children_ms for choice in per_node_choices.values())
 
         # Build physical region plan
         plan = self._build_physical_plan(
@@ -239,6 +260,7 @@ class BatchGlobalOptimizer:
             total_compute,
             total_transfer,
             ctx,
+            estimate_rows,
         )
 
         return BatchOptimizationResult(
@@ -247,7 +269,29 @@ class BatchGlobalOptimizer:
             shared_benefits=shared_benefits,
             total_shared_benefit_ms=total_benefit,
             optimization_basis="dp_global",
+            production_ready=estimates_known,
+            readiness_reason="" if estimates_known else "row-count estimate unavailable",
         )
+
+    @staticmethod
+    def _known_rows(ctx: Any) -> int | None:
+        """Return an evidenced row estimate, never a routing fallback."""
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        for key in ("row_count_estimate", "input_row_count", "estimated_rows"):
+            try:
+                value = int(runtime.get(key) or 0)
+            except (TypeError, ValueError):
+                value = 0
+            if value > 0:
+                return value
+        if getattr(ctx, "data_source", None) is None:
+            return None
+        try:
+            from planner.data_shape import estimate_shape_from_context
+            value = int(estimate_shape_from_context(ctx).estimated_rows or 0)
+            return value if value > 0 else None
+        except Exception:
+            return None
 
     def _optimize_tree(
         self,
@@ -268,7 +312,7 @@ class BatchGlobalOptimizer:
         op = getattr(node, "op", "")
         if op in {"column", "literal", "plan_ref"}:
             # Meta ops: no backend preference
-            return NodeBackendChoice(
+            choice = NodeBackendChoice(
                 node_id=node_id,
                 backend=PhysicalBackend.PANDAS_NUMPY,
                 compute_cost_ms=0.0,
@@ -276,6 +320,8 @@ class BatchGlobalOptimizer:
                 total_cost_ms=0.0,
                 representation=Representation.PANDAS_LONG,
             )
+            self._choices[node_id] = choice
+            return choice
 
         canonical = op  # Simplified; real implementation would look up canonical
         eligible: list[PhysicalBackend] = []
@@ -306,6 +352,7 @@ class BatchGlobalOptimizer:
                     child_choice = self._optimize_tree(
                         child_id, child_node, node_graph, all_nodes, rows, ctx
                     )
+                    self._choices[child_id] = child_choice
                     if child_choice.backend != backend:
                         # Cross-backend transfer
                         transfer_cost += self._estimate_transfer_cost(
@@ -324,7 +371,7 @@ class BatchGlobalOptimizer:
                     representation=infer_representation(backend),
                 )
 
-        return best_choice or NodeBackendChoice(
+        choice = best_choice or NodeBackendChoice(
             node_id=node_id,
             backend=PhysicalBackend.PANDAS_NUMPY,
             compute_cost_ms=0.0,
@@ -332,6 +379,8 @@ class BatchGlobalOptimizer:
             total_cost_ms=0.0,
             representation=Representation.PANDAS_LONG,
         )
+        self._choices[node_id] = choice
+        return choice
 
     def _estimate_transfer_cost(
         self, source: PhysicalBackend, target: PhysicalBackend, rows: int
@@ -351,6 +400,7 @@ class BatchGlobalOptimizer:
         total_compute: float,
         total_transfer: float,
         ctx: Any,
+        estimated_rows: int,
     ) -> PhysicalRegionPlan:
         """Build PhysicalRegionPlan from optimization results."""
         import hashlib
@@ -362,6 +412,8 @@ class BatchGlobalOptimizer:
             backend_groups.setdefault(choice.backend, []).append(node_id)
 
         regions: list[BackendRegion] = []
+        # Use the explicit estimate in the plan; unknown values remain zero and
+        # are marked non-production by BatchOptimizationResult.
         for idx, (backend, node_ids) in enumerate(backend_groups.items()):
             region = BackendRegion(
                 region_id=f"region_{idx}_{backend.value}",
@@ -369,11 +421,13 @@ class BatchGlobalOptimizer:
                 representation=infer_representation(backend),
                 node_ids=tuple(node_ids),
                 execution_axis=ExecutionAxis.GLOBAL_PANEL,
-                estimated_rows=10000,  # Simplified
+                estimated_rows=estimated_rows,
                 estimated_compute_ms=sum(
                     per_node_choices[nid].compute_cost_ms for nid in node_ids
                 ),
-                estimated_memory_bytes=0,  # Would be calculated properly
+                estimated_memory_bytes=max(1, estimated_rows * 8),
+                required_properties=None,
+                state_contract=None,
             )
             regions.append(region)
 
