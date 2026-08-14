@@ -1220,7 +1220,8 @@ class DataAccessSource(DataSource):
                 except Exception:
                     payload[name] = str(f)
             raw = json.dumps(payload, sort_keys=True, default=str)
-            return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+            # SHA-1 used only for data access source identity cache, not cryptographic security
+            return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
         except Exception:
             return "unavailable"
 

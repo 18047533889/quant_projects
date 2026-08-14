@@ -361,23 +361,14 @@ class TestOptionalDependency:
 
     def test_missing_fe_raises_error(self):
         """Test that missing FE raises OptionalDependencyMissing."""
-        import sys
+        import factor_assets.adapters.factor_engine as fe_mod
 
-        # Remove mock FE
-        if 'expr' in sys.modules:
-            del sys.modules['expr']
-        if 'expr.base' in sys.modules:
-            del sys.modules['expr.base']
+        # Directly patch FE_AVAILABLE to simulate missing dependency
+        with patch.object(fe_mod, 'FE_AVAILABLE', False):
+            from factor_assets.adapters.factor_engine import FEIdentityProvider
 
-        # Force reload with FE unavailable
-        import importlib
-        import factor_assets.adapters.factor_engine
-        importlib.reload(factor_assets.adapters.factor_engine)
+            with pytest.raises(OptionalDependencyMissing) as exc_info:
+                FEIdentityProvider()
 
-        from factor_assets.adapters.factor_engine import FEIdentityProvider
-
-        with pytest.raises(OptionalDependencyMissing) as exc_info:
-            FEIdentityProvider()
-
-        assert exc_info.value.package_name == "factor_engine"
-        assert exc_info.value.adapter_name == "FEIdentityProvider"
+            assert exc_info.value.package_name == "factor_engine"
+            assert exc_info.value.adapter_name == "FEIdentityProvider"

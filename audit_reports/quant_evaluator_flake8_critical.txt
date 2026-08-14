@@ -1,0 +1,50 @@
+quant_evaluator/examples/quick_reference_parallel.py:23:12: F821 undefined name 'ic_series'
+    return ic_series
+           ^
+quant_evaluator/examples/quick_reference_parallel.py:29:6: F821 undefined name 'factor_batch_1'
+    (factor_batch_1, label_bundle_1, metric_specs),
+     ^
+quant_evaluator/examples/quick_reference_parallel.py:29:22: F821 undefined name 'label_bundle_1'
+    (factor_batch_1, label_bundle_1, metric_specs),
+                     ^
+quant_evaluator/examples/quick_reference_parallel.py:29:38: F821 undefined name 'metric_specs'
+    (factor_batch_1, label_bundle_1, metric_specs),
+                                     ^
+quant_evaluator/examples/quick_reference_parallel.py:30:6: F821 undefined name 'factor_batch_2'
+    (factor_batch_2, label_bundle_2, metric_specs),
+     ^
+quant_evaluator/examples/quick_reference_parallel.py:30:22: F821 undefined name 'label_bundle_2'
+    (factor_batch_2, label_bundle_2, metric_specs),
+                     ^
+quant_evaluator/examples/quick_reference_parallel.py:30:38: F821 undefined name 'metric_specs'
+    (factor_batch_2, label_bundle_2, metric_specs),
+                                     ^
+quant_evaluator/examples/quick_reference_parallel.py:51:16: F821 undefined name 'compute_ic_mean'
+    "ic_mean": compute_ic_mean,
+               ^
+quant_evaluator/examples/quick_reference_parallel.py:52:17: F821 undefined name 'compute_coverage'
+    "coverage": compute_coverage,
+                ^
+quant_evaluator/examples/quick_reference_parallel.py:70:39: F821 undefined name 'compute_ic_series'
+executor.register_metric("ic_series", compute_ic_series)
+                                      ^
+quant_evaluator/examples/quick_reference_parallel.py:71:37: F821 undefined name 'compute_ic_mean'
+executor.register_metric("ic_mean", compute_ic_mean)
+                                    ^
+quant_evaluator/examples/quick_reference_parallel.py:72:35: F821 undefined name 'compute_ic_ir'
+executor.register_metric("ic_ir", compute_ic_ir)
+                                  ^
+quant_evaluator/examples/quick_reference_parallel.py:83:63: F821 undefined name 'data'
+batches = [(batch, labels, metric_specs) for batch, labels in data]
+                                                              ^
+quant_evaluator/examples/quick_reference_parallel.py:176:37: F821 undefined name 'compute_ic_mean'
+executor.register_metric("ic_mean", compute_ic_mean)
+                                    ^
+quant_evaluator/examples/quick_reference_parallel.py:180:18: F821 undefined name 'batch'
+    factor_batch=batch,
+                 ^
+quant_evaluator/examples/quick_reference_parallel.py:181:18: F821 undefined name 'labels'
+    label_bundle=labels,
+                 ^
+16    F821 undefined name 'ic_series'
+16

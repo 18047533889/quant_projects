@@ -29,8 +29,9 @@ FISCAL_EMITTER_PATH = FE_ROOT / "backend" / "sql_pushdown" / "fiscal_v2.py"
 
 
 def _git_blob_sha(data: bytes) -> str:
+    # SHA-1 used to mimic git blob hash format, not for cryptographic security
     header = f"blob {len(data)}\0".encode("ascii")
-    return hashlib.sha1(header + data).hexdigest()
+    return hashlib.sha1(header + data, usedforsecurity=False).hexdigest()
 
 
 @lru_cache(maxsize=1)

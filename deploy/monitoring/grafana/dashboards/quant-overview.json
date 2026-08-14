@@ -1,0 +1,209 @@
+{
+  "dashboard": {
+    "title": "Quant Services Overview",
+    "uid": "quant-overview",
+    "version": 1,
+    "timezone": "browser",
+    "editable": true,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Status",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "up{job=~\"dataaccess|factorengine\"}",
+            "legendFormat": "{{ job }}"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 0, "w": 9, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "DataAccess"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "FactorEngine"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"x": 15, "y": 0, "w": 9, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"5..\"}[5m])",
+            "legendFormat": "DataAccess 5xx"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"factorengine\",status=~\"5..\"}[5m])",
+            "legendFormat": "FactorEngine 5xx"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Errors/sec"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"type": "gt", "params": [0.05]},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ],
+          "frequency": "60s",
+          "name": "High Error Rate"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Response Time (p95)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 5},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "DataAccess p95"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"factorengine\"}[5m]))",
+            "legendFormat": "FactorEngine p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "DataAccess p99"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"factorengine\"}[5m]))",
+            "legendFormat": "FactorEngine p99"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 5},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"dataaccess\"} / 1024 / 1024 / 1024",
+            "legendFormat": "DataAccess"
+          },
+          {
+            "expr": "process_resident_memory_bytes{job=\"factorengine\"} / 1024 / 1024 / 1024",
+            "legendFormat": "FactorEngine"
+          }
+        ],
+        "yaxes": [
+          {"format": "gbytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 9, "w": 12, "h": 5},
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"dataaccess\"}[5m]) * 100",
+            "legendFormat": "DataAccess"
+          },
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"factorengine\"}[5m]) * 100",
+            "legendFormat": "FactorEngine"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "max": 100},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Active Connections",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 9, "w": 12, "h": 5},
+        "targets": [
+          {
+            "expr": "http_connections_active{job=\"dataaccess\"}",
+            "legendFormat": "DataAccess"
+          },
+          {
+            "expr": "http_connections_active{job=\"factorengine\"}",
+            "legendFormat": "FactorEngine"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Connections"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Pod Status",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 14, "w": 24, "h": 6},
+        "targets": [
+          {
+            "expr": "kube_pod_info{namespace=~\"quant-.*\"}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "pod": "Pod Name",
+                "namespace": "Namespace",
+                "node": "Node"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

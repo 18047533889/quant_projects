@@ -109,7 +109,8 @@ def stable_bucket(
         digest = hashlib.sha256(data).hexdigest()
         return int(digest[:8], 16) % count
     if algorithm == "md5":
-        digest = hashlib.md5(data).hexdigest()
+        # MD5 used only for consistent hash bucketing, not cryptographic security
+        digest = hashlib.md5(data, usedforsecurity=False).hexdigest()
         return int(digest[:8], 16) % count
     if algorithm == "xxhash64":
         try:

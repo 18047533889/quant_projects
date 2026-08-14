@@ -1,0 +1,160 @@
+{
+  "dashboard": {
+    "title": "DataAccess Performance",
+    "uid": "dataaccess-perf",
+    "version": 1,
+    "timezone": "browser",
+    "editable": true,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "Total requests/s"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"2..\"}[5m])",
+            "legendFormat": "2xx"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"4..\"}[5m])",
+            "legendFormat": "4xx"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"5..\"}[5m])",
+            "legendFormat": "5xx"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Response Time Distribution",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.90, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "p90"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "DuckDB Query Performance",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 6, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(duckdb_query_duration_seconds_sum{job=\"dataaccess\"}[5m]) / rate(duckdb_query_duration_seconds_count{job=\"dataaccess\"}[5m])",
+            "legendFormat": "Avg query time"
+          },
+          {
+            "expr": "rate(duckdb_queries_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "Queries/s"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Cache Performance",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 6, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(cache_hits_total{job=\"dataaccess\"}[5m]) / (rate(cache_hits_total{job=\"dataaccess\"}[5m]) + rate(cache_misses_total{job=\"dataaccess\"}[5m]))",
+            "legendFormat": "Hit rate"
+          },
+          {
+            "expr": "rate(cache_hits_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "Hits/s"
+          },
+          {
+            "expr": "rate(cache_misses_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "Misses/s"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Hit Rate", "max": 1},
+          {"format": "ops"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"dataaccess\"} / 1024 / 1024 / 1024",
+            "legendFormat": "RSS Memory (GB)"
+          },
+          {
+            "expr": "process_virtual_memory_bytes{job=\"dataaccess\"} / 1024 / 1024 / 1024",
+            "legendFormat": "Virtual Memory (GB)"
+          }
+        ],
+        "yaxes": [
+          {"format": "gbytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "5xx error rate"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"dataaccess\",status=~\"4..\"}[5m]) / rate(http_requests_total{job=\"dataaccess\"}[5m])",
+            "legendFormat": "4xx error rate"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Error Rate"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"type": "gt", "params": [0.05]},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ]
+        }
+      }
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

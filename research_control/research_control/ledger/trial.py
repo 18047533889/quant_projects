@@ -270,3 +270,14 @@ class TrialLedger:
             if result.get(field):
                 result[field] = json.loads(result[field])
         return result
+
+    def close(self):
+        """Close persistent database connection."""
+        if self._persistent_conn:
+            try:
+                self._persistent_conn.close()
+            except Exception:
+                pass  # Suppress errors during cleanup
+            finally:
+                self._persistent_conn = None
+

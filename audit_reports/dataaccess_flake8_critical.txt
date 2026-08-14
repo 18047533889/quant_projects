@@ -1,0 +1,84 @@
+dataaccess/core/engine.py:435:10: F821 undefined name 'ManagedBatchReader'
+    ) -> "ManagedBatchReader":
+         ^
+dataaccess/core/engine.py:716:10: F821 undefined name 'ManagedBatchReader'
+    ) -> "ManagedBatchReader":
+         ^
+dataaccess/core/engine.py:798:10: F821 undefined name 'ManagedBatchReader'
+    ) -> "ManagedBatchReader":
+         ^
+dataaccess/cos/s3_duckdb.py:146:24: F821 undefined name 'Any'
+        self._by_conn: "weakref.WeakKeyDictionary[Any, str]" = weakref.WeakKeyDictionary()
+                       ^
+dataaccess/cos_contract.py:316:29: F821 undefined name 'Sequence'
+    applied_filter_columns: Sequence[str] | None = None,
+                            ^
+dataaccess/cos_contract.py:317:41: F821 undefined name 'Sequence'
+    applied_filter_values: Mapping[str, Sequence[Any]] | None = None,
+                                        ^
+dataaccess/cos_event_runtime.py:300:9: F821 undefined name 'logger'
+        logger.warning("%s（research 取最严 availability）", msg)
+        ^
+dataaccess/read/predicate.py:154:14: F821 undefined name 'Filter'
+    filters: "Filter | None" = None                     # 通用 Filter AST（任意列等值/范围/集合/空值）
+             ^
+dataaccess/read/query_cache.py:355:5: F824 `global _cache_enabled` is unused: name is never assigned in scope
+    global _cache_enabled
+    ^
+dataaccess/read/query_cache.py:441:5: F824 `global _QUERY_CACHE` is unused: name is never assigned in scope
+    global _QUERY_CACHE
+    ^
+dataaccess/read/query_cache.py:501:5: F824 `global _QUERY_CACHE` is unused: name is never assigned in scope
+    global _QUERY_CACHE
+    ^
+dataaccess/read/session_calendar.py:607:6: F821 undefined name 'AvailabilityResult'
+) -> "AvailabilityResult":
+     ^
+dataaccess/read/telemetry.py:108:13: F821 undefined name 'Any'
+    engine: Any,
+            ^
+dataaccess/read/telemetry.py:112:13: F821 undefined name 'Any'
+    params: Any,
+            ^
+dataaccess/registry/loader.py:119:19: F821 undefined name 'PartitionSpec'
+    partitioning: "PartitionSpec | None" = None                   # #P0-final closure 3 typed PartitionSpec
+                  ^
+dataaccess/registry/loader.py:167:19: F821 undefined name 'PartitionSpec'
+    partitioning: "PartitionSpec | None" = None                   # #P0-final closure 3 typed PartitionSpec
+                  ^
+dataaccess/service/app.py:474:17: F824 `nonlocal cleanup_done` is unused: name is never assigned in scope
+                nonlocal cleanup_done, slot_held
+                ^
+dataaccess/service/app.py:474:17: F824 `nonlocal slot_held` is unused: name is never assigned in scope
+                nonlocal cleanup_done, slot_held
+                ^
+dataaccess/store.py:3400:27: F821 undefined name 'SnapshotBuildError'
+                    raise SnapshotBuildError(
+                          ^
+dataaccess/store.py:3406:19: F821 undefined name 'SnapshotBuildError'
+            raise SnapshotBuildError(
+                  ^
+dataaccess/store.py:3581:31: F821 undefined name 'SnapshotBuildError'
+                        raise SnapshotBuildError(
+                              ^
+dataaccess/store.py:3586:23: F821 undefined name 'SnapshotBuildError'
+                raise SnapshotBuildError(
+                      ^
+dataaccess/store.py:7135:13: F821 undefined name 'write_generation_files'
+            write_generation_files(merged, gen_dir, pcols)
+            ^
+dataaccess/store.py:7720:27: F821 undefined name 'SnapshotBuildError'
+                    raise SnapshotBuildError(
+                          ^
+dataaccess/store.py:7727:19: F821 undefined name 'SnapshotBuildError'
+            raise SnapshotBuildError(
+                  ^
+dataaccess/telemetry/prometheus_exporter.py:80:22: F821 undefined name 'MetricType'
+        metric_type: MetricType,
+                     ^
+dataaccess/write/generation_atomicity.py:115:17: F821 undefined name 'shutil'
+                shutil.rmtree(new_generation_dir)
+                ^
+22    F821 undefined name 'ManagedBatchReader'
+5     F824 `global _cache_enabled` is unused: name is never assigned in scope
+27

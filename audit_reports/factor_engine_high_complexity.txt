@@ -1,0 +1,100 @@
+api/lqtp_compat.py
+    C 132:0 _SourceAttributeNormalizer - C (14)
+    M 133:4 _SourceAttributeNormalizer.visit_Attribute - C (13)
+    F 114:0 augment_dsl_allowlist - C (11)
+api/dsl_parser.py
+    M 114:4 _ExprBuilder._dispatch - D (28)
+    F 230:0 _coerce_call_literals - C (20)
+    M 167:4 _ExprBuilder._visit_call - C (12)
+api/lqtp_functions_loader.py
+    F 118:0 _entries - C (17)
+    F 158:0 augment_from_functions_yaml - C (12)
+api/operator_registry.py
+    F 12:0 build_dsl_allowlist - C (14)
+api/source_ref.py
+    F 311:0 make_source_ref - C (17)
+    F 273:0 _validate_transform_params - C (13)
+    F 410:0 _enforce_source_ref_size_limits - C (12)
+    F 432:0 decode_source_ref_strict - C (12)
+    C 118:0 SourceTransformParamSpec - C (11)
+api/factor_explain.py
+    F 58:0 explain_factor - C (14)
+api/datasets_contract.py
+    F 157:0 audit_prod_profile_contract - C (13)
+api/mining_integration.py
+    F 1254:0 default_typed_mining_search_space_config - E (39)
+    F 44:0 validate_production_dsl - C (17)
+    F 1426:0 validate_formula_in_mining_allowlist - C (16)
+    F 1571:0 audit_composite_join_policies - C (16)
+    F 1076:0 validate_manifest_for_execution - C (14)
+backend/plan_params.py
+    F 103:0 parse_winsorize_quantiles - C (13)
+    F 33:0 parse_finite_float - C (12)
+    F 80:0 int_mode_from_plan_node - C (11)
+backend/recipe_evidence.py
+    F 94:0 _expression_dependencies - C (16)
+    F 133:0 _leaf_backend_sets - C (11)
+backend/operator_certification.py
+    F 164:0 run_certification - C (11)
+backend/ewm_spec.py
+    C 12:0 EwmSpec - C (14)
+    M 19:4 EwmSpec.from_plan_node - C (13)
+backend/sql_backend.py
+    M 64:4 SqlBackend.execute - E (38)
+    C 54:0 SqlBackend - C (14)
+    M 227:4 SqlBackend._eval_python - C (13)
+backend/factor_operator_evidence.py
+    F 246:0 _inherited_validation_errors - E (34)
+backend/elementwise_semantics.py
+    F 107:0 protected_division_truth_table - C (12)
+backend/fastpath_plan_probe.py
+    M 59:4 ProbeSchemaBuilder.build_polars_probe_frame - C (12)
+    M 99:4 ProbeSchemaBuilder.build_duckdb_probe_table - C (11)
+backend/polars_lazy.py
+    M 156:4 LazyColumnBundle.materialize_columns - C (18)
+    F 438:0 build_clickhouse_scan_sql - C (13)
+    F 333:0 build_scan_polars_long - C (11)
+backend/polars_backend_kind.py
+    F 302:0 capability_quality - C (17)
+backend/operator_cost.py
+    F 312:0 _load_benchmark_costs - D (24)
+    F 530:0 estimate_backend_cost - C (12)
+backend/polars_expr_emitter.py
+    F 1489:0 _compile_polars_impl - F (331)
+    F 1108:0 _try_binary_from_base_columns - D (24)
+    F 968:0 _binary_fused_expr - C (19)
+    F 930:0 _ts_rolling_expr_on_column - C (13)
+    F 1076:0 _try_fuse_nary_add_ts - C (13)
+    F 1231:0 _try_ts_pair_from_base_columns - C (12)
+    F 1401:0 _try_fuse_unary_over_ts - C (12)
+    F 3036:0 _first_long_lazy_from_plan - C (11)
+    F 3055:0 _first_series_spine_from_plan - C (11)
+backend/evidence_provenance.py
+    F 153:0 evidence_artifact_validation_errors - F (42)
+    F 590:0 enrich_operator_metadata - C (13)
+    F 348:0 _tracked_tree_files - C (11)
+backend/operator_signatures_phase2.py
+    F 25:0 phase2_operator_signatures - C (18)
+backend/fastpath_coverage.py
+    F 334:0 summarize_fastpath_coverage - E (31)
+    F 177:0 build_fastpath_coverage_row - D (24)
+    F 128:0 _fastpath_block_reason - C (20)
+    F 105:0 _benchmark_canonicals - C (12)
+backend/evidence_delta.py
+    F 90:0 load_effective_primitive_evidence - C (16)
+    F 47:0 _validate_delta_against_current_source - C (15)
+backend/context.py
+    C 11:0 ExecutionContext - C (12)
+    M 43:4 ExecutionContext.__post_init__ - C (11)
+backend/operator_types.py
+    C 34:0 OperatorSignature - E (38)
+    M 51:4 OperatorSignature.validate_node - E (37)
+    F 119:0 _check_input - E (32)
+backend/plan_cost_router.py
+    F 984:0 choose_plan_route - F (43)
+    F 173:0 _measured_baseline - D (27)
+    F 336:0 _data_source_kind - D (22)
+    F 610:0 estimate_plan_peak_memory - D (22)
+    F 377:0 estimate_plan_rows - C (20)
+    F 940:0 predict_ttdc - C (11)
+backend/window_spec.py

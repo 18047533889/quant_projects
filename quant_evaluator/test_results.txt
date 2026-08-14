@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.1.1, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/shw/quant_projects/quant_evaluator
+configfile: pyproject.toml
+plugins: anyio-4.14.2
+collecting ... collected 951 items
+
+tests/adapters/test_data_access_adapter.py::test_data_access_adapter_import_fails_without_da SKIPPED [  0%]
+tests/adapters/test_data_access_adapter.py::test_data_access_adapter_not_imported_by_core PASSED [  0%]
+tests/adapters/test_data_access_adapter.py::test_context_provider_protocol PASSED [  0%]
+tests/adapters/test_data_access_adapter.py::test_universe_provider_protocol PASSED [  0%]
+tests/adapters/test_data_access_adapter.py::test_da_frame_to_factor_batch_integration SKIPPED [  0%]
+tests/adapters/test_data_access_adapter.py::test_da_frame_to_label_bundle_integration SKIPPED [  0%]
+tests/adapters/test_data_access_adapter.py::test_data_access_adapter_methods_raise_not_implemented SKIPPED [  0%]
+tests/adapters/test_data_access_adapter.py::test_data_access_protocols_are_runtime_checkable PASSED [  0%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_engine_adapter_import_fails_without_fe PASSED [  0%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_engine_adapter_not_imported_by_core PASSED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_batch_provider_protocol PASSED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_identity_provider_protocol PASSED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_fe_result_to_factor_batch_integration SKIPPED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_fe_factors_to_factor_batch_integration SKIPPED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_engine_adapter_methods_raise_not_implemented SKIPPED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_engine_protocols_structural_compatibility PASSED [  1%]
+tests/adapters/test_factor_engine_adapter.py::test_factor_engine_adapter_delegates_to_fe_not_duplicate PASSED [  1%]
+tests/adapters/test_pandas_adapter.py::test_pandas_adapter_import_fails_without_pandas SKIPPED [  1%]
+tests/adapters/test_pandas_adapter.py::test_pandas_adapter_not_imported_by_core PASSED [  1%]
+tests/adapters/test_pandas_adapter.py::test_dataframe_to_factor_batch_basic PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_dataframe_to_factor_batch_missing_columns PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_dataframe_to_factor_batch_duplicates PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_factor_batch_to_dataframe_basic PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_dataframe_to_label_bundle_basic PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_dataframe_to_label_bundle_missing_columns PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_label_bundle_to_dataframe_basic PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_pandas_adapter_is_reference_debug_only PASSED [  2%]
+tests/adapters/test_pandas_adapter.py::test_roundtrip_dataframe_factor_batch PASSED [  2%]
+tests/backends/test_polars_backend.py::TestFactorBatchConversion::test_basic_conversion PASSED [  3%]
+tests/backends/test_polars_backend.py::TestFactorBatchConversion::test_conversion_with_axes PASSED [  3%]
+tests/backends/test_polars_backend.py::TestFactorBatchConversion::test_conversion_with_validity PASSED [  3%]
+tests/backends/test_polars_backend.py::TestICParity::test_pearson_ic_small_batch PASSED [  3%]
+tests/backends/test_polars_backend.py::TestICParity::test_spearman_ic_small_batch PASSED [  3%]
+tests/backends/test_polars_backend.py::TestICParity::test_ic_with_nans PASSED [  3%]
+tests/backends/test_polars_backend.py::TestICParity::test_ic_min_obs_threshold PASSED [  3%]
+tests/backends/test_polars_backend.py::TestICParity::test_ic_medium_batch PASSED [  3%]
+tests/backends/test_polars_backend.py::TestQuantileParity::test_quantile_binning_small PASSED [  3%]
+tests/backends/test_polars_backend.py::TestQuantileParity::test_quantile_binning_with_nans PASSED [  3%]
+tests/backends/test_polars_backend.py::TestQuantileReturnsParity::test_quantile_returns_small PASSED [  4%]
+tests/backends/test_polars_backend.py::TestQuantileReturnsParity::test_quantile_returns_with_nans PASSED [  4%]
+tests/backends/test_polars_backend.py::TestPolarsPerformance::test_ic_performance_large_batch 

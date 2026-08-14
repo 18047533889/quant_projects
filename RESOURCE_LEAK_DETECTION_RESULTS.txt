@@ -1,0 +1,509 @@
+================================================================================
+RESOURCE LEAK DETECTION REPORT
+================================================================================
+Timestamp: 2026-08-14T10:35:58.533550
+Project: /home/shw/quant_projects
+
+SUMMARY: 67 issues found
+  - Critical: 0
+  - High: 15
+  - Medium: 52
+  - Low: 0
+
+
+================================================================================
+SQLITE LEAKS
+================================================================================
+
+[1] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/campaign.py:28
+Evidence:
+  - Line 28: self._persistent_conn = sqlite3.connect(db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[2] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/campaign.py:46
+Evidence:
+  - Line 46: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[3] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/query.py:37
+Evidence:
+  - Line 37: conn = sqlite3.connect(self._campaign.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[4] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/query.py:51
+Evidence:
+  - Line 51: conn = sqlite3.connect(self._trial.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[5] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/trial.py:26
+Evidence:
+  - Line 26: self._persistent_conn = sqlite3.connect(db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[6] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/research_control/ledger/trial.py:44
+Evidence:
+  - Line 44: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[7] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/campaign.py:28
+Evidence:
+  - Line 28: self._persistent_conn = sqlite3.connect(db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[8] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/campaign.py:46
+Evidence:
+  - Line 46: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[9] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/query.py:37
+Evidence:
+  - Line 37: conn = sqlite3.connect(self._campaign.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[10] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/query.py:51
+Evidence:
+  - Line 51: conn = sqlite3.connect(self._trial.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[11] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/trial.py:26
+Evidence:
+  - Line 26: self._persistent_conn = sqlite3.connect(db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[12] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledger/trial.py:44
+Evidence:
+  - Line 44: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[13] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledgers/campaign.py:29
+Evidence:
+  - Line 29: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[14] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledgers/query.py:33
+Evidence:
+  - Line 33: conn = sqlite3.connect(self._campaign.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+[15] sqlite_connection_leak (high)
+Description: SQLite connection without context manager
+Location: /home/shw/quant_projects/research_control/build/lib/research_control/ledgers/trial.py:27
+Evidence:
+  - Line 27: conn = sqlite3.connect(self.db_path)
+Suggested Fix: Use 'with sqlite3.connect(...) as conn:' or ensure conn.close() in finally block
+
+================================================================================
+ARRAY ACCUMULATION
+================================================================================
+
+[1] array_accumulation (medium)
+Description: Potential array accumulation in loops: batches
+Location: /home/shw/quant_projects/quant_evaluator/verify_parallel_implementation.py:59
+Evidence:
+  - Variables: batches
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[2] array_accumulation (medium)
+Description: Potential array accumulation in loops: times
+Location: /home/shw/quant_projects/quant_evaluator/tests/benchmark_numba_quick.py:27
+Evidence:
+  - Variables: times
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[3] array_accumulation (medium)
+Description: Potential array accumulation in loops: values_chunks
+Location: /home/shw/quant_projects/quant_evaluator/tests/kernels/test_parity.py:341
+Evidence:
+  - Variables: values_chunks
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[4] array_accumulation (medium)
+Description: Potential array accumulation in loops: monthly_ic
+Location: /home/shw/quant_projects/quant_evaluator/tests/integration/test_slicing_grouping.py:492
+Evidence:
+  - Variables: monthly_ic
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[5] array_accumulation (medium)
+Description: Potential array accumulation in loops: result
+Location: /home/shw/quant_projects/quant_evaluator/runtime/cache_v2.py:1141
+Evidence:
+  - Variables: result
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[6] array_accumulation (medium)
+Description: Potential array accumulation in loops: batches
+Location: /home/shw/quant_projects/quant_evaluator/examples/quick_reference_parallel.py:225
+Evidence:
+  - Variables: batches
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[7] array_accumulation (medium)
+Description: Potential array accumulation in loops: scenarios
+Location: /home/shw/quant_projects/quant_evaluator/metrics/risk/stress_testing.py:334
+Evidence:
+  - Variables: scenarios
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[8] array_accumulation (medium)
+Description: Potential array accumulation in loops: corr_matrices
+Location: /home/shw/quant_projects/quant_evaluator/metrics/interactions/pairwise.py:192
+Evidence:
+  - Variables: corr_matrices
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[9] array_accumulation (medium)
+Description: Potential array accumulation in loops: chunks
+Location: /home/shw/quant_projects/quant_evaluator/planner/batch_plan.py:192
+Evidence:
+  - Variables: chunks
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[10] array_accumulation (medium)
+Description: Potential array accumulation in loops: lines
+Location: /home/shw/quant_projects/quant_evaluator/diagnosis/warnings.py:316
+Evidence:
+  - Variables: lines
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[11] array_accumulation (medium)
+Description: Potential array accumulation in loops: records
+Location: /home/shw/quant_projects/quant_evaluator/adapters/pandas.py:234
+Evidence:
+  - Variables: records
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[12] array_accumulation (medium)
+Description: Potential array accumulation in loops: batches
+Location: /home/shw/quant_projects/quant_evaluator/build/lib/quant_evaluator/verify_parallel_implementation.py:59
+Evidence:
+  - Variables: batches
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[13] array_accumulation (medium)
+Description: Potential array accumulation in loops: result
+Location: /home/shw/quant_projects/quant_evaluator/build/lib/quant_evaluator/runtime/cache_v2.py:1141
+Evidence:
+  - Variables: result
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[14] array_accumulation (medium)
+Description: Potential array accumulation in loops: chunks
+Location: /home/shw/quant_projects/quant_evaluator/build/lib/quant_evaluator/planner/batch_plan.py:192
+Evidence:
+  - Variables: chunks
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[15] array_accumulation (medium)
+Description: Potential array accumulation in loops: lines
+Location: /home/shw/quant_projects/quant_evaluator/build/lib/quant_evaluator/diagnosis/warnings.py:316
+Evidence:
+  - Variables: lines
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[16] array_accumulation (medium)
+Description: Potential array accumulation in loops: records
+Location: /home/shw/quant_projects/quant_evaluator/build/lib/quant_evaluator/adapters/pandas.py:234
+Evidence:
+  - Variables: records
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[17] array_accumulation (medium)
+Description: Potential array accumulation in loops: times
+Location: /home/shw/quant_projects/quant_evaluator/backends/selector.py:487
+Evidence:
+  - Variables: times
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[18] array_accumulation (medium)
+Description: Potential array accumulation in loops: edges
+Location: /home/shw/quant_projects/factor_assets/tests/test_clustering_hierarchical.py:293
+Evidence:
+  - Variables: edges
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[19] array_accumulation (medium)
+Description: Potential array accumulation in loops: warnings, corr_data
+Location: /home/shw/quant_projects/factor_assets/aggregation/representatives.py:317
+Evidence:
+  - Variables: warnings, corr_data
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[20] array_accumulation (medium)
+Description: Potential array accumulation in loops: lineages
+Location: /home/shw/quant_projects/factor_assets/clustering/lineage.py:287
+Evidence:
+  - Variables: lineages
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[21] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_assets/similarity/ann.py:386
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[22] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_assets/similarity/exact.py:380
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[23] array_accumulation (medium)
+Description: Potential array accumulation in loops: edges
+Location: /home/shw/quant_projects/factor_assets/graph/sparse.py:166
+Evidence:
+  - Variables: edges
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[24] array_accumulation (medium)
+Description: Potential array accumulation in loops: refs
+Location: /home/shw/quant_projects/factor_assets/adapters/quant_evaluator.py:172
+Evidence:
+  - Variables: refs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[25] array_accumulation (medium)
+Description: Potential array accumulation in loops: warnings, corr_data
+Location: /home/shw/quant_projects/factor_assets/build/lib/aggregation/representatives.py:317
+Evidence:
+  - Variables: warnings, corr_data
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[26] array_accumulation (medium)
+Description: Potential array accumulation in loops: lineages
+Location: /home/shw/quant_projects/factor_assets/build/lib/clustering/lineage.py:287
+Evidence:
+  - Variables: lineages
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[27] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_assets/build/lib/similarity/exact.py:203
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[28] array_accumulation (medium)
+Description: Potential array accumulation in loops: edges
+Location: /home/shw/quant_projects/factor_assets/build/lib/graph/sparse.py:166
+Evidence:
+  - Variables: edges
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[29] array_accumulation (medium)
+Description: Potential array accumulation in loops: refs
+Location: /home/shw/quant_projects/factor_assets/build/lib/adapters/quant_evaluator.py:172
+Evidence:
+  - Variables: refs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[30] array_accumulation (medium)
+Description: Potential array accumulation in loops: sub_evaluations
+Location: /home/shw/quant_projects/factor_assets/build/lib/selection/gates.py:272
+Evidence:
+  - Variables: sub_evaluations
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[31] array_accumulation (medium)
+Description: Potential array accumulation in loops: dominated_by
+Location: /home/shw/quant_projects/factor_assets/selection/gates.py:648
+Evidence:
+  - Variables: dominated_by
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[32] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/test_ols.py:242
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[33] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/test_diagnostics.py:519
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[34] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/advanced/test_pca_neutralization.py:299
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[35] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/advanced/test_quantile_regression.py:340
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[36] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/advanced/test_robust_regression.py:395
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[37] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/tests/neutralization/advanced/test_kernel_regression.py:383
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[38] array_accumulation (medium)
+Description: Potential array accumulation in loops: data
+Location: /home/shw/quant_projects/factor_preprocess/tests/regime/test_detector.py:228
+Evidence:
+  - Variables: data
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[39] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/neutralization/diagnostics.py:350
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[40] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/neutralization/ols.py:197
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[41] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/neutralization/advanced/pca_neutralization.py:88
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[42] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/neutralization/advanced/kernel_regression.py:161
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[43] array_accumulation (medium)
+Description: Potential array accumulation in loops: recon_coeffs
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/transforms/decomposition/wavelet.py:392
+Evidence:
+  - Variables: recon_coeffs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[44] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/transforms/decomposition/seasonal.py:147
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[45] array_accumulation (medium)
+Description: Potential array accumulation in loops: embedding_configs
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/representation/neural_ready.py:296
+Evidence:
+  - Variables: embedding_configs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[46] array_accumulation (medium)
+Description: Potential array accumulation in loops: high_corr_pairs
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/representation/linear_ready.py:214
+Evidence:
+  - Variables: high_corr_pairs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[47] array_accumulation (medium)
+Description: Potential array accumulation in loops: times
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/backends/selector.py:479
+Evidence:
+  - Variables: times
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[48] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/factor_preprocess/backends/polars_backend.py:403
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[49] array_accumulation (medium)
+Description: Potential array accumulation in loops: exposures_list, values_list
+Location: /home/shw/quant_projects/factor_preprocess/examples/advanced_neutralization_example.py:30
+Evidence:
+  - Variables: exposures_list, values_list
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[50] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/build/lib/factor_preprocess/neutralization/diagnostics.py:350
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[51] array_accumulation (medium)
+Description: Potential array accumulation in loops: results
+Location: /home/shw/quant_projects/factor_preprocess/build/lib/factor_preprocess/neutralization/ols.py:197
+Evidence:
+  - Variables: results
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+[52] array_accumulation (medium)
+Description: Potential array accumulation in loops: high_corr_pairs
+Location: /home/shw/quant_projects/factor_preprocess/build/lib/factor_preprocess/representation/linear_ready.py:214
+Evidence:
+  - Variables: high_corr_pairs
+Suggested Fix: Clear accumulator lists after processing or use generators for streaming
+
+================================================================================
+RESOURCE SNAPSHOTS
+================================================================================
+
+Snapshot 1:
+  Memory RSS: 16.8 MB
+  Open Files: 2
+  Threads: 1
+  Temp Files: 2
+  GC Objects: 15979
+  GC Garbage: 0
+
+Snapshot 2:
+  Memory RSS: 18.0 MB
+  Open Files: 2
+  Threads: 1
+  Temp Files: 2
+  GC Objects: 17293
+  GC Garbage: 0

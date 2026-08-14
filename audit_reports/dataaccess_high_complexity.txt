@@ -1,0 +1,100 @@
+dataaccess/cos_event_runtime.py
+    F 310:0 read_cos_events_asof - D (28)
+    F 107:0 _normalize - D (21)
+    F 56:0 read_cos_events - C (17)
+    F 168:0 _select - C (17)
+    F 258:0 _resolve_event_availability - C (13)
+dataaccess/cos_contract.py
+    M 84:4 COSDatasetContract.__post_init__ - D (21)
+    F 184:0 _validate_filters - C (18)
+    F 249:0 enforce_event_cutoff - C (12)
+    F 311:0 validate_join_fanout - C (12)
+dataaccess/cos_panel_runtime.py
+    F 38:0 read_cos_panel - D (27)
+dataaccess/store.py
+    M 4975:4 DataAccessStore._read_joined_sql - F (89)
+    M 3755:4 DataAccessStore.plan - F (43)
+    M 3239:4 DataAccessStore.read_joined - F (42)
+    M 2536:4 DataAccessStore._scan_polars_with_paths - E (35)
+    M 1159:4 DataAccessStore._validate_allowed_filter_values - E (34)
+    M 1604:4 DataAccessStore._prepare_read_core - E (31)
+    M 623:4 DataAccessStore._authorize_factor_tags - D (29)
+    M 7925:4 DataAccessStore._prune_read_paths - D (27)
+    M 6189:4 DataAccessStore.read_factors - D (26)
+    M 4851:4 DataAccessStore._effective_join_specs - D (25)
+    M 5530:4 DataAccessStore._check_factor_versions - D (25)
+    F 8750:0 _session_avail_sql - D (23)
+    F 8959:0 _seed_qualify_sql - D (22)
+    M 2061:4 DataAccessStore._build_temporal_plan - D (22)
+    M 1073:4 DataAccessStore._enforce_read_contract - D (21)
+    M 3610:4 DataAccessStore._validate_pit_semantics - D (21)
+    M 5737:4 DataAccessStore._read_handle - C (20)
+    M 5950:4 DataAccessStore._read_pyarrow - C (20)
+    M 8480:4 DataAccessStore._build_select_sql - C (20)
+    M 1252:4 DataAccessStore._validate_joined_contract_filters - C (19)
+    M 4292:4 DataAccessStore._read_cached_impl - C (18)
+    M 7169:4 DataAccessStore._generation_delete_rows - C (18)
+    M 8261:4 DataAccessStore._resolve_paths - C (18)
+    M 926:4 DataAccessStore._enforce_required_filters - C (16)
+    M 1332:4 DataAccessStore._prepare_read_request - C (16)
+    M 6770:4 DataAccessStore.write_arrow - C (16)
+    M 2164:4 DataAccessStore._enforce_schema_epochs - C (15)
+    M 4782:4 DataAccessStore._normalize_joined_fields - C (15)
+    M 323:4 DataAccessStore._dataset_mutation - C (14)
+    M 6404:4 DataAccessStore._read_factor_matrix - C (14)
+    M 6947:4 DataAccessStore._crash_safe_overwrite - C (14)
+    M 8346:4 DataAccessStore._resolve_write_dir - C (14)
+    M 2843:4 DataAccessStore.read_auto - C (13)
+    M 3191:4 DataAccessStore._resolve_registered_dataset_for_uri - C (13)
+    M 3681:4 DataAccessStore.resolve_fields - C (13)
+    M 5639:4 DataAccessStore._factor_metadata_values - C (13)
+    F 8872:0 _period_selection_sql - C (12)
+    M 713:4 DataAccessStore._authorize_factor_params - C (12)
+    M 4658:4 DataAccessStore.manifest_version - C (12)
+    M 8041:4 DataAccessStore._expand_glob_paths - C (12)
+    M 5695:4 DataAccessStore._resolve_universe_instruments - C (11)
+    M 6677:4 DataAccessStore.load_columns - C (11)
+    M 7014:4 DataAccessStore._generation_write - C (11)
+    M 7844:4 DataAccessStore._resolve_raw_paths - C (11)
+dataaccess/export/importers.py
+    M 35:4 ContractImporter.from_dict - D (28)
+dataaccess/export/serializers.py
+    M 75:4 ContractSerializer._serialize_value - C (16)
+    M 38:4 ContractSerializer.to_dict - C (12)
+dataaccess/export/converters.py
+    M 34:4 DataFrameConverter.to_pandas - C (11)
+    M 71:4 DataFrameConverter.to_polars - C (11)
+    M 110:4 DataFrameConverter.to_arrow - C (11)
+dataaccess/tests/contract/test_store_write.py
+    F 198:0 test_audit_log_recorded_on_successful_write - C (11)
+dataaccess/tests/unit/test_r30_p2_2026_08.py
+    F 341:0 test_api_surface_compat_aliases - C (11)
+dataaccess/tests/unit/test_final_closure_round3.py
+    F 93:0 test_predicate_restricts_column - C (11)
+dataaccess/tests/unit/test_r30_change_lineage_2026_08.py
+    F 249:0 test_plan_minimal_recompute_single_instrument_not_full_history - C (12)
+    F 445:0 test_artifact_metadata_full_fields - C (12)
+dataaccess/tests/unit/test_audit.py
+    F 28:0 test_write_event_recorded - C (12)
+dataaccess/tests/unit/test_r30_querytrace_2026_08.py
+    F 181:0 test_run_traced_read_success_returns_trace_and_result - C (13)
+dataaccess/tests/unit/test_r30_coverage_partition_2026_08.py
+    F 321:0 test_coverage_describe_structure_and_authority - D (21)
+dataaccess/tests/unit/test_integration_layer.py
+    F 27:0 tree - D (22)
+dataaccess/tests/unit/test_r32_p0_021_040.py
+    F 179:0 test_p0_039_object_identity - C (18)
+dataaccess/tests/unit/test_r40_da_all.py
+    F 159:0 test_manifest_degradation_typed_states - C (12)
+dataaccess/tests/unit/test_r32_experiment_snapshot_2026_08.py
+    F 25:0 test_experiment_snapshot_has_separated_ids - C (11)
+dataaccess/tests/unit/test_r32_change_impact_columns_2026_08.py
+    F 108:0 test_to_fe_input_all_output_keys - C (11)
+dataaccess/tests/unit/test_r30_concepts_2026_08.py
+    F 124:0 test_unit_type_str_and_parse - C (14)
+dataaccess/tests/unit/test_final_closure_dod2.py
+    F 61:0 test_concurrent_writers_serialize_fresh_manifest - C (11)
+dataaccess/tests/unit/test_r30_session_lease_2026_08.py
+    F 400:0 test_cache_hierarchy_layers_complete - C (12)
+    F 108:0 test_source_block_cache_lru_hit_stats - C (11)
+dataaccess/read/schema_epoch.py

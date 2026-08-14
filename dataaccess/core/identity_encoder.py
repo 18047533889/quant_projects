@@ -69,7 +69,8 @@ class CanonicalIdentityEncoder:
 
         if bits == 128:
             # R32-P0-108: 128-bit minimum for non-display identities
-            digest = hashlib.md5(canonical.encode("utf-8")).hexdigest()
+            # MD5 used only for cache key generation, not cryptographic security
+            digest = hashlib.md5(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
         elif bits == 256:
             digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         elif bits == 384:

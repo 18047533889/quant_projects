@@ -1887,7 +1887,8 @@ def _stable_output_hash(out: Any) -> str:
     except Exception:
         return "unhashable"
     finite = np.nan_to_num(arr, nan=-1e30, posinf=1e30, neginf=-1e30)
-    return hashlib.sha1(np.ascontiguousarray(finite).tobytes()).hexdigest()
+    # SHA-1 used only for operator injectivity probe cache, not cryptographic security
+    return hashlib.sha1(np.ascontiguousarray(finite).tobytes(), usedforsecurity=False).hexdigest()
 
 
 def _injectivity_probe_values(name: str, spec: Any) -> list[Any]:

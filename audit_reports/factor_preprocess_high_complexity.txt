@@ -1,0 +1,50 @@
+factor_preprocess/tests/neutralization/test_diagnostics.py
+    C 395:0 TestDiagnoseNeutralization - C (12)
+    C 502:0 TestSummarizeDiagnostics - C (12)
+    M 398:4 TestDiagnoseNeutralization.test_full_diagnostics - C (11)
+    M 505:4 TestSummarizeDiagnostics.test_summary_computation - C (11)
+factor_preprocess/tests/regime/test_detector.py
+    M 20:4 TestVarianceRegimeDetector.test_two_regime_classification - C (11)
+factor_preprocess/tests/adapters/test_factor_assets.py
+    M 190:4 TestFactorAssetsAdapter.test_load_factor_set - C (13)
+factor_preprocess/factor_preprocess/neutralization/regularized.py
+    F 150:0 lasso_neutralize - C (18)
+    F 308:0 elastic_net_neutralize - C (18)
+    F 12:0 ridge_neutralize - C (11)
+factor_preprocess/factor_preprocess/neutralization/ols.py
+    F 12:0 ols_neutralize - C (11)
+factor_preprocess/factor_preprocess/neutralization/advanced/robust_regression.py
+    F 12:0 huber_neutralize - C (15)
+    F 175:0 lad_neutralize - C (15)
+factor_preprocess/factor_preprocess/neutralization/advanced/pca_neutralization.py
+    F 13:0 pca_neutralize - C (16)
+factor_preprocess/factor_preprocess/neutralization/advanced/kernel_regression.py
+    F 32:0 kernel_neutralize - C (15)
+factor_preprocess/factor_preprocess/neutralization/advanced/quantile_regression.py
+    F 13:0 quantile_neutralize - C (16)
+factor_preprocess/factor_preprocess/regime/adaptive_weights.py
+    F 45:0 fit_regime_weights - D (22)
+    F 205:0 regime_adaptive_weights - C (11)
+factor_preprocess/factor_preprocess/regime/detector.py
+    F 196:0 detect_correlation_regime - C (19)
+factor_preprocess/factor_preprocess/regime/switching.py
+    F 48:0 fit_regime_switching - C (15)
+    F 170:0 regime_switching_transform - C (15)
+factor_preprocess/factor_preprocess/kernels/numba_transforms.py
+    F 244:4 cs_rank_2d - C (12)
+    F 322:4 cs_zscore_2d - C (11)
+factor_preprocess/factor_preprocess/representation/neural_ready.py
+    F 80:0 build_neural_ready - D (24)
+factor_preprocess/factor_preprocess/representation/linear_ready.py
+    F 59:0 build_linear_ready - C (15)
+factor_preprocess/factor_preprocess/representation/tree_ready.py
+    F 64:0 build_tree_ready - C (19)
+factor_preprocess/factor_preprocess/backends/polars_backend.py
+    F 328:0 ols_neutralize_polars - C (15)
+factor_preprocess/build/lib/factor_preprocess/neutralization/regularized.py
+    F 150:0 lasso_neutralize - C (18)
+    F 308:0 elastic_net_neutralize - C (18)
+    F 12:0 ridge_neutralize - C (11)
+factor_preprocess/build/lib/factor_preprocess/neutralization/ols.py
+    F 12:0 ols_neutralize - C (11)
+factor_preprocess/build/lib/factor_preprocess/representation/linear_ready.py

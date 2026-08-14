@@ -1,0 +1,50 @@
+quant_evaluator/benchmark_ic_speedup.py
+    F 47:0 benchmark_ic_speedup - C (16)
+quant_evaluator/benchmark_numba_speedup.py
+    F 389:0 print_summary - C (20)
+quant_evaluator/tests/test_parallel_executor.py
+    M 118:4 TestParallelBatchExecutor.test_execute_parallel_multiple_batches - C (11)
+quant_evaluator/tests/test_diagnosis.py
+    M 40:4 TestDiagnoseFactor.test_diagnose_normal_factor - C (11)
+quant_evaluator/tests/integration/test_multi_factor_evaluation.py
+    M 79:4 TestMultiFactorEvaluation.test_complete_multi_factor_pipeline - D (21)
+quant_evaluator/tests/metrics/test_diagnosis.py
+    M 15:4 TestFactorDiagnosis.test_diagnose_healthy_factor - C (12)
+quant_evaluator/tests/adapters/test_factor_engine_adapter.py
+    F 16:0 test_factor_engine_adapter_import_fails_without_fe - C (11)
+quant_evaluator/tests/adapters/test_pandas_adapter.py
+    F 82:0 test_dataframe_to_factor_batch_basic - C (13)
+    F 188:0 test_dataframe_to_label_bundle_basic - C (11)
+quant_evaluator/kernels/fast.py
+    F 12:0 fast_ic_batch - C (12)
+quant_evaluator/kernels/numba_backend.py
+    F 145:0 numba_spearman_ic_batch - D (21)
+    F 521:0 numba_corrcoef_matrix - C (13)
+    F 27:0 numba_pearson_ic_batch - C (12)
+    F 454:0 numba_rolling_corr - C (12)
+quant_evaluator/runtime/budgets.py
+    M 113:4 BudgetTracker.check_budget - C (19)
+quant_evaluator/runtime/parallel_executor.py
+    M 250:4 ParallelBatchExecutor.execute_parallel - C (16)
+quant_evaluator/examples/parallel_evaluation_demo.py
+    F 113:0 demo_sequential_vs_parallel - C (11)
+quant_evaluator/metrics/portfolio_stats.py
+    F 11:0 compute_long_short_returns - C (11)
+quant_evaluator/metrics/quantile_numba.py
+    F 32:0 _assign_quantiles_jit - C (17)
+quant_evaluator/metrics/risk/drawdown_analysis.py
+    F 125:0 identify_drawdown_periods - C (16)
+    F 51:0 compute_drawdown_statistics - C (12)
+quant_evaluator/metrics/risk/stress_testing.py
+    F 142:0 compute_scenario_impact - C (16)
+    F 67:0 apply_hypothetical_scenario - C (13)
+quant_evaluator/metrics/risk/var_cvar.py
+    F 203:0 compute_cvar - C (14)
+    F 139:0 compute_var_cornish_fisher - C (11)
+quant_evaluator/metrics/stats/cointegration.py
+    F 122:0 johansen_test - C (14)
+quant_evaluator/metrics/stats/structural_breaks.py
+    F 361:0 bai_perron_test - C (17)
+    F 275:0 sup_wald_test - C (12)
+    F 30:0 chow_test - C (11)
+quant_evaluator/metrics/stats/granger_causality.py

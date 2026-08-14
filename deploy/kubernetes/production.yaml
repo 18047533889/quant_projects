@@ -1,0 +1,340 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quant-production
+  labels:
+    environment: production
+    project: quant
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dataaccess-config
+  namespace: quant-production
+data:
+  DATA_ACCESS_LOG_LEVEL: "WARNING"
+  DATA_ACCESS_ENABLE_METRICS: "true"
+  DUCKDB_TEMP_DIRECTORY: "/tmp/duckdb"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factorengine-config
+  namespace: quant-production
+data:
+  FACTOR_ENGINE_LOG_LEVEL: "WARNING"
+  FACTOR_ENGINE_ENABLE_METRICS: "true"
+  DATA_ACCESS_API_URL: "http://dataaccess:8765"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dataaccess
+  namespace: quant-production
+  labels:
+    app: dataaccess
+    version: stable
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dataaccess
+      version: stable
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: dataaccess
+        version: stable
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+      - name: dataaccess
+        image: ghcr.io/REPOSITORY/dataaccess:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8765
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: dataaccess-config
+        resources:
+          requests:
+            cpu: 2000m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8765
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8765
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: data-volume
+          mountPath: /var/lib/dataaccess
+        - name: temp-volume
+          mountPath: /tmp/duckdb
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: dataaccess-pvc
+      - name: temp-volume
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataaccess
+  namespace: quant-production
+  labels:
+    app: dataaccess
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8765
+    targetPort: 8765
+    protocol: TCP
+    name: http
+  selector:
+    app: dataaccess
+    version: stable
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: factorengine
+  namespace: quant-production
+  labels:
+    app: factorengine
+    version: stable
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: factorengine
+      version: stable
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: factorengine
+        version: stable
+    spec:
+      securityContext:
+        runAsUser: 10002
+        runAsGroup: 10002
+        fsGroup: 10002
+      containers:
+      - name: factorengine
+        image: ghcr.io/REPOSITORY/factor-engine:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8766
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: factorengine-config
+        resources:
+          requests:
+            cpu: 4000m
+            memory: 8Gi
+          limits:
+            cpu: 8000m
+            memory: 16Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8766
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8766
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: workspace-volume
+          mountPath: /data/quant_workspace
+        - name: cache-volume
+          mountPath: /tmp/factor_cache
+      volumes:
+      - name: workspace-volume
+        persistentVolumeClaim:
+          claimName: factorengine-pvc
+      - name: cache-volume
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: factorengine
+  namespace: quant-production
+  labels:
+    app: factorengine
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8766
+    targetPort: 8766
+    protocol: TCP
+    name: http
+  selector:
+    app: factorengine
+    version: stable
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dataaccess-pvc
+  namespace: quant-production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: factorengine-pvc
+  namespace: quant-production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dataaccess-hpa
+  namespace: quant-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dataaccess
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: factorengine-hpa
+  namespace: quant-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: factorengine
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quant-ingress
+  namespace: quant-production
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  tls:
+  - hosts:
+    - dataaccess.example.com
+    - factorengine.example.com
+    secretName: quant-tls
+  rules:
+  - host: dataaccess.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: dataaccess
+            port:
+              number: 8765
+  - host: factorengine.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: factorengine
+            port:
+              number: 8766

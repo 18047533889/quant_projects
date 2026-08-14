@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  dataaccess:
+    build:
+      context: ../dataaccess
+      dockerfile: ../docker/dataaccess/Dockerfile
+    image: quant/dataaccess:dev
+    container_name: quant-dataaccess-dev
+    ports:
+      - "8765:8765"
+    environment:
+      - DATA_ACCESS_API_HOST=0.0.0.0
+      - DATA_ACCESS_API_PORT=8765
+      - DUCKDB_TEMP_DIRECTORY=/tmp/duckdb
+      - DATA_ACCESS_LOG_LEVEL=INFO
+    volumes:
+      - dataaccess-data:/var/lib/dataaccess
+      - duckdb-temp:/tmp/duckdb
+      - ../data:/data:ro
+    networks:
+      - quant-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8765/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  factorengine:
+    build:
+      context: ../factor_engine
+      dockerfile: ../docker/factor_engine/Dockerfile
+    image: quant/factor-engine:dev
+    container_name: quant-factorengine-dev
+    ports:
+      - "8766:8766"
+    environment:
+      - FACTOR_ENGINE_SERVICE_PORT=8766
+      - PYTHONPATH=/opt/factor_engine
+      - FACTOR_ENGINE_LOG_LEVEL=INFO
+      - DATA_ACCESS_API_URL=http://dataaccess:8765
+    volumes:
+      - factorengine-data:/data/quant_workspace
+      - factor-cache:/tmp/factor_cache
+    networks:
+      - quant-network
+    depends_on:
+      dataaccess:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8766/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  factorpreprocess:
+    build:
+      context: ../factor_preprocess
+      dockerfile: ../docker/factor_preprocess/Dockerfile
+    image: quant/factor-preprocess:dev
+    container_name: quant-factorpreprocess-dev
+    environment:
+      - DATA_ACCESS_API_URL=http://dataaccess:8765
+      - FACTOR_ENGINE_API_URL=http://factorengine:8766
+    volumes:
+      - preprocess-data:/data/workspace
+    networks:
+      - quant-network
+    depends_on:
+      - dataaccess
+      - factorengine
+    restart: unless-stopped
+
+  factoroptimizer:
+    build:
+      context: ../factor_optimizer
+      dockerfile: ../docker/factor_optimizer/Dockerfile
+    image: quant/factor-optimizer:dev
+    container_name: quant-factoroptimizer-dev
+    environment:
+      - DATA_ACCESS_API_URL=http://dataaccess:8765
+      - FACTOR_ENGINE_API_URL=http://factorengine:8766
+    volumes:
+      - optimizer-data:/data/workspace
+    networks:
+      - quant-network
+    depends_on:
+      - dataaccess
+      - factorengine
+    restart: unless-stopped
+
+  quantevaluator:
+    build:
+      context: ../quant_evaluator
+      dockerfile: ../docker/quant_evaluator/Dockerfile
+    image: quant/quant-evaluator:dev
+    container_name: quant-quantevaluator-dev
+    environment:
+      - DATA_ACCESS_API_URL=http://dataaccess:8765
+      - FACTOR_ENGINE_API_URL=http://factorengine:8766
+    volumes:
+      - evaluator-data:/data/workspace
+    networks:
+      - quant-network
+    depends_on:
+      - dataaccess
+      - factorengine
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: quant-prometheus-dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - quant-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: quant-grafana-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - quant-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  quant-network:
+    driver: bridge
+
+volumes:
+  dataaccess-data:
+  duckdb-temp:
+  factorengine-data:
+  factor-cache:
+  preprocess-data:
+  optimizer-data:
+  evaluator-data:
+  prometheus-data:
+  grafana-data:

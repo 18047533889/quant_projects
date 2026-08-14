@@ -23,6 +23,19 @@ try:
 except ImportError:
     ANN_MODULE_AVAILABLE = False
 
+# Check individual backend availability
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+
+try:
+    from annoy import AnnoyIndex
+    ANNOY_AVAILABLE = True
+except ImportError:
+    ANNOY_AVAILABLE = False
+
 
 pytestmark = pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
 
@@ -70,15 +83,13 @@ class TestANNSearchResult:
             )
 
 
+@pytest.mark.skipif(not FAISS_AVAILABLE, reason="faiss not available")
 class TestFaissANNIndex:
     """Tests for FAISS-based ANN index."""
 
     def test_build_and_search(self):
         """Build index and search for neighbors."""
-        try:
-            from factor_assets.similarity.ann import FaissANNIndex
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import FaissANNIndex
 
         # Create simple embeddings
         factor_ids = ["F001", "F002", "F003", "F004"]
@@ -106,10 +117,7 @@ class TestFaissANNIndex:
 
     def test_search_by_id(self):
         """Search for neighbors by factor ID."""
-        try:
-            from factor_assets.similarity.ann import FaissANNIndex
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import FaissANNIndex
 
         factor_ids = ["F001", "F002", "F003"]
         embeddings = np.array([
@@ -132,10 +140,7 @@ class TestFaissANNIndex:
 
     def test_search_with_threshold(self):
         """Search with minimum similarity threshold."""
-        try:
-            from factor_assets.similarity.ann import FaissANNIndex
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import FaissANNIndex
 
         factor_ids = ["F001", "F002", "F003"]
         embeddings = np.array([
@@ -156,10 +161,7 @@ class TestFaissANNIndex:
 
     def test_empty_index(self):
         """Empty index returns empty results."""
-        try:
-            from factor_assets.similarity.ann import FaissANNIndex
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import FaissANNIndex
 
         index = FaissANNIndex(embedding_dim=3)
         query = np.array([1.0, 0.0, 0.0])
@@ -169,10 +171,7 @@ class TestFaissANNIndex:
 
     def test_dimension_mismatch(self):
         """Build fails with dimension mismatch."""
-        try:
-            from factor_assets.similarity.ann import FaissANNIndex
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import FaissANNIndex
 
         index = FaissANNIndex(embedding_dim=3)
         factor_ids = ["F001", "F002"]
@@ -185,16 +184,13 @@ class TestFaissANNIndex:
             index.build(factor_ids, embeddings)
 
 
-@pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
+@pytest.mark.skipif(not NUMPY_AVAILABLE or not ANNOY_AVAILABLE, reason="numpy or annoy not available")
 class TestAnnoyANNIndex:
     """Tests for Annoy-based ANN index."""
 
     def test_build_and_search(self):
         """Build Annoy index and search."""
-        try:
-            from factor_assets.similarity.ann import AnnoyANNIndex
-        except ImportError:
-            pytest.skip("Annoy not available")
+        from factor_assets.similarity.ann import AnnoyANNIndex
 
         factor_ids = ["F001", "F002", "F003", "F004"]
         embeddings = np.array([
@@ -220,10 +216,7 @@ class TestAnnoyANNIndex:
 
     def test_search_by_id(self):
         """Search by factor ID in Annoy index."""
-        try:
-            from factor_assets.similarity.ann import AnnoyANNIndex
-        except ImportError:
-            pytest.skip("Annoy not available")
+        from factor_assets.similarity.ann import AnnoyANNIndex
 
         factor_ids = ["F001", "F002", "F003"]
         embeddings = np.array([
@@ -243,10 +236,7 @@ class TestAnnoyANNIndex:
 
     def test_not_built(self):
         """Search on unbuilt index returns empty."""
-        try:
-            from factor_assets.similarity.ann import AnnoyANNIndex
-        except ImportError:
-            pytest.skip("Annoy not available")
+        from factor_assets.similarity.ann import AnnoyANNIndex
 
         index = AnnoyANNIndex(embedding_dim=3, n_trees=5)
         query = np.array([1.0, 0.0, 0.0])
@@ -255,26 +245,22 @@ class TestAnnoyANNIndex:
         assert len(results) == 0
 
 
-@pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
+@pytest.mark.skipif(not NUMPY_AVAILABLE or not ANN_MODULE_AVAILABLE, reason="numpy or ANN module not available")
 class TestCreateANNIndex:
     """Tests for ANN index factory."""
 
+    @pytest.mark.skipif(not FAISS_AVAILABLE, reason="faiss not available")
     def test_create_faiss_index(self):
         """Factory creates FAISS index."""
-        try:
-            from factor_assets.similarity.ann import create_ann_index, ANNBackend
-        except ImportError:
-            pytest.skip("FAISS not available")
+        from factor_assets.similarity.ann import create_ann_index, ANNBackend
 
         index = create_ann_index(ANNBackend.FAISS, embedding_dim=10)
         assert index is not None
 
+    @pytest.mark.skipif(not ANNOY_AVAILABLE, reason="annoy not available")
     def test_create_annoy_index(self):
         """Factory creates Annoy index."""
-        try:
-            from factor_assets.similarity.ann import create_ann_index, ANNBackend
-        except ImportError:
-            pytest.skip("Annoy not available")
+        from factor_assets.similarity.ann import create_ann_index, ANNBackend
 
         index = create_ann_index(ANNBackend.ANNOY, embedding_dim=10, n_trees=5)
         assert index is not None
@@ -291,6 +277,7 @@ class TestCreateANNIndex:
 
 
 @pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
+@pytest.mark.skipif(not FAISS_AVAILABLE, reason="faiss not available")
 class TestANNIntegration:
     """Integration tests for ANN search."""
 

@@ -1,0 +1,16 @@
+research_control/research_control/sync_legacy.py
+    M 56:4 IdempotentSync.verify_campaign_consistency - C (17)
+research_control/research_control/ledger/query.py
+    M 58:4 LedgerQuery.query_time_range - C (17)
+research_control/research_control/sync/idempotency.py
+    M 309:4 IdempotentSyncEngine.verify_campaign_consistency - C (13)
+research_control/build/lib/research_control/sync.py
+    M 56:4 IdempotentSync.verify_campaign_consistency - C (17)
+research_control/build/lib/research_control/sync_legacy.py
+    M 56:4 IdempotentSync.verify_campaign_consistency - C (17)
+research_control/build/lib/research_control/ledger/query.py
+    M 58:4 LedgerQuery.query_time_range - C (17)
+research_control/build/lib/research_control/ledgers/query.py
+    M 40:4 LedgerQuery.query_time_range - C (17)
+research_control/build/lib/research_control/sync/idempotency.py
+    M 309:4 IdempotentSyncEngine.verify_campaign_consistency - C (13)

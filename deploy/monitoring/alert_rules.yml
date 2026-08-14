@@ -1,0 +1,175 @@
+groups:
+  - name: quant_services
+    interval: 30s
+    rules:
+      # DataAccess Alerts
+      - alert: DataAccessDown
+        expr: up{job="dataaccess"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: dataaccess
+        annotations:
+          summary: "DataAccess service is down"
+          description: "DataAccess service has been down for more than 2 minutes"
+
+      - alert: DataAccessHighErrorRate
+        expr: rate(http_requests_total{job="dataaccess",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: dataaccess
+        annotations:
+          summary: "DataAccess high error rate"
+          description: "DataAccess error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      - alert: DataAccessHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="dataaccess"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: dataaccess
+        annotations:
+          summary: "DataAccess high latency"
+          description: "DataAccess 95th percentile latency is {{ $value }}s"
+
+      - alert: DataAccessHighMemoryUsage
+        expr: (process_resident_memory_bytes{job="dataaccess"} / 1024 / 1024 / 1024) > 7
+        for: 10m
+        labels:
+          severity: warning
+          service: dataaccess
+        annotations:
+          summary: "DataAccess high memory usage"
+          description: "DataAccess memory usage is {{ $value | humanize }}GB (limit is 8GB)"
+
+      # FactorEngine Alerts
+      - alert: FactorEngineDown
+        expr: up{job="factorengine"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: factorengine
+        annotations:
+          summary: "FactorEngine service is down"
+          description: "FactorEngine service has been down for more than 2 minutes"
+
+      - alert: FactorEngineHighErrorRate
+        expr: rate(http_requests_total{job="factorengine",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: factorengine
+        annotations:
+          summary: "FactorEngine high error rate"
+          description: "FactorEngine error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      - alert: FactorEngineHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="factorengine"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: factorengine
+        annotations:
+          summary: "FactorEngine high latency"
+          description: "FactorEngine 95th percentile latency is {{ $value }}s"
+
+      - alert: FactorEngineHighMemoryUsage
+        expr: (process_resident_memory_bytes{job="factorengine"} / 1024 / 1024 / 1024) > 14
+        for: 10m
+        labels:
+          severity: warning
+          service: factorengine
+        annotations:
+          summary: "FactorEngine high memory usage"
+          description: "FactorEngine memory usage is {{ $value | humanize }}GB (limit is 16GB)"
+
+      - alert: FactorEngineHighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="factorengine"}[5m]) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          service: factorengine
+        annotations:
+          summary: "FactorEngine high CPU usage"
+          description: "FactorEngine CPU usage is {{ $value | humanizePercentage }}"
+
+  - name: kubernetes_resources
+    interval: 30s
+    rules:
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace=~"quant-.*"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+
+      - alert: PodNotReady
+        expr: kube_pod_status_phase{namespace=~"quant-.*",phase!~"Running|Succeeded"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod not ready"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in {{ $labels.phase }} state for more than 10 minutes"
+
+      - alert: DeploymentReplicasMismatch
+        expr: kube_deployment_spec_replicas{namespace=~"quant-.*"} != kube_deployment_status_replicas_available{namespace=~"quant-.*"}
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deployment replicas mismatch"
+          description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} available replicas (expected {{ $labels.spec_replicas }})"
+
+      - alert: HighPodMemoryUsage
+        expr: (container_memory_usage_bytes{namespace=~"quant-.*"} / container_spec_memory_limit_bytes{namespace=~"quant-.*"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High pod memory usage"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: HighPodCPUUsage
+        expr: (rate(container_cpu_usage_seconds_total{namespace=~"quant-.*"}[5m]) / container_spec_cpu_quota{namespace=~"quant-.*"} * 100000) > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High pod CPU usage"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}"
+
+  - name: data_quality
+    interval: 1m
+    rules:
+      - alert: DataAccessSlowQueries
+        expr: rate(duckdb_query_duration_seconds_sum{job="dataaccess"}[5m]) / rate(duckdb_query_duration_seconds_count{job="dataaccess"}[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: dataaccess
+        annotations:
+          summary: "DataAccess slow queries detected"
+          description: "Average query duration is {{ $value }}s over the last 5 minutes"
+
+      - alert: FactorComputationFailures
+        expr: rate(factor_computation_failures_total{job="factorengine"}[10m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: factorengine
+        annotations:
+          summary: "Factor computation failures detected"
+          description: "Factor computation failure rate is {{ $value }} over the last 10 minutes"
+
+      - alert: CacheHitRateLow
+        expr: rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m])) < 0.5
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} over the last 5 minutes"

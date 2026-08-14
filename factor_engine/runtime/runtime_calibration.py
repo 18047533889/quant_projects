@@ -74,7 +74,8 @@ def _server_fingerprint() -> str:
             default=str,
             separators=(",", ":"),
         )
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+        # SHA-1 used only for server fingerprint cache key, not cryptographic security
+        return hashlib.sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     except Exception:
         return "unknown"
 

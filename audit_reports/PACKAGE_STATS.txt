@@ -1,0 +1,27 @@
+# Package Statistics for Documentation Audit
+# Generated: 2026-08-14
+
+Package               | Python Files | Total LOC | README Quality | Doc Priority
+---------------------|--------------|-----------|----------------|-------------
+factor_layer         | ~150         | ~8000     | 8/10*          | P1
+factor_optimizer     | 35           | ~3500     | 7/10           | P1
+factor_preprocess    | 137          | ~7000     | 6/10           | P1
+raw_data_layer       | ~40          | ~2500     | 7/10           | P2
+research_control     | 32           | ~2000     | 8/10           | P2
+cli                  | 13           | ~1500     | 9/10           | P2
+monitoring           | 0            | 0         | MISSING        | P1
+toolkit              | 9            | 1299      | MISSING        | P0
+utils                | ~45          | 8776      | 9/10 (subs)    | P2
+
+* factor_layer has structural issue (README.md is directory)
+
+Legend:
+- LOC: Lines of Code (approximate, Python only)
+- README Quality: 0-10 scale based on completeness, examples, architecture docs
+- Doc Priority: P0 (blocking) > P1 (high) > P2 (enhancement)
+
+Key Findings:
+1. toolkit (1299 LOC, 0 docs) - P0 BLOCKING
+2. monitoring (config-only, 0 docs) - P1 HIGH
+3. utils sub-packages are excellent (data_quality, visualization, portfolio all 9/10)
+4. cli has best documentation (9/10 with extensive examples)

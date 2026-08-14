@@ -223,8 +223,9 @@ def _git_blob_sha(relative_path: str) -> str:
     )
     if value:
         return value
+    # SHA-1 used to mimic git blob hash format, not for cryptographic security
     data = path.read_bytes()
-    return hashlib.sha1(f"blob {len(data)}\0".encode("ascii") + data).hexdigest()
+    return hashlib.sha1(f"blob {len(data)}\0".encode("ascii") + data, usedforsecurity=False).hexdigest()
 
 
 def _git_available() -> bool:

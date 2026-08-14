@@ -1,0 +1,1022 @@
+[
+  {
+    "factor_id": "76c2850ef12db3e8",
+    "function_name": "factor_mut_hc004_volpctrank_s12_clip2_5_volwin6",
+    "python_code": "def factor_mut_hc004_volpctrank_s12_clip2_5_volwin6(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(6, min_periods=6).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-2.5, 2.5)\n    factor.name = 'factor_mut_hc004_volpctrank_s12_clip2_5_volwin6'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_crossover_herding_stress_span12_volrank_clip3",
+    "function_name": "factor_crossover_herding_stress_span12_volrank_clip3",
+    "python_code": "def factor_crossover_herding_stress_span12_volrank_clip3(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_crossover_herding_stress_span12_volrank_clip3'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "559a3c3183ad9e42",
+    "function_name": "factor_tanh_thrust_dynamic_smooth",
+    "python_code": "def factor_tanh_thrust_dynamic_smooth(df):\n    import numpy as np\n    df_copy = df.copy()\n    roc_price = df_copy['close'].pct_change(5)\n    roc_volume = df_copy['volume'].pct_change(5)\n    tanh_price = np.tanh(roc_price)\n    tanh_volume = np.tanh(roc_volume)\n    raw = tanh_price * tanh_volume\n    smooth_short = raw.ewm(span=5, min_periods=5).mean()\n    smooth_long = raw.ewm(span=20, min_periods=20).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    weight = 1.0 / (1.0 + np.exp(-(vol_ratio - 1.0) * 2.0))\n    factor = smooth_short * weight + smooth_long * (1.0 - weight)\n    df_copy[\"factor_tanh_thrust_dynamic_smooth\"] = factor\n    return df_copy[\"factor_tanh_thrust_dynamic_smooth\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_price_log_range_gate_clipped_10day_mut_003",
+    "function_name": "factor_vol_price_log_range_gate_clipped_10day_mut_003",
+    "python_code": "def factor_vol_price_log_range_gate_clipped_10day_mut_003(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(5, min_periods=5).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    vol_weight = np.log1p(vol_ratio)\n    raw = pct_change * vol_weight\n    range_ = high - low\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    weight = range_zscore.clip(lower=0, upper=2) + 1.0\n    raw_weighted = raw * weight\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=12, min_periods=12).mean()\n    df_copy['factor_vol_price_log_range_gate_clipped_10day_mut_003'] = ema\n    return df_copy['factor_vol_price_log_range_gate_clipped_10day_mut_003']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_mut_hc004_volpctrank_w8",
+    "function_name": "factor_mut_hc004_volpctrank_w8",
+    "python_code": "def factor_mut_hc004_volpctrank_w8(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_rank = df_copy['volume'].rolling(8, min_periods=8).rank(pct=True)\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_rank * stress_range\n    smoothed = raw.ewm(span=12, min_periods=12, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_mut_hc004_volpctrank_w8'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "34cb4926158cbd1e",
+    "function_name": "factor_volume_adjusted_divergence_ema10",
+    "python_code": "def factor_volume_adjusted_divergence_ema10(df):\n    \"\"\"Overnight minus intraday return spread, smoothed with EMA(10), scaled with volume ratio.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    # ensure float64 and pass Series to talib\n    overnight_ret = overnight_ret.astype(np.float64)\n    intraday_ret = intraday_ret.astype(np.float64)\n    smooth_overnight = pd.Series(talib.EMA(overnight_ret, timeperiod=10), index=overnight_ret.index, dtype=np.float64)\n    smooth_intraday = pd.Series(talib.EMA(intraday_ret, timeperiod=10), index=intraday_ret.index, dtype=np.float64)\n    spread = smooth_overnight - smooth_intraday\n    vol = df_copy[\"volume\"].astype(np.float64)\n    vol_ema = pd.Series(talib.EMA(vol, timeperiod=20), index=vol.index, dtype=np.float64)\n    vol_ratio = (vol / vol_ema).replace([np.inf, -np.inf], np.nan).fillna(1.0)\n    df_copy[\"factor_volume_adjusted_divergence_ema10\"] = spread * vol_ratio\n    return df_copy[\"factor_volume_adjusted_divergence_ema10\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_herding_momentum_stress",
+    "function_name": "factor_herding_momentum_stress",
+    "python_code": "def factor_herding_momentum_stress(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(5, min_periods=5).mean()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    raw = ret * vol_ratio * stress_range\n    smoothed = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = smoothed.clip(-3, 3)\n    factor.name = 'factor_herding_momentum_stress'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_confirmed_momentum_tanh_gated",
+    "function_name": "factor_volume_confirmed_momentum_tanh_gated",
+    "python_code": "def factor_volume_confirmed_momentum_tanh_gated(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    intraday_pos = (df_copy['close'] - df_copy['low']) / range_\n    raw_factor = smoothed_base * intraday_pos\n    factor = np.tanh(raw_factor)\n    df_copy['factor_volume_confirmed_momentum_tanh_gated'] = factor\n    return df_copy['factor_volume_confirmed_momentum_tanh_gated']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+    "function_name": "factor_vol_price_log_range_gate_clipped_boost_5day_mut_001",
+    "python_code": "def factor_vol_price_log_range_gate_clipped_boost_5day_mut_001(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(5, min_periods=5).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    vol_weight = np.log1p(vol_ratio)\n    raw = pct_change * vol_weight\n    range_ = high - low\n    range_mean = range_.rolling(5, min_periods=5).mean()\n    range_std = range_.rolling(5, min_periods=5).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    boost = np.where(range_zscore > 0, np.minimum(range_zscore, 2.0), 0)\n    raw_weighted = raw * (1 + boost)\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=12, min_periods=12).mean()\n    df_copy['factor_vol_price_log_range_gate_clipped_boost_5day_mut_001'] = ema\n    return df_copy['factor_vol_price_log_range_gate_clipped_boost_5day_mut_001']",
+    "tools": ""
+  },
+  {
+    "factor_id": "58de3d016aa7633c",
+    "function_name": "factor_volume_weighted_range_skew",
+    "python_code": "def factor_volume_weighted_range_skew(df):\n    \"\"\"Nonlinear transformation of volume-weighted range EMA ratio to capture regime shifts.\"\"\"\n    df_copy = df.copy()\n    vol_range = df_copy[\"volume\"] * (df_copy[\"high\"] - df_copy[\"low\"])\n    ema_short = vol_range.ewm(span=10, adjust=False).mean()\n    ema_long = vol_range.ewm(span=60, adjust=False).mean()\n    ratio = ema_short / ema_long.replace(0.0, np.nan)\n    factor = np.tanh((ratio - 1.0) * 10.0)\n    df_copy[\"factor_volume_weighted_range_skew\"] = factor\n    return df_copy[\"factor_volume_weighted_range_skew\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_pressure_ewm_smooth",
+    "function_name": "factor_volume_pressure_ewm_smooth",
+    "python_code": "def factor_volume_pressure_ewm_smooth(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=2.0)\n    raw = ret * vol_ratio_clipped\n    smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    return smooth.rename('factor_volume_pressure_ewm_smooth')",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_mut_cross_vwpc_z10_clip2_v3",
+    "function_name": "factor_mut_cross_vwpc_z10_clip2_v3",
+    "python_code": "def factor_mut_cross_vwpc_z10_clip2_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_z = (range_ - range_.rolling(10, min_periods=10).mean()) / range_.rolling(10, min_periods=10).std(ddof=1)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-2, 2))\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_mut_cross_vwpc_z10_clip2_v3'] = smoothed\n    return df_copy['factor_mut_cross_vwpc_z10_clip2_v3']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_pressure_light_crossover",
+    "function_name": "factor_volume_pressure_light_crossover",
+    "python_code": "def factor_volume_pressure_light_crossover(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(10, min_periods=10).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    vol_ratio_clipped = vol_ratio.clip(lower=0.3, upper=3.0)\n    raw = ret * vol_ratio_clipped\n    ewm_smooth = raw.ewm(halflife=7, min_periods=7).mean()\n    rolling_smooth = raw.rolling(10, min_periods=10).mean()\n    smooth = 0.95 * ewm_smooth + 0.05 * rolling_smooth\n    return smooth.rename('factor_volume_pressure_light_crossover')",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_adaptive_vol_directional_smooth_range10",
+    "function_name": "factor_adaptive_vol_directional_smooth_range10",
+    "python_code": "def factor_adaptive_vol_directional_smooth_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10, min_periods=10).mean()\n    slow = vol_ratio.ewm(span=30, min_periods=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_adaptive_vol_directional_smooth_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_adaptive_vol_directional_smooth_range10']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_weighted_pct_range_clip_ema10",
+    "function_name": "factor_vol_weighted_pct_range_clip_ema10",
+    "python_code": "def factor_vol_weighted_pct_range_clip_ema10(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    pct_change = close.pct_change()\n    vol_ma = volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = volume / vol_ma\n    raw = pct_change * vol_ratio\n    range_ = high - low\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1).replace(0, np.nan)\n    range_zscore = (range_ - range_mean) / range_std\n    weight = range_zscore.clip(lower=0, upper=2) + 1.0\n    raw_weighted = raw * weight\n    raw_weighted = raw_weighted.replace([np.inf, -np.inf], np.nan)\n    ema = raw_weighted.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_vol_weighted_pct_range_clip_ema10'] = ema\n    return df_copy['factor_vol_weighted_pct_range_clip_ema10']",
+    "tools": ""
+  },
+  {
+    "factor_id": "222a8dd82489d8b1",
+    "function_name": "factor_volume_confirmed_up_capture",
+    "python_code": "def factor_volume_confirmed_up_capture(df):\n    \"\"\"\n    Crossover: primary = vol-weighted up-capture ratio; secondary = volume ratio conviction amplifier.\n    \"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol = df_copy[\"volume\"]\n    pos_ret = np.where(ret > 0, ret * vol, 0.0)\n    abs_ret = np.abs(ret) * vol\n    pos_sum = pd.Series(pos_ret, index=df_copy.index).rolling(20, min_periods=20).sum()\n    abs_sum = pd.Series(abs_ret, index=df_copy.index).rolling(20, min_periods=20).sum()\n    raw_signal = pos_sum / abs_sum.replace(0.0, np.nan)\n    raw_signal = raw_signal.fillna(0.0)\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    weight = 1.0 + 0.5 * (vol_ratio - 1.0)\n    weight = weight.clip(lower=0.5, upper=1.5).fillna(1.0)\n    factor = raw_signal * weight\n    df_copy[\"factor_volume_confirmed_up_capture\"] = factor\n    return df_copy[\"factor_volume_confirmed_up_capture\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_reversal_vol_intensity",
+    "function_name": "factor_intraday_reversal_vol_intensity",
+    "python_code": "def factor_intraday_reversal_vol_intensity(df):\n    \"\"\"Intraday reversal scaled by relative volatility intensity.\"\"\"\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    intraday_ema = intraday.ewm(span=5, min_periods=5).mean()\n    rv_short = df_copy[\"close\"].pct_change().rolling(20).std()\n    rv_long = df_copy[\"close\"].pct_change().rolling(60).std()\n    vol_ratio = rv_short / rv_long.replace(0, np.nan)\n    vol_ratio = vol_ratio.clip(0.5, 2.0)\n    result = -intraday_ema * vol_ratio\n    result = result.fillna(0)\n    df_copy[\"factor_intraday_reversal_vol_intensity\"] = result\n    return df_copy[\"factor_intraday_reversal_vol_intensity\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_mut_cross_vwpc_z10_clip2_span8_v1",
+    "function_name": "factor_mut_cross_vwpc_z10_clip2_span8_v1",
+    "python_code": "def factor_mut_cross_vwpc_z10_clip2_span8_v1(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    range_ = df_copy['high'] - df_copy['low']\n    range_mean = range_.rolling(10, min_periods=10).mean()\n    range_std = range_.rolling(10, min_periods=10).std(ddof=1)\n    range_z = (range_ - range_mean) / range_std.replace(0, np.nan)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-2, 2))\n    smoothed = raw.ewm(span=8, min_periods=8).mean()\n    df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1'] = smoothed\n    return df_copy['factor_mut_cross_vwpc_z10_clip2_span8_v1']",
+    "tools": ""
+  },
+  {
+    "factor_id": "b54a384026c507e5",
+    "function_name": "factor_vol_regime_trend_smoothed",
+    "python_code": "def factor_vol_regime_trend_smoothed(df):\n    df_copy = df.copy()\n    price_ratio = df_copy['close'] / df_copy['close'].rolling(20, min_periods=20).mean() - 1\n    volume_surge = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    median_range = range_.rolling(20, min_periods=20).median()\n    vol_dev = range_ / median_range - 1\n    signal = price_ratio * volume_surge * vol_dev\n    smoothed = signal.ewm(span=5, adjust=False).mean()\n    df_copy['factor_vol_regime_trend_smoothed'] = smoothed.fillna(0.0)\n    return df_copy['factor_vol_regime_trend_smoothed']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_return_volume_surge",
+    "function_name": "factor_intraday_return_volume_surge",
+    "python_code": "def factor_intraday_return_volume_surge(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_return_volume_surge\"] = raw.ewm(span=20, adjust=False).mean()\n    return df_copy[\"factor_intraday_return_volume_surge\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "74b9b588c2cfeb3e",
+    "function_name": "factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10",
+    "python_code": "def factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 15, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(15, min_periods=3).median()\n    down_med = down_range.rolling(15, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 10, min_periods=10)\n    vol_med10 = volume.rolling(10, min_periods=10).median()\n    vol_ratio = volume / vol_med10.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA3 smoothing\n    factor_smoothed = factor.ewm(span=3, min_periods=3, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_15_minp3_vol10']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_volume_tanh",
+    "function_name": "factor_intraday_volume_tanh",
+    "python_code": "def factor_intraday_volume_tanh(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w = 20\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w, min_periods=w).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_surge_regime_gated",
+    "function_name": "factor_vol_surge_regime_gated",
+    "python_code": "def factor_vol_surge_regime_gated(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_max = df_copy[\"volume\"].rolling(20, min_periods=20).max()\n    vol_surge = df_copy[\"volume\"] / vol_max.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_med = range_.rolling(20).median()\n    high_vol = range_ > range_med\n    factor = raw * high_vol\n    factor = factor.ewm(span=20, adjust=False).mean()\n    factor.name = \"factor_vol_surge_regime_gated\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_weighted_price_change",
+    "function_name": "factor_volume_weighted_price_change",
+    "python_code": "def factor_volume_weighted_price_change(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    price_change = close.pct_change()\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_z = (range_ - range_.rolling(20, min_periods=20).mean()) / range_.rolling(20, min_periods=20).std(ddof=1)\n    raw = price_change * vol_ratio * (1 + range_z.clip(-3, 3))\n    smoothed = raw.ewm(span=10, min_periods=10).mean()\n    df_copy['factor_volume_weighted_price_change'] = smoothed\n    return df_copy['factor_volume_weighted_price_change']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_volume_tanh_short",
+    "function_name": "factor_intraday_volume_tanh_short",
+    "python_code": "def factor_intraday_volume_tanh_short(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    w_sma = 20\n    w_ewm = 10\n    intra_ret = close / open_.replace(0, np.nan) - 1\n    vol_sma = volume.rolling(w_sma, min_periods=w_sma).mean()\n    vol_surge = volume / vol_sma.replace(0, np.nan)\n    raw = intra_ret * vol_surge\n    factor = raw.ewm(span=w_ewm, adjust=False).mean()\n    factor = np.tanh(factor)\n    df_copy[\"factor_intraday_volume_tanh_short\"] = factor.fillna(0)\n    return df_copy[\"factor_intraday_volume_tanh_short\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_reversal_intraday_5d_ema",
+    "function_name": "factor_reversal_intraday_5d_ema",
+    "python_code": "def factor_reversal_intraday_5d_ema(df):\n    \"\"\"Intraday return reversal: negative of 5-period EMA of intraday returns.\"\"\"\n    df_copy = df.copy()\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    ema_intraday = intraday_ret.ewm(span=5, min_periods=5).mean()\n    df_copy[\"factor_reversal_intraday_5d_ema\"] = -ema_intraday\n    return df_copy[\"factor_reversal_intraday_5d_ema\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_pressure_imbalance",
+    "function_name": "factor_volume_pressure_imbalance",
+    "python_code": "def factor_volume_pressure_imbalance(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['open'] - 1\n    vol_med = df_copy['volume'].rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = df_copy['volume'] / vol_med\n    raw = ret * vol_ratio\n    smooth = raw.ewm(halflife=5, min_periods=20).mean()\n    return smooth.rename('factor_volume_pressure_imbalance')",
+    "tools": ""
+  },
+  {
+    "factor_id": "a88aa2d40d4e3aee",
+    "function_name": "factor_ema_vol_asymmetry_rank",
+    "python_code": "def factor_ema_vol_asymmetry_rank(df):\n    \"\"\"Asymmetric volatility measured by the difference between exponentially weighted upside and downside variance, then cross-sectionally ranked.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    pos_ret = ret.clip(lower=0)\n    neg_ret = (-ret).clip(lower=0)\n    ewm_pos_var = pos_ret.pow(2).ewm(span=20, min_periods=20).mean()\n    ewm_neg_var = neg_ret.pow(2).ewm(span=20, min_periods=20).mean()\n    asymmetry = ewm_pos_var - ewm_neg_var\n    df_copy[\"factor_ema_vol_asymmetry_rank\"] = asymmetry\n    return df_copy[\"factor_ema_vol_asymmetry_rank\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "438ecd5ee61b1007",
+    "function_name": "factor_crash_vol_spike_volregime_boost",
+    "python_code": "def factor_crash_vol_spike_volregime_boost(df):\n    \"\"\"Crash precursor: volatility spike ratio with high-volume regime boost.\"\"\"\n    df_copy = df.copy()\n    parkinson = np.log(df_copy[\"high\"] / df_copy[\"low\"])\n    short_vol = parkinson.rolling(5, min_periods=5).mean()\n    long_vol = parkinson.rolling(50, min_periods=50).mean()\n    vol_ratio = short_vol / long_vol.replace(0, np.nan)\n    is_high_vol, _, _ = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    boost = 0.8\n    factor = vol_ratio * (1.0 + is_high_vol * boost)\n    factor = factor.fillna(0)\n    factor.name = \"factor_crash_vol_spike_volregime_boost\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_volume_spike",
+    "function_name": "factor_intraday_volume_spike",
+    "python_code": "def factor_intraday_volume_spike(df):\n    df_copy = df.copy()\n    intday_ret = df_copy[\"close\"] / df_copy[\"open\"] - 1.0\n    vol_mean = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_surge = df_copy[\"volume\"] / vol_mean.replace(0, np.nan)\n    raw = intday_ret * vol_surge\n    df_copy[\"factor_intraday_volume_spike\"] = raw.ewm(span=10, adjust=False).mean()\n    return df_copy[\"factor_intraday_volume_spike\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "8208112fae4e0b20",
+    "function_name": "factor_herding_volume_momentum_continuous",
+    "python_code": "def factor_herding_volume_momentum_continuous(df):\n    \"\"\"Volume-weighted momentum without discrete regime gate, using continuous volume ratio for smoother herding signal.\"\"\"\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change().fillna(0.0)\n    avg_vol = df_copy[\"volume\"].shift(1).rolling(window=20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / avg_vol.replace(0.0, np.nan)\n    weighted_ret = ret * vol_ratio\n    df_copy[\"factor_herding_volume_momentum_continuous\"] = weighted_ret.rolling(window=20, min_periods=20).sum()\n    return df_copy[\"factor_herding_volume_momentum_continuous\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "fe304ef9dfcf0fa1",
+    "function_name": "factor_volume_surge_persistence",
+    "python_code": "def factor_volume_surge_persistence(df):\n    \"\"\"\n    Measures the persistence of volume surges via an exponentially weighted moving average of spike flags.\n    Spike is defined as volume exceeding twice its 20-day rolling median.\n    High values indicate recent or sustained abnormal volume spikes.\n    \"\"\"\n    df_copy = df.copy()\n    vol = df_copy[\"volume\"]\n    median_vol = vol.rolling(20, min_periods=1).median()\n    spike_flag = (vol > 2 * median_vol).astype(float)\n    persistence = spike_flag.ewm(span=10, min_periods=1).mean()\n    df_copy[\"factor_volume_surge_persistence\"] = persistence\n    return df_copy[\"factor_volume_surge_persistence\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "e495067d51905b93",
+    "function_name": "factor_volume_confirmed_ewm",
+    "python_code": "def factor_volume_confirmed_ewm(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(1) - 1\n    vol_ma = df_copy['volume'].rolling(10, min_periods=10).mean()\n    vol_dev = df_copy['volume'] / vol_ma.replace(0, np.nan) - 1\n    raw = ret * vol_dev\n    factor = raw.ewm(span=5, min_periods=3).mean()\n    factor.name = \"factor_volume_confirmed_ewm\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "0c05924d28358990",
+    "function_name": "factor_intraday_adx_momentum",
+    "python_code": "def factor_intraday_adx_momentum(df):\n    df_copy = df.copy()\n    overnight, intraday = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    intraday_5 = intraday.rolling(window=5, min_periods=5).sum()\n    ema = pd.Series(talib.EMA(intraday_5.values, timeperiod=3), index=df_copy.index)\n    adx = pd.Series(talib.ADX(df_copy[\"high\"].values, df_copy[\"low\"].values, df_copy[\"close\"].values, timeperiod=14), index=df_copy.index) / 100.0\n    df_copy[\"factor_intraday_adx_momentum\"] = ema * adx\n    return df_copy[\"factor_intraday_adx_momentum\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "13c328d6a93e822c",
+    "function_name": "factor_volume_adaptive_momentum",
+    "python_code": "def factor_volume_adaptive_momentum(df):\n    \"\"\"Adaptive momentum blend gated by volume regime percentile.\n    \n    Inherits primary mechanism from parent: blending short-term (5-day) and medium-term (21-day)\n    momentum weighted by volume regime percentile from classify_volume_regime.\n    The smoothing modifier is removed to simplify and reduce complexity.\n    \"\"\"\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20)\n    vol_ratio_pct = vol_ratio.rolling(63, min_periods=63).rank(pct=True)\n\n    short_mom = close / close.shift(5) - 1.0\n    med_mom = close / close.shift(21) - 1.0\n\n    weight = vol_ratio_pct.fillna(0.5)\n    adaptive_mom = weight * short_mom + (1.0 - weight) * med_mom\n\n    df_copy[\"factor_volume_adaptive_momentum\"] = adaptive_mom\n    return df_copy[\"factor_volume_adaptive_momentum\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "2717b38912db1376",
+    "function_name": "factor_volatility_compression",
+    "python_code": "def factor_volatility_compression(df):\n    df_copy = df.copy()\n    high, low, close = df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"]\n    atr_short = pd.Series(talib.ATR(high, low, close, timeperiod=5), index=df_copy.index)\n    atr_long = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=df_copy.index)\n    ratio = atr_short / atr_long.replace(0, np.nan)\n    compression = 1.0 - ratio\n    factor = compression.rolling(window=3, min_periods=3).mean()\n    df_copy[\"factor_volatility_compression\"] = factor\n    return df_copy[\"factor_volatility_compression\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "9b8b5080bb51fd0d",
+    "function_name": "factor_intraday_pressure_asym_diff",
+    "python_code": "def factor_intraday_pressure_asym_diff(df):\n    \"\"\"Intraday pressure reversal modulated by up-down volatility difference.\"\"\"\n    df_copy = df.copy()\n    daily_ret = df_copy[\"close\"].pct_change()\n    up_vol = daily_ret.clip(lower=0).rolling(20, min_periods=20).std(ddof=1)\n    down_vol = daily_ret.clip(upper=0).rolling(20, min_periods=20).std(ddof=1)\n    vol_total = up_vol + down_vol\n    asym_diff = (up_vol - down_vol) / vol_total.replace(0, np.nan)\n    intraday_pressure = (df_copy[\"close\"] - df_copy[\"low\"]) / (df_copy[\"high\"] - df_copy[\"low\"]).replace(0, np.nan)\n    reversal = -(intraday_pressure - 0.5)\n    # Non-negative scaling to avoid sign flipping\n    factor = reversal * np.maximum(asym_diff, 0)\n    df_copy[\"factor_intraday_pressure_asym_diff\"] = factor.replace([np.inf, -np.inf], np.nan)\n    return df_copy[\"factor_intraday_pressure_asym_diff\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "094895e9ecb6de45",
+    "function_name": "factor_volatility_asymmetry_spike_adj_ema5",
+    "python_code": "def factor_volatility_asymmetry_spike_adj_ema5(df):\n    df_copy = df.copy()\n    open_ = df_copy['open']\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    range_log = np.log(high / low)\n    sign = np.sign(close - open_)\n    raw = sign * range_log\n    smooth = talib.EMA(raw, timeperiod=5)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(volume, window=20, high_threshold=1.5, low_threshold=0.6)\n    spike_ratio = is_high_vol.rolling(20, min_periods=20).mean()\n    attenuation = 1.0 - 0.5 * spike_ratio\n    result = smooth * attenuation\n    result.name = 'factor_volatility_asymmetry_spike_adj_ema5'\n    return result\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_herding_vol_stress",
+    "function_name": "factor_herding_vol_stress",
+    "python_code": "def factor_herding_vol_stress(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    intraday_direction = (df_copy[\"close\"] - df_copy[\"open\"]) / range_.replace(0.0, np.nan)\n    vol_median = df_copy[\"volume\"].rolling(10, min_periods=10).median()\n    vol_ratio = df_copy[\"volume\"] / vol_median.replace(0.0, np.nan)\n    stress_range = (df_copy[\"high\"] - df_copy[\"low\"]) / df_copy[\"close\"].replace(0.0, np.nan)\n    herding_signal = intraday_direction * vol_ratio * stress_range\n    factor = herding_signal.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_herding_vol_stress\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "67bc8e5bfe6e5237",
+    "function_name": "factor_simple_convex_momentum_log_volume",
+    "python_code": "def factor_simple_convex_momentum_log_volume(df):\n    \"\"\"Simplify to fixed 10-day EMA, remove leverage gate.\"\"\"\n    df_copy = df.copy()\n    ema_close = df_copy[\"close\"].ewm(span=10, min_periods=10).mean()\n    ema_vol = df_copy[\"volume\"].ewm(span=20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / ema_vol.replace(0, np.nan)\n    vol_scale = np.log1p(vol_ratio.clip(lower=0))\n    dev = df_copy[\"close\"] / ema_close.replace(0, np.nan) - 1.0\n    signed_dev = np.sign(dev) * dev.pow(2)\n    df_copy[\"factor_simple_convex_momentum_log_volume\"] = signed_dev * vol_scale\n    return df_copy[\"factor_simple_convex_momentum_log_volume\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_reversal",
+    "function_name": "factor_intraday_reversal",
+    "python_code": "def factor_intraday_reversal(df):\n    df_copy = df.copy()\n    intraday_pos = (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    avg_range = (df_copy['high'] - df_copy['low']).rolling(5).mean()\n    avg_close = df_copy['close'].rolling(5).mean()\n    factor = -intraday_pos * avg_range / avg_close.replace(0, np.nan)\n    factor.name = 'factor_intraday_reversal'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_adjusted_momentum",
+    "function_name": "factor_volume_adjusted_momentum",
+    "python_code": "def factor_volume_adjusted_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_ratio = df_copy[\"volume\"] / df_copy[\"volume\"].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    raw_signal = ret * vol_ratio\n    signal = raw_signal.ewm(span=5, adjust=False).mean()\n    df_copy[\"factor_volume_adjusted_momentum\"] = signal\n    return df_copy[\"factor_volume_adjusted_momentum\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_directional_vol_smooth_range_mut",
+    "function_name": "factor_directional_vol_smooth_range_mut",
+    "python_code": "def factor_directional_vol_smooth_range_mut(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=8).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    fast = vol_ratio.ewm(span=10).mean()\n    slow = vol_ratio.ewm(span=30).mean()\n    weight = 1 / (1 + np.exp(-5 * (vol_ratio - 0.85)))\n    smooth_vol_ratio = weight * fast + (1 - weight) * slow\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_smooth_range_mut'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_smooth_range_mut']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_gated_momentum_v3",
+    "function_name": "factor_vol_gated_momentum_v3",
+    "python_code": "def factor_vol_gated_momentum_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    # 5-day return\n    ret5 = close / close.shift(5) - 1\n    # 20-day rolling standard deviation of daily returns (volatility)\n    daily_ret = close.pct_change()\n    vol = daily_ret.rolling(20, min_periods=20).std(ddof=1)\n    # Time-series rank percentile\n    vol_rank = vol.rolling(20, min_periods=20).rank(pct=True)\n    # Inverse volatility weighting: low vol gets higher weight (1.0), high vol gets lower (0.5)\n    weight = 1.5 - 0.5 * vol_rank\n    gated_ret = ret5 * weight\n    df_copy['factor_vol_gated_momentum_v3'] = gated_ret\n    return df_copy['factor_vol_gated_momentum_v3']",
+    "tools": ""
+  },
+  {
+    "factor_id": "c14fed9d6503cb5a",
+    "function_name": "factor_momentum_volratio",
+    "python_code": "def factor_momentum_volratio(df):\n    df_copy = df.copy()\n    ret5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1.0\n    up_days = (df_copy[\"close\"] > df_copy[\"close\"].shift(1)).astype(float)\n    up_proportion = up_days.ewm(span=20, min_periods=20).mean()\n    ret = df_copy[\"close\"].pct_change()\n    vol20 = ret.rolling(20, min_periods=20).std()\n    vol60 = ret.rolling(60, min_periods=60).std()\n    vol_ratio = vol20 / vol60.replace(0, np.nan)\n    decay = np.exp(-vol_ratio)\n    factor = ret5 * up_proportion * decay\n    factor = factor.fillna(0.0)\n    df_copy[\"factor_momentum_volratio\"] = factor\n    return df_copy[\"factor_momentum_volratio\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "11603b8502e45835",
+    "function_name": "factor_directional_vol_volbase25_smooth_dir_range10",
+    "python_code": "def factor_directional_vol_volbase25_smooth_dir_range10(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=10, min_periods=10).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(25, min_periods=25).mean()\n    smooth_vol = vol_ratio.ewm(span=15, min_periods=15).mean()\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    smooth_direction = direction.ewm(span=3, min_periods=3).mean()\n    df_copy['factor_directional_vol_volbase25_smooth_dir_range10'] = smooth_range * smooth_vol * smooth_direction\n    return df_copy['factor_directional_vol_volbase25_smooth_dir_range10']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_directional_vol_adaptive_crossover",
+    "function_name": "factor_directional_vol_adaptive_crossover",
+    "python_code": "def factor_directional_vol_adaptive_crossover(df):\n    df_copy = df.copy()\n    range_pct = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    smooth_range = range_pct.ewm(span=5).mean()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    smooth_vol_ratio_fast = vol_ratio.ewm(span=10).mean()\n    smooth_vol_ratio_slow = vol_ratio.ewm(span=30).mean()\n    smooth_vol_ratio = np.where(vol_ratio > 0.9, smooth_vol_ratio_fast, smooth_vol_ratio_slow)\n    direction = (df_copy['close'] - df_copy['open']) / df_copy['close']\n    df_copy['factor_directional_vol_adaptive_crossover'] = smooth_range * smooth_vol_ratio * direction\n    return df_copy['factor_directional_vol_adaptive_crossover']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_gated_momentum_volume_weighted",
+    "function_name": "factor_vol_gated_momentum_volume_weighted",
+    "python_code": "def factor_vol_gated_momentum_volume_weighted(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    # 5-day return\n    ret5 = close / close.shift(5) - 1\n    # 14-day ATR\n    atr14 = talib.ATR(high.astype(float).values, low.astype(float).values, close.astype(float).values, timeperiod=14)\n    atr14 = pd.Series(atr14, index=df_copy.index)\n    # Normalized volatility\n    norm_vol = atr14 / close\n    # Time-series rank percentile (continuous gate)\n    vol_rank = norm_vol.rolling(20, min_periods=20).rank(pct=True)\n    # Weight: 0.5 (low vol) to 1.0 (high vol)\n    weight = 0.5 + 0.5 * vol_rank\n    gated_ret = ret5 * weight\n    # Volume factor: relative volume (20-day SMA)\n    vol_ma = volume.rolling(20, min_periods=20).mean()\n    rel_vol = volume / vol_ma.replace(0, np.nan)\n    # Combine: gated momentum amplified by volume conviction\n    factor = gated_ret * rel_vol\n    df_copy['factor_vol_gated_momentum_volume_weighted'] = factor\n    return df_copy['factor_vol_gated_momentum_volume_weighted']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_confirmed_momentum_clipped",
+    "function_name": "factor_volume_confirmed_momentum_clipped",
+    "python_code": "def factor_volume_confirmed_momentum_clipped(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    vol_avg = df_copy[\"volume\"].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy[\"volume\"] / vol_avg.replace(0, np.nan)\n    factor = momentum * vol_ratio\n    factor = factor.clip(-3, 3)\n    factor.name = \"factor_volume_confirmed_momentum_clipped\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_vol_regime_breakout_continuous",
+    "function_name": "factor_vol_regime_breakout_continuous",
+    "python_code": "def factor_vol_regime_breakout_continuous(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(20).median()\n    pos = (df_copy['close'] - df_copy['low']) / range_.replace(0, np.nan)\n    vol_ratio = range_ / range_med.replace(0, np.nan)\n    factor = (pos - 0.5) * vol_ratio\n    factor = factor.ewm(span=5, min_periods=5).mean()\n    factor.name = 'factor_vol_regime_breakout_continuous'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+    "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25",
+    "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    stress_ewm = stress_ewm.clip(upper=2.5)\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-2.5, upper=2.5)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip2_5_w40_ewm15_stressclip25\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+    "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25",
+    "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    stress_ewm = stress_ewm.clip(upper=2.5)\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-3, upper=3)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15_stressclip25\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+    "function_name": "factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15",
+    "python_code": "def factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    vol_mean = volume.rolling(20, min_periods=20).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-3, upper=3)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w20_clip3_w40_ewm15\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15",
+    "function_name": "factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15",
+    "python_code": "def factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"]\n    low = df_copy[\"low\"]\n    close = df_copy[\"close\"]\n    open_ = df_copy[\"open\"]\n    volume = df_copy[\"volume\"]\n    range_ = high - low\n    mean_range = range_.rolling(40, min_periods=40).mean()\n    std_range = range_.rolling(40, min_periods=40).std(ddof=1)\n    z = (range_ - mean_range) / std_range.replace(0, np.nan)\n    stress_ewm = z.clip(lower=0).ewm(span=15, adjust=False).mean()\n    vol_mean = volume.rolling(25, min_periods=25).mean()\n    vol_weight = volume / vol_mean.replace(0, np.nan)\n    vol_weight = vol_weight.clip(upper=2)\n    cont_dir = (close - open_) / range_.replace(0, np.nan)\n    cont_dir = cont_dir.clip(lower=-2, upper=2)\n    factor = stress_ewm * vol_weight * cont_dir\n    df_copy[\"factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15\"] = factor\n    return df_copy[\"factor_stress_volume_cont_weight_cont_dir_w25_clip2_w40_ewm15\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_stress_range_volume_surge",
+    "function_name": "factor_stress_range_volume_surge",
+    "python_code": "def factor_stress_range_volume_surge(df):\n    df_copy = df.copy()\n    stress_range = (df_copy['high'] - df_copy['low']) / df_copy['close'].replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_surge = df_copy['volume'] / vol_ma\n    factor = stress_range * vol_surge\n    df_copy['factor_stress_range_volume_surge'] = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    return df_copy['factor_stress_range_volume_surge']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_pressure_tanh",
+    "function_name": "factor_pressure_tanh",
+    "python_code": "def factor_pressure_tanh(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    safe_range = range_.replace(0, np.nan)\n    intra_pressure = (df_copy[\"close\"] - df_copy[\"low\"]) / safe_range * df_copy[\"volume\"]\n    rolling_mean = intra_pressure.rolling(20, min_periods=20).mean()\n    rolling_std = intra_pressure.rolling(20, min_periods=20).std(ddof=1)\n    z = (intra_pressure - rolling_mean) / rolling_std.replace(0, np.nan)\n    factor = np.tanh(z)\n    factor = factor.fillna(0)\n    df_copy[\"factor_pressure_tanh\"] = factor\n    return df_copy[\"factor_pressure_tanh\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+    "function_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+    "python_code": "def factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 20, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(20, min_periods=3).median()\n    down_med = down_range.rolling(20, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 6, min_periods=6)\n    vol_med6 = volume.rolling(6, min_periods=6).median()\n    vol_ratio = volume / vol_med6.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA5 smoothing (increased from 3 to reduce noise)\n    factor_smoothed = factor.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_herding_simple",
+    "function_name": "factor_herding_simple",
+    "python_code": "def factor_herding_simple(df):\n    df_copy = df.copy()\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    intraday_direction = (df_copy[\"close\"] - df_copy[\"open\"]) / range_.replace(0.0, np.nan)\n    vol_median = df_copy[\"volume\"].rolling(10, min_periods=10).median()\n    vol_ratio = df_copy[\"volume\"] / vol_median.replace(0.0, np.nan)\n    herding_signal = intraday_direction * vol_ratio\n    factor = herding_signal.ewm(span=5, min_periods=5, adjust=False).mean()\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0.0)\n    factor.name = \"factor_herding_simple\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_adaptive_momentum_gate_v2",
+    "function_name": "factor_adaptive_momentum_gate_v2",
+    "python_code": "def factor_adaptive_momentum_gate_v2(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol = ret.rolling(30, min_periods=30).std()\n    momentum_5 = df_copy['close'] / df_copy['close'].shift(5) - 1\n    factor = momentum_5 / vol.replace(0, np.nan)\n    df_copy['factor_adaptive_momentum_gate_v2'] = factor\n    return df_copy['factor_adaptive_momentum_gate_v2']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_volume_confirmed_momentum_binary_gate",
+    "function_name": "factor_volume_confirmed_momentum_binary_gate",
+    "python_code": "def factor_volume_confirmed_momentum_binary_gate(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    base = ret * vol_ratio\n    smoothed_base = base.ewm(span=10, min_periods=10, adjust=False).mean()\n    range_ = df_copy['high'] - df_copy['low']\n    range_ = range_.replace(0, np.nan)\n    mid_point = (df_copy['high'] + df_copy['low']) / 2\n    binary_gate = np.where(df_copy['close'] >= mid_point, 1, -1)\n    factor = smoothed_base * binary_gate\n    df_copy['factor_volume_confirmed_momentum_binary_gate'] = factor\n    return df_copy['factor_volume_confirmed_momentum_binary_gate']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_intraday_reversal_crossover_v1",
+    "function_name": "factor_intraday_reversal_crossover_v1",
+    "python_code": "def factor_intraday_reversal_crossover_v1(df):\n    df_copy = df.copy()\n    intraday_pos = (2*df_copy['close'] - df_copy['high'] - df_copy['low']) / (df_copy['high'] - df_copy['low']).replace(0, np.nan)\n    avg_range = (df_copy['high'] - df_copy['low']).rolling(5).mean()\n    avg_close = df_copy['close'].rolling(5).mean()\n    raw_factor = -intraday_pos * avg_range / avg_close.replace(0, np.nan)\n    smoothed = raw_factor.rolling(3, min_periods=3).mean()\n    smoothed.name = 'factor_intraday_reversal_crossover_v1'\n    return smoothed",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_range_position_volume_gated_smoothed",
+    "function_name": "factor_range_position_volume_gated_smoothed",
+    "python_code": "def factor_range_position_volume_gated_smoothed(df):\n    df_copy = df.copy()\n    low_ = df_copy[\"low\"]\n    high_ = df_copy[\"high\"]\n    close_ = df_copy[\"close\"]\n    volume_ = df_copy[\"volume\"]\n    range_ = high_ - low_\n    pos = (close_ - low_) / range_.replace(0.0, np.nan)\n    pos = pos - 0.5\n    smooth_pos = pos.ewm(span=3, min_periods=3, adjust=False).mean()\n    vol_20 = volume_.rolling(20, min_periods=20).mean()\n    vol_ratio = volume_ / vol_20.replace(0.0, np.nan)\n    factor = smooth_pos * vol_ratio\n    df_copy[\"factor_range_position_volume_gated_smoothed\"] = factor\n    return df_copy[\"factor_range_position_volume_gated_smoothed\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_imbalance_volume_ratio_ewm",
+    "function_name": "factor_imbalance_volume_ratio_ewm",
+    "python_code": "def factor_imbalance_volume_ratio_ewm(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    weighted = imbalance * vol_ratio\n    df_copy['factor_imbalance_volume_ratio_ewm'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ratio_ewm']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_range_position_volume_gated_smoothed_mut",
+    "function_name": "factor_range_position_volume_gated_smoothed_mut",
+    "python_code": "def factor_range_position_volume_gated_smoothed_mut(df):\n    df_copy = df.copy()\n    low_ = df_copy[\"low\"]\n    high_ = df_copy[\"high\"]\n    close_ = df_copy[\"close\"]\n    volume_ = df_copy[\"volume\"]\n    range_ = high_ - low_\n    pos = (close_ - low_) / range_.replace(0.0, np.nan)\n    pos = pos - 0.5\n    smooth_pos = pos.ewm(span=5, min_periods=5, adjust=False).mean()\n    vol_20 = volume_.rolling(20, min_periods=20).mean()\n    vol_ratio = volume_ / vol_20.replace(0.0, np.nan)\n    factor = smooth_pos * vol_ratio\n    df_copy[\"factor_range_position_volume_gated_smoothed_mut\"] = factor\n    return df_copy[\"factor_range_position_volume_gated_smoothed_mut\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_imbalance_volume_ewm_mut",
+    "function_name": "factor_imbalance_volume_ewm_mut",
+    "python_code": "def factor_imbalance_volume_ewm_mut(df):\n    df_copy = df.copy()\n    midpoint = (df_copy['high'] + df_copy['low']) / 2\n    range_ = df_copy['high'] - df_copy['low']\n    imbalance = (df_copy['close'] - midpoint) / range_.replace(0, np.nan)\n    vol_ma = df_copy['volume'].rolling(10, min_periods=10).mean()\n    vol_dev = df_copy['volume'] / vol_ma.replace(0, np.nan) - 1\n    weighted = imbalance * df_copy['volume'] * (1 + vol_dev)\n    df_copy['factor_imbalance_volume_ewm_mut'] = weighted.ewm(span=5, min_periods=3).mean()\n    return df_copy['factor_imbalance_volume_ewm_mut']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2",
+    "function_name": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2",
+    "python_code": "def factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    open_ = df_copy['open']\n    volume = df_copy['volume']\n\n    # Asymmetry ratio using median range (window 20, min_periods=3)\n    up_day = (close > open_).astype(float)\n    down_day = (close <= open_).astype(float)\n    range_ = high - low\n    up_range = range_.where(up_day == 1, np.nan)\n    down_range = range_.where(down_day == 1, np.nan)\n    up_med = up_range.rolling(20, min_periods=3).median()\n    down_med = down_range.rolling(20, min_periods=3).median()\n    up_med = up_med.fillna(1.0)\n    down_med = down_med.fillna(1.0)\n    asym_ratio = up_med / down_med.replace(0.0, np.nan)\n    asym_ratio = asym_ratio.fillna(1.0)\n\n    # Volume ratio using median (window 10, min_periods=5) - mutation: increased window for smoother volume base\n    vol_med10 = volume.rolling(10, min_periods=5).median()\n    vol_ratio = volume / vol_med10.replace(0.0, np.nan)\n    vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)\n\n    # Combine with negative sign\n    factor = -1.0 * asym_ratio * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    # EMA2 smoothing (inherited from parent)\n    factor_smoothed = factor.ewm(span=2, min_periods=2, adjust=False).mean()\n    factor_smoothed = factor_smoothed.replace([np.inf, -np.inf], np.nan).fillna(0)\n\n    df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2'] = factor_smoothed\n    return df_copy['factor_mut_cro_asym_vol_ratio_med_20_minp3_vol10_ema2']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_284",
+    "function_name": "factor_volume_reversal_rank",
+    "python_code": "def factor_volume_reversal_rank(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    rev = -deviation\n    vol_rank = df_copy['volume'].rolling(20, min_periods=20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_volume_reversal_rank'] = factor.fillna(0)\n    return df_copy['factor_volume_reversal_rank']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_676",
+    "function_name": "factor_vwap_adjusted_range_tanh_smooth",
+    "python_code": "def factor_vwap_adjusted_range_tanh_smooth(df):\n    df_copy = df.copy()\n    # Increased ATR window from 14 to 20 for smoother volatility estimate\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    # Increased VWAP window from 20 to 30 for more stable anchor\n    vwap = (df_copy['close'] * df_copy['volume']).rolling(30, min_periods=30).sum() / df_copy['volume'].rolling(30, min_periods=30).sum().replace(0, np.nan)\n    norm_atr = atr / vwap\n    # Increased volume EMA window from 20 to 30 for smoother ratio\n    vol_ema = talib.EMA(df_copy['volume'], timeperiod=30)\n    vol_ratio = df_copy['volume'] / vol_ema\n    raw = norm_atr * vol_ratio\n    factor = np.tanh(raw)\n    df_copy['factor_vwap_adjusted_range_tanh_smooth'] = factor\n    return df_copy['factor_vwap_adjusted_range_tanh_smooth']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_678",
+    "function_name": "factor_vwap_adjusted_range_tanh_mutated_v2",
+    "python_code": "def factor_vwap_adjusted_range_tanh_mutated_v2(df):\n    df_copy = df.copy()\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=14)\n    vwap = (df_copy['close'] * df_copy['volume']).rolling(14).sum() / df_copy['volume'].rolling(14).sum().replace(0, np.nan)\n    norm_atr = atr / vwap\n    vol_ema = talib.EMA(df_copy['volume'], timeperiod=30)\n    vol_ratio = df_copy['volume'] / vol_ema\n    raw = norm_atr * vol_ratio\n    factor = np.tanh(raw)\n    df_copy['factor_vwap_adjusted_range_tanh_mutated_v2'] = factor\n    return df_copy['factor_vwap_adjusted_range_tanh_mutated_v2']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_25",
+    "function_name": "factor_persistence_ewma",
+    "python_code": "def factor_persistence_ewma(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    abs_return_diff = returns.diff().abs()\n    smoothness = -abs_return_diff.ewm(span=10, min_periods=1).mean()\n    df_copy[\"factor_persistence_ewma\"] = smoothness.fillna(0)\n    return df_copy[\"factor_persistence_ewma\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_572",
+    "function_name": "factor_squared_range_volume_rank_smoothed_no_cuberoot",
+    "python_code": "def factor_squared_range_volume_rank_smoothed_no_cuberoot(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_sq = range_ ** 2\n    vol_rank = df_copy['volume'].rolling(20, min_periods=20).rank(pct=True)\n    raw = (range_sq / df_copy['close']) * vol_rank\n    signal = raw.ewm(span=10, min_periods=10, adjust=False).mean()\n    signal.name = 'factor_squared_range_volume_rank_smoothed_no_cuberoot'\n    return signal",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_501",
+    "function_name": "factor_vol_regime_vol_ratio",
+    "python_code": "def factor_vol_regime_vol_ratio(df):\n    df_copy = df.copy()\n    short_vol = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(5).mean()\n    long_vol = (df_copy[\"high\"] - df_copy[\"low\"]).rolling(20).mean()\n    vol_ratio = short_vol / long_vol.replace(0, np.nan)\n    vol_mean = df_copy[\"volume\"].rolling(30).mean()\n    high_vol_mask = (df_copy[\"volume\"] > vol_mean * 1.5).astype(float)\n    factor = -vol_ratio * high_vol_mask\n    df_copy[\"factor_vol_regime_vol_ratio\"] = factor\n    return df_copy[\"factor_vol_regime_vol_ratio\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_133",
+    "function_name": "factor_stable_symmetry_reinforced",
+    "python_code": "def factor_stable_symmetry_reinforced(df):\n    df_copy = df.copy()\n    # Parent 1: smooth absolute return\n    ret = df_copy['close'].pct_change()\n    abs_ret = ret.abs()\n    smooth_abs_ret = abs_ret.ewm(span=21, min_periods=10).mean()\n    # Parent 2: symmetry rank * volume ratio\n    high = df_copy['high']\n    low = df_copy['low']\n    open_ = df_copy['open']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    body_top = np.maximum(open_, close)\n    body_bottom = np.minimum(open_, close)\n    upper_shadow = high - body_top\n    lower_shadow = body_bottom - low\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ma = volume.rolling(20, min_periods=10).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    # Combine: reinforce smooth return with shape-volume signal\n    factor = smooth_abs_ret * (symmetry_rank * vol_ratio)\n    factor = factor.fillna(0)\n    return factor.rename('factor_stable_symmetry_reinforced')\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_763",
+    "function_name": "factor_lag_vol_robust_volratio",
+    "python_code": "def factor_lag_vol_robust_volratio(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(5) - 1\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(window=20, min_periods=20).median()\n    range_mad = (range_ - range_med).abs().rolling(window=20, min_periods=20).mean()\n    range_z = (range_ - range_med) / range_mad.replace(0.0, np.nan)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    raw = ret * range_z * vol_ratio\n    factor = talib.EMA(raw, timeperiod=10)\n    df_copy['factor_lag_vol_robust_volratio'] = factor\n    return df_copy['factor_lag_vol_robust_volratio']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_761",
+    "function_name": "factor_lag_vol_ratio_smoothed_v2",
+    "python_code": "def factor_lag_vol_ratio_smoothed_v2(df):\n    df_copy = df.copy()\n    ret = df_copy['close'] / df_copy['close'].shift(5) - 1\n    range_ = df_copy['high'] - df_copy['low']\n    range_med = range_.rolling(window=30, min_periods=30).median()\n    range_mad = (range_ - range_med).abs().rolling(window=30, min_periods=30).mean()\n    range_z = (range_ - range_med) / range_mad.replace(0.0, np.nan)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    raw_factor = ret * range_z * vol_ratio\n    factor = talib.EMA(raw_factor, timeperiod=15)\n    df_copy['factor_lag_vol_ratio_smoothed_v2'] = factor\n    return df_copy['factor_lag_vol_ratio_smoothed_v2']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_24",
+    "function_name": "factor_persistence",
+    "python_code": "def factor_persistence(df):\n    df_copy = df.copy()\n    returns = df_copy[\"close\"].pct_change()\n    abs_return_diff = returns.diff().abs()\n    smoothness = -abs_return_diff.rolling(window=10, min_periods=1).mean()\n    df_copy[\"factor_persistence\"] = smoothness.fillna(0)\n    return df_copy[\"factor_persistence\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_573",
+    "function_name": "factor_squared_range_close_ema_cuberoot",
+    "python_code": "def factor_squared_range_close_ema_cuberoot(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    range_sq = range_ ** 2\n    raw = range_sq / df_copy['close']\n    smoothed = raw.ewm(span=10, min_periods=10, adjust=False).mean()\n    signal = np.sign(smoothed) * np.abs(smoothed) ** (1/3)\n    signal = pd.Series(signal, index=df_copy.index, name='factor_squared_range_close_ema_cuberoot').fillna(0)\n    return signal",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_72",
+    "function_name": "factor_abnormality_asymmetry",
+    "python_code": "def factor_abnormality_asymmetry(df):\n    df_copy = df.copy()\n    log_vol = np.log(df_copy['volume'] + 1)\n    rolling_mean = log_vol.rolling(window=20).mean()\n    rolling_std = log_vol.rolling(window=20).std()\n    z_score = (log_vol - rolling_mean) / rolling_std\n    abnormality = np.abs(z_score)\n    range_ratio = (df_copy['high'] - df_copy['low']) / df_copy['close']\n    vol_abnorm = abnormality * range_ratio\n    up_day = df_copy['close'] >= df_copy['open']\n    vol_up = df_copy['volume'].where(up_day, 0)\n    vol_down = df_copy['volume'].where(~up_day, 0)\n    span = 10\n    ewma_up = vol_up.ewm(span=span, adjust=False).mean()\n    ewma_down = vol_down.ewm(span=span, adjust=False).mean()\n    ratio = np.where(ewma_down > 0, ewma_up / ewma_down, 1.0)\n    factor = vol_abnorm * ratio\n    df_copy['factor_abnormality_asymmetry'] = factor\n    return df_copy['factor_abnormality_asymmetry']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_89",
+    "function_name": "factor_volume_trend_adjusted_impact",
+    "python_code": "def factor_volume_trend_adjusted_impact(df):\n    df_copy = df.copy()\n    price_move = df_copy['close'] - df_copy['open']\n    volume_ma20 = df_copy['volume'].rolling(window=20, min_periods=20).mean()\n    volume_ratio = df_copy['volume'] / (volume_ma20 + 1e-10)\n    impact = price_move * volume_ratio\n    factor = impact.ewm(span=21, min_periods=21, adjust=False).mean()\n    df_copy[\"factor_volume_trend_adjusted_impact\"] = factor\n    return df_copy[\"factor_volume_trend_adjusted_impact\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_546",
+    "function_name": "factor_volume_abnormality_liquidity_gated",
+    "python_code": "def factor_volume_abnormality_liquidity_gated(df):\n    df_copy = df.copy()\n    vol = df_copy['volume']\n    median_vol = vol.rolling(20, min_periods=20).median()\n    vol_ratio = vol / median_vol.replace(0, np.nan)\n    raw = vol_ratio.rolling(15, min_periods=15).std()\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    factor = np.where(high_liquidity, raw, raw * 0.7)\n    df_copy['factor_volume_abnormality_liquidity_gated'] = factor\n    return df_copy['factor_volume_abnormality_liquidity_gated']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_718",
+    "function_name": "factor_corr_volume_regime",
+    "python_code": "def factor_corr_volume_regime(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_pct = df_copy[\"volume\"].pct_change()\n    corr = ret.rolling(20, min_periods=20).corr(vol_pct)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = corr * vol_ratio\n    factor.name = \"factor_corr_volume_regime\"\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_778",
+    "function_name": "factor_lag_vol_volatility_adjusted_gate",
+    "python_code": "def factor_lag_vol_volatility_adjusted_gate(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_20 = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj = atr_20 / df_copy[\"close\"].replace(0, np.nan)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    factor = np.where(high_resvol, raw.ewm(span=10, min_periods=10, adjust=False).mean(), raw.ewm(span=5, min_periods=5, adjust=False).mean())\n    df_copy[\"factor_lag_vol_volatility_adjusted_gate\"] = factor\n    return df_copy[\"factor_lag_vol_volatility_adjusted_gate\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_658",
+    "function_name": "factor_vol_price_coherence_v2",
+    "python_code": "def factor_vol_price_coherence_v2(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    vol_chg_pct = df_copy[\"volume\"].pct_change()\n    roll_corr = ret.rolling(20, min_periods=20).corr(vol_chg_pct)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = roll_corr * vol_ratio\n    factor = factor.fillna(0)\n    df_copy[\"factor_vol_price_coherence_v2\"] = factor\n    return df_copy[\"factor_vol_price_coherence_v2\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_58",
+    "function_name": "factor_volume_abnormality_range_interaction",
+    "python_code": "def factor_volume_abnormality_range_interaction(df):\n    \"\"\"Volume abnormality interacting with range expansion/compression regime.\"\"\"\n    df_copy = df.copy()\n    log_vol = np.log(df_copy[\"volume\"] + 1)\n    roll_med = log_vol.rolling(window=20, min_periods=10).median()\n    roll_std = log_vol.rolling(window=20, min_periods=10).std()\n    vol_z = np.where(roll_std > 0, (log_vol - roll_med) / roll_std, 0.0)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    avg_range = range_.rolling(window=20, min_periods=10).mean()\n    range_ratio = (range_ + 1e-8) / (avg_range + 1e-8)\n    factor = vol_z * range_ratio\n    factor = np.where(np.isnan(factor), 0.0, factor)\n    df_copy[\"factor_volume_abnormality_range_interaction\"] = factor\n    return df_copy[\"factor_volume_abnormality_range_interaction\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_264",
+    "function_name": "factor_crash_vol_ratio_asym",
+    "python_code": "def factor_crash_vol_ratio_asym(df):\n    df_copy = df.copy()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    up_range = np.maximum(0, df_copy['close'] - df_copy['open'])\n    down_range = np.maximum(0, df_copy['open'] - df_copy['close'])\n    total_range = df_copy['high'] - df_copy['low']\n    ewma_up = up_range.ewm(span=10, min_periods=10).mean()\n    ewma_down = down_range.ewm(span=10, min_periods=10).mean()\n    ewma_total = total_range.ewm(span=10, min_periods=10).mean()\n    asym = (ewma_up - ewma_down) / ewma_total.replace(0, np.nan)\n    factor = -vol_ratio * asym\n    df_copy['factor_crash_vol_ratio_asym'] = factor\n    return df_copy['factor_crash_vol_ratio_asym']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_779",
+    "function_name": "factor_lag_response_vol_tool_adaptive",
+    "python_code": "def factor_lag_response_vol_tool_adaptive(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=30)\n    log_vol_ratio = np.log(np.clip(vol_ratio, 1e-12, None))\n    atr_20 = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj = atr_20 / df_copy[\"close\"].replace(0, np.nan)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    ema5 = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    ema10 = raw.ewm(span=10, min_periods=10, adjust=False).mean()\n    resvol_high_gate = df_copy[\"style_gate_resvol_high\"]\n    factor = np.where(resvol_high_gate > 0, ema10, ema5)\n    df_copy[\"factor_lag_response_vol_tool_adaptive\"] = factor\n    return df_copy[\"factor_lag_response_vol_tool_adaptive\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_544",
+    "function_name": "factor_intraday_pressure_ema",
+    "python_code": "def factor_intraday_pressure_ema(df):\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    pressure = intraday_ret * df_copy[\"volume\"]\n    # Fix: fill NaN and ensure float64 for talib\n    momentum = pd.Series(talib.EMA(pressure.fillna(0).values.astype(np.float64), timeperiod=10), index=df_copy.index)\n    return momentum.fillna(0).rename(\"factor_intraday_pressure_ema\")\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_543",
+    "function_name": "factor_volume_regime_intraday_momentum",
+    "python_code": "def factor_volume_regime_intraday_momentum(df):\n    df_copy = df.copy()\n    intraday_ret = (df_copy[\"close\"] - df_copy[\"open\"]) / df_copy[\"open\"].replace(0, np.nan)\n    pressure = intraday_ret * df_copy[\"volume\"]\n    smoothed = pressure.ewm(span=10, adjust=False).mean()\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    factor = np.where(is_low_vol > 0, smoothed * 0.5, smoothed)\n    df_copy[\"factor\"] = factor\n    return df_copy[\"factor\"].fillna(0).rename(\"factor_volume_regime_intraday_momentum\")\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_780",
+    "function_name": "factor_lag_volatility_regime_adapted",
+    "python_code": "def factor_lag_volatility_regime_adapted(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_short = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=10)\n    atr_long = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj_short = atr_short / df_copy[\"close\"].replace(0, np.nan)\n    vol_adj_long = atr_long / df_copy[\"close\"].replace(0, np.nan)\n    resvol_high = df_copy[\"style_gate_resvol_high\"]\n    vol_adj = np.where(resvol_high > 0, vol_adj_short, vol_adj_long)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    factor = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    df_copy[\"factor_lag_volatility_regime_adapted\"] = factor\n    return df_copy[\"factor_lag_volatility_regime_adapted\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_777",
+    "function_name": "factor_lag_vol_volatility_adjusted",
+    "python_code": "def factor_lag_vol_volatility_adjusted(df):\n    df_copy = df.copy()\n    ret_5 = df_copy[\"close\"] / df_copy[\"close\"].shift(5) - 1\n    ema_vol = df_copy[\"volume\"].ewm(span=30, min_periods=30, adjust=False).mean()\n    log_vol_ratio = np.log(df_copy[\"volume\"] / ema_vol.replace(0, np.nan))\n    atr_20 = talib.ATR(df_copy[\"high\"], df_copy[\"low\"], df_copy[\"close\"], timeperiod=20)\n    vol_adj = atr_20 / df_copy[\"close\"].replace(0, np.nan)\n    raw = ret_5 * log_vol_ratio * vol_adj\n    factor = raw.ewm(span=5, min_periods=5, adjust=False).mean()\n    df_copy[\"factor_lag_vol_volatility_adjusted\"] = factor\n    return df_copy[\"factor_lag_vol_volatility_adjusted\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_587",
+    "function_name": "factor_resvol_volume_momentum",
+    "python_code": "def factor_resvol_volume_momentum(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    fast_mom = pd.Series(talib.ROC(df_copy[\"close\"], timeperiod=5), index=df_copy.index)\n    slow_mom = pd.Series(talib.ROC(df_copy[\"close\"], timeperiod=20), index=df_copy.index)\n    raw_mom = np.where(high_resvol, slow_mom, fast_mom)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    factor = raw_mom * vol_ratio\n    return pd.Series(factor, index=df_copy.index, name='factor_resvol_volume_momentum')\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_907",
+    "function_name": "factor_rsi_volume_confirmed_reversal",
+    "python_code": "def factor_rsi_volume_confirmed_reversal(df):\n    df_copy = df.copy()\n    close_float = df_copy[\"close\"].values.astype(np.float64)\n    rsi = talib.RSI(close_float, timeperiod=14)\n    rsi = pd.Series(rsi, index=df_copy.index)\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    signal = 50 - rsi\n    factor = signal * vol_ratio\n    df_copy[\"factor_rsi_volume_confirmed_reversal\"] = factor\n    return df_copy[\"factor_rsi_volume_confirmed_reversal\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_268",
+    "function_name": "factor_roughness_trend_vol_short",
+    "python_code": "def factor_roughness_trend_vol_short(df):\n    df_copy = df.copy()\n    tr = talib.TRANGE(df_copy['high'], df_copy['low'], df_copy['close'])\n    atr_short = tr.rolling(5, min_periods=5).mean()\n    atr_long = tr.rolling(20, min_periods=20).mean()\n    roughness_ratio = atr_short / atr_long.replace(0, np.nan)\n    sma_20 = df_copy['close'].rolling(20, min_periods=20).mean()\n    trend = (df_copy['close'] / sma_20) - 1\n    vol_ma = df_copy['volume'].rolling(10).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    factor = roughness_ratio * trend * vol_ratio\n    df_copy['factor_roughness_trend_vol_short'] = factor\n    return df_copy['factor_roughness_trend_vol_short']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_122",
+    "function_name": "factor_range_volume_trend",
+    "python_code": "def factor_range_volume_trend(df):\n    df_copy = df.copy()\n    high, low, vol = df_copy['high'], df_copy['low'], df_copy['volume']\n    # range expansion ratio\n    range_ = high - low\n    range_mean = range_.rolling(20).mean().shift(1)\n    range_ratio = range_ / range_mean.replace(0, np.nan)\n    # short-term volume z-score\n    vol_mean20 = vol.rolling(20).mean().shift(1)\n    vol_std20 = vol.rolling(20).std(ddof=0).shift(1)\n    vol_z20 = (vol - vol_mean20) / (vol_std20 + 1e-8)\n    # long-term volume trend\n    vol_mean200 = vol.rolling(200).mean().shift(1)\n    vol_trend = vol / (vol_mean200 + 1e-8)\n    # combine\n    factor = range_ratio * vol_z20 * vol_trend\n    df_copy['factor_range_volume_trend'] = factor\n    return df_copy['factor_range_volume_trend']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_1040",
+    "function_name": "factor_drawdown_vol_persistence",
+    "python_code": "def factor_drawdown_vol_persistence(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    returns = df_copy['close'].pct_change()\n    vol = returns.rolling(20, min_periods=20).std().replace(0, np.nan)\n    normalized_drawdown = drawdown / vol\n    high = df_copy['high'].values.astype('float64')\n    low = df_copy['low'].values.astype('float64')\n    close = df_copy['close'].values.astype('float64')\n    atr40 = talib.ATR(high, low, close, timeperiod=40)\n    atr10 = talib.ATR(high, low, close, timeperiod=10)\n    atr40 = pd.Series(atr40, index=df_copy.index)\n    atr10 = pd.Series(atr10, index=df_copy.index)\n    persistence = atr40 / atr10.replace(0, np.nan)\n    persistence = persistence.clip(lower=0.5, upper=2.0)\n    factor = normalized_drawdown * persistence\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_vol_persistence\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_250",
+    "function_name": "factor_vol_gated_momentum_v2",
+    "python_code": "def factor_vol_gated_momentum_v2(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    # 21-day momentum\n    mom = close / close.shift(21) - 1\n    # 21-day ATR normalized by close for volatility gate\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=21), index=df_copy.index)\n    vol_gate = atr / close\n    # Volume ratio to 21-day SMA (changed from 63-day median for shorter-term capture)\n    vol_sma = volume.rolling(21, min_periods=21).mean()\n    vol_ratio = volume / vol_sma.replace(0, np.nan)\n    # Core: momentum dampened by volatility, multiplied by continuous volume confirmation\n    factor = mom * (1 / (1 + vol_gate)) * vol_ratio\n    df_copy['factor_vol_gated_momentum_v2'] = factor\n    return df_copy['factor_vol_gated_momentum_v2']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_366",
+    "function_name": "factor_range_asym_log_vol",
+    "python_code": "def factor_range_asym_log_vol(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 20\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    ratio = np.log((up_avg + 1e-12) / (down_avg + 1e-12))\n    vol_avg = df_copy['volume'].rolling(20, min_periods=10).mean()\n    vol_max = vol_avg.rolling(20, min_periods=10).max().replace(0, np.nan)\n    vol_weight = vol_avg / vol_max\n    factor = ratio * vol_weight\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_log_vol'] = factor\n    return df_copy['factor_range_asym_log_vol']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_11",
+    "function_name": "factor_volatility_scaled_deviation",
+    "python_code": "def factor_volatility_scaled_deviation(df):\n    df_copy = df.copy()\n    sma20 = df_copy['close'].rolling(window=20, min_periods=20).mean()\n    deviation = df_copy['close'] - sma20\n    ret = df_copy['close'].pct_change()\n    vol20 = ret.rolling(window=20, min_periods=20).std()\n    scaled_dev = deviation / (vol20 * sma20 + 1e-8)\n    factor = np.tanh(scaled_dev)\n    df_copy['factor_volatility_scaled_deviation'] = factor\n    return df_copy['factor_volatility_scaled_deviation']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_179",
+    "function_name": "factor_vol_gated_herding_mutated",
+    "python_code": "def factor_vol_gated_herding_mutated(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Parent1: momentum and volatility adjustment (same as parent)\n    mom = close / close.shift(5) - 1\n    tr = np.maximum(high - low, np.maximum((high - close.shift(1)).abs(), (low - close.shift(1)).abs()))\n    atr = tr.rolling(20, min_periods=10).mean()\n    vol_adj = atr / close\n    vol_mean = vol_adj.rolling(20, min_periods=10).mean()\n    vol_std = vol_adj.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (vol_adj - vol_mean) / vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=7, min_periods=7, adjust=False).mean()\n    persistence = np.tanh(ema_ret * 5)\n    \n    base_mom = (mom / (1 + vol_z_clipped.abs())) * (1 + persistence)\n    \n    # Mutated herding: volume-signed return strength\n    vol_ma20 = volume.rolling(20).mean()\n    volume_dev = (volume - vol_ma20) / vol_ma20.replace(0, np.nan)\n    herding = np.sign(ret) * np.tanh(volume_dev * 3)\n    \n    # Volume confidence with shorter windows\n    vol_rank = volume.rolling(12).rank(pct=True)\n    vol_ma10 = volume.rolling(10).mean()\n    vol_trend = volume.rolling(3).mean() / vol_ma10.replace(0, np.nan)\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Combine\n    factor = base_mom * (1 + np.tanh(herding)) * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_vol_gated_herding_mutated'] = factor\n    return df_copy['factor_vol_gated_herding_mutated']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_234",
+    "function_name": "factor_volume_price_divergence_cross_mut",
+    "python_code": "def factor_volume_price_divergence_cross_mut(df):\n    df_copy = df.copy()\n    price_change_5 = df_copy['close'] - df_copy['close'].shift(5)\n    avg_volume = df_copy['volume'].ewm(span=20, adjust=False).mean()\n    volume_surge = df_copy['volume'] / avg_volume.replace(0, np.nan)\n    factor = -price_change_5 * volume_surge\n    factor = np.tanh(factor)\n    factor = factor.fillna(0)\n    factor.name = \"factor_volume_price_divergence_cross_mut\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_332",
+    "function_name": "factor_liquidity_mom_simple_2_mutated",
+    "python_code": "def factor_liquidity_mom_simple_2_mutated(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    volume = df_copy[\"volume\"]\n    mom = close - close.shift(5)\n    vol_ratio = volume / volume.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = mom * vol_ratio\n    df_copy[\"factor_liquidity_mom_simple_2_mutated\"] = factor\n    return df_copy[\"factor_liquidity_mom_simple_2_mutated\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_364",
+    "function_name": "factor_range_asym_log_short",
+    "python_code": "def factor_range_asym_log_short(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 10\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    # Safe ratio: avoid division by zero by clipping down_avg lower bound\n    ratio = up_avg / down_avg.clip(lower=1e-12)\n    # Clip ratio to avoid log(0) or negative\n    ratio_clipped = np.clip(ratio, 1e-12, None)\n    factor = np.log(ratio_clipped)\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_log_short'] = factor\n    return df_copy['factor_range_asym_log_short']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_247",
+    "function_name": "factor_volume_pressure_reversal",
+    "python_code": "def factor_volume_pressure_reversal(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ma = df_copy['volume'].rolling(20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    signal = -ret * vol_ratio\n    signal = signal.fillna(0)\n    signal.name = 'factor_volume_pressure_reversal'\n    return signal\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_697",
+    "function_name": "factor_downside_vol_liquidity_momentum",
+    "python_code": "def factor_downside_vol_liquidity_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    momentum = close / close.shift(21) - 1.0\n    returns = close.pct_change()\n    downside_returns = returns.where(returns < 0, np.nan)\n    vol_short = downside_returns.rolling(21, min_periods=5).std(ddof=1)\n    vol_long = downside_returns.rolling(63, min_periods=5).std(ddof=1)\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    vol = np.where(high_liquidity, vol_short, vol_long)\n    vol = np.where(vol == 0.0, np.nan, vol)\n    factor = momentum / vol\n    df_copy['factor_downside_vol_liquidity_momentum'] = factor\n    return df_copy['factor_downside_vol_liquidity_momentum']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_695",
+    "function_name": "factor_liquidity_adaptive_momentum",
+    "python_code": "def factor_liquidity_adaptive_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    returns = close.pct_change()\n    mom = close / close.shift(21) - 1.0\n    down_ret = np.where(returns < 0, returns, np.nan)\n    down_ret_series = pd.Series(down_ret, index=df_copy.index)\n    vol_short = down_ret_series.rolling(21, min_periods=5).std(ddof=1)\n    vol_long = down_ret_series.rolling(63, min_periods=5).std(ddof=1)\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    vol = np.where(high_liquidity, vol_short, vol_long)\n    vol = np.where(vol == 0.0, np.nan, vol)\n    factor = mom / vol\n    df_copy['factor_liquidity_adaptive_momentum'] = factor\n    return df_copy['factor_liquidity_adaptive_momentum']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_365",
+    "function_name": "factor_range_asym_vol_smooth",
+    "python_code": "def factor_range_asym_vol_smooth(df):\n    df_copy = df.copy()\n    up_close = df_copy['close'] > df_copy['close'].shift(1)\n    down_close = ~up_close\n    range_ = df_copy['high'] - df_copy['low']\n    win = 20\n    min_per = 5\n    up_sum = range_.where(up_close, 0).rolling(win, min_periods=min_per).sum()\n    down_sum = range_.where(down_close, 0).rolling(win, min_periods=min_per).sum()\n    up_count = up_close.rolling(win, min_periods=min_per).sum()\n    down_count = down_close.rolling(win, min_periods=min_per).sum()\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    ratio = (up_avg - down_avg) / (up_avg + down_avg + 1e-10)\n    vol_avg = df_copy['volume'].rolling(20, min_periods=10).mean()\n    vol_max = vol_avg.rolling(20, min_periods=10).max().replace(0, np.nan)\n    vol_weight = vol_avg / vol_max\n    factor = ratio * vol_weight\n    factor = factor.ewm(span=5, adjust=False).mean()\n    factor = factor.fillna(0)\n    df_copy['factor_range_asym_vol_smooth'] = factor\n    return df_copy['factor_range_asym_vol_smooth']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_215",
+    "function_name": "factor_liquidity_range_gated_momentum_v6",
+    "python_code": "def factor_liquidity_range_gated_momentum_v6(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    ret5 = close.pct_change(5)\n    med_vol20 = volume.rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = volume / med_vol20\n    price_range = high - low\n    conviction_raw = price_range * vol_ratio\n    conviction_rank = conviction_raw.rolling(20, min_periods=20).rank(pct=True)\n    atr = talib.ATR(high.values.astype(np.float64), low.values.astype(np.float64), close.values.astype(np.float64), timeperiod=20)\n    atr_series = pd.Series(atr, index=df_copy.index).fillna(0)\n    atr_ratio = atr_series / close.replace(0, np.nan)\n    vol_gate = np.tanh(atr_ratio)\n    factor = ret5 * conviction_rank * vol_gate\n    df_copy['factor_liquidity_range_gated_momentum_v6'] = factor.fillna(0)\n    return df_copy['factor_liquidity_range_gated_momentum_v6']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_987",
+    "function_name": "factor_drawdown_depth_normalized",
+    "python_code": "def factor_drawdown_depth_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy[\"close\"].rolling(252, min_periods=50).max()\n    drawdown = df_copy[\"close\"] / rolling_max - 1\n    depth = -drawdown\n    ret = df_copy[\"close\"].pct_change()\n    vol = ret.rolling(20, min_periods=10).std()\n    factor = depth / vol.replace(0, np.nan)\n    factor = factor.fillna(0)\n    df_copy[\"factor_drawdown_depth_normalized\"] = factor\n    return df_copy[\"factor_drawdown_depth_normalized\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_1038",
+    "function_name": "factor_drawdown_recovery",
+    "python_code": "def factor_drawdown_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    returns = df_copy['close'].pct_change()\n    vol = returns.rolling(20, min_periods=20).std().replace(0, np.nan)\n    factor = drawdown / vol\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_recovery\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_1044",
+    "function_name": "factor_drawdown_normalized",
+    "python_code": "def factor_drawdown_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    returns = df_copy['close'].pct_change()\n    vol = returns.rolling(20, min_periods=20).std().replace(0, np.nan)\n    factor = drawdown / vol\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_normalized\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_209",
+    "function_name": "factor_liquidity_range_gated_momentum_v5",
+    "python_code": "def factor_liquidity_range_gated_momentum_v5(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    ret5 = close.pct_change(5)\n    med_vol20 = volume.rolling(20, min_periods=20).median().replace(0, np.nan)\n    vol_ratio = volume / med_vol20\n    price_range = high - low\n    conviction_raw = price_range * vol_ratio\n    conviction_rank = conviction_raw.rolling(20, min_periods=20).rank(pct=True)\n    atr = talib.ATR(high.values.astype(np.float64), low.values.astype(np.float64), close.values.astype(np.float64), timeperiod=14)\n    atr_series = pd.Series(atr, index=df_copy.index).fillna(0)\n    atr_ratio = atr_series / close.replace(0, np.nan)\n    vol_gate = np.tanh(atr_ratio)\n    factor = ret5 * conviction_rank * vol_gate\n    df_copy['factor_liquidity_range_gated_momentum_v5'] = factor.fillna(0)\n    return df_copy['factor_liquidity_range_gated_momentum_v5']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_174",
+    "function_name": "factor_vol_gated_herding_crossover",
+    "python_code": "def factor_vol_gated_herding_crossover(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Parent1: momentum and volatility adjustment\n    mom = close / close.shift(5) - 1\n    tr = np.maximum(high - low, np.maximum((high - close.shift(1)).abs(), (low - close.shift(1)).abs()))\n    atr = tr.rolling(20, min_periods=10).mean()\n    vol_adj = atr / close\n    vol_mean = vol_adj.rolling(20, min_periods=10).mean()\n    vol_std = vol_adj.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (vol_adj - vol_mean) / vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=7, min_periods=7, adjust=False).mean()\n    persistence = np.tanh(ema_ret * 5)\n    \n    base_mom = (mom / (1 + vol_z_clipped.abs())) * (1 + persistence)\n    \n    # Parent2: herding signal\n    vol_chg = volume.pct_change()\n    corr_ret_vol = ret.rolling(30, min_periods=30).corr(vol_chg)\n    mean_ret = ret.rolling(40, min_periods=40).mean()\n    std_ret = ret.rolling(40, min_periods=40).std().replace(0, np.nan)\n    z_ret = (ret - mean_ret) / std_ret\n    sp_ret = np.tanh(z_ret)\n    herding = corr_ret_vol * sp_ret\n    \n    # Volume confidence from parent1\n    vol_rank = volume.rolling(20).rank(pct=True)\n    vol_ma20 = volume.rolling(20).mean()\n    vol_trend = volume.rolling(5).mean() / vol_ma20.replace(0, np.nan)\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Combine: base_mom modulated by herding, with volume confidence\n    factor = base_mom * (1 + np.tanh(herding)) * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_vol_gated_herding_crossover'] = factor\n    return df_copy['factor_vol_gated_herding_crossover']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_248",
+    "function_name": "factor_crash_volume_rank",
+    "python_code": "def factor_crash_volume_rank(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ma = df_copy['volume'].rolling(20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(20, min_periods=20).rank(pct=True)\n    signal = -ret * vol_rank\n    signal = signal.fillna(0)\n    signal.name = 'factor_crash_volume_rank'\n    return signal\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_200",
+    "function_name": "factor_volume_confirmed_momentum",
+    "python_code": "def factor_volume_confirmed_momentum(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_20_avg = df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_20_avg\n    volume_rank = volume_ratio.rolling(20).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_201",
+    "function_name": "factor_volume_confirmed_momentum_v3",
+    "python_code": "def factor_volume_confirmed_momentum_v3(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_20_avg = df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_20_avg\n    volume_rank = volume_ratio.rolling(20).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_v3'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_470",
+    "function_name": "factor_volume_adjusted_breakout_with_vol_filter_v2",
+    "python_code": "def factor_volume_adjusted_breakout_with_vol_filter_v2(df):\n    df_copy = df.copy()\n    ret_10 = df_copy['close'].pct_change(10)\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    highest_high = df_copy['high'].rolling(20, min_periods=20).max().shift(1)\n    breakout = df_copy['close'] > highest_high\n    ret_daily = df_copy['close'].pct_change()\n    neg_ret = ret_daily.where(ret_daily < 0, 0)\n    pos_ret = ret_daily.where(ret_daily > 0, 0)\n    neg_vol = neg_ret.rolling(20, min_periods=10).std(ddof=1)\n    pos_vol = pos_ret.rolling(20, min_periods=10).std(ddof=1)\n    vol_ratio_risk = neg_vol / pos_vol.replace(0, np.nan)\n    vol_ratio_risk = np.log(vol_ratio_risk.clip(lower=1e-12))\n    vol_risk_median = vol_ratio_risk.rolling(20, min_periods=20).median()\n    low_risk = vol_ratio_risk < vol_risk_median\n    coherence_signal = (breakout & (vol_ratio > 1) & low_risk) * ret_10 * vol_ratio\n    factor = coherence_signal.rolling(5).sum()\n    factor.name = 'factor_volume_adjusted_breakout_with_vol_filter_v2'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_474",
+    "function_name": "factor_volume_adjusted_breakout_v3",
+    "python_code": "def factor_volume_adjusted_breakout_v3(df):\n    df_copy = df.copy()\n    ret_5 = df_copy['close'].pct_change(5)\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    highest_high = df_copy['high'].rolling(10, min_periods=10).max().shift(1)\n    breakout = df_copy['close'] > highest_high\n    ret_daily = df_copy['close'].pct_change()\n    neg_ret = ret_daily.where(ret_daily < 0, 0)\n    pos_ret = ret_daily.where(ret_daily > 0, 0)\n    neg_vol = neg_ret.rolling(20, min_periods=10).std(ddof=1)\n    pos_vol = pos_ret.rolling(20, min_periods=10).std(ddof=1)\n    vol_ratio_risk = neg_vol / pos_vol.replace(0, np.nan)\n    vol_ratio_risk = np.log(vol_ratio_risk.clip(lower=1e-12))\n    vol_risk_median = vol_ratio_risk.rolling(20, min_periods=20).median()\n    low_risk = vol_ratio_risk < vol_risk_median\n    coherence_signal = (breakout & (vol_ratio > 1) & low_risk) * ret_5 * vol_ratio\n    factor = coherence_signal.rolling(5).sum()\n    factor.name = 'factor_volume_adjusted_breakout_v3'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_207",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v1",
+    "python_code": "def factor_volume_confirmed_momentum_crossover_v1(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_20_avg = df_copy['volume'].rolling(20).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_20_avg\n    volume_rank = volume_ratio.rolling(10).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_crossover_v1'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_167",
+    "function_name": "factor_volume_gated_momentum_mutated_v3",
+    "python_code": "def factor_volume_gated_momentum_mutated_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    \n    # Core momentum: 5-day return\n    mom = close / close.shift(5) - 1\n    \n    # Range-based volatility: rolling std of high-low range / close over 10 days\n    range_ratio = (high - low) / close\n    range_vol = range_ratio.rolling(10, min_periods=5).std()\n    range_vol_mean = range_vol.rolling(20, min_periods=10).mean()\n    range_vol_std = range_vol.rolling(20, min_periods=10).std(ddof=1)\n    vol_z = (range_vol - range_vol_mean) / range_vol_std.replace(0, np.nan)\n    vol_z_clipped = np.clip(vol_z, -2, 2)\n    \n    # Trend persistence: EMA of returns with span 10, clipped\n    ret = close.pct_change()\n    ema_ret = ret.ewm(span=10, min_periods=10, adjust=False).mean()\n    persistence = np.clip(ema_ret * 3, -1, 1)\n    \n    # Volume components: rank percentile and trend ratio\n    vol_rank = volume.rolling(20).rank(pct=True)\n    vol_ma20 = volume.rolling(20).mean()\n    vol_trend = volume.rolling(5).mean() / vol_ma20.replace(0, np.nan)\n    \n    # Confidence: multiplicative product mapped to [0,2] via tanh\n    confidence = 1 + np.tanh(vol_rank * vol_trend)\n    \n    # Base factor: momentum adjusted by volatility and persistence\n    base = mom / (1 + vol_z_clipped.abs()) * (1 + persistence)\n    \n    # Final factor\n    factor = base * confidence\n    factor = factor.fillna(0.0).clip(-5, 5)\n    df_copy['factor_volume_gated_momentum_mutated_v3'] = factor\n    return df_copy['factor_volume_gated_momentum_mutated_v3']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_208",
+    "function_name": "factor_volume_confirmed_momentum_crossover_v2",
+    "python_code": "def factor_volume_confirmed_momentum_crossover_v2(df):\n    df_copy = df.copy()\n    price_ret = df_copy['close'].pct_change(5)\n    volume_30_avg = df_copy['volume'].rolling(30).mean().replace(0, np.nan)\n    volume_ratio = df_copy['volume'] / volume_30_avg\n    volume_rank = volume_ratio.rolling(10).rank(pct=True)\n    factor = price_ret * volume_rank\n    factor.name = 'factor_volume_confirmed_momentum_crossover_v2'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_468",
+    "function_name": "factor_volume_adjusted_breakout_window_001",
+    "python_code": "def factor_volume_adjusted_breakout_window_001(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    highest_high = df_copy['high'].rolling(20, min_periods=20).max().shift(1)\n    breakout = df_copy['close'] > highest_high\n    neg_ret = ret.where(ret < 0, 0)\n    pos_ret = ret.where(ret > 0, 0)\n    neg_vol = neg_ret.rolling(10, min_periods=5).std(ddof=1)\n    pos_vol = pos_ret.rolling(10, min_periods=5).std(ddof=1)\n    vol_ratio_risk = neg_vol / pos_vol.replace(0, np.nan)\n    vol_ratio_risk = np.log(vol_ratio_risk.clip(lower=1e-12))\n    vol_risk_median = vol_ratio_risk.rolling(20, min_periods=20).median()\n    low_risk = vol_ratio_risk < vol_risk_median\n    coherence_signal = (breakout & (vol_ratio > 1) & low_risk) * ret * vol_ratio\n    factor = coherence_signal.rolling(5).sum()\n    factor.name = 'factor_volume_adjusted_breakout_window_001'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_251",
+    "function_name": "factor_crash_volume_gate",
+    "python_code": "def factor_crash_volume_gate(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(5)\n    vol_ma = df_copy['volume'].rolling(20).mean()\n    vol_ratio = df_copy['volume'] / vol_ma.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(20, min_periods=20).rank(pct=True)\n    signal = np.where(vol_rank > 0.5, -ret * vol_ratio, 0.0)\n    signal = pd.Series(signal, index=df_copy.index).fillna(0)\n    signal.name = 'factor_crash_volume_gate'\n    return signal\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_375",
+    "function_name": "factor_downside_vol_asymmetry_smoothed",
+    "python_code": "def factor_downside_vol_asymmetry_smoothed(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    negative_sq = ret.where(ret < 0, 0) ** 2\n    positive_sq = ret.where(ret > 0, 0) ** 2\n    window = 20\n    down_var = negative_sq.rolling(window=window, min_periods=window).mean()\n    up_var = positive_sq.rolling(window=window, min_periods=window).mean()\n    ratio = np.sqrt(down_var) / np.sqrt(up_var.replace(0, np.nan))\n    smoothed_ratio = ratio.rolling(window=5, min_periods=5).mean()\n    factor = np.log(smoothed_ratio + 1e-10)\n    factor.name = \"factor_downside_vol_asymmetry_smoothed\"\n    return factor.fillna(0)",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_708",
+    "function_name": "factor_adx_trend_vol_ema",
+    "python_code": "def factor_adx_trend_vol_ema(df):\n    df_copy = df.copy()\n    high = df_copy[\"high\"].values.astype(np.float64)\n    low = df_copy[\"low\"].values.astype(np.float64)\n    close = df_copy[\"close\"].values.astype(np.float64)\n    adx = talib.ADX(high, low, close, timeperiod=14)\n    dir_sign = np.sign(df_copy[\"close\"].pct_change(10))\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_ratio_clipped = vol_ratio.clip(0.5, 2.0)\n    factor = pd.Series(adx * dir_sign * vol_ratio_clipped, index=df_copy.index, name=\"factor_adx_trend_vol_ema\")\n    factor = factor.fillna(0)\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_135",
+    "function_name": "factor_direction_volume_shape_mut2",
+    "python_code": "def factor_direction_volume_shape_mut2(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    ema_ret = ret.ewm(span=10, adjust=False).mean()\n    vol_20_mean = df_copy[\"volume\"].rolling(20).mean()\n    vol_20_std = df_copy[\"volume\"].rolling(20).std(ddof=1)\n    vol_z = (df_copy[\"volume\"] - vol_20_mean) / vol_20_std.replace(0.0, np.nan)\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    range_20_mean = range_.rolling(20).mean()\n    range_ratio = range_ / range_20_mean.replace(0.0, np.nan)\n    range_ratio_20_mean = range_ratio.rolling(20).mean()\n    range_ratio_20_std = range_ratio.rolling(20).std(ddof=1).replace(0.0, np.nan)\n    range_ratio_z = (range_ratio - range_ratio_20_mean) / range_ratio_20_std\n    vol_tanh = np.tanh(vol_z)\n    range_tanh = np.tanh(range_ratio_z)\n    confirmation = vol_tanh * range_tanh\n    body_top = np.maximum(df_copy[\"open\"], df_copy[\"close\"])\n    body_bottom = np.minimum(df_copy[\"open\"], df_copy[\"close\"])\n    upper_shadow = df_copy[\"high\"] - body_top\n    lower_shadow = body_bottom - df_copy[\"low\"]\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ratio = df_copy[\"volume\"] / vol_20_mean.replace(0.0, np.nan)\n    secondary = symmetry_rank * vol_ratio\n    factor = ema_ret * confirmation + 0.2 * secondary\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy[\"factor_direction_volume_shape_mut2\"] = factor\n    return df_copy[\"factor_direction_volume_shape_mut2\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_450",
+    "function_name": "factor_drawdown_atr_20_normalized",
+    "python_code": "def factor_drawdown_atr_20_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_20_normalized'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_20_normalized']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_445",
+    "function_name": "factor_drawdown_atr_normalized_20",
+    "python_code": "def factor_drawdown_atr_normalized_20(df):\n    df_copy = df.copy()\n    rolling_max = df_copy[\"close\"].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy[\"close\"] - rolling_max) / rolling_max\n    high = df_copy[\"high\"].values.astype(float)\n    low = df_copy[\"low\"].values.astype(float)\n    close = df_copy[\"close\"].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy[\"factor_drawdown_atr_normalized_20\"] = normalized.fillna(0)\n    return df_copy[\"factor_drawdown_atr_normalized_20\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_1042",
+    "function_name": "factor_drawdown_atr_recovery",
+    "python_code": "def factor_drawdown_atr_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    high = df_copy['high'].values.astype('float64')\n    low = df_copy['low'].values.astype('float64')\n    close = df_copy['close'].values.astype('float64')\n    atr20 = talib.ATR(high, low, close, timeperiod=20)\n    atr20 = pd.Series(atr20, index=df_copy.index).replace(0, np.nan)\n    normalized_drawdown = drawdown / atr20\n    factor = normalized_drawdown.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_atr_recovery\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_620",
+    "function_name": "factor_resvol_smoothed_trend",
+    "python_code": "def factor_resvol_smoothed_trend(df):\n    df_copy = df.copy()\n    momentum = df_copy[\"close\"] - df_copy[\"close\"].shift(10)\n    vol = df_copy[\"close\"].rolling(20).std(ddof=1).replace(0, np.nan)\n    trend_signal = momentum / vol\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    weight = np.where(high_resvol, 1.0, 0.5)\n    factor = trend_signal * weight\n    df_copy[\"factor_resvol_smoothed_trend\"] = factor\n    return df_copy[\"factor_resvol_smoothed_trend\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_266",
+    "function_name": "factor_crash_vol_body_asym",
+    "python_code": "def factor_crash_vol_body_asym(df):\n    df_copy = df.copy()\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(10, min_periods=10).mean()\n    body = df_copy['close'] - df_copy['open']\n    total_range = df_copy['high'] - df_copy['low']\n    body_asym = body / total_range.replace(0, np.nan)\n    factor = -vol_ratio * body_asym\n    df_copy['factor_crash_vol_body_asym'] = factor\n    return df_copy['factor_crash_vol_body_asym']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_865",
+    "function_name": "factor_ema_trend_simple",
+    "python_code": "def factor_ema_trend_simple(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    fast_ema = close.ewm(span=20, adjust=False).mean()\n    slow_ema = close.ewm(span=40, adjust=False).mean()\n    factor = (fast_ema - slow_ema) / slow_ema.replace(0, np.nan)\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_ema_trend_simple'] = factor\n    return df_copy['factor_ema_trend_simple']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_203",
+    "function_name": "factor_pressure_compression_simplified_v3",
+    "python_code": "def factor_pressure_compression_simplified_v3(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    open_ = df_copy['open']\n    pressure = (close - open_) * volume\n    abs_pressure = pressure.abs()\n    avg_abs = abs_pressure.rolling(21, min_periods=21).mean().replace(0, np.nan)\n    norm_pressure = pressure / avg_abs\n    vol_ma21 = volume.rolling(21, min_periods=21).mean().replace(0, np.nan)\n    vol_ratio21 = volume / vol_ma21\n    atr = talib.ATR(high.values.astype(np.float64), low.values.astype(np.float64), close.values.astype(np.float64), timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index).fillna(0)\n    atr_ratio = atr_series / close.replace(0, np.nan)\n    gate = np.tanh(vol_ratio21) * np.tanh(atr_ratio)\n    factor = norm_pressure * gate\n    df_copy['factor_pressure_compression_simplified_v3'] = factor.fillna(0)\n    return df_copy['factor_pressure_compression_simplified_v3']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_446",
+    "function_name": "factor_drawdown_std60_normalized",
+    "python_code": "def factor_drawdown_std60_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    vol = df_copy['close'].rolling(window=60, min_periods=60).std(ddof=1)\n    normalized_drawdown = drawdown / vol.replace(0, np.nan)\n    df_copy['factor_drawdown_std60_normalized'] = normalized_drawdown.fillna(0)\n    return df_copy['factor_drawdown_std60_normalized']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_879",
+    "function_name": "factor_crossover_vol_impact_trend_gated",
+    "python_code": "def factor_crossover_vol_impact_trend_gated(df):\n    df_copy = df.copy()\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    vol_factor = vol_ratio.clip(lower=0.5, upper=2.0)\n    ema_short = df_copy[\"close\"].ewm(span=10, adjust=False).mean()\n    ema_long = df_copy[\"close\"].ewm(span=30, adjust=False).mean()\n    slow_trend = (ema_short - ema_long) / ema_long\n    slow_trend_adjusted = slow_trend * vol_factor\n    overnight_ret, intraday_ret = alpha_tools.decompose_overnight_intraday(df_copy[\"close\"], df_copy[\"open\"])\n    total_ret = overnight_ret + intraday_ret\n    fast_impact = np.abs(total_ret) * vol_ratio\n    df_copy[\"factor_crossover_vol_impact_trend_gated\"] = np.where(high_resvol, fast_impact, slow_trend_adjusted)\n    return df_copy[\"factor_crossover_vol_impact_trend_gated\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_343",
+    "function_name": "factor_reversal_volume_gated",
+    "python_code": "def factor_reversal_volume_gated(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=5, adjust=False).mean()\n    volume_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean().replace(0.0, np.nan)\n    factor = (0.5 - smoothed) * volume_ratio\n    df_copy['factor_reversal_volume_gated'] = factor\n    return df_copy['factor_reversal_volume_gated']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_805",
+    "function_name": "factor_negative_skew_stress_gated",
+    "python_code": "def factor_negative_skew_stress_gated(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    rolling_skew = returns.rolling(40, min_periods=40).skew()\n    stress = -rolling_skew\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean()\n    factor = stress * vol_ratio\n    resvol_high = df_copy['style_gate_resvol_high']\n    weight = np.where(resvol_high > 0, 1.2, 0.8)\n    factor = factor * weight\n    factor.name = 'factor_negative_skew_stress_gated'\n    return factor",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_170",
+    "function_name": "factor_herding_vol_gated_momentum",
+    "python_code": "def factor_herding_vol_gated_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change().fillna(0)\n    vol_chg = df_copy['volume'].pct_change().fillna(0)\n    herding_corr = ret.rolling(20, min_periods=20).corr(vol_chg).fillna(0)\n    rank_ret = ret.rolling(20, min_periods=20).rank(pct=True).fillna(0.5)\n    rank_vol = vol_chg.rolling(20, min_periods=20).rank(pct=True).fillna(0.5)\n    inter = (rank_ret - 0.5) * (rank_vol - 0.5)\n    vol_adj = ret.rolling(20, min_periods=20).std().fillna(0)\n    inter_adj = inter / (1 + vol_adj)\n    trend = ret.ewm(span=20, adjust=False).mean().fillna(0)\n    trend_mean = trend.rolling(40, min_periods=20).mean().fillna(0)\n    trend_std = trend.rolling(40, min_periods=20).std(ddof=1).fillna(1)\n    trend_z = (trend - trend_mean) / trend_std.replace(0, 1)\n    factor = inter_adj * (1 + 0.5 * herding_corr) * (1 + 0.5 * trend_z)\n    factor = factor.fillna(0)\n    df_copy['factor_herding_vol_gated_momentum'] = factor\n    return df_copy['factor_herding_vol_gated_momentum']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_559",
+    "function_name": "factor_smoothed_atr_ratio_gated",
+    "python_code": "def factor_smoothed_atr_ratio_gated(df):\n    df_copy = df.copy()\n    atr20 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    atr60 = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=60)\n    ratio = atr20 / atr60.replace(0, np.nan)\n    smoothed_ratio = pd.Series(talib.EMA(ratio.values, timeperiod=5), index=df_copy.index)\n    smoothed_ratio = smoothed_ratio.fillna(0)\n    resvol_high = df_copy['style_gate_resvol_high'] > 0\n    factor = np.where(resvol_high, smoothed_ratio, 0)\n    factor = np.nan_to_num(factor, nan=0)\n    df_copy['factor_smoothed_atr_ratio_gated'] = factor\n    return df_copy['factor_smoothed_atr_ratio_gated']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_448",
+    "function_name": "factor_drawdown_atr_normalized_v2",
+    "python_code": "def factor_drawdown_atr_normalized_v2(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_normalized_v2'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_normalized_v2']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_315",
+    "function_name": "factor_fear_adjusted_dollar_pressure_short_ema",
+    "python_code": "def factor_fear_adjusted_dollar_pressure_short_ema(df):\n    df_copy = df.copy()\n    dollar_imb = (df_copy['close'] - df_copy['open']) * df_copy['volume']\n    smoothed_imb = dollar_imb.ewm(span=10, adjust=False).mean()\n    price_decline = (df_copy['close'].shift(1) - df_copy['close']) / df_copy['close'].shift(1)\n    fear_adj_imb = smoothed_imb * (1 + price_decline)\n    high = df_copy['high'].values.astype(np.float64)\n    low = df_copy['low'].values.astype(np.float64)\n    close = df_copy['close'].values.astype(np.float64)\n    atr = talib.ATR(high, low, close, timeperiod=21)\n    atr_series = pd.Series(atr, index=df_copy.index)\n    raw = fear_adj_imb / atr_series.replace(0, np.nan)\n    df_copy['factor_fear_adjusted_dollar_pressure_short_ema'] = raw.rank(pct=True) * 2 - 1\n    return df_copy['factor_fear_adjusted_dollar_pressure_short_ema']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_140",
+    "function_name": "factor_crossover_hybrid_magnitude",
+    "python_code": "def factor_crossover_hybrid_magnitude(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    abs_ret = ret.abs()\n    smooth_abs_ret = abs_ret.ewm(span=21, min_periods=10).mean()\n    rank_abs_ret = abs_ret.rolling(21, min_periods=10).rank(pct=True)\n    magnitude = 0.5 * smooth_abs_ret + 0.5 * rank_abs_ret\n    high = df_copy['high']\n    low = df_copy['low']\n    open_ = df_copy['open']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    body_top = np.maximum(open_, close)\n    body_bottom = np.minimum(open_, close)\n    upper_shadow = high - body_top\n    lower_shadow = body_bottom - low\n    symmetry = (lower_shadow - upper_shadow) / (lower_shadow + upper_shadow + 1e-10)\n    symmetry_rank = symmetry.rolling(20, min_periods=10).rank(pct=True)\n    vol_ma = volume.rolling(20, min_periods=10).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    factor = magnitude * (symmetry_rank * vol_ratio)\n    factor = factor.fillna(0)\n    return factor.rename('factor_crossover_hybrid_magnitude')\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_349",
+    "function_name": "factor_reversal_volume_simple",
+    "python_code": "def factor_reversal_volume_simple(df):\n    df_copy = df.copy()\n    # core: reversal via smoothed close position\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=3, adjust=False).mean()\n    reversal = 0.5 - smoothed\n    # volume confirmation: rank of volume/SMA(21) over 21 days\n    vol_sma_21 = df_copy['volume'].rolling(21, min_periods=21).mean()\n    vol_ratio = df_copy['volume'] / vol_sma_21.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(21, min_periods=21).rank(pct=True)\n    # combine\n    factor = reversal * vol_rank\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_reversal_volume_simple'] = factor\n    return df_copy['factor_reversal_volume_simple']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_345",
+    "function_name": "factor_reversal_volume_volregime",
+    "python_code": "def factor_reversal_volume_volregime(df):\n    df_copy = df.copy()\n    # Primary mechanism from crossover-reversal-volume-001: reversal with volume confirmation\n    range_ = df_copy['high'] - df_copy['low']\n    safe_range = range_.replace(0.0, np.nan)\n    intra_pos = (df_copy['close'] - df_copy['low']) / safe_range\n    smoothed = intra_pos.ewm(span=3, adjust=False).mean()\n    reversal = 0.5 - smoothed\n    vol_sma_21 = df_copy['volume'].rolling(21, min_periods=21).mean()\n    vol_ratio = df_copy['volume'] / vol_sma_21.replace(0, np.nan)\n    vol_rank = vol_ratio.rolling(63, min_periods=63).rank(pct=True)\n    # Lightweight modifier from rough_mom_crossover_001: volatility regime gate via roughness\n    tr = pd.concat([df_copy['high'] - df_copy['low'],\n                    (df_copy['high'] - df_copy['close'].shift(1)).abs(),\n                    (df_copy['low'] - df_copy['close'].shift(1)).abs()], axis=1).max(axis=1)\n    atr5 = tr.rolling(5, min_periods=5).mean()\n    atr20 = tr.rolling(20, min_periods=20).mean()\n    roughness = atr5 / atr20.replace(0.0, np.nan)\n    regime = np.where(roughness > 1.0, 1.0, 0.5)\n    factor = reversal * vol_rank * regime\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_reversal_volume_volregime'] = factor\n    return df_copy['factor_reversal_volume_volregime']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_392",
+    "function_name": "factor_regime_switch_simple",
+    "python_code": "def factor_regime_switch_simple(df):\n    df_copy = df.copy()\n    sma20 = df_copy['close'].rolling(20, min_periods=20).mean()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    rev = (df_copy['open'] - df_copy['close']) / df_copy['open']\n    trend_up = df_copy['close'] > sma20\n    factor = np.where(trend_up, mom, rev)\n    df_copy['factor_regime_switch_simple'] = factor\n    return df_copy['factor_regime_switch_simple']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_287",
+    "function_name": "factor_intraday_reversal_zscore_volume_short",
+    "python_code": "def factor_intraday_reversal_zscore_volume_short(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    volume = df_copy['volume']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    std_ = fraction.rolling(10, min_periods=10).std(ddof=1).replace(0.0, np.nan)\n    rev = -deviation / std_\n    vol_ratio = volume / volume.rolling(20).mean()\n    vol_rank = vol_ratio.rolling(20, min_periods=20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_intraday_reversal_zscore_volume_short'] = factor\n    return df_copy['factor_intraday_reversal_zscore_volume_short']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_403",
+    "function_name": "factor_volume_stress_adjusted_momentum_robust",
+    "python_code": "def factor_volume_stress_adjusted_momentum_robust(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_median = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_median).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_median) / (vol_mad * 1.4826).replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    returns = df_copy['close'].pct_change()\n    neg_returns = returns.clip(upper=0)\n    downside_std = neg_returns.rolling(20, min_periods=20).std()\n    total_std = returns.rolling(20, min_periods=20).std()\n    ratio = downside_std / total_std.replace(0, np.nan)\n    ratio = ratio.fillna(0.5)\n    factor = ret * vol_robust_z * (1 - ratio)\n    factor.name = \"factor_volume_stress_adjusted_momentum_robust\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_558",
+    "function_name": "factor_asym_vol_down_up_volatility_gated",
+    "python_code": "def factor_asym_vol_down_up_volatility_gated(df, window=20):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change()\n    pos_var = np.where(ret > 0, ret**2, np.nan)\n    neg_var = np.where(ret < 0, ret**2, np.nan)\n    pos_var_mean = pd.Series(pos_var, index=df_copy.index).ewm(span=window, min_periods=5).mean()\n    neg_var_mean = pd.Series(neg_var, index=df_copy.index).ewm(span=window, min_periods=5).mean()\n    ratio = np.log(neg_var_mean / pos_var_mean.replace(0, np.nan))\n    asymmetry = ratio.replace([np.inf, -np.inf], np.nan).fillna(0)\n    is_high_resvol = df_copy['style_gate_resvol_high'] > 0\n    factor = np.where(is_high_resvol, asymmetry, 0.0)\n    df_copy['factor_asym_vol_down_up_volatility_gated'] = factor\n    return df_copy['factor_asym_vol_down_up_volatility_gated']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_279",
+    "function_name": "factor_volume_reversal_direct",
+    "python_code": "def factor_volume_reversal_direct(df):\n    df_copy = df.copy()\n    high = df_copy['high']\n    low = df_copy['low']\n    close = df_copy['close']\n    range_ = high - low\n    fraction = (close - low) / range_.replace(0.0, np.nan)\n    deviation = fraction - 0.5\n    rev = -deviation\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20).mean()\n    vol_rank = vol_ratio.rolling(20).rank(pct=True)\n    factor = rev * vol_rank\n    df_copy['factor_volume_reversal_direct'] = factor\n    return df_copy['factor_volume_reversal_direct']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_407",
+    "function_name": "factor_volume_persistence_momentum_robust",
+    "python_code": "def factor_volume_persistence_momentum_robust(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_med = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_med).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_med) / vol_mad.replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    daily_ret = df_copy['close'].pct_change()\n    persistence = (daily_ret > 0).astype(float).rolling(10).sum() / 10\n    factor = ret * vol_robust_z * persistence\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_volume_persistence_momentum_robust\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_790",
+    "function_name": "factor_drawdown_vol_norm_clean",
+    "python_code": "def factor_drawdown_vol_norm_clean(df):\n    df_copy = df.copy()\n    high_21 = df_copy['high'].rolling(21, min_periods=21).max()\n    drawdown = (high_21 - df_copy['close']) / high_21.replace(0, np.nan)\n    vol_std = df_copy['close'].rolling(21, min_periods=21).std(ddof=1).replace(0, np.nan)\n    factor = drawdown / vol_std\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = 'factor_drawdown_vol_norm_clean'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_405",
+    "function_name": "factor_simplified_robust_volume_momentum",
+    "python_code": "def factor_simplified_robust_volume_momentum(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_median = df_copy['volume'].rolling(20).median()\n    vol_mad = (df_copy['volume'] - vol_median).abs().rolling(20).median()\n    vol_robust_z = (df_copy['volume'] - vol_median) / vol_mad.replace(0, np.nan)\n    vol_robust_z = vol_robust_z.clip(-3, 3)\n    factor = ret * vol_robust_z\n    factor.name = \"factor_simplified_robust_volume_momentum\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_892",
+    "function_name": "factor_regime_vol_adaptive_trend_v4",
+    "python_code": "def factor_regime_vol_adaptive_trend_v4(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    imp = (df_copy['close'] - df_copy['open']) / (df_copy['high'] - df_copy['low'] + 1e-8)\n    imp = imp.rolling(3, min_periods=3).mean()\n    mom = df_copy['close'] / df_copy['close'].shift(10) - 1\n    mom = mom.rolling(5, min_periods=5).mean()\n    _, _, vol_ratio = alpha_tools.classify_volume_regime(df_copy['volume'], window=20)\n    factor = np.where(high_resvol, imp * vol_ratio, mom * vol_ratio)\n    factor = pd.Series(factor, index=df_copy.index)\n    factor = factor.replace([np.inf, -np.inf], np.nan)\n    df_copy['factor_regime_vol_adaptive_trend_v4'] = factor\n    return df_copy['factor_regime_vol_adaptive_trend_v4']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_402",
+    "function_name": "factor_volume_confirmed_momentum_simple_volume_deviation",
+    "python_code": "def factor_volume_confirmed_momentum_simple_volume_deviation(df):\n    df_copy = df.copy()\n    ret = df_copy['close'].pct_change(10)\n    vol_mean = df_copy['volume'].rolling(20).mean()\n    vol_dev = df_copy['volume'] / vol_mean.replace(0, np.nan) - 1\n    factor = ret * vol_dev\n    factor.name = \"factor_volume_confirmed_momentum_simple_volume_deviation\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_45",
+    "function_name": "factor_vol_volume_asym_ewma",
+    "python_code": "def factor_vol_volume_asym_ewma(df):\n    df_copy = df.copy()\n    range_ = df_copy['high'] - df_copy['low']\n    # EWMA smooth range and volume\n    range_ewma10 = range_.ewm(span=10, adjust=False).mean()\n    range_ewma40 = range_.ewm(span=40, adjust=False).mean()\n    vol_ratio = range_ewma10 / range_ewma40 - 1\n    vol_ewma10 = df_copy['volume'].ewm(span=10, adjust=False).mean()\n    vol_ewma40 = df_copy['volume'].ewm(span=40, adjust=False).mean()\n    vol_change = vol_ewma10 / vol_ewma40 - 1\n    # Asymmetric range: up range and down range using close direction\n    ret = df_copy['close'].pct_change()\n    up = ret > 0\n    down = ret < 0\n    # Compute rolling average range on up/down days\n    up_range = range_.where(up, 0)\n    down_range = range_.where(down, 0)\n    # Use EWMA to smooth these conditional ranges\n    up_range_ewma = up_range.ewm(span=20, adjust=False).mean()\n    down_range_ewma = down_range.ewm(span=20, adjust=False).mean()\n    # Avoid division by zero\n    down_range_ewma = down_range_ewma.replace(0, np.nan)\n    asym_ratio = up_range_ewma / down_range_ewma\n    asym_ratio = asym_ratio.replace([np.inf, -np.inf], np.nan)\n    # Combine components with shift to avoid future lookahead\n    factor = vol_ratio.shift(1) * vol_change.shift(1) * asym_ratio.shift(1)\n    # Winsorize extreme values at 5th and 95th percentile\n    lower = factor.quantile(0.05)\n    upper = factor.quantile(0.95)\n    factor = factor.clip(lower, upper)\n    df_copy['factor_vol_volume_asym_ewma'] = factor\n    return df_copy['factor_vol_volume_asym_ewma']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_88",
+    "function_name": "factor_order_imbalance_volume_flow_ema",
+    "python_code": "def factor_order_imbalance_volume_flow_ema(df):\n    df_copy = df.copy()\n    high_low = df_copy[\"high\"] - df_copy[\"low\"]\n    high_low_safe = high_low.replace(0, np.nan)\n    daily_imbalance = (2 * df_copy[\"close\"] - df_copy[\"high\"] - df_copy[\"low\"]) / high_low_safe\n    daily_flow = daily_imbalance * df_copy[\"volume\"]\n    factor = daily_flow.ewm(span=10, min_periods=1, adjust=False).mean()\n    factor = factor.fillna(0).clip(-1e10, 1e10)\n    factor.name = \"factor_order_imbalance_volume_flow_ema\"\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_331",
+    "function_name": "factor_dollar_pressure_range_zscore",
+    "python_code": "def factor_dollar_pressure_range_zscore(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    high = df_copy['high']\n    low = df_copy['low']\n    volume = df_copy['volume']\n    typical_price = (high + low + close) / 3\n    dollar_imbalance = (close - typical_price) * volume\n    range_ = high - low\n    range_mean = range_.rolling(20, min_periods=20).mean().replace(0, np.nan)\n    raw = dollar_imbalance / range_mean\n    raw_mean = raw.rolling(20, min_periods=20).mean()\n    raw_std = raw.rolling(20, min_periods=20).std(ddof=1)\n    zscore = (raw - raw_mean) / raw_std.replace(0, np.nan)\n    df_copy['factor_dollar_pressure_range_zscore'] = zscore\n    return df_copy['factor_dollar_pressure_range_zscore']\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_91",
+    "function_name": "factor_shadow_volume_confirmed",
+    "python_code": "def factor_shadow_volume_confirmed(df):\n    df_copy = df.copy()\n    lower = df_copy[['open', 'close']].min(axis=1) - df_copy['low']\n    upper = df_copy['high'] - df_copy[['open', 'close']].max(axis=1)\n    total = lower + upper\n    shadow_ratio = lower / (total + 1e-8)\n    mean = shadow_ratio.rolling(20, min_periods=20).mean()\n    std = shadow_ratio.rolling(20, min_periods=20).std()\n    shadow_z = (shadow_ratio - mean) / (std + 1e-8)\n    volume_ma20 = df_copy['volume'].rolling(20, min_periods=1).mean()\n    volume_ratio = df_copy['volume'] / (volume_ma20 + 1e-8)\n    factor = shadow_z * volume_ratio\n    factor = factor.clip(-5, 5).fillna(0)\n    factor.name = 'factor_shadow_volume_confirmed'\n    return factor\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_489",
+    "function_name": "factor_asym_vol_cont_gate_30",
+    "python_code": "def factor_asym_vol_cont_gate_30(df):\n    df_copy = df.copy()\n    returns = df_copy['close'].pct_change()\n    down_returns = returns.clip(upper=0)\n    up_returns = returns.clip(lower=0)\n    down_vol = down_returns.rolling(60, min_periods=20).std(ddof=0).clip(lower=1e-10)\n    up_vol = up_returns.rolling(60, min_periods=20).std(ddof=0).clip(lower=1e-10)\n    asym_vol = np.log(down_vol / up_vol)\n    vol_ma = df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    vol_ratio = (df_copy['volume'] / vol_ma).clip(upper=3.0, lower=0.0)\n    factor = asym_vol * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_asym_vol_cont_gate_30'] = factor\n    return df_copy['factor_asym_vol_cont_gate_30']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_825",
+    "function_name": "factor_vol_lag_ret_smoothed",
+    "python_code": "def factor_vol_lag_ret_smoothed(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    high = df_copy['high']\n    low = df_copy['low']\n    # Lagged 5-day return\n    lag_ret_5 = close / close.shift(5) - 1.0\n    # Log volume ratio relative to 20-day EMA\n    vol_ema = volume.ewm(span=20, min_periods=20).mean()\n    vol_ratio = np.log(volume / vol_ema.replace(0, np.nan))\n    # ATR / close as volatility measure\n    tr = pd.DataFrame({'hl': high - low, 'hc': (high - close.shift()).abs(), 'lc': (low - close.shift()).abs()}).max(axis=1)\n    atr = tr.rolling(20, min_periods=20).mean()\n    vol_factor = atr / close.replace(0, np.nan)\n    # Combine: lagged return * log volume ratio * (1 + volatility factor)\n    raw = lag_ret_5 * vol_ratio * (1.0 + vol_factor)\n    # Smooth with EMA5 to capture delayed adjustment\n    df_copy['factor_vol_lag_ret_smoothed'] = raw.ewm(span=5, min_periods=5).mean()\n    return df_copy['factor_vol_lag_ret_smoothed']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_521",
+    "function_name": "factor_asym_vol_gated",
+    "python_code": "def factor_asym_vol_gated(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_avg = down_range.rolling(20, min_periods=10).sum() / down.rolling(20, min_periods=10).sum().replace(0, np.nan)\n    up_avg = up_range.rolling(20, min_periods=10).sum() / up.rolling(20, min_periods=10).sum().replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    raw_asym = np.log(ratio.clip(lower=1e-6))\n    volume_regime = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20)\n    high_vol = volume_regime == \"high\"\n    low_vol = volume_regime == \"low\"\n    factor = np.where(high_vol, raw_asym * 1.5, np.where(low_vol, raw_asym * 0.5, raw_asym))\n    df_copy[\"factor_asym_vol_gated\"] = factor\n    return df_copy[\"factor_asym_vol_gated\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_27",
+    "function_name": "factor_price_impact_stable_5d",
+    "python_code": "def factor_price_impact_stable_5d(df):\n    df_copy = df.copy()\n    df_copy['ret'] = df_copy['close'].pct_change()\n    df_copy['abs_ret'] = df_copy['ret'].abs()\n    median_abs_ret = df_copy['abs_ret'].rolling(window=5, min_periods=3).median()\n    log_volume = np.log(df_copy['volume'] + 1)\n    avg_log_vol = log_volume.rolling(window=5, min_periods=3).mean()\n    df_copy['factor_price_impact_stable_5d'] = median_abs_ret / avg_log_vol\n    df_copy['factor_price_impact_stable_5d'].replace([np.inf, -np.inf], np.nan, inplace=True)\n    return df_copy['factor_price_impact_stable_5d']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_692",
+    "function_name": "factor_asym_intraday_sma",
+    "python_code": "def factor_asym_intraday_sma(df):\n    df_copy = df.copy()\n    upside = (df_copy[\"high\"] - df_copy[\"open\"]).astype(float)\n    downside = (df_copy[\"open\"] - df_copy[\"low\"]).astype(float)\n    sma_up = pd.Series(talib.SMA(upside.values, timeperiod=40), index=df_copy.index)\n    sma_down = pd.Series(talib.SMA(downside.values, timeperiod=40), index=df_copy.index)\n    ratio = sma_down / sma_up.replace(0, np.nan)\n    df_copy[\"factor_asym_intraday_sma\"] = ratio.fillna(0)\n    return df_copy[\"factor_asym_intraday_sma\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_749",
+    "function_name": "factor_adaptive_volume_smoothness",
+    "python_code": "def factor_adaptive_volume_smoothness(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    cv_short = df_copy['volume'].rolling(10, min_periods=10).std(ddof=1) / df_copy['volume'].rolling(10, min_periods=10).mean().replace(0, np.nan)\n    cv_long = df_copy['volume'].rolling(20, min_periods=20).std(ddof=1) / df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = -np.where(high_resvol, cv_long, cv_short)\n    df_copy['factor_adaptive_volume_smoothness'] = factor\n    return df_copy['factor_adaptive_volume_smoothness']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_522",
+    "function_name": "factor_asym_vol_attenuate",
+    "python_code": "def factor_asym_vol_attenuate(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_sum = down_range.rolling(20, min_periods=10).sum()\n    up_sum = up_range.rolling(20, min_periods=10).sum()\n    down_count = down.rolling(20, min_periods=10).sum()\n    up_count = up.rolling(20, min_periods=10).sum()\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    asym = np.log(ratio.clip(lower=1e-6))\n    vol = df_copy[\"volume\"]\n    vol_ema = vol.ewm(span=20, min_periods=10).mean()\n    volu_dev = (vol - vol_ema) / vol_ema.replace(0, np.nan)\n    weight = np.clip(volu_dev, -1, 1)\n    factor = asym * (1 + 0.3 * weight)\n    vol_regime = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    # classify_volume_regime returns 0 for low volume, 1 for normal, 2 for high\n    low_vol = vol_regime == 0\n    factor = np.where(low_vol, factor * 0.7, factor)\n    df_copy[\"factor_asym_vol_attenuate\"] = factor\n    return df_copy[\"factor_asym_vol_attenuate\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_911",
+    "function_name": "factor_rsi_reversal_resvol_volume",
+    "python_code": "def factor_rsi_reversal_resvol_volume(df):\n    df_copy = df.copy()\n    close_float = df_copy[\"close\"].values.astype(np.float64)\n    rsi = talib.RSI(close_float, timeperiod=14)\n    rsi = pd.Series(rsi, index=df_copy.index)\n    raw_signal = 50 - rsi\n    high_resvol = df_copy[\"style_gate_resvol_high\"] > 0\n    gate_scaled = raw_signal * np.where(high_resvol, 1.5, 0.5)\n    is_high_vol, is_low_vol, vol_ratio = alpha_tools.classify_volume_regime(df_copy[\"volume\"], window=20, high_threshold=1.5, low_threshold=0.6)\n    factor = gate_scaled * vol_ratio\n    df_copy[\"factor_rsi_reversal_resvol_volume\"] = factor\n    return df_copy[\"factor_rsi_reversal_resvol_volume\"]\n",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_935",
+    "function_name": "factor_drawdown_depth_duration_range_vol",
+    "python_code": "def factor_drawdown_depth_duration_range_vol(df):\n    df_copy = df.copy()\n    high20 = df_copy['close'].rolling(20).max()\n    depth = (high20 - df_copy['close']) / high20.replace(0.0, np.nan)\n    in_dd = df_copy['close'] < high20\n    duration = in_dd.rolling(20, min_periods=20).sum() / 20.0\n    range_ = df_copy['high'] - df_copy['low']\n    avg_short = range_.rolling(5, min_periods=5).mean()\n    avg_long = range_.rolling(30, min_periods=30).mean()\n    range_ratio = avg_short / avg_long.replace(0.0, np.nan)\n    vol_ratio = df_copy['volume'] / df_copy['volume'].rolling(20, min_periods=20).mean().replace(0.0, np.nan)\n    factor = (1.0 - depth) * (1.0 - duration) * range_ratio * vol_ratio\n    df_copy['factor_drawdown_depth_duration_range_vol'] = factor\n    return df_copy['factor_drawdown_depth_duration_range_vol']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_488",
+    "function_name": "factor_asym_vol_volume_cont_30",
+    "python_code": "def factor_asym_vol_volume_cont_30(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    returns = close.pct_change()\n    up_returns = returns.copy()\n    up_returns[up_returns < 0] = 0\n    down_returns = returns.copy()\n    down_returns[down_returns > 0] = 0\n    up_vol = up_returns.rolling(30, min_periods=30).std()\n    down_vol = down_returns.abs().rolling(30, min_periods=30).std()\n    asym = np.log(down_vol / up_vol.replace(0, np.nan))\n    vol_ma = volume.rolling(20, min_periods=20).mean()\n    vol_ratio = volume / vol_ma.replace(0, np.nan)\n    factor = asym * vol_ratio\n    factor = factor.replace([np.inf, -np.inf], np.nan).fillna(0)\n    df_copy['factor_asym_vol_volume_cont_30'] = factor\n    return df_copy['factor_asym_vol_volume_cont_30']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_517",
+    "function_name": "factor_asym_ratio_pure",
+    "python_code": "def factor_asym_ratio_pure(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    down = ret < 0\n    up = ret >= 0\n    range_ = df_copy[\"high\"] - df_copy[\"low\"]\n    down_range = range_.where(down, 0)\n    up_range = range_.where(up, 0)\n    down_sum = down_range.rolling(20, min_periods=10).sum()\n    up_sum = up_range.rolling(20, min_periods=10).sum()\n    down_count = down.rolling(20, min_periods=10).sum()\n    up_count = up.rolling(20, min_periods=10).sum()\n    down_avg = down_sum / down_count.replace(0, np.nan)\n    up_avg = up_sum / up_count.replace(0, np.nan)\n    ratio = down_avg / up_avg.replace(0, np.nan)\n    factor = np.log(ratio.clip(lower=1e-6))\n    df_copy[\"factor_asym_ratio_pure\"] = factor\n    return df_copy[\"factor_asym_ratio_pure\"]",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_427",
+    "function_name": "factor_window_adjusted_momentum",
+    "python_code": "def factor_window_adjusted_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    volume = df_copy['volume']\n    momentum = close / close.shift(15) - 1\n    vol_mean = volume.rolling(15, min_periods=15).mean()\n    vol_regime = volume / vol_mean.replace(0.0, np.nan)\n    factor = momentum * vol_regime\n    smoothed = factor.ewm(span=5, adjust=False).mean()\n    smoothed = smoothed.fillna(0.0)\n    df_copy['factor_window_adjusted_momentum'] = smoothed\n    return df_copy['factor_window_adjusted_momentum']",
+    "tools": ""
+  },
+  {
+    "factor_id": "factor_809",
+    "function_name": "factor_lagret_volratio_gated_smooth",
+    "python_code": "def factor_lagret_volratio_gated_smooth(df):\n    df_copy = df.copy()\n    lag_ret = df_copy['close'].pct_change(5).shift(1)\n    vol_ema = df_copy['volume'].ewm(span=15, adjust=False).mean()\n    vol_ratio = np.log((df_copy['volume'] / vol_ema).clip(lower=1e-12))\n    raw = lag_ret * vol_ratio\n    use_long_smooth = (df_copy['style_gate_resvol_high'] > 0)\n    smooth_short = raw.ewm(span=5, adjust=False).mean()\n    smooth_long = raw.ewm(span=10, adjust=False).mean()\n    factor = np.where(use_long_smooth, smooth_long, smooth_short)\n    df_copy['factor_lagret_volratio_gated_smooth'] = factor\n    return df_copy['factor_lagret_volratio_gated_smooth']",
+    "tools": ""
+  }
+]

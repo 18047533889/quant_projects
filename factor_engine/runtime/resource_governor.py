@@ -1076,7 +1076,8 @@ def _config_fingerprint(threads: int, plan: "ExecutionResourcePlan") -> str:
         "pragma_set": tuple(sorted(_STATIC_PRAGMA_APPLIERS.keys())),
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    # SHA-1 used only for connection fingerprint cache key, not cryptographic security
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def reset_conn_fingerprints() -> None:

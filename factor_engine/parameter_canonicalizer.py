@@ -748,14 +748,15 @@ def _output_signature(
     )
     # Level 1 — structural identity (shape / index / columns) so two outputs
     # that differ only in their axes never collide on values alone.
+    # SHA-1 used only for parameter equivalence cache keys, not cryptographic security
     structural = _frame_structural_hash(out) if is_frame else hashlib.sha1(
-        repr(arr.shape).encode("utf-8")
+        repr(arr.shape).encode("utf-8"), usedforsecurity=False
     ).hexdigest()
     # Level 2 — full finite-mask hash: NaN placement (a partially-NaN vector is
     # structurally different from an all-finite one even when the finite values
     # coincide).
     finite_mask = np.isfinite(arr)
-    mask_hash = hashlib.sha1(finite_mask.tobytes()).hexdigest()
+    mask_hash = hashlib.sha1(finite_mask.tobytes(), usedforsecurity=False).hexdigest()
     finite = arr[finite_mask]
     if finite.size == 0:
         return (structural, mask_hash, "empty-rank", "empty-values")
@@ -772,7 +773,8 @@ def _output_signature(
 
 def _frame_structural_hash(frame: pd.DataFrame) -> str:
     """Hash of a panel's structural identity (shape + index + columns)."""
-    h = hashlib.sha1()
+    # SHA-1 used only for parameter equivalence cache keys, not cryptographic security
+    h = hashlib.sha1(usedforsecurity=False)
     h.update(repr(frame.shape).encode("utf-8"))
     try:
         h.update(repr(list(frame.index)).encode("utf-8"))
@@ -799,7 +801,8 @@ def _cross_sectional_rank_hash(out: Any, arr: np.ndarray, finite_mask: np.ndarra
         order = np.argsort(finite, kind="stable")
         finite_ranks = np.empty(finite.size, dtype=np.int64)
         finite_ranks[order] = np.arange(finite.size)
-    return hashlib.sha1(np.asarray(finite_ranks).tobytes()).hexdigest()
+    # SHA-1 used only for parameter equivalence cache keys, not cryptographic security
+    return hashlib.sha1(np.asarray(finite_ranks).tobytes(), usedforsecurity=False).hexdigest()
 
 
 def _rounded_raw_hash(finite: np.ndarray) -> str:
@@ -811,7 +814,8 @@ def _rounded_raw_hash(finite: np.ndarray) -> str:
     """
     vals = finite.astype(np.float64)
     rounded = np.asarray([_round_sig(v, 12) for v in vals], dtype=np.float64)
-    return hashlib.sha1(rounded.tobytes()).hexdigest()
+    # SHA-1 used only for parameter equivalence cache keys, not cryptographic security
+    return hashlib.sha1(rounded.tobytes(), usedforsecurity=False).hexdigest()
 
 
 def _quantized_normalized_hash(finite: np.ndarray) -> str:
@@ -829,7 +833,8 @@ def _quantized_normalized_hash(finite: np.ndarray) -> str:
         0,
         _SIGNATURE_QUANT_LEVELS - 1,
     )
-    return hashlib.sha1(quantized.tobytes()).hexdigest()
+    # SHA-1 used only for parameter equivalence cache keys, not cryptographic security
+    return hashlib.sha1(quantized.tobytes(), usedforsecurity=False).hexdigest()
 
 
 def _round_sig(value: float, digits: int) -> float:

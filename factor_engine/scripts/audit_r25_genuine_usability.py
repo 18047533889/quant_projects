@@ -45,7 +45,8 @@ _CAPABILITY_BLOCKERS = {
 
 
 def _digest(items: list[str]) -> str:
-    h = hashlib.sha1()
+    # SHA-1 used only for audit report fingerprint, not cryptographic security
+    h = hashlib.sha1(usedforsecurity=False)
     for item in sorted(set(items)):
         h.update(str(item).encode())
     return h.hexdigest()[:16]

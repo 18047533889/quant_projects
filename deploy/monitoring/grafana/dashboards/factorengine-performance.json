@@ -1,0 +1,191 @@
+{
+  "dashboard": {
+    "title": "FactorEngine Performance",
+    "uid": "factorengine-perf",
+    "version": 1,
+    "timezone": "browser",
+    "editable": true,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Factor Computation Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(factor_computations_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "Computations/s"
+          },
+          {
+            "expr": "rate(factor_computation_failures_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "Failures/s"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Operations/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Factor Computation Duration",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(factor_computation_duration_seconds_bucket{job=\"factorengine\"}[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(factor_computation_duration_seconds_bucket{job=\"factorengine\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(factor_computation_duration_seconds_bucket{job=\"factorengine\"}[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Request Rate by Endpoint",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 6, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "{{ method }} {{ path }}"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Cache Hit Rate",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 6, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(factor_cache_hits_total{job=\"factorengine\"}[5m]) / (rate(factor_cache_hits_total{job=\"factorengine\"}[5m]) + rate(factor_cache_misses_total{job=\"factorengine\"}[5m]))",
+            "legendFormat": "Hit Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.5, "color": "yellow"},
+                {"value": 0.8, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Active Workers",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 6, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "factor_engine_active_workers{job=\"factorengine\"}",
+            "legendFormat": "Active Workers"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "textMode": "value"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"factorengine\"} / 1024 / 1024 / 1024",
+            "legendFormat": "RSS Memory (GB)"
+          },
+          {
+            "expr": "factor_engine_cache_size_bytes{job=\"factorengine\"} / 1024 / 1024 / 1024",
+            "legendFormat": "Cache Size (GB)"
+          }
+        ],
+        "yaxes": [
+          {"format": "gbytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"factorengine\"}[5m]) * 100",
+            "legendFormat": "CPU Usage %"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "max": 100},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Factor Types Distribution",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 18, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum by (factor_type) (rate(factor_computations_total{job=\"factorengine\"}[5m]))",
+            "legendFormat": "{{ factor_type }}"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 18, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(factor_computation_failures_total{job=\"factorengine\"}[5m]) / rate(factor_computations_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "Failure rate"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"factorengine\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"factorengine\"}[5m])",
+            "legendFormat": "HTTP 5xx rate"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Error Rate"},
+          {"format": "short"}
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

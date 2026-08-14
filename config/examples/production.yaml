@@ -1,0 +1,91 @@
+environment: production
+service_name: quant-platform
+version: "1.0.0"
+
+logging:
+  level: INFO
+  format: json
+  output_dir: /var/log/quant
+  max_file_size_mb: 100
+  backup_count: 10
+  enable_console: true
+  enable_file: true
+  enable_syslog: false
+  sanitize_sensitive: true
+  include_context: true
+
+metrics:
+  enabled: true
+  export_port: 9090
+  export_path: /metrics
+  collect_interval_seconds: 60
+  enable_latency_metrics: true
+  enable_throughput_metrics: true
+  enable_error_metrics: true
+  enable_memory_metrics: true
+  enable_cpu_metrics: true
+  enable_disk_metrics: true
+  enable_factor_metrics: true
+  enable_evaluation_metrics: true
+  latency_buckets:
+    - 0.001
+    - 0.005
+    - 0.01
+    - 0.025
+    - 0.05
+    - 0.1
+    - 0.25
+    - 0.5
+    - 1.0
+    - 2.5
+    - 5.0
+    - 10.0
+
+health_check:
+  enabled: true
+  port: 8080
+  path: /health
+  startup_probe_initial_delay_seconds: 10
+  startup_probe_period_seconds: 5
+  startup_probe_timeout_seconds: 3
+  startup_probe_failure_threshold: 30
+  liveness_probe_period_seconds: 10
+  liveness_probe_timeout_seconds: 3
+  liveness_probe_failure_threshold: 3
+  readiness_probe_period_seconds: 10
+  readiness_probe_timeout_seconds: 3
+  readiness_probe_failure_threshold: 3
+  check_database: true
+  check_cache: true
+  check_disk_space: true
+  disk_space_threshold_percent: 90.0
+  check_memory: true
+  memory_threshold_percent: 95.0
+
+resource_limits:
+  max_memory_mb: 30720
+  warning_memory_threshold_percent: 80.0
+  max_cpu_percent: null
+  max_concurrent_evaluations: 100
+  max_concurrent_io_operations: 50
+  max_queue_size: 1000
+  default_operation_timeout_seconds: 300
+  max_operation_timeout_seconds: 3600
+  enable_rate_limiting: true
+  requests_per_minute: 1000
+
+security:
+  require_authentication: false
+  api_key_header: X-API-Key
+  enable_tls: false
+  tls_cert_file: null
+  tls_key_file: null
+  validate_input: true
+  max_request_size_mb: 10
+  enable_cors: false
+  allowed_origins: []
+  enable_audit_log: true
+  audit_log_path: /var/log/quant/audit.log
+
+shutdown_timeout_seconds: 30
+enable_graceful_shutdown: true
