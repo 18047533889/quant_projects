@@ -207,7 +207,10 @@ def test_p0_038_unknown_blob_hash_rejected(tmp_path, monkeypatch):
     }
 
     errors = foe._inherited_validation_errors(payload)
-    assert any("unknown" in e.lower() for e in errors), errors
+    # Look for the specific unknown hash error (not blob mismatch)
+    matching = [e for e in errors if "unknown/missing hash in allowed_post_certification_blob_shas" in e]
+    # Exactly one error per bad hash, no duplicates
+    assert len(matching) == 1, f"Expected exactly 1 error, got {len(matching)}: {matching}"
 
 
 def test_p0_038_empty_blob_hash_rejected(tmp_path, monkeypatch):
@@ -224,7 +227,10 @@ def test_p0_038_empty_blob_hash_rejected(tmp_path, monkeypatch):
     }
 
     errors = foe._inherited_validation_errors(payload)
-    assert any("unknown" in e.lower() or "missing" in e.lower() for e in errors), errors
+    # Look for the specific unknown/missing hash error (not blob mismatch)
+    matching = [e for e in errors if "unknown/missing hash in allowed_post_certification_blob_shas" in e]
+    # Exactly one error per bad hash
+    assert len(matching) == 1, f"Expected exactly 1 error, got {len(matching)}: {matching}"
 
 
 def test_p0_038_unknown_emitter_hash_rejected(tmp_path, monkeypatch):
@@ -241,7 +247,10 @@ def test_p0_038_unknown_emitter_hash_rejected(tmp_path, monkeypatch):
     }
 
     errors = foe._inherited_validation_errors(payload)
-    assert any("unknown" in e.lower() and "emitter" in e.lower() for e in errors), errors
+    matching = [e for e in errors if "unknown" in e.lower() and "emitter" in e.lower() and "polars_emitter" in e]
+    # Exactly one error for the bad emitter hash
+    assert len(matching) == 1, f"Expected exactly 1 error, got {len(matching)}: {matching}"
+    assert "emitter_hashes" in matching[0]
 
 
 def test_p0_038_valid_hashes_accepted(tmp_path, monkeypatch):
@@ -267,6 +276,83 @@ def test_p0_038_valid_hashes_accepted(tmp_path, monkeypatch):
     errors = foe._inherited_validation_errors(payload)
     # Should not have any unknown/missing hash errors
     assert not any("unknown" in e.lower() and ("hash" in e.lower() or "emitter" in e.lower()) for e in errors), errors
+
+
+def test_p0_038_missing_emitter_hashes_rejected(tmp_path, monkeypatch):
+    """FE-P0-038: production evidence must have emitter_hashes."""
+    manifest_path = tmp_path / "scm_manifest.json"
+    _write_manifest(manifest_path, build="aaaa1111", certified="aaaa1111", ancestor=True)
+    _patch_heavy_deps(monkeypatch)
+    monkeypatch.setattr(foe, "_git_available", lambda: False)
+    monkeypatch.setattr(sm, "SCM_MANIFEST_PATH", manifest_path)
+
+    payload = _minimal_payload()
+    # Missing emitter_hashes entirely
+    payload.pop("emitter_hashes", None)
+
+    errors = foe._inherited_validation_errors(payload)
+    matching = [e for e in errors if "emitter_hashes" in e and "missing" in e.lower()]
+    assert len(matching) == 1, f"Expected exactly 1 error for missing emitter_hashes, got {len(matching)}: {matching}"
+
+
+def test_p0_038_unknown_implementation_hash_in_factor_hashes_rejected(tmp_path, monkeypatch):
+    """FE-P0-038: production evidence must reject unknown hash in audited_factor_implementation_hashes."""
+    manifest_path = tmp_path / "scm_manifest.json"
+    _write_manifest(manifest_path, build="aaaa1111", certified="aaaa1111", ancestor=True)
+    monkeypatch.setattr(foe, "_production_sets", lambda: ({"op_a"}, set()))
+    monkeypatch.setattr(ep, "evidence_artifact_valid", lambda *a, **k: True)
+    monkeypatch.setattr(ep, "implementation_hashes_for", lambda c: {"hash": "abc123"})
+    monkeypatch.setattr(foe, "_git_available", lambda: False)
+    monkeypatch.setattr(sm, "SCM_MANIFEST_PATH", manifest_path)
+
+    payload = _minimal_payload()
+    payload["audited_factor_canonicals"] = ["op_a"]
+    payload["audited_factor_implementation_hashes"] = {
+        "op_a": {"hash": "unknown"}  # Bad hash in implementation hashes
+    }
+    payload["emitter_hashes"] = {"polars": "valid"}
+
+    errors = foe._inherited_validation_errors(payload)
+    matching = [e for e in errors if "audited_factor_implementation_hashes" in e and "op_a" in e and "unknown" in e.lower()]
+    # Exactly one error for the unknown hash in implementation hashes
+    assert len(matching) == 1, f"Expected exactly 1 error, got {len(matching)}: {matching}"
+
+
+def test_p0_038_multiple_unknown_hashes_no_duplicates(tmp_path, monkeypatch):
+    """FE-P0-038: multiple unknown hashes should produce exactly one error each, no duplicates."""
+    manifest_path = tmp_path / "scm_manifest.json"
+    _write_manifest(manifest_path, build="aaaa1111", certified="aaaa1111", ancestor=True)
+    monkeypatch.setattr(foe, "_production_sets", lambda: ({"op_a"}, set()))
+    monkeypatch.setattr(ep, "evidence_artifact_valid", lambda *a, **k: True)
+    monkeypatch.setattr(ep, "implementation_hashes_for", lambda c: {"hash": "abc123"})
+    monkeypatch.setattr(foe, "_git_available", lambda: False)
+    monkeypatch.setattr(sm, "SCM_MANIFEST_PATH", manifest_path)
+
+    payload = _minimal_payload()
+    payload["audited_factor_canonicals"] = ["op_a"]
+    payload["audited_factor_implementation_hashes"] = {
+        "op_a": {"hash": "unknown"}
+    }
+    payload["allowed_post_certification_blob_shas"] = {
+        "file1.py": "unknown",
+        "file2.py": "",
+    }
+    payload["emitter_hashes"] = {
+        "polars": "unknown",
+        "duckdb": "",
+    }
+
+    errors = foe._inherited_validation_errors(payload)
+
+    # Count errors by category
+    impl_hash_errors = [e for e in errors if "audited_factor_implementation_hashes" in e and "unknown" in e.lower()]
+    blob_errors = [e for e in errors if "allowed_post_certification_blob_shas" in e and ("unknown" in e.lower() or "missing" in e.lower())]
+    emitter_errors = [e for e in errors if "emitter_hashes" in e and ("unknown" in e.lower() or "missing" in e.lower())]
+
+    # Exactly one error per bad hash, no duplicates
+    assert len(impl_hash_errors) == 1, f"Expected 1 impl hash error, got {len(impl_hash_errors)}: {impl_hash_errors}"
+    assert len(blob_errors) == 2, f"Expected 2 blob errors, got {len(blob_errors)}: {blob_errors}"
+    assert len(emitter_errors) == 2, f"Expected 2 emitter errors, got {len(emitter_errors)}: {emitter_errors}"
 
 
 # ---------------------------------------------------------------------------

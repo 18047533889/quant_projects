@@ -325,20 +325,22 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
                 f"expected={expected!r} actual={actual!r}"
             )
 
-    # FE-P0-038: reject "unknown" or missing hashes in implementation/emitter/artifact
-    for field in ("implementation_hash", "emitter_hash", "artifact_hash"):
-        for key, value in dict(payload.get("allowed_post_certification_blob_shas") or {}).items():
+    # FE-P0-038: reject "unknown" or missing hashes in all hash-bearing mappings
+    def _validate_hash_map(mapping: dict[str, Any], map_name: str, required: bool = True) -> None:
+        if not mapping:
+            if required:
+                errors.append(f"production evidence missing required {map_name}")
+            return
+        for key, value in mapping.items():
             if not value or value == "unknown":
                 errors.append(
-                    f"production evidence cannot contain unknown/missing hash for {key}: {field}"
+                    f"production evidence has unknown/missing hash in {map_name}: {key}"
                 )
-    # Check emitter hashes explicitly
-    emitter_hashes = dict(payload.get("emitter_hashes") or {})
-    for emitter_name, emitter_hash in emitter_hashes.items():
-        if not emitter_hash or emitter_hash == "unknown":
-            errors.append(
-                f"production evidence cannot contain unknown/missing emitter hash: {emitter_name}"
-            )
+
+    _validate_hash_map(blob_shas, "allowed_post_certification_blob_shas", required=False)
+    _validate_hash_map(
+        dict(payload.get("emitter_hashes") or {}), "emitter_hashes", required=True
+    )
 
     try:
         from backend.evidence_provenance import (
@@ -373,6 +375,14 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
         payload.get("audited_factor_implementation_hashes") or {}
     )
     if expected_hashes:
+        # FE-P0-038: validate implementation hashes for unknown/missing values
+        for canon, hash_dict in expected_hashes.items():
+            if not isinstance(hash_dict, dict):
+                errors.append(
+                    f"production evidence has invalid implementation hash for {canon}: not a dict"
+                )
+                continue
+            _validate_hash_map(hash_dict, f"audited_factor_implementation_hashes[{canon}]", required=False)
         actual_hashes = {
             canon: implementation_hashes_for(canon) for canon in sorted(all_targets)
         }
