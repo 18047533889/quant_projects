@@ -303,6 +303,12 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
         str(path)
         for path in (payload.get("allowed_unhashed_artifact_paths") or [])
     }
+    # FE-P0-024: production hard verification must reject any unhashed artifacts
+    if unhashed:
+        errors.append(
+            "production evidence cannot reference unhashed artifacts: "
+            + ", ".join(sorted(unhashed))
+        )
     allowed = set(blob_shas) | unhashed
     unexpected = changed.difference(allowed)
     if unexpected:
@@ -319,6 +325,21 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
                 f"expected={expected!r} actual={actual!r}"
             )
 
+    # FE-P0-038: reject "unknown" or missing hashes in implementation/emitter/artifact
+    for field in ("implementation_hash", "emitter_hash", "artifact_hash"):
+        for key, value in dict(payload.get("allowed_post_certification_blob_shas") or {}).items():
+            if not value or value == "unknown":
+                errors.append(
+                    f"production evidence cannot contain unknown/missing hash for {key}: {field}"
+                )
+    # Check emitter hashes explicitly
+    emitter_hashes = dict(payload.get("emitter_hashes") or {})
+    for emitter_name, emitter_hash in emitter_hashes.items():
+        if not emitter_hash or emitter_hash == "unknown":
+            errors.append(
+                f"production evidence cannot contain unknown/missing emitter hash: {emitter_name}"
+            )
+
     try:
         from backend.evidence_provenance import (
             evidence_artifact_valid,
@@ -331,33 +352,22 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
     except Exception as exc:
         return errors + [f"target resolution failed: {type(exc).__name__}: {exc}"]
 
-    # P0-20: compare the EXACT audited canonical set (not just cardinality) plus
-    # per-canonical implementation hashes.  A same-count target swap must now
-    # fail closed.  Legacy inherited payloads that only recorded cardinality
-    # keep the count fallback so an old artifact still validates by count.
+    # FE-P0-023: reject legacy count-only validation; require exact canonical set and hashes
     expected_canonicals = [
         str(c) for c in (payload.get("audited_factor_canonicals") or [])
     ]
-    if expected_canonicals:
+    if not expected_canonicals:
+        # Legacy payload without exact canonical list: reject in production
+        errors.append(
+            "production evidence requires exact canonical set; "
+            "legacy count-only validation is not sufficient for hard verification"
+        )
+    else:
         if sorted(all_targets) != sorted(expected_canonicals):
             errors.append(
                 "factor target set changed: "
                 f"expected={sorted(expected_canonicals)!r} "
                 f"actual={sorted(all_targets)!r}"
-            )
-    else:
-        expected_all = int(payload.get("audited_factor_target_count") or -1)
-        expected_nonprimitive = int(
-            payload.get("audited_nonprimitive_target_count") or -1
-        )
-        if len(all_targets) != expected_all:
-            errors.append(
-                f"factor target count changed: expected={expected_all} actual={len(all_targets)}"
-            )
-        if len(nonprimitive) != expected_nonprimitive:
-            errors.append(
-                "non-primitive target count changed: "
-                f"expected={expected_nonprimitive} actual={len(nonprimitive)}"
             )
     expected_hashes = dict(
         payload.get("audited_factor_implementation_hashes") or {}
@@ -371,6 +381,11 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
                 "factor target implementation hashes changed: "
                 f"expected={expected_hashes!r} actual={actual_hashes!r}"
             )
+    else:
+        # No implementation hashes: also reject in production
+        errors.append(
+            "production evidence requires per-canonical implementation hashes"
+        )
     return errors
 
 
