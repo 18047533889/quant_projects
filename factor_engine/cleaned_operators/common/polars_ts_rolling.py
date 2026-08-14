@@ -97,16 +97,25 @@ class TSCovNative(SeriesOperator):
         name="ts_cov",
         category="time_series",
         description="滚动协方差",
-        param_names=["x", "y", "window"],
+        param_names=["x", "y", "window", "ddof", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, ddof: int = 1,
+                         min_periods: int | None = None, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
+        ddof_val = strict_integer(ddof, "ddof", minimum=0)
+
+        # Default min_periods to 2 if not specified (need at least 2 pairs)
+        if min_periods is None:
+            min_p = 2
+        else:
+            min_p = strict_integer(min_periods, "min_periods", minimum=1)
+
         cols = _numeric_cols(x)
 
         if y is None:
@@ -117,10 +126,27 @@ class TSCovNative(SeriesOperator):
             x_col = pl.col(c)
             y_col = y[c] if c in y.columns else pl.lit(None)
 
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
+            # Compute rolling covariance manually with ddof support
+            # cov = E[(X - E[X])(Y - E[Y])] / (N - ddof)
+            x_mean = x_col.rolling_mean(window_size=w, min_samples=min_p)
+            y_mean = y_col.rolling_mean(window_size=w, min_samples=min_p)
 
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
+            # Count valid pairs (both x and y are non-null)
+            valid_count = (x_col.is_not_null() & y_col.is_not_null()).cast(pl.Int32).rolling_sum(
+                window_size=w, min_samples=min_p
+            )
+
+            # Sum of (x - mean_x) * (y - mean_y)
+            cov_sum = ((x_col - x_mean) * (y_col - y_mean)).rolling_sum(
+                window_size=w, min_samples=min_p
+            )
+
+            # Apply ddof: divide by (n - ddof) instead of n
+            # If valid_count <= ddof, result is NaN
+            cov = pl.when(valid_count > ddof_val).then(
+                cov_sum / (valid_count - ddof_val)
+            ).otherwise(None)
+
             exprs.append(cov.alias(c))
 
         return x.lazy().with_columns(exprs).collect()

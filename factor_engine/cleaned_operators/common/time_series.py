@@ -1139,17 +1139,23 @@ class TSCorrelation(SeriesOperator):
         name="ts_correlation", category="time_series",
         description="滚动相关系数 (与m_cor相同)",
         examples=["ts_correlation(close, volume, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
+        param_names=["x", "y", "window", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "correlation"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, min_periods: int = 2, **kwargs) -> pd.DataFrame:
         from cleaned_operators.common.strict_params import strict_int
 
         w = strict_int(window, "window", minimum=2)
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         # R19-030: Numba fastpath and pandas slow path share the SAME
         # current-row policy (see _rolling_fast.CURRENT_ROW_POLICY): a window
         # statistic may exist at a row whose current x/y pair is missing, as
@@ -1170,13 +1176,13 @@ class TSCorrelation(SeriesOperator):
                     x.to_numpy(dtype=float),
                     y.to_numpy(dtype=float),
                     w,
-                    min_count=2,
+                    min_count=mp,
                 )
                 if fast is not None:
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=w, min_periods=2).corr(y)
+        return x.rolling(window=w, min_periods=mp).corr(y)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
 class TSCorr(TSCorrelation):
@@ -1186,8 +1192,14 @@ class TSCorr(TSCorrelation):
         name="ts_corr", category="time_series",
         description="滚动相关系数 (ts_correlation的别名)",
         examples=["ts_corr(close, volume, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
-        tags=["time_series", "ts_", "corr"]
+        param_names=["x", "y", "window", "min_periods"], return_type="series",
+        tags=["time_series", "ts_", "corr"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
 
 # aliases: TS_CORR, correlation, m_cor, ts_correlation
@@ -1203,21 +1215,33 @@ class TSCov(SeriesOperator):
         name="ts_cov", category="time_series",
         description="滚动协方差 (与m_cov相同)",
         examples=["ts_cov(returns, market, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
+        param_names=["x", "y", "window", "ddof", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "cov"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, default=1),
+            "min_periods": ParamSpec(dtype=int, min=1, default=None),
         },
     )
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20,
+                         ddof: int = 1, min_periods: int | None = None, **kwargs) -> pd.DataFrame:
         from cleaned_operators.common.strict_params import strict_int
 
         w = strict_int(window, "window", minimum=2)
+        ddof_val = strict_int(ddof, "ddof", minimum=0)
+
+        # Default min_periods to 2 if not specified (need at least 2 pairs)
+        if min_periods is None:
+            min_p = 2
+        else:
+            min_p = strict_int(min_periods, "min_periods", minimum=1)
+
         # R19-030: same current-row policy as ts_corr — a window covariance may
         # exist at a row whose current pair is missing (>= min_periods finite
         # pairs required).  ``.where(valid)`` removed for cross-backend parity.
-        return x.rolling(window=w, min_periods=2).cov(y)
+        # Pandas rolling.cov supports ddof parameter directly
+        return x.rolling(window=w, min_periods=min_p).cov(y, ddof=ddof_val)
 
 # aliases: TS_COV, m_cov, ts_covariance
 
@@ -2034,18 +2058,24 @@ class TSCorrelation(SeriesOperator):
         name="ts_correlation", category="time_series",
         description="滚动相关系数 (与m_cor相同)",
         examples=["ts_correlation(close, volume, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
+        param_names=["x", "y", "window", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "correlation"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
         from cleaned_operators.common.strict_params import strict_int
 
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         w = strict_int(window, "window", minimum=2)
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         merged = x
         y_cols: list[str] = []
         for col in numeric_cols:
@@ -2054,14 +2084,14 @@ class TSCorrelation(SeriesOperator):
                 y_cols.append(yname)
                 merged = merged.with_columns(y[col].alias(yname))
         # R19-030: NaN -> null so the rolling corr skips missing pairs and can
-        # exist at a row whose CURRENT pair is missing (>= min_samples finite
+        # exist at a row whose CURRENT pair is missing (>= min_periods finite
         # pairs required) — same current-row policy as the pandas/Numba paths.
         exprs = [
             pl.rolling_corr(
                 pl.col(col).fill_nan(None),
                 pl.col(f"__y_{col}").fill_nan(None),
                 window_size=w,
-                min_samples=2,
+                min_periods=mp,
             ).alias(col)
             for col in numeric_cols
             if col in y.columns
@@ -2078,8 +2108,14 @@ class TSCorrPolars(TSCorrelation):
         name="ts_corr", category="time_series",
         description="滚动相关系数 (ts_correlation的别名)",
         examples=["ts_corr(close, volume, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
-        tags=["time_series", "ts_", "corr"]
+        param_names=["x", "y", "window", "min_periods"], return_type="series",
+        tags=["time_series", "ts_", "corr"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
 
 # aliases: TS_CORR, correlation, m_cor, ts_correlation
@@ -2095,18 +2131,29 @@ class TSCovPolars(SeriesOperator):
         name="ts_cov", category="time_series",
         description="滚动协方差 (与m_cov相同)",
         examples=["ts_cov(returns, market, 20)"],
-        param_names=["x", "y", "window"], return_type="series",
+        param_names=["x", "y", "window", "ddof", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "cov"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, default=1),
+            "min_periods": ParamSpec(dtype=int, min=1, default=None),
         },
     )
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20,
+                         ddof: int = 1, min_periods: int | None = None, **kwargs) -> pl.DataFrame:
         from cleaned_operators.common.strict_params import strict_int
 
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         w = strict_int(window, "window", minimum=2)
+        ddof_val = strict_int(ddof, "ddof", minimum=0)
+
+        # Default min_periods to 2 if not specified (need at least 2 pairs)
+        if min_periods is None:
+            min_p = 2
+        else:
+            min_p = strict_int(min_periods, "min_periods", minimum=1)
+
         merged = x
         y_cols: list[str] = []
         for col in numeric_cols:
@@ -2121,7 +2168,8 @@ class TSCovPolars(SeriesOperator):
                 pl.col(f"__y_{col}").fill_nan(None),
                 pl.col(col).fill_nan(None),
                 window_size=w,
-                min_samples=2,
+                min_samples=min_p,
+                ddof=ddof_val,
             ).alias(col)
             for col in numeric_cols
             if col in y.columns
