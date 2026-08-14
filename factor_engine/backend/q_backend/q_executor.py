@@ -12,8 +12,10 @@ Hard Gates (文档 §85):
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +43,15 @@ logger = logging.getLogger(__name__)
 # QProcessManager returns the process-global PyKX connection. This lock is
 # shared by every executor instance, not just one executor's callers.
 _PROCESS_CONNECTION_LOCK = threading.RLock()
+_LEASE_LOCK = threading.RLock()
+_ACTIVE_LEASES: dict[str, tuple[str, int, set[str]]] = {}
+
+
+def _safe_q_identifier(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", value)
+    if not cleaned or cleaned[0].isdigit():
+        cleaned = f"v_{cleaned}"
+    return cleaned
 
 
 @dataclass(frozen=True)
@@ -115,6 +126,8 @@ class QExecutor:
         fallback_policy: QExecutionFallbackPolicy | None = None,
         return_resident_handle: bool = False,
         materialize_output: bool = True,
+        workspace_id: str | None = None,
+        generation_id: str | None = None,
     ) -> QExecutionResult:
         """执行 q Region 计划。
 
@@ -131,6 +144,9 @@ class QExecutor:
             RuntimeError: q 不可用且不允许 fallback
         """
         fallback_policy = fallback_policy or QExecutionFallbackPolicy()
+        workspace_id = workspace_id or uuid.uuid4().hex
+        generation_id = generation_id or uuid.uuid4().hex
+        workspace_prefix = f"qe_{_safe_q_identifier(workspace_id)}_"
         if not materialize_output and not return_resident_handle:
             raise ValueError(
                 "execute_region must materialize output or return a resident handle"
@@ -164,11 +180,25 @@ class QExecutor:
                 # The lock spans upload, execution, and output retrieval so
                 # another execution cannot overwrite this connection's names.
                 q = self.process_manager.get_connection()
-                self._load_inputs_to_q(q, input_data)
+                bindings = self._load_inputs_to_q(
+                    q,
+                    input_data,
+                    workspace_id=workspace_id,
+                    generation_id=generation_id,
+                    workspace_prefix=workspace_prefix,
+                )
 
-                logger.debug(f"Executing q Region {plan.region_id}:\n{plan.q_code}")
-                q(plan.q_code)
-                q_result = q(plan.output_table)
+                rewritten_code = self._rewrite_q_code(
+                    plan.q_code,
+                    {
+                        **bindings,
+                        plan.output_table: f"{workspace_prefix}{_safe_q_identifier(plan.output_table)}",
+                    },
+                )
+                output_symbol = f"{workspace_prefix}{_safe_q_identifier(plan.output_table)}"
+                logger.debug(f"Executing q Region {plan.region_id}:\n{rewritten_code}")
+                q(rewritten_code)
+                q_result = q(output_symbol)
                 should_materialize = materialize_output and not return_resident_handle
                 if should_materialize:
                     output_df = self.type_adapter.q_to_pandas(q_result)
@@ -184,13 +214,16 @@ class QExecutor:
                 resident_handle = None
                 if return_resident_handle:
                     resident_handle = QResidentTableHandle(
-                        table_name=plan.output_table,
+                        table_name=output_symbol,
                         q_table_ref=q_result,
                         row_count=rows,
                         byte_size=int(output_bytes),
                         region_id=plan.region_id,
                         connection_id=id(q),
+                        workspace_id=workspace_id,
+                        generation_id=generation_id,
                     )
+                    self._register_lease(resident_handle)
 
             logger.info(
                 f"q Region {plan.region_id} executed: "
@@ -232,6 +265,59 @@ class QExecutor:
             byte_size = 0
         return rows, byte_size
 
+    @staticmethod
+    def _rewrite_q_code(q_code: str, bindings: dict[str, str]) -> str:
+        rewritten = q_code
+        for logical_name in sorted(bindings, key=len, reverse=True):
+            rewritten = re.sub(
+                rf"(?<![A-Za-z0-9_]){re.escape(logical_name)}(?![A-Za-z0-9_])",
+                bindings[logical_name],
+                rewritten,
+            )
+        return rewritten
+
+    @staticmethod
+    def _register_lease(handle: QResidentTableHandle) -> None:
+        if handle.workspace_id is None or handle.generation_id is None:
+            raise QExecutionError("Resident handle is missing workspace lease identity")
+        with _LEASE_LOCK:
+            generation, connection_id, symbols = _ACTIVE_LEASES.setdefault(
+                handle.workspace_id,
+                (handle.generation_id, int(handle.connection_id or 0), set()),
+            )
+            if generation != handle.generation_id or connection_id != int(handle.connection_id or 0):
+                raise QExecutionError("Resident workspace lease identity conflict")
+            symbols.add(handle.table_name)
+
+    @staticmethod
+    def _validate_lease(handle: QResidentTableHandle, q: Any) -> None:
+        if handle.connection_id != id(q):
+            raise QExecutionError(
+                f"Stale Q-resident handle for {handle.table_name}: connection changed"
+            )
+        if handle.workspace_id is None or handle.generation_id is None:
+            raise QExecutionError(
+                f"Stale Q-resident handle for {handle.table_name}: missing workspace identity"
+            )
+        with _LEASE_LOCK:
+            lease = _ACTIVE_LEASES.get(handle.workspace_id)
+            expected = (handle.generation_id, id(q))
+            if lease is None or lease[:2] != expected or handle.table_name not in lease[2]:
+                raise QExecutionError(
+                    f"Stale Q-resident handle for {handle.table_name}: lease is not active"
+                )
+
+    @staticmethod
+    def _cleanup_workspace(q: Any, workspace_id: str, generation_id: str) -> None:
+        with _LEASE_LOCK:
+            lease = _ACTIVE_LEASES.get(workspace_id)
+            if lease is None or lease[0] != generation_id:
+                return
+            symbols = tuple(lease[2])
+            del _ACTIVE_LEASES[workspace_id]
+        for symbol in symbols:
+            q(f"delete {symbol} from `.")
+
     def _increment_telemetry(self, key: str, amount: int = 1) -> None:
         with self._telemetry_lock:
             self._telemetry[key] += int(amount)
@@ -248,8 +334,8 @@ class QExecutor:
     def _load_inputs_to_q(
         self,
         q: Any,
-        input_data: dict[str, pd.DataFrame | QResidentTableHandle],
-    ):
+        workspace_prefix: str,
+    ) -> dict[str, str]:
         """将输入数据加载到 q workspace。
 
         支持 QResidentTableHandle 复用以消除 region 间 ping-pong。
