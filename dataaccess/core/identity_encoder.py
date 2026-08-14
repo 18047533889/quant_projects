@@ -56,7 +56,10 @@ class CanonicalIdentityEncoder:
         return json.dumps(canonical, sort_keys=True, ensure_ascii=True)
 
     def hash_identity(self, value: Any, *, bits: int = 256) -> str:
-        """Hash value to identity digest.
+        """Hash value to identity digest using SHA-256 family.
+
+        DA-P1-028: MD5 prohibited for production correctness identity.
+        All bit widths use SHA-256 truncation for consistency and correctness.
 
         Args:
             value: Value to hash
@@ -74,14 +77,15 @@ class CanonicalIdentityEncoder:
         canonical = self.encode(value)
 
         if bits == 64:
-            # MD5 truncated to 64 bits for ephemeral cache keys
-            # NOT for correctness/security identities
-            full_digest = hashlib.md5(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+            # SHA-256 truncated to 64 bits
+            # DA-P1-028: Use SHA-256, not MD5, even for short digests
+            full_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
             digest = full_digest[:16]  # 64 bits = 16 hex chars
         elif bits == 128:
-            # R32-P0-108: 128-bit minimum for non-display identities
-            # MD5 used only for cache key generation, not cryptographic security
-            digest = hashlib.md5(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+            # SHA-256 truncated to 128 bits
+            # DA-P0-010: Minimum for correctness identities
+            full_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            digest = full_digest[:32]  # 128 bits = 32 hex chars
         elif bits == 256:
             digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         elif bits == 384:
@@ -173,11 +177,22 @@ class CanonicalIdentityEncoder:
                 typed_items.append((type_tag, encoded))
 
             # Sort by JSON-encoded tuple for deterministic order
-            try:
-                sorted_items = sorted(typed_items, key=lambda x: json.dumps(x, sort_keys=True))
-            except TypeError:
-                # Fallback: stringify for comparison
-                sorted_items = sorted(typed_items, key=lambda x: str(x))
+            # Coordinator review: No str() fallback in strict mode - fail if not sortable
+            if self.strict:
+                # In strict mode, all supported types must produce sortable canonical JSON
+                try:
+                    sorted_items = sorted(typed_items, key=lambda x: json.dumps(x, sort_keys=True))
+                except TypeError as e:
+                    raise ValidationError(
+                        f"DA-P0-012: Cannot sort set elements in strict mode. "
+                        f"All elements must produce sortable canonical JSON. Error: {e}"
+                    )
+            else:
+                # Non-strict: fallback to str for backward compatibility
+                try:
+                    sorted_items = sorted(typed_items, key=lambda x: json.dumps(x, sort_keys=True))
+                except TypeError:
+                    sorted_items = sorted(typed_items, key=lambda x: str(x))
 
             return {"__set__": sorted_items}
 
@@ -194,10 +209,22 @@ class CanonicalIdentityEncoder:
                 typed_items.append(((key_type, encoded_key), encoded_value))
 
             # Sort by canonical key representation
-            try:
-                sorted_items = sorted(typed_items, key=lambda x: json.dumps(x[0], sort_keys=True))
-            except TypeError:
-                sorted_items = sorted(typed_items, key=lambda x: str(x[0]))
+            # Coordinator review: No str() fallback in strict mode - fail if not sortable
+            if self.strict:
+                # In strict mode, all supported types must produce sortable canonical JSON
+                try:
+                    sorted_items = sorted(typed_items, key=lambda x: json.dumps(x[0], sort_keys=True))
+                except TypeError as e:
+                    raise ValidationError(
+                        f"DA-P0-013: Cannot sort dict keys in strict mode. "
+                        f"All keys must produce sortable canonical JSON. Error: {e}"
+                    )
+            else:
+                # Non-strict: fallback to str for backward compatibility
+                try:
+                    sorted_items = sorted(typed_items, key=lambda x: json.dumps(x[0], sort_keys=True))
+                except TypeError:
+                    sorted_items = sorted(typed_items, key=lambda x: str(x[0]))
 
             return {"__dict__": sorted_items}
 
@@ -342,14 +369,44 @@ def hash_security_identity(value: Any, *, bits: int = 256) -> IdentityDigest:
     )
 
 
-def hash_cache_key(value: Any, *, bits: int = 64) -> str:
-    """Hash cache key - can be shorter for display purposes.
+def hash_ephemeral_cache_key(value: Any, *, bits: int = 64) -> str:
+    """Hash ephemeral performance cache key - SHORT-LIVED IN-MEMORY ONLY.
 
-    NOTE: This is for ephemeral performance cache keys only.
-    For correctness cache identity, use hash_correctness_identity() instead.
+    WARNING: This function is for EPHEMERAL PERFORMANCE CACHE KEYS ONLY.
+    - Use case: In-memory cache for performance optimization (LRU cache, memoization)
+    - Lifetime: Process lifetime or shorter
+    - Persistence: NEVER persisted to disk or database
+    - Non-strict mode: May use repr() fallback for convenience
+
+    For correctness-critical cache (affecting quantitative results, persisted to disk,
+    or data transformation feeding into factors), use hash_correctness_identity() instead.
+
+    Coordinator review: This function's callers must be audited to ensure they are
+    truly ephemeral. Any result-reuse or correctness cache MUST migrate to
+    hash_correctness_identity().
+
+    Args:
+        value: Value to hash
+        bits: Hash bits (minimum 64, default 64)
+
+    Returns:
+        Hex digest string
     """
     encoder = create_identity_encoder(strict=False)
     return encoder.hash_identity(value, bits=max(bits, 64))
+
+
+# Deprecated alias - use hash_ephemeral_cache_key for clarity
+def hash_cache_key(value: Any, *, bits: int = 64) -> str:
+    """DEPRECATED: Use hash_ephemeral_cache_key or hash_correctness_identity.
+
+    This function name is ambiguous about whether the cache is:
+    - Ephemeral performance cache (use hash_ephemeral_cache_key)
+    - Correctness cache affecting results (use hash_correctness_identity)
+
+    Kept for backward compatibility only. Will be removed in future version.
+    """
+    return hash_ephemeral_cache_key(value, bits=bits)
 
 
 def hash_correctness_identity(value: Any, *, bits: int = 256) -> IdentityDigest:
@@ -381,6 +438,7 @@ __all__ = [
     "hash_source_identity",
     "hash_experiment_identity",
     "hash_security_identity",
-    "hash_cache_key",
+    "hash_ephemeral_cache_key",
+    "hash_cache_key",  # Deprecated, kept for backward compatibility
     "hash_correctness_identity",
 ]

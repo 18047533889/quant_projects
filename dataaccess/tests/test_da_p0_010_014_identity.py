@@ -3,6 +3,7 @@ DA-P0-010 through DA-P0-014: Identity encoder correctness tests.
 
 Tests strict typed encoding, NaN/Inf/-0.0 semantics, and correctness identity requirements.
 """
+import hashlib
 import math
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ from core.identity_encoder import (
     CanonicalIdentityEncoder,
     hash_correctness_identity,
     hash_cache_key,
+    hash_ephemeral_cache_key,
 )
 
 
