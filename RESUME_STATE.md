@@ -1,125 +1,64 @@
-# Resume State - Campaign Checkpoint
-**Last Updated:** 2026-08-14 15:14 CST
-**Campaign Elapsed:** 0h 05m / 6h 00m
+# R2 Local Loop Engineering Resume State
 
-## Critical State Information
+**Updated:** 2026-08-14
+**Mode:** ACTIVE, local-only
+**Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
+**Base HEAD:** `d78ed761b7d098d27e3acf916f3961d75096b3b3`
 
-**Campaign Start:** 2026-08-14 15:09:12 CST  
-**Campaign Target End:** 2026-08-14 21:09:12 CST  
-**Baseline Commit:** a2269475ab3024cdf55d95840ef5c3189c1fdd0e  
+## Non-Negotiable Constraints
 
-**Status:** ACTIVE - First investigation wave in progress
+- Do not use GitHub, `gh`, remote fetch, remote push, or remote CI state.
+- Work only under `/home/shw/quant_projects`.
+- Total memory ceiling is 15 GiB across this session and the other Claude session.
+- Default concurrency: one Writer plus one read-only Reviewer. Heavy tests are serial.
+- Set `OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1` for tests.
+- Never use `git checkout`, `git restore`, `git stash`, or `git clean`.
+- Never bulk AST/regex rewrite `cleaned_operators/`.
+- Do not edit `operator_catalog.py` or `operator_policy.py` concurrently.
+- Never claim PASS or production-ready for an unrun gate.
 
-## Active Workers & Tasks
+## Current Wave: Repository Recovery
 
-### Worker Assignments
-1. **IndependentReviewer** (acd3fc6d8c88a71c6) - Reviewing 8 prior commits
-2. **Worker-Backend** (a8e9980fcc3efe2df) - FE-BE-P0-001 (BackendKind duplicates)
-3. **Worker-Q** (a4245fd5ef1d0a376) - Q-P0-001, Q-P0-002 (q capability)
-4. **Worker-DA-Architecture** (ae661141b71520131) - ARCH-P0-001, ARCH-P0-002 (I/O boundary)
-5. **Worker-Modeling** (accea506002f3f72f) - MODEL-P0-001, MODEL-P0-002 (temporal leakage)
-6. **Worker-FactorAssets** (a605458cc4820670f) - FA-P0-001, FA-P0-003, LEDGER-P0-001
-7. **Worker-DA-Identity** (a79c0d3dcf7726bc0) - DA-ID-P0-002, DA-ID-P0-005 (hash audit)
-8. **Worker-Evaluator** (ac608487e06b3ae3c) - QE-Q-P0-001, QE-Q-P0-002, QE-Q-P0-004
+### Reproduced P0
 
-### Expected Completion Times
-- Fastest investigations: 15:25-15:30 CST (Worker-DA-Architecture, IndependentReviewer)
-- Main wave: 15:35-15:45 CST (most workers)
-- Slowest (hash audit): 15:45-15:55 CST (Worker-DA-Identity)
+1. `factor_engine/backend/q_backend/q_executor.py` has 51 lines at HEAD; its local preimage at `HEAD^` has 372 lines.
+2. `factor_engine/backend/q_backend/q_backend.py` imports `QExecutionFallbackPolicy` and `get_q_executor`, which do not exist in the current executor.
+3. Importing `backend.q_backend.q_backend` raises `ImportError` because `QExecutor` is missing.
+4. The current executor contains hard-coded `PASS` constants but no executor implementation; these constants are not evidence.
+5. Read-only audit confirmed additional source patterns: q backend assumes a nonexistent PlanNode API, and registered Polars rolling statistics include formulas based on time-varying historical means.
 
-## Uncommitted Changes Protection
+### Active Work
 
-**Files with WIP changes (DO NOT TOUCH):**
-- cleaned_operators/common/polars_*.py (7 files)
-- cleaned_operators/polars_native/*.py (6 files)
-- modeling/scripts/wheel_clean_install_smoke.py
+- Writer: recover Q executor/API integrity in isolated worktree.
+- Reviewer slots are intentionally idle while Writer runs to stay inside memory budget; resume one reviewer after Writer finishes.
 
-**Forbidden Operations:**
-- git checkout/restore/stash/clean
-- Bulk edits to cleaned_operators/
-- Editing operator_catalog.py or operator_policy.py
+## Next Priority Queue
 
-## Task Queue State
+1. Independently review and integrate Q executor recovery.
+2. Make Q production-safe/readiness use one evidence definition; no fake readiness messages.
+3. Fix Q PlanNode ABI and reachable lowering registry.
+4. Fix Q fan-in/workspace/resident handle lifecycle.
+5. Fix registered Polars `ts_corr`, `ts_cov`, rolling regression, `ts_moment`, and `ts_kurt` formulas.
+6. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
+7. Repair FactorAssets DataAccess adapter against the local public API.
+8. Fix QuantEvaluator batch/Numba bare `.squeeze()` for `T=1` and `N=1`.
+9. Recalculate actual operator production surface from Registry + MiningRole + Evidence; do not reuse the unproven 678 count.
+10. Remove DataAccess/FactorEngine correctness identity `repr`, `default=str`, and 64-bit truncation paths.
+11. Replace BatchGlobalOptimizer scaffold constants and empty transfer edges with honest unsupported/fail-closed behavior or real planning.
+12. Wire local root gates; no remote/GitHub work.
 
-**P0 Priority:** 48 tasks total
-- Architecture: 3 tasks (3 active)
-- Backend: 7 tasks (1 active, 6 queued)
-- Q Backend: 15 tasks (2 active, 13 queued)
-- DataAccess: 7 tasks (3 active, 4 queued)
-- Modeling: 5 tasks (2 active, 3 queued)
-- FactorAssets: 4 tasks (3 active, 1 queued)
-- Evaluator: 3 tasks (3 active, 0 queued)
-- Build/Packaging: 4 tasks (0 active, 4 queued)
+## Scheduling
 
-**Remaining Unassigned P0:** ~32 tasks
+- Durable local continuation job: `c0d3c644`, every 17 minutes.
+- Durable one-shot final report job: `1f71defb`.
+- Recurring tasks auto-expire after 7 days; the one-shot finalizer should stop new task assignment at the configured end.
 
-## Next Actions on Resume
+## Truth Status
 
-If interrupted and resumed:
-
-1. Check active worker status files in /tmp/claude-*/
-2. Review CAMPAIGN_PROGRESS_REPORT_*.md for latest status
-3. Check AUTONOMOUS_MASTER_QUEUE.md for task states
-4. Collect any completed work since last checkpoint
-5. Route completed work to IndependentReviewer
-6. Requeue rejected work
-7. Assign idle workers to next P0 tasks
-8. Continue campaign until target end time
-
-## Control Files
-
-**Master tracking:**
-- /home/shw/quant_projects/AUTONOMOUS_MASTER_QUEUE.md
-- /home/shw/quant_projects/AGENT_STATUS.md
-- /home/shw/quant_projects/CAMPAIGN_START_STATE.md
-- /home/shw/quant_projects/CAMPAIGN_PROGRESS_REPORT_*.md
-- /home/shw/quant_projects/RESUME_STATE.md (this file)
-
-**To create when needed:**
-- AUDIT_COVERAGE_MATRIX.md (when first findings arrive)
-- CERTIFICATION_MATRIX.md (when first verifications complete)
-- REGRESSION_MATRIX.md (when first tests run)
-
-## Resource State
-
-**Memory:** 2 GiB / 15 GiB (13% utilized)  
-**Worker slots:** 8/8 occupied  
-**High-memory slots:** 0/2 used  
-
-## Auto-Replenishment Config
-
-**Trigger:** runnable < 15 → launch AuditMiner-Static  
-**Trigger:** runnable < 8 → launch AuditMiner-Properties  
-**Current runnable:** 48 (no trigger)  
-
-## Critical Success Criteria
-
-Campaign succeeds if:
-1. All P0 tasks reach CLOSED or documented as BLOCKED
-2. Independent review passes for all fixes
-3. No test split contamination
-4. No temporal leakage in modeling
-5. No silent failures in production paths
-6. Complete backend capability evidence chain
-7. Single authority for all registries/capabilities
-8. Full identity binding for reproducibility
-
-## Known Blockers
-
-**None yet.** Will update as workers report blockers.
-
-## Recovery Commands
-
-```bash
-# Check worker status
-ls -lh /tmp/claude-*/tasks/*.output 2>/dev/null | tail -20
-
-# Check campaign elapsed time
-python3 -c "from datetime import datetime; start=datetime.fromisoformat('2026-08-14T15:09:12'); print(f'Elapsed: {(datetime.now()-start).seconds//60}m')"
-
-# Check git status
-cd /home/shw/quant_projects/factor_engine && git status --short
-
-# Check memory
-free -h
-```
+- Q backend: `NOT_PRODUCTION_CERTIFIED`.
+- Polars: `PARTIALLY_VERIFIED`, known formula/parity work remains.
+- DuckDB: `PARTIALLY_VERIFIED`.
+- FactorAssets: `NOT_PRODUCTION_CERTIFIED`.
+- Modeling: `NOT_PRODUCTION_CERTIFIED` until one authority and runtime enforcement are independently proven.
+- QuantEvaluator: `NOT_PRODUCTION_CERTIFIED` until shape and orientation regressions are independently verified.
+- Root CI/current HEAD: `NOT_RUN` locally unless explicitly executed.
