@@ -221,7 +221,7 @@ def assign_quantiles_numba(
 
     quantiles = _assign_quantiles_jit(values, n_quantiles, policy.value)
 
-    return quantiles.squeeze() if quantiles.shape[2] == 1 else quantiles
+    return quantiles[:, :, 0] if quantiles.shape[2] == 1 else quantiles
 
 
 def compute_quantile_returns_numba(

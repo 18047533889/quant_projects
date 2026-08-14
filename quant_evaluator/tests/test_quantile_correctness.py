@@ -14,6 +14,7 @@ from quant_evaluator.metrics.quantile import (
     assign_quantiles_fast,
     assign_quantiles_batch,
 )
+from quant_evaluator.metrics.quantile_optimized import assign_quantiles_vectorized_v2
 from quant_evaluator.contracts.quantile_policy import QuantileTiePolicy
 
 try:
@@ -335,6 +336,57 @@ def test_all_inf_slice():
 # Edge cases
 # =============================================================================
 
+@pytest.mark.parametrize(
+    ("shape", "n_quantiles", "expected_shape"),
+    [
+        ((1, 5, 1), 5, (1, 5)),
+        ((5, 1, 1), 1, (5, 1)),
+        ((1, 1, 1), 1, (1, 1)),
+        ((3, 5, 1), 5, (3, 5)),
+        ((1, 5, 3), 5, (1, 5, 3)),
+    ],
+)
+def test_quantile_assignment_preserves_time_and_asset_axes(
+    shape, n_quantiles, expected_shape
+):
+    """Only the singleton factor axis may be removed from 3D input."""
+    values = np.arange(np.prod(shape), dtype=np.float64).reshape(shape)
+
+    q_batch = assign_quantiles_batch(values, n_quantiles=n_quantiles)
+    q_vectorized = assign_quantiles_vectorized_v2(
+        values, n_quantiles=n_quantiles
+    )
+
+    assert q_batch.shape == expected_shape
+    assert q_vectorized.shape == expected_shape
+    assert np.array_equal(q_batch, q_vectorized)
+
+
+@pytest.mark.skipif(not NUMBA_AVAILABLE, reason="Numba not available")
+@pytest.mark.parametrize(
+    ("shape", "n_quantiles", "expected_shape"),
+    [
+        ((1, 5, 1), 5, (1, 5)),
+        ((5, 1, 1), 1, (5, 1)),
+        ((1, 1, 1), 1, (1, 1)),
+        ((3, 5, 1), 5, (3, 5)),
+        ((1, 5, 3), 5, (1, 5, 3)),
+    ],
+)
+def test_quantile_assignment_shape_numpy_numba_parity(
+    shape, n_quantiles, expected_shape
+):
+    """NumPy and Numba preserve the same shape ABI for singleton axes."""
+    values = np.arange(np.prod(shape), dtype=np.float64).reshape(shape)
+
+    q_numpy = assign_quantiles_batch(values, n_quantiles=n_quantiles)
+    q_numba = assign_quantiles_numba(values, n_quantiles=n_quantiles)
+
+    assert q_numpy.shape == expected_shape
+    assert q_numba.shape == expected_shape
+    assert np.array_equal(q_numpy, q_numba)
+
+
 def test_insufficient_finite_values():
     """Fewer finite values than quantiles should produce all -1."""
     values = np.array([[1.0, 2.0, np.nan, np.nan, np.nan]])
@@ -355,12 +407,9 @@ def test_single_finite_value():
     assert np.all(q_numpy == -1)
     assert np.all(q_numba == -1)
 
-    # Shape normalization: both should be (1, 3) or both (3,)
-    # assign_quantiles returns (T, N) for 2D input
-    # assign_quantiles_numba might squeeze differently
-    q_numpy_flat = q_numpy.flatten()
-    q_numba_flat = q_numba.flatten()
-    assert np.array_equal(q_numpy_flat, q_numba_flat)
+    assert q_numpy.shape == (1, 3)
+    assert q_numba.shape == (1, 3)
+    assert np.array_equal(q_numpy, q_numba)
 
 
 if __name__ == "__main__":
