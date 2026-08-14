@@ -118,17 +118,25 @@ def test_calibrated_peak_uses_memory_factor_not_elapsed():
     assert factors.memory_factor > factors.elapsed_factor
     assert factors.memory_factor >= 1.3  # EMA blended result
 
-    # calibrated_peak_bytes must use memory_factor
+    # calibrated_peak_bytes returns (base_calibrated, uncertainty)
+    # where base_calibrated = static * memory_factor (uncertainty NOT pre-applied)
     static_peak = 100 * 1024 * 1024
-    predicted, uncertainty = calibrated_peak_bytes(static_peak, key)
+    base_calibrated, uncertainty = calibrated_peak_bytes(static_peak, key)
 
-    # predicted = static * memory_factor * uncertainty
+    # Base should be static * memory_factor
+    # memory_factor ~1.4, so base ~140MB
+    expected_base = int(static_peak * factors.memory_factor)
+    assert abs(base_calibrated - expected_base) < 10 * 1024 * 1024  # Within 10MB
+
+    # Final predicted = base * uncertainty (caller applies)
+    final_predicted = int(base_calibrated * uncertainty)
     # memory_factor ~1.4, uncertainty >= 1.25
-    # predicted >= 100MB * 1.4 * 1.25 = 175MB
-    assert predicted >= static_peak * 1.3
+    # final >= 100MB * 1.4 * 1.25 = 175MB
+    assert final_predicted >= static_peak * 1.3
 
-    # If elapsed_factor was wrongly used, predicted would be much lower
-    # (~100MB * 1.04 * 1.25 = 130MB), this test catches the FE-P0-020 bug
+    # If elapsed_factor was wrongly used, base would be ~104MB
+    # This test catches the FE-P0-020 bug
+    assert base_calibrated >= static_peak  # Should be >= static due to overrun
 
 
 def test_calibrated_peak_zero_static_returns_conservative_bound():
@@ -271,3 +279,33 @@ def test_calibration_ema_update_bounds():
     assert factors.memory_factor <= 10.0
     assert factors.elapsed_factor > 1.0
     assert factors.memory_factor > 1.0
+
+
+def test_resource_governor_zero_estimate_admission():
+    """FE-P0-027: MemoryGovernor.can_admit rejects zero estimates with conservative bound.
+
+    Zero/unknown estimates should not bypass admission control.
+    """
+    from runtime.resource_governor import MemoryGovernor
+
+    gov = MemoryGovernor(
+        process_budget_bytes=100 * 1024 * 1024,  # 100MB
+        duckdb_budget_bytes=50 * 1024 * 1024,
+    )
+
+    # Zero size_bytes should be treated as 8MB conservative minimum
+    # With 100MB budget and no usage, 8MB should be admittable
+    assert gov.can_admit(0) is True
+
+    # Fill up to 93MB
+    gov.reserve_accounting("test_layer", 93 * 1024 * 1024)
+    assert gov.total_usage == 93 * 1024 * 1024
+
+    # Now zero estimate (→ 8MB minimum) should be rejected (93 + 8 > 100)
+    assert gov.can_admit(0) is False
+
+    # Negative estimate should also use 8MB minimum
+    assert gov.can_admit(-1000) is False
+
+    # Verify with explicit 8MB check
+    assert gov.can_admit(8 * 1024 * 1024) is False  # Should match zero behavior

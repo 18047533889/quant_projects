@@ -231,14 +231,17 @@ def calibrated_peak_bytes(
     """R27-019：``predicted_peak = static_peak * calibrated_memory_factor *
     uncertainty_margin``。
 
-    返回 ``(predicted_peak, uncertainty)``。样本少 → 高 uncertainty（1.50）；
-    样本足够且校准收敛 → 降到 1.15（R27-040）。
+    返回 ``(base_calibrated_peak, uncertainty)``。Caller applies uncertainty
+    separately: final = base_calibrated_peak * uncertainty. This prevents
+    double-counting when caller interprets uncertainty independently.
+
+    样本少 → 高 uncertainty（1.50）；样本足够且校准收敛 → 降到 1.15（R27-040）。
 
     FE-P0-020: Fixed bug where elapsed_factor was incorrectly used instead of
     memory_factor. Now correctly extracts .memory_factor from CalibrationFactors.
 
     FE-P0-027: Zero/unknown static_peak_bytes now returns conservative bound
-    (8MB minimum) instead of zero, preventing production admission failures.
+    (8MB base) instead of zero, preventing production admission failures.
     """
     factors = calibrated_factors(key)
 
@@ -255,13 +258,15 @@ def calibrated_peak_bytes(
     else:
         uncertainty = UNCERTAINTY_CALIBRATED
 
-    predicted = max(0, int(static_peak_bytes * factors.memory_factor * uncertainty))
+    # Return base calibrated peak (static * memory_factor), NOT pre-multiplied by uncertainty
+    # Caller applies uncertainty: final_peak = base * uncertainty
+    base_calibrated = max(0, int(static_peak_bytes * factors.memory_factor))
 
-    # FE-P0-027: Final safeguard - never return zero for production paths
-    if predicted == 0:
-        predicted = 8 * 1024 * 1024
+    # FE-P0-027: Final safeguard - never return zero base for production paths
+    if base_calibrated == 0:
+        base_calibrated = 8 * 1024 * 1024
 
-    return predicted, uncertainty
+    return base_calibrated, uncertainty
 
 
 def reset_calibration() -> None:
