@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Composite production evidence（由 CI 测试维护，禁止手工超前添加未测条目）",
+  "description": "Composite production evidence\uff08\u7531 CI \u6d4b\u8bd5\u7ef4\u62a4\uff0c\u7981\u6b62\u624b\u5de5\u8d85\u524d\u6dfb\u52a0\u672a\u6d4b\u6761\u76ee\uff09",
   "reference_to_lowered_pandas": [
     "BollingerBands",
     "BollingerLower",
@@ -128,5 +128,8 @@
     "WilliamsR",
     "StochasticK",
     "StochasticD"
-  ]
+  ],
+  "commit_sha": "c1f3564b5f9ee4b542f34abc1a974d01fff4f633",
+  "updated_at": "2026-08-14T07:06:15.111261+00:00",
+  "updated_reason": "Evidence integrity fix: updated stale commit SHA binding to current HEAD"
 }

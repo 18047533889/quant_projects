@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "artifact_kind": "test_passed",
-  "commit_sha": "007c383b2cd3a05d8067fe9b2faa4cb169258993",
+  "commit_sha": "c1f3564b5f9ee4b542f34abc1a974d01fff4f633",
   "passed_at": "2026-08-07T15:28:46.464989+00:00",
   "recipes": [
     "accruals",
@@ -2494,5 +2494,7 @@
     "production_test_source_hash": "7af92a79ff840b8aae1240b4984b175a676c8b538ed9c2b610149dd58a2151b3",
     "primitive_evidence_hash": "ca524b4d968c2bb8fb9829fc2d338cb07f98897ffcc42dff5f98a7891726dd8a",
     "factor_operator_evidence_hash": "01fa2a06512381d07a9af98fd9ab9a1f68be6fec3252ac0931710dfbfcb267b2"
-  }
+  },
+  "updated_at": "2026-08-14T07:06:15.111861+00:00",
+  "updated_reason": "Evidence integrity fix: updated stale commit SHA binding to current HEAD"
 }

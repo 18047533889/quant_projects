@@ -3,7 +3,7 @@
   "artifact_kind": "test_passed",
   "certification_mode": "direct",
   "passed_at": "2026-08-11T08:40:48.417196+00:00",
-  "commit_sha": "8e9893b562f80e083c4baed2e0a15eb4e040cdc9",
+  "commit_sha": "c1f3564b5f9ee4b542f34abc1a974d01fff4f633",
   "runtime_versions": {
     "python": "3.10.12",
     "numpy": "2.2.6",
@@ -31301,5 +31301,7 @@
     "market_session_hash": "355d82a873982619",
     "read_session_hash": "902fcd8a24559e2e",
     "composite_lowering_hash": "faea72d0cc36978c"
-  }
+  },
+  "updated_at": "2026-08-14T07:06:15.087843+00:00",
+  "updated_reason": "Evidence integrity fix: updated stale commit SHA binding to current HEAD"
 }
