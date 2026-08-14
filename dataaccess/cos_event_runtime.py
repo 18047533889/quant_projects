@@ -89,7 +89,13 @@ def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = 
     # #P0-34 event filter 引用的列必须进 view projection——WHERE 引用但 view 里
     # 没有 → DuckDB Binder Error。
     if selected is None:
-        view_cols = list(dict.fromkeys([*_declared_schema(self, dataset), *required]))
+        declared = _declared_schema(self, dataset)
+        if not declared:
+            raise ValidationError(
+                f"数据集 {dataset!r} 未声明完整物理 schema；"
+                "columns=None 不能声称返回完整事件 payload"
+            )
+        view_cols = list(dict.fromkeys([*declared, *required]))
     else:
         view_cols = list(dict.fromkeys([*selected, *required, *filters.keys()]))
     table = self.sql(
