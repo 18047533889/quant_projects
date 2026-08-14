@@ -10,13 +10,23 @@ Pandas-first tier membership are never sufficient by themselves.
 Prior duplication note: backend/capability_registry.py was a facade wrapper
 that claimed to be the "unified authority" but only delegated to this module.
 It has been deprecated in favor of this single authority.
+
+FE-P0-003: All enums now imported from backend.contracts for ABI consistency.
+FE-P0-004: PhysicalImplementationSpec imported from unified authority.
 """
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Literal, Sequence
+
+# Import unified enums from contracts (FE-P0-003)
+from backend.contracts import (
+    BackendKind,
+    CapabilityLevel,
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
 
 BackendName = Literal[
     "pandas_numpy",
@@ -32,35 +42,7 @@ CapabilityStatus = Literal[
 ]
 
 # Version: incremented when capability semantics change (merged from capability_registry)
-CAPABILITY_REGISTRY_VERSION = "v2.0.0"
-
-
-class BackendKind(str, Enum):
-    """Physical backend execution engines (merged from capability_registry)."""
-    PANDAS_NUMPY = "pandas_numpy"
-    POLARS = "polars"
-    DUCKDB_SQL = "duckdb_sql"
-    CLICKHOUSE_SQL = "clickhouse_sql"
-    Q_KDB = "q_kdb"  # Future
-
-
-class CapabilityLevel(str, Enum):
-    """Backend capability levels (alias for CapabilityStatus, merged from capability_registry)."""
-    UNSUPPORTED = "unsupported"
-    IMPLEMENTED = "implemented"
-    PARITY_VERIFIED = "parity_verified"
-    PRODUCTION_SAFE = "production_safe"
-
-
-class ExecutionKind(str, Enum):
-    """How a backend executes an operator (merged from capability_registry)."""
-    UNSUPPORTED = "unsupported"
-    NATIVE_EXPR = "native_expr"
-    NATIVE_GROUP = "native_group"
-    NATIVE_STREAMING = "native_streaming"
-    DELEGATE_PYTHON = "delegate_python"
-    DELEGATE_PANDAS = "delegate_pandas"
-    REFERENCE = "reference"
+CAPABILITY_REGISTRY_VERSION = "v2.1.0"  # Bumped for FE-P0-003/004/005 unification
 
 
 class UnsupportedOperatorBackendError(RuntimeError):
@@ -199,11 +181,17 @@ class BackendCapabilityRecord:
         return self.level == CapabilityLevel.PRODUCTION_SAFE
 
     def is_native_execution(self) -> bool:
-        """Check if execution is truly native (not delegate)."""
+        """Check if execution is truly native (not delegate).
+
+        FE-P0-003: Updated to use unified ExecutionKind enum members.
+        """
         return self.execution_kind in {
             ExecutionKind.NATIVE_EXPR,
             ExecutionKind.NATIVE_GROUP,
             ExecutionKind.NATIVE_STREAMING,
+            ExecutionKind.POLARS_NATIVE_EXPR,
+            ExecutionKind.POLARS_NUMPY_KERNEL,
+            ExecutionKind.DUCKDB_NATIVE_SQL,
         }
 
 
@@ -481,7 +469,7 @@ def _sql_emitter_ok(
     return ok
 
 
-def _polars_status(canon: str) -> CapabilityStatus:
+def _polars_status(canon: str, *, production_mode: bool = True) -> CapabilityStatus:
     """Return Polars status from evidence, rejecting delegates from production_safe.
 
     Polars delegates (polars_udf_pandas_delegate) round-trip through to_pandas(),
@@ -492,6 +480,9 @@ def _polars_status(canon: str) -> CapabilityStatus:
     Evidence certifies correctness but does not distinguish native vs delegate
     execution. This function consults polars_backend_kind to enforce that only
     genuine native implementations can be production_safe.
+
+    FE-P0-005: Defaults to production_mode=True (fail closed). Operators without
+    explicit PhysicalImplementationSpec are classified as unsupported in production.
     """
     from backend.primitive_evidence import (
         POLARS_EDGE_VERIFIED,
@@ -504,9 +495,15 @@ def _polars_status(canon: str) -> CapabilityStatus:
         return "unsupported"
 
     # Delegates must never reach production_safe (they round-trip through pandas)
-    from backend.polars_backend_kind import canonical_polars_is_delegate
+    # FE-P0-005: Pass production_mode flag to enforce explicit spec requirement
+    from backend.polars_backend_kind import canonical_polars_is_delegate, canonical_polars_kind, BackendKind as PolarsBK
 
-    is_delegate = canonical_polars_is_delegate(canon)
+    polars_kind = canonical_polars_kind(canon, production_mode=production_mode)
+    if production_mode and polars_kind == PolarsBK.UNSUPPORTED:
+        # No explicit spec in production mode
+        return "unsupported"
+
+    is_delegate = canonical_polars_is_delegate(canon, production_mode=production_mode)
 
     if (
         canon in POLARS_REFERENCE_PARITY_VERIFIED
@@ -598,12 +595,19 @@ def backend_status(
     backend: BackendName,
     *,
     data_source_kind: str = "duckdb",
+    production_mode: bool = True,  # FE-P0-005: Default to fail-closed
 ) -> CapabilityStatus:
+    """Get backend capability status.
+
+    FE-P0-005: Defaults to production_mode=True (fail closed). Requires explicit
+    PhysicalImplementationSpec for production_safe classification. Set
+    production_mode=False explicitly for research/diagnostic heuristic fallback.
+    """
     canon = resolve_canonical(canonical)
     if backend == "pandas_numpy":
         return _pandas_status(canon)
     if backend == "polars":
-        return _polars_status(canon)
+        return _polars_status(canon, production_mode=production_mode)
     if backend in _SQL_BACKENDS:
         return _sql_status(canon, dialect=backend)
     return "unsupported"
@@ -1201,6 +1205,11 @@ class BackendCapabilityRegistry:
             "pandas_fallback": ExecutionKind.DELEGATE_PANDAS,
             "pandas_materialization_fallback": ExecutionKind.DELEGATE_PANDAS,
             "pandas_numpy_reference": ExecutionKind.REFERENCE,
+            # FE-P0-003: Map additional execution kinds
+            "polars_native_expr": ExecutionKind.POLARS_NATIVE_EXPR,
+            "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
+            "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
+            "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
         }
         exec_kind = execution_kind_map.get(cap.execution_kind, ExecutionKind.UNSUPPORTED)
 

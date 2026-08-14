@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Explicit backend-kind taxonomy for "polars" registry slots (audit R13 P0-63).
 
-`load_all()` ends with :func:`cleaned_operators.polars_gap_coverage.register_polars_gap_coverage`,
+`load_all()` ends with :func:`cleaned_operators.polars_gap_coverage.register_polaris_gap_coverage`,
 which wraps nearly every remaining pandas-only canonical as a `backend="polars"`
 slot via :func:`cleaned_operators.rolling_pack.register_polars_udf`.  Those slots
 are *not* native Polars at all — every call round-trips Polars → Pandas → certified
@@ -31,98 +31,13 @@ declaration is missing, but explicit declaration is the authoritative path forwa
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from backend.operator_capability import ExecutionKind
+# Import from unified contract authority (FE-P0-003, FE-P0-004)
+from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 
-@dataclass(frozen=True)
-class PhysicalImplementationSpec:
-    """Explicit declaration of how an operator implementation executes.
-
-    This replaces source-code heuristics with an authoritative contract.
-    Operator classes should define a ``_physical_spec`` class attribute or
-    ``physical_spec()`` method returning this spec.
-
-    Fields:
-
-    * ``canonical`` — Canonical operator name (e.g., "ts_mean").
-    * ``backend`` — Physical backend identifier ("pandas_numpy", "polars", "duckdb_sql").
-    * ``execution_kind`` — How this implementation executes (see ExecutionKind enum).
-    * ``supports_lazy`` — Can defer computation until collect()?
-    * ``supports_streaming`` — Can process in batches without full materialization?
-    * ``stateful`` — Does execution carry mutable state across windows (e.g., EMA)?
-    * ``materializes_full_panel`` — Must load entire panel into memory?
-    * ``requires_sorted`` — Requires pre-sorted input for correctness?
-    * ``supports_nulls`` — Handles null values correctly per spec?
-    * ``supports_nan`` — Handles NaN correctly (vs treating as null)?
-    * ``supports_inf`` — Handles +/-Inf correctly (vs clamping/error)?
-    * ``notes`` — Human-readable notes about implementation choices/limits.
-
-    Example declaration in an operator class::
-
-        class TsMeanPolars(PolarsOperator):
-            _physical_spec = PhysicalImplementationSpec(
-                canonical="ts_mean",
-                backend="polars",
-                execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
-                supports_lazy=True,
-                supports_streaming=True,
-                stateful=False,
-                materializes_full_panel=False,
-                requires_sorted=False,
-                supports_nulls=True,
-                supports_nan=True,
-                supports_inf=True,
-                notes="Pure rolling_mean expression; streaming-capable",
-            )
-
-            def _calculate_series(self, df, params):
-                return df.select(
-                    pl.col(params["input"])
-                    .rolling_mean(params["window"])
-                    .alias(params["output"])
-                )
-
-    For gap-coverage delegates::
-
-        class TsSkewnessPolarsDelegate(PolarsOperator):
-            _physical_spec = PhysicalImplementationSpec(
-                canonical="ts_skewness",
-                backend="polars",
-                execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
-                supports_lazy=False,
-                supports_streaming=False,
-                stateful=False,
-                materializes_full_panel=True,
-                requires_sorted=False,
-                supports_nulls=True,  # Inherited from pandas reference
-                supports_nan=True,
-                supports_inf=True,
-                notes="Gap coverage: delegates to pandas reference via to_pandas()",
-            )
-    """
-
-    canonical: str
-    backend: str
-    execution_kind: ExecutionKind
-
-    # Execution mode capabilities
-    supports_lazy: bool = False
-    supports_streaming: bool = False
-    stateful: bool = False
-    materializes_full_panel: bool = False
-    requires_sorted: bool = False
-
-    # Data handling capabilities
-    supports_nulls: bool = False
-    supports_nan: bool = False
-    supports_inf: bool = False
-
-    # Documentation
-    notes: str = ""
 
 
 class BackendKind(str, Enum):
@@ -133,6 +48,7 @@ class BackendKind(str, Enum):
     PANDAS_REFERENCE = "pandas_reference"
     SQL_NATIVE = "sql_native"
     UNSUPPORTED = "unsupported"
+
 
 
 #: Source markers whose ``polars`` backend is a Pandas materialisation round-trip.
@@ -223,6 +139,7 @@ def polars_backend_kind(
     *,
     source: str = "",
     module: str = "",
+    production_mode: bool = True,  # FE-P0-005: Default to fail-closed
 ) -> BackendKind:
     """Classify a registered ``polars`` implementation.
 
@@ -230,9 +147,13 @@ def polars_backend_kind(
     the registry ``backend_meta["source"]`` and the operator class module; when
     they are known the classification is exact without source inspection.
 
+    **FE-P0-005: Production classification requires explicit validated spec**.
+    Defaults to production_mode=True (fail closed). Set production_mode=False
+    explicitly for research/diagnostic heuristic classification.
+
     **Explicit declaration preferred**: Operators should declare
     :class:`PhysicalImplementationSpec` via ``_physical_spec`` attribute or
-    ``physical_spec()`` method. Source inspection is a fallback with a warning.
+    ``physical_spec()`` method. Source inspection is only for research diagnostics.
     """
     # Try explicit declaration first
     spec = get_physical_spec(operator)
@@ -255,12 +176,23 @@ def polars_backend_kind(
         else:
             return BackendKind.UNSUPPORTED
 
-    # Fallback to heuristics with warning
+    # FE-P0-005: Production requires explicit spec; fail closed
+    if production_mode:
+        canonical = getattr(operator, "canonical", "unknown")
+        warnings.warn(
+            f"Production mode: Operator {canonical} (backend=polars) lacks explicit "
+            f"PhysicalImplementationSpec; classification=UNSUPPORTED. "
+            f"Add _physical_spec attribute or physical_spec() method for production eligibility.",
+            stacklevel=2,
+        )
+        return BackendKind.UNSUPPORTED
+
+    # Research/diagnostic mode: fallback to heuristics with warning
     canonical = getattr(operator, "canonical", "unknown")
     warnings.warn(
-        f"Operator {canonical} (backend=polars) lacks explicit PhysicalImplementationSpec; "
-        f"falling back to source inspection heuristics. Add _physical_spec attribute "
-        f"or physical_spec() method for authoritative classification.",
+        f"Research mode: Operator {canonical} (backend=polars) lacks explicit PhysicalImplementationSpec; "
+        f"falling back to source inspection heuristics. "
+        f"Add _physical_spec attribute for authoritative classification.",
         stacklevel=2,
     )
 
@@ -276,8 +208,11 @@ def polars_backend_kind(
     return BackendKind.POLARS_NATIVE
 
 
-def canonical_polars_kind(canonical: str) -> BackendKind:
-    """Return the backend-kind of a canonical's registered ``polars`` slot."""
+def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> BackendKind:
+    """Return the backend-kind of a canonical's registered ``polars`` slot.
+
+    FE-P0-005: Defaults to production_mode=True (fail closed).
+    """
     try:
         from cleaned_operators.registry import OperatorRegistry
     except Exception:  # pragma: no cover - registry unavailable
@@ -291,12 +226,15 @@ def canonical_polars_kind(canonical: str) -> BackendKind:
         (OperatorRegistry._catalog.get(canonical, {}) or {}).get("backend_meta") or {}
     ).get("polars", {}) or {}
     source = str(meta.get("source") or "")
-    return polars_backend_kind(op, source=source)
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
 
 
-def canonical_polars_is_delegate(canonical: str) -> bool:
-    """True when the canonical's polars slot is a pandas-delegating UDF."""
-    return canonical_polars_kind(canonical) == BackendKind.POLARS_UDF_PANDAS_DELEGATE
+def canonical_polars_is_delegate(canonical: str, *, production_mode: bool = True) -> bool:
+    """True when the canonical's polars slot is a pandas-delegating UDF.
+
+    FE-P0-005: Defaults to production_mode=True (fail closed).
+    """
+    return canonical_polars_kind(canonical, production_mode=production_mode) == BackendKind.POLARS_UDF_PANDAS_DELEGATE
 
 
 def capability_quality(canonical: str, backend: str) -> str:
