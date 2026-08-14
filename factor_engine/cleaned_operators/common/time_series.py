@@ -1632,9 +1632,29 @@ class TSZScore(SeriesOperator):
         tags=["time_series", "ts_", "zscore"]
     )
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        from backend.numeric_semantics import zscore_zero_std_fill
+
         mean = x.rolling(window=window, min_periods=1).mean()
-        std = x.rolling(window=window, min_periods=1).std().replace(0, 1)
-        return (x - mean) / std
+        std = x.rolling(window=window, min_periods=1).std()
+
+        # R40 Parity Fix: When std=0 or NULL, return zero_fill (0.0) to match Polars backend
+        # and numeric_semantics policy. Must avoid division by zero entirely.
+        zero_fill = zscore_zero_std_fill("ts_zscore")
+
+        # Mask where std is valid (not null and not zero)
+        valid_std_mask = (std.notna()) & (std != 0)
+
+        # Initialize result as NaN everywhere
+        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
+
+        # Compute zscore only where std is valid and non-zero
+        result[valid_std_mask] = ((x - mean) / std)[valid_std_mask]
+
+        # Where std is exactly zero (constant window), use zero_fill
+        zero_std_mask = (std.notna()) & (std == 0)
+        result[zero_std_mask] = zero_fill
+
+        return result
 
 
 def _apply_colwise_kernel(x: pd.DataFrame, fn, **kwargs) -> pd.DataFrame:
