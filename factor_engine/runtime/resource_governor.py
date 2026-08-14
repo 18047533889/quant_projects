@@ -935,7 +935,14 @@ class MemoryGovernor:
 
         只在必要时触发 evict（真实逐出缓存），**从不**为探测本身记账。返回
         True/False 且 ``_usage`` 不含 ``__probe__``。
+
+        FE-P0-027: Zero/unknown size_bytes is treated as conservative 8MB minimum
+        to prevent bypassing admission control.
         """
+        # FE-P0-027: Prevent zero size from bypassing admission
+        if size_bytes <= 0:
+            size_bytes = 8 * 1024 * 1024  # 8MB conservative minimum
+
         size = max(0, int(size_bytes * factor))
         with self._lock:
             if self.total_usage + size > self.process_budget_bytes:

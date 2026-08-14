@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,28 @@ _EMA_ALPHA = 0.2
 _LOCK = threading.RLock()
 #: key -> {"elapsed_factor": float, "memory_factor": float, "samples": int}
 _CALIBRATION: dict[str, dict[str, float]] = {}
+
+
+# ---------------------------------------------------------------------------
+# FE-P0-019: Typed CalibrationFactors result
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CalibrationFactors:
+    """FE-P0-019: Typed calibration result replacing ambiguous tuple.
+
+    Returned by calibrated_factors() to make elapsed_factor vs memory_factor
+    explicit at call sites. Prevents bugs like FE-P0-020 where the wrong
+    factor was used.
+    """
+    elapsed_factor: float
+    memory_factor: float
+    samples: int
+
+    def to_tuple(self) -> tuple[float, float, int]:
+        """Compatibility accessor for legacy callers expecting tuple unpacking."""
+        return (self.elapsed_factor, self.memory_factor, self.samples)
 
 
 def _server_fingerprint() -> str:
@@ -181,16 +204,21 @@ def record_task_actual(
             entry["memory_factor"] = cur + _EMA_ALPHA * (ratio - cur)
 
 
-def calibrated_factors(key: str) -> tuple[float, float, int]:
-    """返回 (elapsed_factor, memory_factor, samples)；无样本返回 (1.0, 1.0, 0)。"""
+def calibrated_factors(key: str) -> CalibrationFactors:
+    """返回 CalibrationFactors (elapsed_factor, memory_factor, samples)；无样本返回 (1.0, 1.0, 0)。
+
+    FE-P0-019: Now returns typed CalibrationFactors instead of ambiguous tuple.
+    Legacy callers can use .to_tuple() for compatibility, but new code should
+    access fields directly (.elapsed_factor, .memory_factor, .samples).
+    """
     with _LOCK:
         entry = _CALIBRATION.get(key)
         if entry is None:
-            return 1.0, 1.0, 0
-        return (
-            float(entry.get("elapsed_factor", 1.0)),
-            float(entry.get("memory_factor", 1.0)),
-            int(entry.get("samples", 0)),
+            return CalibrationFactors(1.0, 1.0, 0)
+        return CalibrationFactors(
+            elapsed_factor=float(entry.get("elapsed_factor", 1.0)),
+            memory_factor=float(entry.get("memory_factor", 1.0)),
+            samples=int(entry.get("samples", 0)),
         )
 
 
@@ -203,17 +231,42 @@ def calibrated_peak_bytes(
     """R27-019：``predicted_peak = static_peak * calibrated_memory_factor *
     uncertainty_margin``。
 
-    返回 ``(predicted_peak, uncertainty)``。样本少 → 高 uncertainty（1.50）；
-    样本足够且校准收敛 → 降到 1.15（R27-040）。
+    返回 ``(base_calibrated_peak, uncertainty)``。Caller applies uncertainty
+    separately: final = base_calibrated_peak * uncertainty. This prevents
+    double-counting when caller interprets uncertainty independently.
+
+    样本少 → 高 uncertainty（1.50）；样本足够且校准收敛 → 降到 1.15（R27-040）。
+
+    FE-P0-020: Fixed bug where elapsed_factor was incorrectly used instead of
+    memory_factor. Now correctly extracts .memory_factor from CalibrationFactors.
+
+    FE-P0-027: Zero/unknown static_peak_bytes now returns conservative bound
+    (8MB base) instead of zero, preventing production admission failures.
     """
-    mem_factor, _, samples = calibrated_factors(key)
-    if samples < 1:
+    factors = calibrated_factors(key)
+
+    # FE-P0-027: Prevent zero estimate in production paths
+    if static_peak_bytes <= 0:
+        # Conservative fallback: 8MB minimum (prevents zero admission)
+        static_peak_bytes = 8 * 1024 * 1024
+
+    # FE-P0-020: Use memory_factor, not elapsed_factor
+    if factors.samples < 1:
         uncertainty = UNCERTAINTY_WARM
-    elif samples < samples_for_calibrated_uncertainty:
+    elif factors.samples < samples_for_calibrated_uncertainty:
         uncertainty = UNCERTAINTY_COLD
     else:
         uncertainty = UNCERTAINTY_CALIBRATED
-    return max(0, int(static_peak_bytes * mem_factor)), uncertainty
+
+    # Return base calibrated peak (static * memory_factor), NOT pre-multiplied by uncertainty
+    # Caller applies uncertainty: final_peak = base * uncertainty
+    base_calibrated = max(0, int(static_peak_bytes * factors.memory_factor))
+
+    # FE-P0-027: Final safeguard - never return zero base for production paths
+    if base_calibrated == 0:
+        base_calibrated = 8 * 1024 * 1024
+
+    return base_calibrated, uncertainty
 
 
 def reset_calibration() -> None:
