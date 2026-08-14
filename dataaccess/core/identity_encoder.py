@@ -1,6 +1,11 @@
 """
 R32-P0-107: CanonicalIdentityEncoder全仓唯一.
 R32-P0-108: 关键identity至少128-bit.
+DA-P0-010: correctness cache identity 使用 strict + >=128 bit.
+DA-P0-011: correctness identity 禁止 repr fallback.
+DA-P0-012: set/frozenset typed canonicalization.
+DA-P0-013: dict key typed canonicalization.
+DA-P0-014: NaN/Infinity/-0.0 explicit identity tokens.
 
 Canonical identity encoding with production fail-closed semantics.
 """
@@ -8,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -54,7 +60,7 @@ class CanonicalIdentityEncoder:
 
         Args:
             value: Value to hash
-            bits: Hash bits (128, 256, 384, 512)
+            bits: Hash bits (64, 128, 256, 384, 512)
 
         Returns:
             Hex digest of specified bit length
@@ -62,12 +68,17 @@ class CanonicalIdentityEncoder:
         Raises:
             ValidationError: If bits not supported or encoding fails
         """
-        if bits not in {128, 256, 384, 512}:
+        if bits not in {64, 128, 256, 384, 512}:
             raise ValidationError(f"Unsupported hash bits: {bits}")
 
         canonical = self.encode(value)
 
-        if bits == 128:
+        if bits == 64:
+            # MD5 truncated to 64 bits for ephemeral cache keys
+            # NOT for correctness/security identities
+            full_digest = hashlib.md5(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+            digest = full_digest[:16]  # 64 bits = 16 hex chars
+        elif bits == 128:
             # R32-P0-108: 128-bit minimum for non-display identities
             # MD5 used only for cache key generation, not cryptographic security
             digest = hashlib.md5(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
@@ -81,7 +92,12 @@ class CanonicalIdentityEncoder:
         return digest
 
     def _encode_value(self, value: Any) -> Any:
-        """Encode single value to canonical form."""
+        """Encode single value to canonical form.
+
+        DA-P0-014: NaN/Infinity/-0.0 handled explicitly.
+        DA-P0-012: set/frozenset use typed canonicalization.
+        DA-P0-013: dict keys use typed canonicalization.
+        """
         # None
         if value is None:
             return None
@@ -94,8 +110,23 @@ class CanonicalIdentityEncoder:
         if isinstance(value, int):
             return value
         if isinstance(value, float):
-            # Preserve exact float representation
-            return {"__float__": value}
+            # DA-P0-014: Explicit tokens for special float values
+            if math.isnan(value):
+                return {"__float_special__": "NaN"}
+            elif math.isinf(value):
+                if value > 0:
+                    return {"__float_special__": "+Inf"}
+                else:
+                    return {"__float_special__": "-Inf"}
+            elif value == 0.0:
+                # Distinguish -0.0 from +0.0
+                if math.copysign(1.0, value) < 0:
+                    return {"__float_special__": "-0.0"}
+                else:
+                    return 0.0
+            else:
+                # Regular float: use exact representation
+                return {"__float__": value}
 
         # String
         if isinstance(value, str):
@@ -130,18 +161,45 @@ class CanonicalIdentityEncoder:
         if isinstance(value, (list, tuple)):
             return [self._encode_value(v) for v in value]
 
-        # Set/frozenset - sorted for determinism
+        # Set/frozenset - sorted with type preservation
+        # DA-P0-012: typed canonicalization for sets
         if isinstance(value, (set, frozenset)):
-            try:
-                sorted_items = sorted(value)
-            except TypeError:
-                # Not sortable, convert to strings
-                sorted_items = sorted(str(v) for v in value)
-            return {"__set__": [self._encode_value(v) for v in sorted_items]}
+            # Encode each item with type tag, then sort by canonical bytes
+            typed_items = []
+            for item in value:
+                encoded = self._encode_value(item)
+                # Create sortable tuple: (type_tag, encoded_value)
+                type_tag = type(item).__name__
+                typed_items.append((type_tag, encoded))
 
-        # Dict/mapping - sort keys
+            # Sort by JSON-encoded tuple for deterministic order
+            try:
+                sorted_items = sorted(typed_items, key=lambda x: json.dumps(x, sort_keys=True))
+            except TypeError:
+                # Fallback: stringify for comparison
+                sorted_items = sorted(typed_items, key=lambda x: str(x))
+
+            return {"__set__": sorted_items}
+
+        # Dict/mapping - sort keys with type preservation
+        # DA-P0-013: dict key typed canonicalization
         if isinstance(value, dict):
-            return {k: self._encode_value(v) for k, v in sorted(value.items())}
+            # Encode both keys and values with type information
+            typed_items = []
+            for k, v in value.items():
+                encoded_key = self._encode_value(k)
+                encoded_value = self._encode_value(v)
+                # Preserve key type
+                key_type = type(k).__name__
+                typed_items.append(((key_type, encoded_key), encoded_value))
+
+            # Sort by canonical key representation
+            try:
+                sorted_items = sorted(typed_items, key=lambda x: json.dumps(x[0], sort_keys=True))
+            except TypeError:
+                sorted_items = sorted(typed_items, key=lambda x: str(x[0]))
+
+            return {"__dict__": sorted_items}
 
         # Dataclass - canonical field order
         if is_dataclass(value):
@@ -156,10 +214,13 @@ class CanonicalIdentityEncoder:
             }
 
         # Fallback: repr in non-strict, error in strict
+        # DA-P0-011: correctness identity禁止repr fallback
         if self.strict:
             raise ValidationError(
-                f"R32-P0-107: Cannot encode {type(value).__name__} in strict mode. "
-                "Production禁止repr fallback."
+                f"DA-P0-011: Cannot encode {type(value).__name__} in strict mode. "
+                f"Correctness identity禁止repr fallback. "
+                f"Supported types: None, bool, int, float, str, bytes, datetime, "
+                f"Enum, list, tuple, set, frozenset, dict, dataclass."
             )
 
         return {"__repr__": repr(value)}
@@ -170,13 +231,15 @@ class IdentityDigest:
     """Identity digest with minimum bit requirement enforcement.
 
     R32-P0-108: 关键identity至少128-bit.
-    cache display id可短; source/experiment/security/policy/artifact identity
+    DA-P0-010: correctness cache identity也必须≥128-bit + strict.
+
+    cache display id可短; source/experiment/security/policy/artifact/correctness identity
     应≥128 bit,最好full SHA256 internal.
     """
 
     digest: str
     bits: int
-    identity_type: str  # "cache", "source", "experiment", "security", "policy", "artifact"
+    identity_type: str  # "cache", "correctness", "source", "experiment", "security", "policy", "artifact"
 
     def __post_init__(self) -> None:
         """Validate digest meets minimum bit requirement."""
@@ -188,7 +251,7 @@ class IdentityDigest:
 
         if actual_bits < min_bits:
             raise ValidationError(
-                f"R32-P0-108: {self.identity_type} identity requires ≥{min_bits} bits, "
+                f"DA-P0-010 / R32-P0-108: {self.identity_type} identity requires ≥{min_bits} bits, "
                 f"got {actual_bits} bits ({hex_chars} hex chars)"
             )
 
@@ -201,8 +264,9 @@ class IdentityDigest:
     def _minimum_bits_for_type(self) -> int:
         """Get minimum bit requirement for identity type."""
         if self.identity_type == "cache":
-            return 64  # Display IDs can be short
+            return 64  # Display IDs can be short (ephemeral performance cache)
         elif self.identity_type in {
+            "correctness",  # DA-P0-010: correctness cache identity must be ≥128 bits
             "source",
             "experiment",
             "security",
@@ -279,9 +343,35 @@ def hash_security_identity(value: Any, *, bits: int = 256) -> IdentityDigest:
 
 
 def hash_cache_key(value: Any, *, bits: int = 64) -> str:
-    """Hash cache key - can be shorter for display purposes."""
+    """Hash cache key - can be shorter for display purposes.
+
+    NOTE: This is for ephemeral performance cache keys only.
+    For correctness cache identity, use hash_correctness_identity() instead.
+    """
     encoder = create_identity_encoder(strict=False)
     return encoder.hash_identity(value, bits=max(bits, 64))
+
+
+def hash_correctness_identity(value: Any, *, bits: int = 256) -> IdentityDigest:
+    """Hash correctness cache identity with minimum 128-bit requirement.
+
+    DA-P0-010: Correctness cache identity must be:
+    - strict=True (no repr fallback)
+    - ≥128 bits (preferably full SHA-256)
+
+    Use this for cache that affects quantitative result correctness:
+    - Factor computation result cache
+    - Data transformation cache that feeds into factors
+    - Any cache where incorrect reuse would produce wrong trading signals
+    """
+    encoder = create_identity_encoder(strict=True)
+    digest = encoder.hash_identity(value, bits=bits)
+
+    return IdentityDigest(
+        digest=digest,
+        bits=bits,
+        identity_type="correctness",
+    )
 
 
 __all__ = [
@@ -292,4 +382,5 @@ __all__ = [
     "hash_experiment_identity",
     "hash_security_identity",
     "hash_cache_key",
+    "hash_correctness_identity",
 ]
