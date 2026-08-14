@@ -37,61 +37,38 @@ from typing import Iterator
 # ---------------------------------------------------------------------------
 
 #: Modules explicitly authorized for direct physical I/O operations.
-#: Each entry documents the module's specific responsibility in the DA boundary.
+#: ONLY storage/sources (DataAccess boundary) and storage/ persistence layer.
+#: Runtime, backend, export, and most scripts are VIOLATIONS - they bypass
+#: DataAccess governance and must be migrated.
 #: Paths are relative to repo root (factor_engine/ directory).
 AUTHORIZED_MODULES: dict[str, str] = {
-    # Physical storage layer
-    "storage/cache.py": "Plan execution cache - persistent disk cache with schema versioning",
-    "storage/result_store.py": "Materialized factor results - atomic write with metadata",
-    "storage/delta_store.py": "Incremental update storage - delta merge with generation fence",
-    "storage/block_lake.py": "Block-based data lake - versioned parquet blocks",
-    "storage/parquet_batch_writer.py": "Low-level parquet streaming writer - batch row groups",
-    "storage/schema_migration.py": "Schema evolution - migrate legacy formats",
-    "storage/lake_version.py": "Lake versioning - snapshot management",
-    "storage/spill_store.py": "OOM recovery spill-to-disk - temporary overflow storage",
-    "storage/materialize/materializer.py": "Factor materialization - atomic result persistence with generation fence",
-    "storage/materialize/factor_matrix_materializer.py": "Factor matrix persistence - wide-form batch write",
-    "storage/materialize/lake_publish.py": "Lake publication - atomic multi-partition commit",
-    "storage/sources/kline_parquet_source.py": "Raw kline parquet reader - source-specific physical I/O",
-    "storage/sources/parquet_source.py": "Generic parquet source reader - configurable schema physical I/O",
-    "storage/sources/staging_loader.py": "Staging area loader - temporary ingestion physical I/O",
+    # Storage sources - the legitimate DataAccess physical I/O boundary
+    "storage/sources/kline_parquet_source.py": "DataAccess kline reader - governed parquet read with PIT",
+    "storage/sources/parquet_source.py": "DataAccess generic parquet reader - governed physical I/O",
+    "storage/sources/staging_loader.py": "DataAccess staging loader - ingestion with validation",
+    "storage/sources/lqtp_logical_source.py": "DataAccess LQTP source - logical query physical execution",
 
-    # Runtime execution layer
-    "runtime/shard_executor.py": "Distributed execution - worker result materialization",
-    "runtime/spill_store.py": "Runtime memory governor - spill buffer to disk",
-    "runtime/resource_calibration_store.py": "Resource profile persistence - P99 calibration data",
-    "runtime/intermediate_registry.py": "Shared subplan materialization - CSE physical cache",
-    "runtime/reconcile/snapshot_reconcile.py": "Snapshot consistency checker - read lake metadata for validation",
-    "runtime/multibackend/batch_transfer_optimizer.py": "Cross-backend transfer - DuckDB staging for batch conversion",
+    # Storage layer - persistent cache and materialization (governed writes)
+    "storage/cache.py": "Factor cache - governed persistent result cache",
+    "storage/result_store.py": "Result store - governed factor result persistence",
+    "storage/delta_store.py": "Delta store - governed incremental update storage",
+    "storage/block_lake.py": "Block lake - governed versioned parquet blocks",
+    "storage/parquet_batch_writer.py": "Batch writer - governed low-level parquet streaming",
+    "storage/schema_migration.py": "Schema migration - governed legacy format conversion",
+    "storage/lake_version.py": "Lake versioning - governed snapshot management",
+    "storage/matrix_block_layout.py": "Matrix layout - governed wide-form storage",
 
-    # Backend execution
-    "backend/sql_pushdown/executor.py": "DuckDB query executor - SQL backend physical I/O",
-    "backend/sql_pushdown/duckdb_capabilities.py": "DuckDB capability probe - version detection and feature test",
-    "backend/fastpath_plan_probe.py": "Backend capability probe - synthetic test execution",
-
-    # Export/import boundary
-    "export/serializers.py": "Factor export serialization - external system handoff",
-    "export/importers.py": "External data ingestion - validated import with PIT check",
-
-    # Benchmarking/tuning infrastructure (scripts/ - operational utilities)
-    "benchmarks/backend_operator_bench.py": "Backend performance measurement - isolated bench fixtures",
-    "scripts/calibrate_backend_costs.py": "Cost model calibration - empirical timing measurement",
-    "scripts/duckdb_parallel_tuning_benchmark.py": "DuckDB parallelism tuning - synthetic load testing",
-    "scripts/storage_tuning_benchmark.py": "Storage backend tuning - I/O pattern benchmarking",
-    "scripts/sql_certification_factory.py": "SQL operator certification - generate parity test fixtures",
-
-    # Evidence generation (scripts/ - one-time certification utilities)
-    "scripts/certify_primitive_evidence.py": "Primitive operator evidence generator - read existing ledger",
-    "scripts/certify_factor_operator_evidence.py": "Factor operator evidence generator - read existing ledger",
-    "scripts/certify_intraday_parity.py": "Intraday parity certification - cross-backend validation fixtures",
-    "scripts/generate_model_layer_redesign_evidence.py": "Model layer evidence generator - migration validation",
-    "scripts/audit_r37_hard_gates.py": "R37 audit gate checker - read persisted evidence files",
-    "scripts/compare_lqtp_golden.py": "LQTP golden comparison - regression test reference reader",
+    # Storage materialization - governed factor result persistence
+    "storage/materialize/materializer.py": "Materializer - governed atomic factor result persistence",
+    "storage/materialize/factor_matrix_materializer.py": "Matrix materializer - governed wide-form persistence",
+    "storage/materialize/lake_publish.py": "Lake publisher - governed multi-partition atomic commit",
 }
 
-#: Test fixtures are allowed but must use deliberate violation patterns for negative tests
+#: Test patterns allowed (limited to explicit test directories and fixtures)
+#: Tests may use direct I/O for fixtures, mocks, and isolated validation.
 TEST_ALLOWLIST_PATTERNS = [
-    "tests/",  # All test files allowed - they test the physical layer
+    "tests/",  # All test files - may need direct I/O for fixtures and validation
+    "benchmarks/",  # Benchmark fixtures - isolated performance harness
 ]
 
 #: Patterns that trigger violations
@@ -183,12 +160,9 @@ class IOBoundaryVisitor(ast.NodeVisitor):
 
 
 def scan_file(filepath: Path) -> list[Violation]:
-    """Scan a single Python file for I/O boundary violations."""
+    """Scan a single Python file for I/O boundary violations using AST."""
     try:
         source = filepath.read_text(encoding="utf-8")
-
-        # Quick string scan for patterns (catches commented violations in tests)
-        # We still use AST as primary detection to avoid false positives in strings
         tree = ast.parse(source, filename=str(filepath))
 
         visitor = IOBoundaryVisitor(str(filepath))
