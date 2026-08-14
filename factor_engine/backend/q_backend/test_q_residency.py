@@ -116,7 +116,7 @@ def test_resident_handle_creation(mock_q_process, mock_type_adapter, sample_inpu
     assert result.success
     assert result.resident_handle is not None
     assert isinstance(result.resident_handle, QResidentTableHandle)
-    assert result.resident_handle.table_name == "result"
+    assert result.resident_handle.q_symbol.endswith("_result")
     assert result.resident_handle.region_id == "region_A"
     assert result.resident_handle.connection_id == id(mock_q_process)
     assert result.resident_handle.row_count == 100
@@ -196,6 +196,8 @@ def test_resident_handle_reuse_eliminates_upload(mock_q_process, mock_type_adapt
         plan_b,
         {"intermediate": result_a.resident_handle},  # Pass handle, not DataFrame
         return_resident_handle=False,
+        workspace_id=result_a.resident_handle.workspace_id,
+        generation_id=result_a.resident_handle.generation_id,
     )
 
     assert result_b.success
@@ -329,6 +331,7 @@ def test_resident_handle_with_different_table_names(mock_q_process, mock_type_ad
     result = executor.execute_region(
         plan,
         {"new_name": resident_handle},
+        allow_legacy_handles=True,
     )
 
     assert result.success

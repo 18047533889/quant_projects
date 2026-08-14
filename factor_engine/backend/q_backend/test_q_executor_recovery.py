@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from backend.q_backend.q_compiler import QRegionPlan
+from backend.q_backend.q_adapter import QResidentTableHandle
 from backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
@@ -90,7 +91,179 @@ def test_unavailable_runtime_raises_typed_error_even_with_fallback_named():
         )
 
 
-def test_runtime_exception_propagates_as_q_execution_error():
+class _QResult:
+    nbytes = 8
+
+    def __len__(self):
+        return 1
+
+
+class _RecordingQ:
+    def __init__(self, *, fail_on_execute=None, fail_on_delete=False):
+        self.calls = []
+        self.fail_on_execute = fail_on_execute
+        self.fail_on_delete = fail_on_delete
+        self.result = _QResult()
+        self._execution_failed = False
+
+    def __setitem__(self, key, value):
+        self.calls.append(("bind", key))
+
+    def __call__(self, query):
+        self.calls.append(("call", query))
+        if isinstance(query, str) and query.startswith("delete "):
+            if self.fail_on_delete:
+                raise RuntimeError("cleanup failed")
+            return None
+        if self.fail_on_execute is not None and not self._execution_failed:
+            self._execution_failed = True
+            raise self.fail_on_execute
+        return self.result
+
+
+def _available_executor(connection, adapter=None):
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    manager.get_connection.return_value = connection
+    adapter = adapter or MagicMock()
+    adapter.pandas_to_q.return_value = object()
+    adapter.q_to_pandas.return_value = pd.DataFrame({"value": [1.0]})
+    return QExecutor(process_manager=manager, type_adapter=adapter)
+
+
+def test_unbound_resident_handle_is_rejected_in_production():
+    connection = _RecordingQ()
+    executor = _available_executor(connection)
+
+    with pytest.raises(QExecutionError, match="Unbound Q-resident handle rejected"):
+        executor.execute_region(
+            _plan("r1", ("base",), "out"),
+            {
+                "base": QResidentTableHandle(
+                    table_name="base",
+                    q_table_ref=object(),
+                    row_count=1,
+                    byte_size=1,
+                    region_id="legacy",
+                )
+            },
+        )
+
+
+def test_baseexception_still_cleans_execution_workspace():
+    connection = _RecordingQ(fail_on_execute=KeyboardInterrupt())
+    executor = _available_executor(connection)
+
+    with pytest.raises(KeyboardInterrupt):
+        executor.execute_region(
+            _plan("cancel", ("base",), "out"),
+            {"base": pd.DataFrame({"x": [1.0]})},
+            workspace_id="cancel-workspace",
+            generation_id="cancel-generation",
+        )
+
+    deletes = [query for kind, query in connection.calls if kind == "call" and query.startswith("delete ")]
+    assert any("qe_cancel_workspace_base" in query for query in deletes)
+    assert any("qe_cancel_workspace_out" in query for query in deletes)
+
+
+def test_cleanup_failure_does_not_replace_original_execution_error():
+    connection = _RecordingQ(fail_on_execute=RuntimeError("execution failed"), fail_on_delete=True)
+    executor = _available_executor(connection)
+
+    with pytest.raises(QExecutionError, match="execution failed"):
+        executor.execute_region(
+            _plan("failure", ("base",), "out"),
+            {"base": pd.DataFrame({"x": [1.0]})},
+            workspace_id="failure-workspace",
+            generation_id="failure-generation",
+        )
+
+
+def test_sequential_execution_rejects_stale_handle_after_cleanup():
+    connection = _RecordingQ()
+    executor = _available_executor(connection)
+    handle_result = executor.execute_region(
+        _plan("source", ("base",), "intermediate"),
+        {"base": pd.DataFrame({"x": [1.0]})},
+        return_resident_handle=True,
+        workspace_id="stale-workspace",
+        generation_id="stale-generation",
+    )
+    handle = handle_result.resident_handle
+    assert handle is not None
+
+    executor.execute_region(
+        _plan("consumer", ("intermediate",), "final"),
+        {"intermediate": handle},
+        workspace_id="stale-workspace",
+        generation_id="stale-generation",
+    )
+
+    with pytest.raises(QExecutionError, match="Stale Q-resident handle"):
+        executor.execute_region(
+            _plan("reuse", ("intermediate",), "after_cleanup"),
+            {"intermediate": handle},
+            workspace_id="stale-workspace",
+            generation_id="stale-generation",
+        )
+
+
+def test_direct_success_cleans_physical_q_symbols():
+    connection = _RecordingQ()
+    executor = _available_executor(connection)
+
+    result = executor.execute_region(
+        _plan("direct", ("base",), "logical-output"),
+        {"base": pd.DataFrame({"x": [1.0]})},
+        workspace_id="physical-workspace",
+        generation_id="physical-generation",
+    )
+
+    assert result.success
+    deletes = [query for kind, query in connection.calls if kind == "call" and query.startswith("delete ")]
+    assert {
+        "delete qe_physical_workspace_base from `.",
+        "delete qe_physical_workspace_logical_output from `.",
+    } <= set(deletes)
+
+
+def test_batch_final_success_cleans_all_physical_q_symbols():
+    connection = _RecordingQ()
+    executor = _available_executor(connection)
+    plans = [
+        _plan("left", ("base",), "left-out"),
+        _plan("right", ("base",), "right-out"),
+        _plan("diamond", ("base", "left-out", "right-out"), "final-out"),
+    ]
+
+    results = executor.execute_batch_regions(plans, {"base": pd.DataFrame({"x": [1.0]})})
+
+    assert len(results) == 3
+    deletes = [query for kind, query in connection.calls if kind == "call" and query.startswith("delete ")]
+    for symbol in ("base", "left_out", "right_out", "final_out"):
+        assert any(f"delete qe_" in query and f"_{symbol} from `." in query for query in deletes)
+
+
+def test_batch_diamond_fan_in_executes_with_cleanup():
+    connection = _RecordingQ()
+    executor = _available_executor(connection)
+    plans = [
+        _plan("left", ("base",), "left-out"),
+        _plan("right", ("base",), "right-out"),
+        _plan("diamond", ("base", "left-out", "right-out"), "final-out"),
+    ]
+
+    results = executor.execute_batch_regions(plans, {"base": pd.DataFrame({"x": [1.0]})})
+
+    assert all(result.success for result in results)
+    execution_queries = [query for kind, query in connection.calls if kind == "call" and not query.startswith("delete ")]
+    assert any("left_out" in query for query in execution_queries)
+    assert any("right_out" in query for query in execution_queries)
+    assert any("final_out" in query for query in execution_queries)
     manager = MagicMock()
     manager.check_availability.return_value = MagicMock(
         status=QAvailabilityStatus.AVAILABLE,

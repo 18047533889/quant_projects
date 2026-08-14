@@ -75,6 +75,24 @@ class TestTransformRegistry:
         with pytest.raises(ValueError, match="already registered with version"):
             registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL, version="2.0.0")
 
+    def test_omitted_admission_defaults_to_production(self):
+        registry = TransformRegistry()
+        registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL)
+
+        metadata = registry.get("dummy")
+        assert metadata is not None
+        assert metadata.admission == "PRODUCTION"
+        assert registry.validate_production("dummy") is metadata
+
+    def test_invalid_admission_is_rejected(self):
+        with pytest.raises(ValueError, match="admission must be"):
+            TransformRegistry().register(
+                "dummy",
+                dummy_transform,
+                TransformCategory.CROSS_SECTIONAL,
+                admission="UNKNOWN",
+            )
+
     def test_list_by_category(self):
         """Test listing transforms by category."""
         registry = TransformRegistry()
@@ -130,7 +148,8 @@ class TestTransformRegistry:
         )
         registry.register(
             "unsafe", dummy_transform, TransformCategory.CROSS_SECTIONAL,
-            causal_safe=False
+            causal_safe=False,
+            admission="RESEARCH_ONLY",
         )
 
         safe = registry.list_causal_safe()
@@ -252,14 +271,36 @@ class TestDefaultRegistry:
         assert registry.get("compute_exposures") is not None
 
     def test_all_default_transforms_causal_safe(self):
-        """Test that all default transforms are marked causal safe."""
+        """Test that every production-admitted transform is marked causal safe."""
         registry = get_default_registry()
 
         all_transforms = registry.all_transforms()
         assert len(all_transforms) > 0
 
         for meta in all_transforms:
-            assert meta.causal_safe is True, f"{meta.name} should be causal_safe"
+            if meta.admission == "PRODUCTION":
+                assert meta.causal_safe is True, f"{meta.name} should be causal_safe"
+
+    def test_full_series_transforms_are_offline_only(self):
+        registry = get_default_registry()
+        for name in [
+            "bandpass_filter",
+            "extract_cycle",
+            "christiano_fitzgerald_filter",
+            "wavelet_decompose",
+            "wavelet_smooth",
+            "wavelet_denoise",
+        ]:
+            metadata = registry.get(name)
+            assert metadata is not None
+            assert metadata.causal_safe is False
+            assert metadata.admission == "OFFLINE_ONLY"
+            with pytest.raises(ValueError, match="OFFLINE_ONLY"):
+                registry.validate_production(name)
+
+    def test_production_validation_rejects_unknown_transform(self):
+        with pytest.raises(ValueError, match="not registered"):
+            TransformRegistry().validate_production("unregistered_transform")
 
     def test_default_registry_functions_callable(self):
         """Test that registered functions are actually callable."""

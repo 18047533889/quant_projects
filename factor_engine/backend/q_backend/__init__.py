@@ -30,16 +30,26 @@ Phase 1 优先场景（文档 §24）：
 from __future__ import annotations
 
 __all__ = [
+    "QBackend",
+    "get_q_backend",
     "QBackendCapability",
     "QProcessManager",
     "QTypeAdapter",
     "QExecutor",
     "QCompiler",
+    "QRegionPlan",
+    "get_q_compiler",
     "check_q_availability",
+    "is_q_available",
 ]
 
+from backend.q_backend.q_backend import QBackend, get_q_backend
 from backend.q_backend.q_capability import QBackendCapability
-from backend.q_backend.q_process_manager import QProcessManager, check_q_availability
+from backend.q_backend.q_process_manager import (
+    QProcessManager,
+    check_q_availability,
+    is_q_available,
+)
 from backend.q_backend.q_adapter import QTypeAdapter
 from backend.q_backend.q_executor import QExecutor
 from backend.q_backend.q_compiler import QCompiler

@@ -121,7 +121,7 @@ class TestQCompiler:
         assert compiler.compile_operator("add", ["x", "y"]) == "x + y"
         assert compiler.compile_operator("subtract", ["x", "y"]) == "x - y"
         assert compiler.compile_operator("multiply", ["x", "y"]) == "x * y"
-        assert compiler.compile_operator("divide", ["x", "y"]) == "x % y"
+        assert compiler.compile_operator("divide", ["x", "y"]) == "x / y"
 
         # Unary ops
         assert compiler.compile_operator("negate", ["x"]) == "neg x"
@@ -192,7 +192,7 @@ class TestQCompiler:
             {"operator": "add", "id": "n1"},
             {"operator": "ts_mean", "id": "n2"},
         ]
-        is_valid, unsupported = compiler.validate_region(nodes)
+        is_valid, unsupported = compiler.validate_region(nodes, mode="research")
         assert is_valid
         assert len(unsupported) == 0
 
@@ -201,7 +201,7 @@ class TestQCompiler:
             {"operator": "add", "id": "n1"},
             {"operator": "garch", "id": "n2"},
         ]
-        is_valid, unsupported = compiler.validate_region(nodes)
+        is_valid, unsupported = compiler.validate_region(nodes, mode="research")
         assert not is_valid
         assert "garch" in unsupported
 
@@ -229,6 +229,7 @@ class TestQCompiler:
             nodes=nodes,
             input_tables=["input1", "input2"],
             output_name="result",
+            mode="research",
         )
 
         assert plan.region_id == "test_region"

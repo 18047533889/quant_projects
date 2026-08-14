@@ -149,18 +149,21 @@ class FaissANNIndex:
             raise ValueError("Number of factor_ids must match embeddings rows")
         if embeddings.shape[1] != self.embedding_dim:
             raise ValueError(f"Expected embedding_dim={self.embedding_dim}, got {embeddings.shape[1]}")
+        if len(set(factor_ids)) != len(factor_ids):
+            raise ValueError("factor_ids must be unique")
 
-        # Store factor IDs
-        self._factor_ids = list(factor_ids)
-        self._id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
-
-        # Normalize embeddings if requested
+        staged_embeddings = np.ascontiguousarray(embeddings, dtype=np.float32).copy()
         if self.normalize:
-            embeddings = embeddings.astype(np.float32)
-            faiss.normalize_L2(embeddings)
+            faiss.normalize_L2(staged_embeddings)
 
-        # Build index
-        self._index.add(embeddings.astype(np.float32))
+        staged_index = faiss.IndexFlatIP(self.embedding_dim)
+        staged_index.add(staged_embeddings)
+        staged_factor_ids = list(factor_ids)
+        staged_id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
+
+        self._index = staged_index
+        self._factor_ids = staged_factor_ids
+        self._id_to_idx = staged_id_to_idx
 
     def search(
         self,

@@ -6,8 +6,48 @@ Gates evaluate evidence against thresholds without duplicating evaluation logic.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Protocol
+from typing import Mapping, Optional, Protocol, Union
 from datetime import datetime, timezone
+
+
+class MetricDirection(Enum):
+    """Comparison direction declared by a metric contract."""
+
+    HIGHER_IS_BETTER = "higher_is_better"
+    LOWER_IS_BETTER = "lower_is_better"
+    ABSOLUTE_HIGHER_IS_BETTER = "absolute_higher_is_better"
+
+
+@dataclass(frozen=True)
+class MetricBinding:
+    """Exact metric schema required by one gate."""
+
+    metric_id: str
+    unit: str
+    direction: MetricDirection
+
+    def __post_init__(self):
+        if not self.metric_id:
+            raise ValueError("metric_id is required")
+        if not self.unit:
+            raise ValueError("metric unit is required")
+        if not isinstance(self.direction, MetricDirection):
+            raise TypeError("metric direction must be a MetricDirection")
+
+
+@dataclass(frozen=True)
+class MetricEvidence:
+    """Typed metric value supplied by an evidence producer."""
+
+    value: float
+    unit: str
+    direction: MetricDirection
+
+    def __post_init__(self):
+        if not self.unit:
+            raise ValueError("metric evidence unit is required")
+        if not isinstance(self.direction, MetricDirection):
+            raise TypeError("metric evidence direction must be a MetricDirection")
 
 
 class GateResult(Enum):
@@ -138,6 +178,15 @@ class ThresholdGate:
         return self._gate_version
 
     @property
+    def metric_direction(self) -> MetricDirection:
+        """Return the metric direction enforced by this gate."""
+        return (
+            MetricDirection.HIGHER_IS_BETTER
+            if self._higher_is_better
+            else MetricDirection.LOWER_IS_BETTER
+        )
+
+    @property
     def threshold(self) -> float:
         """Get threshold value."""
         return self._threshold
@@ -194,7 +243,7 @@ class CompositeGate:
         gates: list[EvidenceGate],
         require_all: bool = True,
         gate_version: str = "1.0",
-        metric_bindings: Optional[dict[str, str]] = None,
+        metric_bindings: Optional[Mapping[str, MetricBinding]] = None,
     ):
         """
         Initialize composite gate.
@@ -205,9 +254,8 @@ class CompositeGate:
             require_all: If True, all gates must pass (AND);
                         if False, any gate can pass (OR)
             gate_version: Gate version identifier
-            metric_bindings: Optional explicit gate_name -> metric_id mapping
-                           If None, falls back to heuristic matching (legacy)
-                           If provided, missing bindings cause FAIL-CLOSED
+            metric_bindings: Exact gate_name -> typed metric schema mapping.
+                           Missing, duplicate, or invalid bindings fail closed.
         """
         if not gate_name:
             raise ValueError("gate_name is required")
@@ -218,7 +266,7 @@ class CompositeGate:
         self._gates = gates
         self._require_all = require_all
         self._gate_version = gate_version
-        self._metric_bindings = metric_bindings or {}
+        self._metric_bindings = dict(metric_bindings or {})
 
     @property
     def gate_name(self) -> str:
@@ -234,7 +282,7 @@ class CompositeGate:
         self,
         factor_id: str,
         evidence_id: str,
-        metrics: dict[str, float],
+        metrics: Mapping[str, MetricEvidence],
     ) -> tuple[GateEvaluation, list[GateEvaluation]]:
         """
         Evaluate all sub-gates and compute composite result.
@@ -242,67 +290,104 @@ class CompositeGate:
         Args:
             factor_id: Factor identifier
             evidence_id: Evidence identifier
-            metrics: Dict of metric_name -> metric_value
+            metrics: Exact metric_id -> typed metric evidence mapping
 
         Returns:
             Tuple of (composite_evaluation, sub_evaluations)
         """
         sub_evaluations = []
+        binding_errors = False
+
+        def fail_closed(gate: EvidenceGate, message: str, metric_name: Optional[str] = None) -> None:
+            nonlocal binding_errors
+            binding_errors = True
+            sub_evaluations.append(
+                GateEvaluation(
+                    gate_name=gate.gate_name,
+                    factor_id=factor_id,
+                    result=GateResult.FAIL,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    evidence_id=evidence_id or None,
+                    metric_name=metric_name,
+                    message=message,
+                    gate_version=gate.gate_version,
+                )
+            )
+
+        gate_names = [gate.gate_name for gate in self._gates]
+        duplicate_names = {name for name in gate_names if gate_names.count(name) > 1}
 
         for gate in self._gates:
-            # Try to find matching metric for this gate
-            matched = False
-            gate_name_lower = gate.gate_name.lower()
+            if not evidence_id:
+                fail_closed(gate, "Missing evidence_id")
+                continue
+            if gate.gate_name in duplicate_names:
+                fail_closed(gate, f"Ambiguous duplicate gate name: {gate.gate_name}")
+                continue
 
-            # Strategy 1: Look for metric name contained in gate name
-            # e.g., "minimum_ic" contains "ic", "maximum_turnover" contains "turnover"
-            for metric_name, metric_value in metrics.items():
-                metric_lower = metric_name.lower()
-                if metric_lower in gate_name_lower or gate_name_lower in metric_lower:
-                    try:
-                        eval_result = gate.evaluate(
-                            factor_id=factor_id,
-                            evidence_id=evidence_id,
-                            metric_name=metric_name,
-                            metric_value=metric_value,
-                        )
-                        sub_evaluations.append(eval_result)
-                        matched = True
-                        break
-                    except Exception:
-                        continue
+            binding = self._metric_bindings.get(gate.gate_name)
+            if binding is None:
+                fail_closed(gate, f"Missing metric binding for gate: {gate.gate_name}")
+                continue
+            if not isinstance(binding, MetricBinding):
+                fail_closed(gate, f"Invalid untyped metric binding for gate: {gate.gate_name}")
+                continue
 
-            # Strategy 2: If no match found, try reverse (gate name prefix matches metric)
-            if not matched:
-                for metric_name, metric_value in metrics.items():
-                    if gate_name_lower.startswith(metric_name.lower()):
-                        try:
-                            eval_result = gate.evaluate(
-                                factor_id=factor_id,
-                                evidence_id=evidence_id,
-                                metric_name=metric_name,
-                                metric_value=metric_value,
-                            )
-                            sub_evaluations.append(eval_result)
-                            matched = True
-                            break
-                        except Exception:
-                            continue
+            evidence = metrics.get(binding.metric_id)
+            if evidence is None:
+                fail_closed(
+                    gate,
+                    f"Missing evidence for bound metric: {binding.metric_id}",
+                    binding.metric_id,
+                )
+                continue
+            if not isinstance(evidence, MetricEvidence):
+                fail_closed(
+                    gate,
+                    f"Invalid untyped evidence for bound metric: {binding.metric_id}",
+                    binding.metric_id,
+                )
+                continue
+            if evidence.unit != binding.unit:
+                fail_closed(
+                    gate,
+                    f"Metric unit mismatch for {binding.metric_id}: expected {binding.unit}, got {evidence.unit}",
+                    binding.metric_id,
+                )
+                continue
+            if evidence.direction is not binding.direction:
+                fail_closed(
+                    gate,
+                    f"Metric direction mismatch for {binding.metric_id}: expected {binding.direction.value}, got {evidence.direction.value}",
+                    binding.metric_id,
+                )
+                continue
 
-            # Strategy 3: Fallback - try first available metric
-            if not matched:
-                for metric_name, metric_value in metrics.items():
-                    try:
-                        eval_result = gate.evaluate(
-                            factor_id=factor_id,
-                            evidence_id=evidence_id,
-                            metric_name=metric_name,
-                            metric_value=metric_value,
-                        )
-                        sub_evaluations.append(eval_result)
-                        break  # Only evaluate each gate once
-                    except Exception:
-                        continue
+            expected_direction = getattr(gate, "metric_direction", None)
+            if expected_direction is None or expected_direction is not binding.direction:
+                expected = expected_direction.value if isinstance(expected_direction, MetricDirection) else "declared gate direction"
+                fail_closed(
+                    gate,
+                    f"Binding direction incompatible with gate {gate.gate_name}: expected {expected}, got {binding.direction.value}",
+                    binding.metric_id,
+                )
+                continue
+
+            try:
+                sub_evaluations.append(
+                    gate.evaluate(
+                        factor_id=factor_id,
+                        evidence_id=evidence_id,
+                        metric_name=binding.metric_id,
+                        metric_value=evidence.value,
+                    )
+                )
+            except Exception as exc:
+                fail_closed(
+                    gate,
+                    f"Gate evaluation failed for {binding.metric_id}: {type(exc).__name__}",
+                    binding.metric_id,
+                )
 
         now = datetime.now(timezone.utc).isoformat()
 
@@ -321,7 +406,11 @@ class CompositeGate:
                 sub_evaluations,
             )
 
-        if self._require_all:
+        if binding_errors:
+            result = GateResult.FAIL
+            passed_count = sum(1 for ev in sub_evaluations if ev.passed)
+            message = f"{passed_count}/{len(sub_evaluations)} gates passed; metric evidence validation failed"
+        elif self._require_all:
             # AND logic: all must pass
             all_passed = all(ev.passed for ev in sub_evaluations)
             result = GateResult.PASS if all_passed else GateResult.FAIL
@@ -375,6 +464,11 @@ class MinimumICGate(ThresholdGate):
             higher_is_better=True,
             gate_version=gate_version,
         )
+
+    @property
+    def metric_direction(self) -> MetricDirection:
+        """IC magnitude is the admitted quantity."""
+        return MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
 
     def evaluate(
         self,

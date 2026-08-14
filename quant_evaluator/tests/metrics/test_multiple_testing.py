@@ -14,6 +14,57 @@ from quant_evaluator.metrics.multiple_testing import (
 )
 
 
+@pytest.mark.parametrize(
+    ("method", "correction"),
+    [
+        ("fdr_bh", benjamini_hochberg_correction),
+        ("holm", holm_bonferroni_correction),
+    ],
+)
+@pytest.mark.parametrize(
+    "p_values",
+    [
+        np.array([0.9, 0.001, np.nan, 0.02, 0.001, 0.5, np.inf, 0.04]),
+        np.array([[0.04, 0.001, 0.9], [np.nan, 0.02, 0.001]]),
+        np.array([0.02, 0.9, 0.001, 0.04, 0.001, 0.5]),
+    ],
+)
+def test_bh_and_holm_match_statsmodels_with_valid_values(
+    method, correction, p_values
+):
+    """Match statsmodels after excluding invalid values, preserving positions."""
+    multitest = pytest.importorskip("statsmodels.stats.multitest")
+    alpha = 0.05
+    valid_mask = np.isfinite(p_values)
+    expected_reject, expected_adjusted, _, _ = multitest.multipletests(
+        p_values[valid_mask], alpha=alpha, method=method
+    )
+
+    adjusted, reject, discoveries = correction(p_values, alpha=alpha)
+
+    assert np.all(np.isnan(adjusted[~valid_mask]))
+    assert not np.any(reject[~valid_mask])
+    assert np.allclose(adjusted[valid_mask], expected_adjusted)
+    assert np.array_equal(reject[valid_mask], expected_reject)
+    assert discoveries == expected_reject.sum()
+
+
+@pytest.mark.parametrize(
+    "correction",
+    [benjamini_hochberg_correction, holm_bonferroni_correction],
+)
+def test_bh_and_holm_all_invalid_values(correction):
+    """Invalid-only inputs retain shape and contain no discoveries."""
+    p_values = np.array([[np.nan, np.inf], [-np.inf, np.nan]])
+
+    adjusted, reject, discoveries = correction(p_values)
+
+    assert adjusted.shape == p_values.shape
+    assert np.all(np.isnan(adjusted))
+    assert not np.any(reject)
+    assert discoveries == 0
+
+
 class TestBonferroni:
     """Test Bonferroni correction."""
 

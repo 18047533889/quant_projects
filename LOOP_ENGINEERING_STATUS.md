@@ -580,3 +580,79 @@
 
 **Recommendation:** Strong session. 4 P0 issues fixed with 43 new tests. Platform is healthier. Consider DATA-001 policy decision or conclude.
 
+---
+
+## Session 5 — Loop Engineering V2
+
+### Cycle V2-01 — P0-A q_executor import recovery
+**Baseline SHA:** `d78ed761b7d098d27e3acf916f3961d75096b3b3`
+**Audit method:** exact committed-tree structural/import audit plus local-history comparison
+
+**Reproduced:**
+- Committed `factor_engine/backend/q_backend/q_executor.py` was 51 lines with four hard-coded `"PASS"` constants and none of its required public classes/functions.
+- Direct imports of `QExecutor`, `QExecutionFallbackPolicy`, and `get_q_executor` were broken; focused collection had two import errors.
+- Last intact main-ancestry implementation identified at `e495c8c4e47750ee173e1034223fb0ce750035d6`.
+
+**Implemented locally:**
+- Restored executable executor API from the intact local-history baseline without git checkout/restore/reset.
+- Removed fake PASS constants.
+- Added full-region connection serialization and thread-safe telemetry updates.
+- Changed missing input, unavailable process, and runtime failures to typed fail-closed q errors.
+- Added focused typed-error regression tests.
+
+**Verified:**
+- Out-of-tree executor/residency adversarial tests: `22 passed` with BLAS/OpenMP single-threaded.
+- Recovery tests were mirrored into the configured `tests/` collection tree; collection proof found `10 tests`, and execution was `10 passed`.
+- Direct imports of `QExecutor`, `QExecutionResult`, `QExecutionFallbackPolicy`, `get_q_executor`, and `QBackend` succeeded.
+- Broader q tests: `20 passed, 1 skipped, 10 failed`; failures expose existing q capability/compiler/package-export gaps outside the restored executor and keep q backend non-production.
+
+**Independent review:**
+- Confirmed import/API recovery, typed fail-closed behavior, fan-in preservation, shared cross-executor connection lock, and invalid output-mode rejection.
+- Reopened remaining executor P0: caller-provided q symbols are still process-global, resident handles lack workspace/generation identity, and intermediate symbols/handles have no deterministic cleanup on success/failure/cancellation.
+
+**Current classification:**
+- q_executor broken import surface: `FIXED_LOCAL`, independently validated, not committed or exact-SHA verified.
+- q workspace isolation/resident lifetime: `BROKEN` and blocks P0-A closure.
+- q backend overall: `RESEARCH_ONLY/BROKEN` pending workspace/lease cleanup, P0-B/P0-C, and package export fixes.
+- V2 issue lifecycle not yet complete: no commit, wheel proof, or exact-SHA verification.
+
+### Cycle V2-02 - q workspace and resident lease hardening
+**Audit method:** concurrency/lifecycle/metamorphic audit with stale-handle and failure cleanup tests
+
+**Reproduced:**
+- q symbols were written under caller-provided names in the process-global workspace.
+- `QResidentTableHandle` only carried connection identity; workspace and generation were absent in production-created handles.
+- successful/failing intermediate executions had no deterministic symbol cleanup.
+
+**Implemented locally:**
+- Added execution-scoped namespace prefixes and q-code symbol rewriting.
+- Added workspace/generation/q-symbol identity to resident handles.
+- Added active lease tracking, strict validation for batch-created handles, and deterministic cleanup in success/failure/batch `finally` paths.
+- Shared the connection lock across executor instances and made cleanup failure non-masking.
+- Preserved compatibility for unbound legacy direct-test handles.
+
+**Verified:**
+- q residency/recovery focused tests: `22 passed` serially with BLAS/OpenMP single-threaded.
+- `git diff --check` and direct q executor/handle imports pass.
+
+**Independent validation status:** pending a fresh validator pass over namespace rewriting and cleanup semantics. The q backend remains `RESEARCH_ONLY/BROKEN`; capability authority/compiler/package-export P0s remain open.
+
+### Later V2 verified scope updates
+- FactorPreprocess production admission: `CLOSED_LOCAL`; independent evidence was `108` focused plus `663` full package tests. Unsafe full-series decomposition transforms are offline-only/non-causal. No exact-SHA claim.
+- QuantEvaluator evaluator/cache contracts: `CLOSED_LOCAL` after independent validation.
+- QuantEvaluator streaming continuity: `CLOSED_LOCAL`; `35` streaming plus `39` evaluator/contract tests passed serially. Public streams fail typed on replay, overlap, reverse time, identity/context changes, and empty input.
+- Standalone modeling contracts/adapter: `CLOSED_LOCAL`; validator evidence was `69` focused plus `29` factor_preprocess contract/fold tests. Two stale fitted-transform callers still require explicit `apply_start_time`; contracts remain fail-closed.
+- Modeling rank-transform dependency/wheel runtime path: SciPy is now a base dependency; focused rank-transform suite `19 passed`, and isolated wheel smoke exercised tied ranks and NaN preservation.
+- FactorAssets typed metric gates: migrated compatibility callers to explicit `MetricBinding`/`MetricEvidence`; combined focused suite `81 passed`. Production behavior remains fail-closed for missing evidence.
+
+### q authority current state
+- Current-main registry repair uses executable compiler lowerings as the physical authority and keeps production admission fail-closed without independent compile/runtime/parity/domain/hash/version evidence.
+- Fresh state reports `110` declared targets, `80` executable lowerings, and `0` production-ready operators; 30 declaration/lowering gaps remain explicit.
+- Focused authority evidence currently reports `42 passed`; final independent validator remains active. At most this can close the authority/schema scope locally, not the q backend overall.
+- q backend remains open for compiler dispatch/defaults, package exports, PhysicalBackendRegion enforcement, process lifecycle/type semantics, and live q integration.
+
+### Open integration queue
+- FactorEngine ModelArtifact integration remains open: production callers must thread mandatory `PredictionContext`; ApplicationWindow must strictly parse timestamps. Do not restore contextless prediction.
+- q executor residency is locally tested but awaits final strong-diamond/current collection verdict before closure.
+- FactorAssets SeenIndex/FAISS atomicity and FactorOptimizer cost reservation are active disjoint P1 scopes.
+

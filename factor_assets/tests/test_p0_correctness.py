@@ -10,6 +10,9 @@ from factor_assets.selection import (
     GateResult,
     CompositeGate,
     ThresholdGate,
+    MetricBinding,
+    MetricDirection,
+    MetricEvidence,
 )
 from factor_assets.clustering import ModularityClustering, HierarchicalClustering
 from factor_assets.graph import SparseCorrelationGraph, CorrelationEdge
@@ -25,14 +28,14 @@ def test_composite_gate_explicit_binding():
         gates=[gate1, gate2],
         require_all=True,
         metric_bindings={
-            "minimum_ic": "ic_mean",
-            "maximum_turnover": "turnover",
+            "minimum_ic": MetricBinding("ic_mean", "correlation", MetricDirection.HIGHER_IS_BETTER),
+            "maximum_turnover": MetricBinding("turnover", "fraction", MetricDirection.LOWER_IS_BETTER),
         }
     )
 
     metrics = {
-        "ic_mean": 0.03,
-        "turnover": 0.4,
+        "ic_mean": MetricEvidence(0.03, "correlation", MetricDirection.HIGHER_IS_BETTER),
+        "turnover": MetricEvidence(0.4, "fraction", MetricDirection.LOWER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(

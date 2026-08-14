@@ -1,8 +1,9 @@
 """
-Wavelet decomposition for multi-scale time series analysis.
+Wavelet decomposition for offline multi-scale time series analysis.
 
-All functions are causal - they exclude the current observation and operate
-per-asset to ensure no future leakage.
+These public operations reconstruct each output from the available full
+series. A one-observation shift does not make that reconstruction prefix-stable,
+so these transforms are restricted to offline/research use.
 """
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ def wavelet_decompose(
     value_col: str = "value",
 ) -> Dict[str, pd.Series]:
     """
-    Causal wavelet decomposition into approximation and detail coefficients.
+    Offline-only wavelet decomposition into approximation and detail coefficients.
 
     Parameters
     ----------
@@ -172,7 +173,7 @@ def wavelet_smooth(
     value_col: str = "value",
 ) -> pd.Series:
     """
-    Causal wavelet smoothing by reconstructing from approximation coefficients.
+    Offline-only wavelet smoothing by reconstructing approximation coefficients.
 
     Parameters
     ----------
@@ -234,7 +235,7 @@ def wavelet_denoise(
     value_col: str = "value",
 ) -> pd.Series:
     """
-    Causal wavelet denoising using soft/hard thresholding.
+    Offline-only wavelet denoising using soft/hard thresholding.
 
     Parameters
     ----------

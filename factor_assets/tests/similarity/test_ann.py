@@ -183,6 +183,42 @@ class TestFaissANNIndex:
         with pytest.raises(ValueError, match="Expected embedding_dim"):
             index.build(factor_ids, embeddings)
 
+    def test_consecutive_build_replaces_index_and_mapping(self):
+        index = FaissANNIndex(embedding_dim=2, normalize=True)
+        index.build(["OLD1", "OLD2"], np.array([[1.0, 0.0], [0.9, 0.1]]))
+        index.build(["NEW1"], np.array([[0.0, 1.0]]))
+
+        assert index.num_factors == 1
+        assert index.search_by_id("OLD1") == []
+        assert [result.factor_id for result in index.search(np.array([1.0, 0.0]), k=10)] == ["NEW1"]
+
+    def test_duplicate_factor_ids_rejected_without_changing_index(self):
+        index = FaissANNIndex(embedding_dim=2)
+        index.build(["OLD"], np.array([[1.0, 0.0]]))
+
+        with pytest.raises(ValueError, match="factor_ids must be unique"):
+            index.build(["DUP", "DUP"], np.array([[1.0, 0.0], [0.0, 1.0]]))
+
+        assert index.num_factors == 1
+        assert index.search(np.array([1.0, 0.0]), k=1)[0].factor_id == "OLD"
+
+    def test_failed_rebuild_preserves_previous_index(self, monkeypatch):
+        import factor_assets.similarity.ann as ann_module
+
+        index = FaissANNIndex(embedding_dim=2)
+        index.build(["OLD"], np.array([[1.0, 0.0]]))
+
+        class FailingIndex:
+            def add(self, embeddings):
+                raise RuntimeError("injected add failure")
+
+        monkeypatch.setattr(ann_module.faiss, "IndexFlatIP", lambda dim: FailingIndex())
+        with pytest.raises(RuntimeError, match="injected add failure"):
+            index.build(["NEW"], np.array([[0.0, 1.0]]))
+
+        assert index.num_factors == 1
+        assert index.search(np.array([1.0, 0.0]), k=1)[0].factor_id == "OLD"
+
 
 @pytest.mark.skipif(not NUMPY_AVAILABLE or not ANNOY_AVAILABLE, reason="numpy or annoy not available")
 class TestAnnoyANNIndex:

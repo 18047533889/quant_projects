@@ -14,9 +14,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
-from backend.q_backend.q_capability import QBackendCapability, get_q_capability
+from backend.q_backend.q_capability import QBackendCapability
+from backend.q_backend.q_physical_implementation_registry import (
+    QPhysicalImplementationRegistry,
+    build_q_physical_implementation_registry,
+    install_q_physical_implementation_registry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +50,20 @@ class QCompiler:
     """
 
     def __init__(self, capability: QBackendCapability | None = None):
-        self.capability = capability or get_q_capability()
+        # The registry is derived from this compiler's executable map.  A
+        # caller-provided capability remains supported for isolated fixtures.
+        self.capability = capability or QBackendCapability(
+            QPhysicalImplementationRegistry(
+                declared_targets=QPhysicalImplementationRegistry._DECLARED_TARGETS
+            )
+        )
         self._operator_map = self._build_operator_map()
+
+    def executable_lowerings(self) -> dict[str, str]:
+        return dict(self._operator_map)
+
+    def declared_targets(self) -> frozenset[str]:
+        return self.capability.registry.declared_targets()
 
     def _build_operator_map(self) -> dict[str, str]:
         """构建算子名称 → q 函数映射。"""
@@ -55,7 +72,7 @@ class QCompiler:
             "add": "+",
             "subtract": "-",
             "multiply": "*",
-            "divide": "%",
+            "divide": "/",
             "negate": "neg",
             "abs": "abs",
             "power": "xexp",
@@ -160,23 +177,16 @@ class QCompiler:
             "wma": "{wavg[til count x;x]}",
         }
 
-    def can_compile_operator(self, op_name: str) -> bool:
-        """算子是否可以编译为 q。
-
-        Uses evidence-based capability authority via QBackendCapability.
-        Q2-P0-004: Compiler admission must use evidence framework, not manual lists.
-
-        参数:
-            op_name: 算子名称
-
-        返回:
-            是否支持
-        """
-        # Delegate to capability which uses evidence framework
-        # The capability.supports_native checks _PHASE1_NATIVE_OPS
-        # but that's acceptable as long as it's the single source
-        # The real authority is whether lowering exists in _operator_map
+    def has_lowering(self, op_name: str) -> bool:
+        """Return whether this compiler has an executable lowering."""
         return op_name in self._operator_map
+
+    def is_production_certified(self, op_name: str) -> bool:
+        return self.capability.registry.is_production_certified(op_name)
+
+    def can_compile_operator(self, op_name: str) -> bool:
+        """Return whether an executable lowering exists; production admission is separate."""
+        return self.has_lowering(op_name)
 
     def compile_operator(
         self,
@@ -206,8 +216,83 @@ class QCompiler:
 
         params = params or {}
 
-        # 简单二元算子
-        if q_func in {"+", "-", "*", "%", ">", "<", ">=", "<=", "=", "<>"}:
+        def required_param(name: str) -> Any:
+            if name not in params:
+                raise ValueError(f"{op_name} requires canonical parameter '{name}'")
+            return params[name]
+
+        # Preserve the public rank lowering contract before generic function
+        # and lambda dispatch can change the emitted expression shape.
+        if op_name in {"rank", "cs_rank"}:
+            if len(inputs) != 1:
+                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
+            return f"rank {inputs[0]}" if op_name == "rank" else "{iasc iasc x}"
+
+        # Lag must run before generic q-function/lambda handling.
+        if op_name == "lag":
+            periods = required_param("periods")
+            if len(inputs) != 1:
+                raise ValueError(f"lag requires 1 input, got {len(inputs)}")
+            return f"prev {inputs[0]}" if periods == 1 else f"{periods} prev\\{inputs[0]}"
+
+        # Windowed special lowerings must run before generic lambda handling.
+        if op_name in {"ts_corr", "ts_cov"}:
+            window = required_param("window")
+            if len(inputs) != 2:
+                raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
+            return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
+
+        if op_name == "ts_beta":
+            window = required_param("window")
+            if len(inputs) != 2:
+                raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
+            return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
+
+        if op_name == "ema":
+            span = required_param("span")
+            alpha = 2.0 / (span + 1)
+            if len(inputs) != 1:
+                raise ValueError(f"ema requires 1 input, got {len(inputs)}")
+            return f"ema[{alpha};{inputs[0]}]"
+
+        if op_name == "wma":
+            window = required_param("window")
+            if len(inputs) != 1:
+                raise ValueError(f"wma requires 1 input, got {len(inputs)}")
+            return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
+
+        if op_name == "clip":
+            lower = required_param("lower")
+            upper = required_param("upper")
+            if len(inputs) != 1:
+                raise ValueError(f"clip requires 1 input, got {len(inputs)}")
+            return f"({inputs[0]}|{lower})&{upper}"
+
+        if op_name == "where":
+            if len(inputs) != 3:
+                raise ValueError(f"where requires 3 inputs (cond, true_val, false_val), got {len(inputs)}")
+            return f"?[{inputs[0]};{inputs[1]};{inputs[2]}]"
+
+        if op_name == "fillna":
+            fill_value = required_param("fill_value")
+            if len(inputs) != 1:
+                raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
+            return f"{inputs[0]}^{fill_value}"
+
+        if op_name in {"ts_quantile", "cs_quantile"}:
+            q_val = required_param("q")
+            if len(inputs) != 1:
+                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
+            window = required_param("window") if op_name.startswith("ts_") else None
+            return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}" if window else f"{q_val} quantile {inputs[0]}"
+
+        if op_name == "cs_percentile_rank":
+            if len(inputs) != 1:
+                raise ValueError(f"cs_percentile_rank requires 1 input, got {len(inputs)}")
+            return f"({{(iasc iasc x)%count x}})[{inputs[0]}]"
+
+        # Simple binary operators
+        if q_func in {"+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=", "<>"}:
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{inputs[0]} {q_func} {inputs[1]}"
@@ -232,21 +317,16 @@ class QCompiler:
 
         # 滚动窗口算子
         if op_name.startswith("ts_") and q_func in {"mavg", "msum", "mdev", "mmin", "mmax", "mcount"}:
-            window = params.get("window", 20)
+            window = required_param("window")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{window} {q_func} {inputs[0]}"
 
-        # Lag
-        if op_name == "lag":
-            periods = params.get("periods", 1)
+        if op_name == "sma":
+            window = required_param("window")
             if len(inputs) != 1:
-                raise ValueError(f"lag requires 1 input, got {len(inputs)}")
-            # q prev with repeat
-            if periods == 1:
-                return f"prev {inputs[0]}"
-            else:
-                return f"{periods} prev\\{inputs[0]}"
+                raise ValueError(f"sma requires 1 input, got {len(inputs)}")
+            return f"{window} mavg {inputs[0]}"
 
         # 聚合算子
         if q_func in {"avg", "sum", "dev", "min", "max", "med"}:
@@ -254,28 +334,22 @@ class QCompiler:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{q_func} {inputs[0]}"
 
-        # Rank
-        if op_name in {"rank", "cs_rank"}:
-            if len(inputs) != 1:
-                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            return f"({q_func})[{inputs[0]}]"
-
         # Correlation/Covariance/Beta
         if op_name in {"ts_corr", "ts_cov"}:
-            window = params.get("window", 20)
+            window = required_param("window")
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
 
         if op_name == "ts_beta":
-            window = params.get("window", 20)
+            window = required_param("window")
             if len(inputs) != 2:
                 raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
             return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
 
         # EMA (exponential moving average)
         if op_name == "ema":
-            span = params.get("span", 20)
+            span = required_param("span")
             alpha = 2.0 / (span + 1)
             if len(inputs) != 1:
                 raise ValueError(f"ema requires 1 input, got {len(inputs)}")
@@ -283,15 +357,15 @@ class QCompiler:
 
         # WMA (weighted moving average)
         if op_name == "wma":
-            window = params.get("window", 20)
+            window = required_param("window")
             if len(inputs) != 1:
                 raise ValueError(f"wma requires 1 input, got {len(inputs)}")
             return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
 
         # Clip
-        if op_name in {"clip", "cs_clip"}:
-            lower = params.get("lower", -999999)
-            upper = params.get("upper", 999999)
+        if op_name == "clip":
+            lower = required_param("lower")
+            upper = required_param("upper")
             if len(inputs) != 1:
                 raise ValueError(f"clip requires 1 input, got {len(inputs)}")
             return f"({inputs[0]}|{lower})&{upper}"
@@ -304,17 +378,17 @@ class QCompiler:
 
         # Fill operations
         if op_name == "fillna":
-            fill_value = params.get("fill_value", 0)
+            fill_value = required_param("fill_value")
             if len(inputs) != 1:
                 raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
             return f"{inputs[0]}^{fill_value}"
 
         # Quantile
         if op_name in {"ts_quantile", "cs_quantile"}:
-            q_val = params.get("q", 0.5)
+            q_val = required_param("q")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            window = params.get("window", 20) if op_name.startswith("ts_") else None
+            window = required_param("window") if op_name.startswith("ts_") else None
             if window:
                 return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}"
             else:
@@ -335,6 +409,7 @@ class QCompiler:
         *,
         input_tables: list[str],
         output_name: str,
+        mode: Literal["production", "research"] = "production",
     ) -> QRegionPlan:
         """编译整个 Region 为 q 代码。
 
@@ -351,6 +426,13 @@ class QCompiler:
         """
         if not nodes:
             raise ValueError("Empty region cannot be compiled")
+
+        is_valid, unsupported = self.validate_region(nodes, mode=mode)
+        if not is_valid:
+            raise ValueError(
+                f"Cannot admit q physical region in {mode} mode: "
+                f"unsupported operators {unsupported}"
+            )
 
         # 生成 q 代码
         q_statements = []
@@ -399,6 +481,8 @@ class QCompiler:
     def validate_region(
         self,
         nodes: list[dict[str, Any]],
+        *,
+        mode: Literal["production", "research"] = "production",
     ) -> tuple[bool, list[str]]:
         """验证 Region 中所有节点是否可编译。
 
@@ -411,7 +495,12 @@ class QCompiler:
         unsupported = []
         for node in nodes:
             op_name = node["operator"]
-            if not self.can_compile_operator(op_name):
+            admitted = (
+                self.is_production_certified(op_name)
+                if mode == "production"
+                else self.can_compile_operator(op_name)
+            )
+            if not admitted:
                 unsupported.append(op_name)
 
         return len(unsupported) == 0, unsupported
@@ -426,4 +515,9 @@ def get_q_compiler() -> QCompiler:
     global _COMPILER
     if _COMPILER is None:
         _COMPILER = QCompiler()
+        registry = build_q_physical_implementation_registry(
+            _COMPILER.executable_lowerings(),
+            _COMPILER.declared_targets(),
+        )
+        install_q_physical_implementation_registry(registry)
     return _COMPILER

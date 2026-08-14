@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Frozen-scoring predictor (Model Layer Major Redesign taskbook §22 / §23).
-
-Production scoring is PURE frozen scoring: ``artifact.predict`` applies the
-frozen preprocessing and the frozen model.  It must never call ``fit``.  The
-predictor installs an instrumentation guard (a flag-raising stub over
-``artifact.learner.fit``) for the duration of each predict and asserts that it
-was never invoked.
-"""
+"""Frozen-scoring predictor with mandatory OOS prediction context."""
 from __future__ import annotations
 
 from typing import Any
@@ -14,44 +7,60 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from modeling.artifact import ModelArtifact
+from modeling.artifact import ModelArtifact, PredictionContext
 from modeling.dataset import PanelDataset
 
 __all__ = ["Predictor", "predict_panel", "batch_predict"]
 
 
 class Predictor:
-    """Pure scoring surface.  Never fits."""
+    """Pure frozen scoring surface. Never fits."""
 
-    def __init__(self) -> None:
-        pass
-
-    def predict(self, artifact: ModelArtifact, X: np.ndarray | pd.DataFrame) -> np.ndarray:
-        """Score through the frozen artifact, asserting ``fit`` is never called."""
-        X = np.asarray(X, dtype=np.float64)
+    def predict(
+        self,
+        artifact: ModelArtifact,
+        X: np.ndarray | pd.DataFrame,
+        context: PredictionContext,
+    ) -> np.ndarray:
+        if not isinstance(context, PredictionContext):
+            raise TypeError("Predictor.predict requires PredictionContext")
+        values = np.asarray(X, dtype=np.float64)
         original_fit = artifact.learner.fit
         called = {"fit": False}
 
         def _guard(*args: Any, **kwargs: Any) -> Any:
             called["fit"] = True
-            raise AssertionError("learner.fit was invoked during predict (frozen scoring only)")
+            raise AssertionError("learner.fit was invoked during predict")
 
         artifact.learner.fit = _guard  # type: ignore[assignment]
         try:
-            out = artifact.predict(X)
+            output = artifact.predict(values, context=context)
         finally:
             artifact.learner.fit = original_fit
-        assert not called["fit"], "learner.fit was invoked during predict (frozen scoring only)"
-        return out
+        assert not called["fit"]
+        return output
 
 
-def predict_panel(artifact: ModelArtifact, ds: PanelDataset) -> pd.Series:
-    """Score every row of a panel (features only), aligned to ``ds.frame`` index."""
-    X = ds.frame[ds.feature_cols].to_numpy(dtype=np.float64)
-    pred = Predictor().predict(artifact, X)
-    return pd.Series(pred, index=ds.frame.index)
+def predict_panel(
+    artifact: ModelArtifact,
+    dataset: PanelDataset,
+    context: PredictionContext,
+) -> pd.Series:
+    """Score panel rows using a row-aligned mandatory context."""
+    values = dataset.frame[dataset.feature_cols].to_numpy(dtype=np.float64)
+    predictions = Predictor().predict(artifact, values, context)
+    return pd.Series(predictions, index=dataset.frame.index)
 
 
-def batch_predict(artifact: ModelArtifact, X_batches: list) -> list[np.ndarray]:
-    """Predict each batch independently (parity with per-batch predict)."""
-    return [Predictor().predict(artifact, np.asarray(b, dtype=np.float64)) for b in X_batches]
+def batch_predict(
+    artifact: ModelArtifact,
+    batches: list[np.ndarray],
+    contexts: list[PredictionContext],
+) -> list[np.ndarray]:
+    """Score batches with exactly one mandatory context per batch."""
+    if len(batches) != len(contexts):
+        raise ValueError("batches and contexts must have equal length")
+    return [
+        Predictor().predict(artifact, np.asarray(batch, dtype=np.float64), context)
+        for batch, context in zip(batches, contexts)
+    ]

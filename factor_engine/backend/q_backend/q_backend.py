@@ -113,9 +113,13 @@ class QBackend(Backend):
             QOutputContractViolation: 输出 schema 不匹配 (Q2-P0-017)
             QPlanningFallbackAllowed: Planning-time 允许的 fallback (Q2-P0-018)
         """
-        # Q2-P0-015: Document PhysicalBackendRegion gap
-        # Current: receives whole logical tree as one region
-        # Required: Canonical DAG → PhysicalBackendRegion → QCompiler → QExecutor
+        if self._production_mode:
+            raise QPhysicalRegionNotImplemented(
+                "Production q execution requires a planner-admitted physical "
+                "region; whole-tree PlanNode self-routing is disabled"
+            )
+
+        # Research compatibility path: treat the supplied logical tree as one region.
         logger.warning(
             "Q2-P0-015: QBackend receiving whole logical tree (simplified). "
             "Production requires PhysicalBackendRegion from Planner."
@@ -253,7 +257,8 @@ class QBackend(Backend):
         nodes = self._extract_nodes_topological(plan)
 
         # 验证所有节点可以编译
-        is_valid, unsupported = self._compiler.validate_region(nodes)
+        mode = "production" if self._production_mode else "research"
+        is_valid, unsupported = self._compiler.validate_region(nodes, mode=mode)
         if not is_valid:
             raise ValueError(
                 f"Cannot compile plan to q: unsupported operators {unsupported}"
@@ -265,6 +270,7 @@ class QBackend(Backend):
             nodes=nodes,
             input_tables=["input_table"],
             output_name="result",
+            mode=mode,
         )
 
         return region_plan
@@ -563,8 +569,9 @@ class QBackend(Backend):
                 self._stats[key] = 0 if isinstance(self._stats[key], int) else 0.0
 
 
-# Global singleton
-_Q_BACKEND: QBackend | None = None
+# Configuration-scoped singletons prevent a research instance from leaking
+# permissive settings into a production caller (or vice versa).
+_Q_BACKENDS: dict[tuple[bool, bool], QBackend] = {}
 
 
 def get_q_backend(
@@ -581,10 +588,10 @@ def get_q_backend(
     返回:
         QBackend 实例
     """
-    global _Q_BACKEND
-    if _Q_BACKEND is None:
-        _Q_BACKEND = QBackend(
+    key = (fallback_to_pandas, production_mode)
+    if key not in _Q_BACKENDS:
+        _Q_BACKENDS[key] = QBackend(
             fallback_to_pandas=fallback_to_pandas,
             production_mode=production_mode,
         )
-    return _Q_BACKEND
+    return _Q_BACKENDS[key]

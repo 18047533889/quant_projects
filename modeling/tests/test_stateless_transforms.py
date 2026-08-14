@@ -24,6 +24,11 @@ class TestRankTransform:
         ranked = rank_transform(X, axis=1, pct=True)
         assert np.isnan(ranked[0, 1])
 
+    def test_rank_ties_use_average_percentile(self):
+        X = np.array([[1.0, 2.0, 2.0, 4.0]])
+        ranked = rank_transform(X, axis=1, pct=True)
+        np.testing.assert_allclose(ranked, [[0.0, 0.5, 0.5, 1.0]])
+
     def test_all_nan_row(self):
         X = np.array([[1.0, 2.0, 3.0], [np.nan, np.nan, np.nan]])
         ranked = rank_transform(X, axis=1, pct=True)

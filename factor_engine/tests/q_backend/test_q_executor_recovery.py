@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from backend.q_backend.q_compiler import QRegionPlan
+from backend.q_backend.q_adapter import QResidentTableHandle
 from backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
@@ -87,6 +88,32 @@ def test_unavailable_runtime_raises_typed_error_even_with_fallback_named():
             _plan("r1", ("base",), "out"),
             {"base": pd.DataFrame({"x": [1.0]})},
             fallback_policy=policy,
+        )
+
+
+
+def test_unbound_resident_handle_is_rejected_in_production():
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    connection = MagicMock()
+    manager.get_connection.return_value = connection
+    executor = QExecutor(process_manager=manager, type_adapter=MagicMock())
+
+    with pytest.raises(QExecutionError, match="Unbound Q-resident handle rejected"):
+        executor.execute_region(
+            _plan("r1", ("base",), "out"),
+            {
+                "base": QResidentTableHandle(
+                    table_name="base",
+                    q_table_ref=object(),
+                    row_count=1,
+                    byte_size=1,
+                    region_id="legacy",
+                )
+            },
         )
 
 
@@ -221,6 +248,71 @@ def test_runtime_failure_never_soft_fails_from_policy_flags():
             {"base": pd.DataFrame({"x": [1.0]})},
             fallback_policy=policy,
         )
+
+
+
+
+class _DiamondQResult:
+    nbytes = 8
+
+    def __len__(self):
+        return 1
+
+
+class _DiamondQRecorder:
+    def __init__(self):
+        self.calls: list[str] = []
+        self.result = _DiamondQResult()
+
+    def __setitem__(self, key, value):
+        self.calls.append(f"bind {key}")
+
+    def __call__(self, query):
+        self.calls.append(query)
+        if isinstance(query, str) and query.startswith("delete "):
+            return None
+        return self.result
+
+
+def test_batch_diamond_fan_in_routes_both_physical_predecessors_into_final_q_code():
+    """The final q plan must consume both routed resident predecessor symbols."""
+    connection = _DiamondQRecorder()
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    manager.get_connection.return_value = connection
+    adapter = MagicMock()
+    adapter.pandas_to_q.return_value = object()
+    adapter.q_to_pandas.return_value = pd.DataFrame({"value": [3.0]})
+    executor = QExecutor(process_manager=manager, type_adapter=adapter)
+    plans = [
+        _plan("left", ("base",), "left-out"),
+        _plan("right", ("base",), "right-out"),
+        QRegionPlan(
+            region_id="diamond",
+            node_ids=("diamond",),
+            q_code="final-out: left-out + right-out + base",
+            input_tables=("base", "left-out", "right-out"),
+            output_table="final-out",
+        ),
+    ]
+
+    results = executor.execute_batch_regions(
+        plans,
+        {"base": pd.DataFrame({"x": [1.0]})},
+    )
+
+    assert all(result.success for result in results)
+    final_q_code = next(
+        query
+        for query in connection.calls
+        if query.startswith("qe_") and "+" in query
+    )
+    assert "_left_out" in final_q_code
+    assert "_right_out" in final_q_code
+    assert "_base" in final_q_code
 
 
 def test_two_executor_instances_serialize_shared_connection():

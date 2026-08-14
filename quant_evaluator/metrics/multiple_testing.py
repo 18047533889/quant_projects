@@ -94,7 +94,8 @@ def benjamini_hochberg_correction(
     else:
         n_discoveries = 0
 
-    # Compute adjusted p-values (step-down)
+    # Compute BH adjusted p-values. In sorted order, they must be
+    # non-decreasing, so propagate each smaller value toward lower ranks.
     adjusted_sorted = np.minimum.accumulate(
         (p_sorted * n_tests / ranks)[::-1]
     )[::-1]
@@ -102,12 +103,12 @@ def benjamini_hochberg_correction(
 
     # Map back to original positions
     adjusted_flat = np.full_like(p_flat, np.nan)
-    adjusted_flat[original_idx[sort_idx]] = adjusted_sorted
+    adjusted_flat[original_idx] = adjusted_sorted
 
     # Rejection mask
     reject_flat = np.zeros_like(p_flat, dtype=bool)
     if n_discoveries > 0:
-        reject_indices = original_idx[sort_idx[:n_discoveries]]
+        reject_indices = original_idx[:n_discoveries]
         reject_flat[reject_indices] = True
 
     return (
@@ -167,19 +168,21 @@ def holm_bonferroni_correction(
         else:
             break
 
-    # Compute adjusted p-values (step-down maximum)
-    adjusted_sorted = p_sorted * (n_tests - ranks + 1)
-    adjusted_sorted = np.minimum.accumulate(np.maximum.accumulate(adjusted_sorted))
-    adjusted_sorted = np.minimum(adjusted_sorted, 1.0)
+    # Compute Holm adjusted p-values. In sorted order, adjusted values must
+    # be non-decreasing, so each rank inherits the largest prior value.
+    adjusted_sorted = np.minimum(
+        np.maximum.accumulate(p_sorted * (n_tests - ranks + 1)),
+        1.0,
+    )
 
     # Map back to original positions
     adjusted_flat = np.full_like(p_flat, np.nan)
-    adjusted_flat[original_idx[sort_idx]] = adjusted_sorted
+    adjusted_flat[original_idx] = adjusted_sorted
 
     # Rejection mask
     reject_flat = np.zeros_like(p_flat, dtype=bool)
     if n_discoveries > 0:
-        reject_indices = original_idx[sort_idx[:n_discoveries]]
+        reject_indices = original_idx[:n_discoveries]
         reject_flat[reject_indices] = True
 
     return (

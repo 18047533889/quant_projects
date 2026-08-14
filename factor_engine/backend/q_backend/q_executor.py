@@ -128,6 +128,7 @@ class QExecutor:
         materialize_output: bool = True,
         workspace_id: str | None = None,
         generation_id: str | None = None,
+        allow_legacy_handles: bool = False,
     ) -> QExecutionResult:
         """执行 q Region 计划。
 
@@ -173,6 +174,8 @@ class QExecutor:
                 f"Missing input tables for region {plan.region_id}: {missing_tables}"
             )
 
+        q: Any | None = None
+        resident_handle: QResidentTableHandle | None = None
         try:
             with self._connection_lock:
                 start_time = time.perf_counter()
@@ -186,6 +189,7 @@ class QExecutor:
                     workspace_id=workspace_id,
                     generation_id=generation_id,
                     workspace_prefix=workspace_prefix,
+                    allow_legacy_handles=allow_legacy_handles,
                 )
 
                 rewritten_code = self._rewrite_q_code(
@@ -196,6 +200,13 @@ class QExecutor:
                     },
                 )
                 output_symbol = f"{workspace_prefix}{_safe_q_identifier(plan.output_table)}"
+                with _LEASE_LOCK:
+                    lease = _ACTIVE_LEASES.setdefault(
+                        workspace_id, (generation_id, id(q), set())
+                    )
+                    if lease[:2] != (generation_id, id(q)):
+                        raise QExecutionError("Execution workspace lease identity conflict")
+                    lease[2].add(output_symbol)
                 logger.debug(f"Executing q Region {plan.region_id}:\n{rewritten_code}")
                 q(rewritten_code)
                 q_result = q(output_symbol)
@@ -211,7 +222,6 @@ class QExecutor:
 
                 execution_time = (time.perf_counter() - start_time) * 1000
 
-                resident_handle = None
                 if return_resident_handle:
                     resident_handle = QResidentTableHandle(
                         table_name=plan.output_table,
@@ -238,21 +248,22 @@ class QExecutor:
                 success=True,
                 resident_handle=resident_handle,
             )
-            if resident_handle is None:
-                with self._connection_lock:
-                    self._cleanup_workspace(q, workspace_id, generation_id)
             return result
 
         except (QDataUnavailableError, QProcessUnavailableError):
             raise
         except Exception as e:
-            if "q" in locals():
-                with self._connection_lock:
-                    self._cleanup_workspace(q, workspace_id, generation_id)
             error_msg = f"q execution failed for region {plan.region_id}: {e}"
             logger.error(error_msg)
 
             raise QExecutionError(error_msg) from e
+        finally:
+            # Direct executions own their workspace.  Always release it,
+            # including cancellation-like BaseExceptions, while preserving
+            # any original failure from the execution body.
+            if q is not None and resident_handle is None:
+                with self._connection_lock:
+                    self._cleanup_workspace(q, workspace_id, generation_id)
 
     @staticmethod
     def _resident_result_metadata(q_result: Any) -> tuple[int, int]:
@@ -295,23 +306,30 @@ class QExecutor:
             )
             if generation != handle.generation_id or connection_id != int(handle.connection_id or 0):
                 raise QExecutionError("Resident workspace lease identity conflict")
-            symbols.add(handle.table_name)
+            symbols.add(handle.q_symbol or handle.table_name)
 
     @staticmethod
-    def _validate_lease(handle: QResidentTableHandle, q: Any) -> None:
+    def _validate_lease(
+        handle: QResidentTableHandle,
+        q: Any,
+        *,
+        allow_legacy_handles: bool,
+    ) -> None:
         if handle.connection_id is not None and handle.connection_id != id(q):
             raise QExecutionError(
                 f"Stale Q-resident handle for {handle.table_name}: connection changed"
             )
         if handle.workspace_id is None or handle.generation_id is None:
-            # Legacy direct handles without ownership metadata are allowed only
-            # when they explicitly identify a connection; None is an unbound
-            # compatibility handle and cannot claim stale ownership.
+            if not allow_legacy_handles:
+                raise QExecutionError(
+                    f"Unbound Q-resident handle rejected for {handle.table_name}"
+                )
             return
         with _LEASE_LOCK:
             lease = _ACTIVE_LEASES.get(handle.workspace_id)
             expected = (handle.generation_id, id(q))
-            if lease is None or lease[:2] != expected or handle.table_name not in lease[2]:
+            physical_symbol = handle.q_symbol or handle.table_name
+            if lease is None or lease[:2] != expected or physical_symbol not in lease[2]:
                 raise QExecutionError(
                     f"Stale Q-resident handle for {handle.table_name}: lease is not active"
                 )
@@ -351,6 +369,7 @@ class QExecutor:
         workspace_id: str,
         generation_id: str,
         workspace_prefix: str,
+        allow_legacy_handles: bool,
     ) -> dict[str, str]:
         """Load inputs into an execution-owned q namespace."""
         bindings: dict[str, str] = {}
@@ -358,7 +377,7 @@ class QExecutor:
             symbol = f"{workspace_prefix}{_safe_q_identifier(table_name)}"
             bindings[table_name] = symbol
             if isinstance(data, QResidentTableHandle):
-                self._validate_lease(data, q)
+                self._validate_lease(data, q, allow_legacy_handles=allow_legacy_handles)
                 if data.table_name != symbol:
                     q(f"{symbol}: {data.q_symbol or data.table_name}")
                 self._increment_telemetry("resident_reuse_count")
@@ -419,6 +438,7 @@ class QExecutor:
                     materialize_output=is_last or not enable_residency,
                     workspace_id=workspace_id,
                     generation_id=generation_id,
+                    allow_legacy_handles=False,
                 )
                 results.append(result)
 

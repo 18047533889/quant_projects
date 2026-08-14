@@ -33,6 +33,7 @@ class TransformMetadata:
     parameters: Dict[str, Any] = field(default_factory=dict)
     tags: Set[str] = field(default_factory=set)
     causal_safe: bool = True
+    admission: str = "PRODUCTION"
     signature_hash: Optional[str] = None
 
     def __post_init__(self):
@@ -76,6 +77,7 @@ class TransformRegistry:
         parameters: Optional[Dict[str, Any]] = None,
         tags: Optional[Set[str]] = None,
         causal_safe: bool = True,
+        admission: Optional[str] = None,
     ) -> None:
         """
         Register a transform.
@@ -98,6 +100,8 @@ class TransformRegistry:
             Searchable tags
         causal_safe : bool
             Whether transform preserves causal structure
+        admission : str
+            Production admission class
         """
         if name in self._transforms:
             existing = self._transforms[name]
@@ -108,6 +112,14 @@ class TransformRegistry:
                 )
             return
 
+        # Existing callers omit admission for ordinary causal transforms;
+        # make that omission explicit rather than treating it as unknown.
+        admission = admission or "PRODUCTION"
+        if admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
+            raise ValueError("admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY")
+        if admission == "PRODUCTION" and not causal_safe:
+            raise ValueError("Production transforms must be causal_safe")
+
         metadata = TransformMetadata(
             name=name,
             func=func,
@@ -117,6 +129,7 @@ class TransformRegistry:
             parameters=parameters or {},
             tags=tags or set(),
             causal_safe=causal_safe,
+            admission=admission,
         )
 
         self._transforms[name] = metadata
@@ -130,6 +143,17 @@ class TransformRegistry:
     def get(self, name: str) -> Optional[TransformMetadata]:
         """Get transform metadata by name."""
         return self._transforms.get(name)
+
+    def validate_production(self, name: str) -> TransformMetadata:
+        """Resolve registry metadata and fail closed for production admission."""
+        metadata = self.get(name)
+        if metadata is None:
+            raise ValueError(f"Transform '{name}' is not registered")
+        if metadata.admission != "PRODUCTION":
+            raise ValueError(f"Transform '{name}' is {metadata.admission}")
+        if not metadata.causal_safe:
+            raise ValueError(f"Transform '{name}' is not production-causal-safe")
+        return metadata
 
     def get_function(self, name: str) -> Optional[Callable]:
         """Get transform function by name."""
@@ -180,6 +204,10 @@ def create_default_registry() -> TransformRegistry:
         days_since_update, observation_age, freshness_score, stale_data_indicator,
     )
     from factor_preprocess.neutralization import ols_neutralize, compute_exposures
+    from factor_preprocess.transforms.decomposition import (
+        bandpass_filter, extract_cycle, christiano_fitzgerald_filter,
+        wavelet_decompose, wavelet_smooth, wavelet_denoise,
+    )
 
     registry = TransformRegistry()
 
@@ -349,10 +377,28 @@ def create_default_registry() -> TransformRegistry:
         causal_safe=True,
     )
 
+    # Full-series decomposition uses symmetric/zero-phase reconstruction and is
+    # therefore not admissible in production unless a causal implementation exists.
+    for name, func in [
+        ("bandpass_filter", bandpass_filter),
+        ("extract_cycle", extract_cycle),
+        ("christiano_fitzgerald_filter", christiano_fitzgerald_filter),
+        ("wavelet_decompose", wavelet_decompose),
+        ("wavelet_smooth", wavelet_smooth),
+        ("wavelet_denoise", wavelet_denoise),
+    ]:
+        registry.register(
+            name, func, TransformCategory.TEMPORAL,
+            version="1.0.0",
+            description="Full-series decomposition; offline/research use only",
+            tags={"temporal", "full_series", "offline_only"},
+            causal_safe=False,
+            admission="OFFLINE_ONLY",
+        )
+
     return registry
 
 
-# Global default registry instance
 _default_registry: Optional[TransformRegistry] = None
 
 

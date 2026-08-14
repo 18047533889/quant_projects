@@ -36,6 +36,7 @@ from datetime import date, datetime
 from typing import Any, Mapping, Sequence
 
 import numpy as np
+import pandas as pd
 
 __all__ = [
     "ModelExecutionClass",
@@ -355,54 +356,75 @@ class EmbargoSpec:
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class ApplicationWindow:
-    """Temporal window for out-of-sample transform application (MODEL-P0-005).
+    """Strict, normalized temporal window for OOS application."""
 
-    When applying a fitted preprocessing transform (scaler/PCA/imputer) to OOS data,
-    the application window enforces that the transform is only applied to data that
-    exists after the training cutoff. This prevents accidental leakage where a
-    transform trained on train+validation is applied to validation-period data.
-
-    The public FittedTransform.transform() API MUST require an ApplicationWindow;
-    only internal fit_transform (used during training) may bypass this check.
-    """
-
-    start: Any  # First legal date/timestamp for OOS application
-    end: Any | None = None  # Last legal date/timestamp (None = unbounded)
-    strict: bool = True  # If True, reject any data before start
+    start: Any
+    end: Any | None = None
+    strict: bool = True
 
     def __post_init__(self) -> None:
-        if self.start is None:
-            raise ValueError("ApplicationWindow.start cannot be None")
-        if self.end is not None and self.start > self.end:
+        start = self.normalize_boundary(self.start, "start")
+        end = None if self.end is None else self.normalize_boundary(self.end, "end")
+        if end is not None and start > end:
+            raise ValueError(f"ApplicationWindow.start {start} > end {end}")
+        object.__setattr__(self, "start", start)
+        object.__setattr__(self, "end", end)
+
+    @staticmethod
+    def normalize_boundary(value: Any, name: str = "boundary") -> pd.Timestamp:
+        if value is None:
+            raise ValueError(f"ApplicationWindow.{name} cannot be None")
+        try:
+            parsed = pd.to_datetime(value, errors="raise", utc=True)
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError(
-                f"ApplicationWindow.start {self.start} > end {self.end}"
+                f"ApplicationWindow.{name} is not a valid timestamp: {value!r}"
+            ) from exc
+        if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
+            raise ValueError(
+                f"ApplicationWindow.{name} is not a valid scalar timestamp: {value!r}"
             )
+        return parsed
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ApplicationWindow":
+        if not isinstance(data, Mapping):
+            raise TypeError("ApplicationWindow payload must be a mapping")
+        if "start" not in data:
+            raise ValueError("ApplicationWindow payload missing start")
+        strict = data.get("strict", True)
+        if not isinstance(strict, bool):
+            raise TypeError("ApplicationWindow.strict must be bool")
+        return cls(start=data["start"], end=data.get("end"), strict=strict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"start": self.start.isoformat(), "end": self.end.isoformat() if self.end is not None else None, "strict": self.strict}
+
+    def normalize_dates(self, dates: Any) -> np.ndarray:
+        values = np.asarray(dates)
+        if values.ndim != 1:
+            raise ValueError("dates must be a one-dimensional sequence")
+        try:
+            parsed = pd.to_datetime(values, errors="raise", utc=True)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("dates contain malformed timestamp values") from exc
+        if pd.isna(parsed).any():
+            raise ValueError("dates contain null timestamp values")
+        return parsed.to_numpy(dtype="datetime64[ns]")
 
     def validate_dates(self, dates: Any) -> tuple[bool, list[str]]:
-        """Validate that dates fall within the application window.
-
-        Returns (valid, violations) where violations lists dates outside the window.
-        """
+        dates_array = self.normalize_dates(dates)
+        start = self.start.to_datetime64()
+        end = self.end.to_datetime64() if self.end is not None else None
         violations: list[str] = []
-        dates_array = np.asarray(dates)
-
         if self.strict:
-            # Check all dates are >= start
-            before_start = dates_array < self.start
+            before_start = dates_array < start
             if np.any(before_start):
-                n_violations = int(np.sum(before_start))
-                violations.append(
-                    f"{n_violations} dates before application window start {self.start}"
-                )
-
-        if self.end is not None:
-            after_end = dates_array > self.end
+                violations.append(f"{int(np.sum(before_start))} dates before application window start {self.start}")
+        if end is not None:
+            after_end = dates_array > end
             if np.any(after_end):
-                n_violations = int(np.sum(after_end))
-                violations.append(
-                    f"{n_violations} dates after application window end {self.end}"
-                )
-
+                violations.append(f"{int(np.sum(after_end))} dates after application window end {self.end}")
         return (not violations), violations
 
 

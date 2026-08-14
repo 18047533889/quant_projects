@@ -3,6 +3,9 @@ Tests for persistent seen index.
 """
 
 import pytest
+import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
 
@@ -59,6 +62,84 @@ class TestPersistentSeenIndex:
         assert record1.factor_id == record2.factor_id == "factor1"
         assert record1.origin == record2.origin == "manual"
         assert index.count() == 1
+
+    def test_concurrent_writers_same_hash_are_idempotent(self, tmp_path):
+        db_path = tmp_path / "seen.db"
+        barrier = threading.Barrier(4)
+
+        def write(writer_id):
+            with PersistentSeenIndex(str(db_path)) as index:
+                barrier.wait()
+                return index.record("shared", f"factor-{writer_id}", f"origin-{writer_id}")
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            records = list(pool.map(write, range(4)))
+
+        assert len({record.first_seen_at for record in records}) == 1
+        assert len({record.factor_id for record in records}) == 1
+        with PersistentSeenIndex(str(db_path)) as index:
+            assert index.count() == 1
+
+    def test_record_retries_busy_error(self, monkeypatch):
+        index = PersistentSeenIndex(":memory:", busy_timeout_ms=0, max_busy_retries=2)
+        class ConnectionProxy:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, sql, parameters=()):
+                return self.connection.execute(sql, parameters)
+
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return self.connection.__exit__(exc_type, exc_val, exc_tb)
+
+        proxy = ConnectionProxy(index._conn)
+        original_execute = proxy.execute
+        attempts = 0
+
+        def flaky_execute(sql, parameters=()):
+            nonlocal attempts
+            if "INSERT INTO seen_factors" in sql and attempts == 0:
+                attempts += 1
+                raise sqlite3.OperationalError("database is locked")
+            return original_execute(sql, parameters)
+
+        proxy.execute = flaky_execute
+        index._conn = proxy
+        record = index.record("hash1", "factor1")
+
+        assert attempts == 1
+        assert record.factor_id == "factor1"
+        assert index.count() == 1
+
+    def test_record_rolls_back_failed_insert(self):
+        index = PersistentSeenIndex(":memory:")
+
+        class ConnectionProxy:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, sql, parameters=()):
+                cursor = self.connection.execute(sql, parameters)
+                if "INSERT INTO seen_factors" in sql:
+                    raise RuntimeError("injected failure")
+                return cursor
+
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return self.connection.__exit__(exc_type, exc_val, exc_tb)
+
+        index._conn = ConnectionProxy(index._conn)
+        with pytest.raises(RuntimeError, match="injected failure"):
+            index.record("hash1", "factor1")
+
+        assert index.count() == 0
 
     def test_get_all_ordered(self):
         """Test get_all returns records ordered by first_seen_at."""

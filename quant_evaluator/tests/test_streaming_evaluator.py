@@ -11,7 +11,7 @@ from typing import Iterator, Tuple
 
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.contracts.label_bundle import LabelBundle
-from quant_evaluator.contracts.errors import InvalidContractError
+from quant_evaluator.contracts.errors import InvalidContractError, InsufficientObservations, SnapshotMismatchError
 
 from quant_evaluator.runtime.streaming_evaluator import (
     StreamingEvaluator,
@@ -290,9 +290,16 @@ class TestStreamingEvaluator:
 
         # Create a simple generator
         def simple_generator():
-            for _ in range(5):
+            for offset in range(0, 100, 20):
                 batch = self.create_test_batch(T=20, N=100, F=2)
-                labels = self.create_test_labels(T=20, N=100)
+                labels = LabelBundle(
+                    target_id="forward_return_1d",
+                    values=np.random.randn(20, 100),
+                    horizon=1,
+                    decision_time=tuple(range(offset, offset + 20)),
+                    label_start_time=tuple(range(offset, offset + 20)),
+                    label_end_time=tuple(range(offset + 1, offset + 21)),
+                )
                 yield batch, labels
 
         metric_specs = [
@@ -523,10 +530,55 @@ class TestStreamingEvaluator:
 
         metric_specs = [{"metric_id": "coverage", "metric_kind": "coverage"}]
 
-        result = evaluator.evaluate_stream(empty_generator(), metric_specs)
+        with pytest.raises(InsufficientObservations, match="no chunks"):
+            evaluator.evaluate_stream(empty_generator(), metric_specs)
 
-        assert result.chunks_processed == 0
-        assert result.total_observations_processed == 0
+    def _boundary_chunks(self):
+        values = np.ones((2, 1, 1))
+        def make(start, *, factor="f", context=None, target="target"):
+            batch = FactorBatch(
+                factor_ids=(factor,),
+                time_axis=AxisRef("time", "int64", 2, np.array([start, start + 1])),
+                asset_axis=AxisRef("asset", "int64", 1, np.array(["asset-1"])),
+                values=values,
+                context_refs=context or {"snapshot": "s1"},
+            )
+            labels = LabelBundle(
+                target_id=target, values=np.ones((2, 1)), horizon=1,
+                decision_time=(start, start + 1), label_start_time=(start, start + 1),
+                label_end_time=(start + 1, start + 2), source_ref="labels", calendar_ref="cal",
+            )
+            return batch, labels
+        return make
+
+    def _boundary_evaluator(self):
+        evaluator = StreamingEvaluator()
+        evaluator.register_streaming_metric("coverage", streaming_coverage_updater, MetricKind.COVERAGE)
+        return evaluator, [{"metric_id": "coverage", "metric_kind": "coverage"}]
+
+    def test_stream_reverse_order_rejected(self):
+        make = self._boundary_chunks(); evaluator, specs = self._boundary_evaluator()
+        with pytest.raises(InvalidContractError, match="monotonic"):
+            evaluator.evaluate_stream(iter([make(2), make(0)]), specs)
+
+    def test_stream_replay_rejected(self):
+        make = self._boundary_chunks(); evaluator, specs = self._boundary_evaluator()
+        with pytest.raises(InvalidContractError, match="duplicate|replayed"):
+            evaluator.evaluate_stream(iter([make(0), make(0)]), specs)
+
+    @pytest.mark.parametrize("change", ["context", "identity"])
+    def test_stream_context_or_identity_change_rejected(self, change):
+        make = self._boundary_chunks(); evaluator, specs = self._boundary_evaluator()
+        first = make(0)
+        second = make(2, context={"snapshot": "s2"} if change == "context" else {"snapshot": "s1"},
+                      factor="g" if change == "identity" else "f")
+        with pytest.raises(SnapshotMismatchError, match="identity/context"):
+            evaluator.evaluate_stream(iter([first, second]), specs)
+
+    def test_stream_overlap_rejected(self):
+        make = self._boundary_chunks(); evaluator, specs = self._boundary_evaluator()
+        with pytest.raises(InvalidContractError, match="overlapping|duplicate|replayed"):
+            evaluator.evaluate_stream(iter([make(0), make(1)]), specs)
 
     def test_get_budget_report(self):
         budget = ComputationBudget(max_memory_mb=1024.0)

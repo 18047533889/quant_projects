@@ -61,16 +61,22 @@ class FactorPreprocessAdapter:
             FutureLeakageError: If fit window would leak future information
             AdapterError: If contract cannot be translated
         """
-        # Validate no future leakage
-        if contract.mode == TransformMode.FITTED and contract.fit_window is not None:
-            if application_period_start is not None:
-                if not contract.fit_window.is_valid_for_application(
-                    application_period_start, application_period_start
-                ):
-                    raise FutureLeakageError(
-                        f"Fit window {contract.fit_window.fit_end} must end before "
-                        f"application period {application_period_start}"
-                    )
+        # Fitted transforms must always declare the application period. Without
+        # it, the temporal contract cannot distinguish OOS use from leakage.
+        if contract.mode == TransformMode.FITTED:
+            if contract.fit_window is None:
+                raise AdapterError("FITTED contract requires fit_window")
+            if application_period_start is None:
+                raise AdapterError(
+                    "application_period_start is required for fitted transforms"
+                )
+            if not contract.fit_window.is_valid_for_application(
+                application_period_start, application_period_start
+            ):
+                raise FutureLeakageError(
+                    f"Fit window {contract.fit_window.fit_end} must end before "
+                    f"application period {application_period_start}"
+                )
 
         # Translate transforms
         fp_transforms = []
@@ -156,7 +162,18 @@ class FactorPreprocessAdapter:
             "fit_start_time": fit_window.fit_start,
             "fit_end_time": fit_window.fit_end,
             "fit_universe_ref": fit_window.universe_ref,
+            "fit_snapshot_ref": fit_window.data_snapshot_ref,
         }
+
+    @staticmethod
+    def validate_fitted_state_features(state: Any, feature_ids: List[str]) -> None:
+        """Require exact ordered feature compatibility for a fitted state."""
+        expected = list(getattr(state, "feature_order", ()) or ())
+        if expected and list(feature_ids) != expected:
+            raise AdapterError(
+                "FittedState feature order mismatch: "
+                f"expected {expected}, got {list(feature_ids)}"
+            )
 
     def wrap_output(
         self,
@@ -192,15 +209,14 @@ class FactorPreprocessAdapter:
                 f"Expected FeatureBundle from factor_preprocess, got {type(fp_output).__name__}"
             )
 
-        # Extract validated fields from FeatureBundle
-        features = fp_output.features
+        # FeatureBundle exposes its payload as `values`.
+        features = fp_output.values
 
-        # Extract feature names from channels or axis
+        # Extract feature names from the FeatureBundle channel mapping.
         feature_names = []
-        if hasattr(fp_output, 'channels') and fp_output.channels:
-            for channel in fp_output.channels:
-                if hasattr(channel, 'feature_ids'):
-                    feature_names.extend(channel.feature_ids)
+        for channel in fp_output.channels.values():
+            if channel.channel_type == "feature":
+                feature_names.extend(channel.feature_ids)
 
         # Extract missing indicators if present
         missing_indicators = None

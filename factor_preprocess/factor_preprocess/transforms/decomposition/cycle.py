@@ -1,8 +1,9 @@
 """
-Cycle extraction using bandpass filters.
+Cycle extraction using full-series bandpass filters.
 
-All functions are causal - they exclude the current observation and operate
-per-asset to ensure no future leakage.
+These public operations are intended for offline/research analysis. Shifting the
+input by one observation does not make zero-phase filtering or full-sample
+trend estimation prefix-stable.
 """
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ def bandpass_filter(
     value_col: str = "value",
 ) -> pd.Series:
     """
-    Causal bandpass filter for cycle extraction.
+    Offline-only bandpass filter for cycle extraction.
 
     Parameters
     ----------
@@ -197,7 +198,7 @@ def christiano_fitzgerald_filter(
     value_col: str = "value",
 ) -> pd.Series:
     """
-    Causal Christiano-Fitzgerald bandpass filter for cycle extraction.
+    Offline-only Christiano-Fitzgerald bandpass filter for cycle extraction.
 
     Parameters
     ----------

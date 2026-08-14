@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from modeling.artifact import PredictionContext
 from modeling.learners.base import BaseLearner, FrozenModel
 
 __all__ = [

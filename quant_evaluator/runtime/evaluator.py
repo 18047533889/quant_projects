@@ -6,6 +6,10 @@ Orchestrates metric computation with planning, caching, and budget tracking.
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Callable
+import hashlib
+import json
+import types
+from types import MappingProxyType
 import numpy as np
 import time
 
@@ -23,7 +27,6 @@ from quant_evaluator.planner.dependency_plan import (
 from quant_evaluator.runtime.intermediates import (
     IntermediateCache,
     CacheKey,
-    compute_input_hash,
 )
 from quant_evaluator.runtime.budgets import (
     ComputationBudget,
@@ -47,6 +50,7 @@ class EvaluationResult:
     cache_misses: int = 0
     resource_usage: Optional[ResourceUsage] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    provenance: Dict[str, Any] = field(default_factory=dict)
 
     def get_metric(self, metric_id: str, default=None) -> Any:
         """Retrieve a metric by ID."""
@@ -70,6 +74,8 @@ class EvaluationResult:
             result["resource_usage"] = self.resource_usage.to_dict()
         if self.metadata:
             result["metadata"] = self.metadata
+        if self.provenance:
+            result["provenance"] = self.provenance
         return result
 
 
@@ -159,9 +165,9 @@ class Evaluator:
         # Build dependency graph
         dep_graph = resolve_metric_dependencies(metric_specs)
 
-        # Create batch plan
+        # Chunking is opt-in: unsafe metrics default to full-batch execution.
         batch_plan = None
-        if use_chunking:
+        if use_chunking and self._chunking_is_safe(dep_graph):
             batch_plan = create_batch_plan(
                 factor_batch,
                 max_chunk_memory_mb=self.max_chunk_memory_mb,
@@ -199,6 +205,8 @@ class Evaluator:
             factor_batch.num_factors,
         )
         result.metadata["num_metrics"] = len(dep_graph.nodes)
+        result.provenance = self._provenance(factor_batch, label_bundle)
+        result.metadata["provenance"] = result.provenance
 
         return result
 
@@ -224,12 +232,13 @@ class Evaluator:
                 continue
 
             # Check cache
+            cache_identity = self._cache_identity(metric_id, node, factor_batch, label_bundle)
             cache_key = CacheKey(
                 metric_id=metric_id,
-                input_hash=compute_input_hash(factor_batch.factor_ids),
+                input_hash=cache_identity,
             )
 
-            cached_value = self.cache.get(cache_key)
+            cached_value = self.cache.get(cache_key) if cache_identity else None
             if cached_value is not None:
                 result.metrics[metric_id] = cached_value
                 self._cache_hits += 1
@@ -248,7 +257,8 @@ class Evaluator:
 
             # Store in result and cache
             result.metrics[metric_id] = metric_value
-            self.cache.put(cache_key, metric_value)
+            if cache_identity:
+                self.cache.put(cache_key, metric_value)
 
             self.budget_tracker.record_operation()
 
@@ -270,7 +280,10 @@ class Evaluator:
 
         # Process each chunk
         chunk_results = []
-        for chunk in batch_plan.get_ordered_chunks():
+        for chunk in sorted(
+            batch_plan.chunks,
+            key=lambda item: (item.time_slice[0], item.asset_slice[0], item.factor_slice[0]),
+        ):
             self.budget_tracker.check_budget(raise_on_exceed=True)
 
             chunk_result = self._evaluate_chunk(
@@ -313,17 +326,16 @@ class Evaluator:
                 continue
 
             # Check cache
+            cache_identity = self._cache_identity(
+                metric_id, node, chunk_batch, chunk_labels, chunk=chunk
+            )
             cache_key = CacheKey(
                 metric_id=metric_id,
                 chunk_id=chunk.chunk_id,
-                input_hash=compute_input_hash(
-                    chunk_batch.factor_ids,
-                    time_slice=chunk.time_slice,
-                    asset_slice=chunk.asset_slice,
-                ),
+                input_hash=cache_identity,
             )
 
-            cached_value = self.cache.get(cache_key)
+            cached_value = self.cache.get(cache_key) if cache_identity else None
             if cached_value is not None:
                 chunk_metrics[metric_id] = cached_value
                 self._cache_hits += 1
@@ -341,7 +353,8 @@ class Evaluator:
             )
 
             chunk_metrics[metric_id] = metric_value
-            self.cache.put(cache_key, metric_value)
+            if cache_identity:
+                self.cache.put(cache_key, metric_value)
 
             self.budget_tracker.record_operation()
 
@@ -411,11 +424,15 @@ class Evaluator:
             name=factor_batch.time_axis.name,
             dtype=factor_batch.time_axis.dtype,
             size=t_end - t_start,
+            values=(factor_batch.time_axis.values[t_start:t_end].copy()
+                    if factor_batch.time_axis.values is not None else None),
         )
         chunk_asset_axis = AxisRef(
             name=factor_batch.asset_axis.name,
             dtype=factor_batch.asset_axis.dtype,
             size=a_end - a_start,
+            values=(factor_batch.asset_axis.values[a_start:a_end].copy()
+                    if factor_batch.asset_axis.values is not None else None),
         )
 
         return FactorBatch(
@@ -426,6 +443,8 @@ class Evaluator:
             validity=chunk_validity,
             layout=factor_batch.layout,
             dtype=factor_batch.dtype,
+            context_refs=dict(factor_batch.context_refs),
+            value_hash=self._array_hash(chunk_values),
         )
 
     def _extract_chunk_labels(
@@ -452,6 +471,9 @@ class Evaluator:
             label_start_time=label_bundle.label_start_time[t_start:t_end],
             label_end_time=label_bundle.label_end_time[t_start:t_end],
             validity=chunk_validity,
+            source_ref=label_bundle.source_ref,
+            calendar_ref=label_bundle.calendar_ref,
+            metadata=dict(label_bundle.metadata),
         )
 
     def _aggregate_chunk_results(
@@ -474,24 +496,147 @@ class Evaluator:
             if not chunk_values:
                 continue
 
-            # Aggregate based on metric kind
-            if node.metric_kind == MetricKind.IC:
-                # Concatenate IC series
+            aggregation = node.metadata.get("aggregation")
+            if aggregation == "mean":
+                raise InvalidContractError(
+                    f"Metric {metric_id} requires an explicit weighted reduction protocol"
+                )
+            if not self._metric_is_partitionable(node) or aggregation not in {
+                "concat", "first", "sum"
+            }:
+                raise InvalidContractError(
+                    f"Metric {metric_id} has no safe chunk aggregation contract"
+                )
+
+            if aggregation == "concat":
                 aggregated[metric_id] = np.concatenate(chunk_values, axis=0)
-            elif node.metric_kind == MetricKind.COVERAGE:
-                # Average coverage
-                aggregated[metric_id] = np.mean(chunk_values)
-            elif node.metric_kind == MetricKind.SUMMARY:
-                # Take first value (summaries are typically scalar)
-                aggregated[metric_id] = chunk_values[0]
+            elif aggregation == "sum":
+                aggregated[metric_id] = np.sum(chunk_values)
             else:
-                # Default: concatenate arrays
-                if isinstance(chunk_values[0], np.ndarray):
-                    aggregated[metric_id] = np.concatenate(chunk_values, axis=0)
-                else:
-                    aggregated[metric_id] = chunk_values
+                aggregated[metric_id] = chunk_values[0]
 
         return aggregated
+
+    @staticmethod
+    def _metric_is_partitionable(node: MetricNode) -> bool:
+        return node.metadata.get("partitionability", "NOT_PARTITIONABLE") == "PARTITIONABLE"
+
+    def _chunking_is_safe(self, dep_graph: MetricDependencyGraph) -> bool:
+        return all(
+            self._metric_is_partitionable(node)
+            and node.metadata.get("aggregation") in {"concat", "first", "sum"}
+            and not node.requires_full_batch
+            for node in dep_graph.nodes.values()
+        )
+
+    @staticmethod
+    def _array_hash(value: np.ndarray) -> str:
+        array = np.ascontiguousarray(value)
+        digest = hashlib.sha256()
+        digest.update(str(array.dtype).encode())
+        digest.update(str(array.shape).encode())
+        digest.update(array.tobytes())
+        return digest.hexdigest()
+
+    @staticmethod
+    def _freeze(value: Any) -> Any:
+        if isinstance(value, np.ndarray):
+            return {
+                "dtype": str(value.dtype),
+                "shape": value.shape,
+                "sha256": Evaluator._array_hash(value),
+            }
+        if isinstance(value, dict):
+            return {str(k): Evaluator._freeze(value[k]) for k in sorted(value, key=str)}
+        if isinstance(value, (list, tuple)):
+            return [Evaluator._freeze(item) for item in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return repr(value)
+
+    @staticmethod
+    def _is_immutably_cacheable(value: Any) -> bool:
+        if isinstance(value, (str, int, float, bool, bytes, type(None))):
+            return True
+        if isinstance(value, tuple):
+            return all(Evaluator._is_immutably_cacheable(item) for item in value)
+        if isinstance(value, frozenset):
+            return all(Evaluator._is_immutably_cacheable(item) for item in value)
+        return False
+
+    def _cache_identity(self, metric_id, node, factor_batch, label_bundle, chunk=None):
+        try:
+            metric_fn = self._metric_functions[metric_id]
+            if not isinstance(metric_fn, types.FunctionType):
+                # Callable instances can hide mutable state behind descriptors or
+                # custom attribute access; their semantic identity is unprovable.
+                return None
+            code = metric_fn.__code__
+            closure_state = []
+            for cell in metric_fn.__closure__ or ():
+                value = cell.cell_contents
+                if self._is_immutably_cacheable(value):
+                    closure_state.append(self._freeze(value))
+                else:
+                    # Mutable state, including mutable values nested inside an
+                    # immutable container, may change between evaluations.
+                    return None
+            function_hash = hashlib.sha256(
+                json.dumps(
+                    [code.co_code.hex(), self._freeze(code.co_consts),
+                     self._freeze(metric_fn.__defaults__),
+                     self._freeze(metric_fn.__kwdefaults__), closure_state],
+                    sort_keys=True, separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            identity = {
+                "metric": metric_id,
+                "kind": node.metric_kind.value,
+                "metadata": self._freeze(node.metadata),
+                "function": [metric_fn.__module__, metric_fn.__qualname__, function_hash],
+                "factor_ids": list(factor_batch.factor_ids),
+                "factor_values": self._freeze(factor_batch.values),
+                "factor_validity": self._freeze(factor_batch.validity),
+                "time_axis": self._freeze(factor_batch.time_axis.values),
+                "asset_axis": self._freeze(factor_batch.asset_axis.values),
+                "context_refs": self._freeze(factor_batch.context_refs),
+                "factor_value_hash": factor_batch.value_hash,
+                "labels": {
+                    "target_id": label_bundle.target_id,
+                    "values": self._freeze(label_bundle.values),
+                    "validity": self._freeze(label_bundle.validity),
+                    "horizon": label_bundle.horizon,
+                    "execution_delay": label_bundle.execution_delay,
+                    "decision_time": self._freeze(label_bundle.decision_time),
+                    "execution_time": self._freeze(label_bundle.execution_time),
+                    "label_start_time": self._freeze(label_bundle.label_start_time),
+                    "label_end_time": self._freeze(label_bundle.label_end_time),
+                    "source_ref": label_bundle.source_ref,
+                    "calendar_ref": label_bundle.calendar_ref,
+                    "metadata": self._freeze(label_bundle.metadata),
+                },
+                "chunk": self._freeze(
+                    (chunk.time_slice, chunk.asset_slice, chunk.factor_slice)
+                ) if chunk else None,
+            }
+            payload = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+            return hashlib.sha256(payload.encode()).hexdigest()
+        except Exception:
+            return None
+
+    def _provenance(self, factor_batch, label_bundle):
+        return MappingProxyType({
+            "factor_ids": tuple(factor_batch.factor_ids),
+            "time_coordinates": self._freeze(factor_batch.time_axis.values),
+            "asset_coordinates": self._freeze(factor_batch.asset_axis.values),
+            "context_refs": MappingProxyType(dict(factor_batch.context_refs)),
+            "factor_value_hash": factor_batch.value_hash or self._array_hash(factor_batch.values),
+            "label_source_ref": label_bundle.source_ref,
+            "label_calendar_ref": label_bundle.calendar_ref,
+            "label_target_id": label_bundle.target_id,
+            "label_value_hash": self._array_hash(label_bundle.values),
+            "label_metadata": MappingProxyType(dict(label_bundle.metadata)),
+        })
 
     def _validate_inputs(
         self,

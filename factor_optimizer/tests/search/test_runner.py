@@ -276,6 +276,53 @@ def test_search_runner_successful_trials():
     assert all(t.status == TrialStatus.EVALUATED for t in successful)
 
 
+def test_search_runner_cost_greater_than_remaining_does_not_execute():
+    budget = SearchBudget(max_trials=5, max_evaluations=5, max_cost_units=10.0)
+    config = SearchConfig(budget=budget, evaluation_cost_units=6.0)
+    calls = []
+
+    def proposal_fn():
+        return Trial(trial_id=f"t{len(calls) + 1}", mutation_id="m", status=TrialStatus.PROPOSED)
+
+    def evaluation_fn(trial, fidelity):
+        calls.append(trial.trial_id)
+        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 6.0}
+
+    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    session = runner.run("cost-boundary")
+
+    assert calls == ["t1"]
+    assert session.stop_reason == "evaluation_budget_unavailable"
+    assert session.budget_tracker.cost_used == 6.0
+    assert session.budget_tracker.evaluations_used == 1
+    assert session.trials[-1].status == TrialStatus.FAILED
+
+
+def test_search_runner_evaluation_failure_refunds_reservation():
+    budget = SearchBudget(max_trials=2, max_evaluations=2, max_cost_units=10.0)
+    config = SearchConfig(budget=budget, evaluation_cost_units=10.0)
+    calls = 0
+
+    def proposal_fn():
+        return Trial(trial_id=f"t{len(session_trials) + 1}", mutation_id="m", status=TrialStatus.PROPOSED)
+
+    session_trials = []
+
+    def evaluation_fn(trial, fidelity):
+        nonlocal calls
+        session_trials.append(trial)
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("failed")
+        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 10.0}
+
+    session = SearchRunner(config, proposal_fn, evaluation_fn).run("refund")
+    assert calls == 2
+    assert session.budget_tracker.cost_used == 10.0
+    assert session.budget_tracker.cost_reserved == 0.0
+    assert session.budget_tracker.evaluations_used == 1
+
+
 def test_search_session_duration():
     budget = SearchBudget(max_trials=1, max_evaluations=1)
     config = SearchConfig(budget=budget)

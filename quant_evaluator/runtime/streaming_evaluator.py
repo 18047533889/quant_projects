@@ -12,7 +12,7 @@ import time
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
-from quant_evaluator.contracts.errors import InvalidContractError
+from quant_evaluator.contracts.errors import InvalidContractError, InsufficientObservations, SnapshotMismatchError
 
 from quant_evaluator.planner.dependency_plan import MetricKind
 from quant_evaluator.runtime.budgets import ComputationBudget, BudgetTracker, ResourceUsage
@@ -177,6 +177,74 @@ class StreamingEvaluator:
         # Execution stats
         self._peak_memory_mb = 0.0
 
+    @staticmethod
+    def _freeze_identity(value: Any) -> Any:
+        """Convert context metadata into a deterministic, comparable value."""
+        if isinstance(value, dict):
+            return tuple(sorted((str(k), StreamingEvaluator._freeze_identity(v)) for k, v in value.items()))
+        if isinstance(value, (list, tuple)):
+            return tuple(StreamingEvaluator._freeze_identity(v) for v in value)
+        if isinstance(value, np.ndarray):
+            return tuple(value.tolist())
+        return value
+
+    def _stream_identity(self, factor_batch: FactorBatch, label_bundle: LabelBundle) -> Tuple[Any, ...]:
+        """Return immutable identity/context metadata for a public stream."""
+        return (
+            self._freeze_identity(factor_batch.context_refs),
+            tuple(factor_batch.factor_ids),
+            self._freeze_identity(factor_batch.asset_axis.values),
+            factor_batch.asset_axis.name,
+            factor_batch.asset_axis.dtype,
+            label_bundle.target_id,
+            label_bundle.horizon,
+            label_bundle.execution_delay,
+            label_bundle.source_ref,
+            label_bundle.calendar_ref,
+            self._freeze_identity(label_bundle.metadata),
+        )
+
+    @staticmethod
+    def _coordinates(axis: Any, fallback: Tuple[Any, ...]) -> Tuple[Any, ...]:
+        """Use explicit axis coordinates when present; otherwise supplied labels."""
+        if axis.values is not None:
+            return tuple(axis.values.tolist())
+        return tuple(fallback)
+
+    def _validate_stream_boundary(
+        self,
+        factor_batch: FactorBatch,
+        label_bundle: LabelBundle,
+        stream_state: Dict[str, Any],
+    ) -> None:
+        """Enforce continuity and identity for externally supplied chunks."""
+        self._validate_chunk(factor_batch, label_bundle)
+        identity = self._stream_identity(factor_batch, label_bundle)
+        if stream_state.get("identity") is None:
+            stream_state["identity"] = identity
+            stream_state["factor_ids"] = tuple(factor_batch.factor_ids)
+            stream_state["asset_coords"] = self._coordinates(factor_batch.asset_axis, tuple(range(factor_batch.num_assets)))
+        elif identity != stream_state["identity"]:
+            raise SnapshotMismatchError("stream identity/context changed between chunks")
+
+        times = self._coordinates(factor_batch.time_axis, tuple(label_bundle.decision_time))
+        if len(times) != factor_batch.num_times:
+            raise InvalidContractError("time coordinates do not match factor time axis")
+        previous = stream_state.get("last_time")
+        seen = stream_state.setdefault("seen_times", set())
+        try:
+            if any(times[i] >= times[i + 1] for i in range(len(times) - 1)):
+                raise InvalidContractError("stream time coordinates must be strictly increasing")
+            if any(t in seen for t in times):
+                raise InvalidContractError("duplicate or replayed stream time coordinates")
+            if previous is not None and times[0] <= previous:
+                raise InvalidContractError("stream chunks must be monotonic and non-overlapping")
+        except TypeError as exc:
+            raise InvalidContractError("stream time coordinates must be orderable") from exc
+        seen.update(times)
+        if times:
+            stream_state["last_time"] = times[-1]
+
     def register_streaming_metric(
         self,
         metric_id: str,
@@ -201,6 +269,8 @@ class StreamingEvaluator:
         self,
         data_generator: Iterator[Tuple[FactorBatch, LabelBundle]],
         metric_specs: List[Dict],
+        *,
+        _internal_splitter: bool = False,
     ) -> StreamingEvaluationResult:
         """
         Evaluate metrics on streaming data.
@@ -226,12 +296,16 @@ class StreamingEvaluator:
         # Process chunks
         chunks_processed = 0
         total_obs = 0
+        stream_state: Dict[str, Any] = {}
 
         for factor_batch, label_bundle in data_generator:
             self.budget_tracker.check_budget(raise_on_exceed=True)
 
-            # Validate chunk
-            self._validate_chunk(factor_batch, label_bundle)
+            # Validate chunk and public stream continuity before updating state.
+            if _internal_splitter:
+                self._validate_chunk(factor_batch, label_bundle)
+            else:
+                self._validate_stream_boundary(factor_batch, label_bundle, stream_state)
 
             # Update each metric state with this chunk
             for metric_id, state in metric_states.items():
@@ -252,6 +326,8 @@ class StreamingEvaluator:
             self.budget_tracker.record_operation()
 
         # Finalize all metrics
+        if chunks_processed == 0:
+            raise InsufficientObservations("public streaming evaluation received no chunks")
         result = StreamingEvaluationResult()
         for metric_id, state in metric_states.items():
             result.metrics[metric_id] = state.finalize()
@@ -290,7 +366,7 @@ class StreamingEvaluator:
             StreamingEvaluationResult with finalized metrics
         """
         generator = self._batch_to_generator(factor_batch, label_bundle)
-        return self.evaluate_stream(generator, metric_specs)
+        return self.evaluate_stream(generator, metric_specs, _internal_splitter=True)
 
     def _batch_to_generator(
         self,

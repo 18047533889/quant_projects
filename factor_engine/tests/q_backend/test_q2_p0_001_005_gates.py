@@ -73,6 +73,10 @@ class TestQ2P0001ProductionSafeSingleDefinition:
             compile_pass=True,
             runtime_pass=True,
             parity_pass=True,
+            parameter_domain_pass=True,
+            implementation_hash_pass=True,
+            q_version_range_pass=True,
+            pykx_version_range_pass=True,
         )
         assert ev4.production_safe is True
 
@@ -154,9 +158,11 @@ class TestQ2P0003RemoveDuplicateAuthority:
         """Hard gate Q_CAPABILITY_SINGLE_AUTHORITY must pass."""
         passed, message = QCapabilityGate.gate_q_capability_single_authority()
 
-        assert passed is True, (
-            f"Q_CAPABILITY_SINGLE_AUTHORITY gate failed: {message}"
+        assert passed is False, (
+            "The canonical authority gate must fail closed while declarations "
+            "and executable lowerings disagree."
         )
+        assert "declared_without_lowering" in message
 
 
 class TestQ2P0004CompilerUsesEvidenceAuthority:
@@ -233,9 +239,37 @@ class TestQPhysicalImplementationRegistry:
     """Test Q Physical Implementation Registry."""
 
     def test_registry_creation(self):
-        """Registry should initialize empty."""
+        """Registry should initialize empty, including declarations."""
         registry = QPhysicalImplementationRegistry()
+        assert registry.declared_targets() == frozenset()
         assert registry.get_with_lowering() == frozenset()
+        assert registry.admission_disagreements() == {
+            "declared_without_lowering": [],
+            "lowering_without_declaration": [],
+        }
+
+    def test_custom_declarations_are_instance_scoped(self):
+        registry = QPhysicalImplementationRegistry(
+            lowerings={"a": "q_a"}, declared_targets=frozenset({"a"})
+        )
+        assert registry.declared_targets() == frozenset({"a"})
+        assert registry.admission_disagreements() == {
+            "declared_without_lowering": [],
+            "lowering_without_declaration": [],
+        }
+
+    def test_disagreement_and_missing_evidence_are_fail_closed(self):
+        registry = QPhysicalImplementationRegistry(
+            lowerings={"rogue": "q_rogue"}, declared_targets=frozenset({"declared"})
+        )
+        missing = registry.get_missing_evidence()
+        assert set(missing["rogue"]) == {
+            "compile", "runtime", "parity", "parameter_domain",
+            "implementation_hash", "q_version_range", "pykx_version_range",
+        }
+        assert registry.get_production_ready() == frozenset()
+        assert registry.is_production_certified("rogue") is False
+        assert registry.gate_all_lowerings_have_evidence()[0] is False
 
     def test_register_implementation(self):
         """Should register implementation."""
@@ -248,6 +282,9 @@ class TestQPhysicalImplementationRegistry:
             runtime_evidence="test_runtime_add_001",
             parity_evidence="test_parity_add_001",
             parameter_domain_id="param_domain_add",
+            implementation_hash="sha256:add",
+            q_version_range=">=4,<5",
+            pykx_version_range=">=2,<3",
         )
 
         registry.register(impl)
@@ -289,6 +326,9 @@ class TestQPhysicalImplementationRegistry:
             runtime_evidence="r3",
             parity_evidence="par3",
             parameter_domain_id="p3",
+            implementation_hash="sha256:op3",
+            q_version_range=">=4,<5",
+            pykx_version_range=">=2,<3",
         )
         assert impl3.production_ready is True
 
@@ -309,7 +349,10 @@ class TestQPhysicalImplementationRegistry:
 
         missing = registry.get_missing_evidence()
         assert "partial_op" in missing
-        assert set(missing["partial_op"]) == {"runtime", "parity", "parameter_domain"}
+        assert set(missing["partial_op"]) == {
+            "runtime", "parity", "parameter_domain",
+            "implementation_hash", "q_version_range", "pykx_version_range",
+        }
 
     def test_gate_all_lowerings_have_evidence(self):
         """Gate should fail if any lowering lacks evidence."""

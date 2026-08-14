@@ -1,6 +1,7 @@
 """Tests for SearchBudget and BudgetTracker."""
 
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from factor_optimizer.contracts.search_budget import SearchBudget, BudgetTracker
 
 
@@ -30,8 +31,12 @@ def test_search_budget_validation():
     with pytest.raises(ValueError, match="max_evaluations must be >= 1"):
         SearchBudget(max_evaluations=0)
 
-    with pytest.raises(ValueError, match="max_cost_units must be > 0"):
+    with pytest.raises(ValueError, match="max_cost_units must be finite and > 0"):
         SearchBudget(max_cost_units=0.0)
+
+    for invalid_cost in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="max_cost_units must be finite and > 0"):
+            SearchBudget(max_cost_units=invalid_cost)
 
 
 def test_budget_tracker_initialization():
@@ -144,6 +149,49 @@ def test_budget_tracker_llm_calls():
     tracker.record_llm_call()
     assert not tracker.can_call_llm()
     assert tracker.llm_calls_used == 3
+
+
+def test_budget_tracker_atomic_reservation_and_reconciliation():
+    budget = SearchBudget(max_evaluations=10, max_cost_units=10.0)
+    tracker = BudgetTracker(budget)
+
+    assert tracker.reserve_evaluation(6.0)
+    assert not tracker.reserve_evaluation(5.0)
+    tracker.commit_evaluation(6.0, 4.0)
+    assert tracker.cost_used == 4.0
+    assert tracker.cost_reserved == 0.0
+    assert tracker.remaining_cost() == 6.0
+
+    assert tracker.reserve_evaluation(6.0)  # Exact boundary is allowed.
+    tracker.release_evaluation(6.0)
+    assert tracker.evaluations_used == 1
+    assert tracker.remaining_cost() == 6.0
+
+
+def test_budget_tracker_concurrent_reservations_are_atomic():
+    tracker = BudgetTracker(SearchBudget(max_evaluations=10, max_cost_units=10.0))
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        accepted = list(executor.map(lambda _: tracker.reserve_evaluation(6.0), range(4)))
+
+    assert accepted.count(True) == 1
+    assert tracker.cost_reserved == 6.0
+    assert tracker.evaluations_reserved == 1
+
+
+def test_budget_tracker_release_rejects_invalid_cost_without_mutation():
+    tracker = BudgetTracker(SearchBudget(max_evaluations=10, max_cost_units=10.0))
+    assert tracker.reserve_evaluation(5.0)
+
+    for invalid_cost in (-1.0, float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="reserved evaluation cost must be finite and >= 0"):
+            tracker.release_evaluation(invalid_cost)
+        assert tracker.cost_reserved == 5.0
+        assert tracker.evaluations_reserved == 1
+
+    tracker.release_evaluation(5.0)
+    assert tracker.cost_reserved == 0.0
+    assert tracker.evaluations_reserved == 0
 
 
 def test_budget_tracker_no_llm_limit():

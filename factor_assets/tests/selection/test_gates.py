@@ -16,6 +16,9 @@ from factor_assets.selection.gates import (
     MinimumCoverageGate,
     MinimumObservationsGate,
     ParetoDominanceGate,
+    MetricBinding,
+    MetricDirection,
+    MetricEvidence,
 )
 
 
@@ -265,6 +268,50 @@ def test_composite_gate_requires_name():
         CompositeGate(gate_name="", gates=[gate1])
 
 
+def test_composite_gate_rejects_wrong_metric_and_units():
+    gate = MaximumTurnoverGate(threshold=0.5)
+    composite = CompositeGate(
+        "admission", [gate], metric_bindings={
+            "maximum_turnover": MetricBinding(
+                "turnover", "fraction", MetricDirection.LOWER_IS_BETTER
+            )
+        }
+    )
+    result, sub = composite.evaluate_all(
+        "F001", "E001", {"other": MetricEvidence(0.1, "fraction", MetricDirection.LOWER_IS_BETTER)}
+    )
+    assert result.failed
+    assert "turnover" in sub[0].message
+
+
+def test_composite_gate_fails_closed_for_missing_evidence_and_unit_mismatch():
+    gate = MinimumCoverageGate(threshold=0.8)
+    composite = CompositeGate(
+        "admission", [gate], metric_bindings={
+            "minimum_coverage": MetricBinding(
+                "coverage", "fraction", MetricDirection.HIGHER_IS_BETTER
+            )
+        }
+    )
+    missing, _ = composite.evaluate_all("F001", "E001", {})
+    assert missing.failed
+    wrong_unit, sub = composite.evaluate_all(
+        "F001", "E001", {"coverage": MetricEvidence(0.9, "percent", MetricDirection.HIGHER_IS_BETTER)}
+    )
+    assert wrong_unit.failed
+    assert "unit mismatch" in sub[0].message
+
+
+def test_composite_gate_requires_typed_bindings():
+    gate = ThresholdGate("gate", 1.0)
+    composite = CompositeGate("admission", [gate], metric_bindings={"gate": "value"})
+    result, sub = composite.evaluate_all(
+        "F001", "E001", {"value": MetricEvidence(2.0, "count", MetricDirection.HIGHER_IS_BETTER)}
+    )
+    assert result.failed
+    assert "untyped metric binding" in sub[0].message
+
+
 def test_composite_gate_requires_gates():
     """CompositeGate must have at least one gate."""
     with pytest.raises(ValueError, match="gates list cannot be empty"):
@@ -280,11 +327,15 @@ def test_composite_gate_and_all_pass():
         gate_name="composite_gate",
         gates=[gate1, gate2],
         require_all=True,
+        metric_bindings={
+            "sharpe_gate": MetricBinding("sharpe", "ratio", MetricDirection.HIGHER_IS_BETTER),
+            "ic_gate": MetricBinding("ic", "correlation", MetricDirection.HIGHER_IS_BETTER),
+        },
     )
 
     metrics = {
-        "sharpe": 1.5,
-        "ic": 0.05,
+        "sharpe": MetricEvidence(1.5, "ratio", MetricDirection.HIGHER_IS_BETTER),
+        "ic": MetricEvidence(0.05, "correlation", MetricDirection.HIGHER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -308,11 +359,15 @@ def test_composite_gate_and_some_fail():
         gate_name="composite_gate",
         gates=[gate1, gate2],
         require_all=True,
+        metric_bindings={
+            "sharpe_gate": MetricBinding("sharpe", "ratio", MetricDirection.HIGHER_IS_BETTER),
+            "ic_gate": MetricBinding("ic", "correlation", MetricDirection.HIGHER_IS_BETTER),
+        },
     )
 
     metrics = {
-        "sharpe": 1.5,
-        "ic": 0.01,  # Below threshold
+        "sharpe": MetricEvidence(1.5, "ratio", MetricDirection.HIGHER_IS_BETTER),
+        "ic": MetricEvidence(0.01, "correlation", MetricDirection.HIGHER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -335,11 +390,15 @@ def test_composite_gate_or_any_pass():
         gate_name="composite_gate",
         gates=[gate1, gate2],
         require_all=False,  # OR logic
+        metric_bindings={
+            "sharpe_gate": MetricBinding("sharpe", "ratio", MetricDirection.HIGHER_IS_BETTER),
+            "ic_gate": MetricBinding("ic", "correlation", MetricDirection.HIGHER_IS_BETTER),
+        },
     )
 
     metrics = {
-        "sharpe": 0.5,  # Below threshold
-        "ic": 0.05,     # Above threshold
+        "sharpe": MetricEvidence(0.5, "ratio", MetricDirection.HIGHER_IS_BETTER),
+        "ic": MetricEvidence(0.05, "correlation", MetricDirection.HIGHER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -361,11 +420,15 @@ def test_composite_gate_or_all_fail():
         gate_name="composite_gate",
         gates=[gate1, gate2],
         require_all=False,  # OR logic
+        metric_bindings={
+            "sharpe_gate": MetricBinding("sharpe", "ratio", MetricDirection.HIGHER_IS_BETTER),
+            "ic_gate": MetricBinding("ic", "correlation", MetricDirection.HIGHER_IS_BETTER),
+        },
     )
 
     metrics = {
-        "sharpe": 0.5,
-        "ic": 0.01,
+        "sharpe": MetricEvidence(0.5, "ratio", MetricDirection.HIGHER_IS_BETTER),
+        "ic": MetricEvidence(0.01, "correlation", MetricDirection.HIGHER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -385,9 +448,12 @@ def test_composite_gate_no_matching_metrics():
     composite = CompositeGate(
         gate_name="composite_gate",
         gates=[gate1],
+        metric_bindings={
+            "sharpe_gate": MetricBinding("sharpe", "ratio", MetricDirection.HIGHER_IS_BETTER),
+        },
     )
 
-    metrics = {}  # No metrics provided
+    metrics = {}  # No evidence provided
 
     composite_eval, sub_evals = composite.evaluate_all(
         factor_id="F001",
@@ -395,9 +461,9 @@ def test_composite_gate_no_matching_metrics():
         metrics=metrics,
     )
 
-    assert composite_eval.result == GateResult.ERROR
-    assert len(sub_evals) == 0
-    assert "No sub-gates evaluated" in composite_eval.message
+    assert composite_eval.failed
+    assert len(sub_evals) == 1
+    assert "Missing evidence for bound metric" in sub_evals[0].message
 
 
 def test_gate_result_enum():
@@ -496,6 +562,29 @@ def test_minimum_ic_gate_negative_ic_pass():
     assert "raw=-0.0500" in evaluation.message
 
 
+def test_minimum_ic_gate_absolute_direction_binding_accepts_negative_ic():
+    """CompositeGate preserves absolute IC semantics for negative evidence."""
+    gate = MinimumICGate(threshold=0.02)
+    composite = CompositeGate(
+        gate_name="absolute_ic",
+        gates=[gate],
+        metric_bindings={
+            "minimum_ic": MetricBinding(
+                "ic", "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            )
+        },
+    )
+
+    result, sub_evaluations = composite.evaluate_all(
+        "F001",
+        "E001",
+        {"ic": MetricEvidence(-0.05, "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER)},
+    )
+
+    assert result.passed
+    assert sub_evaluations[0].passed
+
+
 def test_minimum_ic_gate_fail():
     """Test IC gate failing."""
     gate = MinimumICGate(threshold=0.02)
@@ -543,6 +632,35 @@ def test_minimum_ic_gate_negative_at_threshold():
         metric_value=-0.02,
     )
     assert evaluation.passed
+
+
+def test_minimum_ic_gate_requires_absolute_direction_binding():
+    """MinimumICGate admits signed IC evidence only under an absolute contract."""
+    gate = MinimumICGate(threshold=0.02)
+    composite = CompositeGate(
+        "ic_admission",
+        [gate],
+        metric_bindings={
+            "minimum_ic": MetricBinding(
+                "ic", "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            )
+        },
+    )
+
+    passed, _ = composite.evaluate_all(
+        "F001",
+        "EVD_001",
+        {"ic": MetricEvidence(-0.03, "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER)},
+    )
+    assert passed.passed
+
+    rejected, sub_evaluations = composite.evaluate_all(
+        "F001",
+        "EVD_001",
+        {"ic": MetricEvidence(-0.03, "correlation", MetricDirection.HIGHER_IS_BETTER)},
+    )
+    assert rejected.failed
+    assert "Metric direction mismatch" in sub_evaluations[0].message
 
 
 # ============================================================================
@@ -1026,13 +1144,30 @@ def test_composite_gate_with_specialized_gates_and():
         gate_name="production_ready",
         gates=[ic_gate, turnover_gate, coverage_gate],
         require_all=True,
+        metric_bindings={
+            "minimum_ic": MetricBinding(
+                "ic", "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            ),
+            "maximum_turnover": MetricBinding(
+                "turnover", "fraction", MetricDirection.LOWER_IS_BETTER
+            ),
+            "minimum_coverage": MetricBinding(
+                "coverage", "fraction", MetricDirection.HIGHER_IS_BETTER
+            ),
+        },
     )
 
     # All gates pass
     metrics = {
-        "ic": 0.05,
-        "turnover": 0.3,
-        "coverage": 0.9,
+        "ic": MetricEvidence(
+            0.05, "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+        ),
+        "turnover": MetricEvidence(
+            0.3, "fraction", MetricDirection.LOWER_IS_BETTER
+        ),
+        "coverage": MetricEvidence(
+            0.9, "fraction", MetricDirection.HIGHER_IS_BETTER
+        ),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -1055,12 +1190,24 @@ def test_composite_gate_with_specialized_gates_or():
         gate_name="acceptable_factor",
         gates=[ic_gate, turnover_gate],
         require_all=False,  # OR logic
+        metric_bindings={
+            "minimum_ic": MetricBinding(
+                "ic", "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            ),
+            "maximum_turnover": MetricBinding(
+                "turnover", "fraction", MetricDirection.LOWER_IS_BETTER
+            ),
+        },
     )
 
     # IC fails, turnover passes
     metrics = {
-        "ic": 0.01,
-        "turnover": 0.3,
+        "ic": MetricEvidence(
+            0.01, "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+        ),
+        "turnover": MetricEvidence(
+            0.3, "fraction", MetricDirection.LOWER_IS_BETTER
+        ),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(
@@ -1083,12 +1230,27 @@ def test_composite_gate_all_specialized_fail():
         gate_name="strict_requirements",
         gates=[ic_gate, coverage_gate, obs_gate],
         require_all=True,
+        metric_bindings={
+            "minimum_ic": MetricBinding(
+                "ic", "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            ),
+            "minimum_coverage": MetricBinding(
+                "coverage", "fraction", MetricDirection.HIGHER_IS_BETTER
+            ),
+            "minimum_observations": MetricBinding(
+                "n_obs", "count", MetricDirection.HIGHER_IS_BETTER
+            ),
+        },
     )
 
     metrics = {
-        "ic": 0.01,
-        "coverage": 0.5,
-        "n_obs": 100.0,
+        "ic": MetricEvidence(
+            0.01, "correlation", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+        ),
+        "coverage": MetricEvidence(
+            0.5, "fraction", MetricDirection.HIGHER_IS_BETTER
+        ),
+        "n_obs": MetricEvidence(100.0, "count", MetricDirection.HIGHER_IS_BETTER),
     }
 
     composite_eval, sub_evals = composite.evaluate_all(

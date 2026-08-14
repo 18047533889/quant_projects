@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from modeling.artifact import ModelArtifact
+from modeling.artifact import ModelArtifact, PredictionContext
 from modeling.learners.base import LearnerSpec, get_learner
 from modeling.model_catalog import (
     ModelArtifactCatalog,

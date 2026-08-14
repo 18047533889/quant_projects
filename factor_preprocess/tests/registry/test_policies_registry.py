@@ -4,6 +4,8 @@ from factor_preprocess.registry import (
     PolicyRegistry,
     PolicyPreset,
     PolicyLevel,
+    TransformRegistry,
+    TransformCategory,
     TransformStep,
     get_default_policy_registry,
 )
@@ -106,6 +108,53 @@ class TestPolicyPreset:
         valid, errors = policy.validate()
         assert valid is False
         assert any("must be causal_safe=True" in err for err in errors)
+
+    def test_production_cannot_trust_user_causal_safe_flag(self):
+        from factor_preprocess.registry import TransformCategory
+
+        registry = TransformRegistry()
+        registry.register(
+            "unsafe_full_series", lambda values: values,
+            TransformCategory.TEMPORAL, causal_safe=False,
+            admission="OFFLINE_ONLY",
+        )
+        policy = PolicyPreset(
+            name="claimed_safe", description="unsafe", level=PolicyLevel.PRODUCTION,
+            steps=[TransformStep("unsafe_full_series", {})], causal_safe=True,
+        )
+        valid, errors = policy.validate(transform_registry=registry)
+        assert valid is False
+        assert any("OFFLINE_ONLY" in error for error in errors)
+
+    def test_production_rejects_unregistered_transform(self):
+        policy = PolicyPreset(
+            name="unknown_step", description="unknown", level=PolicyLevel.PRODUCTION,
+            steps=[TransformStep("unregistered_transform", {})], causal_safe=True,
+        )
+        valid, errors = policy.validate(transform_registry=TransformRegistry())
+        assert valid is False
+        assert any("not registered" in error for error in errors)
+
+    def test_production_resolves_every_step_against_registry(self):
+        registry = TransformRegistry()
+        registry.register(
+            "safe_step", lambda values: values,
+            TransformCategory.TEMPORAL,
+        )
+        policy = PolicyPreset(
+            name="mixed_steps",
+            description="one registered and one unknown step",
+            level=PolicyLevel.PRODUCTION,
+            steps=[
+                TransformStep("safe_step", {}),
+                TransformStep("missing_step", {}),
+            ],
+            causal_safe=True,
+        )
+
+        valid, errors = policy.validate(transform_registry=registry)
+        assert valid is False
+        assert any("missing_step" in error and "not registered" in error for error in errors)
 
     def test_policy_validation_duplicate_steps(self):
         """Test validation fails on duplicate step names."""

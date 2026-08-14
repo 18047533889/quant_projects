@@ -5,8 +5,22 @@ Defines temporal boundaries, split specifications, and output formats.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Literal
 from enum import Enum
+
+
+def _deep_freeze(value: Any) -> Any:
+    """Freeze nested contract containers without copying scalar values."""
+    if isinstance(value, dict):
+        return MappingProxyType({key: _deep_freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_deep_freeze(item) for item in value)
+    return value
 
 from modeling.errors import FitWindowError, SplitError, ContractViolation
 
@@ -131,6 +145,11 @@ class OutOfFoldSpec:
 
     def __post_init__(self):
         """Validate OOF specification."""
+        if self.strategy not in {"rolling", "expanding", "anchored"}:
+            raise SplitError(
+                "strategy must be one of {'rolling', 'expanding', 'anchored'}"
+            )
+        object.__setattr__(self, "folds", tuple(self.folds))
         if not self.folds:
             raise SplitError("At least one fold required")
 
@@ -188,11 +207,17 @@ class PreprocessContract:
 
     def __post_init__(self):
         """Validate contract."""
+        object.__setattr__(self, "transforms", _deep_freeze(self.transforms))
         if self.mode == TransformMode.FITTED and self.fit_window is None:
             raise ContractViolation("FITTED mode requires fit_window")
 
         if self.mode == TransformMode.STATELESS and self.fit_window is not None:
             raise ContractViolation("STATELESS mode should not have fit_window")
+
+        modes = {spec.get("mode") for spec in self.transforms}
+        known_modes = modes & {"stateless", "fitted"}
+        if len(known_modes) > 1:
+            raise ContractViolation("Mixed stateless and fitted transforms are not supported")
 
 
 @dataclass

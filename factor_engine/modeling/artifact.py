@@ -26,12 +26,66 @@ from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec
 
 __all__ = [
     "ModelArtifactManifest",
+    "PredictionContext",
     "ModelArtifact",
+    "FrozenPreprocessing",
     "PREPROCESSING_IDENTITY_KINDS",
     "ARTIFACT_SCHEMA_VERSION",
 ]
 
 ARTIFACT_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class PredictionContext:
+    """Mandatory context for every frozen prediction."""
+
+    application_window: Any
+    dates: Any
+    asof: Any
+    feature_schema_hash: str
+
+    def __post_init__(self) -> None:
+        from modeling.contracts import ApplicationWindow
+
+        if not isinstance(self.application_window, ApplicationWindow):
+            raise TypeError("PredictionContext.application_window must be ApplicationWindow")
+        dates = np.asarray(self.dates)
+        if dates.ndim != 1:
+            raise ValueError("PredictionContext.dates must be one-dimensional")
+        if self.asof is None:
+            raise ValueError("PredictionContext.asof is required")
+        if not isinstance(self.feature_schema_hash, str) or not self.feature_schema_hash:
+            raise ValueError("PredictionContext.feature_schema_hash is required")
+        normalized_dates = self.application_window.normalize_dates(dates)
+        normalized_asof = self.application_window.normalize_boundary(self.asof, "asof")
+        object.__setattr__(self, "dates", normalized_dates)
+        object.__setattr__(self, "asof", normalized_asof)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "application_window": self.application_window.to_dict(),
+            "dates": [value.isoformat() for value in self.dates],
+            "asof": self.asof.isoformat(),
+            "feature_schema_hash": self.feature_schema_hash,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PredictionContext":
+        from modeling.contracts import ApplicationWindow
+
+        if not isinstance(data, Mapping):
+            raise TypeError("PredictionContext payload must be a mapping")
+        required = {"application_window", "dates", "asof", "feature_schema_hash"}
+        missing = required.difference(data)
+        if missing:
+            raise ValueError(f"PredictionContext payload missing fields: {sorted(missing)}")
+        return cls(
+            application_window=ApplicationWindow.from_dict(data["application_window"]),
+            dates=data["dates"],
+            asof=data["asof"],
+            feature_schema_hash=data["feature_schema_hash"],
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -238,29 +292,57 @@ class FrozenPreprocessing:
             _canonical_json(self._steps).encode("utf-8")
         ).hexdigest()
 
-    def transform(self, X: np.ndarray, *, application_window: Any = None) -> np.ndarray:
-        """Apply frozen preprocessing transform (MODEL-P0-005).
+    def transform(
+        self,
+        X: np.ndarray,
+        *,
+        application_window: Any = None,
+        dates: Any = None,
+    ) -> np.ndarray:
+        """Apply frozen preprocessing, validating any public OOS application.
 
-        For public OOS usage, ``application_window`` should be provided to ensure
-        the transform is only applied to data after training cutoff. Internal
-        fit_transform (during training) may pass None.
-
-        Args:
-            X: Input features (n_samples, n_features).
-            application_window: Optional ApplicationWindow to validate OOS safety.
-                If provided, this enforces temporal boundaries on when the transform
-                can be applied (must be after training cutoff).
-
-        Returns:
-            Transformed features.
+        Training code may omit both context arguments. Once an application
+        window is supplied, dates are mandatory and are validated before any
+        transform is applied; this prevents callers from passing a ceremonial
+        window while transforming rows outside it.
         """
-        # MODEL-P0-005: Optional application window validation
-        # (not enforced in base implementation for backward compatibility,
-        # but ModelArtifact.predict_oos enforces it at the public API level)
         if application_window is not None:
-            # If dates are embedded in X or passed separately, validate them
-            # For now, this is a placeholder for future enforcement
-            pass
+            from modeling.contracts import ApplicationWindow
+
+            if not isinstance(application_window, ApplicationWindow):
+                raise TypeError(
+                    "application_window must be ApplicationWindow, "
+                    f"got {type(application_window)}"
+                )
+            if dates is None:
+                raise ValueError("application_window validation requires dates")
+            dates_array = np.asarray(dates)
+            if dates_array.ndim != 1:
+                raise ValueError("dates must be a one-dimensional sequence")
+            if len(dates_array) != len(X):
+                raise ValueError(
+                    f"dates length {len(dates_array)} does not match X rows {len(X)}"
+                )
+            if not np.issubdtype(dates_array.dtype, np.datetime64):
+                dates_array = pd.to_datetime(dates_array).to_numpy()
+            validation_window = application_window
+            if np.issubdtype(dates_array.dtype, np.datetime64):
+                from modeling.contracts import ApplicationWindow
+
+                validation_window = ApplicationWindow(
+                    start=pd.Timestamp(application_window.start),
+                    end=(
+                        pd.Timestamp(application_window.end)
+                        if application_window.end is not None
+                        else None
+                    ),
+                    strict=application_window.strict,
+                )
+            valid, violations = validation_window.validate_dates(dates_array)
+            if not valid:
+                raise ValueError(
+                    f"transform violates application window: {'; '.join(violations)}"
+                )
 
         out = X
         for step in self._steps:
@@ -424,60 +506,63 @@ class ModelArtifact:
 
 
     # -- scoring (§22: prediction must never fit) -----------------------------
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """Frozen scoring path.  Guaranteed NOT to call learner.fit (the
-        predictor layer additionally asserts this via instrumentation)."""
-        Xt = self.preprocessing.transform(np.asarray(X, dtype=np.float64))
-        return self.learner.predict(self.frozen, Xt)
+    def predict(
+        self,
+        X: np.ndarray,
+        *,
+        context: PredictionContext,
+    ) -> np.ndarray:
+        """Score the frozen model with mandatory production context."""
+        if not isinstance(context, PredictionContext):
+            raise TypeError(f"context must be PredictionContext, got {type(context)}")
+        return self.predict_oos(X, context=context)
 
     def predict_oos(
         self,
         X: np.ndarray,
         *,
-        application_window: Any,
-        dates: Any = None,
+        context: PredictionContext,
     ) -> np.ndarray:
-        """Out-of-sample prediction with application window enforcement (MODEL-P0-005).
-
-        Public OOS API that requires explicit ApplicationWindow to prevent temporal
-        leakage. The window ensures the transform is only applied to data after
-        the training cutoff.
-
-        Args:
-            X: Input features (n_samples, n_features).
-            application_window: Required ApplicationWindow defining legal OOS dates.
-            dates: Optional array of dates corresponding to X rows for validation.
-
-        Returns:
-            Predictions.
-
-        Raises:
-            ValueError: If application_window is None or dates violate the window.
-        """
-        from modeling.contracts import ApplicationWindow
-
-        if application_window is None:
+        """Production OOS prediction with temporal and schema enforcement."""
+        if not isinstance(context, PredictionContext):
+            raise TypeError("predict_oos requires PredictionContext")
+        application_window = context.application_window
+        dates = context.dates
+        asof = context.asof
+        feature_schema_hash = context.feature_schema_hash
+        expected_schema = self.manifest.feature_schema_hash
+        if feature_schema_hash != expected_schema:
             raise ValueError(
-                "predict_oos requires application_window; use predict() for in-sample only"
+                f"feature schema mismatch: expected {expected_schema!r}, "
+                f"got {feature_schema_hash!r}"
             )
+        if not self.is_legal_asof(asof):
+            raise ValueError("artifact is not available at prediction asof")
 
-        if not isinstance(application_window, ApplicationWindow):
-            raise TypeError(
-                f"application_window must be ApplicationWindow, got {type(application_window)}"
+        cutoff = self.manifest.activation_at or self.manifest.available_at
+        if cutoff and _cmp_less(application_window.start, cutoff):
+            raise ValueError(
+                f"application window starts before artifact activation: "
+                f"{application_window.start!r} < {cutoff!r}"
             )
+        if application_window.end is not None and _cmp_less(asof, application_window.end):
+            raise ValueError("application window contains dates after prediction asof")
 
-        # Validate dates if provided
-        if dates is not None:
-            valid, violations = application_window.validate_dates(dates)
-            if not valid:
-                raise ValueError(
-                    f"OOS prediction violates application window: {'; '.join(violations)}"
-                )
+        X_array = np.asarray(X, dtype=np.float64)
+        dates_array = np.asarray(dates)
+        if dates_array.ndim != 1:
+            raise ValueError("dates must be a one-dimensional sequence")
+        if len(dates_array) != len(X_array):
+            raise ValueError(
+                f"dates length {len(dates_array)} does not match X rows {len(X_array)}"
+            )
+        if any(_cmp_less(asof, date) for date in dates_array):
+            raise ValueError("prediction dates cannot be after prediction asof")
 
-        # Apply transform with window context
         Xt = self.preprocessing.transform(
-            np.asarray(X, dtype=np.float64),
+            X_array,
             application_window=application_window,
+            dates=dates_array,
         )
         return self.learner.predict(self.frozen, Xt)
 
@@ -588,6 +673,6 @@ def _cmp_less(a: Any, b: Any) -> bool:
         return bool(a < b)
     except TypeError:
         try:
-            return bool(pd.Timestamp(a) < pd.Timestamp(b))
+            return bool(pd.Timestamp(str(a)) < pd.Timestamp(str(b)))
         except Exception:
             raise TypeError(f"cannot compare asof values {a!r} < {b!r}")

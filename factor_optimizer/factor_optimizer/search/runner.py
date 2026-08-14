@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from math import isfinite
 from typing import Any, Callable, Dict, List, Optional
 
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
@@ -10,21 +11,14 @@ from factor_optimizer.contracts.trial import Trial, TrialStatus
 
 @dataclass
 class SearchConfig:
-    """
-    Configuration for search execution.
+    """Configuration for search execution."""
 
-    Attributes:
-        budget: Budget limits for the search
-        plateau_window: Number of evaluations to consider for plateau detection
-        plateau_threshold: Minimum improvement to avoid plateau (relative)
-        enable_multifidelity: Whether to use multi-fidelity evaluation
-        max_concurrency: Maximum parallel evaluations
-    """
     budget: SearchBudget
     plateau_window: int = 20
     plateau_threshold: float = 0.001
     enable_multifidelity: bool = True
     max_concurrency: int = 4
+    evaluation_cost_units: Optional[float] = None
 
     def __post_init__(self):
         if self.plateau_window < 1:
@@ -33,24 +27,16 @@ class SearchConfig:
             raise ValueError("plateau_threshold must be >= 0")
         if self.max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
+        if self.evaluation_cost_units is not None and (
+            not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
+        ):
+            raise ValueError("evaluation_cost_units must be finite and >= 0")
 
 
 @dataclass
 class SearchSession:
-    """
-    Runtime state for an active search session.
+    """Runtime state for an active search session."""
 
-    Attributes:
-        session_id: Unique identifier for this session
-        config: Search configuration
-        budget_tracker: Budget consumption tracker
-        trials: All trials generated in this session
-        best_score: Best score seen so far
-        best_trial_id: Trial ID of the best candidate
-        started_at: Session start timestamp
-        finished_at: Session completion timestamp
-        stop_reason: Reason for search termination
-    """
     session_id: str
     config: SearchConfig
     budget_tracker: BudgetTracker
@@ -93,15 +79,7 @@ class SearchSession:
 
 
 class SearchRunner:
-    """
-    Orchestrates mutation search with budget and stopping criteria.
-
-    The runner coordinates:
-    - Budget tracking (trials, evaluations, cost)
-    - Plateau detection
-    - Multi-fidelity evaluation tiers
-    - Pareto frontier tracking
-    """
+    """Orchestrates mutation search with budget and stopping criteria."""
 
     def __init__(
         self,
@@ -110,51 +88,28 @@ class SearchRunner:
         evaluation_fn: Callable[[Trial, int], Dict[str, Any]],
         plateau_detector: Optional[Callable[[List[float]], bool]] = None,
     ):
-        """
-        Initialize search runner.
-
-        Args:
-            config: Search configuration
-            proposal_fn: Function that generates new trial proposals
-            evaluation_fn: Function that evaluates a trial at given fidelity
-            plateau_detector: Optional custom plateau detection function
-        """
         self.config = config
         self.proposal_fn = proposal_fn
         self.evaluation_fn = evaluation_fn
         self.plateau_detector = plateau_detector
 
     def run(self, session_id: str) -> SearchSession:
-        """
-        Execute search until budget exhausted or plateau reached.
-
-        Args:
-            session_id: Unique identifier for this search session
-
-        Returns:
-            Completed SearchSession with all trials
-        """
+        """Execute search until budget exhausted or plateau reached."""
         budget_tracker = BudgetTracker(budget=self.config.budget)
         session = SearchSession(
             session_id=session_id,
             config=self.config,
             budget_tracker=budget_tracker,
         )
-
         recent_scores: List[float] = []
 
         while not session.is_finished():
-            # Check budget
             if budget_tracker.is_exhausted():
                 session.finish(reason="budget_exhausted")
                 break
-
-            # Check plateau
             if self._check_plateau(recent_scores):
                 session.finish(reason="plateau_detected")
                 break
-
-            # Generate proposal
             if not budget_tracker.can_propose_trial():
                 session.finish(reason="max_trials_reached")
                 break
@@ -163,49 +118,49 @@ class SearchRunner:
             budget_tracker.record_trial()
             session.add_trial(trial)
 
-            # Validate
             trial.update_status(TrialStatus.VALIDATING)
             legality = self._validate_trial(trial)
             if not legality["is_legal"]:
                 trial.update_status(TrialStatus.ILLEGAL, legality_check=legality)
                 continue
-
             trial.update_status(TrialStatus.LEGAL, legality_check=legality)
 
-            # Evaluate
-            if not budget_tracker.can_evaluate():
-                session.finish(reason="max_evaluations_reached")
+            reserved_cost = self.config.evaluation_cost_units
+            if reserved_cost is None:
+                reserved_cost = budget_tracker.remaining_cost()
+            if not budget_tracker.reserve_evaluation(reserved_cost):
+                trial.update_status(TrialStatus.FAILED, failure_reason="evaluation budget unavailable")
+                session.finish(reason="evaluation_budget_unavailable")
                 break
 
             trial.update_status(TrialStatus.EVALUATING)
-
+            fidelity = 0 if self.config.enable_multifidelity else 4
             try:
-                # Use lowest fidelity tier if multifidelity enabled
-                fidelity = 0 if self.config.enable_multifidelity else 4
                 result = self.evaluation_fn(trial, fidelity)
+                actual_cost = result.get("cost")
+                if actual_cost is None:
+                    raise ValueError("evaluation result cost is unknown")
+                budget_tracker.commit_evaluation(reserved_cost, float(actual_cost))
+            except Exception as exc:
+                if budget_tracker.evaluations_reserved:
+                    budget_tracker.release_evaluation(reserved_cost)
+                trial.update_status(TrialStatus.FAILED, failure_reason=str(exc))
+                continue
 
-                trial.update_status(
-                    TrialStatus.EVALUATED,
-                    evaluation_ref=result.get("evaluation_id"),
-                    metadata={"score": result.get("score"), "fidelity": fidelity},
-                )
-
-                score = result.get("score")
-                if score is not None:
-                    recent_scores.append(score)
-                    if len(recent_scores) > self.config.plateau_window:
-                        recent_scores.pop(0)
-
-                    session.update_best(trial.trial_id, score)
-
-                budget_tracker.record_evaluation(cost=result.get("cost", 1.0))
-
-            except Exception as e:
-                trial.update_status(TrialStatus.FAILED, failure_reason=str(e))
+            trial.update_status(
+                TrialStatus.EVALUATED,
+                evaluation_ref=result.get("evaluation_id"),
+                metadata={"score": result.get("score"), "fidelity": fidelity},
+            )
+            score = result.get("score")
+            if score is not None:
+                recent_scores.append(score)
+                if len(recent_scores) > self.config.plateau_window:
+                    recent_scores.pop(0)
+                session.update_best(trial.trial_id, score)
 
         if not session.is_finished():
             session.finish(reason="manual_stop")
-
         return session
 
     def _validate_trial(self, trial: Trial) -> Dict[str, Any]:
@@ -219,19 +174,14 @@ class SearchRunner:
         """Check if search has plateaued."""
         if len(recent_scores) < self.config.plateau_window:
             return False
-
         if self.plateau_detector is not None:
             return self.plateau_detector(recent_scores)
-
-        # Default: check if improvement over window is below threshold
         if not recent_scores:
             return False
 
         max_score = max(recent_scores)
         min_score = min(recent_scores)
-
         if max_score == 0:
             return min_score == 0
-
         relative_improvement = (max_score - min_score) / abs(max_score)
         return relative_improvement < self.config.plateau_threshold

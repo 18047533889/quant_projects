@@ -11,7 +11,7 @@ from quant_evaluator.contracts.errors import InvalidContractError
 
 from quant_evaluator.runtime.evaluator import Evaluator, EvaluationResult
 from quant_evaluator.runtime.budgets import ComputationBudget
-from quant_evaluator.planner.dependency_plan import MetricKind
+from quant_evaluator.planner.dependency_plan import MetricKind, resolve_metric_dependencies
 
 
 class TestEvaluationResult:
@@ -181,11 +181,11 @@ class TestEvaluator:
         assert result1.cache_misses == 1
         assert result1.cache_hits == 0
 
-        # Second evaluation (should use cache)
+        # Mutable closure state is intentionally uncacheable.
         result2 = evaluator.evaluate(batch, labels, metric_specs, use_chunking=False)
-        assert call_count[0] == 1  # Not called again
-        assert result2.cache_hits == 1
-        assert result2.cache_misses == 0
+        assert call_count[0] == 2
+        assert result2.cache_hits == 0
+        assert result2.cache_misses == 1
 
     def test_evaluate_cache_disabled(self):
         evaluator = Evaluator(enable_cache=False)
@@ -389,3 +389,88 @@ class TestEvaluator:
         # Despite specs order, execution must be A -> B -> C
         assert execution_order == ["A", "B", "C"]
         assert result.get_metric("C") == 3
+
+    def test_cache_binds_immutable_closure_state(self):
+        evaluator = Evaluator(enable_cache=True)
+        multiplier = 2
+        calls = [0]
+
+        def metric(**kwargs):
+            calls[0] += 1
+            return multiplier
+
+        evaluator.register_metric("metric", metric)
+        batch = self.create_test_batch(T=4, N=2)
+        labels = self.create_test_labels(T=4, N=2)
+        specs = [{"metric_id": "metric", "metric_kind": "custom"}]
+
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 2
+        multiplier = 3
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 3
+        assert calls[0] == 2
+
+    def test_cache_bypasses_mutable_closure_and_callable_instance(self):
+        batch = self.create_test_batch(T=4, N=2)
+        labels = self.create_test_labels(T=4, N=2)
+        specs = [{"metric_id": "metric", "metric_kind": "custom"}]
+
+        config = {"value": 2}
+        evaluator = Evaluator(enable_cache=True)
+        evaluator.register_metric("metric", lambda **kwargs: config["value"])
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 2
+        config["value"] = 3
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 3
+
+        class CallableMetric:
+            def __init__(self):
+                self.value = 4
+
+            def __call__(self, **kwargs):
+                return self.value
+
+        callable_metric = CallableMetric()
+        evaluator = Evaluator(enable_cache=True)
+        evaluator.register_metric("metric", callable_metric)
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 4
+        callable_metric.value = 5
+        assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 5
+
+    def test_cache_rejects_nested_mutable_closure_state(self):
+        batch = self.create_test_batch(T=4, N=2)
+        labels = self.create_test_labels(T=4, N=2)
+        specs = [{"metric_id": "metric", "metric_kind": "custom"}]
+
+        cases = [
+            ([2], lambda value: value.__setitem__(0, 3), lambda value: value[0]),
+            ({"value": 2}, lambda value: value.__setitem__("value", 3), lambda value: value["value"]),
+            ({2}, lambda value: (value.clear(), value.add(3)), lambda value: next(iter(value))),
+            (np.array([2]), lambda value: value.__setitem__(0, 3), lambda value: int(value[0])),
+        ]
+        for mutable, mutate, extract in cases:
+            holder = (mutable,)
+
+            def metric(**kwargs):
+                return extract(holder[0])
+
+            evaluator = Evaluator(enable_cache=True)
+            evaluator.register_metric("metric", metric)
+            assert evaluator.evaluate(batch, labels, specs, use_chunking=False).get_metric("metric") == 2
+            mutate(mutable)
+            second = evaluator.evaluate(batch, labels, specs, use_chunking=False)
+            assert second.get_metric("metric") == 3
+            assert second.cache_hits == 0
+
+    def test_chunk_mean_requires_weighted_reduction_protocol(self):
+        evaluator = Evaluator()
+        graph = resolve_metric_dependencies([{
+            "metric_id": "mean_metric",
+            "metric_kind": "custom",
+            "metadata": {"partitionability": "PARTITIONABLE", "aggregation": "mean"},
+        }])
+
+        with pytest.raises(InvalidContractError, match="weighted reduction"):
+            evaluator._aggregate_chunk_results(
+                [{"mean_metric": 1.0}, {"mean_metric": 9.0}],
+                ["mean_metric"],
+                graph,
+            )

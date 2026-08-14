@@ -12,6 +12,16 @@ import pandas as pd
 from typing import Optional
 
 
+def _groupwise_lagged_stat(values, window, min_periods, asset_col, value_col, operation):
+    """Apply a lagged window operation independently for each asset."""
+    result = pd.Series(np.nan, index=values.index, dtype=float)
+    for positions in values.groupby(asset_col, sort=False).indices.values():
+        positions = list(positions)
+        lagged = values.iloc[positions][value_col].shift(1)
+        result.iloc[positions] = operation(lagged, window, min_periods)
+    return result
+
+
 def rolling_mean(
     values: pd.DataFrame,
     window: int,
@@ -60,11 +70,9 @@ def rolling_mean(
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
     # Shift to exclude current observation, then rolling
-    result = (
-        values.groupby(asset_col, sort=False)[value_col]
-        .shift(1)  # Lag by 1 to exclude current
-        .rolling(window=window, min_periods=min_periods)
-        .mean()
+    result = _groupwise_lagged_stat(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
     )
 
     return result
@@ -117,11 +125,9 @@ def rolling_std(
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
     # Shift to exclude current observation, then rolling
-    result = (
-        values.groupby(asset_col, sort=False)[value_col]
-        .shift(1)  # Lag by 1 to exclude current
-        .rolling(window=window, min_periods=min_periods)
-        .std(ddof=ddof)
+    result = _groupwise_lagged_stat(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
     )
 
     return result
@@ -182,8 +188,14 @@ def rolling_zscore(
 
     # Compute lagged statistics (excluding current)
     lagged = grouped.shift(1)
-    rolling_mean_val = lagged.rolling(window=window, min_periods=min_periods).mean()
-    rolling_std_val = lagged.rolling(window=window, min_periods=min_periods).std(ddof=ddof)
+    rolling_mean_val = _groupwise_lagged_stat(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
+    )
+    rolling_std_val = _groupwise_lagged_stat(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
+    )
 
     # Z-score: (current - mean) / std
     current = values[value_col]
@@ -236,11 +248,15 @@ def ewma(
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
     # Shift to exclude current observation, then EWMA
-    result = (
-        values.groupby(asset_col, sort=False)[value_col]
-        .shift(1)  # Lag by 1 to exclude current
-        .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
-        .mean()
-    )
+    result = pd.Series(np.nan, index=values.index, dtype=float)
+    for positions in values.groupby(asset_col, sort=False).indices.values():
+        positions = list(positions)
+        result.iloc[positions] = (
+            values.iloc[positions][value_col]
+            .shift(1)
+            .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
+            .mean()
+            .to_numpy()
+        )
 
     return result

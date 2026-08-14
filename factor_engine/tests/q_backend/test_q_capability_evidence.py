@@ -109,6 +109,10 @@ class TestQCapabilityEvidence:
             "native_without_lowering_count",
             "production_safe_count",
             "native_without_lowering",
+            "declared_without_lowering",
+            "lowering_without_declaration",
+            "missing_evidence",
+            "research_ready",
             "production_ready",
         }
         assert set(report.keys()) == required_keys
@@ -137,7 +141,7 @@ class TestQCapabilityEvidence:
         report = generate_capability_report()
         missing_count = report["native_without_lowering_count"]
 
-        if missing_count == 0:
+        if missing_count == 0 and report["production_safe_count"] == report["lowering_exists_count"]:
             assert report["production_ready"] is True
         else:
             assert report["production_ready"] is False
@@ -227,6 +231,10 @@ class TestQCapabilityEvidenceRecord:
             compile_pass=True,
             runtime_pass=True,
             parity_pass=True,
+            parameter_domain_pass=True,
+            implementation_hash_pass=True,
+            q_version_range_pass=True,
+            pykx_version_range_pass=True,
         )
         assert ev2.production_safe is True
 

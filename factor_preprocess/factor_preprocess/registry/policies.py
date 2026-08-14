@@ -44,7 +44,7 @@ class PolicyPreset:
     requires_returns: bool = False
     tags: List[str] = field(default_factory=list)
 
-    def validate(self) -> Tuple[bool, List[str]]:
+    def validate(self, transform_registry=None) -> Tuple[bool, List[str]]:
         """
         Validate policy configuration.
 
@@ -66,6 +66,14 @@ class PolicyPreset:
         if self.level == PolicyLevel.PRODUCTION:
             if not self.causal_safe:
                 errors.append("Production policies must be causal_safe=True")
+            if transform_registry is None:
+                from factor_preprocess.registry.transforms import get_default_registry
+                transform_registry = get_default_registry()
+            for step in self.steps:
+                try:
+                    transform_registry.validate_production(step.name)
+                except ValueError as exc:
+                    errors.append(str(exc))
 
         # Check for duplicate step names
         step_names = [step.name for step in self.steps]

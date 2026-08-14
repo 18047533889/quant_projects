@@ -94,7 +94,10 @@ print('✓ Imports OK')
         print("\n[5/5] Smoke test...")
         smoke_script = tmpdir / "test_smoke.py"
         smoke_script.write_text("""
+import numpy as np
+
 from modeling.contracts import FitWindow
+from modeling.preprocess import rank_transform
 from datetime import datetime
 
 window = FitWindow(
@@ -102,6 +105,15 @@ window = FitWindow(
     fit_end=datetime(2020, 12, 31),
 )
 print(f'✓ Created FitWindow: {window.fit_start} to {window.fit_end}')
+
+ranked = rank_transform(
+    np.array([[1.0, 2.0, 2.0, 4.0], [4.0, np.nan, 1.0, 2.0]]),
+    axis=1,
+    pct=True,
+)
+assert np.allclose(ranked[0], [0.0, 0.5, 0.5, 1.0])
+assert np.isnan(ranked[1, 1])
+print('✓ rank_transform path executed')
 """)
         code, stdout, stderr = run_command(f"{python_exe} {smoke_script}", check=False)
         if code != 0:

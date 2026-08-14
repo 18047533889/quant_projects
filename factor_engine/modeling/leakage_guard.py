@@ -24,10 +24,16 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
+from modeling.artifact import (
+    FrozenPreprocessing,
+    ModelArtifact,
+    ModelArtifactManifest,
+    PredictionContext,
+)
 from modeling.contracts import (
     BEFORE_SAME_DAY_VWAP,
     AFTER_CLOSE_TO_NEXT_VWAP,
+    ApplicationWindow,
     DecisionClock,
     LabelContract,
 )
