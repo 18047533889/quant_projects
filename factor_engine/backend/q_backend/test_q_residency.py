@@ -401,7 +401,9 @@ def test_stale_resident_handle_fails_before_q_execution(
         connection_id=id(mock_q_process) + 1,
     )
 
-    with pytest.raises(RuntimeError, match="Stale Q-resident handle"):
+    from backend.q_backend.q_errors import QExecutionError
+
+    with pytest.raises(QExecutionError, match="Stale Q-resident handle"):
         executor.execute_region(
             sample_region_plan,
             {"input_table": stale_handle},
@@ -432,6 +434,50 @@ def test_resident_metadata_failure_does_not_materialize(
     assert result.resident_handle is not None
     assert result.resident_handle.byte_size == 0
     mock_type_adapter.q_to_pandas.assert_not_called()
+
+
+def test_missing_input_raises_typed_error_before_connection(
+    mock_q_process, mock_type_adapter, sample_region_plan
+):
+    """Missing plan inputs fail closed without touching q."""
+    from backend.q_backend.q_errors import QDataUnavailableError
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    with pytest.raises(QDataUnavailableError, match="Missing input tables"):
+        executor.execute_region(sample_region_plan, {})
+
+    mock_q_process.assert_not_called()
+
+
+def test_unavailable_runtime_raises_typed_error(mock_type_adapter, sample_region_plan):
+    """Unavailable q is a typed production failure, never a fallback."""
+    from backend.q_backend.q_errors import QProcessUnavailableError
+
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.UNAVAILABLE,
+        error_message="not installed",
+    )
+    executor = QExecutor(process_manager=manager, type_adapter=mock_type_adapter)
+
+    with pytest.raises(QProcessUnavailableError, match="Fallback disabled"):
+        executor.execute_region(sample_region_plan, {"input_table": pd.DataFrame()})
+    manager.get_connection.assert_not_called()
+
+
+def test_runtime_failure_raises_typed_error(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    """q execution failures remain fail-closed and typed."""
+    from backend.q_backend.q_errors import QExecutionError
+
+    mock_q_process.side_effect = RuntimeError("q boom")
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    with pytest.raises(QExecutionError, match="q boom"):
+        executor.execute_region(
+            sample_region_plan,
+            {"input_table": sample_input_data},
+        )
 
 
 if __name__ == "__main__":
