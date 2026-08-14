@@ -365,7 +365,7 @@ class PhysicalRegionPlan:
             ],
         }
         raw = _json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def normalize_backend_name(backend: str) -> PhysicalBackend:
