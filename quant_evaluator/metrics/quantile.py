@@ -255,7 +255,7 @@ def assign_quantiles_batch(
 
             quantiles[t, mask, f] = q_bins
 
-    return quantiles.squeeze() if quantiles.shape[2] == 1 else quantiles
+    return quantiles[:, :, 0] if quantiles.shape[2] == 1 else quantiles
 
 
 

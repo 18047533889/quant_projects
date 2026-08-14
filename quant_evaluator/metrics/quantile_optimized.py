@@ -62,7 +62,7 @@ def assign_quantiles_vectorized_v2(
             q_bins = np.searchsorted(boundaries, v_valid, side='right')
             quantiles[t, valid, f] = q_bins
 
-    return quantiles.squeeze() if quantiles.shape[2] == 1 else quantiles
+    return quantiles[:, :, 0] if quantiles.shape[2] == 1 else quantiles
 
 
 def compute_quantile_returns_ultra_fast(
