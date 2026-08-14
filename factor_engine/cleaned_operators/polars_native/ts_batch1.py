@@ -337,21 +337,34 @@ class TSCorrPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, y, window, min_periods=2, **kwargs):
-        # Use rolling_corr with min_periods parameter
-        df = pl.DataFrame({"x": x, "y": y})
-        return (
-            df.lazy()
-            .select([
-                pl.rolling_corr(
-                    pl.col("x").fill_nan(None),
-                    pl.col("y").fill_nan(None),
-                    window_size=window,
-                    min_periods=min_periods,
-                    ddof=1
-                ).alias("result")
-            ])
-            .collect()["result"]
+        # Compute every moment from the same pairwise-complete trailing window.
+        df = pl.DataFrame({"x": x, "y": y}).with_columns(
+            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
+            .then(pl.col("x"))
+            .otherwise(None)
+            .alias("x_pair"),
+            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
+            .then(pl.col("y"))
+            .otherwise(None)
+            .alias("y_pair"),
         )
+        n = pl.col("x_pair").is_not_null().cast(pl.UInt64).rolling_sum(window, min_samples=1)
+        sx = pl.col("x_pair").rolling_sum(window, min_samples=1)
+        sy = pl.col("y_pair").rolling_sum(window, min_samples=1)
+        sxx = (pl.col("x_pair") * pl.col("x_pair")).rolling_sum(window, min_samples=1)
+        syy = (pl.col("y_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
+        sxy = (pl.col("x_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
+        covariance_numerator = sxy - (sx * sy / n)
+        x_variance_numerator = sxx - (sx * sx / n)
+        y_variance_numerator = syy - (sy * sy / n)
+        result = pl.when(
+            (n >= min_periods)
+            & (x_variance_numerator > 0)
+            & (y_variance_numerator > 0)
+        ).then(
+            covariance_numerator / (x_variance_numerator * y_variance_numerator).sqrt()
+        ).otherwise(None).alias("result")
+        return df.lazy().select(result).collect()["result"]
 
 
 @register_operator(name="ts_cov", canonical="ts_cov", backend="polars")
@@ -370,20 +383,29 @@ class TSCovPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, y, window, **kwargs):
-        df = pl.DataFrame({"x": x, "y": y})
-        return (
-            df.lazy()
-            .with_columns([
-                (pl.col("x") - pl.col("x").rolling_mean(window)).alias("x_dm"),
-                (pl.col("y") - pl.col("y").rolling_mean(window)).alias("y_dm")
-            ])
-            .select([
-                (pl.col("x_dm") * pl.col("y_dm"))
-                .rolling_mean(window)
-                .alias("result")
-            ])
-            .collect()["result"]
+        min_periods = kwargs.get("min_periods", 2)
+        ddof = kwargs.get("ddof", 1)
+        df = pl.DataFrame({"x": x, "y": y}).with_columns(
+            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
+            .then(pl.col("x"))
+            .otherwise(None)
+            .alias("x_pair"),
+            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
+            .then(pl.col("y"))
+            .otherwise(None)
+            .alias("y_pair"),
         )
+        n = pl.col("x_pair").is_not_null().cast(pl.UInt64).rolling_sum(window, min_samples=1)
+        sx = pl.col("x_pair").rolling_sum(window, min_samples=1)
+        sy = pl.col("y_pair").rolling_sum(window, min_samples=1)
+        sxy = (pl.col("x_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
+        denominator = n - ddof
+        result = pl.when(
+            (n >= min_periods) & (denominator > 0)
+        ).then(
+            (sxy - (sx * sy / n)) / denominator
+        ).otherwise(None).alias("result")
+        return df.lazy().select(result).collect()["result"]
 
 
 @register_operator(name="ts_corr_if", canonical="ts_corr_if", backend="polars")
