@@ -10,10 +10,22 @@ from factor_assets.novelty.provider import (
     EvidenceResult,
     MockEvidenceProvider,
 )
+from factor_assets.novelty.conditional import (
+    NoveltyResult,
+    ResultIdentity,
+    ResultIdentityCache,
+    ConditionalNoveltyProvider,
+    SimpleConditionalNoveltyAssessor,
+)
 
 __all__ = [
     "EvidenceProvider",
     "EvidenceQuery",
     "EvidenceResult",
     "MockEvidenceProvider",
+    "NoveltyResult",
+    "ResultIdentity",
+    "ResultIdentityCache",
+    "ConditionalNoveltyProvider",
+    "SimpleConditionalNoveltyAssessor",
 ]

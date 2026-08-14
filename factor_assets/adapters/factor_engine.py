@@ -157,8 +157,8 @@ class FEIdentityProvider:
         """
         Parse expression string through FE.
 
-        This is a placeholder — real implementation would use FE's parser.
-        For now, we assume expression is already an Expr node or parseable.
+        Note: FE's ensure_expr only handles simple literals, not full expressions.
+        For complex expressions, pass Expr nodes directly via FEIdentityProviderFromExpr.
 
         Args:
             expression: Expression string or Expr node
@@ -168,16 +168,24 @@ class FEIdentityProvider:
 
         Raises:
             ValueError: If expression cannot be parsed
+            NotImplementedError: If expression is a complex string (not supported)
         """
         if isinstance(expression, Expr):
             return expression
 
-        # If expression is a string, we need FE's parser
-        # For now, raise an error — real implementation would parse
-        raise NotImplementedError(
-            "String expression parsing requires FE parser integration. "
-            "Pass Expr node directly or implement FE parser adapter."
-        )
+        # ensure_expr can handle simple field names but not complex expressions
+        # For now, only support simple identifiers
+        if not expression or not expression.replace('_', '').isalnum():
+            raise NotImplementedError(
+                "String expression parsing requires FE parser integration. "
+                "Pass Expr node directly or use FEIdentityProviderFromExpr."
+            )
+
+        # Use FE's ensure_expr for simple field names only
+        try:
+            return ensure_expr(expression)
+        except Exception as e:
+            raise ValueError(f"Failed to parse expression '{expression}': {e}") from e
 
     def validate_expression(self, expression: str) -> bool:
         """

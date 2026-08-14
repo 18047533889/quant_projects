@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeling"
+version = "0.1.0"
+description = "Model input preparation layer - preprocessing interface for predictive modeling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+authors = [
+    {name = "Quant Team"},
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=3.0.0",
+]
+
+# Integration with factor_preprocess (optional adapter)
+preprocess = [
+    "factor_preprocess>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["modeling*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "leakage: Tests for future leakage prevention",
+    "contract: Contract validation tests",
+]

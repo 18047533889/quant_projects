@@ -257,9 +257,9 @@ class FamilyRepresentativeSelector:
 
         elif method == RepresentativeSelectionMethod.RANDOM:
             import random
-            if random_seed is not None:
-                random.seed(random_seed)
-            selected = tuple(random.sample(list(factor_ids), max_representatives))
+            # Use local Random instance to avoid polluting global RNG state
+            rng = random.Random(random_seed)
+            selected = tuple(rng.sample(list(factor_ids), max_representatives))
             return RepresentativeSelection(
                 selection_id=selection_id,
                 family=family,
@@ -289,9 +289,16 @@ class FamilyRepresentativeSelector:
         for fid in factor_ids:
             ic = self.ic_provider.get_ic(fid, universe_ref, lookback_periods)
             if ic is None:
-                warnings.append(f"No IC data for {fid}")
-                ic = 0.0
+                warnings.append(f"No IC data for {fid}, skipping")
+                # Do NOT fill with 0.0 - skip factors without evidence
+                continue
             ic_data.append((fid, abs(ic)))  # Use absolute IC
+
+        if not ic_data:
+            raise ValueError(
+                "No IC data available for any candidate factors. "
+                "Cannot select representatives without evidence."
+            )
 
         # Sort by descending absolute IC
         ic_data.sort(key=lambda x: x[1], reverse=True)
@@ -321,9 +328,16 @@ class FamilyRepresentativeSelector:
                 fid, other_ids, universe_ref
             )
             if avg_corr is None:
-                warnings.append(f"No correlation data for {fid}")
-                avg_corr = 1.0  # Pessimistic default
+                warnings.append(f"No correlation data for {fid}, skipping")
+                # Do NOT fill with pessimistic default - skip factors without evidence
+                continue
             corr_data.append((fid, avg_corr))
+
+        if not corr_data:
+            raise ValueError(
+                "No correlation data available for any candidate factors. "
+                "Cannot select representatives without evidence."
+            )
 
         # Sort by ascending average correlation
         corr_data.sort(key=lambda x: x[1])

@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 factor_engine = ["factor-engine>=0.3.0"]
-quant_evaluator = ["quant-evaluator>=0.1.0"]
+quant_evaluator = ["quant-evaluator>=0.0.1a1,<0.2"]
 dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]

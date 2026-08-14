@@ -250,16 +250,16 @@ def compute_quantile_returns(
     quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)
     quantile_counts = np.zeros((T, n_quantiles, F), dtype=np.int32)
 
-    # Vectorized quantile assignment for all factors at once
-    q_assignments = assign_quantiles_batch(values, n_quantiles=n_quantiles)  # (T, N, F)
+    # Process each factor independently
+    for f in range(F):
+        # Assign quantiles for this factor across all time periods
+        q_assignments_f = assign_quantiles_batch(values[:, :, f], n_quantiles=n_quantiles)  # (T, N)
 
-    # Vectorized aggregation per time-factor pair
-    for t in range(T):
-        label_t = labels[t, :]
-        valid_labels = np.isfinite(label_t)
-
-        for f in range(F):
-            q_t_f = q_assignments[t, :, f]
+        # Aggregate per time period
+        for t in range(T):
+            label_t = labels[t, :]
+            valid_labels = np.isfinite(label_t)
+            q_t_f = q_assignments_f[t, :]  # (N,)
 
             # Combined mask: valid quantile assignment AND valid label
             valid_mask = (q_t_f >= 0) & valid_labels

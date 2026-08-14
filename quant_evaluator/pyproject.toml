@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "quant_evaluator"
 version = "0.0.1a1"
 description = "Pure batch evaluator returning typed evidence bundles for factor evaluation"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Quant Platform", email = "noreply@example.com"}
 ]
@@ -21,6 +21,16 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=3.0",
 ]
+fast = ["numba>=0.57.0"]
+polars = ["polars>=0.19.0"]
+arrow = ["pyarrow>=12.0.0"]
+stats = ["statsmodels>=0.14.0"]
+full = [
+    "numba>=0.57.0",
+    "polars>=0.19.0",
+    "pyarrow>=12.0.0",
+    "statsmodels>=0.14.0",
+]
 
 [tool.setuptools]
 packages = [
@@ -31,6 +41,9 @@ packages = [
     "quant_evaluator.diagnosis",
     "quant_evaluator.kernels",
     "quant_evaluator.metrics",
+    "quant_evaluator.metrics.interactions",
+    "quant_evaluator.metrics.risk",
+    "quant_evaluator.metrics.stats",
     "quant_evaluator.planner",
     "quant_evaluator.registry",
     "quant_evaluator.runtime",
@@ -44,6 +57,9 @@ packages = [
 "quant_evaluator.diagnosis" = "diagnosis"
 "quant_evaluator.kernels" = "kernels"
 "quant_evaluator.metrics" = "metrics"
+"quant_evaluator.metrics.interactions" = "metrics/interactions"
+"quant_evaluator.metrics.risk" = "metrics/risk"
+"quant_evaluator.metrics.stats" = "metrics/stats"
 "quant_evaluator.planner" = "planner"
 "quant_evaluator.registry" = "registry"
 "quant_evaluator.runtime" = "runtime"
@@ -57,3 +73,6 @@ quant_evaluator = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

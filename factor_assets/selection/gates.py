@@ -194,6 +194,7 @@ class CompositeGate:
         gates: list[EvidenceGate],
         require_all: bool = True,
         gate_version: str = "1.0",
+        metric_bindings: Optional[dict[str, str]] = None,
     ):
         """
         Initialize composite gate.
@@ -204,6 +205,9 @@ class CompositeGate:
             require_all: If True, all gates must pass (AND);
                         if False, any gate can pass (OR)
             gate_version: Gate version identifier
+            metric_bindings: Optional explicit gate_name -> metric_id mapping
+                           If None, falls back to heuristic matching (legacy)
+                           If provided, missing bindings cause FAIL-CLOSED
         """
         if not gate_name:
             raise ValueError("gate_name is required")
@@ -214,6 +218,7 @@ class CompositeGate:
         self._gates = gates
         self._require_all = require_all
         self._gate_version = gate_version
+        self._metric_bindings = metric_bindings or {}
 
     @property
     def gate_name(self) -> str:

@@ -129,14 +129,49 @@ class ModularityClustering:
     Identifies dense subgroups (families) within correlation graph.
     """
 
-    def __init__(self, graph: SparseCorrelationGraph, resolution: float = 1.0):
+    def __init__(
+        self,
+        graph: SparseCorrelationGraph,
+        resolution: float = 1.0,
+        min_cluster_size: int = 1,
+        max_cluster_size: Optional[int] = None,
+        allow_toy_algorithm: bool = False,
+    ):
         """
         Args:
             graph: Correlation graph to cluster
             resolution: Resolution parameter (higher = more/smaller clusters)
+            min_cluster_size: Minimum cluster size (smaller clusters merged/rejected)
+            max_cluster_size: Maximum cluster size (larger clusters flagged with warning)
+            allow_toy_algorithm: Must be True to bypass production backend check.
+                                Set to True ONLY for testing/debugging.
+
+        Raises:
+            RuntimeError: If allow_toy_algorithm=False and no production backend available
         """
         self.graph = graph
         self.resolution = resolution
+        self.min_cluster_size = min_cluster_size
+        self.max_cluster_size = max_cluster_size
+
+        # Production safety: require explicit opt-in for toy algorithm
+        if not allow_toy_algorithm:
+            # Check for production backends
+            try:
+                import igraph
+                # If igraph available, could use Leiden - but not implemented yet
+                # For now, fail closed
+                raise RuntimeError(
+                    "ModularityClustering is a toy/reference implementation. "
+                    "Production clustering requires mature backend (e.g., Leiden via igraph). "
+                    "Set allow_toy_algorithm=True ONLY for testing/debugging."
+                )
+            except ImportError:
+                raise RuntimeError(
+                    "ModularityClustering is a toy/reference implementation. "
+                    "Production clustering requires mature backend (e.g., Leiden via igraph). "
+                    "Install python-igraph or set allow_toy_algorithm=True for testing only."
+                )
 
     def cluster(self, max_iterations: int = 100) -> ClusterResult:
         """
@@ -391,16 +426,19 @@ class HierarchicalClustering:
         self,
         graph: SparseCorrelationGraph,
         method: str = 'average',
-        metric: str = 'correlation'
+        metric: str = 'correlation',
+        max_factors: int = 500,
     ):
         """
         Args:
             graph: Correlation graph to cluster
             method: Linkage method ('single', 'complete', 'average', 'ward')
             metric: Distance metric ('correlation', 'euclidean')
+            max_factors: Maximum number of factors (safety limit for O(N²) memory)
 
         Raises:
             ImportError: If scipy is not available
+            ValueError: If graph.node_count > max_factors
         """
         if not SCIPY_AVAILABLE:
             raise ImportError(
@@ -408,9 +446,17 @@ class HierarchicalClustering:
                 "Install with: pip install scipy"
             )
 
+        if graph.node_count > max_factors:
+            raise ValueError(
+                f"Graph has {graph.node_count} factors, exceeds max_factors={max_factors}. "
+                f"HierarchicalClustering uses O(N²) dense distance matrix. "
+                f"For large graphs, use sparse methods or increase max_factors explicitly."
+            )
+
         self.graph = graph
         self.method = method
         self.metric = metric
+        self.max_factors = max_factors
 
     def build_dendrogram(self) -> Dendrogram:
         """

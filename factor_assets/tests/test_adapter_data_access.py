@@ -6,6 +6,7 @@ Tests DA integration protocols and error handling.
 
 import pytest
 from datetime import date
+from unittest.mock import patch
 
 from factor_assets.adapters import OptionalDependencyMissing
 
@@ -14,38 +15,61 @@ class TestDAFactorValueReader:
     """Test DA factor value reader."""
 
     def test_missing_da_raises_error(self):
-        """Test that missing DA raises OptionalDependencyMissing."""
-        from factor_assets.adapters.data_access import DAFactorValueReader
+        """Test that missing DA raises OptionalDependencyMissing when DA not available."""
+        import factor_assets.adapters.data_access as da_mod
 
-        with pytest.raises(OptionalDependencyMissing) as exc_info:
-            DAFactorValueReader()
+        # Mock _try_import_da to do nothing and keep DA_AVAILABLE = False
+        def mock_try_import():
+            da_mod.DA_AVAILABLE = False
+            da_mod._DataAccessStore = None
 
-        assert exc_info.value.package_name == "data_access"
-        assert exc_info.value.adapter_name == "DAFactorValueReader"
+        with patch.object(da_mod, '_try_import_da', mock_try_import):
+            from factor_assets.adapters.data_access import DAFactorValueReader
+
+            with pytest.raises(OptionalDependencyMissing) as exc_info:
+                DAFactorValueReader()
+
+            assert exc_info.value.package_name == "data_access"
+            assert exc_info.value.adapter_name == "DAFactorValueReader"
 
     def test_not_implemented_error_message(self):
-        """Test that error message mentions DA is pending."""
+        """Test that error message mentions DA when not available."""
+        import factor_assets.adapters.data_access as da_mod
         from factor_assets.adapters import OptionalDependencyMissing
 
-        with pytest.raises(OptionalDependencyMissing) as exc_info:
-            from factor_assets.adapters.data_access import DAFactorValueReader
-            DAFactorValueReader()
+        # Mock _try_import_da to do nothing and keep DA_AVAILABLE = False
+        def mock_try_import():
+            da_mod.DA_AVAILABLE = False
+            da_mod._DataAccessStore = None
 
-        assert "data_access" in str(exc_info.value)
+        with patch.object(da_mod, '_try_import_da', mock_try_import):
+            with pytest.raises(OptionalDependencyMissing) as exc_info:
+                from factor_assets.adapters.data_access import DAFactorValueReader
+                DAFactorValueReader()
+
+            assert "data_access" in str(exc_info.value)
 
 
 class TestDACatalogReader:
     """Test DA catalog reader."""
 
     def test_missing_da_raises_error(self):
-        """Test that missing DA raises OptionalDependencyMissing."""
-        from factor_assets.adapters.data_access import DACatalogReader
+        """Test that missing DA raises OptionalDependencyMissing when DA not available."""
+        import factor_assets.adapters.data_access as da_mod
 
-        with pytest.raises(OptionalDependencyMissing) as exc_info:
-            DACatalogReader()
+        # Mock _try_import_da to do nothing and keep DA_AVAILABLE = False
+        def mock_try_import():
+            da_mod.DA_AVAILABLE = False
+            da_mod._DataAccessStore = None
 
-        assert exc_info.value.package_name == "data_access"
-        assert exc_info.value.adapter_name == "DACatalogReader"
+        with patch.object(da_mod, '_try_import_da', mock_try_import):
+            from factor_assets.adapters.data_access import DACatalogReader
+
+            with pytest.raises(OptionalDependencyMissing) as exc_info:
+                DACatalogReader()
+
+            assert exc_info.value.package_name == "data_access"
+            assert exc_info.value.adapter_name == "DACatalogReader"
 
 
 class TestProtocols:
@@ -141,14 +165,22 @@ class TestAdapterIntegration:
 
     def test_graceful_import_handling(self):
         """Test that missing DA can be handled gracefully."""
-        try:
-            from factor_assets.adapters.data_access import DAFactorValueReader
-            reader = DAFactorValueReader()
-            assert False, "Should have raised OptionalDependencyMissing"
-        except OptionalDependencyMissing as e:
-            # This is expected
-            assert "data_access" in str(e)
-            assert "pip install factor_assets[adapters]" in str(e)
+        import factor_assets.adapters.data_access as da_mod
+
+        # Mock _try_import_da to do nothing and keep DA_AVAILABLE = False
+        def mock_try_import():
+            da_mod.DA_AVAILABLE = False
+            da_mod._DataAccessStore = None
+
+        with patch.object(da_mod, '_try_import_da', mock_try_import):
+            try:
+                from factor_assets.adapters.data_access import DAFactorValueReader
+                reader = DAFactorValueReader()
+                assert False, "Should have raised OptionalDependencyMissing"
+            except OptionalDependencyMissing as e:
+                # This is expected
+                assert "data_access" in str(e)
+                assert "pip install factor_assets[adapters]" in str(e)
 
     def test_protocol_based_design(self):
         """Test that protocols enable testing without real DA."""

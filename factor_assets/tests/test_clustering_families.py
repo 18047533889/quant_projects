@@ -104,7 +104,7 @@ def test_modularity_clustering_simple():
     ]
 
     graph = SparseCorrelationGraph(edges)
-    clustering = ModularityClustering(graph)
+    clustering = ModularityClustering(graph, allow_toy_algorithm=True)
     result = clustering.cluster(max_iterations=10)
 
     # Should find 2 clusters
@@ -121,7 +121,7 @@ def test_modularity_clustering_single_cluster():
     ]
 
     graph = SparseCorrelationGraph(edges)
-    clustering = ModularityClustering(graph, resolution=1.0)
+    clustering = ModularityClustering(graph, resolution=1.0, allow_toy_algorithm=True)
     result = clustering.cluster(max_iterations=10)
 
     # Tight cluster should stay together
@@ -139,11 +139,11 @@ def test_modularity_clustering_resolution():
     graph = SparseCorrelationGraph(edges)
 
     # Low resolution: fewer clusters
-    clustering_low = ModularityClustering(graph, resolution=0.5)
+    clustering_low = ModularityClustering(graph, resolution=0.5, allow_toy_algorithm=True)
     result_low = clustering_low.cluster(max_iterations=10)
 
     # High resolution: more clusters
-    clustering_high = ModularityClustering(graph, resolution=2.0)
+    clustering_high = ModularityClustering(graph, resolution=2.0, allow_toy_algorithm=True)
     result_high = clustering_high.cluster(max_iterations=10)
 
     # Both should produce valid results
@@ -161,7 +161,7 @@ def test_modularity_clustering_convergence():
     ]
 
     graph = SparseCorrelationGraph(edges)
-    clustering = ModularityClustering(graph)
+    clustering = ModularityClustering(graph, allow_toy_algorithm=True)
 
     # Should complete within iterations
     result = clustering.cluster(max_iterations=5)
@@ -179,7 +179,7 @@ def test_empty_graph_clustering():
     result = cc.find_components()
     assert result.num_clusters == 0
 
-    clustering = ModularityClustering(graph)
+    clustering = ModularityClustering(graph, allow_toy_algorithm=True)
     result = clustering.cluster()
     assert result.num_clusters == 0
 
@@ -202,6 +202,6 @@ def test_star_topology():
     assert result.get_cluster_members(0) == {"HUB", "A", "B", "C", "D"}
 
     # Modularity: might split or stay together
-    clustering = ModularityClustering(graph)
+    clustering = ModularityClustering(graph, allow_toy_algorithm=True)
     result = clustering.cluster()
     assert result.num_clusters >= 1
