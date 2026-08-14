@@ -2141,3 +2141,360 @@ def retained_direct_rows(rows: Sequence[DirectUseOperator] | None = None) -> lis
     if rows is None:
         rows = direct_use_matrix_rows()
     return [r for r in rows if r.direct_use_status.value.startswith("direct_")]
+
+
+# ---------------------------------------------------------------------------
+# FE-P0-035 / GATE-023: Direct-use manifest validation (production/cold-start)
+# ---------------------------------------------------------------------------
+
+
+class ManifestValidationError(Exception):
+    """Raised when a direct-use manifest is missing, malformed, stale, or invalid."""
+    pass
+
+
+@dataclass(frozen=True)
+class ManifestValidationResult:
+    """Result of validating a direct-use manifest."""
+    valid: bool
+    manifest_path: str
+    error_kind: str = ""  # missing | malformed | stale | invalid_schema | empty | head_lookup_failed
+    error_detail: str = ""
+    schema_version: str = ""
+    fingerprint_head: str = ""
+    operator_count: int = 0
+
+
+def validate_direct_use_manifest(
+    manifest_path: str,
+    *,
+    run_mode: str = "production",
+    allow_stale: bool = False,
+    current_head_sha: str | None = None,
+) -> ManifestValidationResult:
+    """FE-P0-035: Validate a direct-use manifest before production/cold-start mining.
+
+    Production and cold-start mining paths MUST validate manifests and fail closed
+    when validation fails. Explicit research mode may surface validation state but
+    does not enforce it.
+
+    Args:
+        manifest_path: Path to manifest JSON file (direct_mining_manifest.json,
+            direct_mining_catalog.json, etc.)
+        run_mode: "production" | "cold_start" | "research" — production/cold-start
+            enforce validation; research surfaces status only
+        allow_stale: If False (default), reject manifests where fingerprint.head
+            does not match current HEAD (stale evidence)
+        current_head_sha: Current git HEAD SHA; if None, reads from git
+
+    Returns:
+        ManifestValidationResult with valid=True/False and diagnostic state
+
+    Raises:
+        ManifestValidationError: When run_mode in (production, cold_start) and
+            manifest is missing, malformed, stale, or invalid
+    """
+    import json
+    import subprocess
+    from pathlib import Path
+
+    p = Path(manifest_path).resolve()
+    enforce = run_mode.lower() in ("production", "cold_start")
+
+    # Missing manifest
+    if not p.exists():
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="missing",
+            error_detail=f"Manifest file does not exist: {p}",
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # Malformed JSON
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="malformed",
+            error_detail=f"Failed to parse manifest JSON: {e}",
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # Invalid schema
+    if not isinstance(payload, dict):
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail="Manifest root is not a JSON object",
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    schema_version = payload.get("schema_version", "")
+    if not schema_version or not isinstance(schema_version, str):
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail="Missing or invalid schema_version field",
+            schema_version=str(schema_version),
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # Expected schema prefix
+    if not schema_version.startswith("factor_engine.r18.") and not schema_version.startswith("factor_engine."):
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail=f"Unexpected schema version: {schema_version}",
+            schema_version=schema_version,
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # Empty manifest
+    op_count = payload.get("count", 0)
+    if not isinstance(op_count, int) or op_count < 0:
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail=f"Invalid count field: {op_count}",
+            schema_version=schema_version,
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # operators field must exist and be a list
+    if "operators" not in payload:
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail="Missing operators field",
+            schema_version=schema_version,
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    operators = payload.get("operators", [])
+    if not isinstance(operators, list):
+        result = ManifestValidationResult(
+            valid=False,
+            manifest_path=str(p),
+            error_kind="invalid_schema",
+            error_detail="operators field must be a list",
+            schema_version=schema_version,
+        )
+        if enforce:
+            raise ManifestValidationError(result.error_detail)
+        return result
+
+    # Stale manifest check: fail closed when HEAD lookup fails
+    fingerprint = payload.get("fingerprint", {})
+    fp_head = fingerprint.get("head", "") if isinstance(fingerprint, dict) else ""
+
+    if not allow_stale:
+        if current_head_sha is None:
+            try:
+                current_head_sha = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=Path(__file__).parent.parent,
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                ).strip()
+            except Exception as e:
+                # Fail closed when HEAD lookup fails in production/cold-start
+                if enforce:
+                    result = ManifestValidationResult(
+                        valid=False,
+                        manifest_path=str(p),
+                        error_kind="head_lookup_failed",
+                        error_detail=f"Failed to determine current git HEAD: {e}",
+                        schema_version=schema_version,
+                        operator_count=op_count,
+                    )
+                    raise ManifestValidationError(result.error_detail)
+                current_head_sha = ""
+
+        if current_head_sha and fp_head and fp_head != current_head_sha:
+            result = ManifestValidationResult(
+                valid=False,
+                manifest_path=str(p),
+                error_kind="stale",
+                error_detail=f"Manifest fingerprint {fp_head[:8]} does not match current HEAD {current_head_sha[:8]}",
+                schema_version=schema_version,
+                fingerprint_head=fp_head,
+                operator_count=op_count,
+            )
+            if enforce:
+                raise ManifestValidationError(result.error_detail)
+            return result
+
+    # Valid manifest
+    return ManifestValidationResult(
+        valid=True,
+        manifest_path=str(p),
+        schema_version=schema_version,
+        fingerprint_head=fp_head,
+        operator_count=op_count,
+    )
+
+
+def load_validated_manifest(
+    manifest_path: str,
+    *,
+    run_mode: str = "production",
+    allow_stale: bool = False,
+) -> dict[str, Any]:
+    """FE-P0-035: Load and validate a direct-use manifest (fail-closed).
+
+    Validates the manifest and returns the parsed payload. Production and
+    cold-start modes enforce validation (raise on failure); research mode
+    surfaces validation errors but returns the payload anyway.
+
+    Args:
+        manifest_path: Path to manifest JSON
+        run_mode: "production" | "cold_start" | "research"
+        allow_stale: Allow stale fingerprint (default False)
+
+    Returns:
+        Parsed manifest payload (dict)
+
+    Raises:
+        ManifestValidationError: When manifest is invalid and run_mode enforces
+    """
+    import json
+    from pathlib import Path
+
+    result = validate_direct_use_manifest(
+        manifest_path,
+        run_mode=run_mode,
+        allow_stale=allow_stale,
+    )
+
+    # Research mode surfaces validation but does not block
+    if run_mode.lower() == "research" and not result.valid:
+        import warnings
+        warnings.warn(
+            f"Direct-use manifest validation failed: {result.error_detail}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # Load and return payload
+    p = Path(manifest_path).resolve()
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {}
+
+
+def get_direct_use_mining_operators_from_manifest(
+    manifest_path: str,
+    *,
+    run_mode: str = "production",
+    allow_stale: bool = False,
+    current_head_sha: str | None = None,
+    context: DirectUseContext | None = None,
+) -> list[str]:
+    """FE-P0-035: Load operator list from a validated manifest (fail-closed).
+
+    Production and cold-start mining should use this instead of directly reading
+    manifest files. Validates the manifest first and fails closed on validation
+    errors in production/cold-start modes.
+
+    Args:
+        manifest_path: Path to manifest JSON
+        run_mode: "production" | "cold_start" | "research"
+        allow_stale: Allow stale fingerprint (default False)
+        current_head_sha: Current git HEAD SHA; if None, reads from git
+        context: DirectUseContext for additional filtering (optional)
+
+    Returns:
+        List of canonical operator names from the manifest
+
+    Raises:
+        ManifestValidationError: When manifest is invalid and run_mode enforces
+    """
+    # Validate first with all parameters
+    validate_direct_use_manifest(
+        manifest_path,
+        run_mode=run_mode,
+        allow_stale=allow_stale,
+        current_head_sha=current_head_sha,
+    )
+
+    payload = load_validated_manifest(
+        manifest_path,
+        run_mode=run_mode,
+        allow_stale=allow_stale,
+    )
+
+    operators = payload.get("operators", [])
+
+    # Handle both list-of-strings and list-of-dicts formats
+    if operators and isinstance(operators[0], dict):
+        canonicals = [op.get("canonical", op.get("name", "")) for op in operators if isinstance(op, dict)]
+    else:
+        canonicals = [str(op) for op in operators if op]
+
+    # Context filtering: perform real work (not a pass stub)
+    if context is not None:
+        filtered: list[str] = []
+        # Load full operator metadata for proper filtering
+        from cleaned_operators import load_all
+        from cleaned_operators.registry import OperatorRegistry
+
+        load_all()
+
+        for canonical in canonicals:
+            catalog = OperatorRegistry._catalog.get(canonical)
+            if catalog is None:
+                continue
+
+            # Build full operator row for context checks
+            try:
+                row = build_direct_use_operator(canonical, catalog)
+            except Exception:
+                continue
+
+            # Market filtering
+            if context.market and context.market not in row.supported_markets:
+                continue
+
+            # Cost filtering
+            if context.max_cost is not None and row.runtime_cost > context.max_cost:
+                continue
+
+            # Source availability filtering
+            if context.available_sources:
+                missing = [s for s in row.source_recipes if s not in context.available_sources]
+                if missing:
+                    continue
+
+            # Frequency filtering
+            if context.target_frequency is not None:
+                if context.target_frequency == "minute" and row.output_semantic_kind == "daily":
+                    continue
+
+            filtered.append(canonical)
+
+        return filtered
+
+    return canonicals

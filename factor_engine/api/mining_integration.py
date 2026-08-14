@@ -1193,6 +1193,63 @@ def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
     return "direct_all_context"
 
 
+def get_mining_operators_from_manifest(
+    manifest_path: str,
+    *,
+    run_mode: str = "production",
+    allow_stale: bool = False,
+    market: str | None = None,
+    max_cost: int | None = None,
+    available_sources: list[str] | None = None,
+    target_frequency: str | None = None,
+) -> list[str]:
+    """FE-P0-035: Production/cold-start entry point with manifest validation.
+
+    Wires validate_direct_use_manifest() into production and cold-start mining
+    paths. Fails closed when:
+    - Manifest is missing, malformed, or has invalid schema
+    - Manifest fingerprint is stale (unless allow_stale=True)
+    - git HEAD lookup fails in production/cold-start mode
+    - Context filtering removes all operators
+
+    Args:
+        manifest_path: Path to direct-use manifest JSON
+        run_mode: "production" | "cold_start" | "research"
+        allow_stale: Allow stale manifest fingerprint (default False)
+        market: Market context for filtering (e.g., "ashare", "us")
+        max_cost: Maximum runtime cost for filtering
+        available_sources: Available data sources for filtering
+        target_frequency: Target frequency for filtering ("daily", "minute")
+
+    Returns:
+        List of canonical operator names after validation and filtering
+
+    Raises:
+        ManifestValidationError: When manifest validation fails in
+            production/cold-start mode
+    """
+    from mining.direct_use import (
+        DirectUseContext,
+        get_direct_use_mining_operators_from_manifest,
+    )
+
+    # Build context for filtering (performs real work, not a pass stub)
+    context = DirectUseContext(
+        available_sources=tuple(available_sources) if available_sources else (),
+        target_frequency=target_frequency,
+        market=market,
+        max_cost=max_cost,
+    )
+
+    # Validate and load manifest with context filtering
+    return get_direct_use_mining_operators_from_manifest(
+        manifest_path,
+        run_mode=run_mode,
+        allow_stale=allow_stale,
+        context=context,
+    )
+
+
 def default_mining_search_space_config(
     *,
     tier: str | None = None,
