@@ -93,7 +93,7 @@ class TSTrimmedMeanNative(SeriesOperator):
         tags=["time_series", "statistics", "polars", "native"],
         param_specs={
             "window": ParamSpec(dtype=int, min=5, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "trim_pct": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, searchable=False, param_role=ParamRole.TUNING),
+            "trim_pct": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -523,7 +523,7 @@ class TSLowerPartialMomentNative(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "target": ParamSpec(dtype=float, default=0.0, searchable=False, param_role=ParamRole.THRESHOLD),
-            "order": ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.TUNING),
+            "order": ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -566,7 +566,7 @@ class TSUpperPartialMomentNative(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
             "target": ParamSpec(dtype=float, default=0.0, searchable=False, param_role=ParamRole.THRESHOLD),
-            "order": ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.TUNING),
+            "order": ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
