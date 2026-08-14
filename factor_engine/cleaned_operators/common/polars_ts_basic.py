@@ -66,26 +66,32 @@ class TSMeanNative(SeriesOperator):
     backend="polars",
 )
 class TSStdNative(SeriesOperator):
-    """Rolling standard deviation."""
+    """Rolling standard deviation with configurable ddof (delta degrees of freedom).
+
+    ddof=1 (default): sample standard deviation (denominator: n-1)
+    ddof=0: population standard deviation (denominator: n)
+    """
 
     metadata = OperatorMetadata(
         name="ts_std",
         category="time_series",
         description="滚动标准差",
-        param_names=["x", "d"],
+        param_names=["x", "d", "ddof"],
         return_type="series",
         tags=["time_series", "polars", "native"],
         param_specs={
             "d": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, max=1, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, ddof: int = 1, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(d, "d", minimum=2)
+        delta_dof = strict_integer(ddof, "ddof", minimum=0, maximum=1)
         cols = _numeric_cols(x)
-        return x.lazy().with_columns([pl.col(c).rolling_std(window_size=w).alias(c) for c in cols]).collect()
+        return x.lazy().with_columns([pl.col(c).rolling_std(window_size=w, ddof=delta_dof).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -232,7 +238,7 @@ class TSQuantileNative(SeriesOperator):
         tags=["time_series", "polars", "native"],
         param_specs={
             "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=False, param_role=ParamRole.THRESHOLD),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=False, param_role=ParamRole.STATE_THRESHOLD),
         },
     )
 
