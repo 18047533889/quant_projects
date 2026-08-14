@@ -9,13 +9,34 @@ from data_access.cos_contract import require_cos_contract, validate_event_filter
 from data_access.cos_runtime import _read_cos_events, _read_cos_events_asof
 
 
+class _Dataset:
+    def __init__(self, columns):
+        self.schema = {column: "double" for column in columns}
+
+
+class _Registry:
+    def __init__(self, tables):
+        self._tables = tables
+
+    def get(self, dataset):
+        return _Dataset(self._tables[dataset].columns)
+
+
 class FakeEventStore:
     def __init__(self, tables):
         self.tables = tables
+        self._registry = _Registry(tables)
+        self.view_columns = []
 
     def sql(self, query, **kwargs):
         dataset = kwargs["read_datasets"][0]
-        return pa.Table.from_pandas(self.tables[dataset], preserve_index=False)
+        requested = kwargs["view_columns"][dataset]
+        self.view_columns.append(requested)
+        frame = self.tables[dataset]
+        # A real view exposes exactly the authorized physical projection.
+        # Missing declared columns are null in this bounded fake fixture.
+        projected = frame.reindex(columns=requested)
+        return pa.Table.from_pandas(projected, preserve_index=False)
 
 
 def test_latest_period_does_not_roll_back_after_old_period_restatement():
