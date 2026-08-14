@@ -78,41 +78,52 @@ class SplitSpec:
     gap_days: int = 0
 
     def __post_init__(self):
-        """Validate split specification."""
+        """Validate split boundaries using the supplied calendar-day contract.
+
+        ``gap_days`` counts complete calendar days between adjacent periods, so a
+        requested gap of ``N`` requires a boundary distance of at least ``N + 1``
+        days. This API has no exchange-calendar or label-maturity inputs; callers
+        requiring those semantics must validate them before constructing a
+        ``SplitSpec`` rather than treating this check as a trading-session or
+        purge/embargo contract.
+        """
         if self.train_start >= self.train_end:
             raise SplitError("train_start must be before train_end")
+        if not isinstance(self.gap_days, int) or isinstance(self.gap_days, bool):
+            raise SplitError("gap_days must be a non-negative integer")
+        if self.gap_days < 0:
+            raise SplitError("gap_days must be non-negative")
 
-        # Validate validation period if specified
+        def _validate_boundary(left_end: datetime, right_start: datetime, boundary: str) -> None:
+            if right_start < left_end:
+                raise SplitError(f"{boundary} must not overlap (start={right_start}, end={left_end})")
+            required_distance = self.gap_days + 1
+            actual_distance = (right_start - left_end).days
+            if actual_distance < required_distance:
+                raise SplitError(
+                    f"gap_days={self.gap_days} requires at least {required_distance} days between "
+                    f"{boundary}, but actual gap is {actual_distance} days "
+                    f"(left_end={left_end.date()}, right_start={right_start.date()})"
+                )
+
+        # Validate validation period if specified.
         if self.val_start is not None or self.val_end is not None:
             if self.val_start is None or self.val_end is None:
                 raise SplitError("Both val_start and val_end must be specified together")
             if self.val_start >= self.val_end:
                 raise SplitError("val_start must be before val_end")
-            if self.val_start < self.train_end:
-                raise SplitError("val_start must be >= train_end (no overlap)")
+            _validate_boundary(self.train_end, self.val_start, "train_end and val_start")
 
-            # FM2-P0-006: Enforce gap_days between train_end and val_start
-            if self.gap_days > 0:
-                # gap_days=5 means 5 full calendar days between, so val_start >= train_end + 6 days
-                actual_gap_days = (self.val_start - self.train_end).days
-                required_gap_days = self.gap_days + 1
-                if actual_gap_days < required_gap_days:
-                    raise SplitError(
-                        f"gap_days={self.gap_days} requires at least {required_gap_days} days between "
-                        f"train_end and val_start, but actual gap is {actual_gap_days} days "
-                        f"(train_end={self.train_end.date()}, val_start={self.val_start.date()})"
-                    )
-
-        # Validate test period if specified
+        # Validate test period if specified.
         if self.test_start is not None or self.test_end is not None:
             if self.test_start is None or self.test_end is None:
                 raise SplitError("Both test_start and test_end must be specified together")
             if self.test_start >= self.test_end:
                 raise SplitError("test_start must be before test_end")
-            if self.val_end is not None and self.test_start < self.val_end:
-                raise SplitError("test_start must be >= val_end (no overlap)")
-            elif self.val_end is None and self.test_start < self.train_end:
-                raise SplitError("test_start must be >= train_end (no overlap)")
+            if self.val_end is not None:
+                _validate_boundary(self.val_end, self.test_start, "val_end and test_start")
+            else:
+                _validate_boundary(self.train_end, self.test_start, "train_end and test_start")
 
     def get_fit_window(self, for_split: Literal["train", "val", "test"]) -> FitWindow:
         """

@@ -4,7 +4,7 @@ FM2-P0-005/006: gap_days enforcement tests for standalone modeling package.
 Tests that SplitSpec.__post_init__ actually enforces gap_days (not just documents it).
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from modeling.contracts import SplitSpec
 from modeling.errors import SplitError
@@ -99,62 +99,58 @@ class TestGapDaysEnforcement:
             )
 
     def test_gap_days_not_checked_when_no_validation(self):
-        """gap_days is only checked when validation period is specified."""
-        # No validation period → gap_days is ignored
+        """A train-only split has no boundary after train to validate."""
         split = SplitSpec(
             split_id="train_only",
             train_start=datetime(2020, 1, 1),
             train_end=datetime(2020, 12, 31),
-            gap_days=100,  # Large gap, but no validation to check against
+            gap_days=100,
         )
         assert split.val_start is None
 
-    def test_gap_days_error_message_includes_dates(self):
-        """Error message includes actual dates for debugging."""
-        with pytest.raises(SplitError) as exc_info:
+    def test_gap_days_train_to_test_without_validation_enforced(self):
+        with pytest.raises(SplitError, match="train_end and test_start"):
             SplitSpec(
-                split_id="debug_info",
+                split_id="no_validation_gap",
                 train_start=datetime(2020, 1, 1),
-                train_end=datetime(2020, 12, 31),
-                val_start=datetime(2021, 1, 2),
-                val_end=datetime(2021, 6, 30),
+                train_end=datetime(2020, 1, 10),
+                test_start=datetime(2020, 1, 12),
+                test_end=datetime(2020, 1, 20),
                 gap_days=5,
             )
 
-        error_msg = str(exc_info.value)
-        assert "gap_days=5" in error_msg
-        assert "2020-12-31" in error_msg  # train_end date
-        assert "2021-01-02" in error_msg  # val_start date
-        assert "actual gap is 2 days" in error_msg
+    def test_gap_days_validation_to_test_enforced(self):
+        with pytest.raises(SplitError, match="val_end and test_start"):
+            SplitSpec(
+                split_id="validation_test_gap",
+                train_start=datetime(2020, 1, 1),
+                train_end=datetime(2020, 1, 10),
+                val_start=datetime(2020, 1, 16),
+                val_end=datetime(2020, 1, 20),
+                test_start=datetime(2020, 1, 22),
+                test_end=datetime(2020, 1, 30),
+                gap_days=5,
+            )
 
-    def test_gap_days_with_test_period(self):
-        """gap_days applies to train/val boundary, not train/test."""
-        # Train and validation with proper gap
+    def test_gap_days_all_boundaries_exact_boundary_passes(self):
         split = SplitSpec(
-            split_id="with_test",
+            split_id="all_boundaries_exact",
             train_start=datetime(2020, 1, 1),
-            train_end=datetime(2020, 6, 30),
-            val_start=datetime(2020, 7, 6),  # 6 days after train_end
-            val_end=datetime(2020, 12, 31),
-            test_start=datetime(2021, 1, 1),  # Adjacent to val_end (no gap required here)
-            test_end=datetime(2021, 6, 30),
+            train_end=datetime(2020, 1, 10),
+            val_start=datetime(2020, 1, 16),
+            val_end=datetime(2020, 1, 20),
+            test_start=datetime(2020, 1, 26),
+            test_end=datetime(2020, 1, 30),
             gap_days=5,
         )
         assert (split.val_start - split.train_end).days == 6
-        # Test can be adjacent to val (gap_days doesn't apply to val/test boundary)
-        assert (split.test_start - split.val_end).days == 1
+        assert (split.test_start - split.val_end).days == 6
 
     def test_gap_days_negative_not_allowed(self):
-        """Negative gap_days would be caught if validated (implementation may allow)."""
-        # Note: The implementation doesn't explicitly validate gap_days >= 0,
-        # but negative gap_days would just not trigger the check (gap_days > 0 condition)
-        split = SplitSpec(
-            split_id="negative_gap",
-            train_start=datetime(2020, 1, 1),
-            train_end=datetime(2020, 12, 31),
-            val_start=datetime(2021, 1, 1),
-            val_end=datetime(2021, 6, 30),
-            gap_days=-5,  # Negative is semantically invalid but doesn't break check
-        )
-        # The check is "if self.gap_days > 0", so negative just bypasses it
-        assert split.gap_days == -5
+        with pytest.raises(SplitError, match="gap_days must be non-negative"):
+            SplitSpec(
+                split_id="negative_gap",
+                train_start=datetime(2020, 1, 1),
+                train_end=datetime(2020, 12, 31),
+                gap_days=-5,
+            )
