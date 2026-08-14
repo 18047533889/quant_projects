@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import fields
+import threading
+import time
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -171,3 +173,100 @@ def test_batch_fan_in_preserves_base_and_all_resident_predecessors(monkeypatch):
         "b": {"base"},
         "c": {"base", "a_out", "b_out"},
     }
+
+
+def test_invalid_output_mode_is_rejected_before_readiness_check():
+    manager = MagicMock()
+    executor = QExecutor(process_manager=manager, type_adapter=MagicMock())
+
+    with pytest.raises(ValueError, match="materialize output or return"):
+        executor.execute_region(
+            _plan("r1", ("base",), "out"),
+            {"base": pd.DataFrame({"x": [1.0]})},
+            materialize_output=False,
+            return_resident_handle=False,
+        )
+    manager.check_availability.assert_not_called()
+
+
+def test_readiness_exception_is_typed():
+    manager = MagicMock()
+    manager.check_availability.side_effect = RuntimeError("probe failed")
+    executor = QExecutor(process_manager=manager, type_adapter=MagicMock())
+
+    with pytest.raises(QProcessUnavailableError, match="readiness check failed"):
+        executor.execute_region(
+            _plan("r1", ("base",), "out"),
+            {"base": pd.DataFrame({"x": [1.0]})},
+        )
+
+
+def test_runtime_failure_never_soft_fails_from_policy_flags():
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    manager.get_connection.return_value.side_effect = RuntimeError("q exploded")
+    executor = QExecutor(process_manager=manager, type_adapter=MagicMock())
+    policy = QExecutionFallbackPolicy(
+        allow_fallback=False,
+        fallback_backend=None,
+        fail_on_unavailable=False,
+    )
+
+    with pytest.raises(QExecutionError, match="q exploded"):
+        executor.execute_region(
+            _plan("r1", ("base",), "out"),
+            {"base": pd.DataFrame({"x": [1.0]})},
+            fallback_policy=policy,
+        )
+
+
+def test_two_executor_instances_serialize_shared_connection():
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    active = 0
+    peak_active = 0
+    state_lock = threading.Lock()
+
+    class Connection:
+        def __setitem__(self, key, value):
+            pass
+
+        def __call__(self, query):
+            nonlocal active, peak_active
+            if ":" not in query:
+                return [1.0]
+            with state_lock:
+                active += 1
+                peak_active = max(peak_active, active)
+            time.sleep(0.02)
+            with state_lock:
+                active -= 1
+            return None
+
+    manager.get_connection.return_value = Connection()
+    adapter = MagicMock()
+    adapter.pandas_to_q.return_value = object()
+    adapter.q_to_pandas.return_value = pd.DataFrame({"value": [1.0]})
+    executors = [
+        QExecutor(process_manager=manager, type_adapter=adapter),
+        QExecutor(process_manager=manager, type_adapter=adapter),
+    ]
+    threads = [
+        threading.Thread(
+            target=executor.execute_region,
+            args=(_plan(f"r{i}", ("base",), f"out{i}"), {"base": pd.DataFrame({"x": [1.0]})}),
+        )
+        for i, executor in enumerate(executors)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert peak_active == 1

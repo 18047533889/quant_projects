@@ -38,6 +38,10 @@ from backend.q_backend.q_process_manager import (
 
 logger = logging.getLogger(__name__)
 
+# QProcessManager returns the process-global PyKX connection. This lock is
+# shared by every executor instance, not just one executor's callers.
+_PROCESS_CONNECTION_LOCK = threading.RLock()
+
 
 @dataclass(frozen=True)
 class QExecutionResult:
@@ -81,7 +85,7 @@ class QExecutor:
         self.type_adapter = type_adapter or get_q_type_adapter()
         # PyKX exposes one process-global q connection. A complete region
         # execution is the smallest safe critical section for that workspace.
-        self._connection_lock = threading.RLock()
+        self._connection_lock = _PROCESS_CONNECTION_LOCK
         self._telemetry_lock = threading.Lock()
 
         # Telemetry counters for residency tracking
@@ -127,25 +131,23 @@ class QExecutor:
             RuntimeError: q 不可用且不允许 fallback
         """
         fallback_policy = fallback_policy or QExecutionFallbackPolicy()
+        if not materialize_output and not return_resident_handle:
+            raise ValueError(
+                "execute_region must materialize output or return a resident handle"
+            )
 
         # 检查 q 可用性
-        ready, message = self.check_execution_readiness()
+        try:
+            ready, message = self.check_execution_readiness()
+        except Exception as exc:
+            raise QProcessUnavailableError(
+                f"q readiness check failed for region {plan.region_id}: {exc}"
+            ) from exc
         if not ready:
-            if fallback_policy.fail_on_unavailable:
-                raise QProcessUnavailableError(
-                    f"q execution failed: {message}. "
-                    "Fallback disabled in production mode."
-                )
-            else:
-                logger.warning(f"q unavailable: {message}")
-                return QExecutionResult(
-                    region_id=plan.region_id,
-                    output_df=pd.DataFrame(),
-                    execution_time_ms=0.0,
-                    rows_processed=0,
-                    success=False,
-                    error_message=message,
-                )
+            raise QProcessUnavailableError(
+                f"q execution failed: {message}. "
+                "Runtime fallback is disabled; select another backend during planning."
+            )
 
         missing_tables = [
             table_name for table_name in plan.input_tables if table_name not in input_data
@@ -209,17 +211,7 @@ class QExecutor:
             error_msg = f"q execution failed for region {plan.region_id}: {e}"
             logger.error(error_msg)
 
-            if fallback_policy.fail_on_unavailable:
-                raise QExecutionError(error_msg) from e
-
-            return QExecutionResult(
-                region_id=plan.region_id,
-                output_df=pd.DataFrame(),
-                execution_time_ms=0.0,
-                rows_processed=0,
-                success=False,
-                error_message=error_msg,
-            )
+            raise QExecutionError(error_msg) from e
 
     @staticmethod
     def _resident_result_metadata(q_result: Any) -> tuple[int, int]:
@@ -330,40 +322,30 @@ class QExecutor:
             执行结果列表
         """
         results = []
-        current_input = dict(input_data)  # 初始输入
+        available_inputs: dict[str, pd.DataFrame | QResidentTableHandle] = dict(input_data)
 
         for i, plan in enumerate(plans):
             is_last = (i == len(plans) - 1)
+            region_inputs = {
+                name: available_inputs[name]
+                for name in plan.input_tables
+                if name in available_inputs
+            }
 
             result = self.execute_region(
                 plan,
-                current_input,
+                region_inputs,
                 fallback_policy=fallback_policy,
                 return_resident_handle=enable_residency and not is_last,
-                materialize_output=is_last,
+                materialize_output=is_last or not enable_residency,
             )
             results.append(result)
 
-            # 失败时是否继续
-            if not result.success and fallback_policy and fallback_policy.fail_on_unavailable:
-                logger.error(f"Region {plan.region_id} failed, stopping batch")
-                break
-
-            # 如果启用 residency 且不是最后一个 region，传递 resident handle
             if enable_residency and not is_last and result.resident_handle:
-                # 下一个 region 将使用当前 region 的输出作为输入
-                # 假设输出表名在下一个 region 的输入中被引用
-                # 这里简化处理：将 resident handle 加入可用输入
-                next_plan = plans[i + 1]
-                if plan.output_table in next_plan.input_tables:
-                    current_input = {plan.output_table: result.resident_handle}
-                    logger.info(
-                        f"Passing resident handle from {plan.region_id} "
-                        f"to {next_plan.region_id} (eliminated re-upload)"
-                    )
-                else:
-                    # 下一个 region 不需要当前输出，重置为初始输入
-                    current_input = dict(input_data)
+                available_inputs[plan.output_table] = result.resident_handle
+                logger.info(
+                    f"Retained resident handle from {plan.region_id} for downstream regions"
+                )
 
         return results
 
