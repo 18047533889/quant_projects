@@ -1,0 +1,130 @@
+================================================================================
+Operator ABI Consistency Validation
+================================================================================
+Scanning 179 operator files...
+Found 4 files with _PARAMS/_KERNELS pattern
+Found 86 files with class-based operators
+
+⚠ Found 16 ABI violations:
+
+
+================================================================================
+HIGH SEVERITY (16 violations)
+================================================================================
+
+Canonical: row_sum_skipna
+File: fiscal_event_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['...', 'min_count']
+Details: Phantom in declaration: ['...', 'min_count']
+
+Canonical: panel_day_night_beta_gap
+File: panel_batch1.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['ret', 'benchmark_ret', 'day_start', 'day_end', 'night_start', 'night_end', 'window']
+Details: Phantom in declaration: ['benchmark_ret', 'day_end', 'day_start', 'night_end', 'night_start', 'ret', 'window']
+
+Canonical: pastor_stambaugh_beta
+File: panel_batch1.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['ret', 'benchmark_ret', 'liquidity_proxy', 'window']
+Details: Phantom in declaration: ['benchmark_ret', 'liquidity_proxy', 'ret', 'window']
+
+Canonical: price_delay_score
+File: panel_batch1.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['ret', 'benchmark_ret', 'window', 'max_lags']
+Details: Phantom in declaration: ['benchmark_ret', 'max_lags', 'ret', 'window']
+
+Canonical: ts_regression_slope
+File: production_repairs.py
+Type: param_mismatch
+Expected signature: ['y', 'x', 'window']
+Declared params:    ['y', 'x', 'window', 'lag', 'retval', 'min_periods', 'add_intercept']
+Details: Phantom in declaration: ['add_intercept', 'lag', 'min_periods', 'retval']
+
+Canonical: ts_signature_mahalanobis_anomaly
+File: research_transform.py
+Type: param_mismatch
+Expected signature: ['f1', 'f2', 'f3', 'path_window', 'history_window', 'depth']
+Declared params:    ['f1', 'f2', 'f3', 'path_window', 'history_window']
+Details: Missing in declaration: ['depth']
+
+Canonical: overnight_return
+File: return_decomp.py
+Type: param_mismatch
+Expected signature: ['open_px', 'pre_close', 'price_basis']
+Declared params:    ['open', 'pre_close']
+Details: Missing in declaration: ['open_px', 'price_basis']; Phantom in declaration: ['open']
+
+Canonical: open_close_return
+File: return_decomp.py
+Type: param_mismatch
+Expected signature: ['open_px', 'close', 'price_basis']
+Declared params:    ['open', 'close']
+Details: Missing in declaration: ['open_px', 'price_basis']; Phantom in declaration: ['open']
+
+Canonical: open_to_vwap_return
+File: return_decomp.py
+Type: param_mismatch
+Expected signature: ['open_px', 'vwap', 'price_basis']
+Declared params:    ['open', 'vwap']
+Details: Missing in declaration: ['open_px', 'price_basis']; Phantom in declaration: ['open']
+
+Canonical: vwap_to_close_return
+File: return_decomp.py
+Type: param_mismatch
+Expected signature: ['vwap', 'close', 'price_basis']
+Declared params:    ['vwap', 'close']
+Details: Missing in declaration: ['price_basis']
+
+Canonical: report_asof
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['value', 'report_date', 'asof_date', 'max_staleness_days']
+Details: Phantom in declaration: ['asof_date', 'max_staleness_days', 'report_date', 'value']
+
+Canonical: event_window_return_asof
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['ret', 'event_date', 'window_before', 'window_after']
+Details: Phantom in declaration: ['event_date', 'ret', 'window_after', 'window_before']
+
+Canonical: financial_snapshot_lag
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['x', 'period_id', 'fiscal_date', 'lag_periods']
+Details: Phantom in declaration: ['fiscal_date', 'lag_periods', 'period_id', 'x']
+
+Canonical: same_calendar_day_mean
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['x', 'window']
+Details: Phantom in declaration: ['window', 'x']
+
+Canonical: same_calendar_month_return
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['x', 'window']
+Details: Phantom in declaration: ['window', 'x']
+
+Canonical: same_clock_lag
+File: time_semantic_ops.py
+Type: param_mismatch
+Expected signature: []
+Declared params:    ['x', 'clock_time', 'lag_minutes']
+Details: Phantom in declaration: ['clock_time', 'lag_minutes', 'x']
+
+================================================================================
+Summary: 16 total violations
+  HIGH: 16
+================================================================================
