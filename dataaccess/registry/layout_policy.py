@@ -3,6 +3,7 @@
 DA-P0-008: BucketHashRegistry 单一权威，version 冻结算法与字节编码。
 DA-P0-009: write assignment 与 read predicate 绑定同一 validated policy。
 DA-P1-027: 拒绝非法 bucket_count，不静默修正。
+DA-P1-028: MD5 不得作为生产正确性身份选项。
 """
 
 from __future__ import annotations
@@ -45,10 +46,13 @@ class BucketHashRegistry:
         self._register_builtin_implementations()
 
     def _register_builtin_implementations(self) -> None:
-        """注册内置实现。"""
-        # v1: sha256/md5/xxhash64, UTF-8 编码 → digest → 前8位hex → int → mod
+        """注册内置实现。
+
+        DA-P1-028: MD5 仅用于 legacy 兼容读取，不得用于生产写入或新配置。
+        """
+        # v1: sha256/xxhash64 生产可用；md5 仅 legacy 兼容读取
         self.register(1, "sha256", self._v1_sha256)
-        self.register(1, "md5", self._v1_md5)
+        self.register(1, "md5", self._v1_md5_legacy_readonly)
         self.register(1, "xxhash64", self._v1_xxhash64)
 
     def register(
@@ -101,8 +105,12 @@ class BucketHashRegistry:
         return int(digest[:8], 16) % bucket_count
 
     @staticmethod
-    def _v1_md5(key: str, bucket_count: int) -> int:
-        """v1 + md5: 仅用于 consistent hash bucketing，非密码学用途。"""
+    def _v1_md5_legacy_readonly(key: str, bucket_count: int) -> int:
+        """v1 + md5: LEGACY 兼容读取旧数据，禁止用于生产写入或新配置。
+
+        DA-P1-028: MD5 不得作为生产正确性身份选项。
+        此实现仅用于读取历史 MD5-bucketed 数据，不得用于新写入。
+        """
         data = key.encode("utf-8")
         digest = hashlib.md5(data, usedforsecurity=False).hexdigest()
         return int(digest[:8], 16) % bucket_count
@@ -144,6 +152,8 @@ def parse_layout_policy(raw: Any) -> LayoutPolicy | None:
 
     #P1-75 strict config：unknown key 拒绝、count 严格正整数、column 非空——
     非法配置直接报错，不静默修正（``count=0 → 1`` 会让 bucket 布局语义漂移）。
+
+    DA-P1-028: 拒绝 MD5 作为生产配置选项，仅 sha256/xxhash64 可用。
     """
     if raw is None:
         return None
@@ -172,9 +182,11 @@ def parse_layout_policy(raw: Any) -> LayoutPolicy | None:
         raise ValidationError(f"layout_policy.bucket.column 必须是非空字符串，收到 {column!r}")
     count = _strict_count(bucket_raw.get("count", 64), context="layout_policy.bucket")
     algo = str(bucket_raw.get("hash_algorithm", "sha256")).strip().lower()
-    if algo not in {"sha256", "xxhash64", "md5"}:
+    # DA-P1-028: MD5 不得出现在生产配置中
+    if algo not in {"sha256", "xxhash64"}:
         raise ValidationError(
-            f"layout_policy.bucket.hash_algorithm 必须 sha256/xxhash64/md5，收到 {algo!r}"
+            f"layout_policy.bucket.hash_algorithm 必须为 sha256/xxhash64，收到 {algo!r}"
+            f"（MD5 已禁用于生产配置）"
         )
     version = bucket_raw.get("hash_version", 1)
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -202,6 +214,11 @@ def stable_bucket(
 
     DA-P0-008: version + algorithm 决定实现，通过 BucketHashRegistry。
     DA-P1-027: bucket_count 必须是正整数，不接受 0/-1/float/bool。
+
+    .. warning::
+        LEGACY/RESEARCH API: 生产代码应使用 ``stable_bucket_from_policy``
+        从 validated BucketLayoutPolicy 计算，确保 write/read 对称性。
+        直接调用此函数绕过 policy 验证，可能导致 DA-P0-009 违规。
     """
     return _BUCKET_HASH_REGISTRY.compute_bucket(
         str(key), bucket_count, version, algorithm
@@ -228,6 +245,11 @@ def instrument_buckets(
     """标的列表 → 需读取的 bucket 集合。
 
     DA-P1-027: bucket_count 必须是正整数。
+
+    .. warning::
+        LEGACY/RESEARCH API: 生产代码应使用 ``instrument_buckets_from_policy``
+        从 validated BucketLayoutPolicy 计算，确保 write/read 对称性。
+        直接调用此函数绕过 policy 验证，可能导致 DA-P0-009 违规。
     """
     return {
         stable_bucket(str(inst), bucket_count, algorithm=algorithm, version=version)
@@ -293,6 +315,11 @@ def bucket_partition_predicate(
     """生成 hive bucket 剪枝谓词片段与 bucket 值列表。
 
     DA-P1-027: bucket_count 必须是正整数，不接受 0/-1/float/bool。
+
+    .. warning::
+        LEGACY/RESEARCH API: 生产代码应使用 ``bucket_partition_predicate_from_policy``
+        从 validated BucketLayoutPolicy 计算，确保 write/read 对称性。
+        直接调用此函数绕过 policy 验证，可能导致 DA-P0-009 违规。
     """
     buckets = sorted(
         instrument_buckets(

@@ -3,6 +3,7 @@
 DA-P0-008: BucketHashRegistry 单一权威，version 冻结算法与字节编码。
 DA-P0-009: write assignment 与 read predicate 绑定同一 validated policy。
 DA-P1-027: 拒绝非法 bucket_count，不静默修正。
+DA-P1-028: MD5 不得作为生产正确性身份选项。
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from registry.layout_policy import (
     bucket_partition_predicate_from_policy,
     instrument_buckets,
     instrument_buckets_from_policy,
+    parse_layout_policy,
     prune_glob_paths_for_buckets,
     stable_bucket,
     stable_bucket_from_policy,
@@ -244,4 +246,149 @@ class TestLowMemoryExecution:
         # 空字符串边界
         b3 = stable_bucket("", 64, algorithm="sha256", version=1)
         assert 0 <= b3 < 64
+
+
+# DA-P1-028: MD5 生产禁用测试
+class TestMD5ProductionBan:
+    """DA-P1-028: MD5 不得作为生产正确性身份选项。"""
+
+    def test_parse_layout_policy_rejects_md5(self):
+        """parse_layout_policy 拒绝 MD5 配置。"""
+        config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 64,
+                "hash_algorithm": "md5",
+                "hash_version": 1,
+            }
+        }
+        with pytest.raises(Exception) as exc_info:
+            parse_layout_policy(config)
+        assert "md5" in str(exc_info.value).lower() or "sha256" in str(exc_info.value).lower()
+
+    def test_parse_layout_policy_accepts_sha256(self):
+        """parse_layout_policy 接受 sha256。"""
+        config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 64,
+                "hash_algorithm": "sha256",
+                "hash_version": 1,
+            }
+        }
+        policy = parse_layout_policy(config)
+        assert policy is not None
+        assert policy.bucket.hash_algorithm == "sha256"
+
+    def test_parse_layout_policy_accepts_xxhash64(self):
+        """parse_layout_policy 接受 xxhash64。"""
+        config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 64,
+                "hash_algorithm": "xxhash64",
+                "hash_version": 1,
+            }
+        }
+        policy = parse_layout_policy(config)
+        assert policy is not None
+        assert policy.bucket.hash_algorithm == "xxhash64"
+
+    def test_bucket_layout_policy_construction_allows_md5_for_legacy_read(self):
+        """BucketLayoutPolicy 直接构造允许 md5（用于读取历史数据），但不应出现在新配置中。"""
+        # 直接构造不验证（允许读取旧数据）
+        policy = BucketLayoutPolicy(
+            column="bucket",
+            count=64,
+            hash_algorithm="md5",
+            hash_version=1,
+        )
+        assert policy.hash_algorithm == "md5"
+        # 但能读取旧数据
+        b = stable_bucket_from_policy("AAPL", policy)
+        assert 0 <= b < 64
+
+
+# DA-P0-009: 生产调用者 write/read 对称性
+class TestProductionCallerSymmetry:
+    """DA-P0-009: 验证生产路径使用相同 policy 对象。"""
+
+    def test_bucket_values_for_instruments_uses_same_policy(self):
+        """bucket_values_for_instruments 内部使用 *_from_policy 路径。"""
+        from registry.layout_policy import LayoutPolicy, bucket_values_for_instruments
+
+        bucket_policy = BucketLayoutPolicy(
+            column="bucket", count=64, hash_algorithm="sha256", hash_version=1
+        )
+        layout_policy = LayoutPolicy(bucket=bucket_policy)
+        instruments = ["AAPL", "MSFT", "GOOGL"]
+
+        # bucket_values_for_instruments 返回写入用的 bucket 值
+        write_buckets_list = bucket_values_for_instruments(
+            instruments, layout_policy, partition_columns=["date", "bucket"]
+        )
+        assert write_buckets_list is not None
+
+        # 读取路径使用相同 policy
+        _, read_buckets = bucket_partition_predicate_from_policy(instruments, bucket_policy)
+
+        # 验证对称性：写入的 buckets 必须完全覆盖读取的 buckets
+        assert set(write_buckets_list) == set(read_buckets)
+
+    def test_from_policy_apis_use_same_registry(self):
+        """*_from_policy API 使用相同 BucketHashRegistry。"""
+        policy = BucketLayoutPolicy(
+            column="bucket", count=128, hash_algorithm="sha256", hash_version=1
+        )
+        instruments = ["600000.SH", "000001.SZ"]
+
+        # 写入路径
+        write_buckets = {inst: stable_bucket_from_policy(inst, policy) for inst in instruments}
+
+        # 读取路径
+        read_buckets_set = instrument_buckets_from_policy(instruments, policy)
+        _, read_buckets_list = bucket_partition_predicate_from_policy(instruments, policy)
+
+        # 三个 API 必须一致
+        assert set(write_buckets.values()) == read_buckets_set
+        assert set(write_buckets.values()) == set(read_buckets_list)
+
+    def test_validated_policy_prevents_invalid_config(self):
+        """通过 parse_layout_policy 验证的 policy 不含非法配置。"""
+        # 合法配置
+        valid_config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 64,
+                "hash_algorithm": "sha256",
+                "hash_version": 1,
+            }
+        }
+        policy = parse_layout_policy(valid_config)
+        assert policy is not None
+
+        # 非法 bucket_count
+        invalid_count_config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 0,  # 非法
+                "hash_algorithm": "sha256",
+                "hash_version": 1,
+            }
+        }
+        with pytest.raises(Exception):
+            parse_layout_policy(invalid_count_config)
+
+        # 非法 hash_algorithm (MD5)
+        invalid_algo_config = {
+            "bucket": {
+                "column": "bucket",
+                "count": 64,
+                "hash_algorithm": "md5",  # 禁用
+                "hash_version": 1,
+            }
+        }
+        with pytest.raises(Exception):
+            parse_layout_policy(invalid_algo_config)
+
 
