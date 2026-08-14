@@ -293,27 +293,42 @@ class TSRankIfPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, condition, window, **kwargs):
-        # Rolling rank: current value's rank within the rolling window
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns(pl.lit(condition).alias("_cond"))
-            .with_columns([
-                pl.when(pl.col("_cond"))
-                .then(pl.col(feature.name))
-                .otherwise(None)
-                .alias("_filtered")
-            ])
-            .with_columns([
-                pl.col("_filtered")
-                .rank(method="average")
-                .over(pl.int_range(0, pl.count()).alias("_row") // window)
-                .alias(feature.name)
-            ])
-            .select([feature.name])
-            .collect()
-            .to_series()
+        """Return the canonical causal trailing conditional percentile rank.
+
+        Ranking over ``row // window`` creates disjoint blocks.  The reference
+        contract instead ranks the current finite value against the inclusive
+        trailing window after applying the finite ``condition == 1`` mask.
+        """
+        w = max(2, int(window))
+        min_periods = max(2, int(kwargs.get("min_periods", 5)))
+        values = feature.cast(pl.Float64).fill_nan(None)
+        finite_values = pl.Series(
+            "_finite_values",
+            [value if value is not None and np.isfinite(value) else None for value in values],
+            dtype=pl.Float64,
         )
+        cond = pl.Series("_condition", condition).cast(pl.Float64).fill_nan(None)
+        selected = pl.Series(
+            "_selected",
+            [
+                value if flag is not None and np.isfinite(flag) and flag == 1.0 else None
+                for value, flag in zip(finite_values, cond)
+            ],
+            dtype=pl.Float64,
+        )
+
+        def _rank_current(window_values):
+            current = window_values[-1]
+            if current is None:
+                return None
+            finite = [value for value in window_values if value is not None]
+            if len(finite) < min_periods:
+                return None
+            less = sum(value < current for value in finite)
+            equal = sum(value == current for value in finite)
+            return (less + 0.5 * equal) / len(finite)
+
+        return selected.rolling_map(_rank_current, window_size=w, min_samples=1)
 
 
 # ============================================================================
