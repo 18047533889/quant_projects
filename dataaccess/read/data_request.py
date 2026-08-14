@@ -128,15 +128,7 @@ def _immutable(value: Any) -> Any:
     """
     if isinstance(value, MappingProxyType):
         return value
-    import copy
-
-    try:
-        value = copy.deepcopy(value)
-    except Exception:
-        try:
-            value = copy.copy(value)
-        except Exception:
-            return value
+    value = _copy_request_value(value)
     if isinstance(value, dict):
         return MappingProxyType(
             {str(k): _immutable(v) for k, v in value.items()}
@@ -162,15 +154,40 @@ def _deep_freeze(value: Any) -> Any:
     """
     if isinstance(value, MappingProxyType):
         return value
+    return _copy_request_value(value)
+
+
+def _copy_request_value(value: Any) -> Any:
+    """Return an owned request value or fail closed."""
+    if isinstance(value, MappingProxyType):
+        return value
+
+    from data_access.core.identity_encoder import create_identity_encoder
+
+    try:
+        create_identity_encoder(strict=True).encode(value)
+    except Exception as exc:
+        raise ValidationError(
+            "CompiledDataRequest value cannot be canonically encoded or detached: "
+            f"{type(value).__name__}: {exc}"
+        ) from exc
+
     import copy
 
     try:
         return copy.deepcopy(value)
-    except Exception:
-        try:
-            return copy.copy(value)
-        except Exception:
-            return value
+    except Exception as deep_exc:
+        # A shallow copy of a container/custom object would retain nested live
+        # references.  Only canonical immutable scalars may safely use it.
+        if isinstance(value, (type(None), bool, int, float, str, bytes)):
+            try:
+                return copy.copy(value)
+            except Exception:
+                pass
+        raise ValidationError(
+            "CompiledDataRequest value cannot be canonically encoded or detached: "
+            f"{type(value).__name__}; deepcopy failed"
+        ) from deep_exc
 
 
 def _deep_freeze_mapping(value: Any) -> MappingProxyType | None:
