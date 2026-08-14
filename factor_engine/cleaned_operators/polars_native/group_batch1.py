@@ -37,6 +37,7 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
     canonical="group_ex_self_mean",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupExSelfMeanPolarsNative(SeriesOperator):
     """组内除自身外其余成员的均值（leave-one-out peer mean）."""
@@ -78,6 +79,7 @@ class GroupExSelfMeanPolarsNative(SeriesOperator):
     canonical="group_weighted_mean",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupWeightedMeanPolarsNative(SeriesOperator):
     """组内加权平均值."""
@@ -121,6 +123,7 @@ class GroupWeightedMeanPolarsNative(SeriesOperator):
     canonical="group_weighted_zscore",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupWeightedZscorePolarsNative(SeriesOperator):
     """组内加权 z-score 标准化."""
@@ -177,6 +180,7 @@ class GroupWeightedZscorePolarsNative(SeriesOperator):
     canonical="group_valid_count",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupValidCountPolarsNative(SeriesOperator):
     """组内有效值数量."""
@@ -212,6 +216,7 @@ class GroupValidCountPolarsNative(SeriesOperator):
     canonical="group_ex_self_std",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupExSelfStdPolarsNative(SeriesOperator):
     """组内除自身外其余成员的标准差."""
@@ -254,6 +259,7 @@ class GroupExSelfStdPolarsNative(SeriesOperator):
     canonical="group_ex_self_mad",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupExSelfMadPolarsNative(SeriesOperator):
     """组内除自身外其余成员的平均绝对偏差."""
@@ -292,6 +298,7 @@ class GroupExSelfMadPolarsNative(SeriesOperator):
     canonical="group_kurtosis",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupKurtosisPolarsNative(SeriesOperator):
     """组内峰度."""
@@ -339,6 +346,7 @@ class GroupKurtosisPolarsNative(SeriesOperator):
     canonical="group_skewness",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupSkewnessPolarsNative(SeriesOperator):
     """组内偏度."""
@@ -386,6 +394,7 @@ class GroupSkewnessPolarsNative(SeriesOperator):
     canonical="group_topk_mean",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupTopkMeanPolarsNative(SeriesOperator):
     """组内前 k 个最大值的均值."""
@@ -431,6 +440,7 @@ class GroupTopkMeanPolarsNative(SeriesOperator):
     replace=True,
     replacement_reason="True native Polars implementation using .over() instead of old implementation",
     expected_old_source="factor_dsl_np",
+    research_only=True,
 )
 class GroupNeutralizePolarsNative(SeriesOperator):
     """组内去均值（中性化）."""
@@ -468,6 +478,7 @@ class GroupNeutralizePolarsNative(SeriesOperator):
     canonical="group_ex_self_quantile",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupExSelfQuantilePolarsNative(SeriesOperator):
     """组内除自身外其余成员的分位数."""
@@ -504,6 +515,7 @@ class GroupExSelfQuantilePolarsNative(SeriesOperator):
     canonical="group_quantile_spread",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupQuantileSpreadPolarsNative(SeriesOperator):
     """组内分位数间距."""
@@ -543,6 +555,7 @@ class GroupQuantileSpreadPolarsNative(SeriesOperator):
     canonical="group_tail_ratio",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupTailRatioPolarsNative(SeriesOperator):
     """组内尾部比率（上尾 / 下尾）."""
@@ -599,6 +612,7 @@ class GroupTailRatioPolarsNative(SeriesOperator):
     canonical="group_impute_median",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupImputeMedianPolarsNative(SeriesOperator):
     """组内中位数填充缺失值."""
@@ -636,6 +650,7 @@ class GroupImputeMedianPolarsNative(SeriesOperator):
     canonical="group_winsorize",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupWinsorizePolarsNative(SeriesOperator):
     """组内缩尾处理."""
@@ -675,6 +690,7 @@ class GroupWinsorizePolarsNative(SeriesOperator):
     canonical="group_ex_self_weighted_mean",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupExSelfWeightedMeanPolarsNative(SeriesOperator):
     """组内除自身外其余成员的加权均值."""
@@ -722,6 +738,7 @@ class GroupExSelfWeightedMeanPolarsNative(SeriesOperator):
     canonical="group_feature_coverage_ratio",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupFeatureCoverageRatioPolarsNative(SeriesOperator):
     """组内特征覆盖率（非缺失比例）."""
@@ -760,6 +777,7 @@ class GroupFeatureCoverageRatioPolarsNative(SeriesOperator):
     canonical="group_feature_valid_member_count",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupFeatureValidMemberCountPolarsNative(SeriesOperator):
     """组内有效成员数量."""
@@ -799,6 +817,7 @@ class GroupFeatureValidMemberCountPolarsNative(SeriesOperator):
     canonical="group_mean",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupMeanPolarsNative(SeriesOperator):
     """组内均值."""
@@ -825,6 +844,7 @@ class GroupMeanPolarsNative(SeriesOperator):
     canonical="group_std",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupStdPolarsNative(SeriesOperator):
     """组内标准差."""
@@ -851,6 +871,7 @@ class GroupStdPolarsNative(SeriesOperator):
     canonical="group_sum",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupSumPolarsNative(SeriesOperator):
     """组内求和."""
@@ -877,6 +898,7 @@ class GroupSumPolarsNative(SeriesOperator):
     canonical="group_max",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupMaxPolarsNative(SeriesOperator):
     """组内最大值."""
@@ -903,6 +925,7 @@ class GroupMaxPolarsNative(SeriesOperator):
     canonical="group_min",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupMinPolarsNative(SeriesOperator):
     """组内最小值."""
@@ -929,6 +952,7 @@ class GroupMinPolarsNative(SeriesOperator):
     canonical="group_count",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupCountPolarsNative(SeriesOperator):
     """组内计数."""
@@ -955,6 +979,7 @@ class GroupCountPolarsNative(SeriesOperator):
     canonical="group_zscore",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupZscorePolarsNative(SeriesOperator):
     """组内 z-score 标准化."""
@@ -987,6 +1012,7 @@ class GroupZscorePolarsNative(SeriesOperator):
     canonical="group_rank",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupRankPolarsNative(SeriesOperator):
     """组内排名."""
@@ -1013,6 +1039,7 @@ class GroupRankPolarsNative(SeriesOperator):
     canonical="group_percentile",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupPercentilePolarsNative(SeriesOperator):
     """组内百分位数."""
@@ -1039,6 +1066,7 @@ class GroupPercentilePolarsNative(SeriesOperator):
     canonical="group_normalize",
     backend="polars",
     source="polars_native.group_batch1",
+    research_only=True,
 )
 class GroupNormalizePolarsNative(SeriesOperator):
     """组内归一化到 [0, 1]."""

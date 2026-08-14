@@ -39,6 +39,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="ts_skew",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSkewNative(SeriesOperator):
     """Rolling skewness."""
@@ -82,6 +83,7 @@ class TSSkewNative(SeriesOperator):
     canonical="ts_trimmed_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSTrimmedMeanNative(SeriesOperator):
     """Rolling trimmed mean (exclude top/bottom quantiles)."""
@@ -127,6 +129,7 @@ class TSTrimmedMeanNative(SeriesOperator):
     canonical="ts_median",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMedianNative(SeriesOperator):
     """Rolling median."""
@@ -165,6 +168,7 @@ class TSMedianNative(SeriesOperator):
     canonical="ts_qn_scale",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQnScaleNative(SeriesOperator):
     """Rolling Qn robust scale estimator (IQR / 1.349)."""
@@ -207,6 +211,7 @@ class TSQnScaleNative(SeriesOperator):
     canonical="ts_quantile_range",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileRangeNative(SeriesOperator):
     """Rolling quantile range: Q_upper - Q_lower."""
@@ -249,6 +254,7 @@ class TSQuantileRangeNative(SeriesOperator):
     canonical="ts_quantile_kurtosis",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileKurtosisNative(SeriesOperator):
     """Rolling quantile-based kurtosis: (Q_0.875 - Q_0.125) / (Q_0.75 - Q_0.25)."""
@@ -294,6 +300,7 @@ class TSQuantileKurtosisNative(SeriesOperator):
     canonical="ts_quantile_skew",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileSkewNative(SeriesOperator):
     """Rolling quantile-based skew: (Q_0.75 + Q_0.25 - 2*Q_0.5) / (Q_0.75 - Q_0.25)."""
@@ -341,6 +348,7 @@ class TSQuantileSkewNative(SeriesOperator):
     canonical="ts_downside_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSDownsideDeviationNative(SeriesOperator):
     """Rolling downside deviation: sqrt(mean((min(x - target, 0))^2))."""
@@ -383,6 +391,7 @@ class TSDownsideDeviationNative(SeriesOperator):
     canonical="ts_upside_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSUpsideDeviationNative(SeriesOperator):
     """Rolling upside deviation: sqrt(mean((max(x - target, 0))^2))."""
@@ -431,6 +440,7 @@ class TSUpsideDeviationNative(SeriesOperator):
     canonical="ts_expected_shortfall",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSExpectedShortfallNative(SeriesOperator):
     """Rolling expected shortfall (CVaR): mean of losses beyond VaR threshold."""
@@ -475,6 +485,7 @@ class TSExpectedShortfallNative(SeriesOperator):
     canonical="ts_expected_shortfall_asymmetry",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSExpectedShortfallAsymmetryNative(SeriesOperator):
     """(ES_upside - |ES_downside|) / (ES_upside + |ES_downside|)."""
@@ -521,6 +532,7 @@ class TSExpectedShortfallAsymmetryNative(SeriesOperator):
     canonical="ts_lower_partial_moment",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSLowerPartialMomentNative(SeriesOperator):
     """Rolling lower partial moment: mean((max(target - x, 0))^order)."""
@@ -565,6 +577,7 @@ class TSLowerPartialMomentNative(SeriesOperator):
     canonical="ts_upper_partial_moment",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSUpperPartialMomentNative(SeriesOperator):
     """Rolling upper partial moment: mean((max(x - target, 0))^order)."""
@@ -609,6 +622,7 @@ class TSUpperPartialMomentNative(SeriesOperator):
     canonical="ts_semivariance_balance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSemivarianceBalanceNative(SeriesOperator):
     """(upside_variance - downside_variance) / (upside_variance + downside_variance)."""
@@ -657,6 +671,7 @@ class TSSemivarianceBalanceNative(SeriesOperator):
     canonical="ts_tail_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSTailMeanNative(SeriesOperator):
     """Rolling mean of tail beyond quantile threshold."""
@@ -700,6 +715,7 @@ class TSTailMeanNative(SeriesOperator):
     canonical="ts_tail_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSTailRatioNative(SeriesOperator):
     """Rolling tail ratio: |Q_0.95| / |Q_0.05|."""
@@ -741,6 +757,7 @@ class TSTailRatioNative(SeriesOperator):
     canonical="ts_tail_imbalance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSTailImbalanceNative(SeriesOperator):
     """Rolling tail imbalance: (Q_0.95 + Q_0.05) / (Q_0.95 - Q_0.05)."""
@@ -789,6 +806,7 @@ class TSTailImbalanceNative(SeriesOperator):
     canonical="ts_max_drawdown",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMaxDrawdownNative(SeriesOperator):
     """Rolling maximum drawdown from peak."""
@@ -830,6 +848,7 @@ class TSMaxDrawdownNative(SeriesOperator):
     canonical="ts_current_drawdown_duration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSCurrentDrawdownDurationNative(SeriesOperator):
     """Days since last peak."""
@@ -868,6 +887,7 @@ class TSCurrentDrawdownDurationNative(SeriesOperator):
     canonical="ts_current_drawdown_area",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSCurrentDrawdownAreaNative(SeriesOperator):
     """Cumulative drawdown area since last peak."""
@@ -906,6 +926,7 @@ class TSCurrentDrawdownAreaNative(SeriesOperator):
     canonical="ts_time_under_water",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSTimeUnderWaterNative(SeriesOperator):
     """Rolling fraction of time in drawdown."""
@@ -947,6 +968,7 @@ class TSTimeUnderWaterNative(SeriesOperator):
     canonical="ts_recovery_fraction",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRecoveryFractionNative(SeriesOperator):
     """Current value / rolling max (recovery from drawdown)."""
@@ -987,6 +1009,7 @@ class TSRecoveryFractionNative(SeriesOperator):
     canonical="ts_max_buildup",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMaxBuildupNative(SeriesOperator):
     """Rolling maximum buildup from trough."""
@@ -1028,6 +1051,7 @@ class TSMaxBuildupNative(SeriesOperator):
     canonical="ts_realized_quarticity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRealizedQuarticityNative(SeriesOperator):
     """Rolling realized quarticity: sum(x^4)."""
@@ -1067,6 +1091,7 @@ class TSRealizedQuarticityNative(SeriesOperator):
     canonical="ulcer_index",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UlcerIndexNative(SeriesOperator):
     """Ulcer index: sqrt(mean(drawdown^2))."""
@@ -1108,6 +1133,7 @@ class UlcerIndexNative(SeriesOperator):
     canonical="ts_staleness",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSStalenessNative(SeriesOperator):
     """Rolling staleness: fraction of unchanged values."""
@@ -1154,6 +1180,7 @@ class TSStalenessNative(SeriesOperator):
     canonical="ts_distance_to_high",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSDistanceToHighNative(SeriesOperator):
     """(rolling_max - current) / rolling_max."""
@@ -1194,6 +1221,7 @@ class TSDistanceToHighNative(SeriesOperator):
     canonical="ts_distance_to_low",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSDistanceToLowNative(SeriesOperator):
     """(current - rolling_min) / rolling_min."""
@@ -1234,6 +1262,7 @@ class TSDistanceToLowNative(SeriesOperator):
     canonical="ts_prev_high",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPrevHighNative(SeriesOperator):
     """Rolling maximum value."""
@@ -1272,6 +1301,7 @@ class TSPrevHighNative(SeriesOperator):
     canonical="ts_prev_low",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPrevLowNative(SeriesOperator):
     """Rolling minimum value."""
@@ -1310,6 +1340,7 @@ class TSPrevLowNative(SeriesOperator):
     canonical="ts_breakout_high",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSBreakoutHighNative(SeriesOperator):
     """Binary: 1 if current > rolling_max(lookback), 0 otherwise."""
@@ -1350,6 +1381,7 @@ class TSBreakoutHighNative(SeriesOperator):
     canonical="ts_breakdown_low",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSBreakdownLowNative(SeriesOperator):
     """Binary: 1 if current < rolling_min(lookback), 0 otherwise."""
@@ -1394,6 +1426,7 @@ class TSBreakdownLowNative(SeriesOperator):
     canonical="ts_channel_position",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSChannelPositionNative(SeriesOperator):
     """(x - low) / (high - low); position in [0, 1]."""
@@ -1436,6 +1469,7 @@ class TSChannelPositionNative(SeriesOperator):
     canonical="ts_channel_width",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSChannelWidthNative(SeriesOperator):
     """Absolute channel width: high - low."""
@@ -1477,6 +1511,7 @@ class TSChannelWidthNative(SeriesOperator):
     canonical="ts_channel_width_pct",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSChannelWidthPctNative(SeriesOperator):
     """Relative channel width: (high - low) / low."""
@@ -1518,6 +1553,7 @@ class TSChannelWidthPctNative(SeriesOperator):
     canonical="ts_channel_width_atr",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSChannelWidthATRNative(SeriesOperator):
     """Channel width normalized by ATR."""
@@ -1564,6 +1600,7 @@ class TSChannelWidthATRNative(SeriesOperator):
     canonical="ts_channel_width_slope",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSChannelWidthSlopeNative(SeriesOperator):
     """Change in channel width over period."""
@@ -1614,6 +1651,7 @@ class TSChannelWidthSlopeNative(SeriesOperator):
     canonical="ts_swing_amplitude",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSwingAmplitudeNative(SeriesOperator):
     """Absolute swing amplitude: |high - low| over window."""
@@ -1655,6 +1693,7 @@ class TSSwingAmplitudeNative(SeriesOperator):
     canonical="ts_swing_amplitude_pct",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSwingAmplitudePctNative(SeriesOperator):
     """Relative swing amplitude: (high - low) / avg."""
@@ -1697,6 +1736,7 @@ class TSSwingAmplitudePctNative(SeriesOperator):
     canonical="ts_swing_amplitude_atr",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSwingAmplitudeATRNative(SeriesOperator):
     """Swing amplitude normalized by ATR."""
@@ -1742,6 +1782,7 @@ class TSSwingAmplitudeATRNative(SeriesOperator):
     canonical="ts_swing_duration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSwingDurationNative(SeriesOperator):
     """Days since last swing reversal (simplified: days since change > threshold)."""
@@ -1782,6 +1823,7 @@ class TSSwingDurationNative(SeriesOperator):
     canonical="ts_swing_velocity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSSwingVelocityNative(SeriesOperator):
     """Swing velocity: amplitude / duration."""

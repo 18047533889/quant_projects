@@ -34,6 +34,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="event_frequency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventFrequencyNative(SeriesOperator):
     """Count of events in rolling window."""
@@ -66,6 +67,7 @@ class EventFrequencyNative(SeriesOperator):
     canonical="event_active_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventActiveCountNative(SeriesOperator):
     """Count of active (non-zero) events in window."""
@@ -100,6 +102,7 @@ class EventActiveCountNative(SeriesOperator):
     canonical="event_cumulative_return_past",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventCumulativeReturnPastNative(SeriesOperator):
     """Cumulative return since last event."""
@@ -134,6 +137,7 @@ class EventCumulativeReturnPastNative(SeriesOperator):
     canonical="event_abnormal_return_past",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventAbnormalReturnPastNative(SeriesOperator):
     """Abnormal return since last event (vs benchmark)."""
@@ -168,6 +172,7 @@ class EventAbnormalReturnPastNative(SeriesOperator):
     canonical="event_arithmetic_return_sum",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventArithmeticReturnSumNative(SeriesOperator):
     """Sum of arithmetic returns over event window."""
@@ -202,6 +207,7 @@ class EventArithmeticReturnSumNative(SeriesOperator):
     canonical="event_log_return_sum",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventLogReturnSumNative(SeriesOperator):
     """Sum of log returns over event window."""
@@ -236,6 +242,7 @@ class EventLogReturnSumNative(SeriesOperator):
     canonical="event_return_since_last",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventReturnSinceLastNative(SeriesOperator):
     """Return accumulated since last event occurrence."""
@@ -270,6 +277,7 @@ class EventReturnSinceLastNative(SeriesOperator):
     canonical="event_decay_asof",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventDecayAsofNative(SeriesOperator):
     """Exponentially decayed value since last event."""
@@ -305,6 +313,7 @@ class EventDecayAsofNative(SeriesOperator):
     canonical="event_cluster_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventClusterCountNative(SeriesOperator):
     """Count of event clusters in window."""
@@ -339,6 +348,7 @@ class EventClusterCountNative(SeriesOperator):
     canonical="event_cluster_mean_size",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventClusterMeanSizeNative(SeriesOperator):
     """Average size of event clusters."""
@@ -373,6 +383,7 @@ class EventClusterMeanSizeNative(SeriesOperator):
     canonical="event_fano_factor",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventFanoFactorNative(SeriesOperator):
     """Fano factor: variance / mean of event counts."""
@@ -405,6 +416,7 @@ class EventFanoFactorNative(SeriesOperator):
     canonical="event_fano_excess",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventFanoExcessNative(SeriesOperator):
     """Excess Fano factor: (variance - mean) / mean."""
@@ -437,6 +449,7 @@ class EventFanoExcessNative(SeriesOperator):
     canonical="event_allan_factor",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventAllanFactorNative(SeriesOperator):
     """Allan factor for event timing stability."""
@@ -469,6 +482,7 @@ class EventAllanFactorNative(SeriesOperator):
     canonical="event_allan_log_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventAllanLogMeanNative(SeriesOperator):
     """Log of Allan factor mean."""
@@ -501,6 +515,7 @@ class EventAllanLogMeanNative(SeriesOperator):
     canonical="event_allan_scaling_slope",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventAllanScalingSlopeNative(SeriesOperator):
     """Scaling exponent of Allan factor vs window size."""
@@ -535,6 +550,7 @@ class EventAllanScalingSlopeNative(SeriesOperator):
     canonical="event_hawkes_branching_ratio_proxy",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventHawkesBranchingRatioProxyNative(SeriesOperator):
     """Proxy for Hawkes process branching ratio."""
@@ -567,6 +583,7 @@ class EventHawkesBranchingRatioProxyNative(SeriesOperator):
     canonical="event_interval_memory",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventIntervalMemoryNative(SeriesOperator):
     """Correlation between successive inter-event intervals."""
@@ -599,6 +616,7 @@ class EventIntervalMemoryNative(SeriesOperator):
     canonical="event_interval_mark_coupling",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventIntervalMarkCouplingNative(SeriesOperator):
     """Correlation between inter-event interval and event mark."""
@@ -634,6 +652,7 @@ class EventIntervalMarkCouplingNative(SeriesOperator):
     canonical="event_mark_autocorr",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventMarkAutocorrNative(SeriesOperator):
     """Autocorrelation of event marks."""
@@ -668,6 +687,7 @@ class EventMarkAutocorrNative(SeriesOperator):
     canonical="event_refractory",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventRefractoryNative(SeriesOperator):
     """Refractory period indicator after event."""
@@ -700,6 +720,7 @@ class EventRefractoryNative(SeriesOperator):
     canonical="event_local_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventLocalVariationNative(SeriesOperator):
     """Local variation coefficient of inter-event intervals."""
@@ -732,6 +753,7 @@ class EventLocalVariationNative(SeriesOperator):
     canonical="event_level_survival_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventLevelSurvivalShareNative(SeriesOperator):
     """Share of events that persist for given duration."""
@@ -766,6 +788,7 @@ class EventLevelSurvivalShareNative(SeriesOperator):
     canonical="event_historical_response_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventHistoricalResponseMeanNative(SeriesOperator):
     """Mean response magnitude following similar events."""
@@ -801,6 +824,7 @@ class EventHistoricalResponseMeanNative(SeriesOperator):
     canonical="event_historical_response_sign_balance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventHistoricalResponseSignBalanceNative(SeriesOperator):
     """Balance of positive vs negative historical responses."""
@@ -836,6 +860,7 @@ class EventHistoricalResponseSignBalanceNative(SeriesOperator):
     canonical="event_response_peak_lag",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponsePeakLagNative(SeriesOperator):
     """Lag to peak response after event."""
@@ -871,6 +896,7 @@ class EventResponsePeakLagNative(SeriesOperator):
     canonical="event_response_decay_rate",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponseDecayRateNative(SeriesOperator):
     """Decay rate of response after event."""
@@ -906,6 +932,7 @@ class EventResponseDecayRateNative(SeriesOperator):
     canonical="event_response_dispersion",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponseDispersionNative(SeriesOperator):
     """Dispersion of responses across similar events."""
@@ -941,6 +968,7 @@ class EventResponseDispersionNative(SeriesOperator):
     canonical="event_response_effective_events",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponseEffectiveEventsNative(SeriesOperator):
     """Effective number of independent events contributing to response."""
@@ -973,6 +1001,7 @@ class EventResponseEffectiveEventsNative(SeriesOperator):
     canonical="event_response_overlap_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponseOverlapRatioNative(SeriesOperator):
     """Ratio of overlapping event response windows."""
@@ -1007,6 +1036,7 @@ class EventResponseOverlapRatioNative(SeriesOperator):
     canonical="event_response_reversal_strength",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EventResponseReversalStrengthNative(SeriesOperator):
     """Strength of reversal after initial response."""

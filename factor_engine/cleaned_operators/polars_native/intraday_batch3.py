@@ -15,7 +15,7 @@ from operators.base import SeriesOperator, PanelOperator
 # Interval Amount/Volume Measures
 # ============================================================================
 
-@register_operator(name="intra_interval_amount_share", backend="polars")
+@register_operator(name="intra_interval_amount_share", backend="polars", research_only=True)
 class IntraIntervalAmountSharePolarsNative(SeriesOperator):
     """Share of daily dollar volume in a specific time interval."""
 
@@ -55,7 +55,7 @@ class IntraIntervalAmountSharePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_interval_illiquidity", backend="polars")
+@register_operator(name="intra_interval_illiquidity", backend="polars", research_only=True)
 class IntraIntervalIlliquidityPolarsNative(SeriesOperator):
     """Amihud measure for a specific interval."""
 
@@ -91,7 +91,7 @@ class IntraIntervalIlliquidityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_interval_vwap_deviation", backend="polars")
+@register_operator(name="intra_interval_vwap_deviation", backend="polars", research_only=True)
 class IntraIntervalVwapDeviationPolarsNative(SeriesOperator):
     """Average price deviation from interval VWAP."""
 
@@ -160,7 +160,7 @@ class IntraIntervalVwapDeviationPolarsNative(SeriesOperator):
 # Segment Measures (Multiple intervals)
 # ============================================================================
 
-@register_operator(name="intra_segment_return", backend="polars")
+@register_operator(name="intra_segment_return", backend="polars", research_only=True)
 class IntraSegmentReturnPolarsNative(SeriesOperator):
     """Return in segment N of K equal segments."""
 
@@ -198,7 +198,7 @@ class IntraSegmentReturnPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_segment_realized_vol", backend="polars")
+@register_operator(name="intra_segment_realized_vol", backend="polars", research_only=True)
 class IntraSegmentRealizedVolPolarsNative(SeriesOperator):
     """Realized volatility in segment N of K equal segments."""
 
@@ -235,7 +235,7 @@ class IntraSegmentRealizedVolPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_segment_volume_share", backend="polars")
+@register_operator(name="intra_segment_volume_share", backend="polars", research_only=True)
 class IntraSegmentVolumeSharePolarsNative(SeriesOperator):
     """Volume share in segment N of K equal segments."""
 
@@ -278,7 +278,7 @@ class IntraSegmentVolumeSharePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_segment_amount_share", backend="polars")
+@register_operator(name="intra_segment_amount_share", backend="polars", research_only=True)
 class IntraSegmentAmountSharePolarsNative(SeriesOperator):
     """Dollar volume share in segment N of K equal segments."""
 
@@ -321,7 +321,7 @@ class IntraSegmentAmountSharePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_segment_vwap_deviation", backend="polars")
+@register_operator(name="intra_segment_vwap_deviation", backend="polars", research_only=True)
 class IntraSegmentVwapDeviationPolarsNative(SeriesOperator):
     """Price deviation from segment VWAP in segment N."""
 
@@ -391,7 +391,7 @@ class IntraSegmentVwapDeviationPolarsNative(SeriesOperator):
 # VWAP Path Dynamics
 # ============================================================================
 
-@register_operator(name="intra_vwap_path_slope", backend="polars")
+@register_operator(name="intra_vwap_path_slope", backend="polars", research_only=True)
 class IntraVwapPathSlopePolarsNative(SeriesOperator):
     """Slope of price relative to VWAP over the day."""
 
@@ -441,7 +441,7 @@ class IntraVwapPathSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_vwap_path_curvature", backend="polars")
+@register_operator(name="intra_vwap_path_curvature", backend="polars", research_only=True)
 class IntraVwapPathCurvaturePolarsNative(SeriesOperator):
     """Curvature (quadratic term) of price deviation from VWAP."""
 
@@ -489,7 +489,7 @@ class IntraVwapPathCurvaturePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_vwap_reversion_speed", backend="polars")
+@register_operator(name="intra_vwap_reversion_speed", backend="polars", research_only=True)
 class IntraVwapReversionSpeedPolarsNative(SeriesOperator):
     """Speed of mean reversion to VWAP (AR(1) coefficient of deviations)."""
 
@@ -535,7 +535,7 @@ class IntraVwapReversionSpeedPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_time_above_vwap", backend="polars")
+@register_operator(name="intra_time_above_vwap", backend="polars", research_only=True)
 class IntraTimeAboveVwapPolarsNative(SeriesOperator):
     """Total time (in bars) price is above VWAP."""
 
@@ -575,7 +575,7 @@ class IntraTimeAboveVwapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_longest_above_vwap_streak", backend="polars")
+@register_operator(name="intra_longest_above_vwap_streak", backend="polars", research_only=True)
 class IntraLongestAboveVwapStreakPolarsNative(SeriesOperator):
     """Longest consecutive bars price stays above VWAP."""
 
@@ -628,7 +628,7 @@ class IntraLongestAboveVwapStreakPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_longest_below_vwap_streak", backend="polars")
+@register_operator(name="intra_longest_below_vwap_streak", backend="polars", research_only=True)
 class IntraLongestBelowVwapStreakPolarsNative(SeriesOperator):
     """Longest consecutive bars price stays below VWAP."""
 
@@ -681,7 +681,7 @@ class IntraLongestBelowVwapStreakPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_price_vwap_max_positive_excursion", backend="polars")
+@register_operator(name="intra_price_vwap_max_positive_excursion", backend="polars", research_only=True)
 class IntraPriceVwapMaxPositiveExcursionPolarsNative(SeriesOperator):
     """Maximum positive excursion of price from VWAP."""
 
@@ -721,7 +721,7 @@ class IntraPriceVwapMaxPositiveExcursionPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_price_vwap_max_negative_excursion", backend="polars")
+@register_operator(name="intra_price_vwap_max_negative_excursion", backend="polars", research_only=True)
 class IntraPriceVwapMaxNegativeExcursionPolarsNative(SeriesOperator):
     """Maximum negative excursion of price from VWAP."""
 
@@ -765,7 +765,7 @@ class IntraPriceVwapMaxNegativeExcursionPolarsNative(SeriesOperator):
 # Bar Range and Volatility Measures
 # ============================================================================
 
-@register_operator(name="intra_bar_range_deviation", backend="polars")
+@register_operator(name="intra_bar_range_deviation", backend="polars", research_only=True)
 class IntraBarRangeDeviationPolarsNative(SeriesOperator):
     """Standard deviation of bar ranges (high - low)."""
 
@@ -789,7 +789,7 @@ class IntraBarRangeDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_bar_range_persistence", backend="polars")
+@register_operator(name="intra_bar_range_persistence", backend="polars", research_only=True)
 class IntraBarRangePersistencePolarsNative(SeriesOperator):
     """Autocorrelation of bar ranges."""
 
@@ -817,7 +817,7 @@ class IntraBarRangePersistencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_extreme_bar_return", backend="polars")
+@register_operator(name="intra_extreme_bar_return", backend="polars", research_only=True)
 class IntraExtremeBarReturnPolarsNative(SeriesOperator):
     """Return of the bar with the largest absolute return."""
 
@@ -838,7 +838,7 @@ class IntraExtremeBarReturnPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_high_low_affinity", backend="polars")
+@register_operator(name="intra_high_low_affinity", backend="polars", research_only=True)
 class IntraHighLowAffinityPolarsNative(SeriesOperator):
     """Correlation between high and low prices within day."""
 
@@ -863,7 +863,7 @@ class IntraHighLowAffinityPolarsNative(SeriesOperator):
 # Tail Measures
 # ============================================================================
 
-@register_operator(name="intra_tail_event_count", backend="polars")
+@register_operator(name="intra_tail_event_count", backend="polars", research_only=True)
 class IntraTailEventCountPolarsNative(SeriesOperator):
     """Count of extreme tail events (beyond threshold)."""
 
@@ -892,7 +892,7 @@ class IntraTailEventCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_tail_volume_share", backend="polars")
+@register_operator(name="intra_tail_volume_share", backend="polars", research_only=True)
 class IntraTailVolumeSharePolarsNative(SeriesOperator):
     """Share of volume during tail events."""
 
@@ -931,7 +931,7 @@ class IntraTailVolumeSharePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_signed_tail_variation_ratio", backend="polars")
+@register_operator(name="intra_signed_tail_variation_ratio", backend="polars", research_only=True)
 class IntraSignedTailVariationRatioPolarsNative(SeriesOperator):
     """Ratio of positive to negative tail variation."""
 
@@ -972,7 +972,7 @@ class IntraSignedTailVariationRatioPolarsNative(SeriesOperator):
 # Same-Slot Measures (comparison with same time on different days)
 # ============================================================================
 
-@register_operator(name="intra_same_slot_momentum", backend="polars")
+@register_operator(name="intra_same_slot_momentum", backend="polars", research_only=True)
 class IntraSameSlotMomentumPolarsNative(SeriesOperator):
     """Average return at same intraday slot across recent days."""
 
@@ -1005,7 +1005,7 @@ class IntraSameSlotMomentumPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_same_slot_reversal", backend="polars")
+@register_operator(name="intra_same_slot_reversal", backend="polars", research_only=True)
 class IntraSameSlotReversalPolarsNative(SeriesOperator):
     """Negative of same-slot momentum (reversal signal)."""
 
@@ -1033,7 +1033,7 @@ class IntraSameSlotReversalPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_same_slot_zscore", backend="polars")
+@register_operator(name="intra_same_slot_zscore", backend="polars", research_only=True)
 class IntraSameSlotZscorePolarsNative(SeriesOperator):
     """Average z-score of returns relative to same-slot distribution."""
 
@@ -1068,7 +1068,7 @@ class IntraSameSlotZscorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_consolidation_quality", backend="polars")
+@register_operator(name="intra_consolidation_quality", backend="polars", research_only=True)
 class IntraConsolidationQualityPolarsNative(SeriesOperator):
     """Measure of price stability: inverse of range/mean ratio."""
 
@@ -1095,7 +1095,7 @@ class IntraConsolidationQualityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_eod_reversal_decomposition", backend="polars")
+@register_operator(name="intra_eod_reversal_decomposition", backend="polars", research_only=True)
 class IntraEodReversalDecompositionPolarsNative(SeriesOperator):
     """Return from intraday high/low to close (measuring end-of-day reversal)."""
 

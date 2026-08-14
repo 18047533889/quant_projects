@@ -46,6 +46,7 @@ def _wilder_ema_expr(col: pl.Expr, period: int) -> pl.Expr:
     category="technical_indicator",
     canonical="ALMA",
     source="polars_native_phase6",
+    research_only=True,
 )
 class ALMA(SeriesOperator):
     """Arnaud Legoux Moving Average"""
@@ -76,6 +77,7 @@ class ALMA(SeriesOperator):
     category="technical_indicator",
     canonical="DMI_plus",
     source="polars_native_phase6",
+    research_only=True,
 )
 class DMI_plus(SeriesOperator):
     """Directional Movement Index Plus"""
@@ -108,6 +110,7 @@ class DMI_plus(SeriesOperator):
     category="technical_indicator",
     canonical="DMI_minus",
     source="polars_native_phase6",
+    research_only=True,
 )
 class DMI_minus(SeriesOperator):
     """Directional Movement Index Minus"""
@@ -140,6 +143,7 @@ class DMI_minus(SeriesOperator):
     category="technical_indicator",
     canonical="DX",
     source="polars_native_phase6",
+    research_only=True,
 )
 class DX(SeriesOperator):
     """Directional Movement Index"""
@@ -174,6 +178,7 @@ class DX(SeriesOperator):
     category="technical_indicator",
     canonical="NATR",
     source="polars_native_phase6",
+    research_only=True,
 )
 class NATR(SeriesOperator):
     """Normalized Average True Range"""
@@ -209,6 +214,7 @@ class NATR(SeriesOperator):
     category="technical_indicator",
     canonical="PPO",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PPO(SeriesOperator):
     """Percentage Price Oscillator"""
@@ -236,6 +242,7 @@ class PPO(SeriesOperator):
     category="technical_indicator",
     canonical="PPO_signal",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PPO_signal(SeriesOperator):
     """PPO Signal Line"""
@@ -263,6 +270,7 @@ class PPO_signal(SeriesOperator):
     category="technical_indicator",
     canonical="PPO_hist",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PPO_hist(SeriesOperator):
     """PPO Histogram"""
@@ -291,6 +299,7 @@ class PPO_hist(SeriesOperator):
     category="technical_indicator",
     canonical="PVO",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PVO(SeriesOperator):
     """Percentage Volume Oscillator"""
@@ -318,6 +327,7 @@ class PVO(SeriesOperator):
     category="technical_indicator",
     canonical="PVO_signal",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PVO_signal(SeriesOperator):
     """PVO Signal Line"""
@@ -345,6 +355,7 @@ class PVO_signal(SeriesOperator):
     category="technical_indicator",
     canonical="PVO_hist",
     source="polars_native_phase6",
+    research_only=True,
 )
 class PVO_hist(SeriesOperator):
     """PVO Histogram"""
@@ -373,6 +384,7 @@ class PVO_hist(SeriesOperator):
     category="technical_indicator",
     canonical="donchian_position",
     source="polars_native_phase6",
+    research_only=True,
 )
 class donchian_position(SeriesOperator):
     """Donchian Channel Position"""
@@ -402,6 +414,7 @@ class donchian_position(SeriesOperator):
     category="utility",
     canonical="calendar_day_diff",
     source="polars_native_phase6",
+    research_only=True,
 )
 class calendar_day_diff(SeriesOperator):
     """Calendar days since last observation"""
@@ -431,6 +444,7 @@ class calendar_day_diff(SeriesOperator):
     category="technical_indicator",
     canonical="directional_change_extent",
     source="polars_native_phase6",
+    research_only=True,
 )
 class directional_change_extent(SeriesOperator):
     """Directional Change Event Extent"""
@@ -462,6 +476,7 @@ class directional_change_extent(SeriesOperator):
     replace=True,
     replacement_reason="Native Polars implementation replaces pandas bridge",
     expected_old_source="factor_dsl_np",
+    research_only=True,
 )
 class winsorize_mean(SeriesOperator):
     """Winsorized Mean"""
@@ -493,6 +508,7 @@ class winsorize_mean(SeriesOperator):
     replace=True,
     replacement_reason="Native Polars implementation replaces pandas bridge",
     expected_old_source="factor_dsl_np",
+    research_only=True,
 )
 class zscore(SeriesOperator):
     """Z-Score Normalization"""
@@ -520,6 +536,7 @@ class zscore(SeriesOperator):
     category="statistics",
     canonical="zero_return_ratio",
     source="polars_native_phase6",
+    research_only=True,
 )
 class zero_return_ratio(SeriesOperator):
     """Ratio of zero returns"""
@@ -545,6 +562,7 @@ class zero_return_ratio(SeriesOperator):
     category="technical_indicator",
     canonical="vwap_deviation",
     source="polars_native_phase6",
+    research_only=True,
 )
 class vwap_deviation(SeriesOperator):
     """Deviation from VWAP"""
@@ -577,6 +595,7 @@ class vwap_deviation(SeriesOperator):
     replace=True,
     replacement_reason="Native Polars implementation replaces pandas bridge",
     expected_old_source="factor_dsl_np",
+    research_only=True,
 )
 class vwap_to_close_return(SeriesOperator):
     """Return from VWAP to close"""
@@ -609,6 +628,7 @@ class vwap_to_close_return(SeriesOperator):
     replace=True,
     replacement_reason="Native Polars implementation replaces pandas bridge",
     expected_old_source="factor_dsl_np",
+    research_only=True,
 )
 class open_to_vwap_return(SeriesOperator):
     """Return from open to VWAP"""
@@ -640,6 +660,7 @@ class open_to_vwap_return(SeriesOperator):
     category="group_feature",
     canonical="group_feature_coverage_ratio",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_coverage_ratio(SeriesOperator):
     """Group Feature Coverage Ratio"""
@@ -669,6 +690,7 @@ class group_feature_coverage_ratio(SeriesOperator):
     category="group_feature",
     canonical="group_feature_valid_member_count",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_valid_member_count(SeriesOperator):
     """Count of valid members in group"""
@@ -693,6 +715,7 @@ class group_feature_valid_member_count(SeriesOperator):
     category="group_feature",
     canonical="group_feature_mode_share",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_mode_share(SeriesOperator):
     """Share of most common value in group"""
@@ -722,6 +745,7 @@ class group_feature_mode_share(SeriesOperator):
     category="group_feature",
     canonical="group_peer_beta_deviation",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_peer_beta_deviation(SeriesOperator):
     """Deviation from group beta"""
@@ -754,6 +778,7 @@ class group_peer_beta_deviation(SeriesOperator):
     category="group_feature",
     canonical="group_signal_attraction_share",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_signal_attraction_share(SeriesOperator):
     """Share of group with same signal direction"""
@@ -785,6 +810,7 @@ class group_signal_attraction_share(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pca_explained_ratio",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pca_explained_ratio(SeriesOperator):
     """Rolling PCA explained variance ratio"""
@@ -813,6 +839,7 @@ class panel_rolling_pca_explained_ratio(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pca_loading",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pca_loading(SeriesOperator):
     """Rolling PCA loading"""
@@ -845,6 +872,7 @@ class panel_rolling_pca_loading(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pca_resid",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pca_resid(SeriesOperator):
     """Rolling PCA residual"""
@@ -878,6 +906,7 @@ class panel_rolling_pca_resid(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pca_resid_momentum",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pca_resid_momentum(SeriesOperator):
     """Momentum of PCA residual"""
@@ -911,6 +940,7 @@ class panel_rolling_pca_resid_momentum(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pca_resid_vol",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pca_resid_vol(SeriesOperator):
     """Volatility of PCA residual"""
@@ -943,6 +973,7 @@ class panel_rolling_pca_resid_vol(SeriesOperator):
     category="panel_feature",
     canonical="panel_async_beta_ex_self",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_async_beta_ex_self(SeriesOperator):
     """Async beta excluding self from market"""
@@ -978,6 +1009,7 @@ class panel_async_beta_ex_self(SeriesOperator):
     category="panel_feature",
     canonical="panel_factor_pocket_strength",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_factor_pocket_strength(SeriesOperator):
     """Factor pocket strength"""
@@ -1009,6 +1041,7 @@ class panel_factor_pocket_strength(SeriesOperator):
     category="panel_feature",
     canonical="panel_predictability_mosaic_score",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_predictability_mosaic_score(SeriesOperator):
     """Predictability mosaic score"""
@@ -1037,6 +1070,7 @@ class panel_predictability_mosaic_score(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pcr_forecast",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pcr_forecast(SeriesOperator):
     """Rolling PCR (Principal Component Regression) forecast"""
@@ -1077,6 +1111,7 @@ class panel_rolling_pcr_forecast(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_pls_forecast",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_pls_forecast(SeriesOperator):
     """Rolling PLS (Partial Least Squares) forecast"""
@@ -1114,6 +1149,7 @@ class panel_rolling_pls_forecast(SeriesOperator):
     category="panel_feature",
     canonical="panel_rolling_elastic_net_forecast",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_rolling_elastic_net_forecast(SeriesOperator):
     """Rolling elastic net forecast"""
@@ -1152,6 +1188,7 @@ class panel_rolling_elastic_net_forecast(SeriesOperator):
     category="panel_feature",
     canonical="panel_regime_conditioned_forecast",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_regime_conditioned_forecast(SeriesOperator):
     """Regime-conditioned forecast"""
@@ -1184,6 +1221,7 @@ class panel_regime_conditioned_forecast(SeriesOperator):
     category="panel_feature",
     canonical="panel_mixture_of_experts_score",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_mixture_of_experts_score(SeriesOperator):
     """Mixture of experts score"""
@@ -1218,6 +1256,7 @@ class panel_mixture_of_experts_score(SeriesOperator):
     category="panel_feature",
     canonical="panel_peer_graph_aggregate",
     source="polars_native_phase6",
+    research_only=True,
 )
 class panel_peer_graph_aggregate(SeriesOperator):
     """Peer graph aggregate"""
@@ -1247,6 +1286,7 @@ class panel_peer_graph_aggregate(SeriesOperator):
     category="group_feature",
     canonical="group_corr_mst_length",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_corr_mst_length(SeriesOperator):
     """Correlation minimum spanning tree length"""
@@ -1276,6 +1316,7 @@ class group_corr_mst_length(SeriesOperator):
     category="group_feature",
     canonical="group_current_members_tail_coexceedance",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_current_members_tail_coexceedance(SeriesOperator):
     """Group tail co-exceedance"""
@@ -1306,6 +1347,7 @@ class group_current_members_tail_coexceedance(SeriesOperator):
     category="group_feature",
     canonical="group_distribution_js_divergence",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_distribution_js_divergence(SeriesOperator):
     """Jensen-Shannon divergence between group and universe"""
@@ -1334,6 +1376,7 @@ class group_distribution_js_divergence(SeriesOperator):
     category="group_feature",
     canonical="group_feature_effective_rank",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_effective_rank(SeriesOperator):
     """Effective rank within group"""
@@ -1363,6 +1406,7 @@ class group_feature_effective_rank(SeriesOperator):
     category="group_feature",
     canonical="group_feature_mode_localization",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_mode_localization(SeriesOperator):
     """Mode localization in group"""
@@ -1393,6 +1437,7 @@ class group_feature_mode_localization(SeriesOperator):
     category="group_feature",
     canonical="group_feature_second_mode_localization",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_second_mode_localization(SeriesOperator):
     """Second mode localization"""
@@ -1426,6 +1471,7 @@ class group_feature_second_mode_localization(SeriesOperator):
     category="group_feature",
     canonical="group_feature_spectral_gap",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_feature_spectral_gap(SeriesOperator):
     """Spectral gap in group"""
@@ -1455,6 +1501,7 @@ class group_feature_spectral_gap(SeriesOperator):
     category="group_feature",
     canonical="group_multi_level_rank_consistency",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_multi_level_rank_consistency(SeriesOperator):
     """Multi-level rank consistency"""
@@ -1486,6 +1533,7 @@ class group_multi_level_rank_consistency(SeriesOperator):
     category="group_feature",
     canonical="group_peer_information_diffusion",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_peer_information_diffusion(SeriesOperator):
     """Peer information diffusion rate"""
@@ -1682,6 +1730,7 @@ class group_tail_lead_score(SeriesOperator):
     category="group_feature",
     canonical="group_wasserstein_barycenter_distance",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_wasserstein_barycenter_distance(SeriesOperator):
     """Wasserstein distance to group barycenter"""
@@ -1710,6 +1759,7 @@ class group_wasserstein_barycenter_distance(SeriesOperator):
     category="group_feature",
     canonical="group_spd_feature_structure_shift",
     source="polars_native_phase6",
+    research_only=True,
 )
 class group_spd_feature_structure_shift(SeriesOperator):
     """Feature structure shift in SPD manifold"""
@@ -1741,6 +1791,7 @@ class group_spd_feature_structure_shift(SeriesOperator):
     category="risk",
     canonical="turnover_adjusted_volatility",
     source="polars_native_phase6",
+    research_only=True,
 )
 class turnover_adjusted_volatility(SeriesOperator):
     """Turnover-adjusted volatility"""
@@ -1772,6 +1823,7 @@ class turnover_adjusted_volatility(SeriesOperator):
     category="microstructure",
     canonical="volume_price_range_density",
     source="polars_native_phase6",
+    research_only=True,
 )
 class volume_price_range_density(SeriesOperator):
     """Volume per unit price range"""
@@ -1803,6 +1855,7 @@ class volume_price_range_density(SeriesOperator):
     replace=True,
     replacement_reason="Phase 6 implementation replaces earlier native polars version",
     expected_old_source="operator_overhaul_native_polars",
+    research_only=True,
 )
 class yoy_by_period(SeriesOperator):
     """Year-over-year change by period"""
@@ -1832,6 +1885,7 @@ class yoy_by_period(SeriesOperator):
     replace=True,
     replacement_reason="Phase 6 implementation replaces earlier native polars version",
     expected_old_source="operator_overhaul_native_polars",
+    research_only=True,
 )
 class ttm_from_cumulative(SeriesOperator):
     """Trailing twelve months from cumulative"""
@@ -1860,6 +1914,7 @@ class ttm_from_cumulative(SeriesOperator):
     category="liquidity",
     canonical="dollar_volume_zscore",
     source="polars_native_phase6",
+    research_only=True,
 )
 class dollar_volume_zscore(SeriesOperator):
     """Dollar volume z-score"""
@@ -1891,6 +1946,7 @@ class dollar_volume_zscore(SeriesOperator):
     category="composition",
     canonical="composition_entropy",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_entropy(SeriesOperator):
     """Compositional data entropy"""
@@ -1921,6 +1977,7 @@ class composition_entropy(SeriesOperator):
     category="composition",
     canonical="composition_normalized_entropy",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_normalized_entropy(SeriesOperator):
     """Normalized compositional entropy"""
@@ -1950,6 +2007,7 @@ class composition_normalized_entropy(SeriesOperator):
     category="composition",
     canonical="composition_clr_component",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_clr_component(SeriesOperator):
     """Centered log-ratio component"""
@@ -1978,6 +2036,7 @@ class composition_clr_component(SeriesOperator):
     category="composition",
     canonical="composition_aitchison_distance",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_aitchison_distance(SeriesOperator):
     """Aitchison distance between compositions"""
@@ -2008,6 +2067,7 @@ class composition_aitchison_distance(SeriesOperator):
     category="composition",
     canonical="composition_js_divergence",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_js_divergence(SeriesOperator):
     """Jensen-Shannon divergence of compositions"""
@@ -2044,6 +2104,7 @@ class composition_js_divergence(SeriesOperator):
     category="composition",
     canonical="composition_ilr_balance",
     source="polars_native_phase6",
+    research_only=True,
 )
 class composition_ilr_balance(SeriesOperator):
     """Isometric log-ratio balance"""
@@ -2075,6 +2136,7 @@ class composition_ilr_balance(SeriesOperator):
     category="technical_indicator",
     canonical="ichimoku_senkou_a",
     source="polars_native_phase6",
+    research_only=True,
 )
 class ichimoku_senkou_a(SeriesOperator):
     """Ichimoku Senkou Span A"""
@@ -2108,6 +2170,7 @@ class ichimoku_senkou_a(SeriesOperator):
     category="technical_indicator",
     canonical="ichimoku_senkou_b",
     source="polars_native_phase6",
+    research_only=True,
 )
 class ichimoku_senkou_b(SeriesOperator):
     """Ichimoku Senkou Span B"""
@@ -2137,6 +2200,7 @@ class ichimoku_senkou_b(SeriesOperator):
     category="technical_indicator",
     canonical="ichimoku_cloud_position",
     source="polars_native_phase6",
+    research_only=True,
 )
 class ichimoku_cloud_position(SeriesOperator):
     """Position relative to Ichimoku cloud"""
@@ -2182,6 +2246,7 @@ class ichimoku_cloud_position(SeriesOperator):
     category="technical_indicator",
     canonical="ichimoku_cloud_width",
     source="polars_native_phase6",
+    research_only=True,
 )
 class ichimoku_cloud_width(SeriesOperator):
     """Ichimoku cloud width"""
@@ -2216,6 +2281,7 @@ class ichimoku_cloud_width(SeriesOperator):
     category="volume_indicator",
     canonical="rolling_obv",
     source="polars_native_phase6",
+    research_only=True,
 )
 class rolling_obv(SeriesOperator):
     """Rolling On-Balance Volume"""
@@ -2249,6 +2315,7 @@ class rolling_obv(SeriesOperator):
     category="volume_indicator",
     canonical="rolling_adl_flow",
     source="polars_native_phase6",
+    research_only=True,
 )
 class rolling_adl_flow(SeriesOperator):
     """Rolling Accumulation/Distribution Line"""
@@ -2285,6 +2352,7 @@ class rolling_adl_flow(SeriesOperator):
     category="volume_indicator",
     canonical="rolling_pvt",
     source="polars_native_phase6",
+    research_only=True,
 )
 class rolling_pvt(SeriesOperator):
     """Rolling Price Volume Trend"""
@@ -2317,6 +2385,7 @@ class rolling_pvt(SeriesOperator):
     category="fundamental",
     canonical="accounting_comparability_score",
     source="polars_native_phase6",
+    research_only=True,
 )
 class accounting_comparability_score(SeriesOperator):
     """Accounting comparability score"""
@@ -2346,6 +2415,7 @@ class accounting_comparability_score(SeriesOperator):
     category="statistics",
     canonical="baseline_scaled_wasserstein_distance",
     source="polars_native_phase6",
+    research_only=True,
 )
 class baseline_scaled_wasserstein_distance(SeriesOperator):
     """Baseline-scaled Wasserstein distance"""
@@ -2377,6 +2447,7 @@ class baseline_scaled_wasserstein_distance(SeriesOperator):
     category="technical_indicator",
     canonical="EaseOfMovement",
     source="polars_native_phase6",
+    research_only=True,
 )
 class EaseOfMovement(SeriesOperator):
     """Ease of Movement indicator"""
@@ -2416,6 +2487,7 @@ class EaseOfMovement(SeriesOperator):
     category="technical_indicator",
     canonical="KeltnerUpper",
     source="polars_native_phase6",
+    research_only=True,
 )
 class KeltnerUpper(SeriesOperator):
     """Keltner Channel Upper Band"""
@@ -2457,6 +2529,7 @@ class KeltnerUpper(SeriesOperator):
     category="technical_indicator",
     canonical="KeltnerLower",
     source="polars_native_phase6",
+    research_only=True,
 )
 class KeltnerLower(SeriesOperator):
     """Keltner Channel Lower Band"""
@@ -2496,6 +2569,7 @@ class KeltnerLower(SeriesOperator):
     category="technical_indicator",
     canonical="KeltnerPosition",
     source="polars_native_phase6",
+    research_only=True,
 )
 class KeltnerPosition(SeriesOperator):
     """Position within Keltner Channel"""
@@ -2538,6 +2612,7 @@ class KeltnerPosition(SeriesOperator):
     category="risk",
     canonical="lqtp_historical_cvar",
     source="polars_native_phase6",
+    research_only=True,
 )
 class lqtp_historical_cvar(SeriesOperator):
     """Historical Conditional Value at Risk"""

@@ -34,6 +34,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="report_rolling_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportRollingMeanNative(SeriesOperator):
     """Rolling mean across report periods."""
@@ -66,6 +67,7 @@ class ReportRollingMeanNative(SeriesOperator):
     canonical="report_yoy_lag",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportYoYLagNative(SeriesOperator):
     """Year-over-year value (lag 4 quarters for quarterly data)."""
@@ -98,6 +100,7 @@ class ReportYoYLagNative(SeriesOperator):
     canonical="report_change_breadth",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportChangeBreadthNative(SeriesOperator):
     """Fraction of line items that changed significantly."""
@@ -130,6 +133,7 @@ class ReportChangeBreadthNative(SeriesOperator):
     canonical="report_change_coherence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportChangeCoherenceNative(SeriesOperator):
     """Coherence of changes across related line items."""
@@ -159,6 +163,7 @@ class ReportChangeCoherenceNative(SeriesOperator):
     canonical="report_revision_magnitude",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportRevisionMagnitudeNative(SeriesOperator):
     """Magnitude of revision from previous report."""
@@ -188,6 +193,7 @@ class ReportRevisionMagnitudeNative(SeriesOperator):
     canonical="report_filing_delay_surprise",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportFilingDelaySurpriseNative(SeriesOperator):
     """Unexpected delay in filing (days beyond typical)."""
@@ -220,6 +226,7 @@ class ReportFilingDelaySurpriseNative(SeriesOperator):
     canonical="report_benford_js_divergence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ReportBenfordJSDivergenceNative(SeriesOperator):
     """Jensen-Shannon divergence from Benford's Law distribution."""

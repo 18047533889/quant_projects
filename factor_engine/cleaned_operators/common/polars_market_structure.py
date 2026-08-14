@@ -39,6 +39,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="a_share_cap_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class AShareCapRatioNative(SeriesOperator):
     """A-share market cap / total market cap."""
@@ -77,6 +78,7 @@ class AShareCapRatioNative(SeriesOperator):
     canonical="circulating_cap_ratio_change",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CirculatingCapRatioChangeNative(SeriesOperator):
     """Change in circulating cap / total cap ratio over d periods."""
@@ -118,6 +120,7 @@ class CirculatingCapRatioChangeNative(SeriesOperator):
     canonical="circulating_cap_unlock_proxy",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CirculatingCapUnlockProxyNative(SeriesOperator):
     """Positive changes in circulating cap ratio (unlock events)."""
@@ -154,6 +157,7 @@ class CirculatingCapUnlockProxyNative(SeriesOperator):
     canonical="market_cap_free_cap_gap",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MarketCapFreeCapGapNative(SeriesOperator):
     """(total_cap - free_cap) / total_cap; locked share ratio."""
@@ -196,6 +200,7 @@ class MarketCapFreeCapGapNative(SeriesOperator):
     canonical="listing_age",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ListingAgeNative(SeriesOperator):
     """Days since listing date."""
@@ -229,6 +234,7 @@ class ListingAgeNative(SeriesOperator):
     canonical="suspension_frequency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class SuspensionFrequencyNative(SeriesOperator):
     """Rolling count of suspension days / window."""
@@ -268,6 +274,7 @@ class SuspensionFrequencyNative(SeriesOperator):
     canonical="suspension_status_coverage",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class SuspensionStatusCoverageNative(SeriesOperator):
     """Rolling non-null suspension status ratio."""
@@ -311,6 +318,7 @@ class SuspensionStatusCoverageNative(SeriesOperator):
     canonical="capital_change_age",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CapitalChangeAgeNative(SeriesOperator):
     """Days since last capital change event."""
@@ -344,6 +352,7 @@ class CapitalChangeAgeNative(SeriesOperator):
     canonical="capital_change_magnitude",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CapitalChangeMagnitudeNative(SeriesOperator):
     """Relative change in total shares: (new - old) / old."""
@@ -382,6 +391,7 @@ class CapitalChangeMagnitudeNative(SeriesOperator):
     canonical="index_member",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexMemberNative(SeriesOperator):
     """Binary index membership indicator."""
@@ -414,6 +424,7 @@ class IndexMemberNative(SeriesOperator):
     canonical="index_membership_age",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexMembershipAgeNative(SeriesOperator):
     """Days since entry into index (consecutive membership)."""
@@ -450,6 +461,7 @@ class IndexMembershipAgeNative(SeriesOperator):
     canonical="index_weight",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexWeightNative(SeriesOperator):
     """Index weight (pass-through, may normalize)."""
@@ -476,6 +488,7 @@ class IndexWeightNative(SeriesOperator):
     canonical="index_weight_change",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexWeightChangeNative(SeriesOperator):
     """Change in index weight over d periods."""
@@ -515,6 +528,7 @@ class IndexWeightChangeNative(SeriesOperator):
     canonical="index_weight_gap_to_free_float",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexWeightGapToFreeFloatNative(SeriesOperator):
     """index_weight - free_float_cap / sum(free_float_cap)."""
@@ -552,6 +566,7 @@ class IndexWeightGapToFreeFloatNative(SeriesOperator):
     canonical="index_entry_exit_event",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexEntryExitEventNative(SeriesOperator):
     """Index entry/exit indicator: +1 entry, -1 exit, 0 no change."""
@@ -587,6 +602,7 @@ class IndexEntryExitEventNative(SeriesOperator):
     canonical="index_event_decay",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexEventDecayNative(SeriesOperator):
     """Exponential decay of index entry/exit events."""
@@ -635,6 +651,7 @@ class IndexEventDecayNative(SeriesOperator):
     canonical="index_reconstitution_churn",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IndexReconstitutionChurnNative(SeriesOperator):
     """Rolling sum of |entry_exit_event| over window."""
@@ -677,6 +694,7 @@ class IndexReconstitutionChurnNative(SeriesOperator):
     canonical="multi_index_entry_intensity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MultiIndexEntryIntensityNative(SeriesOperator):
     """Sum of entry events across multiple index memberships."""

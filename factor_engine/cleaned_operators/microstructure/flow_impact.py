@@ -228,6 +228,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
     business_category="intraday_microstructure",
     canonical="intraday_bvc_imbalance",
     source="microstructure.flow_impact",
+    research_only=True,
 )
 class IntradayBvcImbalance(SeriesOperator):
     """BV-C signed order-flow imbalance, one scalar per (date, symbol).
@@ -302,6 +303,7 @@ class IntradayBvcImbalance(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intraday_impact_beta",
     source="microstructure.flow_impact",
+    research_only=True,
 )
 class IntradayImpactBeta(SeriesOperator):
     """Per-day price-impact regression slope ``lambda``.
@@ -350,6 +352,7 @@ class IntradayImpactBeta(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intraday_impact_asymmetry",
     source="microstructure.flow_impact",
+    research_only=True,
 )
 class IntradayImpactAsymmetry(SeriesOperator):
     """Buy vs sell price-impact asymmetry.
@@ -411,6 +414,7 @@ class IntradayImpactAsymmetry(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intraday_return_wasserstein_shift",
     source="microstructure.flow_impact",
+    research_only=True,
 )
 class IntradayReturnWassersteinShift(SeriesOperator):
     """Wasserstein-1 shift between today's return distribution and the past.
@@ -462,6 +466,7 @@ class IntradayReturnWassersteinShift(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="micro_bvc_vpin",
     source="microstructure.flow_impact",
+    research_only=True,
 )
 class MicroBvcVpin(SeriesOperator):
     """VPIN built from BV-C flow over equal-volume buckets.

@@ -28,7 +28,7 @@ from cleaned_operators.base import (
 # BASIC PERIOD OPERATIONS
 # ============================================================================
 
-@register_operator(name="fin_lag", canonical="fin_lag", backend="polars")
+@register_operator(name="fin_lag", canonical="fin_lag", backend="polars", research_only=True)
 class FinLagPolarsNative(SeriesOperator):
     """Lag financial data by N periods (default 1 quarter)."""
     
@@ -51,7 +51,7 @@ class FinLagPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_diff", canonical="fin_diff", backend="polars")
+@register_operator(name="fin_diff", canonical="fin_diff", backend="polars", research_only=True)
 class FinDiffPolarsNative(SeriesOperator):
     """Absolute difference from N periods ago."""
     
@@ -77,7 +77,7 @@ class FinDiffPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_pct_change", canonical="fin_pct_change", backend="polars")
+@register_operator(name="fin_pct_change", canonical="fin_pct_change", backend="polars", research_only=True)
 class FinPctChangePolarsNative(SeriesOperator):
     """Percentage change from N periods ago."""
     
@@ -103,7 +103,7 @@ class FinPctChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_log_change", canonical="fin_log_change", backend="polars")
+@register_operator(name="fin_log_change", canonical="fin_log_change", backend="polars", research_only=True)
 class FinLogChangePolarsNative(SeriesOperator):
     """Log change from N periods ago."""
     
@@ -129,7 +129,7 @@ class FinLogChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth", canonical="fin_growth", backend="polars")
+@register_operator(name="fin_growth", canonical="fin_growth", backend="polars", research_only=True)
 class FinGrowthPolarsNative(SeriesOperator):
     """Growth rate (same as pct_change, alias for clarity)."""
     
@@ -159,7 +159,7 @@ class FinGrowthPolarsNative(SeriesOperator):
 # YOY AND QOQ OPERATIONS
 # ============================================================================
 
-@register_operator(name="fin_yoy", canonical="fin_yoy", backend="polars")
+@register_operator(name="fin_yoy", canonical="fin_yoy", backend="polars", research_only=True)
 class FinYoYPolarsNative(SeriesOperator):
     """Year-over-year growth (4 quarters for quarterly data)."""
     
@@ -185,7 +185,7 @@ class FinYoYPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_qoq", canonical="fin_qoq", backend="polars")
+@register_operator(name="fin_qoq", canonical="fin_qoq", backend="polars", research_only=True)
 class FinQoQPolarsNative(SeriesOperator):
     """Quarter-over-quarter growth."""
     
@@ -215,7 +215,7 @@ class FinQoQPolarsNative(SeriesOperator):
 # TTM (TRAILING TWELVE MONTHS) OPERATIONS
 # ============================================================================
 
-@register_operator(name="fin_ttm", canonical="fin_ttm", backend="polars")
+@register_operator(name="fin_ttm", canonical="fin_ttm", backend="polars", research_only=True)
 class FinTTMPolarsNative(SeriesOperator):
     """Trailing twelve months sum (4 quarters rolling sum)."""
     
@@ -241,7 +241,7 @@ class FinTTMPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_ttm_quarterly", canonical="fin_ttm_quarterly", backend="polars")
+@register_operator(name="fin_ttm_quarterly", canonical="fin_ttm_quarterly", backend="polars", research_only=True)
 class FinTTMQuarterlyPolarsNative(SeriesOperator):
     """TTM from quarterly data (rolling sum of 4 quarters)."""
     
@@ -267,7 +267,7 @@ class FinTTMQuarterlyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_quarter_from_cumulative", canonical="fin_quarter_from_cumulative", backend="polars")
+@register_operator(name="fin_quarter_from_cumulative", canonical="fin_quarter_from_cumulative", backend="polars", research_only=True)
 class FinQuarterFromCumulativePolarsNative(SeriesOperator):
     """Extract quarterly value from cumulative annual (Q4=annual, Q3=Q4-Q3_cumulative, etc)."""
     
@@ -297,7 +297,7 @@ class FinQuarterFromCumulativePolarsNative(SeriesOperator):
 # STATISTICAL MEASURES
 # ============================================================================
 
-@register_operator(name="fin_std", canonical="fin_std", backend="polars")
+@register_operator(name="fin_std", canonical="fin_std", backend="polars", research_only=True)
 class FinStdPolarsNative(SeriesOperator):
     """Rolling standard deviation over N periods."""
     
@@ -323,7 +323,7 @@ class FinStdPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cv", canonical="fin_cv", backend="polars")
+@register_operator(name="fin_cv", canonical="fin_cv", backend="polars", research_only=True)
 class FinCVPolarsNative(SeriesOperator):
     """Coefficient of variation (std / mean) over N periods."""
     
@@ -350,7 +350,7 @@ class FinCVPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_mean_abs_deviation", canonical="fin_mean_abs_deviation", backend="polars")
+@register_operator(name="fin_mean_abs_deviation", canonical="fin_mean_abs_deviation", backend="polars", research_only=True)
 class FinMeanAbsDeviationPolarsNative(SeriesOperator):
     """Mean absolute deviation from rolling mean."""
     
@@ -378,7 +378,7 @@ class FinMeanAbsDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_range", canonical="fin_range", backend="polars")
+@register_operator(name="fin_range", canonical="fin_range", backend="polars", research_only=True)
 class FinRangePolarsNative(SeriesOperator):
     """Range (max - min) over N periods."""
     
@@ -409,7 +409,7 @@ class FinRangePolarsNative(SeriesOperator):
 # GROWTH DYNAMICS
 # ============================================================================
 
-@register_operator(name="fin_growth_acceleration", canonical="fin_growth_acceleration", backend="polars")
+@register_operator(name="fin_growth_acceleration", canonical="fin_growth_acceleration", backend="polars", research_only=True)
 class FinGrowthAccelerationPolarsNative(SeriesOperator):
     """Change in growth rate (second derivative)."""
     
@@ -440,7 +440,7 @@ class FinGrowthAccelerationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth_change", canonical="fin_growth_change", backend="polars")
+@register_operator(name="fin_growth_change", canonical="fin_growth_change", backend="polars", research_only=True)
 class FinGrowthChangePolarsNative(SeriesOperator):
     """Absolute change in growth rate."""
     
@@ -468,7 +468,7 @@ class FinGrowthChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth_volatility", canonical="fin_growth_volatility", backend="polars")
+@register_operator(name="fin_growth_volatility", canonical="fin_growth_volatility", backend="polars", research_only=True)
 class FinGrowthVolatilityPolarsNative(SeriesOperator):
     """Standard deviation of growth rates over N periods."""
     
@@ -496,7 +496,7 @@ class FinGrowthVolatilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth_stability", canonical="fin_growth_stability", backend="polars")
+@register_operator(name="fin_growth_stability", canonical="fin_growth_stability", backend="polars", research_only=True)
 class FinGrowthStabilityPolarsNative(SeriesOperator):
     """Negative of growth volatility (higher = more stable)."""
     
@@ -524,7 +524,7 @@ class FinGrowthStabilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cagr", canonical="fin_cagr", backend="polars")
+@register_operator(name="fin_cagr", canonical="fin_cagr", backend="polars", research_only=True)
 class FinCAGRPolarsNative(SeriesOperator):
     """Compound annual growth rate over N periods."""
     
@@ -554,7 +554,7 @@ class FinCAGRPolarsNative(SeriesOperator):
 # RATIO OPERATIONS
 # ============================================================================
 
-@register_operator(name="fin_ratio", canonical="fin_ratio", backend="polars")
+@register_operator(name="fin_ratio", canonical="fin_ratio", backend="polars", research_only=True)
 class FinRatioPolarsNative(SeriesOperator):
     """Ratio to value N periods ago."""
     
@@ -580,7 +580,7 @@ class FinRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_common_size", canonical="fin_common_size", backend="polars")
+@register_operator(name="fin_common_size", canonical="fin_common_size", backend="polars", research_only=True)
 class FinCommonSizePolarsNative(SeriesOperator):
     """Common size analysis: value / rolling sum (as fraction of total)."""
     
@@ -607,7 +607,7 @@ class FinCommonSizePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_turnover", canonical="fin_turnover", backend="polars")
+@register_operator(name="fin_turnover", canonical="fin_turnover", backend="polars", research_only=True)
 class FinTurnoverPolarsNative(SeriesOperator):
     """Turnover ratio using average balance (current + lag) / 2."""
     
@@ -634,7 +634,7 @@ class FinTurnoverPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_average_balance", canonical="fin_average_balance", backend="polars")
+@register_operator(name="fin_average_balance", canonical="fin_average_balance", backend="polars", research_only=True)
 class FinAverageBalancePolarsNative(SeriesOperator):
     """Average balance between current and N periods ago."""
     
@@ -664,7 +664,7 @@ class FinAverageBalancePolarsNative(SeriesOperator):
 # STREAK AND PERSISTENCE MEASURES
 # ============================================================================
 
-@register_operator(name="fin_positive_streak", canonical="fin_positive_streak", backend="polars")
+@register_operator(name="fin_positive_streak", canonical="fin_positive_streak", backend="polars", research_only=True)
 class FinPositiveStreakPolarsNative(SeriesOperator):
     """Count consecutive positive values."""
     
@@ -716,7 +716,7 @@ class FinPositiveStreakPolarsNative(SeriesOperator):
         return streak.alias(col_name)
 
 
-@register_operator(name="fin_negative_streak", canonical="fin_negative_streak", backend="polars")
+@register_operator(name="fin_negative_streak", canonical="fin_negative_streak", backend="polars", research_only=True)
 class FinNegativeStreakPolarsNative(SeriesOperator):
     """Count consecutive negative values."""
     
@@ -768,7 +768,7 @@ class FinNegativeStreakPolarsNative(SeriesOperator):
         return streak.alias(col_name)
 
 
-@register_operator(name="fin_sign_change_count", canonical="fin_sign_change_count", backend="polars")
+@register_operator(name="fin_sign_change_count", canonical="fin_sign_change_count", backend="polars", research_only=True)
 class FinSignChangeCountPolarsNative(SeriesOperator):
     """Rolling count of sign changes over N periods."""
     
@@ -796,7 +796,7 @@ class FinSignChangeCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_monotonicity", canonical="fin_monotonicity", backend="polars")
+@register_operator(name="fin_monotonicity", canonical="fin_monotonicity", backend="polars", research_only=True)
 class FinMonotonicityPolarsNative(SeriesOperator):
     """Measure of monotonic trend: (increases - decreases) / window."""
     
@@ -831,7 +831,7 @@ class FinMonotonicityPolarsNative(SeriesOperator):
 # PERSISTENCE AND QUALITY METRICS
 # ============================================================================
 
-@register_operator(name="fin_earnings_persistence", canonical="fin_earnings_persistence", backend="polars")
+@register_operator(name="fin_earnings_persistence", canonical="fin_earnings_persistence", backend="polars", research_only=True)
 class FinEarningsPersistencePolarsNative(SeriesOperator):
     """Correlation between current and lagged values over window."""
     
@@ -862,7 +862,7 @@ class FinEarningsPersistencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_earnings_smoothness", canonical="fin_earnings_smoothness", backend="polars")
+@register_operator(name="fin_earnings_smoothness", canonical="fin_earnings_smoothness", backend="polars", research_only=True)
 class FinEarningsSmoothnessPolarsNative(SeriesOperator):
     """Negative of absolute changes (smoother = fewer large changes)."""
     
@@ -889,7 +889,7 @@ class FinEarningsSmoothnessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_stability", canonical="fin_stability", backend="polars")
+@register_operator(name="fin_stability", canonical="fin_stability", backend="polars", research_only=True)
 class FinStabilityPolarsNative(SeriesOperator):
     """Negative coefficient of variation (higher = more stable)."""
     
@@ -920,7 +920,7 @@ class FinStabilityPolarsNative(SeriesOperator):
 # TREND ANALYSIS
 # ============================================================================
 
-@register_operator(name="fin_trend_slope", canonical="fin_trend_slope", backend="polars")
+@register_operator(name="fin_trend_slope", canonical="fin_trend_slope", backend="polars", research_only=True)
 class FinTrendSlopePolarsNative(SeriesOperator):
     """Simple linear trend slope: (current - first) / periods."""
     
@@ -946,7 +946,7 @@ class FinTrendSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_trend_acceleration", canonical="fin_trend_acceleration", backend="polars")
+@register_operator(name="fin_trend_acceleration", canonical="fin_trend_acceleration", backend="polars", research_only=True)
 class FinTrendAccelerationPolarsNative(SeriesOperator):
     """Change in trend slope (second derivative approximation)."""
     
@@ -979,7 +979,7 @@ class FinTrendAccelerationPolarsNative(SeriesOperator):
 # FISCAL PERIOD OPERATIONS
 # ============================================================================
 
-@register_operator(name="fiscal_pct_change", canonical="fiscal_pct_change", backend="polars")
+@register_operator(name="fiscal_pct_change", canonical="fiscal_pct_change", backend="polars", research_only=True)
 class FiscalPctChangePolarsNative(SeriesOperator):
     """Fiscal period percentage change."""
     
@@ -1005,7 +1005,7 @@ class FiscalPctChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fiscal_acceleration", canonical="fiscal_acceleration", backend="polars")
+@register_operator(name="fiscal_acceleration", canonical="fiscal_acceleration", backend="polars", research_only=True)
 class FiscalAccelerationPolarsNative(SeriesOperator):
     """Fiscal acceleration (change in growth rate)."""
     
@@ -1033,7 +1033,7 @@ class FiscalAccelerationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fiscal_rolling_std", canonical="fiscal_rolling_std", backend="polars")
+@register_operator(name="fiscal_rolling_std", canonical="fiscal_rolling_std", backend="polars", research_only=True)
 class FiscalRollingStdPolarsNative(SeriesOperator):
     """Rolling standard deviation of fiscal data."""
     
@@ -1059,7 +1059,7 @@ class FiscalRollingStdPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fiscal_autocorr", canonical="fiscal_autocorr", backend="polars")
+@register_operator(name="fiscal_autocorr", canonical="fiscal_autocorr", backend="polars", research_only=True)
 class FiscalAutocorrPolarsNative(SeriesOperator):
     """Fiscal autocorrelation at specified lag over window."""
     
@@ -1093,7 +1093,7 @@ class FiscalAutocorrPolarsNative(SeriesOperator):
 
 # NOTE: fiscal_reversal_ratio moved to fiscal_batch2.py with magnitude-weighted implementation
 # This simpler implementation is kept for reference but not registered
-# @register_operator(name="fiscal_reversal_ratio", canonical="fiscal_reversal_ratio", backend="polars")
+# @register_operator(name="fiscal_reversal_ratio", canonical="fiscal_reversal_ratio", backend="polars", research_only=True)
 class FiscalReversalRatioPolarsNative_DISABLED(SeriesOperator):
     """Ratio of sign reversals to total periods in window."""
 
@@ -1122,7 +1122,7 @@ class FiscalReversalRatioPolarsNative_DISABLED(SeriesOperator):
         )
 
 
-@register_operator(name="fiscal_direction_consistency", canonical="fiscal_direction_consistency", backend="polars")
+@register_operator(name="fiscal_direction_consistency", canonical="fiscal_direction_consistency", backend="polars", research_only=True)
 class FiscalDirectionConsistencyPolarsNative(SeriesOperator):
     """Consistency of direction: 1 - reversal_ratio."""
     
@@ -1155,7 +1155,7 @@ class FiscalDirectionConsistencyPolarsNative(SeriesOperator):
 # DIVERGENCE AND GAP MEASURES
 # ============================================================================
 
-@register_operator(name="fin_divergence", canonical="fin_divergence", backend="polars")
+@register_operator(name="fin_divergence", canonical="fin_divergence", backend="polars", research_only=True)
 class FinDivergencePolarsNative(SeriesOperator):
     """Divergence from rolling mean (standardized)."""
     
@@ -1186,7 +1186,7 @@ class FinDivergencePolarsNative(SeriesOperator):
 # NORMALIZED SCORES
 # ============================================================================
 
-@register_operator(name="fin_zscore_history", canonical="fin_zscore_history", backend="polars")
+@register_operator(name="fin_zscore_history", canonical="fin_zscore_history", backend="polars", research_only=True)
 class FinZScoreHistoryPolarsNative(SeriesOperator):
     """Z-score relative to historical distribution over window."""
     
@@ -1213,7 +1213,7 @@ class FinZScoreHistoryPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_percentile_history", canonical="fin_percentile_history", backend="polars")
+@register_operator(name="fin_percentile_history", canonical="fin_percentile_history", backend="polars", research_only=True)
 class FinPercentileHistoryPolarsNative(SeriesOperator):
     """Percentile rank within rolling window."""
     
@@ -1245,7 +1245,7 @@ class FinPercentileHistoryPolarsNative(SeriesOperator):
 # SURPRISE AND EXPECTATION MEASURES
 # ============================================================================
 
-@register_operator(name="fin_surprise", canonical="fin_surprise", backend="polars")
+@register_operator(name="fin_surprise", canonical="fin_surprise", backend="polars", research_only=True)
 class FinSurprisePolarsNative(SeriesOperator):
     """Surprise relative to expectation (vs rolling mean)."""
     
@@ -1271,7 +1271,7 @@ class FinSurprisePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_surprise_zscore", canonical="fin_surprise_zscore", backend="polars")
+@register_operator(name="fin_surprise_zscore", canonical="fin_surprise_zscore", backend="polars", research_only=True)
 class FinSurpriseZScorePolarsNative(SeriesOperator):
     """Standardized surprise (z-score)."""
     

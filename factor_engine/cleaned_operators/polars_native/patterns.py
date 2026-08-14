@@ -49,6 +49,7 @@ def _find_pivots(data: np.ndarray, left: int = 2, right: int = 2) -> tuple[np.nd
     category="chart_pattern",
     canonical="pattern_123_bear",
     source="polars_native_patterns",
+    research_only=True,
 )
 class Pattern123Bear(SeriesOperator):
     """Bearish 1-2-3 pattern: high, higher high, lower high."""
@@ -90,6 +91,7 @@ class Pattern123Bear(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_123_bull",
     source="polars_native_patterns",
+    research_only=True,
 )
 class Pattern123Bull(SeriesOperator):
     """Bullish 1-2-3 pattern: low, lower low, higher low."""
@@ -130,6 +132,7 @@ class Pattern123Bull(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_ascending_triangle",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternAscendingTriangle(SeriesOperator):
     """Ascending triangle: flat resistance, rising support."""
@@ -174,6 +177,7 @@ class PatternAscendingTriangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bear_flag",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBearFlag(SeriesOperator):
     """Bear flag: downtrend with upward consolidation."""
@@ -214,6 +218,7 @@ class PatternBearFlag(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bear_pennant",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBearPennant(SeriesOperator):
     """Bear pennant: downtrend with converging consolidation."""
@@ -249,6 +254,7 @@ class PatternBearPennant(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_breakdown_retest",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBreakdownRetest(SeriesOperator):
     """Price breaks support then retests it from below."""
@@ -286,6 +292,7 @@ class PatternBreakdownRetest(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_breakout_retest",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBreakoutRetest(SeriesOperator):
     """Price breaks resistance then retests it from above."""
@@ -321,6 +328,7 @@ class PatternBreakoutRetest(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_broadening",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBroadening(SeriesOperator):
     """Broadening pattern: expanding volatility range."""
@@ -356,6 +364,7 @@ class PatternBroadening(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bull_flag",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBullFlag(SeriesOperator):
     """Bull flag: uptrend with downward consolidation."""
@@ -394,6 +403,7 @@ class PatternBullFlag(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bull_pennant",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternBullPennant(SeriesOperator):
     """Bull pennant: uptrend with converging consolidation."""
@@ -428,6 +438,7 @@ class PatternBullPennant(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_cup",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternCup(SeriesOperator):
     """Cup pattern: U-shaped recovery."""
@@ -467,6 +478,7 @@ class PatternCup(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_cup_handle",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternCupHandle(SeriesOperator):
     """Cup and handle: U-shaped recovery with small dip."""
@@ -505,6 +517,7 @@ class PatternCupHandle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_descending_triangle",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternDescendingTriangle(SeriesOperator):
     """Descending triangle: flat support, falling resistance."""
@@ -549,6 +562,7 @@ class PatternDescendingTriangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_double_bottom",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternDoubleBottom(SeriesOperator):
     """Double bottom: two similar lows (W pattern)."""
@@ -588,6 +602,7 @@ class PatternDoubleBottom(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_double_top",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternDoubleTop(SeriesOperator):
     """Double top: two similar highs (M pattern)."""
@@ -626,6 +641,7 @@ class PatternDoubleTop(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_falling_channel",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternFallingChannel(SeriesOperator):
     """Falling channel: parallel downtrend lines."""
@@ -667,6 +683,7 @@ class PatternFallingChannel(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_falling_wedge",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternFallingWedge(SeriesOperator):
     """Falling wedge: converging downtrend (bullish reversal)."""
@@ -709,6 +726,7 @@ class PatternFallingWedge(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_head_shoulders",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternHeadShoulders(SeriesOperator):
     """Head and shoulders: bearish reversal with 3 peaks."""
@@ -752,6 +770,7 @@ class PatternHeadShoulders(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_inverse_head_shoulders",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternInverseHeadShoulders(SeriesOperator):
     """Inverse head and shoulders: bullish reversal with 3 troughs."""
@@ -795,6 +814,7 @@ class PatternInverseHeadShoulders(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rectangle",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternRectangle(SeriesOperator):
     """Rectangle: horizontal support and resistance."""
@@ -835,6 +855,7 @@ class PatternRectangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rising_channel",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternRisingChannel(SeriesOperator):
     """Rising channel: parallel uptrend lines."""
@@ -876,6 +897,7 @@ class PatternRisingChannel(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rising_wedge",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternRisingWedge(SeriesOperator):
     """Rising wedge: converging uptrend (bearish reversal)."""
@@ -918,6 +940,7 @@ class PatternRisingWedge(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rounding_bottom",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternRoundingBottom(SeriesOperator):
     """Rounding bottom: gradual U-shaped recovery."""
@@ -958,6 +981,7 @@ class PatternRoundingBottom(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rounding_top",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternRoundingTop(SeriesOperator):
     """Rounding top: gradual inverted U-shaped decline."""
@@ -997,6 +1021,7 @@ class PatternRoundingTop(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_sym_triangle",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternSymTriangle(SeriesOperator):
     """Symmetric triangle: converging highs and lows."""
@@ -1038,6 +1063,7 @@ class PatternSymTriangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_triple_bottom",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternTripleBottom(SeriesOperator):
     """Triple bottom: three similar lows."""
@@ -1078,6 +1104,7 @@ class PatternTripleBottom(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_triple_top",
     source="polars_native_patterns",
+    research_only=True,
 )
 class PatternTripleTop(SeriesOperator):
     """Triple top: three similar highs."""

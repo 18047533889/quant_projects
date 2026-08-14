@@ -60,6 +60,7 @@ def _panel_result(base: pl.DataFrame, values: dict[str, pl.Series]) -> pl.DataFr
     canonical="ElderRay",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class ElderRay(SeriesOperator):
     """Elder Ray Index (Bull Power + Bear Power combined indicator)"""
@@ -99,6 +100,7 @@ class ElderRay(SeriesOperator):
     canonical="FisherTransform",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class FisherTransform(SeriesOperator):
     """Fisher Transform: converts prices to Gaussian normal distribution"""
@@ -138,6 +140,7 @@ class FisherTransform(SeriesOperator):
     canonical="PSAR",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class PSAR(SeriesOperator):
     """Parabolic SAR: Stop and Reverse indicator"""
@@ -241,6 +244,7 @@ class PSAR(SeriesOperator):
     canonical="QQE",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class QQE(SeriesOperator):
     """Quantitative Qualitative Estimation: smoothed RSI with ATR bands"""
@@ -285,6 +289,7 @@ class QQE(SeriesOperator):
     canonical="RSX",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class RSX(SeriesOperator):
     """Relative Strength Xtra: noise-free RSI using Jurik-style smoothing"""
@@ -335,6 +340,7 @@ class RSX(SeriesOperator):
     canonical="SupertrendDirection",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class SupertrendDirection(SeriesOperator):
     """Supertrend Direction: +1 for uptrend, -1 for downtrend"""
@@ -420,6 +426,7 @@ class SupertrendDirection(SeriesOperator):
     canonical="TSI",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class TSI(SeriesOperator):
     """True Strength Index: double-smoothed momentum oscillator"""
@@ -450,6 +457,7 @@ class TSI(SeriesOperator):
     canonical="TSI_signal",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class TSI_signal(SeriesOperator):
     """TSI signal line: EMA of TSI"""
@@ -481,6 +489,7 @@ class TSI_signal(SeriesOperator):
     canonical="VortexMinus",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class VortexMinus(SeriesOperator):
     """Vortex Indicator Minus (VI-)"""
@@ -537,6 +546,7 @@ class VortexMinus(SeriesOperator):
     canonical="VortexPlus",
     source="polars_native_technical_final",
     backend="polars",
+    research_only=True,
 )
 class VortexPlus(SeriesOperator):
     """Vortex Indicator Plus (VI+)"""

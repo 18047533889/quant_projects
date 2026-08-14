@@ -92,6 +92,7 @@ def _mad(vals: np.ndarray) -> float:
     business_category="time_series_distribution",
     canonical="ts_tail_imbalance",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsTailImbalance(SeriesOperator):
     """尾部失衡: (Upper - Lower) / n, 范围 [-1,1]。
@@ -141,6 +142,7 @@ class TsTailImbalance(SeriesOperator):
     business_category="time_series_distribution",
     canonical="ts_expected_shortfall_asymmetry",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsExpectedShortfallAsymmetry(SeriesOperator):
     """期望短尾不对称: (U - L) / (U + L + eps), 范围 [-1,1]。
@@ -198,6 +200,7 @@ def _empirical_quantiles(v: np.ndarray, grid: np.ndarray) -> np.ndarray:
     business_category="time_series_distribution",
     canonical="ts_wasserstein_shift",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsWassersteinShift(SeriesOperator):
     """一维 Wasserstein 位移: mean_u |F_A^{-1}(u) - F_B^{-1}(u)| / (MAD(B) + eps)。
@@ -244,6 +247,7 @@ class TsWassersteinShift(SeriesOperator):
     business_category="time_series_distribution",
     canonical="ts_ks_shift",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsKsShift(SeriesOperator):
     """KS 位移: sup_z |F_A(z) - F_B(z)|, 范围 [0,1]。
@@ -285,6 +289,7 @@ class TsKsShift(SeriesOperator):
     business_category="time_series_distribution",
     canonical="ts_location_shift",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsLocationShift(SeriesOperator):
     """位置位移: (median(A) - median(B)) / (MAD(B) + eps)。稳健的水平移动。"""
@@ -323,6 +328,7 @@ class TsLocationShift(SeriesOperator):
     business_category="time_series_distribution",
     canonical="ts_scale_shift",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsScaleShift(SeriesOperator):
     """尺度位移: log((MAD(A) + eps) / (MAD(B) + eps))。波动/离散度的换挡。"""
@@ -391,6 +397,7 @@ def _quantile_transport_fit(recent: np.ndarray, old: np.ndarray) -> tuple[float,
     business_category="time_series_distribution",
     canonical="ts_quantile_transport_slope",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsQuantileTransportSlope(SeriesOperator):
     """分位数输运斜率 b：ΔQ(q) = a + b·(q-0.5) + c·(q-0.5)²。
@@ -432,6 +439,7 @@ class TsQuantileTransportSlope(SeriesOperator):
     business_category="time_series_distribution",
     canonical="ts_quantile_transport_curvature",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsQuantileTransportCurvature(SeriesOperator):
     """分位数输运曲率 c：ΔQ(q) = a + b·(q-0.5) + c·(q-0.5)²。
@@ -506,6 +514,7 @@ def _mmd_rbf(recent: np.ndarray, old: np.ndarray, min_periods: int) -> float:
     business_category="time_series_distribution",
     canonical="ts_mmd_rbf_shift",
     source="alpha_language_distribution",
+    research_only=True,
 )
 class TsMmdRbfShift(SeriesOperator):
     """近 vs 旧窗口的 RBF-kernel MMD²（最大均值差异）。

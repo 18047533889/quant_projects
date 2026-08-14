@@ -44,6 +44,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="ts_ar_coefficient",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARCoefficientNative(SeriesOperator):
     """Rolling AR(p) coefficient estimation via OLS."""
@@ -105,6 +106,7 @@ class TSARCoefficientNative(SeriesOperator):
     canonical="ts_ar_fitted_value",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARFittedValueNative(SeriesOperator):
     """Rolling AR(p) fitted value (in-sample prediction)."""
@@ -158,6 +160,7 @@ class TSARFittedValueNative(SeriesOperator):
     canonical="ts_ar_forecast",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARForecastNative(SeriesOperator):
     """Rolling AR(p) one-step-ahead forecast."""
@@ -212,6 +215,7 @@ class TSARForecastNative(SeriesOperator):
     canonical="ts_ar_innovation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARInnovationNative(SeriesOperator):
     """AR(p) innovation (forecast error): y_t - forecast_t."""
@@ -272,6 +276,7 @@ class TSARInnovationNative(SeriesOperator):
     canonical="ts_ar_innovation_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARInnovationZNative(SeriesOperator):
     """Standardized AR(p) innovation: innovation / std(innovation)."""
@@ -338,6 +343,7 @@ class TSARInnovationZNative(SeriesOperator):
     canonical="ts_ar_in_sample_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARInSampleResidNative(SeriesOperator):
     """AR(p) in-sample residual std."""
@@ -392,6 +398,7 @@ class TSARInSampleResidNative(SeriesOperator):
     canonical="ts_ar_coeff_stability",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARCoeffStabilityNative(SeriesOperator):
     """AR coefficient stability: std of coefficient over sub-windows."""
@@ -476,6 +483,7 @@ class TSARCoeffStabilityNative(SeriesOperator):
     canonical="ts_ar_prior_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARPriorCoeffNative(SeriesOperator):
     """AR coefficient estimated on prior window (before current)."""
@@ -537,6 +545,7 @@ class TSARPriorCoeffNative(SeriesOperator):
     canonical="ts_ar_prior_forecast",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARPriorForecastNative(SeriesOperator):
     """AR forecast using prior window only."""
@@ -590,6 +599,7 @@ class TSARPriorForecastNative(SeriesOperator):
     canonical="ts_ar_prior_innovation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARPriorInnovationNative(SeriesOperator):
     """AR innovation using prior window forecast."""
@@ -650,6 +660,7 @@ class TSARPriorInnovationNative(SeriesOperator):
     canonical="ts_ar_prior_innovation_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSARPriorInnovationZNative(SeriesOperator):
     """Standardized AR innovation using prior window."""
@@ -721,6 +732,7 @@ class TSARPriorInnovationZNative(SeriesOperator):
     canonical="ts_poly2_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPoly2CoeffNative(SeriesOperator):
     """Rolling quadratic polynomial coefficient."""
@@ -777,6 +789,7 @@ class TSPoly2CoeffNative(SeriesOperator):
     canonical="ts_poly2_forecast_error",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPoly2ForecastErrorNative(SeriesOperator):
     """Quadratic polynomial forecast error."""
@@ -833,6 +846,7 @@ class TSPoly2ForecastErrorNative(SeriesOperator):
     canonical="ts_poly2_forecast_error_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPoly2ForecastErrorZNative(SeriesOperator):
     """Standardized quadratic polynomial forecast error."""
@@ -895,6 +909,7 @@ class TSPoly2ForecastErrorZNative(SeriesOperator):
     canonical="ts_poly2_prior_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPoly2PriorCoeffNative(SeriesOperator):
     """Quadratic polynomial coefficient from prior window."""
@@ -951,6 +966,7 @@ class TSPoly2PriorCoeffNative(SeriesOperator):
     canonical="ts_poly2_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSPoly2ResidNative(SeriesOperator):
     """Quadratic polynomial in-sample residual std."""
@@ -1006,6 +1022,7 @@ class TSPoly2ResidNative(SeriesOperator):
     canonical="ts_ridge_regression_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionCoeffNative(SeriesOperator):
     """Ridge regression coefficient (L2 regularized linear regression)."""
@@ -1063,6 +1080,7 @@ class TSRidgeRegressionCoeffNative(SeriesOperator):
     canonical="ts_ridge_regression_coeff_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionCoeffPriorNative(SeriesOperator):
     """Ridge regression coefficient from prior window."""
@@ -1120,6 +1138,7 @@ class TSRidgeRegressionCoeffPriorNative(SeriesOperator):
     canonical="ts_ridge_regression_forecast_error",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionForecastErrorNative(SeriesOperator):
     """Ridge regression forecast error."""
@@ -1180,6 +1199,7 @@ class TSRidgeRegressionForecastErrorNative(SeriesOperator):
     canonical="ts_ridge_regression_forecast_error_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
     """Standardized ridge regression forecast error."""
@@ -1246,6 +1266,7 @@ class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
     canonical="ts_ridge_regression_in_sample_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionInSampleResidNative(SeriesOperator):
     """Ridge regression in-sample residual std."""
@@ -1300,6 +1321,7 @@ class TSRidgeRegressionInSampleResidNative(SeriesOperator):
     canonical="ts_ridge_regression_predictive_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
     """Ridge regression rolling predictive residual std."""
@@ -1364,6 +1386,7 @@ class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
     canonical="ts_ridge_regression_resid_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSRidgeRegressionResidZNative(SeriesOperator):
     """Current value as z-score of ridge residuals."""
@@ -1436,6 +1459,7 @@ class TSRidgeRegressionResidZNative(SeriesOperator):
     canonical="ts_huber_regression_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionCoeffNative(SeriesOperator):
     """Huber robust regression coefficient (simplified IRLS)."""
@@ -1505,6 +1529,7 @@ class TSHuberRegressionCoeffNative(SeriesOperator):
     canonical="ts_huber_regression_coeff_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionCoeffPriorNative(SeriesOperator):
     """Huber robust regression coefficient from prior window."""
@@ -1577,6 +1602,7 @@ class TSHuberRegressionCoeffPriorNative(SeriesOperator):
     canonical="ts_huber_regression_forecast_error",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionForecastErrorNative(SeriesOperator):
     """Huber robust regression forecast error."""
@@ -1648,6 +1674,7 @@ class TSHuberRegressionForecastErrorNative(SeriesOperator):
     canonical="ts_huber_regression_forecast_error_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionForecastErrorZNative(SeriesOperator):
     """Standardized Huber robust regression forecast error."""
@@ -1725,6 +1752,7 @@ class TSHuberRegressionForecastErrorZNative(SeriesOperator):
     canonical="ts_huber_regression_in_sample_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionInSampleResidNative(SeriesOperator):
     """Huber robust regression in-sample residual std."""
@@ -1790,6 +1818,7 @@ class TSHuberRegressionInSampleResidNative(SeriesOperator):
     canonical="ts_huber_regression_predictive_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionPredictiveResidNative(SeriesOperator):
     """Huber robust regression rolling predictive residual std."""
@@ -1865,6 +1894,7 @@ class TSHuberRegressionPredictiveResidNative(SeriesOperator):
     canonical="ts_huber_regression_resid_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSHuberRegressionResidZNative(SeriesOperator):
     """Current value as z-score of Huber residuals."""
@@ -1948,6 +1978,7 @@ class TSHuberRegressionResidZNative(SeriesOperator):
     canonical="ts_quantile_regression_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileRegressionCoeffNative(SeriesOperator):
     """Quantile regression coefficient (simplified via weighted least squares approximation)."""
@@ -2010,6 +2041,7 @@ class TSQuantileRegressionCoeffNative(SeriesOperator):
     canonical="ts_quantile_regression_coeff_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
     """Quantile regression coefficient from prior window."""
@@ -2071,6 +2103,7 @@ class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
     canonical="ts_quantile_regression_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileRegressionResidNative(SeriesOperator):
     """Quantile regression in-sample residual std."""
@@ -2129,6 +2162,7 @@ class TSQuantileRegressionResidNative(SeriesOperator):
     canonical="ts_quantile_regression_slope",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSQuantileRegressionSlopeNative(SeriesOperator):
     """Quantile regression slope coefficient (coef_index=1)."""
@@ -2189,6 +2223,7 @@ class TSQuantileRegressionSlopeNative(SeriesOperator):
     canonical="ts_multi_regression_coeff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionCoeffNative(SeriesOperator):
     """Multi-variable regression coefficient (uses polynomial features from single series)."""
@@ -2247,6 +2282,7 @@ class TSMultiRegressionCoeffNative(SeriesOperator):
     canonical="ts_multi_regression_coeff_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionCoeffPriorNative(SeriesOperator):
     """Multi-variable regression coefficient from prior window."""
@@ -2305,6 +2341,7 @@ class TSMultiRegressionCoeffPriorNative(SeriesOperator):
     canonical="ts_multi_regression_r2",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionR2Native(SeriesOperator):
     """Multi-variable regression R-squared."""
@@ -2363,6 +2400,7 @@ class TSMultiRegressionR2Native(SeriesOperator):
     canonical="ts_multi_regression_r2_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionR2PriorNative(SeriesOperator):
     """Multi-variable regression R-squared from prior window."""
@@ -2421,6 +2459,7 @@ class TSMultiRegressionR2PriorNative(SeriesOperator):
     canonical="ts_multi_regression_forecast_error",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionForecastErrorNative(SeriesOperator):
     """Multi-variable regression forecast error."""
@@ -2482,6 +2521,7 @@ class TSMultiRegressionForecastErrorNative(SeriesOperator):
     canonical="ts_multi_regression_forecast_error_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionForecastErrorZNative(SeriesOperator):
     """Standardized multi-variable regression forecast error."""
@@ -2549,6 +2589,7 @@ class TSMultiRegressionForecastErrorZNative(SeriesOperator):
     canonical="ts_multi_regression_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionResidNative(SeriesOperator):
     """Multi-variable regression in-sample residual std."""
@@ -2604,6 +2645,7 @@ class TSMultiRegressionResidNative(SeriesOperator):
     canonical="ts_multi_regression_resid_z",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionResidZNative(SeriesOperator):
     """Current value as z-score of multi-regression residuals."""
@@ -2672,6 +2714,7 @@ class TSMultiRegressionResidZNative(SeriesOperator):
     canonical="ts_multi_regression_coeff_stability",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionCoeffStabilityNative(SeriesOperator):
     """Multi-regression coefficient stability over sub-windows."""
@@ -2750,6 +2793,7 @@ class TSMultiRegressionCoeffStabilityNative(SeriesOperator):
     canonical="ts_multi_regression_adjusted_r2_prior",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
     """Multi-variable regression adjusted R-squared from prior window."""

@@ -8,7 +8,6 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 
 
-@register_operator(
     name="ts_sma_cn",
     category="time_series",
     business_category="time_series",
@@ -16,6 +15,7 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
     source="lqtp_compat",
     backend="pandas_numpy",
     status="research",
+    research_only=True,
 )
 class ChineseRecursiveSMA(SeriesOperator):
     """Chinese/JQ recursive SMA: y=(m*x+(n-m)*prev)/n."""
@@ -47,7 +47,6 @@ class ChineseRecursiveSMA(SeriesOperator):
         return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
-@register_operator(
     name="lqtp_historical_cvar",
     category="time_series",
     business_category="risk",
@@ -55,6 +54,7 @@ class ChineseRecursiveSMA(SeriesOperator):
     source="lqtp_compat",
     backend="pandas_numpy",
     status="research",
+    research_only=True,
 )
 class LQTPHistoricalCVaR(SeriesOperator):
     """Historical Expected Shortfall: negative mean of observations <= rolling q-quantile."""

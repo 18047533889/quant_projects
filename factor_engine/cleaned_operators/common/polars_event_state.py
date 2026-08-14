@@ -39,6 +39,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="state_since_last",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateSinceLastNative(SeriesOperator):
     """Periods since condition was last true."""
@@ -72,6 +73,7 @@ class StateSinceLastNative(SeriesOperator):
     canonical="state_since_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateSinceCountNative(SeriesOperator):
     """Count of events since condition became true."""
@@ -111,6 +113,7 @@ class StateSinceCountNative(SeriesOperator):
     canonical="state_hold",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateHoldNative(SeriesOperator):
     """Hold state for N periods after trigger."""
@@ -149,6 +152,7 @@ class StateHoldNative(SeriesOperator):
     canonical="state_latch",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateLatchNative(SeriesOperator):
     """Latch state on (set trigger) and off (reset trigger)."""
@@ -190,6 +194,7 @@ class StateLatchNative(SeriesOperator):
     canonical="state_deadband",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateDeadbandNative(SeriesOperator):
     """Deadband filter: change only if delta exceeds threshold."""
@@ -230,6 +235,7 @@ class StateDeadbandNative(SeriesOperator):
     canonical="state_ewm_if",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class StateEwmIfNative(SeriesOperator):
     """EWM that only updates when condition is true."""
@@ -278,6 +284,7 @@ class StateEwmIfNative(SeriesOperator):
     canonical="cross_event",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CrossEventNative(SeriesOperator):
     """Detect when x crosses threshold (1=up, -1=down, 0=no cross)."""
@@ -318,6 +325,7 @@ class CrossEventNative(SeriesOperator):
     canonical="limit_up_close",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class LimitUpCloseNative(SeriesOperator):
     """Detect limit-up close (close >= prev_close * 1.1)."""
@@ -350,6 +358,7 @@ class LimitUpCloseNative(SeriesOperator):
     canonical="limit_down_close",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class LimitDownCloseNative(SeriesOperator):
     """Detect limit-down close (close <= prev_close * 0.9)."""
@@ -382,6 +391,7 @@ class LimitDownCloseNative(SeriesOperator):
     canonical="tradable_state",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TradableStateNative(SeriesOperator):
     """Tradable state: non-null, positive volume, non-limit."""
@@ -420,6 +430,7 @@ class TradableStateNative(SeriesOperator):
     canonical="ffill_limit",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FfillLimitNative(SeriesOperator):
     """Forward fill with maximum gap limit."""
@@ -459,6 +470,7 @@ class FfillLimitNative(SeriesOperator):
     canonical="directional_change_state",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DirectionalChangeStateNative(SeriesOperator):
     """Directional change state: 1=uptrend, -1=downtrend, 0=neutral."""
@@ -501,6 +513,7 @@ class DirectionalChangeStateNative(SeriesOperator):
     canonical="date_diff_days",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DateDiffDaysNative(SeriesOperator):
     """Days between current and previous date."""
@@ -540,6 +553,7 @@ class DateDiffDaysNative(SeriesOperator):
     canonical="trading_day_diff",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TradingDayDiffNative(SeriesOperator):
     """Trading days since last observation (row count)."""

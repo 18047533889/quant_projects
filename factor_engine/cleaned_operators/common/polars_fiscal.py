@@ -34,6 +34,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="fiscal_pct_change",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalPctChangeNative(SeriesOperator):
     """Fiscal period percentage change."""
@@ -66,6 +67,7 @@ class FiscalPctChangeNative(SeriesOperator):
     canonical="fiscal_acceleration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalAccelerationNative(SeriesOperator):
     """Fiscal period acceleration (second derivative)."""
@@ -98,6 +100,7 @@ class FiscalAccelerationNative(SeriesOperator):
     canonical="fiscal_autocorr",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalAutocorrNative(SeriesOperator):
     """Fiscal period autocorrelation."""
@@ -132,6 +135,7 @@ class FiscalAutocorrNative(SeriesOperator):
     canonical="fiscal_rolling_std",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalRollingStdNative(SeriesOperator):
     """Rolling standard deviation over fiscal periods."""
@@ -164,6 +168,7 @@ class FiscalRollingStdNative(SeriesOperator):
     canonical="fiscal_reversal_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalReversalRatioNative(SeriesOperator):
     """Ratio of sign reversals in fiscal period changes."""
@@ -196,6 +201,7 @@ class FiscalReversalRatioNative(SeriesOperator):
     canonical="fiscal_change_direction_agreement",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalChangeDirectionAgreementNative(SeriesOperator):
     """Agreement of change directions between two metrics."""
@@ -230,6 +236,7 @@ class FiscalChangeDirectionAgreementNative(SeriesOperator):
     canonical="fiscal_pair_direction_agreement",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalPairDirectionAgreementNative(SeriesOperator):
     """Pairwise direction agreement across fiscal periods."""
@@ -264,6 +271,7 @@ class FiscalPairDirectionAgreementNative(SeriesOperator):
     canonical="fiscal_direction_consistency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalDirectionConsistencyNative(SeriesOperator):
     """Consistency of change direction over fiscal periods."""
@@ -296,6 +304,7 @@ class FiscalDirectionConsistencyNative(SeriesOperator):
     canonical="fiscal_sign_consistency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalSignConsistencyNative(SeriesOperator):
     """Consistency of sign over fiscal periods."""
@@ -328,6 +337,7 @@ class FiscalSignConsistencyNative(SeriesOperator):
     canonical="fiscal_sign_agreement",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalSignAgreementNative(SeriesOperator):
     """Sign agreement between two metrics."""
@@ -357,6 +367,7 @@ class FiscalSignAgreementNative(SeriesOperator):
     canonical="fiscal_true_streak",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalTrueStreakNative(SeriesOperator):
     """Consecutive fiscal periods with same sign."""
@@ -383,6 +394,7 @@ class FiscalTrueStreakNative(SeriesOperator):
     canonical="fiscal_accrual_quality",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalAccrualQualityNative(SeriesOperator):
     """Accrual quality metric (e.g., Dechow-Dichev)."""
@@ -417,6 +429,7 @@ class FiscalAccrualQualityNative(SeriesOperator):
     canonical="fiscal_asymmetric_timeliness",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalAsymmetricTimelinessNative(SeriesOperator):
     """Basu (1997) asymmetric timeliness measure."""
@@ -451,6 +464,7 @@ class FiscalAsymmetricTimelinessNative(SeriesOperator):
     canonical="fiscal_asymmetric_elasticity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalAsymmetricElasticityNative(SeriesOperator):
     """Asymmetric response elasticity (good vs bad news)."""
@@ -485,6 +499,7 @@ class FiscalAsymmetricElasticityNative(SeriesOperator):
     canonical="fiscal_regression_resid_std",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalRegressionResidStdNative(SeriesOperator):
     """Standard deviation of regression residuals over fiscal periods."""
@@ -519,6 +534,7 @@ class FiscalRegressionResidStdNative(SeriesOperator):
     canonical="fiscal_ar_resid_std",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalARResidStdNative(SeriesOperator):
     """Standard deviation of AR(1) residuals over fiscal periods."""
@@ -551,6 +567,7 @@ class FiscalARResidStdNative(SeriesOperator):
     canonical="fiscal_perpetual_inventory",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalPerpetualInventoryNative(SeriesOperator):
     """Perpetual inventory method for capital stock accumulation."""
@@ -583,6 +600,7 @@ class FiscalPerpetualInventoryNative(SeriesOperator):
     canonical="fiscal_standardized_surprise",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FiscalStandardizedSurpriseNative(SeriesOperator):
     """Standardized unexpected earnings (SUE)."""

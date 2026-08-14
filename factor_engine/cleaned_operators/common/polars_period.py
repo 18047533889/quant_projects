@@ -34,6 +34,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="period_average",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class PeriodAverageNative(SeriesOperator):
     """Average value over a period window."""
@@ -66,6 +67,7 @@ class PeriodAverageNative(SeriesOperator):
     canonical="period_lag",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class PeriodLagNative(SeriesOperator):
     """Lag by n periods."""
@@ -98,6 +100,7 @@ class PeriodLagNative(SeriesOperator):
     canonical="period_change",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class PeriodChangeNative(SeriesOperator):
     """Period-over-period change."""
@@ -130,6 +133,7 @@ class PeriodChangeNative(SeriesOperator):
     canonical="period_cagr",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class PeriodCAGRNative(SeriesOperator):
     """Compound annual growth rate over periods."""
@@ -164,6 +168,7 @@ class PeriodCAGRNative(SeriesOperator):
     canonical="period_stability",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class PeriodStabilityNative(SeriesOperator):
     """Stability measure: 1 - (std / mean) over periods."""

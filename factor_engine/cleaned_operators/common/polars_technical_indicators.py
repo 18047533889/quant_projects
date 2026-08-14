@@ -40,6 +40,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="WMA",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class WMANative(SeriesOperator):
     """Weighted Moving Average: linear decreasing weights."""
@@ -82,6 +83,7 @@ class WMANative(SeriesOperator):
     canonical="DEMA",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DEMANative(SeriesOperator):
     """Double Exponential Moving Average: 2*EMA - EMA(EMA)."""
@@ -118,6 +120,7 @@ class DEMANative(SeriesOperator):
     canonical="TEMA",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TEMANative(SeriesOperator):
     """Triple Exponential Moving Average: 3*EMA - 3*EMA(EMA) + EMA(EMA(EMA))."""
@@ -155,6 +158,7 @@ class TEMANative(SeriesOperator):
     canonical="HMA",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class HMANative(SeriesOperator):
     """Hull Moving Average: WMA(2*WMA(n/2) - WMA(n), sqrt(n))."""
@@ -207,6 +211,7 @@ class HMANative(SeriesOperator):
     canonical="RSI_WILDER",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class RSIWilderNative(SeriesOperator):
     """RSI using Wilder's smoothing: 100 - 100/(1 + RS), RS = EMA(gain)/EMA(loss)."""
@@ -250,6 +255,7 @@ class RSIWilderNative(SeriesOperator):
     canonical="CMO",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CMONative(SeriesOperator):
     """Chande Momentum Oscillator: 100 * (sum_up - sum_down) / (sum_up + sum_down)."""
@@ -292,6 +298,7 @@ class CMONative(SeriesOperator):
     canonical="MACD_line",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MACDLineNative(SeriesOperator):
     """MACD line: EMA(fast) - EMA(slow)."""
@@ -331,6 +338,7 @@ class MACDLineNative(SeriesOperator):
     canonical="MACD_signal",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MACDSignalNative(SeriesOperator):
     """MACD signal: EMA of MACD line."""
@@ -374,6 +382,7 @@ class MACDSignalNative(SeriesOperator):
     canonical="MACD_hist",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MACDHistNative(SeriesOperator):
     """MACD histogram: MACD line - signal."""
@@ -422,6 +431,7 @@ class MACDHistNative(SeriesOperator):
     canonical="ATR_WILDER",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ATRWilderNative(SeriesOperator):
     """Average True Range using Wilder's smoothing."""
@@ -470,6 +480,7 @@ class ATRWilderNative(SeriesOperator):
     canonical="ADX",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ADXNative(SeriesOperator):
     """Average Directional Index."""
@@ -540,6 +551,7 @@ class ADXNative(SeriesOperator):
     canonical="bollinger_pct_b",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class BollingerPctBNative(SeriesOperator):
     """Bollinger %B: (price - lower_band) / (upper_band - lower_band)."""
@@ -581,6 +593,7 @@ class BollingerPctBNative(SeriesOperator):
     canonical="bollinger_width",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class BollingerWidthNative(SeriesOperator):
     """Bollinger Band Width: (upper - lower) / middle."""
@@ -618,6 +631,7 @@ class BollingerWidthNative(SeriesOperator):
     canonical="KeltnerMid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class KeltnerMidNative(SeriesOperator):
     """Keltner Channel middle line: EMA of typical price."""
@@ -667,6 +681,7 @@ class KeltnerMidNative(SeriesOperator):
     canonical="donchian_lower",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DonchianLowerNative(SeriesOperator):
     """Donchian Channel lower: rolling min of low."""
@@ -699,6 +714,7 @@ class DonchianLowerNative(SeriesOperator):
     canonical="donchian_mid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DonchianMidNative(SeriesOperator):
     """Donchian Channel mid: (rolling_max(high) + rolling_min(low)) / 2."""
@@ -738,6 +754,7 @@ class DonchianMidNative(SeriesOperator):
     canonical="donchian_upper",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class DonchianUpperNative(SeriesOperator):
     """Donchian Channel upper: rolling max of high."""
@@ -770,6 +787,7 @@ class DonchianUpperNative(SeriesOperator):
     canonical="ichimoku_tenkan",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IchimokuTenkanNative(SeriesOperator):
     """Ichimoku Tenkan-sen (conversion line): (9-period high + 9-period low) / 2."""
@@ -809,6 +827,7 @@ class IchimokuTenkanNative(SeriesOperator):
     canonical="ichimoku_kijun",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IchimokuKijunNative(SeriesOperator):
     """Ichimoku Kijun-sen (base line): (26-period high + 26-period low) / 2."""
@@ -853,6 +872,7 @@ class IchimokuKijunNative(SeriesOperator):
     canonical="MFI",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class MFINative(SeriesOperator):
     """Money Flow Index: volume-weighted RSI."""
@@ -908,6 +928,7 @@ class MFINative(SeriesOperator):
     canonical="CMF",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CMFNative(SeriesOperator):
     """Chaikin Money Flow."""
@@ -958,6 +979,7 @@ class CMFNative(SeriesOperator):
     canonical="ForceIndex",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ForceIndexNative(SeriesOperator):
     """Force Index: (close - close_prev) * volume, then EMA smoothed."""
@@ -1001,6 +1023,7 @@ class ForceIndexNative(SeriesOperator):
     canonical="ChaikinOscillator",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ChaikinOscillatorNative(SeriesOperator):
     """Chaikin Oscillator: EMA(ADL, fast) - EMA(ADL, slow)."""
@@ -1058,6 +1081,7 @@ class ChaikinOscillatorNative(SeriesOperator):
     canonical="rolling_vwap",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class RollingVWAPNative(SeriesOperator):
     """Rolling Volume-Weighted Average Price."""
@@ -1102,6 +1126,7 @@ class RollingVWAPNative(SeriesOperator):
     canonical="CoppockCurve",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CoppockCurveNative(SeriesOperator):
     """Coppock Curve: WMA of (ROC14 + ROC11)."""
@@ -1157,6 +1182,7 @@ class CoppockCurveNative(SeriesOperator):
     canonical="efficiency_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class EfficiencyRatioNative(SeriesOperator):
     """Kaufman Efficiency Ratio: net_change / sum(abs(change))."""
@@ -1195,6 +1221,7 @@ class EfficiencyRatioNative(SeriesOperator):
     canonical="choppiness_index",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ChoppinessIndexNative(SeriesOperator):
     """Choppiness Index: 100 * log10(sum(ATR) / (max - min)) / log10(n)."""
@@ -1254,6 +1281,7 @@ class ChoppinessIndexNative(SeriesOperator):
     canonical="UltimateOscillator",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UltimateOscillatorNative(SeriesOperator):
     """Ultimate Oscillator: weighted average of three time periods."""
@@ -1320,6 +1348,7 @@ class UltimateOscillatorNative(SeriesOperator):
     canonical="Supertrend",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class SupertrendNative(SeriesOperator):
     """Supertrend indicator value."""
@@ -1377,6 +1406,7 @@ class SupertrendNative(SeriesOperator):
     canonical="KAMA",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class KAMANative(SeriesOperator):
     """Kaufman Adaptive Moving Average."""

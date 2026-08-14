@@ -23,7 +23,7 @@ from cleaned_operators.base import (
 # Markov Chain Operators
 # ============================================================================
 
-@register_operator(name="ts_markov_spectral_gap", canonical="ts_markov_spectral_gap", backend="polars")
+@register_operator(name="ts_markov_spectral_gap", canonical="ts_markov_spectral_gap", backend="polars", research_only=True)
 class TSMarkovSpectralGapPolarsNative(SeriesOperator):
     """Spectral gap (1 - second largest eigenvalue) of estimated transition matrix"""
 
@@ -46,7 +46,7 @@ class TSMarkovSpectralGapPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_markov_state_entropy", canonical="ts_markov_state_entropy", backend="polars")
+@register_operator(name="ts_markov_state_entropy", canonical="ts_markov_state_entropy", backend="polars", research_only=True)
 class TSMarkovStateEntropyPolarsNative(SeriesOperator):
     """Shannon entropy of state occupancy distribution"""
 
@@ -68,7 +68,7 @@ class TSMarkovStateEntropyPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_markov_stationary_surprisal", canonical="ts_markov_stationary_surprisal", backend="polars")
+@register_operator(name="ts_markov_stationary_surprisal", canonical="ts_markov_stationary_surprisal", backend="polars", research_only=True)
 class TSMarkovStationarySurprisalPolarsNative(SeriesOperator):
     """Surprisal of current state under stationary distribution"""
 
@@ -90,7 +90,7 @@ class TSMarkovStationarySurprisalPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_markov_transition_surprisal", canonical="ts_markov_transition_surprisal", backend="polars")
+@register_operator(name="ts_markov_transition_surprisal", canonical="ts_markov_transition_surprisal", backend="polars", research_only=True)
 class TSMarkovTransitionSurprisalPolarsNative(SeriesOperator):
     """Surprisal of observed transition from previous state"""
 
@@ -116,7 +116,7 @@ class TSMarkovTransitionSurprisalPolarsNative(SeriesOperator):
 # Mass and Concentration Metrics
 # ============================================================================
 
-@register_operator(name="ts_mass_concentration", canonical="ts_mass_concentration", backend="polars")
+@register_operator(name="ts_mass_concentration", canonical="ts_mass_concentration", backend="polars", research_only=True)
 class TSMassConcentrationPolarsNative(SeriesOperator):
     """Concentration of cumulative mass (Gini-like metric)"""
 
@@ -142,7 +142,7 @@ class TSMassConcentrationPolarsNative(SeriesOperator):
 # Matrix Profile Operators
 # ============================================================================
 
-@register_operator(name="ts_matrix_profile_discord_score", canonical="ts_matrix_profile_discord_score", backend="polars")
+@register_operator(name="ts_matrix_profile_discord_score", canonical="ts_matrix_profile_discord_score", backend="polars", research_only=True)
 class TSMatrixProfileDiscordScorePolarsNative(SeriesOperator):
     """Matrix profile discord score (distance to nearest neighbor)"""
 
@@ -165,7 +165,7 @@ class TSMatrixProfileDiscordScorePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_matrix_profile_motif_age", canonical="ts_matrix_profile_motif_age", backend="polars")
+@register_operator(name="ts_matrix_profile_motif_age", canonical="ts_matrix_profile_motif_age", backend="polars", research_only=True)
 class TSMatrixProfileMotifAgePolarsNative(SeriesOperator):
     """Time since most recent motif occurrence"""
 
@@ -187,7 +187,7 @@ class TSMatrixProfileMotifAgePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_matrix_profile_motif_frequency", canonical="ts_matrix_profile_motif_frequency", backend="polars")
+@register_operator(name="ts_matrix_profile_motif_frequency", canonical="ts_matrix_profile_motif_frequency", backend="polars", research_only=True)
 class TSMatrixProfileMotifFrequencyPolarsNative(SeriesOperator):
     """Frequency of motif occurrences in window"""
 
@@ -210,7 +210,7 @@ class TSMatrixProfileMotifFrequencyPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_matrix_profile_neighbor_dispersion", canonical="ts_matrix_profile_neighbor_dispersion", backend="polars")
+@register_operator(name="ts_matrix_profile_neighbor_dispersion", canonical="ts_matrix_profile_neighbor_dispersion", backend="polars", research_only=True)
 class TSMatrixProfileNeighborDispersionPolarsNative(SeriesOperator):
     """Standard deviation of nearest neighbor distances"""
 
@@ -232,7 +232,7 @@ class TSMatrixProfileNeighborDispersionPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_matrix_profile_novelty", canonical="ts_matrix_profile_novelty", backend="polars")
+@register_operator(name="ts_matrix_profile_novelty", canonical="ts_matrix_profile_novelty", backend="polars", research_only=True)
 class TSMatrixProfileNoveltyPolarsNative(SeriesOperator):
     """Current subsequence distance to historical patterns"""
 
@@ -258,7 +258,7 @@ class TSMatrixProfileNoveltyPolarsNative(SeriesOperator):
 # Path Geometry and Excursion Metrics
 # ============================================================================
 
-@register_operator(name="ts_max_chord_excursion", canonical="ts_max_chord_excursion", backend="polars")
+@register_operator(name="ts_max_chord_excursion", canonical="ts_max_chord_excursion", backend="polars", research_only=True)
 class TSMaxChordExcursionPolarsNative(SeriesOperator):
     """Maximum perpendicular distance from linear trend"""
 
@@ -280,7 +280,7 @@ class TSMaxChordExcursionPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_max_drawdown_activity_cost", canonical="ts_max_drawdown_activity_cost", backend="polars")
+@register_operator(name="ts_max_drawdown_activity_cost", canonical="ts_max_drawdown_activity_cost", backend="polars", research_only=True)
 class TSMaxDrawdownActivityCostPolarsNative(SeriesOperator):
     """Maximum drawdown weighted by trading activity"""
 
@@ -302,7 +302,7 @@ class TSMaxDrawdownActivityCostPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_mean_excess_slope", canonical="ts_mean_excess_slope", backend="polars")
+@register_operator(name="ts_mean_excess_slope", canonical="ts_mean_excess_slope", backend="polars", research_only=True)
 class TSMeanExcessSlopePolarsNative(SeriesOperator):
     """Slope of mean excess function (for extreme value theory)"""
 
@@ -329,7 +329,7 @@ class TSMeanExcessSlopePolarsNative(SeriesOperator):
 # Mean Reversion Metrics
 # ============================================================================
 
-@register_operator(name="ts_mean_reversion_half_life", canonical="ts_mean_reversion_half_life", backend="polars")
+@register_operator(name="ts_mean_reversion_half_life", canonical="ts_mean_reversion_half_life", backend="polars", research_only=True)
 class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
     """Estimated half-life of mean reversion"""
 
@@ -382,7 +382,7 @@ class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
         return result.to_series()
 
 
-@register_operator(name="ts_mean_reversion_ou_approx_half_life", canonical="ts_mean_reversion_ou_approx_half_life", backend="polars")
+@register_operator(name="ts_mean_reversion_ou_approx_half_life", canonical="ts_mean_reversion_ou_approx_half_life", backend="polars", research_only=True)
 class TSMeanReversionOUApproxHalfLifePolarsNative(SeriesOperator):
     """Ornstein-Uhlenbeck approximation of mean reversion half-life"""
 
@@ -422,7 +422,7 @@ class TSMeanReversionOUApproxHalfLifePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_median3_causal", canonical="ts_median3_causal", backend="polars")
+@register_operator(name="ts_median3_causal", canonical="ts_median3_causal", backend="polars", research_only=True)
 class TSMedian3CausalPolarsNative(SeriesOperator):
     """Causal 3-period median filter"""
 
@@ -456,7 +456,7 @@ class TSMedian3CausalPolarsNative(SeriesOperator):
 # Distribution Shift Metrics
 # ============================================================================
 
-@register_operator(name="ts_mmd_rbf_shift", canonical="ts_mmd_rbf_shift", backend="polars")
+@register_operator(name="ts_mmd_rbf_shift", canonical="ts_mmd_rbf_shift", backend="polars", research_only=True)
 class TSMMDRBFShiftPolarsNative(SeriesOperator):
     """Maximum Mean Discrepancy with RBF kernel for distribution shift detection"""
 
@@ -478,7 +478,7 @@ class TSMMDRBFShiftPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_modwt_band_corr", canonical="ts_modwt_band_corr", backend="polars")
+@register_operator(name="ts_modwt_band_corr", canonical="ts_modwt_band_corr", backend="polars", research_only=True)
 class TSMODWTBandCorrPolarsNative(SeriesOperator):
     """Correlation between MODWT wavelet bands"""
 
@@ -501,7 +501,7 @@ class TSMODWTBandCorrPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_motif_recurrence_count", canonical="ts_motif_recurrence_count", backend="polars")
+@register_operator(name="ts_motif_recurrence_count", canonical="ts_motif_recurrence_count", backend="polars", research_only=True)
 class TSMotifRecurrenceCountPolarsNative(SeriesOperator):
     """Count of motif recurrences in window"""
 
@@ -528,7 +528,7 @@ class TSMotifRecurrenceCountPolarsNative(SeriesOperator):
 # Multifractal Analysis
 # ============================================================================
 
-@register_operator(name="ts_multifractal_asymmetry", canonical="ts_multifractal_asymmetry", backend="polars")
+@register_operator(name="ts_multifractal_asymmetry", canonical="ts_multifractal_asymmetry", backend="polars", research_only=True)
 class TSMultifractalAsymmetryPolarsNative(SeriesOperator):
     """Asymmetry of multifractal spectrum"""
 
@@ -549,7 +549,7 @@ class TSMultifractalAsymmetryPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multifractal_curvature", canonical="ts_multifractal_curvature", backend="polars")
+@register_operator(name="ts_multifractal_curvature", canonical="ts_multifractal_curvature", backend="polars", research_only=True)
 class TSMultifractalCurvaturePolarsNative(SeriesOperator):
     """Curvature of multifractal spectrum at peak"""
 
@@ -570,7 +570,7 @@ class TSMultifractalCurvaturePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multifractal_spectrum_width", canonical="ts_multifractal_spectrum_width", backend="polars")
+@register_operator(name="ts_multifractal_spectrum_width", canonical="ts_multifractal_spectrum_width", backend="polars", research_only=True)
 class TSMultifractalSpectrumWidthPolarsNative(SeriesOperator):
     """Width of multifractal spectrum (alpha_max - alpha_min)"""
 
@@ -595,7 +595,7 @@ class TSMultifractalSpectrumWidthPolarsNative(SeriesOperator):
 # Multiscale Entropy and Trend Analysis
 # ============================================================================
 
-@register_operator(name="ts_multiscale_entropy_slope", canonical="ts_multiscale_entropy_slope", backend="polars")
+@register_operator(name="ts_multiscale_entropy_slope", canonical="ts_multiscale_entropy_slope", backend="polars", research_only=True)
 class TSMultiscaleEntropySlopePolarsNative(SeriesOperator):
     """Slope of sample entropy across scales"""
 
@@ -617,7 +617,7 @@ class TSMultiscaleEntropySlopePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multiscale_permutation_entropy_slope", canonical="ts_multiscale_permutation_entropy_slope", backend="polars")
+@register_operator(name="ts_multiscale_permutation_entropy_slope", canonical="ts_multiscale_permutation_entropy_slope", backend="polars", research_only=True)
 class TSMultiscalePermutationEntropySlopePolarsNative(SeriesOperator):
     """Slope of permutation entropy across scales"""
 
@@ -639,7 +639,7 @@ class TSMultiscalePermutationEntropySlopePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multiscale_trend_consensus", canonical="ts_multiscale_trend_consensus", backend="polars")
+@register_operator(name="ts_multiscale_trend_consensus", canonical="ts_multiscale_trend_consensus", backend="polars", research_only=True)
 class TSMultiscaleTrendConsensusPolarsNative(SeriesOperator):
     """Agreement of trend direction across multiple scales"""
 
@@ -676,7 +676,7 @@ class TSMultiscaleTrendConsensusPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multiscale_trend_curvature", canonical="ts_multiscale_trend_curvature", backend="polars")
+@register_operator(name="ts_multiscale_trend_curvature", canonical="ts_multiscale_trend_curvature", backend="polars", research_only=True)
 class TSMultiscaleTrendCurvaturePolarsNative(SeriesOperator):
     """Curvature of trend strength across scales"""
 
@@ -698,7 +698,7 @@ class TSMultiscaleTrendCurvaturePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_multiscale_trend_dispersion", canonical="ts_multiscale_trend_dispersion", backend="polars")
+@register_operator(name="ts_multiscale_trend_dispersion", canonical="ts_multiscale_trend_dispersion", backend="polars", research_only=True)
 class TSMultiscaleTrendDispersionPolarsNative(SeriesOperator):
     """Standard deviation of trend estimates across scales"""
 
@@ -724,7 +724,7 @@ class TSMultiscaleTrendDispersionPolarsNative(SeriesOperator):
 # Structural Level and Pivot Analysis
 # ============================================================================
 
-@register_operator(name="ts_nearest_structural_level_distance", canonical="ts_nearest_structural_level_distance", backend="polars")
+@register_operator(name="ts_nearest_structural_level_distance", canonical="ts_nearest_structural_level_distance", backend="polars", research_only=True)
 class TSNearestStructuralLevelDistancePolarsNative(SeriesOperator):
     """Distance to nearest support/resistance level"""
 
@@ -745,7 +745,7 @@ class TSNearestStructuralLevelDistancePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_nth_pivot_high", canonical="ts_nth_pivot_high", backend="polars")
+@register_operator(name="ts_nth_pivot_high", canonical="ts_nth_pivot_high", backend="polars", research_only=True)
 class TSNthPivotHighPolarsNative(SeriesOperator):
     """Value of nth most recent pivot high"""
 
@@ -767,7 +767,7 @@ class TSNthPivotHighPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_nth_pivot_high_age", canonical="ts_nth_pivot_high_age", backend="polars")
+@register_operator(name="ts_nth_pivot_high_age", canonical="ts_nth_pivot_high_age", backend="polars", research_only=True)
 class TSNthPivotHighAgePolarsNative(SeriesOperator):
     """Periods since nth most recent pivot high"""
 
@@ -789,7 +789,7 @@ class TSNthPivotHighAgePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_nth_pivot_low", canonical="ts_nth_pivot_low", backend="polars")
+@register_operator(name="ts_nth_pivot_low", canonical="ts_nth_pivot_low", backend="polars", research_only=True)
 class TSNthPivotLowPolarsNative(SeriesOperator):
     """Value of nth most recent pivot low"""
 
@@ -811,7 +811,7 @@ class TSNthPivotLowPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_nth_pivot_low_age", canonical="ts_nth_pivot_low_age", backend="polars")
+@register_operator(name="ts_nth_pivot_low_age", canonical="ts_nth_pivot_low_age", backend="polars", research_only=True)
 class TSNthPivotLowAgePolarsNative(SeriesOperator):
     """Periods since nth most recent pivot low"""
 
@@ -833,7 +833,7 @@ class TSNthPivotLowAgePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_nth_value", canonical="ts_nth_value", backend="polars")
+@register_operator(name="ts_nth_value", canonical="ts_nth_value", backend="polars", research_only=True)
 class TSNthValuePolarsNative(SeriesOperator):
     """Value at nth position back in time"""
 
@@ -857,7 +857,7 @@ class TSNthValuePolarsNative(SeriesOperator):
 # Opening/Overnight Analysis
 # ============================================================================
 
-@register_operator(name="ts_opening_mispricing_score", canonical="ts_opening_mispricing_score", backend="polars")
+@register_operator(name="ts_opening_mispricing_score", canonical="ts_opening_mispricing_score", backend="polars", research_only=True)
 class TSOpeningMispricingScorePolarsNative(SeriesOperator):
     """Z-score of opening gap relative to historical pattern"""
 
@@ -888,7 +888,7 @@ class TSOpeningMispricingScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_ordinal_irreversibility", canonical="ts_ordinal_irreversibility", backend="polars")
+@register_operator(name="ts_ordinal_irreversibility", canonical="ts_ordinal_irreversibility", backend="polars", research_only=True)
 class TSOrdinalIrreversibilityPolarsNative(SeriesOperator):
     """Time asymmetry based on ordinal patterns"""
 
@@ -910,7 +910,7 @@ class TSOrdinalIrreversibilityPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_overnight_intraday_cov", canonical="ts_overnight_intraday_cov", backend="polars")
+@register_operator(name="ts_overnight_intraday_cov", canonical="ts_overnight_intraday_cov", backend="polars", research_only=True)
 class TSOvernightIntradayCovPolarsNative(SeriesOperator):
     """Covariance between overnight and intraday returns"""
 
@@ -942,7 +942,7 @@ class TSOvernightIntradayCovPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_overnight_intraday_sign_agreement", canonical="ts_overnight_intraday_sign_agreement", backend="polars")
+@register_operator(name="ts_overnight_intraday_sign_agreement", canonical="ts_overnight_intraday_sign_agreement", backend="polars", research_only=True)
 class TSOvernightIntradaySignAgreementPolarsNative(SeriesOperator):
     """Fraction of time overnight and intraday returns have same sign"""
 
@@ -970,7 +970,7 @@ class TSOvernightIntradaySignAgreementPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_overnight_intraday_spread", canonical="ts_overnight_intraday_spread", backend="polars")
+@register_operator(name="ts_overnight_intraday_spread", canonical="ts_overnight_intraday_spread", backend="polars", research_only=True)
 class TSOvernightIntradaySpreadPolarsNative(SeriesOperator):
     """Difference between overnight and intraday return means"""
 
@@ -1001,7 +1001,7 @@ class TSOvernightIntradaySpreadPolarsNative(SeriesOperator):
 # Partial Correlation and Advanced Regression
 # ============================================================================
 
-@register_operator(name="ts_partial_corr", canonical="ts_partial_corr", backend="polars")
+@register_operator(name="ts_partial_corr", canonical="ts_partial_corr", backend="polars", research_only=True)
 class TSPartialCorrPolarsNative(SeriesOperator):
     """Partial correlation controlling for confounding variable"""
 
@@ -1023,7 +1023,7 @@ class TSPartialCorrPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pastor_stambaugh_liquidity_gamma", canonical="ts_pastor_stambaugh_liquidity_gamma", backend="polars")
+@register_operator(name="ts_pastor_stambaugh_liquidity_gamma", canonical="ts_pastor_stambaugh_liquidity_gamma", backend="polars", research_only=True)
 class TSPastorStambaughLiquidityGammaPolarsNative(SeriesOperator):
     """Pastor-Stambaugh liquidity measure (return reversal after volume)"""
 
@@ -1049,7 +1049,7 @@ class TSPastorStambaughLiquidityGammaPolarsNative(SeriesOperator):
 # Path Geometry and Signatures
 # ============================================================================
 
-@register_operator(name="ts_path_efficiency", canonical="ts_path_efficiency", backend="polars")
+@register_operator(name="ts_path_efficiency", canonical="ts_path_efficiency", backend="polars", research_only=True)
 class TSPathEfficiencyPolarsNative(SeriesOperator):
     """Ratio of straight-line distance to path length"""
 
@@ -1084,7 +1084,7 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_path_leadlag_area", canonical="ts_path_leadlag_area", backend="polars")
+@register_operator(name="ts_path_leadlag_area", canonical="ts_path_leadlag_area", backend="polars", research_only=True)
 class TSPathLeadlagAreaPolarsNative(SeriesOperator):
     """Signed area between two paths (lead-lag relationship)"""
 
@@ -1112,7 +1112,7 @@ class TSPathLeadlagAreaPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_path_signature_area", canonical="ts_path_signature_area", backend="polars")
+@register_operator(name="ts_path_signature_area", canonical="ts_path_signature_area", backend="polars", research_only=True)
 class TSPathSignatureAreaPolarsNative(SeriesOperator):
     """Path signature level 2 area term"""
 
@@ -1133,7 +1133,7 @@ class TSPathSignatureAreaPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_path_signature_depth2_norm", canonical="ts_path_signature_depth2_norm", backend="polars")
+@register_operator(name="ts_path_signature_depth2_norm", canonical="ts_path_signature_depth2_norm", backend="polars", research_only=True)
 class TSPathSignatureDepth2NormPolarsNative(SeriesOperator):
     """Norm of depth-2 path signature"""
 
@@ -1154,7 +1154,7 @@ class TSPathSignatureDepth2NormPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pattern_symmetry", canonical="ts_pattern_symmetry", backend="polars")
+@register_operator(name="ts_pattern_symmetry", canonical="ts_pattern_symmetry", backend="polars", research_only=True)
 class TSPatternSymmetryPolarsNative(SeriesOperator):
     """Symmetry score of pattern around midpoint"""
 
@@ -1179,7 +1179,7 @@ class TSPatternSymmetryPolarsNative(SeriesOperator):
 # Permutation and Persistence Analysis
 # ============================================================================
 
-@register_operator(name="ts_permutation_transition_entropy", canonical="ts_permutation_transition_entropy", backend="polars")
+@register_operator(name="ts_permutation_transition_entropy", canonical="ts_permutation_transition_entropy", backend="polars", research_only=True)
 class TSPermutationTransitionEntropyPolarsNative(SeriesOperator):
     """Entropy of transitions between ordinal patterns"""
 
@@ -1201,7 +1201,7 @@ class TSPermutationTransitionEntropyPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_persistence_birth_dispersion", canonical="ts_persistence_birth_dispersion", backend="polars")
+@register_operator(name="ts_persistence_birth_dispersion", canonical="ts_persistence_birth_dispersion", backend="polars", research_only=True)
 class TSPersistenceBirthDispersionPolarsNative(SeriesOperator):
     """Standard deviation of topological feature birth times"""
 
@@ -1222,7 +1222,7 @@ class TSPersistenceBirthDispersionPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_persistence_diagram_shift", canonical="ts_persistence_diagram_shift", backend="polars")
+@register_operator(name="ts_persistence_diagram_shift", canonical="ts_persistence_diagram_shift", backend="polars", research_only=True)
 class TSPersistenceDiagramShiftPolarsNative(SeriesOperator):
     """Wasserstein distance between current and reference persistence diagrams"""
 
@@ -1244,7 +1244,7 @@ class TSPersistenceDiagramShiftPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_persistence_entropy_h0", canonical="ts_persistence_entropy_h0", backend="polars")
+@register_operator(name="ts_persistence_entropy_h0", canonical="ts_persistence_entropy_h0", backend="polars", research_only=True)
 class TSPersistenceEntropyH0PolarsNative(SeriesOperator):
     """Entropy of H0 (connected components) persistence"""
 
@@ -1265,7 +1265,7 @@ class TSPersistenceEntropyH0PolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_persistence_entropy_h1", canonical="ts_persistence_entropy_h1", backend="polars")
+@register_operator(name="ts_persistence_entropy_h1", canonical="ts_persistence_entropy_h1", backend="polars", research_only=True)
 class TSPersistenceEntropyH1PolarsNative(SeriesOperator):
     """Entropy of H1 (loops) persistence"""
 
@@ -1290,7 +1290,7 @@ class TSPersistenceEntropyH1PolarsNative(SeriesOperator):
 # Change Detection
 # ============================================================================
 
-@register_operator(name="ts_pettitt_change_score", canonical="ts_pettitt_change_score", backend="polars")
+@register_operator(name="ts_pettitt_change_score", canonical="ts_pettitt_change_score", backend="polars", research_only=True)
 class TSPettittChangeScorePolarsNative(SeriesOperator):
     """Pettitt test statistic for change point detection"""
 
@@ -1311,7 +1311,7 @@ class TSPettittChangeScorePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pickands_tail_index", canonical="ts_pickands_tail_index", backend="polars")
+@register_operator(name="ts_pickands_tail_index", canonical="ts_pickands_tail_index", backend="polars", research_only=True)
 class TSPickandsTailIndexPolarsNative(SeriesOperator):
     """Pickands estimator for tail index (extreme value theory)"""
 
@@ -1336,7 +1336,7 @@ class TSPickandsTailIndexPolarsNative(SeriesOperator):
 # Pivot Point Analysis
 # ============================================================================
 
-@register_operator(name="ts_pivot_high_age", canonical="ts_pivot_high_age", backend="polars")
+@register_operator(name="ts_pivot_high_age", canonical="ts_pivot_high_age", backend="polars", research_only=True)
 class TSPivotHighAgePolarsNative(SeriesOperator):
     """Periods since most recent pivot high"""
 
@@ -1358,7 +1358,7 @@ class TSPivotHighAgePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pivot_high_count", canonical="ts_pivot_high_count", backend="polars")
+@register_operator(name="ts_pivot_high_count", canonical="ts_pivot_high_count", backend="polars", research_only=True)
 class TSPivotHighCountPolarsNative(SeriesOperator):
     """Count of pivot highs in window"""
 
@@ -1380,7 +1380,7 @@ class TSPivotHighCountPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pivot_high_spacing", canonical="ts_pivot_high_spacing", backend="polars")
+@register_operator(name="ts_pivot_high_spacing", canonical="ts_pivot_high_spacing", backend="polars", research_only=True)
 class TSPivotHighSpacingPolarsNative(SeriesOperator):
     """Average spacing between pivot highs"""
 
@@ -1402,7 +1402,7 @@ class TSPivotHighSpacingPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pivot_low_age", canonical="ts_pivot_low_age", backend="polars")
+@register_operator(name="ts_pivot_low_age", canonical="ts_pivot_low_age", backend="polars", research_only=True)
 class TSPivotLowAgePolarsNative(SeriesOperator):
     """Periods since most recent pivot low"""
 
@@ -1424,7 +1424,7 @@ class TSPivotLowAgePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pivot_low_count", canonical="ts_pivot_low_count", backend="polars")
+@register_operator(name="ts_pivot_low_count", canonical="ts_pivot_low_count", backend="polars", research_only=True)
 class TSPivotLowCountPolarsNative(SeriesOperator):
     """Count of pivot lows in window"""
 
@@ -1446,7 +1446,7 @@ class TSPivotLowCountPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_pivot_low_spacing", canonical="ts_pivot_low_spacing", backend="polars")
+@register_operator(name="ts_pivot_low_spacing", canonical="ts_pivot_low_spacing", backend="polars", research_only=True)
 class TSPivotLowSpacingPolarsNative(SeriesOperator):
     """Average spacing between pivot lows"""
 
@@ -1468,7 +1468,7 @@ class TSPivotLowSpacingPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_price_delay", canonical="ts_price_delay", backend="polars")
+@register_operator(name="ts_price_delay", canonical="ts_price_delay", backend="polars", research_only=True)
 class TSPriceDelayPolarsNative(SeriesOperator):
     """Price delay measure (fraction of R² from lagged returns)"""
 
@@ -1494,7 +1494,7 @@ class TSPriceDelayPolarsNative(SeriesOperator):
 # Sample Entropy and Quantile Metrics
 # ============================================================================
 
-@register_operator(name="ts_pseudocount_sample_entropy", canonical="ts_pseudocount_sample_entropy", backend="polars")
+@register_operator(name="ts_pseudocount_sample_entropy", canonical="ts_pseudocount_sample_entropy", backend="polars", research_only=True)
 class TSPseudocountSampleEntropyPolarsNative(SeriesOperator):
     """Sample entropy with pseudocount regularization"""
 
@@ -1517,7 +1517,7 @@ class TSPseudocountSampleEntropyPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_beta_spread", canonical="ts_quantile_beta_spread", backend="polars")
+@register_operator(name="ts_quantile_beta_spread", canonical="ts_quantile_beta_spread", backend="polars", research_only=True)
 class TSQuantileBetaSpreadPolarsNative(SeriesOperator):
     """Difference between upper and lower quantile regression slopes"""
 
@@ -1540,7 +1540,7 @@ class TSQuantileBetaSpreadPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_beta_spread_prior", canonical="ts_quantile_beta_spread_prior", backend="polars")
+@register_operator(name="ts_quantile_beta_spread_prior", canonical="ts_quantile_beta_spread_prior", backend="polars", research_only=True)
 class TSQuantileBetaSpreadPriorPolarsNative(SeriesOperator):
     """Quantile beta spread using only historical data (causal)"""
 
@@ -1563,7 +1563,7 @@ class TSQuantileBetaSpreadPriorPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_crossing_spectral_concentration", canonical="ts_quantile_crossing_spectral_concentration", backend="polars")
+@register_operator(name="ts_quantile_crossing_spectral_concentration", canonical="ts_quantile_crossing_spectral_concentration", backend="polars", research_only=True)
 class TSQuantileCrossingSpectralConcentrationPolarsNative(SeriesOperator):
     """Spectral concentration of quantile crossing times"""
 
@@ -1585,7 +1585,7 @@ class TSQuantileCrossingSpectralConcentrationPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_if", canonical="ts_quantile_if", backend="polars")
+@register_operator(name="ts_quantile_if", canonical="ts_quantile_if", backend="polars", research_only=True)
 class TSQuantileIfPolarsNative(SeriesOperator):
     """Conditional quantile (quantile of values where condition is True)"""
 
@@ -1607,7 +1607,7 @@ class TSQuantileIfPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_transport_curvature", canonical="ts_quantile_transport_curvature", backend="polars")
+@register_operator(name="ts_quantile_transport_curvature", canonical="ts_quantile_transport_curvature", backend="polars", research_only=True)
 class TSQuantileTransportCurvaturePolarsNative(SeriesOperator):
     """Curvature of quantile transport map"""
 
@@ -1629,7 +1629,7 @@ class TSQuantileTransportCurvaturePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantile_transport_slope", canonical="ts_quantile_transport_slope", backend="polars")
+@register_operator(name="ts_quantile_transport_slope", canonical="ts_quantile_transport_slope", backend="polars", research_only=True)
 class TSQuantileTransportSlopePolarsNative(SeriesOperator):
     """Slope of quantile transport map (median)"""
 
@@ -1651,7 +1651,7 @@ class TSQuantileTransportSlopePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_quantilogram", canonical="ts_quantilogram", backend="polars")
+@register_operator(name="ts_quantilogram", canonical="ts_quantilogram", backend="polars", research_only=True)
 class TSQuantilogramPolarsNative(SeriesOperator):
     """Quantilogram (correlation of quantile exceedance at different lags)"""
 
@@ -1689,7 +1689,7 @@ class TSQuantilogramPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_range_expansion", canonical="ts_range_expansion", backend="polars")
+@register_operator(name="ts_range_expansion", canonical="ts_range_expansion", backend="polars", research_only=True)
 class TSRangeExpansionPolarsNative(SeriesOperator):
     """Rate of range expansion (volatility regime indicator)"""
 
@@ -1720,7 +1720,7 @@ class TSRangeExpansionPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_ratio", canonical="ts_ratio", backend="polars")
+@register_operator(name="ts_ratio", canonical="ts_ratio", backend="polars", research_only=True)
 class TSRatioPolarsNative(SeriesOperator):
     """Simple ratio of two series"""
 
@@ -1741,7 +1741,7 @@ class TSRatioPolarsNative(SeriesOperator):
 # Recurrence Analysis (RQA)
 # ============================================================================
 
-@register_operator(name="ts_recurrence_determinism", canonical="ts_recurrence_determinism", backend="polars")
+@register_operator(name="ts_recurrence_determinism", canonical="ts_recurrence_determinism", backend="polars", research_only=True)
 class TSRecurrenceDeterminismPolarsNative(SeriesOperator):
     """RQA determinism (fraction of recurrence points forming diagonal lines)"""
 
@@ -1763,7 +1763,7 @@ class TSRecurrenceDeterminismPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_diagonal_entropy", canonical="ts_recurrence_diagonal_entropy", backend="polars")
+@register_operator(name="ts_recurrence_diagonal_entropy", canonical="ts_recurrence_diagonal_entropy", backend="polars", research_only=True)
 class TSRecurrenceDiagonalEntropyPolarsNative(SeriesOperator):
     """Shannon entropy of diagonal line length distribution"""
 
@@ -1785,7 +1785,7 @@ class TSRecurrenceDiagonalEntropyPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_divergence", canonical="ts_recurrence_divergence", backend="polars")
+@register_operator(name="ts_recurrence_divergence", canonical="ts_recurrence_divergence", backend="polars", research_only=True)
 class TSRecurrenceDivergencePolarsNative(SeriesOperator):
     """Rate of divergence (inverse of longest diagonal line)"""
 
@@ -1807,7 +1807,7 @@ class TSRecurrenceDivergencePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_laminarity", canonical="ts_recurrence_laminarity", backend="polars")
+@register_operator(name="ts_recurrence_laminarity", canonical="ts_recurrence_laminarity", backend="polars", research_only=True)
 class TSRecurrenceLaminarityPolarsNative(SeriesOperator):
     """RQA laminarity (fraction of recurrence points in vertical lines)"""
 
@@ -1829,7 +1829,7 @@ class TSRecurrenceLaminarityPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_longest_vertical_length", canonical="ts_recurrence_longest_vertical_length", backend="polars")
+@register_operator(name="ts_recurrence_longest_vertical_length", canonical="ts_recurrence_longest_vertical_length", backend="polars", research_only=True)
 class TSRecurrenceLongestVerticalLengthPolarsNative(SeriesOperator):
     """Length of longest vertical line in recurrence plot"""
 
@@ -1851,7 +1851,7 @@ class TSRecurrenceLongestVerticalLengthPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_mean_diagonal_length", canonical="ts_recurrence_mean_diagonal_length", backend="polars")
+@register_operator(name="ts_recurrence_mean_diagonal_length", canonical="ts_recurrence_mean_diagonal_length", backend="polars", research_only=True)
 class TSRecurrenceMeanDiagonalLengthPolarsNative(SeriesOperator):
     """Average length of diagonal lines in recurrence plot"""
 
@@ -1873,7 +1873,7 @@ class TSRecurrenceMeanDiagonalLengthPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_recurrence_trapping_time", canonical="ts_recurrence_trapping_time", backend="polars")
+@register_operator(name="ts_recurrence_trapping_time", canonical="ts_recurrence_trapping_time", backend="polars", research_only=True)
 class TSRecurrenceTrappingTimePolarsNative(SeriesOperator):
     """Average vertical line length (trapping time)"""
 
@@ -1899,7 +1899,7 @@ class TSRecurrenceTrappingTimePolarsNative(SeriesOperator):
 # Regime and Regression Analysis
 # ============================================================================
 
-@register_operator(name="ts_regime_duration", canonical="ts_regime_duration", backend="polars")
+@register_operator(name="ts_regime_duration", canonical="ts_regime_duration", backend="polars", research_only=True)
 class TSRegimeDurationPolarsNative(SeriesOperator):
     """Duration of current regime (time since last regime change)"""
 
@@ -1932,7 +1932,7 @@ class TSRegimeDurationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_forecast_error", canonical="ts_regression_forecast_error", backend="polars")
+@register_operator(name="ts_regression_forecast_error", canonical="ts_regression_forecast_error", backend="polars", research_only=True)
 class TSRegressionForecastErrorPolarsNative(SeriesOperator):
     """Out-of-sample regression forecast error"""
 
@@ -1953,7 +1953,7 @@ class TSRegressionForecastErrorPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_regression_forecast_error_z", canonical="ts_regression_forecast_error_z", backend="polars")
+@register_operator(name="ts_regression_forecast_error_z", canonical="ts_regression_forecast_error_z", backend="polars", research_only=True)
 class TSRegressionForecastErrorZPolarsNative(SeriesOperator):
     """Standardized forecast error"""
 
@@ -1974,7 +1974,7 @@ class TSRegressionForecastErrorZPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_regression_in_sample_resid", canonical="ts_regression_in_sample_resid", backend="polars")
+@register_operator(name="ts_regression_in_sample_resid", canonical="ts_regression_in_sample_resid", backend="polars", research_only=True)
 class TSRegressionInSampleResidPolarsNative(SeriesOperator):
     """In-sample regression residual"""
 
@@ -1995,7 +1995,7 @@ class TSRegressionInSampleResidPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_regression_resid_if", canonical="ts_regression_resid_if", backend="polars")
+@register_operator(name="ts_regression_resid_if", canonical="ts_regression_resid_if", backend="polars", research_only=True)
 class TSRegressionResidIfPolarsNative(SeriesOperator):
     """Conditional regression residual"""
 
@@ -2016,7 +2016,7 @@ class TSRegressionResidIfPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_regression_resid_mean", canonical="ts_regression_resid_mean", backend="polars")
+@register_operator(name="ts_regression_resid_mean", canonical="ts_regression_resid_mean", backend="polars", research_only=True)
 class TSRegressionResidMeanPolarsNative(SeriesOperator):
     """Rolling mean of regression residuals"""
 
@@ -2037,7 +2037,7 @@ class TSRegressionResidMeanPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_regression_tstat", canonical="ts_regression_tstat", backend="polars")
+@register_operator(name="ts_regression_tstat", canonical="ts_regression_tstat", backend="polars", research_only=True)
 class TSRegressionTstatPolarsNative(SeriesOperator):
     """T-statistic of regression slope"""
 
@@ -2058,7 +2058,7 @@ class TSRegressionTstatPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_residualized_hsic", canonical="ts_residualized_hsic", backend="polars")
+@register_operator(name="ts_residualized_hsic", canonical="ts_residualized_hsic", backend="polars", research_only=True)
 class TSResidualizedHSICPolarsNative(SeriesOperator):
     """Hilbert-Schmidt Independence Criterion on residuals"""
 
@@ -2083,7 +2083,7 @@ class TSResidualizedHSICPolarsNative(SeriesOperator):
 # Support/Resistance Analysis
 # ============================================================================
 
-@register_operator(name="ts_resistance_break", canonical="ts_resistance_break", backend="polars")
+@register_operator(name="ts_resistance_break", canonical="ts_resistance_break", backend="polars", research_only=True)
 class TSResistanceBreakPolarsNative(SeriesOperator):
     """Binary indicator of resistance level break"""
 
@@ -2112,7 +2112,7 @@ class TSResistanceBreakPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_resistance_fit_r2", canonical="ts_resistance_fit_r2", backend="polars")
+@register_operator(name="ts_resistance_fit_r2", canonical="ts_resistance_fit_r2", backend="polars", research_only=True)
 class TSResistanceFitR2PolarsNative(SeriesOperator):
     """R² of linear fit to resistance level touches"""
 
@@ -2133,7 +2133,7 @@ class TSResistanceFitR2PolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_resistance_log_slope", canonical="ts_resistance_log_slope", backend="polars")
+@register_operator(name="ts_resistance_log_slope", canonical="ts_resistance_log_slope", backend="polars", research_only=True)
 class TSResistanceLogSlopePolarsNative(SeriesOperator):
     """Log-slope of resistance level over time"""
 
@@ -2154,7 +2154,7 @@ class TSResistanceLogSlopePolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_resistance_slope", canonical="ts_resistance_slope", backend="polars")
+@register_operator(name="ts_resistance_slope", canonical="ts_resistance_slope", backend="polars", research_only=True)
 class TSResistanceSlopePolarsNative(SeriesOperator):
     """Linear slope of resistance level"""
 
@@ -2191,7 +2191,7 @@ class TSResistanceSlopePolarsNative(SeriesOperator):
 # Response and Return Analysis
 # ============================================================================
 
-@register_operator(name="ts_response_slope_asymmetry", canonical="ts_response_slope_asymmetry", backend="polars")
+@register_operator(name="ts_response_slope_asymmetry", canonical="ts_response_slope_asymmetry", backend="polars", research_only=True)
 class TSResponseSlopeAsymmetryPolarsNative(SeriesOperator):
     """Asymmetry between positive and negative response slopes"""
 
@@ -2212,7 +2212,7 @@ class TSResponseSlopeAsymmetryPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_return_spectral_entropy", canonical="ts_return_spectral_entropy", backend="polars")
+@register_operator(name="ts_return_spectral_entropy", canonical="ts_return_spectral_entropy", backend="polars", research_only=True)
 class TSReturnSpectralEntropyPolarsNative(SeriesOperator):
     """Entropy of power spectral density"""
 
@@ -2237,7 +2237,7 @@ class TSReturnSpectralEntropyPolarsNative(SeriesOperator):
 # Robust Statistics
 # ============================================================================
 
-@register_operator(name="ts_robust_ema", canonical="ts_robust_ema", backend="polars")
+@register_operator(name="ts_robust_ema", canonical="ts_robust_ema", backend="polars", research_only=True)
 class TSRobustEMAPolarsNative(SeriesOperator):
     """Robust exponential moving average (using median updates)"""
 
@@ -2268,7 +2268,7 @@ class TSRobustEMAPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_robust_zscore_inclusive", canonical="ts_robust_zscore_inclusive", backend="polars")
+@register_operator(name="ts_robust_zscore_inclusive", canonical="ts_robust_zscore_inclusive", backend="polars", research_only=True)
 class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
     """Robust z-score using median and MAD (inclusive of current point)"""
 
@@ -2301,7 +2301,7 @@ class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_robust_zscore_prior", canonical="ts_robust_zscore_prior", backend="polars")
+@register_operator(name="ts_robust_zscore_prior", canonical="ts_robust_zscore_prior", backend="polars", research_only=True)
 class TSRobustZscorePriorPolarsNative(SeriesOperator):
     """Robust z-score using only prior data (causal)"""
 
@@ -2334,7 +2334,7 @@ class TSRobustZscorePriorPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_rolling_median_causal", canonical="ts_rolling_median_causal", backend="polars")
+@register_operator(name="ts_rolling_median_causal", canonical="ts_rolling_median_causal", backend="polars", research_only=True)
 class TSRollingMedianCausalPolarsNative(SeriesOperator):
     """Rolling median using only prior data"""
 
@@ -2354,7 +2354,7 @@ class TSRollingMedianCausalPolarsNative(SeriesOperator):
         return feature.shift(1).rolling_median(window)
 
 
-@register_operator(name="ts_rolling_sr_gaussian_mean_shift_score", canonical="ts_rolling_sr_gaussian_mean_shift_score", backend="polars")
+@register_operator(name="ts_rolling_sr_gaussian_mean_shift_score", canonical="ts_rolling_sr_gaussian_mean_shift_score", backend="polars", research_only=True)
 class TSRollingSRGaussianMeanShiftScorePolarsNative(SeriesOperator):
     """Gaussian kernel mean shift anomaly score"""
 
@@ -2380,7 +2380,7 @@ class TSRollingSRGaussianMeanShiftScorePolarsNative(SeriesOperator):
 # Additional Metrics (completing the batch to line 634)
 # ============================================================================
 
-@register_operator(name="ts_roughness", canonical="ts_roughness", backend="polars")
+@register_operator(name="ts_roughness", canonical="ts_roughness", backend="polars", research_only=True)
 class TSRoughnessPolarsNative(SeriesOperator):
     """Path roughness (sum of squared second differences)"""
 
@@ -2409,7 +2409,7 @@ class TSRoughnessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_rqa_determinism_fixed_rr", canonical="ts_rqa_determinism_fixed_rr", backend="polars")
+@register_operator(name="ts_rqa_determinism_fixed_rr", canonical="ts_rqa_determinism_fixed_rr", backend="polars", research_only=True)
 class TSRQADeterminismFixedRRPolarsNative(SeriesOperator):
     """RQA determinism with fixed recurrence rate"""
 
@@ -2431,7 +2431,7 @@ class TSRQADeterminismFixedRRPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_rqa_laminarity_fixed_rr", canonical="ts_rqa_laminarity_fixed_rr", backend="polars")
+@register_operator(name="ts_rqa_laminarity_fixed_rr", canonical="ts_rqa_laminarity_fixed_rr", backend="polars", research_only=True)
 class TSRQALaminarityFixedRRPolarsNative(SeriesOperator):
     """RQA laminarity with fixed recurrence rate"""
 
@@ -2453,7 +2453,7 @@ class TSRQALaminarityFixedRRPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_run_concentration", canonical="ts_run_concentration", backend="polars")
+@register_operator(name="ts_run_concentration", canonical="ts_run_concentration", backend="polars", research_only=True)
 class TSRunConcentrationPolarsNative(SeriesOperator):
     """Concentration of runs (streaks) in the series"""
 
@@ -2474,7 +2474,7 @@ class TSRunConcentrationPolarsNative(SeriesOperator):
         return pl.lit(None).cast(pl.Float64)
 
 
-@register_operator(name="ts_run_efficiency", canonical="ts_run_efficiency", backend="polars")
+@register_operator(name="ts_run_efficiency", canonical="ts_run_efficiency", backend="polars", research_only=True)
 class TSRunEfficiencyPolarsNative(SeriesOperator):
     """Efficiency of directional runs"""
 

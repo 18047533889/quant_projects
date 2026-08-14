@@ -40,6 +40,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="intraday_volatility",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayVolatilityNative(SeriesOperator):
     """Intraday realized volatility from high-frequency returns."""
@@ -67,6 +68,7 @@ class IntradayVolatilityNative(SeriesOperator):
     canonical="intraday_vwap_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayVwapDeviationNative(SeriesOperator):
     """Price deviation from VWAP."""
@@ -107,6 +109,7 @@ class IntradayVwapDeviationNative(SeriesOperator):
     canonical="intra_realized_variance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRealizedVarianceNative(SeriesOperator):
     """Sum of squared returns."""
@@ -134,6 +137,7 @@ class IntraRealizedVarianceNative(SeriesOperator):
     canonical="intra_realized_skewness",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRealizedSkewnessNative(SeriesOperator):
     """Realized skewness from intraday returns."""
@@ -161,6 +165,7 @@ class IntraRealizedSkewnessNative(SeriesOperator):
     canonical="intra_realized_kurtosis",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRealizedKurtosisNative(SeriesOperator):
     """Realized kurtosis from intraday returns."""
@@ -188,6 +193,7 @@ class IntraRealizedKurtosisNative(SeriesOperator):
     canonical="intra_realized_quarticity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRealizedQuarticityNative(SeriesOperator):
     """Realized quarticity = sum(r^4)."""
@@ -215,6 +221,7 @@ class IntraRealizedQuarticityNative(SeriesOperator):
     canonical="intra_realized_semivariance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRealizedSemivarianceNative(SeriesOperator):
     """Downside semivariance (negative returns only)."""
@@ -253,6 +260,7 @@ class IntraRealizedSemivarianceNative(SeriesOperator):
     canonical="intra_bipower_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraBipowerVariationNative(SeriesOperator):
     """Bipower variation = sum(|r_i| * |r_{i-1}|) for jump-robust volatility."""
@@ -283,6 +291,7 @@ class IntraBipowerVariationNative(SeriesOperator):
     canonical="intra_tripower_quarticity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntroTripowerQuarticityNative(SeriesOperator):
     """Tripower quarticity = sum(|r_i|^{4/3} * |r_{i-1}|^{4/3} * |r_{i-2}|^{4/3})."""
@@ -317,6 +326,7 @@ class IntroTripowerQuarticityNative(SeriesOperator):
     canonical="intra_continuous_variance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraContinuousVarianceNative(SeriesOperator):
     """Continuous variance approximation using bipower."""
@@ -353,6 +363,7 @@ class IntraContinuousVarianceNative(SeriesOperator):
     canonical="intra_jump_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpVariationNative(SeriesOperator):
     """Jump component = RV - continuous variance."""
@@ -393,6 +404,7 @@ class IntraJumpVariationNative(SeriesOperator):
     canonical="intra_positive_jump_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraPositiveJumpVariationNative(SeriesOperator):
     """Positive jump variation."""
@@ -433,6 +445,7 @@ class IntraPositiveJumpVariationNative(SeriesOperator):
     canonical="intra_negative_jump_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraNegativeJumpVariationNative(SeriesOperator):
     """Negative jump variation."""
@@ -473,6 +486,7 @@ class IntraNegativeJumpVariationNative(SeriesOperator):
     canonical="intra_jump_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpCountNative(SeriesOperator):
     """Count of significant jumps."""
@@ -513,6 +527,7 @@ class IntraJumpCountNative(SeriesOperator):
     canonical="intra_jump_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpRatioNative(SeriesOperator):
     """Jump variation / total variation."""
@@ -548,6 +563,7 @@ class IntraJumpRatioNative(SeriesOperator):
     canonical="intra_signed_jump_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSignedJumpRatioNative(SeriesOperator):
     """(Positive jumps - Negative jumps) / Total jumps."""
@@ -583,6 +599,7 @@ class IntraSignedJumpRatioNative(SeriesOperator):
     canonical="intra_jump_first_time",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpFirstTimeNative(SeriesOperator):
     """First occurrence index of significant jump."""
@@ -623,6 +640,7 @@ class IntraJumpFirstTimeNative(SeriesOperator):
     canonical="intra_jump_last_time",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpLastTimeNative(SeriesOperator):
     """Last occurrence index of significant jump."""
@@ -663,6 +681,7 @@ class IntraJumpLastTimeNative(SeriesOperator):
     canonical="intra_jump_clustering",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpClusteringNative(SeriesOperator):
     """Jump clustering: consecutive jumps indicator."""
@@ -707,6 +726,7 @@ class IntraJumpClusteringNative(SeriesOperator):
     canonical="intra_jump_concentration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraJumpConcentrationNative(SeriesOperator):
     """Jump concentration: max jump / total jump variation."""
@@ -739,6 +759,7 @@ class IntraJumpConcentrationNative(SeriesOperator):
     canonical="intra_high_time",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraHighTimeNative(SeriesOperator):
     """Time of intraday high (normalized to [0,1])."""
@@ -767,6 +788,7 @@ class IntraHighTimeNative(SeriesOperator):
     canonical="intra_low_time",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraLowTimeNative(SeriesOperator):
     """Time of intraday low (normalized to [0,1])."""
@@ -799,6 +821,7 @@ class IntraLowTimeNative(SeriesOperator):
     canonical="intra_interval_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalReturnNative(SeriesOperator):
     """Return within specific time interval."""
@@ -833,6 +856,7 @@ class IntraIntervalReturnNative(SeriesOperator):
     canonical="intra_interval_volume_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalVolumeShareNative(SeriesOperator):
     """Volume share in specific interval."""
@@ -860,6 +884,7 @@ class IntraIntervalVolumeShareNative(SeriesOperator):
     canonical="intra_interval_amount_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalAmountShareNative(SeriesOperator):
     """Amount share in specific interval."""
@@ -887,6 +912,7 @@ class IntraIntervalAmountShareNative(SeriesOperator):
     canonical="intra_interval_realized_variance",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalRealizedVarianceNative(SeriesOperator):
     """Realized variance within interval."""
@@ -924,6 +950,7 @@ class IntraIntervalRealizedVarianceNative(SeriesOperator):
     canonical="intra_interval_vwap_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalVwapDeviationNative(SeriesOperator):
     """VWAP deviation within interval."""
@@ -959,6 +986,7 @@ class IntraIntervalVwapDeviationNative(SeriesOperator):
     canonical="intra_interval_illiquidity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraIntervalIlliquidityNative(SeriesOperator):
     """Amihud-style illiquidity in interval."""
@@ -994,6 +1022,7 @@ class IntraIntervalIlliquidityNative(SeriesOperator):
     canonical="intra_segment_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSegmentReturnNative(SeriesOperator):
     """Return in market segment (morning/afternoon)."""
@@ -1021,6 +1050,7 @@ class IntraSegmentReturnNative(SeriesOperator):
     canonical="intra_segment_volume_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSegmentVolumeShareNative(SeriesOperator):
     """Volume share in segment."""
@@ -1048,6 +1078,7 @@ class IntraSegmentVolumeShareNative(SeriesOperator):
     canonical="intra_segment_amount_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSegmentAmountShareNative(SeriesOperator):
     """Amount share in segment."""
@@ -1075,6 +1106,7 @@ class IntraSegmentAmountShareNative(SeriesOperator):
     canonical="intra_segment_realized_vol",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSegmentRealizedVolNative(SeriesOperator):
     """Realized volatility in segment."""
@@ -1102,6 +1134,7 @@ class IntraSegmentRealizedVolNative(SeriesOperator):
     canonical="intra_segment_vwap_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSegmentVwapDeviationNative(SeriesOperator):
     """VWAP deviation in segment."""
@@ -1142,6 +1175,7 @@ class IntraSegmentVwapDeviationNative(SeriesOperator):
     canonical="intra_lunch_gap_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraLunchGapReturnNative(SeriesOperator):
     """Return gap across lunch break."""
@@ -1169,6 +1203,7 @@ class IntraLunchGapReturnNative(SeriesOperator):
     canonical="intra_session_boundary_jump",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSessionBoundaryJumpNative(SeriesOperator):
     """Jump at session boundary (open/close)."""
@@ -1196,6 +1231,7 @@ class IntraSessionBoundaryJumpNative(SeriesOperator):
     canonical="intra_close_participation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraCloseParticipationNative(SeriesOperator):
     """Volume participation in last N minutes."""
@@ -1223,6 +1259,7 @@ class IntraCloseParticipationNative(SeriesOperator):
     canonical="intra_high_low_affinity",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraHighLowAffinityNative(SeriesOperator):
     """Affinity of close to high vs low."""
@@ -1270,6 +1307,7 @@ class IntraHighLowAffinityNative(SeriesOperator):
     canonical="intra_max_drawdown",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraMaxDrawdownNative(SeriesOperator):
     """Maximum intraday drawdown from running max."""
@@ -1303,6 +1341,7 @@ class IntraMaxDrawdownNative(SeriesOperator):
     canonical="intra_max_drawup",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraMaxDrawupNative(SeriesOperator):
     """Maximum intraday drawup from running min."""
@@ -1336,6 +1375,7 @@ class IntraMaxDrawupNative(SeriesOperator):
     canonical="intra_drawdown_depth",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraDrawdownDepthNative(SeriesOperator):
     """Current drawdown depth."""
@@ -1369,6 +1409,7 @@ class IntraDrawdownDepthNative(SeriesOperator):
     canonical="intra_drawdown_duration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraDrawdownDurationNative(SeriesOperator):
     """Duration of current drawdown."""
@@ -1396,6 +1437,7 @@ class IntraDrawdownDurationNative(SeriesOperator):
     canonical="intra_drawdown_recovery_half_life",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraDrawdownRecoveryHalfLifeNative(SeriesOperator):
     """Half-life of drawdown recovery."""
@@ -1423,6 +1465,7 @@ class IntraDrawdownRecoveryHalfLifeNative(SeriesOperator):
     canonical="intra_path_efficiency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraPathEfficiencyNative(SeriesOperator):
     """Path efficiency: net move / total variation."""
@@ -1455,6 +1498,7 @@ class IntraPathEfficiencyNative(SeriesOperator):
     canonical="intra_entropy",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraEntropyNative(SeriesOperator):
     """Information entropy of intraday distribution."""
@@ -1482,6 +1526,7 @@ class IntraEntropyNative(SeriesOperator):
     canonical="intra_concentration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraConcentrationNative(SeriesOperator):
     """Concentration of intraday activity (HHI-style)."""
@@ -1509,6 +1554,7 @@ class IntraConcentrationNative(SeriesOperator):
     canonical="intra_range_gap_flag",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRangeGapFlagNative(SeriesOperator):
     """Gap flag: open outside previous range."""
@@ -1541,6 +1587,7 @@ class IntraRangeGapFlagNative(SeriesOperator):
     canonical="intra_amihud",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraAmihudNative(SeriesOperator):
     """Intraday Amihud illiquidity: |return| / volume."""

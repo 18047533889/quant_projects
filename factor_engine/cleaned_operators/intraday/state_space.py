@@ -112,6 +112,7 @@ def _kalman_filter_1d(observations: np.ndarray, process_var: float = 1e-5, obs_v
     canonical="intra_kalman_latent_price",
     source="intraday.state_space",
     backend="pandas_numpy",
+    research_only=True,
 )
 class IntraKalmanLatentPrice(SessionAggregationOperator):
     """日内 Kalman 滤波潜在价格偏离度。
@@ -154,6 +155,7 @@ class IntraKalmanLatentPrice(SessionAggregationOperator):
     canonical="intra_kalman_latent_price",
     source="intraday.state_space",
     backend="polars",
+    research_only=True,
 )
 class IntraKalmanLatentPricePolars(SessionAggregationOperator):
     """Polars backend for intra_kalman_latent_price."""
@@ -196,6 +198,7 @@ class IntraKalmanLatentPricePolars(SessionAggregationOperator):
     canonical="intra_state_space_volume_components",
     source="intraday.state_space",
     backend="pandas_numpy",
+    research_only=True,
 )
 class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
     """日内成交量状态空间分解：趋势/周期能量比。
@@ -245,6 +248,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
     canonical="intra_state_space_volume_components",
     source="intraday.state_space",
     backend="polars",
+    research_only=True,
 )
 class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
     """Polars backend for intra_state_space_volume_components."""
@@ -293,6 +297,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
     canonical="intra_functional_motif_score",
     source="intraday.state_space",
     backend="pandas_numpy",
+    research_only=True,
 )
 class IntraFunctionalMotifScore(SessionAggregationOperator):
     """日内价格轨迹功能性模式得分。
@@ -352,6 +357,7 @@ class IntraFunctionalMotifScore(SessionAggregationOperator):
     canonical="intra_functional_motif_score",
     source="intraday.state_space",
     backend="polars",
+    research_only=True,
 )
 class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
     """Polars backend for intra_functional_motif_score."""
@@ -408,6 +414,7 @@ class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
     canonical="intra_visibility_graph_features",
     source="intraday.state_space",
     backend="pandas_numpy",
+    research_only=True,
 )
 class IntraVisibilityGraphFeatures(SessionAggregationOperator):
     """日内价格序列可见性图特征。
@@ -464,6 +471,7 @@ class IntraVisibilityGraphFeatures(SessionAggregationOperator):
     canonical="intra_visibility_graph_features",
     source="intraday.state_space",
     backend="polars",
+    research_only=True,
 )
 class IntraVisibilityGraphFeaturesPolars(SessionAggregationOperator):
     """Polars backend for intra_visibility_graph_features."""

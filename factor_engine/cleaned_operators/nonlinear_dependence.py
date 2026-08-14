@@ -121,6 +121,7 @@ def _distance_corr(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     business_category="time_series_risk",
     canonical="ts_distance_corr",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsDistanceCorr(SeriesOperator):
     """距离相关：同时捕捉线性与非线性依赖，常数/过短窗口返回 NaN，输出 [0,1]。"""
@@ -160,6 +161,7 @@ class TsDistanceCorr(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_distance_cov",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsDistanceCov(SeriesOperator):
     """距离协方差：距离相关的底层尺度量，允许挖掘规模相关非线性联动。"""
@@ -267,6 +269,7 @@ def _quantile_hist_mi(
     business_category="time_series_risk",
     canonical="ts_mutual_information",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsMutualInformation(SeriesOperator):
     """互信息（分位数直方图估计）：normalized=True 输出 [0,1] 无量纲；否则为 nats。"""
@@ -320,6 +323,7 @@ class TsMutualInformation(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_lagged_mutual_information",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsLaggedMutualInformation(SeriesOperator):
     """滞后互信息：MI(x[t-lag], y[t])，lag 必须为非负整数，输出单位为 nats。"""
@@ -464,6 +468,7 @@ def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_ta
     business_category="time_series_risk",
     canonical="ts_upper_tail_coexceedance_probability",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsUpperTailDependence(SeriesOperator):
     """固定 q 的上尾同超概率 P(y > Qy(q) | x > Qx(q))，有方向：以 source x 为条件。
@@ -509,6 +514,7 @@ class TsUpperTailDependence(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_lower_tail_coexceedance_probability",
     source="nonlinear_dependence",
+    research_only=True,
 )
 class TsLowerTailDependence(SeriesOperator):
     """固定 q 的下尾同超概率 P(y ≤ Qy(q) | x ≤ Qx(q))，有方向：以 source x 为条件。

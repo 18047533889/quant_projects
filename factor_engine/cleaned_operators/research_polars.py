@@ -25,7 +25,7 @@ def _positive(value: int, name: str) -> int:
     return int(value)
 
 
-@register_operator(name="price_spread_deviation", category="time_series", business_category="time_series", canonical="price_spread_deviation", source="factor_dsl_polars")
+@register_operator(name="price_spread_deviation", category="time_series", business_category="time_series", canonical="price_spread_deviation", source="factor_dsl_polars", research_only=True)
 class PriceSpreadDeviationPolars(SeriesOperator):
     metadata = OperatorMetadata(name="price_spread_deviation", category="time_series", description="Trailing price deviation", param_names=["x", "d"], tags=["polars", "pit_safe"])
 
@@ -38,7 +38,7 @@ class PriceSpreadDeviationPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_polars")
+@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_polars", research_only=True)
 class TSDecayExpWindowNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="ts_decay_exp_window", category="time_series", description="Trailing exponential weighted mean", param_names=["x", "window", "alpha"], tags=["polars", "pit_safe"])
 
@@ -59,7 +59,7 @@ class TSDecayExpWindowNativePolars(SeriesOperator):
         ])
 
 
-@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_polars")
+@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_polars", research_only=True)
 class TSSumDecayNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="ts_sum_decay", category="time_series", description="Trailing exponential weighted sum", param_names=["x", "window"], tags=["polars", "pit_safe"])
 
@@ -89,6 +89,7 @@ class TSSumDecayNativePolars(SeriesOperator):
     canonical="ts_moment", source="factor_dsl_polars",
     replace=True, replacement_reason="3-arg central moment overrides the 2-arg colwise bridge (round-7 P0 chain pinning)",
     expected_old_source="factor_dsl_polars_bridge",
+    research_only=True,
 )
 class TSMomentNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="ts_moment", category="time_series", description="Trailing central moment", param_names=["x", "d", "k"], tags=["polars", "pit_safe"])
@@ -109,7 +110,7 @@ class TSMomentNativePolars(SeriesOperator):
         ])
 
 
-@register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_polars")
+@register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_polars", research_only=True)
 class SaturateNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="saturate", category="signal", description="Elementwise clip to [0,1]", param_names=["x"], tags=["polars", "pit_safe"])
 
@@ -117,7 +118,7 @@ class SaturateNativePolars(SeriesOperator):
         return x.with_columns([pl.col(c).clip(0.0, 1.0).alias(c) for c in _numeric_cols(x)])
 
 
-@register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_polars")
+@register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_polars", research_only=True)
 class SignedPowerNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="signed_power", category="signal", description="Sign-preserving power", param_names=["x", "c"], tags=["polars", "pit_safe"])
 

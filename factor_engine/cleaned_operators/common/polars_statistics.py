@@ -75,7 +75,6 @@ def _time_slope_col(col: pl.Expr, window: int) -> pl.Expr:
     return col.rolling_map(_dot, window_size=w, min_samples=w)
 
 
-@register_operator(name="ts_time_slope", category="statistics", business_category="statistics_regression", canonical="ts_time_slope", source="factor_dsl_polars")
 class SlopePolars(SeriesOperator):
     """Polars 滚动时间斜率"""
     metadata = OperatorMetadata(
@@ -89,7 +88,6 @@ class SlopePolars(SeriesOperator):
         return x.with_columns([_time_slope_col(pl.col(c), w).alias(c) for c in cols])
 
 
-@register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="factor_dsl_polars")
 class TSRegressionPolars(SeriesOperator):
     """Polars 滚动回归"""
     metadata = OperatorMetadata(
@@ -137,7 +135,6 @@ def _rolling_binary(
     return left.with_columns([expr_fn(left[c], right[c], w).alias(c) for c in cols])
 
 
-@register_operator(name="avg", category="statistics", business_category="statistics_regression", canonical="avg", source="factor_dsl_polars")
 class AvgPolars(SeriesOperator):
     """Polars 滚动均值"""
     metadata = OperatorMetadata(
@@ -150,7 +147,6 @@ class AvgPolars(SeriesOperator):
         return _rolling_unary(x, w, lambda c, n: c.rolling_mean(window_size=n, min_samples=1))
 
 
-@register_operator(name="Var", category="statistics", business_category="statistics_regression", canonical="Var", source="factor_dsl_polars")
 class VarPolars(SeriesOperator):
     """Polars 滚动方差"""
     metadata = OperatorMetadata(
@@ -163,7 +159,6 @@ class VarPolars(SeriesOperator):
         return _rolling_unary(x, w, lambda c, n: c.rolling_var(window_size=n, min_samples=1))
 
 
-@register_operator(name="Skew", category="statistics", business_category="statistics_regression", canonical="Skew", source="factor_dsl_polars")
 class SkewPolars(SeriesOperator):
     """Polars 滚动偏度"""
     metadata = OperatorMetadata(
@@ -176,7 +171,6 @@ class SkewPolars(SeriesOperator):
         return _rolling_unary(x, w, lambda c, n: c.rolling_skew(window_size=n, min_samples=1))
 
 
-@register_operator(name="Kurt", category="statistics", business_category="statistics_regression", canonical="Kurt", source="factor_dsl_polars")
 class KurtPolars(SeriesOperator):
     """Polars 滚动峰度"""
     metadata = OperatorMetadata(
@@ -202,7 +196,6 @@ class KurtPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="Median", category="statistics", business_category="statistics_regression", canonical="Median", source="factor_dsl_polars")
 class MedianPolars(SeriesOperator):
     """Polars 滚动中位数"""
     metadata = OperatorMetadata(
@@ -215,7 +208,6 @@ class MedianPolars(SeriesOperator):
         return _rolling_unary(x, w, lambda c, n: c.rolling_median(window_size=n, min_samples=1))
 
 
-@register_operator(name="count", category="statistics", business_category="statistics_regression", canonical="count", source="factor_dsl_polars")
 class CountPolars(SeriesOperator):
     """Polars 滚动非空计数"""
     metadata = OperatorMetadata(
@@ -230,7 +222,6 @@ class CountPolars(SeriesOperator):
         )
 
 
-@register_operator(name="Beta", category="statistics", business_category="statistics_regression", canonical="Beta", source="factor_dsl_polars")
 class BetaPolars(SeriesOperator):
     """Polars 滚动 Beta"""
     metadata = OperatorMetadata(
@@ -249,7 +240,6 @@ class BetaPolars(SeriesOperator):
         return _rolling_binary(y, x, w, _beta)
 
 
-@register_operator(name="Corr", category="statistics", business_category="statistics_regression", canonical="Corr", source="factor_dsl_polars")
 class CorrPolars(SeriesOperator):
     """Polars 滚动相关"""
     metadata = OperatorMetadata(
@@ -264,7 +254,6 @@ class CorrPolars(SeriesOperator):
         )
 
 
-@register_operator(name="Cov", category="statistics", business_category="statistics_regression", canonical="Cov", source="factor_dsl_polars")
 class CovPolars(SeriesOperator):
     """Polars 滚动协方差"""
     metadata = OperatorMetadata(
@@ -279,7 +268,6 @@ class CovPolars(SeriesOperator):
         )
 
 
-@register_operator(name="Covariance", category="statistics", business_category="statistics_regression", canonical="Covariance", source="factor_dsl_polars")
 class CovariancePolars(CovPolars):
     """Polars 滚动协方差"""
     metadata = OperatorMetadata(
@@ -288,7 +276,6 @@ class CovariancePolars(CovPolars):
     )
 
 
-@register_operator(name="intercept", category="statistics", business_category="statistics_regression", canonical="intercept", source="factor_dsl_polars")
 class InterceptPolars(SeriesOperator):
     """Polars 滚动 OLS 截距"""
     metadata = OperatorMetadata(
@@ -310,7 +297,6 @@ class InterceptPolars(SeriesOperator):
         return y.with_columns(exprs)
 
 
-@register_operator(name="r_squared", category="statistics", business_category="statistics_regression", canonical="r_squared", source="factor_dsl_polars")
 class RSquaredPolars(SeriesOperator):
     """Polars 滚动 R²"""
     metadata = OperatorMetadata(
@@ -326,7 +312,6 @@ class RSquaredPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="residual", category="statistics", business_category="statistics_regression", canonical="residual", source="factor_dsl_polars")
 class ResidualPolars(SeriesOperator):
     """Polars 滚动回归残差**均值**。
 
@@ -357,7 +342,6 @@ class ResidualPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="Mode", category="statistics", business_category="statistics_regression", canonical="Mode", source="factor_dsl_polars")
 class ModePolars(SeriesOperator):
     """Polars 滚动众数。
 
@@ -394,7 +378,6 @@ class ModePolars(SeriesOperator):
         ])
 
 
-@register_operator(name="autocorr", category="statistics", business_category="statistics_regression", canonical="autocorr", source="factor_dsl_polars")
 class AutocorrPolars(SeriesOperator):
     """Polars 自相关系数。
 
@@ -420,7 +403,6 @@ class AutocorrPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="beta", category="statistics", business_category="statistics_regression", canonical="beta", source="factor_dsl_polars")
 class betaPolars(BetaPolars):
     """Polars 滚动 Beta（小写）"""
     metadata = OperatorMetadata(
@@ -429,7 +411,6 @@ class betaPolars(BetaPolars):
     )
 
 
-@register_operator(name="corr_test", category="statistics", business_category="statistics_regression", canonical="corr_test", source="factor_dsl_polars")
 class CorrTestPolars(SeriesOperator):
     """扩展窗口 Pearson 相关检验 p 值；前缀样本数 < 3 时为 NaN。"""
 
@@ -452,7 +433,6 @@ class CorrTestPolars(SeriesOperator):
         return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 
-@register_operator(name="durbin_watson_test", category="statistics", business_category="statistics_regression", canonical="durbin_watson_test", source="factor_dsl_polars")
 class DurbinWatsonTestPolars(SeriesOperator):
     """扩展窗口 Durbin-Watson 统计量（非 p 值）；用于残差自相关诊断。"""
 
@@ -472,7 +452,6 @@ class DurbinWatsonTestPolars(SeriesOperator):
         return residuals.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 
-@register_operator(name="ts_mean_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_mean_abs_deviation", source="factor_dsl_polars")
 class MeanAbsDeviationPolars(SeriesOperator):
     """Polars 滚动平均绝对离差：``mean(|x_i - mean(window)|)``。
 
@@ -496,7 +475,6 @@ class MeanAbsDeviationPolars(SeriesOperator):
         ])
 
 
-@register_operator(name="ts_median_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_median_abs_deviation", source="factor_dsl_polars")
 class MedianAbsDeviationPolars(SeriesOperator):
     """Polars 滚动中位数绝对离差（标准 MAD）：``median(|x_i - median(window)|)``。
 

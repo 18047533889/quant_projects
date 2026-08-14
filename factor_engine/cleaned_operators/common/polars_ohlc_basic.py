@@ -33,6 +33,7 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     canonical="open_close_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class OpenCloseReturnNative(SeriesOperator):
     """Intraday return: (close - open) / open."""
@@ -69,6 +70,7 @@ class OpenCloseReturnNative(SeriesOperator):
     canonical="overnight_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class OvernightReturnNative(SeriesOperator):
     """Overnight return: (open_t - close_{t-1}) / close_{t-1}."""
@@ -106,6 +108,7 @@ class OvernightReturnNative(SeriesOperator):
     canonical="overnight_volatility",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class OvernightVolatilityNative(SeriesOperator):
     """Rolling std of overnight returns."""
@@ -150,6 +153,7 @@ class OvernightVolatilityNative(SeriesOperator):
     canonical="true_range",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class TrueRangeNative(SeriesOperator):
     """True range: max(high-low, |high-prev_close|, |low-prev_close|)."""
@@ -185,6 +189,7 @@ class TrueRangeNative(SeriesOperator):
     canonical="garman_klass_vol",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GarmanKlassVolNative(SeriesOperator):
     """Garman-Klass volatility estimator."""
@@ -225,6 +230,7 @@ class GarmanKlassVolNative(SeriesOperator):
     canonical="parkinson_vol",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class ParkinsonVolNative(SeriesOperator):
     """Parkinson volatility: sqrt(mean(log(H/L)^2 / (4*ln(2))))."""
@@ -266,6 +272,7 @@ class ParkinsonVolNative(SeriesOperator):
     canonical="rogers_satchell_vol",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class RogersSatchellVolNative(SeriesOperator):
     """Rogers-Satchell volatility estimator."""
@@ -308,6 +315,7 @@ class RogersSatchellVolNative(SeriesOperator):
     canonical="yang_zhang_vol",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class YangZhangVolNative(SeriesOperator):
     """Yang-Zhang volatility (simplified)."""
@@ -354,6 +362,7 @@ class YangZhangVolNative(SeriesOperator):
     canonical="range_volatility",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class RangeVolatilityNative(SeriesOperator):
     """Rolling std of (high - low) / close."""
@@ -392,6 +401,7 @@ class RangeVolatilityNative(SeriesOperator):
     canonical="intraday_volatility",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayVolatilityNative(SeriesOperator):
     """Rolling std of (high - low)."""
@@ -435,6 +445,7 @@ class IntradayVolatilityNative(SeriesOperator):
     canonical="candle_body",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleBodyNative(SeriesOperator):
     """Candle body: close - open."""
@@ -466,6 +477,7 @@ class CandleBodyNative(SeriesOperator):
     canonical="candle_abs_body",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleAbsBodyNative(SeriesOperator):
     """Absolute candle body: |close - open|."""
@@ -497,6 +509,7 @@ class CandleAbsBodyNative(SeriesOperator):
     canonical="candle_range",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleRangeNative(SeriesOperator):
     """Candle range: high - low."""
@@ -528,6 +541,7 @@ class CandleRangeNative(SeriesOperator):
     canonical="candle_upper_shadow",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleUpperShadowNative(SeriesOperator):
     """Upper shadow: high - max(open, close)."""
@@ -560,6 +574,7 @@ class CandleUpperShadowNative(SeriesOperator):
     canonical="candle_lower_shadow",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleLowerShadowNative(SeriesOperator):
     """Lower shadow: min(open, close) - low."""
@@ -592,6 +607,7 @@ class CandleLowerShadowNative(SeriesOperator):
     canonical="candle_body_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleBodyRatioNative(SeriesOperator):
     """Body ratio: |close - open| / (high - low)."""
@@ -630,6 +646,7 @@ class CandleBodyRatioNative(SeriesOperator):
     canonical="candle_upper_shadow_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleUpperShadowRatioNative(SeriesOperator):
     """Upper shadow ratio: upper_shadow / range."""
@@ -669,6 +686,7 @@ class CandleUpperShadowRatioNative(SeriesOperator):
     canonical="candle_lower_shadow_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleLowerShadowRatioNative(SeriesOperator):
     """Lower shadow ratio: lower_shadow / range."""
@@ -708,6 +726,7 @@ class CandleLowerShadowRatioNative(SeriesOperator):
     canonical="candle_direction",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleDirectionNative(SeriesOperator):
     """Candle direction: sign(close - open)."""
@@ -739,6 +758,7 @@ class CandleDirectionNative(SeriesOperator):
     canonical="candle_gap",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleGapNative(SeriesOperator):
     """Gap: open_t - close_{t-1}."""
@@ -771,6 +791,7 @@ class CandleGapNative(SeriesOperator):
     canonical="candle_gap_pct",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleGapPctNative(SeriesOperator):
     """Gap percent: (open_t - close_{t-1}) / close_{t-1}."""
@@ -808,6 +829,7 @@ class CandleGapPctNative(SeriesOperator):
     canonical="candle_close_location",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleCloseLocationNative(SeriesOperator):
     """Close location within range: (close - low) / (high - low)."""
@@ -845,6 +867,7 @@ class CandleCloseLocationNative(SeriesOperator):
     canonical="candle_body_position",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CandleBodyPositionNative(SeriesOperator):
     """Body position: (open + close) / 2 relative to range."""

@@ -96,6 +96,7 @@ def _corr(a: np.ndarray, b: np.ndarray, min_periods: int) -> float:
     business_category="time_series_volatility",
     canonical="ts_vol_of_vol",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsVolOfVol(SeriesOperator):
     """波动率的波动率: std(log(inner_vol + eps)) over outer_window。
@@ -129,6 +130,7 @@ class TsVolOfVol(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_vol_acceleration",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsVolAcceleration(SeriesOperator):
     """波动加速度: log(v_t / v_{t-lag})。正 = 波动升温, 负 = 降温。
@@ -171,6 +173,7 @@ class TsVolAcceleration(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_vol_term_structure",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsVolTermStructure(SeriesOperator):
     """波动率期限结构: log(vol_short / vol_long)。要求 short < long。
@@ -214,6 +217,7 @@ class TsVolTermStructure(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_semivariance_balance",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsSemivarianceBalance(SeriesOperator):
     """半方差平衡: (SV+ - SV-) / (SV+ + SV- + eps), 范围 [-1,1]。
@@ -253,6 +257,7 @@ class TsSemivarianceBalance(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_realized_quarticity",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsRealizedQuarticity(SeriesOperator):
     """归一化四次幂比(非原始 realized quarticity): W·Σr⁴ / (3·RV² + eps)。
@@ -295,6 +300,7 @@ class TsRealizedQuarticity(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_vol_clustering",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsVolClustering(SeriesOperator):
     """波动聚集: |ret| 的滞后 1 阶自相关。正 = 大波动倾向连续出现。"""
@@ -325,6 +331,7 @@ class TsVolClustering(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_leverage_effect",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsLeverageEffect(SeriesOperator):
     """杠杆效应(因果版): corr(r_{tau-1}, v_tau) over window, v = trailing 波动。
@@ -364,6 +371,7 @@ class TsLeverageEffect(SeriesOperator):
     business_category="time_series_volatility",
     canonical="ts_jump_bipower_proxy",
     source="alpha_language_volatility",
+    research_only=True,
 )
 class TsJumpBipowerProxy(SeriesOperator):
     """日频跳跃代理: max(RV - BV, 0) / (RV + eps), 范围 [0,1]。

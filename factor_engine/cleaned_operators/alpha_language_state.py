@@ -246,6 +246,7 @@ def _run_windows(values: np.ndarray, state: np.ndarray, window: int) -> np.ndarr
     business_category="time_series_state",
     canonical="ts_run_strength",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsRunStrength(SeriesOperator):
     """当前连续相同非零 state 区间内 x 的累计（run strength）。
@@ -334,6 +335,7 @@ class TsRunStrength(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_run_efficiency",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsRunEfficiency(SeriesOperator):
     """当前 run 的路径效率: |sum x| / (sum |x| + eps), 范围 [0,1]。
@@ -412,6 +414,7 @@ class TsRunEfficiency(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_run_concentration",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsRunConcentration(SeriesOperator):
     """当前 run 的集中度: max|x| / (sum |x| + eps), 范围 [0,1]。
@@ -488,6 +491,7 @@ class TsRunConcentration(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_hysteresis_state",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsHysteresisState(SeriesOperator):
     """双阈值滞后状态机: z > +upper -> +1; z < -upper -> -1; 已 +1 且 z < lower -> 0; 已 -1 且 z > -lower -> 0。
@@ -536,6 +540,7 @@ class TsHysteresisState(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_hysteresis_age",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsHysteresisAge(SeriesOperator):
     """滞后状态机, 按当前状态的持续年龄归一: state_t * min(age_t, cap) / cap, 范围 [-1,1]。
@@ -593,6 +598,7 @@ class TsHysteresisAge(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_state_integral",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsStateIntegral(SeriesOperator):
     """当前非零滞后状态段内的强度累计: state_t * sum max(|z|-lower, 0)。
@@ -665,6 +671,7 @@ class TsStateIntegral(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_state_entry_strength",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsStateEntryStrength(SeriesOperator):
     """进入状态瞬间的强度, 状态持续期间 carry 最近一次 entry strength。
@@ -717,6 +724,7 @@ class TsStateEntryStrength(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_transition_intensity",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsTransitionIntensity(SeriesOperator):
     """状态切换的幅度加权强度: sum(|dx| * I_tau) / (sum I_tau + eps)。
@@ -783,6 +791,7 @@ class TsTransitionIntensity(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_sign_persistence",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsSignPersistence(SeriesOperator):
     """符号滞后 1 阶自相关: corr(sign(x_tau), sign(x_{tau-1}))。
@@ -826,6 +835,7 @@ class TsSignPersistence(SeriesOperator):
     business_category="time_series_state",
     canonical="ts_sign_cluster_index",
     source="alpha_language_state",
+    research_only=True,
 )
 class TsSignClusterIndex(SeriesOperator):
     """窗口内符号 run 长度的集中度(归一化 HHI): 高 = 长 run/少切换, 低 = 高频交替。

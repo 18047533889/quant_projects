@@ -338,6 +338,7 @@ def _bar_metadata(name: str, description: str, params: list[str], *, unit: str) 
     business_category="intraday_microstructure",
     canonical="intra_state_count",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateCount(SessionAggregationOperator):
     """统计日内处于 target 离散状态的分钟 bar 数量（含跨日窗口）。"""
@@ -375,6 +376,7 @@ class IntraStateCount(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_sum",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateSum(SessionAggregationOperator):
     """对目标状态 bar 的 x 求和（含跨日窗口）。"""
@@ -411,6 +413,7 @@ class IntraStateSum(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_vwap",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateVwap(SessionAggregationOperator):
     """目标状态 bar 的成交额加权均价（pooled VWAP）。"""
@@ -455,6 +458,7 @@ class IntraStateVwap(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_interval_moment",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateIntervalMoment(SessionAggregationOperator):
     """目标状态事件间隔的跨日矩（std/skew/kurtosis）。"""
@@ -537,6 +541,7 @@ def _follow_pooled(
     business_category="intraday_microstructure",
     canonical="intra_state_follow_ratio",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateFollowRatio(SessionAggregationOperator):
     """目标事件后 lead 期 x 的累计比值 sum(x_lead)/sum(x_event)。"""
@@ -567,6 +572,7 @@ class IntraStateFollowRatio(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_follow_beta",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateFollowBeta(SessionAggregationOperator):
     """事件 x 对 lead 后 x 的 OLS 斜率（含截距）。"""
@@ -591,6 +597,7 @@ class IntraStateFollowBeta(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_follow_corr",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateFollowCorr(SessionAggregationOperator):
     """事件 x 与 lead 后 x 的 Pearson 相关。"""
@@ -619,6 +626,7 @@ class IntraStateFollowCorr(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_pair_same_slot_corr",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStatePairSameSlotCorr(SessionAggregationOperator):
     """两个状态在相同时刻槽上的逐日命中计数向量的 Pearson 相关。"""
@@ -699,6 +707,7 @@ class IntraStatePairSameSlotCorr(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_dwell_stats",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateDwellStats(SessionAggregationOperator):
     """状态驻留 run 长度统计（mean/max/cv/last/share）。"""
@@ -751,6 +760,7 @@ class IntraStateDwellStats(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_transition_entropy",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraStateTransitionEntropy(SessionAggregationOperator):
     """相邻 bar 状态转移矩阵的香农熵（可去自转移 + 归一化）。"""
@@ -813,6 +823,7 @@ class IntraStateTransitionEntropy(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_neighbor_event_class",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraNeighborEventClass(SeriesOperator):
     """逐 bar 事件分类：孤立 / 簇集（同 session 邻域搜索）。"""
@@ -870,6 +881,7 @@ class IntraNeighborEventClass(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_range_gap_flag",
     source="intraday.state_ops",
+    research_only=True,
 )
 class IntraRangeGapFlag(SeriesOperator):
     """逐 bar 事件前后价格区间是否出现严格跳空（不重叠）。"""

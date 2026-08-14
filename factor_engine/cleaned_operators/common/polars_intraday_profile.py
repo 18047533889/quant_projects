@@ -40,6 +40,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="intra_volume_profile_cosine",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeProfileCosineNative(SeriesOperator):
     """Cosine similarity between today's and average volume profile."""
@@ -72,6 +73,7 @@ class IntraVolumeProfileCosineNative(SeriesOperator):
     canonical="intra_volume_profile_jsd",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeProfileJsdNative(SeriesOperator):
     """Jensen-Shannon divergence of volume profile."""
@@ -105,6 +107,7 @@ class IntraVolumeProfileJsdNative(SeriesOperator):
     canonical="intra_amount_profile_cosine",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraAmountProfileCosineNative(SeriesOperator):
     """Cosine similarity between today's and average amount profile."""
@@ -137,6 +140,7 @@ class IntraAmountProfileCosineNative(SeriesOperator):
     canonical="intra_amount_profile_jsd",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraAmountProfileJsdNative(SeriesOperator):
     """Jensen-Shannon divergence of amount profile."""
@@ -174,6 +178,7 @@ class IntraAmountProfileJsdNative(SeriesOperator):
     canonical="intra_return_profile_cosine",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity of return profile."""
@@ -206,6 +211,7 @@ class IntraReturnProfileCosineNative(SeriesOperator):
     canonical="intra_signed_return_profile_cosine",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSignedReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity preserving return sign."""
@@ -238,6 +244,7 @@ class IntraSignedReturnProfileCosineNative(SeriesOperator):
     canonical="intra_abs_return_profile_cosine",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraAbsReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity of absolute return profile."""
@@ -275,6 +282,7 @@ class IntraAbsReturnProfileCosineNative(SeriesOperator):
     canonical="intra_volume_profile_peak_geometry",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeProfilePeakGeometryNative(SeriesOperator):
     """Geometry of volume profile peak (time, width, height)."""
@@ -302,6 +310,7 @@ class IntraVolumeProfilePeakGeometryNative(SeriesOperator):
     canonical="intra_volume_profile_supply_structure",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeProfileSupplyStructureNative(SeriesOperator):
     """Supply structure from volume profile (overhead/below)."""
@@ -331,6 +340,7 @@ class IntraVolumeProfileSupplyStructureNative(SeriesOperator):
     canonical="intra_volume_profile_value_area",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeProfileValueAreaNative(SeriesOperator):
     """Value area (70% volume concentration range)."""
@@ -360,6 +370,7 @@ class IntraVolumeProfileValueAreaNative(SeriesOperator):
     canonical="intra_volume_at_price_profile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraVolumeAtPriceProfileNative(SeriesOperator):
     """Volume-at-price distribution characteristics."""
@@ -394,6 +405,7 @@ class IntraVolumeAtPriceProfileNative(SeriesOperator):
     canonical="intra_round_price_clustering_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRoundPriceClusteringShareNative(SeriesOperator):
     """Share of volume at round price levels."""
@@ -429,6 +441,7 @@ class IntraRoundPriceClusteringShareNative(SeriesOperator):
     canonical="intra_round_price_barrier_response",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraRoundPriceBarrierResponseNative(SeriesOperator):
     """Price response at round number barriers."""
@@ -463,6 +476,7 @@ class IntraRoundPriceBarrierResponseNative(SeriesOperator):
     canonical="intra_bar_range_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraBarRangePersistenceNative(SeriesOperator):
     """Persistence of bar range (high-low)."""
@@ -504,6 +518,7 @@ class IntraBarRangePersistenceNative(SeriesOperator):
     canonical="intra_bar_range_deviation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraBarRangeDeviationNative(SeriesOperator):
     """Deviation of bar range from average."""
@@ -548,6 +563,7 @@ class IntraBarRangeDeviationNative(SeriesOperator):
     canonical="intra_consolidation_quality",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraConsolidationQualityNative(SeriesOperator):
     """Quality of price consolidation (tight range)."""
@@ -589,6 +605,7 @@ class IntraConsolidationQualityNative(SeriesOperator):
     canonical="intra_extreme_bar_return",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraExtremeBarReturnNative(SeriesOperator):
     """Return of most extreme intraday bar."""
@@ -616,6 +633,7 @@ class IntraExtremeBarReturnNative(SeriesOperator):
     canonical="intra_tail_event_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraTailEventCountNative(SeriesOperator):
     """Count of tail events (beyond threshold)."""
@@ -656,6 +674,7 @@ class IntraTailEventCountNative(SeriesOperator):
     canonical="intra_tail_volume_share",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraTailVolumeShareNative(SeriesOperator):
     """Volume share in tail events."""
@@ -700,6 +719,7 @@ class IntraTailVolumeShareNative(SeriesOperator):
     canonical="intra_negative_tail_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraNegativeTailVariationNative(SeriesOperator):
     """Variation in negative tail (downside extremes)."""
@@ -740,6 +760,7 @@ class IntraNegativeTailVariationNative(SeriesOperator):
     canonical="intra_positive_tail_variation",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraPositiveTailVariationNative(SeriesOperator):
     """Variation in positive tail (upside extremes)."""
@@ -780,6 +801,7 @@ class IntraPositiveTailVariationNative(SeriesOperator):
     canonical="intra_signed_tail_variation_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraSignedTailVariationRatioNative(SeriesOperator):
     """Ratio of positive to negative tail variation."""
@@ -821,6 +843,7 @@ class IntraSignedTailVariationRatioNative(SeriesOperator):
     canonical="intra_price_vwap_max_positive_excursion",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraPriceVwapMaxPositiveExcursionNative(SeriesOperator):
     """Maximum positive excursion from VWAP."""
@@ -859,6 +882,7 @@ class IntraPriceVwapMaxPositiveExcursionNative(SeriesOperator):
     canonical="intra_price_vwap_max_negative_excursion",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntraPriceVwapMaxNegativeExcursionNative(SeriesOperator):
     """Maximum negative excursion from VWAP."""
@@ -902,6 +926,7 @@ class IntraPriceVwapMaxNegativeExcursionNative(SeriesOperator):
     canonical="intraday_profile_pca_residual",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayProfilePcaResidualNative(SeriesOperator):
     """PCA residual of intraday profile."""
@@ -929,6 +954,7 @@ class IntradayProfilePcaResidualNative(SeriesOperator):
     canonical="intraday_profile_phase_shift",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayProfilePhaseShiftNative(SeriesOperator):
     """Phase shift of intraday profile relative to average."""
@@ -958,6 +984,7 @@ class IntradayProfilePhaseShiftNative(SeriesOperator):
     canonical="intraday_profile_surprise_energy",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class IntradayProfileSurpriseEnergyNative(SeriesOperator):
     """Energy of profile surprise (L2 norm of deviation)."""

@@ -19,7 +19,7 @@ from operators.base import SeriesOperator
 # intraday_* operators (25): minute → daily aggregations
 # ============================================================================
 
-@register_operator(name="intraday_activity_duration_curvature", backend="polars")
+@register_operator(name="intraday_activity_duration_curvature", backend="polars", research_only=True)
 class IntradayActivityDurationCurvaturePolarsNative(SeriesOperator):
     """Curvature of cumulative activity duration curve within each session."""
 
@@ -39,7 +39,7 @@ class IntradayActivityDurationCurvaturePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_barrier_approach_acceleration", backend="polars")
+@register_operator(name="intraday_barrier_approach_acceleration", backend="polars", research_only=True)
 class IntradayBarrierApproachAccelerationPolarsNative(SeriesOperator):
     """Acceleration of price as it approaches intraday barriers (limits/highs)."""
 
@@ -58,7 +58,7 @@ class IntradayBarrierApproachAccelerationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_bvc_imbalance", backend="polars")
+@register_operator(name="intraday_bvc_imbalance", backend="polars", research_only=True)
 class IntradayBvcImbalancePolarsNative(SeriesOperator):
     """Buy-Volume-Concentration imbalance: asymmetry in volume distribution."""
 
@@ -83,7 +83,7 @@ class IntradayBvcImbalancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_impact_asymmetry", backend="polars")
+@register_operator(name="intraday_impact_asymmetry", backend="polars", research_only=True)
 class IntradayImpactAsymmetryPolarsNative(SeriesOperator):
     """Asymmetry between up-move and down-move price impact."""
 
@@ -109,7 +109,7 @@ class IntradayImpactAsymmetryPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_impact_beta", backend="polars")
+@register_operator(name="intraday_impact_beta", backend="polars", research_only=True)
 class IntradayImpactBetaPolarsNative(SeriesOperator):
     """Power-law exponent of volume-price impact relationship."""
 
@@ -131,7 +131,7 @@ class IntradayImpactBetaPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_impact_decay_rate", backend="polars")
+@register_operator(name="intraday_impact_decay_rate", backend="polars", research_only=True)
 class IntradayImpactDecayRatePolarsNative(SeriesOperator):
     """Exponential decay rate of price impact after volume spikes."""
 
@@ -150,7 +150,7 @@ class IntradayImpactDecayRatePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_jump_test_stat", backend="polars")
+@register_operator(name="intraday_jump_test_stat", backend="polars", research_only=True)
 class IntradayJumpTestStatPolarsNative(SeriesOperator):
     """Jump test statistic: (RV - BV) / sqrt(variance of BV)."""
 
@@ -194,7 +194,7 @@ class IntradayJumpTestStatPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_medrv", backend="polars")
+@register_operator(name="intraday_medrv", backend="polars", research_only=True)
 class IntradayMedrvPolarsNative(SeriesOperator):
     """MedRV: Median-based realized volatility estimator (robust to jumps)."""
 
@@ -213,7 +213,7 @@ class IntradayMedrvPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_minrv", backend="polars")
+@register_operator(name="intraday_minrv", backend="polars", research_only=True)
 class IntradayMinrvPolarsNative(SeriesOperator):
     """MinRV: Minimum-based realized volatility (robust to jumps)."""
 
@@ -232,7 +232,7 @@ class IntradayMinrvPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_quantile_curve_pca_residual", backend="polars")
+@register_operator(name="intraday_quantile_curve_pca_residual", backend="polars", research_only=True)
 class IntradayQuantileCurvePcaResidualPolarsNative(SeriesOperator):
     """PCA residual of intraday return quantile curve."""
 
@@ -251,7 +251,7 @@ class IntradayQuantileCurvePcaResidualPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_quantile_curve_pca_score", backend="polars")
+@register_operator(name="intraday_quantile_curve_pca_score", backend="polars", research_only=True)
 class IntradayQuantileCurvePcaScorePolarsNative(SeriesOperator):
     """First PCA component score of intraday return quantile curve."""
 
@@ -270,7 +270,7 @@ class IntradayQuantileCurvePcaScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_realized_power_variation", backend="polars")
+@register_operator(name="intraday_realized_power_variation", backend="polars", research_only=True)
 class IntradayRealizedPowerVariationPolarsNative(SeriesOperator):
     """Realized power variation: sum of |return|^p for arbitrary power p."""
 
@@ -288,7 +288,7 @@ class IntradayRealizedPowerVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_realized_semivariance_balance", backend="polars")
+@register_operator(name="intraday_realized_semivariance_balance", backend="polars", research_only=True)
 class IntradayRealizedSemivarianceBalancePolarsNative(SeriesOperator):
     """Balance between upside and downside semivariance."""
 
@@ -314,7 +314,7 @@ class IntradayRealizedSemivarianceBalancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_return_wasserstein_shift", backend="polars")
+@register_operator(name="intraday_return_wasserstein_shift", backend="polars", research_only=True)
 class IntradayReturnWassersteinShiftPolarsNative(SeriesOperator):
     """Wasserstein distance between morning and afternoon return distributions."""
 
@@ -333,7 +333,7 @@ class IntradayReturnWassersteinShiftPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_rv_signature_curvature", backend="polars")
+@register_operator(name="intraday_rv_signature_curvature", backend="polars", research_only=True)
 class IntradayRvSignatureCurvaturePolarsNative(SeriesOperator):
     """Curvature of realized variance signature plot (RV vs sampling frequency)."""
 
@@ -352,7 +352,7 @@ class IntradayRvSignatureCurvaturePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_rv_signature_slope", backend="polars")
+@register_operator(name="intraday_rv_signature_slope", backend="polars", research_only=True)
 class IntradayRvSignatureSlopePolarsNative(SeriesOperator):
     """Slope of realized variance signature plot."""
 
@@ -371,7 +371,7 @@ class IntradayRvSignatureSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_session_shape_novelty", backend="polars")
+@register_operator(name="intraday_session_shape_novelty", backend="polars", research_only=True)
 class IntradaySessionShapeNoveltyPolarsNative(SeriesOperator):
     """Novelty score: distance from today's intraday pattern to historical average."""
 
@@ -390,7 +390,7 @@ class IntradaySessionShapeNoveltyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_subsampled_rv_dispersion", backend="polars")
+@register_operator(name="intraday_subsampled_rv_dispersion", backend="polars", research_only=True)
 class IntradaySubsampledRvDispersionPolarsNative(SeriesOperator):
     """Dispersion of RV estimates across subsampled grids."""
 
@@ -409,7 +409,7 @@ class IntradaySubsampledRvDispersionPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volatility_concentration", backend="polars")
+@register_operator(name="intraday_volatility_concentration", backend="polars", research_only=True)
 class IntradayVolatilityConcentrationPolarsNative(SeriesOperator):
     """Concentration of volatility: share of total variance in top-k bars."""
 
@@ -435,7 +435,7 @@ class IntradayVolatilityConcentrationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volatility_entropy", backend="polars")
+@register_operator(name="intraday_volatility_entropy", backend="polars", research_only=True)
 class IntradayVolatilityEntropyPolarsNative(SeriesOperator):
     """Shannon entropy of normalized squared-return distribution."""
 
@@ -454,7 +454,7 @@ class IntradayVolatilityEntropyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volatility_signature_slope", backend="polars")
+@register_operator(name="intraday_volatility_signature_slope", backend="polars", research_only=True)
 class IntradayVolatilitySignatureSlopePolarsNative(SeriesOperator):
     """Slope of volatility signature plot (std vs sampling frequency)."""
 
@@ -473,7 +473,7 @@ class IntradayVolatilitySignatureSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volatility_time_centroid", backend="polars")
+@register_operator(name="intraday_volatility_time_centroid", backend="polars", research_only=True)
 class IntradayVolatilityTimeCentroidPolarsNative(SeriesOperator):
     """Time centroid of intraday volatility distribution."""
 
@@ -503,7 +503,7 @@ class IntradayVolatilityTimeCentroidPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volume_clock_path_efficiency", backend="polars")
+@register_operator(name="intraday_volume_clock_path_efficiency", backend="polars", research_only=True)
 class IntradayVolumeClockPathEfficiencyPolarsNative(SeriesOperator):
     """Path efficiency in volume-clock space: direct distance / actual path."""
 
@@ -525,7 +525,7 @@ class IntradayVolumeClockPathEfficiencyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_volume_clock_roughness", backend="polars")
+@register_operator(name="intraday_volume_clock_roughness", backend="polars", research_only=True)
 class IntradayVolumeClockRoughnessPolarsNative(SeriesOperator):
     """Roughness of price path in volume-clock space."""
 
@@ -547,7 +547,7 @@ class IntradayVolumeClockRoughnessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_wasserstein_pair_distance", backend="polars")
+@register_operator(name="intraday_wasserstein_pair_distance", backend="polars", research_only=True)
 class IntradayWassersteinPairDistancePolarsNative(SeriesOperator):
     """Wasserstein distance between return distributions of two instruments."""
 
@@ -573,7 +573,7 @@ class IntradayWassersteinPairDistancePolarsNative(SeriesOperator):
 # intra_* operators (24): session-aware statistics and event analysis
 # ============================================================================
 
-@register_operator(name="intra_event_pre_post_contrast", backend="polars")
+@register_operator(name="intra_event_pre_post_contrast", backend="polars", research_only=True)
 class IntraEventPrePostContrastPolarsNative(SeriesOperator):
     """Contrast between pre-event and post-event window statistics."""
 
@@ -592,7 +592,7 @@ class IntraEventPrePostContrastPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_event_window_reduce", backend="polars")
+@register_operator(name="intra_event_window_reduce", backend="polars", research_only=True)
 class IntraEventWindowReducePolarsNative(SeriesOperator):
     """Reduce function over windows around detected events."""
 
@@ -611,7 +611,7 @@ class IntraEventWindowReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_impulse_event_detector", backend="polars")
+@register_operator(name="intra_impulse_event_detector", backend="polars", research_only=True)
 class IntraImpulseEventDetectorPolarsNative(SeriesOperator):
     """Detect impulse events: sudden spikes in volume or price movement."""
 
@@ -630,7 +630,7 @@ class IntraImpulseEventDetectorPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_limit_duration", backend="polars")
+@register_operator(name="intra_limit_duration", backend="polars", research_only=True)
 class IntraLimitDurationPolarsNative(SeriesOperator):
     """Total minutes spent at daily price limits."""
 
@@ -648,7 +648,7 @@ class IntraLimitDurationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_limit_first_hit_time", backend="polars")
+@register_operator(name="intra_limit_first_hit_time", backend="polars", research_only=True)
 class IntraLimitFirstHitTimePolarsNative(SeriesOperator):
     """Minute-of-day when price first hits the daily limit."""
 
@@ -671,7 +671,7 @@ class IntraLimitFirstHitTimePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_limit_pre_hit_pressure_profile", backend="polars")
+@register_operator(name="intra_limit_pre_hit_pressure_profile", backend="polars", research_only=True)
 class IntraLimitPreHitPressureProfilePolarsNative(SeriesOperator):
     """Volume/turnover profile in the bars leading up to limit hit."""
 
@@ -690,7 +690,7 @@ class IntraLimitPreHitPressureProfilePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_limit_reopen_count", backend="polars")
+@register_operator(name="intra_limit_reopen_count", backend="polars", research_only=True)
 class IntraLimitReopenCountPolarsNative(SeriesOperator):
     """Number of times price reopens after hitting limit."""
 
@@ -709,7 +709,7 @@ class IntraLimitReopenCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_liquidity_resilience_curve_fit", backend="polars")
+@register_operator(name="intra_liquidity_resilience_curve_fit", backend="polars", research_only=True)
 class IntraLiquidityResilienceCurveFitPolarsNative(SeriesOperator):
     """Fit parameters of liquidity resilience curve after shocks."""
 
@@ -728,7 +728,7 @@ class IntraLiquidityResilienceCurveFitPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_multiresolution_resample_reduce", backend="polars")
+@register_operator(name="intra_multiresolution_resample_reduce", backend="polars", research_only=True)
 class IntraMultiresolutionResampleReducePolarsNative(SeriesOperator):
     """Aggregate statistics at multiple time resolutions within session."""
 
@@ -747,7 +747,7 @@ class IntraMultiresolutionResampleReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_neighbor_event_class", backend="polars")
+@register_operator(name="intra_neighbor_event_class", backend="polars", research_only=True)
 class IntraNeighborEventClassPolarsNative(SeriesOperator):
     """Classification of events based on temporal neighborhood similarity."""
 
@@ -766,7 +766,7 @@ class IntraNeighborEventClassPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_post_impulse_response", backend="polars")
+@register_operator(name="intra_post_impulse_response", backend="polars", research_only=True)
 class IntraPostImpulseResponsePolarsNative(SeriesOperator):
     """Average response pattern in bars following impulse events."""
 
@@ -785,7 +785,7 @@ class IntraPostImpulseResponsePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_probe_outcome_score", backend="polars")
+@register_operator(name="intra_probe_outcome_score", backend="polars", research_only=True)
 class IntraProbeOutcomeScorePolarsNative(SeriesOperator):
     """Outcome score: success rate of price probes above/below levels."""
 
@@ -804,7 +804,7 @@ class IntraProbeOutcomeScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_profile_earth_mover_distance", backend="polars")
+@register_operator(name="intra_profile_earth_mover_distance", backend="polars", research_only=True)
 class IntraProfileEarthMoverDistancePolarsNative(SeriesOperator):
     """Earth Mover's Distance between today's profile and reference profile."""
 
@@ -826,7 +826,7 @@ class IntraProfileEarthMoverDistancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_response_curve_features", backend="polars")
+@register_operator(name="intra_response_curve_features", backend="polars", research_only=True)
 class IntraResponseCurveFeaturesPolarsNative(SeriesOperator):
     """Features extracted from impulse response curve."""
 
@@ -845,7 +845,7 @@ class IntraResponseCurveFeaturesPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_slice_mask_pair_reduce", backend="polars")
+@register_operator(name="intra_slice_mask_pair_reduce", backend="polars", research_only=True)
 class IntraSliceMaskPairReducePolarsNative(SeriesOperator):
     """Pairwise reduction over two masked slices of the session."""
 
@@ -864,7 +864,7 @@ class IntraSliceMaskPairReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_slice_mask_reduce", backend="polars")
+@register_operator(name="intra_slice_mask_reduce", backend="polars", research_only=True)
 class IntraSliceMaskReducePolarsNative(SeriesOperator):
     """Reduction over masked time slice within session."""
 
@@ -887,7 +887,7 @@ class IntraSliceMaskReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_dwell_stats", backend="polars")
+@register_operator(name="intra_state_dwell_stats", backend="polars", research_only=True)
 class IntraStateDwellStatsPolarsNative(SeriesOperator):
     """Statistics of dwell times in discrete states."""
 
@@ -906,7 +906,7 @@ class IntraStateDwellStatsPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_interval_moment", backend="polars")
+@register_operator(name="intra_state_interval_moment", backend="polars", research_only=True)
 class IntraStateIntervalMomentPolarsNative(SeriesOperator):
     """Moment (mean/std/skew) of intervals between state transitions."""
 
@@ -925,7 +925,7 @@ class IntraStateIntervalMomentPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_pair_same_slot_corr", backend="polars")
+@register_operator(name="intra_state_pair_same_slot_corr", backend="polars", research_only=True)
 class IntraStatePairSameSlotCorrPolarsNative(SeriesOperator):
     """Correlation between two state series at same minute-of-day slots."""
 
@@ -947,7 +947,7 @@ class IntraStatePairSameSlotCorrPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_supply_absorption_score", backend="polars")
+@register_operator(name="intra_supply_absorption_score", backend="polars", research_only=True)
 class IntraSupplyAbsorptionScorePolarsNative(SeriesOperator):
     """Score measuring how effectively supply/demand imbalances are absorbed."""
 
@@ -973,7 +973,7 @@ class IntraSupplyAbsorptionScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_ute_high", backend="polars")
+@register_operator(name="intra_ute_high", backend="polars", research_only=True)
 class IntraUteHighPolarsNative(SeriesOperator):
     """Upside Tail Event: fraction of bars in the upper tail."""
 
@@ -999,7 +999,7 @@ class IntraUteHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_ute_low", backend="polars")
+@register_operator(name="intra_ute_low", backend="polars", research_only=True)
 class IntraUteLowPolarsNative(SeriesOperator):
     """Downside Tail Event: fraction of bars in the lower tail."""
 
@@ -1025,7 +1025,7 @@ class IntraUteLowPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_vwap_path_curvature_pct", backend="polars")
+@register_operator(name="intra_vwap_path_curvature_pct", backend="polars", research_only=True)
 class IntraVwapPathCurvaturePctPolarsNative(SeriesOperator):
     """Curvature of price path relative to VWAP (percent deviation)."""
 
@@ -1055,7 +1055,7 @@ class IntraVwapPathCurvaturePctPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_vwap_path_slope_pct", backend="polars")
+@register_operator(name="intra_vwap_path_slope_pct", backend="polars", research_only=True)
 class IntraVwapPathSlopePctPolarsNative(SeriesOperator):
     """Slope of price path relative to VWAP (percent per minute)."""
 

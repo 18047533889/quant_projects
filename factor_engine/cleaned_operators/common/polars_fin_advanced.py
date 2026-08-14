@@ -44,6 +44,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="fin_surprise",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSurpriseNative(SeriesOperator):
     """Financial surprise: actual - expected."""
@@ -72,6 +73,7 @@ class FinSurpriseNative(SeriesOperator):
     canonical="fin_surprise_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSurpriseZscoreNative(SeriesOperator):
     """Financial surprise z-score: (actual - expected) / std(historical surprises)."""
@@ -110,6 +112,7 @@ class FinSurpriseZscoreNative(SeriesOperator):
     canonical="fin_surprise_event_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSurpriseEventZscoreNative(SeriesOperator):
     """Financial surprise event z-score using only announcement dates."""
@@ -167,6 +170,7 @@ class FinSurpriseEventZscoreNative(SeriesOperator):
     canonical="fin_surprise_event_percentile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSurpriseEventPercentileNative(SeriesOperator):
     """Financial surprise percentile rank among historical events."""
@@ -223,6 +227,7 @@ class FinSurpriseEventPercentileNative(SeriesOperator):
     canonical="fin_expectation_revision",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationRevisionNative(SeriesOperator):
     """Expectation revision: current_expectation - prior_expectation."""
@@ -255,6 +260,7 @@ class FinExpectationRevisionNative(SeriesOperator):
     canonical="fin_expectation_revision_pct",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationRevisionPctNative(SeriesOperator):
     """Expectation revision percentage: (current - prior) / |prior|."""
@@ -291,6 +297,7 @@ class FinExpectationRevisionPctNative(SeriesOperator):
     canonical="fin_expectation_revision_magnitude",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationRevisionMagnitudeNative(SeriesOperator):
     """Expectation revision magnitude: |current - prior|."""
@@ -323,6 +330,7 @@ class FinExpectationRevisionMagnitudeNative(SeriesOperator):
     canonical="fin_expectation_revision_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationRevisionCountNative(SeriesOperator):
     """Count of expectation revisions in window."""
@@ -359,6 +367,7 @@ class FinExpectationRevisionCountNative(SeriesOperator):
     canonical="fin_expectation_revision_speed",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationRevisionSpeedNative(SeriesOperator):
     """Average magnitude of expectation revisions in window."""
@@ -393,6 +402,7 @@ class FinExpectationRevisionSpeedNative(SeriesOperator):
     canonical="fin_expectation_dispersion",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinExpectationDispersionNative(SeriesOperator):
     """Dispersion of expectations over window (std)."""
@@ -425,6 +435,7 @@ class FinExpectationDispersionNative(SeriesOperator):
     canonical="fin_days_since_expectation_revision",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinDaysSinceExpectationRevisionNative(SeriesOperator):
     """Days since last meaningful expectation revision."""
@@ -476,6 +487,7 @@ class FinDaysSinceExpectationRevisionNative(SeriesOperator):
     canonical="fin_revision_delta",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinRevisionDeltaNative(SeriesOperator):
     """Revision delta: current - lag."""
@@ -506,6 +518,7 @@ class FinRevisionDeltaNative(SeriesOperator):
     canonical="fin_revision_magnitude",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinRevisionMagnitudeNative(SeriesOperator):
     """Revision magnitude: |current - lag|."""
@@ -536,6 +549,7 @@ class FinRevisionMagnitudeNative(SeriesOperator):
     canonical="fin_revision_pct",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinRevisionPctNative(SeriesOperator):
     """Revision percentage: (current - lag) / |lag|."""
@@ -572,6 +586,7 @@ class FinRevisionPctNative(SeriesOperator):
     canonical="fin_revision_direction",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinRevisionDirectionNative(SeriesOperator):
     """Revision direction: sign(current - lag)."""
@@ -602,6 +617,7 @@ class FinRevisionDirectionNative(SeriesOperator):
     canonical="fin_revision_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinRevisionCountNative(SeriesOperator):
     """Count of revisions in window."""
@@ -643,6 +659,7 @@ class FinRevisionCountNative(SeriesOperator):
     canonical="fin_beat_streak",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinBeatStreakNative(SeriesOperator):
     """Consecutive quarters beating expectations."""
@@ -688,6 +705,7 @@ class FinBeatStreakNative(SeriesOperator):
     canonical="fin_miss_streak",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinMissStreakNative(SeriesOperator):
     """Consecutive quarters missing expectations."""
@@ -738,6 +756,7 @@ class FinMissStreakNative(SeriesOperator):
     canonical="fin_earnings_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinEarningsPersistenceNative(SeriesOperator):
     """Earnings persistence: autocorrelation of earnings changes."""
@@ -788,6 +807,7 @@ class FinEarningsPersistenceNative(SeriesOperator):
     canonical="fin_cashflow_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinCashflowPersistenceNative(SeriesOperator):
     """Cashflow persistence: autocorrelation of cashflow changes."""
@@ -838,6 +858,7 @@ class FinCashflowPersistenceNative(SeriesOperator):
     canonical="fin_margin_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinMarginPersistenceNative(SeriesOperator):
     """Margin persistence: autocorrelation of margin changes."""
@@ -888,6 +909,7 @@ class FinMarginPersistenceNative(SeriesOperator):
     canonical="fin_growth_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinGrowthPersistenceNative(SeriesOperator):
     """Growth persistence: autocorrelation of growth rates."""
@@ -943,6 +965,7 @@ class FinGrowthPersistenceNative(SeriesOperator):
     canonical="fin_earnings_smoothness",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinEarningsSmoothnessNative(SeriesOperator):
     """Earnings smoothness: std(earnings) / mean(|earnings|)."""
@@ -980,6 +1003,7 @@ class FinEarningsSmoothnessNative(SeriesOperator):
     canonical="fin_accrual_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinAccrualRatioNative(SeriesOperator):
     """Accrual ratio: (earnings - cashflow) / |earnings|."""
@@ -1019,6 +1043,7 @@ class FinAccrualRatioNative(SeriesOperator):
     canonical="fin_seasonal_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSeasonalZscoreNative(SeriesOperator):
     """Seasonal z-score: (current - seasonal_mean) / seasonal_std."""
@@ -1076,6 +1101,7 @@ class FinSeasonalZscoreNative(SeriesOperator):
     canonical="fin_seasonal_percentile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinSeasonalPercentileNative(SeriesOperator):
     """Seasonal percentile: current vs same season historical values."""
@@ -1134,6 +1160,7 @@ class FinSeasonalPercentileNative(SeriesOperator):
     canonical="fin_zscore_history",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinZscoreHistoryNative(SeriesOperator):
     """Z-score vs full history."""
@@ -1171,6 +1198,7 @@ class FinZscoreHistoryNative(SeriesOperator):
     canonical="fin_zscore_vs_prior_history",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinZscoreVsPriorHistoryNative(SeriesOperator):
     """Z-score vs prior history (excludes current)."""
@@ -1223,6 +1251,7 @@ class FinZscoreVsPriorHistoryNative(SeriesOperator):
     canonical="fin_percentile_history",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinPercentileHistoryNative(SeriesOperator):
     """Percentile rank vs full history."""
@@ -1265,6 +1294,7 @@ class FinPercentileHistoryNative(SeriesOperator):
     canonical="fin_percentile_vs_prior_history",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class FinPercentileVsPriorHistoryNative(SeriesOperator):
     """Percentile rank vs prior history (excludes current)."""

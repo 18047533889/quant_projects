@@ -358,7 +358,7 @@ def check_statistical_sample_policy(policy: StatisticalSamplePolicy, *, canonica
 
 
 # 重复实现：见 ts_mean；dedupe 注销
-# @register_operator(name="SMA", category="time_series", business_category="time_series", canonical="SMA", source="factor_dsl_np")
+# @register_operator(name="SMA", category="time_series", business_category="time_series", canonical="SMA", source="factor_dsl_np", research_only=True)
 class SMA(SeriesOperator):
     """简单移动平均（SMA）；dedupe 后别名指向 ``ts_mean``。"""
 
@@ -381,7 +381,7 @@ class SMA(SeriesOperator):
 
 
 # canonical=WMA backend=pandas_numpy selected=WMA source=time_series/m_ops.py
-@register_operator(name="WMA", category="time_series", business_category="time_series", canonical="WMA", source="factor_dsl_np")
+@register_operator(name="WMA", category="time_series", business_category="time_series", canonical="WMA", source="factor_dsl_np", research_only=True)
 class WMA(SeriesOperator):
     """加权移动平均（线性衰减权重）。"""
 
@@ -409,7 +409,7 @@ _AGGR_TOP_N_FUNCS = frozenset({"sum", "avg", "mean", "max", "min", "std", "count
 
 
 # canonical=aggr_top_n backend=pandas_numpy selected=aggr_top_n source=time_series/topn_ops.py
-@register_operator(name="aggr_top_n", category="cross_sectional", business_category="cross_sectional_routing", canonical="aggr_top_n", source="factor_dsl_np")
+@register_operator(name="aggr_top_n", category="cross_sectional", business_category="cross_sectional_routing", canonical="aggr_top_n", source="factor_dsl_np", research_only=True)
 class AggrTopN(SeriesOperator):
     """自定义 Top-N **跨截面路由**聚合（按排序列选取前 N 标的聚合）。
 
@@ -483,7 +483,7 @@ class AggrTopN(SeriesOperator):
 
 
 # canonical=cum_top_n_avg backend=pandas_numpy selected=cum_top_n_avg source=time_series/topn_ops.py
-@register_operator(name="cum_top_n_avg", category="time_series", business_category="time_series", canonical="cum_top_n_avg", source="factor_dsl_np")
+@register_operator(name="cum_top_n_avg", category="time_series", business_category="time_series", canonical="cum_top_n_avg", source="factor_dsl_np", research_only=True)
 class CumTopNAvg(SeriesOperator):
     """扩展窗口内前 N 大值的均值。"""
 
@@ -500,7 +500,7 @@ class CumTopNAvg(SeriesOperator):
 
 
 # canonical=cum_top_n_sum backend=pandas_numpy selected=cum_top_n_sum source=time_series/topn_ops.py
-@register_operator(name="cum_top_n_sum", category="time_series", business_category="time_series", canonical="cum_top_n_sum", source="factor_dsl_np")
+@register_operator(name="cum_top_n_sum", category="time_series", business_category="time_series", canonical="cum_top_n_sum", source="factor_dsl_np", research_only=True)
 class CumTopNSum(SeriesOperator):
     """扩展窗口内前 N 大值的求和。"""
 
@@ -517,7 +517,7 @@ class CumTopNSum(SeriesOperator):
 
 
 # canonical=decay_linear backend=pandas_numpy selected=ts_decay_linear source=time_series/ts_ops.py
-@register_operator(name="ts_decay_linear", category="time_series", business_category="time_series", canonical="ts_decay_linear", source="factor_dsl_np")
+@register_operator(name="ts_decay_linear", category="time_series", business_category="time_series", canonical="ts_decay_linear", source="factor_dsl_np", research_only=True)
 class TSDecayLinear(SeriesOperator):
     """线性衰减加权滚动平均（``ts_decay_linear`` canonical）。"""
 
@@ -536,7 +536,7 @@ class TSDecayLinear(SeriesOperator):
 
 
 # canonical=ema backend=pandas_numpy selected=EMA source=time_series/m_ops.py
-@register_operator(name="EMA", category="time_series", business_category="time_series", canonical="ts_ema", source="factor_dsl_np")
+@register_operator(name="EMA", category="time_series", business_category="time_series", canonical="ts_ema", source="factor_dsl_np", research_only=True)
 class EMA(SeriesOperator):
     """指数移动平均（EWM，``adjust=False``）。"""
 
@@ -561,7 +561,7 @@ class EMA(SeriesOperator):
 
 
 # canonical=ts_argmax backend=pandas_numpy selected=ts_argmax source=time_series/m_ops.py
-@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_np")
+@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_np", research_only=True)
 class TSArgmax(SeriesOperator):
     """滚动窗口内最大值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
 
@@ -602,7 +602,7 @@ class TSArgmax(SeriesOperator):
 
 
 # canonical=ts_argmin backend=pandas_numpy selected=ts_argmin source=time_series/m_ops.py
-@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_np")
+@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_np", research_only=True)
 class TSArgmin(SeriesOperator):
     """滚动窗口内最小值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
 
@@ -640,7 +640,7 @@ class TSArgmin(SeriesOperator):
 
 
 # canonical=m_beta backend=pandas_numpy selected=m_beta source=time_series/m_ops.py
-@register_operator(name="m_beta", category="time_series", business_category="time_series", canonical="ts_beta", source="factor_dsl_np")
+@register_operator(name="m_beta", category="time_series", business_category="time_series", canonical="ts_beta", source="factor_dsl_np", research_only=True)
 class MovingBeta(SeriesOperator):
     """两变量滚动 Beta：``Cov(y,x)/Var(x)``。
 
@@ -688,7 +688,7 @@ class MovingBeta(SeriesOperator):
 
 
 # canonical=m_bottom_n_avg backend=pandas_numpy selected=m_bottom_n_avg source=time_series/topn_ops.py
-@register_operator(name="m_bottom_n_avg", category="time_series", business_category="time_series", canonical="ts_bottom_n_avg", source="factor_dsl_np")
+@register_operator(name="m_bottom_n_avg", category="time_series", business_category="time_series", canonical="ts_bottom_n_avg", source="factor_dsl_np", research_only=True)
 class MovingBottomNAvg(SeriesOperator):
     """滚动窗口内后 N 小值的均值。"""
 
@@ -705,7 +705,7 @@ class MovingBottomNAvg(SeriesOperator):
 
 
 # canonical=m_bottom_n_sum backend=pandas_numpy selected=m_bottom_n_sum source=time_series/topn_ops.py
-@register_operator(name="m_bottom_n_sum", category="time_series", business_category="time_series", canonical="ts_bottom_n_sum", source="factor_dsl_np")
+@register_operator(name="m_bottom_n_sum", category="time_series", business_category="time_series", canonical="ts_bottom_n_sum", source="factor_dsl_np", research_only=True)
 class MovingBottomNSum(SeriesOperator):
     """滚动窗口内后 N 小值的求和。"""
 
@@ -722,7 +722,7 @@ class MovingBottomNSum(SeriesOperator):
 
 
 # canonical=m_mad backend=pandas_numpy selected=m_mad source=time_series/m_ops.py
-@register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_np")
+@register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_np", research_only=True)
 class MovingMAD(SeriesOperator):
     """滚动平均绝对离差（MAD）。"""
 
@@ -743,7 +743,7 @@ class MovingMAD(SeriesOperator):
 
 
 # canonical=m_median backend=pandas_numpy selected=m_median source=time_series/m_ops.py
-@register_operator(name="m_median", category="time_series", business_category="time_series", canonical="ts_median", source="factor_dsl_np")
+@register_operator(name="m_median", category="time_series", business_category="time_series", canonical="ts_median", source="factor_dsl_np", research_only=True)
 class MovingMedian(SeriesOperator):
     """滚动中位数。"""
 
@@ -763,7 +763,7 @@ class MovingMedian(SeriesOperator):
 
 
 # canonical=ts_pct backend=pandas_numpy selected=ts_pct source=time_series/m_ops.py
-@register_operator(name="ts_pct", category="time_series", business_category="time_series", canonical="ts_pct", source="factor_dsl_np")
+@register_operator(name="ts_pct", category="time_series", business_category="time_series", canonical="ts_pct", source="factor_dsl_np", research_only=True)
 class TSPctChange(SeriesOperator):
     """d 期变化率：``x_t / x_{t-d} - 1``。"""
 
@@ -789,7 +789,7 @@ class TSPctChange(SeriesOperator):
 
 
 # canonical=ts_log_return backend=pandas_numpy selected=ts_log_return source=time_series/m_ops.py
-@register_operator(name="ts_log_return", category="time_series", business_category="time_series", canonical="ts_log_return", source="factor_dsl_np")
+@register_operator(name="ts_log_return", category="time_series", business_category="time_series", canonical="ts_log_return", source="factor_dsl_np", research_only=True)
 class TSLogReturn(SeriesOperator):
     """d 期对数收益率：``ln(x_t / x_{t-d})``。"""
 
@@ -822,7 +822,7 @@ class TSLogReturn(SeriesOperator):
 
 
 # canonical=ts_sharpe backend=pandas_numpy selected=ts_sharpe source=time_series/m_ops.py
-@register_operator(name="ts_sharpe", category="time_series", business_category="time_series", canonical="ts_sharpe", source="factor_dsl_np")
+@register_operator(name="ts_sharpe", category="time_series", business_category="time_series", canonical="ts_sharpe", source="factor_dsl_np", research_only=True)
 class TSSharpe(SeriesOperator):
     """滚动夏普比率（年化，可配置 ``ann_factor``）。"""
 
@@ -893,6 +893,7 @@ class TSSharpe(SeriesOperator):
     business_category="time_series",
     canonical="ts_autocorr",
     source="factor_dsl_np",
+    research_only=True,
 )
 class TSAutocorr(SeriesOperator):
     """滚动自相关系数：窗口内 ``corr(x, x.shift(lag))``。"""
@@ -943,7 +944,7 @@ class TSAutocorr(SeriesOperator):
 
 
 # canonical=ts_quantile backend=pandas_numpy selected=ts_quantile source=time_series/m_ops.py
-@register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_np")
+@register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_np", research_only=True)
 class TSQuantile(SeriesOperator):
     """滚动窗口分位数 ``Q_q``。"""
 
@@ -979,7 +980,7 @@ class TSQuantile(SeriesOperator):
 
 
 # canonical=m_top_n_avg backend=pandas_numpy selected=m_top_n_avg source=time_series/topn_ops.py
-@register_operator(name="m_top_n_avg", category="time_series", business_category="time_series", canonical="ts_top_n_avg", source="factor_dsl_np")
+@register_operator(name="m_top_n_avg", category="time_series", business_category="time_series", canonical="ts_top_n_avg", source="factor_dsl_np", research_only=True)
 class MovingTopNAvg(SeriesOperator):
     """滚动窗口内前 N 大值的均值。"""
 
@@ -996,7 +997,7 @@ class MovingTopNAvg(SeriesOperator):
 
 
 # canonical=m_top_n_std backend=pandas_numpy selected=m_top_n_std source=time_series/topn_ops.py
-@register_operator(name="m_top_n_std", category="time_series", business_category="time_series", canonical="ts_top_n_std", source="factor_dsl_np")
+@register_operator(name="m_top_n_std", category="time_series", business_category="time_series", canonical="ts_top_n_std", source="factor_dsl_np", research_only=True)
 class MovingTopNStd(SeriesOperator):
     """滚动窗口内前 N 大值的标准差。"""
 
@@ -1013,7 +1014,7 @@ class MovingTopNStd(SeriesOperator):
 
 
 # canonical=ts_topk_sum backend=pandas_numpy selected=ts_topk_sum source=time_series/topn_ops.py
-@register_operator(name="ts_topk_sum", category="time_series", business_category="time_series", canonical="ts_topk_sum", source="factor_dsl_np")
+@register_operator(name="ts_topk_sum", category="time_series", business_category="time_series", canonical="ts_topk_sum", source="factor_dsl_np", research_only=True)
 class TSTopKSum(SeriesOperator):
     """滚动窗口内 Top-K 求和。"""
 
@@ -1049,7 +1050,7 @@ class TSTopKSum(SeriesOperator):
 
 
 # canonical=m_var backend=pandas_numpy selected=m_var source=time_series/m_ops.py
-@register_operator(name="m_var", category="time_series", business_category="time_series", canonical="ts_var", source="factor_dsl_np")
+@register_operator(name="m_var", category="time_series", business_category="time_series", canonical="ts_var", source="factor_dsl_np", research_only=True)
 class MovingVariance(SeriesOperator):
     """滚动方差。"""
 
@@ -1069,7 +1070,7 @@ class MovingVariance(SeriesOperator):
 
 
 # 重复实现：见 ts_zscore；dedupe 注销
-# @register_operator(name="m_zscore", category="time_series", business_category="time_series", canonical="m_zscore", source="factor_dsl_np")
+# @register_operator(name="m_zscore", category="time_series", business_category="time_series", canonical="m_zscore", source="factor_dsl_np", research_only=True)
 class MovingZscore(SeriesOperator):
     """滚动窗口 Z-Score 标准化（dedupe 后别名指向 ``ts_zscore``）。"""
 
@@ -1091,7 +1092,7 @@ class MovingZscore(SeriesOperator):
 
 
 # canonical=tm_top_n_avg backend=pandas_numpy selected=tm_top_n_avg source=time_series/topn_ops.py
-@register_operator(name="tm_top_n_avg", category="time_series", business_category="time_series", canonical="tm_top_n_avg", source="factor_dsl_np")
+@register_operator(name="tm_top_n_avg", category="time_series", business_category="time_series", canonical="tm_top_n_avg", source="factor_dsl_np", research_only=True)
 class TimeWindowTopNAvg(SeriesOperator):
     """指定时间窗口内前 N 大值的均值。"""
 
@@ -1108,7 +1109,7 @@ class TimeWindowTopNAvg(SeriesOperator):
 
 
 # canonical=tm_top_n_sum backend=pandas_numpy selected=tm_top_n_sum source=time_series/topn_ops.py
-@register_operator(name="tm_top_n_sum", category="time_series", business_category="time_series", canonical="tm_top_n_sum", source="factor_dsl_np")
+@register_operator(name="tm_top_n_sum", category="time_series", business_category="time_series", canonical="tm_top_n_sum", source="factor_dsl_np", research_only=True)
 class TimeWindowTopNSum(SeriesOperator):
     """指定时间窗口内前 N 大值的求和。"""
 
@@ -1173,7 +1174,7 @@ class TSCorrelation(SeriesOperator):
                 pass
         return x.rolling(window=w, min_periods=2).corr(y)
 
-@register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
+@register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np", research_only=True)
 class TSCorr(TSCorrelation):
     """滚动相关系数（``ts_corr`` canonical）。"""
 
@@ -1190,7 +1191,7 @@ class TSCorr(TSCorrelation):
 
 
 # canonical=ts_cov backend=pandas_numpy selected=ts_cov source=time_series/ts_ops.py
-@register_operator(name="ts_cov", category="time_series", business_category="time_series", canonical="ts_cov", source="factor_dsl_np")
+@register_operator(name="ts_cov", category="time_series", business_category="time_series", canonical="ts_cov", source="factor_dsl_np", research_only=True)
 class TSCov(SeriesOperator):
     """滚动协方差。"""
 
@@ -1236,7 +1237,7 @@ class TSDecay(SeriesOperator):
 
 
 # canonical=ts_decay_exp_window backend=pandas_numpy selected=ts_decay_exp_window source=time_series/ts_ops.py
-@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_np")
+@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_np", research_only=True)
 class TSDecayExpWindow(SeriesOperator):
     """指数加权滚动平均。"""
 
@@ -1275,7 +1276,7 @@ class TSDecayExpWindow(SeriesOperator):
 
 
 # canonical=ts_delay backend=pandas_numpy selected=ts_delay source=time_series/ts_ops.py
-@register_operator(name="ts_delay", category="time_series", business_category="time_series", canonical="ts_delay", source="factor_dsl_np")
+@register_operator(name="ts_delay", category="time_series", business_category="time_series", canonical="ts_delay", source="factor_dsl_np", research_only=True)
 class TSDelay(SeriesOperator):
     """n 期因果滞后（PIT-safe，负滞后返回 NaN）。"""
 
@@ -1296,7 +1297,7 @@ class TSDelay(SeriesOperator):
 
 
 # canonical=ts_delta backend=pandas_numpy selected=ts_delta source=time_series/ts_ops.py
-@register_operator(name="ts_delta", category="time_series", business_category="time_series", canonical="ts_delta", source="factor_dsl_np")
+@register_operator(name="ts_delta", category="time_series", business_category="time_series", canonical="ts_delta", source="factor_dsl_np", research_only=True)
 class TSDelta(SeriesOperator):
     """n 期差分：``x - lag(x, n)``。"""
 
@@ -1317,7 +1318,7 @@ class TSDelta(SeriesOperator):
 
 
 # canonical=ts_kurt backend=pandas_numpy selected=m_kurt source=time_series/m_ops.py
-@register_operator(name="m_kurt", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np")
+@register_operator(name="m_kurt", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np", research_only=True)
 class MovingKurt(SeriesOperator):
     """滚动峰度。"""
 
@@ -1339,7 +1340,7 @@ class MovingKurt(SeriesOperator):
 
 
 # canonical=ts_max backend=pandas_numpy selected=ts_max source=time_series/ts_ops.py
-@register_operator(name="ts_max", category="time_series", business_category="time_series", canonical="ts_max", source="factor_dsl_np")
+@register_operator(name="ts_max", category="time_series", business_category="time_series", canonical="ts_max", source="factor_dsl_np", research_only=True)
 class TSMax(SeriesOperator):
     """滚动最大值。"""
 
@@ -1358,7 +1359,7 @@ class TSMax(SeriesOperator):
 
 
 # canonical=ts_mean backend=pandas_numpy selected=ts_mean source=time_series/ts_ops.py
-@register_operator(name="ts_mean", category="time_series", business_category="time_series", canonical="ts_mean", source="factor_dsl_np")
+@register_operator(name="ts_mean", category="time_series", business_category="time_series", canonical="ts_mean", source="factor_dsl_np", research_only=True)
 class TSMean(SeriesOperator):
     """滚动均值（支持 Numba 加速路径）。"""
 
@@ -1388,7 +1389,7 @@ class TSMean(SeriesOperator):
 
 
 # canonical=ts_min backend=pandas_numpy selected=ts_min source=time_series/ts_ops.py
-@register_operator(name="ts_min", category="time_series", business_category="time_series", canonical="ts_min", source="factor_dsl_np")
+@register_operator(name="ts_min", category="time_series", business_category="time_series", canonical="ts_min", source="factor_dsl_np", research_only=True)
 class TSMin(SeriesOperator):
     """滚动最小值。"""
 
@@ -1407,7 +1408,7 @@ class TSMin(SeriesOperator):
 
 
 # canonical=ts_product backend=pandas_numpy selected=ts_product source=time_series/ts_ops.py
-@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np")
+@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np", research_only=True)
 class TSProduct(SeriesOperator):
     """滚动乘积（对数域累加实现）。"""
 
@@ -1437,7 +1438,7 @@ class TSProduct(SeriesOperator):
 
 
 # canonical=ts_rank backend=pandas_numpy selected=ts_rank source=time_series/ts_ops.py
-@register_operator(name="ts_rank", category="time_series", business_category="time_series", canonical="ts_rank", source="factor_dsl_np")
+@register_operator(name="ts_rank", category="time_series", business_category="time_series", canonical="ts_rank", source="factor_dsl_np", research_only=True)
 class TSRank(SeriesOperator):
     """滚动百分位排名（支持 Numba 加速路径）。"""
 
@@ -1483,7 +1484,7 @@ class TSRank(SeriesOperator):
 
 
 # canonical=ts_regression backend=pandas_numpy selected=ts_regression source=time_series/ts_ops.py
-@register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="factor_dsl_np")
+@register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="factor_dsl_np", research_only=True)
 class TSRegression(SeriesOperator):
     """滚动 OLS 回归（slope/intercept/r²/residual）。"""
 
@@ -1505,7 +1506,7 @@ class TSRegression(SeriesOperator):
 
 
 # canonical=ts_skew backend=pandas_numpy selected=m_skew source=time_series/m_ops.py
-@register_operator(name="m_skew", category="time_series", business_category="time_series", canonical="ts_skew", source="factor_dsl_np")
+@register_operator(name="m_skew", category="time_series", business_category="time_series", canonical="ts_skew", source="factor_dsl_np", research_only=True)
 class MovingSkew(SeriesOperator):
     """滚动偏度。"""
 
@@ -1553,7 +1554,7 @@ class TSStdDev(SeriesOperator):
                 pass
         return x.rolling(window=window, min_periods=1).std()
 
-@register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
+@register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np", research_only=True)
 class TSStd(TSStdDev):
     """滚动标准差（``ts_std`` canonical）。"""
 
@@ -1570,7 +1571,7 @@ class TSStd(TSStdDev):
 
 
 # canonical=ts_sum backend=pandas_numpy selected=ts_sum source=time_series/ts_ops.py
-@register_operator(name="ts_sum", category="time_series", business_category="time_series", canonical="ts_sum", source="factor_dsl_np")
+@register_operator(name="ts_sum", category="time_series", business_category="time_series", canonical="ts_sum", source="factor_dsl_np", research_only=True)
 class TSSum(SeriesOperator):
     """滚动求和。"""
 
@@ -1589,7 +1590,7 @@ class TSSum(SeriesOperator):
 
 
 # canonical=ts_sum_decay backend=pandas_numpy selected=ts_sum_decay source=time_series/ts_ops.py
-@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_np")
+@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_np", research_only=True)
 class TSSumDecay(SeriesOperator):
     """指数衰减权重滚动求和。"""
 
@@ -1620,7 +1621,7 @@ class TSSumDecay(SeriesOperator):
 
 
 # canonical=ts_zscore backend=pandas_numpy selected=ts_zscore source=time_series/ts_ops.py
-@register_operator(name="ts_zscore", category="time_series", business_category="time_series", canonical="ts_zscore", source="factor_dsl_np")
+@register_operator(name="ts_zscore", category="time_series", business_category="time_series", canonical="ts_zscore", source="factor_dsl_np", research_only=True)
 class TSZScore(SeriesOperator):
     """滚动 Z-Score 标准化。"""
 
@@ -1671,7 +1672,7 @@ def _apply_colwise_kernel(x: pd.DataFrame, fn, **kwargs) -> pd.DataFrame:
     return x.apply(lambda s: fn(s.values, **kwargs) if kwargs else fn(s.values))
 
 
-@register_operator(name="price_spread_deviation", category="time_series", business_category="time_series", canonical="price_spread_deviation", source="factor_dsl_np")
+@register_operator(name="price_spread_deviation", category="time_series", business_category="time_series", canonical="price_spread_deviation", source="factor_dsl_np", research_only=True)
 class PriceSpreadDeviation(SeriesOperator):
     """相对窗口均值偏离度。"""
 
@@ -1699,7 +1700,7 @@ class PriceSpreadDeviation(SeriesOperator):
         return _apply_colwise_kernel(x, price_spread_deviation_, d=w)
 
 
-@register_operator(name="ts_moment", category="time_series", business_category="time_series", canonical="ts_moment", source="factor_dsl_np")
+@register_operator(name="ts_moment", category="time_series", business_category="time_series", canonical="ts_moment", source="factor_dsl_np", research_only=True)
 class TSMoment(SeriesOperator):
     """滚动 k 阶中心矩。"""
 
@@ -1729,7 +1730,7 @@ class TSMoment(SeriesOperator):
         )
 
 
-@register_operator(name="rank_corr", category="time_series", business_category="time_series", canonical="rank_corr", source="factor_dsl_np")
+@register_operator(name="rank_corr", category="time_series", business_category="time_series", canonical="rank_corr", source="factor_dsl_np", research_only=True)
 class RankCorr(SeriesOperator):
     """滚动窗口秩相关系数（时序，`d>0`）。
 
@@ -1766,7 +1767,7 @@ class RankCorr(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_poly2_coeff", category="time_series", business_category="time_series", canonical="ts_poly2_coeff", source="factor_dsl_np")
+@register_operator(name="ts_poly2_coeff", category="time_series", business_category="time_series", canonical="ts_poly2_coeff", source="factor_dsl_np", research_only=True)
 class TSPoly2Coeff(SeriesOperator):
     """时间二次拟合二次项系数。"""
 
@@ -1790,7 +1791,7 @@ class TSPoly2Coeff(SeriesOperator):
         return _apply_colwise_kernel(x, ts_poly2_coeff_, d=strict_int(d, "d", minimum=3))
 
 
-@register_operator(name="ts_poly2_resid", category="time_series", business_category="time_series", canonical="ts_poly2_resid", source="factor_dsl_np")
+@register_operator(name="ts_poly2_resid", category="time_series", business_category="time_series", canonical="ts_poly2_resid", source="factor_dsl_np", research_only=True)
 class TSPoly2Resid(SeriesOperator):
     """二次拟合窗口末残差。"""
 
@@ -1823,7 +1824,7 @@ class TSPoly2Resid(SeriesOperator):
 # fit on data STRICTLY <= t-1; the current observation is used only for
 # evaluation (R22-054..055).  These are the mineable poly2 forms (DIRECT_ALPHA);
 # the in-sample *_coeff/*_resid stay RESEARCH_TOOL.
-@register_operator(name="ts_poly2_prior_coeff", category="time_series", business_category="time_series", canonical="ts_poly2_prior_coeff", source="factor_dsl_np")
+@register_operator(name="ts_poly2_prior_coeff", category="time_series", business_category="time_series", canonical="ts_poly2_prior_coeff", source="factor_dsl_np", research_only=True)
 class TSPoly2PriorCoeff(SeriesOperator):
     """二次拟合二次项系数（prior 窗口 [t-d, t-1]，严格因果）。"""
 
@@ -1847,7 +1848,7 @@ class TSPoly2PriorCoeff(SeriesOperator):
         return _apply_colwise_kernel(x, ts_poly2_prior_coeff_, d=strict_int(d, "d", minimum=3))
 
 
-@register_operator(name="ts_poly2_forecast_error", category="time_series", business_category="time_series", canonical="ts_poly2_forecast_error", source="factor_dsl_np")
+@register_operator(name="ts_poly2_forecast_error", category="time_series", business_category="time_series", canonical="ts_poly2_forecast_error", source="factor_dsl_np", research_only=True)
 class TSPoly2ForecastError(SeriesOperator):
     """二次拟合一步外预测误差（prior 拟合，当前观测仅评估）。"""
 
@@ -1871,7 +1872,7 @@ class TSPoly2ForecastError(SeriesOperator):
         return _apply_colwise_kernel(x, ts_poly2_forecast_error_, d=strict_int(d, "d", minimum=3))
 
 
-@register_operator(name="ts_poly2_forecast_error_z", category="time_series", business_category="time_series", canonical="ts_poly2_forecast_error_z", source="factor_dsl_np")
+@register_operator(name="ts_poly2_forecast_error_z", category="time_series", business_category="time_series", canonical="ts_poly2_forecast_error_z", source="factor_dsl_np", research_only=True)
 class TSPoly2ForecastErrorZ(SeriesOperator):
     """标准化一步外预测误差（除以 in-sample 残差 std）。"""
 
@@ -1895,7 +1896,7 @@ class TSPoly2ForecastErrorZ(SeriesOperator):
         return _apply_colwise_kernel(x, ts_poly2_forecast_error_z_, d=strict_int(d, "d", minimum=3))
 
 
-@register_operator(name="digital_count", category="time_series", business_category="time_series", canonical="digital_count", source="factor_dsl_np")
+@register_operator(name="digital_count", category="time_series", business_category="time_series", canonical="digital_count", source="factor_dsl_np", research_only=True)
 class DigitalCount(SeriesOperator):
     """连续小波动片段计数。"""
 
@@ -1931,7 +1932,7 @@ class DigitalCount(SeriesOperator):
         )
 
 
-@register_operator(name="ts_max_buildup", category="time_series", business_category="time_series", canonical="ts_max_buildup", source="factor_dsl_np")
+@register_operator(name="ts_max_buildup", category="time_series", business_category="time_series", canonical="ts_max_buildup", source="factor_dsl_np", research_only=True)
 class TSMaxBuildup(SeriesOperator):
     """窗口内持续创新高次数。"""
 
@@ -1983,6 +1984,7 @@ register_operator = register_polars_operator
     canonical="ts_decay_linear",
     source="factor_dsl_np",
     backend="polars",
+    research_only=True,
 )
 class TSDecayLinearPolars(SeriesOperator):
     """Polars 线性衰减加权滚动平均。"""
@@ -2066,7 +2068,7 @@ class TSCorrelation(SeriesOperator):
             return x
         return merged.with_columns(exprs).drop(y_cols)
 
-@register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
+@register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np", research_only=True)
 class TSCorrPolars(TSCorrelation):
     """Polars 滚动相关系数。"""
 
@@ -2083,7 +2085,7 @@ class TSCorrPolars(TSCorrelation):
 
 
 # canonical=ts_cov backend=polars selected=ts_cov source=time_series/ts_ops_polars.py
-@register_operator(name="ts_cov", category="time_series", business_category="time_series", canonical="ts_cov", source="factor_dsl_np")
+@register_operator(name="ts_cov", category="time_series", business_category="time_series", canonical="ts_cov", source="factor_dsl_np", research_only=True)
 class TSCovPolars(SeriesOperator):
     """Polars 滚动协方差。"""
 
@@ -2149,7 +2151,7 @@ class TSDecayPolars(SeriesOperator):
 
 
 # canonical=ts_decay_exp_window backend=polars selected=ts_decay_exp_window source=time_series/ts_ops_polars.py
-@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_np")
+@register_operator(name="ts_decay_exp_window", category="time_series", business_category="time_series", canonical="ts_decay_exp_window", source="factor_dsl_np", research_only=True)
 class TSDecayExpWindowPolars(SeriesOperator):
     """Polars 指数加权滚动。"""
 
@@ -2188,7 +2190,7 @@ class TSDecayExpWindowPolars(SeriesOperator):
 
 
 # canonical=ts_delay backend=polars selected=ts_delay source=time_series/ts_ops_polars.py
-@register_operator(name="ts_delay", category="time_series", business_category="time_series", canonical="ts_delay", source="factor_dsl_np")
+@register_operator(name="ts_delay", category="time_series", business_category="time_series", canonical="ts_delay", source="factor_dsl_np", research_only=True)
 class TSDelayPolars(SeriesOperator):
     """Polars n 期滞后（负滞后返回 NaN）。"""
 
@@ -2213,7 +2215,7 @@ class TSDelayPolars(SeriesOperator):
 
 
 # canonical=ts_delta backend=polars selected=ts_delta source=time_series/ts_ops_polars.py
-@register_operator(name="ts_delta", category="time_series", business_category="time_series", canonical="ts_delta", source="factor_dsl_np")
+@register_operator(name="ts_delta", category="time_series", business_category="time_series", canonical="ts_delta", source="factor_dsl_np", research_only=True)
 class TSDeltaPolars(SeriesOperator):
     """Polars n 期差分。"""
 
@@ -2238,7 +2240,7 @@ class TSDeltaPolars(SeriesOperator):
 
 
 # canonical=ts_kurt backend=polars selected=ts_kurtosis source=time_series/ts_ops_polars.py
-@register_operator(name="ts_kurtosis", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np")
+@register_operator(name="ts_kurtosis", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np", research_only=True)
 class TSKurtosisPolars(SeriesOperator):
     """Polars 滚动峰度。"""
 
@@ -2260,7 +2262,7 @@ class TSKurtosisPolars(SeriesOperator):
 
 
 # canonical=ts_max backend=polars selected=ts_max source=time_series/ts_ops_polars.py
-@register_operator(name="ts_max", category="time_series", business_category="time_series", canonical="ts_max", source="factor_dsl_np")
+@register_operator(name="ts_max", category="time_series", business_category="time_series", canonical="ts_max", source="factor_dsl_np", research_only=True)
 class TSMaxPolars(SeriesOperator):
     """Polars 滚动最大值。"""
 
@@ -2282,7 +2284,7 @@ class TSMaxPolars(SeriesOperator):
 
 
 # canonical=ts_mean backend=polars selected=ts_mean source=time_series/ts_ops_polars.py
-@register_operator(name="ts_mean", category="time_series", business_category="time_series", canonical="ts_mean", source="factor_dsl_np")
+@register_operator(name="ts_mean", category="time_series", business_category="time_series", canonical="ts_mean", source="factor_dsl_np", research_only=True)
 class TSMeanPolars(SeriesOperator):
     """Polars 滚动均值。"""
 
@@ -2304,7 +2306,7 @@ class TSMeanPolars(SeriesOperator):
 
 
 # canonical=ts_min backend=polars selected=ts_min source=time_series/ts_ops_polars.py
-@register_operator(name="ts_min", category="time_series", business_category="time_series", canonical="ts_min", source="factor_dsl_np")
+@register_operator(name="ts_min", category="time_series", business_category="time_series", canonical="ts_min", source="factor_dsl_np", research_only=True)
 class TSMinPolars(SeriesOperator):
     """Polars 滚动最小值。"""
 
@@ -2326,7 +2328,7 @@ class TSMinPolars(SeriesOperator):
 
 
 # canonical=ts_product backend=polars selected=ts_product source=time_series/ts_ops_polars.py
-@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np")
+@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np", research_only=True)
 class TSProductPolars(SeriesOperator):
     """Polars 滚动乘积。"""
 
@@ -2355,7 +2357,7 @@ class TSProductPolars(SeriesOperator):
 
 
 # canonical=ts_rank backend=polars selected=ts_rank source=time_series/ts_ops_polars.py
-@register_operator(name="ts_rank", category="time_series", business_category="time_series", canonical="ts_rank", source="factor_dsl_np")
+@register_operator(name="ts_rank", category="time_series", business_category="time_series", canonical="ts_rank", source="factor_dsl_np", research_only=True)
 class TSRankPolars(SeriesOperator):
     """Polars 滚动百分位排名。"""
 
@@ -2385,7 +2387,7 @@ class TSRankPolars(SeriesOperator):
 
 
 # canonical=ts_skew backend=polars selected=ts_skewness source=time_series/ts_ops_polars.py
-@register_operator(name="ts_skewness", category="time_series", business_category="time_series", canonical="ts_skew", source="factor_dsl_np")
+@register_operator(name="ts_skewness", category="time_series", business_category="time_series", canonical="ts_skew", source="factor_dsl_np", research_only=True)
 class TSSkewnessPolars(SeriesOperator):
     """Polars 滚动偏度。"""
 
@@ -2426,7 +2428,7 @@ class TSStdDev(SeriesOperator):
             pl.col(c).rolling_std(window_size=window, min_samples=1).alias(c) for c in cols
         ])
 
-@register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
+@register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np", research_only=True)
 class TSStdPolars(TSStdDev):
     """Polars 滚动标准差。"""
 
@@ -2443,7 +2445,7 @@ class TSStdPolars(TSStdDev):
 
 
 # canonical=ts_sum backend=polars selected=ts_sum source=time_series/ts_ops_polars.py
-@register_operator(name="ts_sum", category="time_series", business_category="time_series", canonical="ts_sum", source="factor_dsl_np")
+@register_operator(name="ts_sum", category="time_series", business_category="time_series", canonical="ts_sum", source="factor_dsl_np", research_only=True)
 class TSSumPolars(SeriesOperator):
     """Polars 滚动求和。"""
 
@@ -2465,7 +2467,7 @@ class TSSumPolars(SeriesOperator):
 
 
 # canonical=ts_sum_decay backend=polars selected=ts_sum_decay source=time_series/ts_ops_polars.py
-@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_np")
+@register_operator(name="ts_sum_decay", category="time_series", business_category="time_series", canonical="ts_sum_decay", source="factor_dsl_np", research_only=True)
 class TSSumDecayPolars(SeriesOperator):
     """Polars 衰减权重滚动求和。"""
 
@@ -2503,6 +2505,7 @@ class TSSumDecayPolars(SeriesOperator):
     canonical="ts_zscore",
     source="factor_dsl_np",
     backend="polars",
+    research_only=True,
 )
 class TSZScorePolars(SeriesOperator):
     """Polars 滚动 Z-Score。"""
@@ -2536,6 +2539,7 @@ class TSZScorePolars(SeriesOperator):
     canonical="ts_sharpe",
     source="factor_dsl_np",
     backend="polars",
+    research_only=True,
 )
 class TSSharpePolars(SeriesOperator):
     """Polars 滚动夏普比率。"""
@@ -2607,6 +2611,7 @@ class TSSharpePolars(SeriesOperator):
     canonical="ts_autocorr",
     source="factor_dsl_np",
     backend="polars",
+    research_only=True,
 )
 class TSAutocorrPolars(SeriesOperator):
     """Polars 滚动自相关。"""

@@ -63,6 +63,7 @@ def _cs_long_transform(
     canonical="cs_rank",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSRankNative(SeriesOperator):
     """Cross-sectional percentile rank."""
@@ -95,6 +96,7 @@ class CSRankNative(SeriesOperator):
     canonical="cs_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSZscoreNative(SeriesOperator):
     """Cross-sectional z-score."""
@@ -129,6 +131,7 @@ class CSZscoreNative(SeriesOperator):
     canonical="cs_demean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSDemeanNative(SeriesOperator):
     """Cross-sectional demean."""
@@ -158,6 +161,7 @@ class CSDemeanNative(SeriesOperator):
     canonical="cs_scale",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSScaleNative(SeriesOperator):
     """Cross-sectional scale to unit sum of absolute values."""
@@ -191,6 +195,7 @@ class CSScaleNative(SeriesOperator):
     canonical="cs_quantile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSQuantileNative(SeriesOperator):
     """Cross-sectional quantile (broadcast)."""
@@ -231,6 +236,7 @@ class CSQuantileNative(SeriesOperator):
     canonical="cs_bucket",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSBucketNative(SeriesOperator):
     """Cross-sectional bucketing into n bins."""
@@ -272,6 +278,7 @@ class CSBucketNative(SeriesOperator):
     canonical="cs_bucket_fixed",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSBucketFixedNative(SeriesOperator):
     """Bucket by fixed thresholds."""
@@ -306,6 +313,7 @@ class CSBucketFixedNative(SeriesOperator):
     canonical="cs_bucket_historical",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSBucketHistoricalNative(SeriesOperator):
     """Bucket using historical quantiles."""
@@ -351,6 +359,7 @@ class CSBucketHistoricalNative(SeriesOperator):
     canonical="cs_fill_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSFillMeanNative(SeriesOperator):
     """Fill nulls with cross-sectional mean."""
@@ -380,6 +389,7 @@ class CSFillMeanNative(SeriesOperator):
     canonical="cs_fill_median",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSFillMedianNative(SeriesOperator):
     """Fill nulls with cross-sectional median."""
@@ -409,6 +419,7 @@ class CSFillMedianNative(SeriesOperator):
     canonical="cs_impute_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSImputeMeanNative(SeriesOperator):
     """Alias for cs_fill_mean."""
@@ -438,6 +449,7 @@ class CSImputeMeanNative(SeriesOperator):
     canonical="cs_impute_median",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSImputeMedianNative(SeriesOperator):
     """Alias for cs_fill_median."""
@@ -472,6 +484,7 @@ class CSImputeMedianNative(SeriesOperator):
     canonical="cs_neutralize",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSNeutralizeNative(SeriesOperator):
     """Cross-sectional demean (alias)."""
@@ -501,6 +514,7 @@ class CSNeutralizeNative(SeriesOperator):
     canonical="cs_weighted_demean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSWeightedDemeanNative(SeriesOperator):
     """Weighted cross-sectional demean."""
@@ -536,6 +550,7 @@ class CSWeightedDemeanNative(SeriesOperator):
     canonical="cs_weighted_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSWeightedMeanNative(SeriesOperator):
     """Weighted cross-sectional mean (broadcast)."""
@@ -570,6 +585,7 @@ class CSWeightedMeanNative(SeriesOperator):
     canonical="cs_weighted_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSWeightedZscoreNative(SeriesOperator):
     """Weighted cross-sectional z-score."""
@@ -612,6 +628,7 @@ class CSWeightedZscoreNative(SeriesOperator):
     canonical="cs_weighted_percentile_rank",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSWeightedPercentileRankNative(SeriesOperator):
     """Weighted percentile rank."""
@@ -650,6 +667,7 @@ class CSWeightedPercentileRankNative(SeriesOperator):
     canonical="cs_valid_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSValidCountNative(SeriesOperator):
     """Count of non-null values in cross-section (broadcast)."""
@@ -679,6 +697,7 @@ class CSValidCountNative(SeriesOperator):
     canonical="cs_coverage_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSCoverageRatioNative(SeriesOperator):
     """Ratio of non-null values in cross-section."""
@@ -711,6 +730,7 @@ class CSCoverageRatioNative(SeriesOperator):
     canonical="cs_universe_coverage",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSUniverseCoverageNative(SeriesOperator):
     """Universe coverage ratio (alias)."""
@@ -743,6 +763,7 @@ class CSUniverseCoverageNative(SeriesOperator):
     canonical="cs_physical_panel_coverage",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSPhysicalPanelCoverageNative(SeriesOperator):
     """Physical panel coverage (alias)."""
@@ -780,6 +801,7 @@ class CSPhysicalPanelCoverageNative(SeriesOperator):
     canonical="cs_rank_gaussian",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSRankGaussianNative(SeriesOperator):
     """Gaussian rank normalization (rank to normal quantiles)."""
@@ -812,6 +834,7 @@ class CSRankGaussianNative(SeriesOperator):
     canonical="cs_residual_percentile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSResidualPercentileNative(SeriesOperator):
     """Percentile of residuals (after demean)."""
@@ -844,6 +867,7 @@ class CSResidualPercentileNative(SeriesOperator):
     canonical="cs_tail_breadth",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSTailBreadthNative(SeriesOperator):
     """Fraction of values in tails (beyond ±threshold std)."""
@@ -882,6 +906,7 @@ class CSTailBreadthNative(SeriesOperator):
     canonical="cs_tail_retention",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSTailRetentionNative(SeriesOperator):
     """Retain only values in tails, set others to null."""
@@ -926,6 +951,7 @@ class CSTailRetentionNative(SeriesOperator):
     canonical="cs_huber_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSHuberResidNative(SeriesOperator):
     """Huber regression residual (simplified: use demean as proxy)."""
@@ -956,6 +982,7 @@ class CSHuberResidNative(SeriesOperator):
     canonical="cs_lad_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSLadResidNative(SeriesOperator):
     """LAD (L1) regression residual (use median)."""
@@ -985,6 +1012,7 @@ class CSLadResidNative(SeriesOperator):
     canonical="cs_ridge_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSRidgeResidNative(SeriesOperator):
     """Ridge regression residual (simplified: demean)."""
@@ -1014,6 +1042,7 @@ class CSRidgeResidNative(SeriesOperator):
     canonical="cs_quantile_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSQuantileResidNative(SeriesOperator):
     """Quantile regression residual (use quantile center)."""
@@ -1052,6 +1081,7 @@ class CSQuantileResidNative(SeriesOperator):
     canonical="cs_spline_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class CSSplineResidNative(SeriesOperator):
     """Spline regression residual (simplified: demean)."""

@@ -182,6 +182,7 @@ def _entropy_from_counts(counts: list[int], total: int, normalize: int | None) -
     business_category="sequence_complexity",
     canonical="ts_permutation_entropy",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsPermutationEntropy(SeriesOperator):
     """排列熵：窗口内连续嵌入排列模式的香农熵，normalize=True 除以 log(order!)。"""
@@ -241,6 +242,7 @@ def _embedding_range(values: np.ndarray) -> float:
     business_category="sequence_complexity",
     canonical="ts_weighted_permutation_entropy",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsWeightedPermutationEntropy(SeriesOperator):
     """加权排列熵：按嵌入振幅（方差/极差）加权，权重只作用于当前窗口。"""
@@ -321,6 +323,7 @@ class TsWeightedPermutationEntropy(SeriesOperator):
     business_category="sequence_complexity",
     canonical="ts_permutation_transition_entropy",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsPermutationTransitionEntropy(SeriesOperator):
     """排列转移熵：相邻排列状态的转移条件熵，normalize 除以 log(状态数)。"""
@@ -422,6 +425,7 @@ def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
     business_category="sequence_complexity",
     canonical="ts_sample_entropy",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsSampleEntropy(SeriesOperator):
     """样本熵：容差 = tolerance_scale × 窗口标准差；无匹配对或常数窗口返回 NaN。window 上限 120。"""
@@ -509,6 +513,7 @@ def _dfa_hurst(run: np.ndarray, min_scale: int, max_scale: int, n_scales: int) -
     business_category="sequence_complexity",
     canonical="ts_hurst_dfa",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsHurstDfa(SeriesOperator):
     """去趋势波动分析 Hurst 指数：log F(s) 对 log s 的斜率。window 上限 512。"""
@@ -589,6 +594,7 @@ def _higuchi_fd(run: np.ndarray, k_max: int) -> float:
     business_category="sequence_complexity",
     canonical="ts_higuchi_fractal_dimension",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsHiguchiFractalDimension(SeriesOperator):
     """Higuchi 分形维数：log L(k) 对 log(1/k) 的斜率，衡量路径粗糙度。"""
@@ -647,6 +653,7 @@ def _variogram_slope(chunk: np.ndarray, max_lag: int, min_valid_lags: int) -> fl
     business_category="sequence_complexity",
     canonical="ts_variogram_slope",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsVariogramSlope(SeriesOperator):
     """变差函数斜率：log E[(x[t+k]-x[t])²] 对 log k 的斜率（尺度结构）。"""
@@ -718,6 +725,7 @@ def _autocorr_half_life(chunk: np.ndarray, max_lag: int, use_abs: bool, min_peri
     business_category="sequence_complexity",
     canonical="ts_autocorr_decay_half_life",
     source="sequence_complexity",
+    research_only=True,
 )
 class TsAutocorrDecayHalfLife(SeriesOperator):
     """自相关衰减半衰期：拟合多阶滞后自相关指数衰减，无衰减返回 NaN。"""

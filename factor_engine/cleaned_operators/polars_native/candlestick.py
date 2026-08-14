@@ -43,6 +43,7 @@ def _get_ohlc_arrays(open_df: pl.DataFrame, high_df: pl.DataFrame,
     category="candlestick",
     canonical="candle_body_percentile",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleBodyPercentile(SeriesOperator):
     """Percentile rank of candle body size over rolling window"""
@@ -76,6 +77,7 @@ class CandleBodyPercentile(SeriesOperator):
     category="candlestick",
     canonical="candle_body_zscore",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleBodyZScore(SeriesOperator):
     """Z-score of candle body size"""
@@ -111,6 +113,7 @@ class CandleBodyZScore(SeriesOperator):
     category="candlestick",
     canonical="candle_close_strength",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleCloseStrength(SeriesOperator):
     """Close position within the bar range: (close - low) / (high - low)"""
@@ -143,6 +146,7 @@ class CandleCloseStrength(SeriesOperator):
     category="candlestick",
     canonical="candle_gap_atr",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleGapATR(SeriesOperator):
     """Gap size normalized by ATR"""
@@ -182,6 +186,7 @@ class CandleGapATR(SeriesOperator):
     category="candlestick",
     canonical="candle_inside_ratio",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleInsideRatio(SeriesOperator):
     """Rolling ratio of inside bars (bars within previous bar's range)"""
@@ -222,6 +227,7 @@ class CandleInsideRatio(SeriesOperator):
     category="candlestick",
     canonical="candle_lower_shadow_zscore",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleLowerShadowZScore(SeriesOperator):
     """Z-score of lower shadow length"""
@@ -259,6 +265,7 @@ class CandleLowerShadowZScore(SeriesOperator):
     category="candlestick",
     canonical="candle_overlap_ratio",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleOverlapRatio(SeriesOperator):
     """Body overlap ratio with previous candle"""
@@ -299,6 +306,7 @@ class CandleOverlapRatio(SeriesOperator):
     category="candlestick",
     canonical="candle_range_atr",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleRangeATR(SeriesOperator):
     """Candle range normalized by ATR"""
@@ -339,6 +347,7 @@ class CandleRangeATR(SeriesOperator):
     category="candlestick",
     canonical="candle_range_percentile",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleRangePercentile(SeriesOperator):
     """Percentile rank of candle range"""
@@ -372,6 +381,7 @@ class CandleRangePercentile(SeriesOperator):
     category="candlestick",
     canonical="candle_range_zscore",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleRangeZScore(SeriesOperator):
     """Z-score of candle range"""
@@ -407,6 +417,7 @@ class CandleRangeZScore(SeriesOperator):
     category="candlestick",
     canonical="candle_rejection_lower",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleRejectionLower(SeriesOperator):
     """Lower wick as ratio of total range"""
@@ -443,6 +454,7 @@ class CandleRejectionLower(SeriesOperator):
     category="candlestick",
     canonical="candle_rejection_upper",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleRejectionUpper(SeriesOperator):
     """Upper wick as ratio of total range"""
@@ -479,6 +491,7 @@ class CandleRejectionUpper(SeriesOperator):
     category="candlestick",
     canonical="candle_upper_shadow_zscore",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CandleUpperShadowZScore(SeriesOperator):
     """Z-score of upper shadow length"""
@@ -518,6 +531,7 @@ class CandleUpperShadowZScore(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_dark_cloud_cover",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_DarkCloudCover(SeriesOperator):
     """Dark Cloud Cover pattern: bearish reversal (2-bar)"""
@@ -562,6 +576,7 @@ class CDL_DarkCloudCover(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_doji",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Doji(SeriesOperator):
     """Doji pattern: indecision (open ≈ close)"""
@@ -594,6 +609,7 @@ class CDL_Doji(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_dragonfly_doji",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_DragonflyDoji(SeriesOperator):
     """Dragonfly Doji: bullish reversal (T-shaped, long lower shadow)"""
@@ -630,6 +646,7 @@ class CDL_DragonflyDoji(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_engulfing",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Engulfing(SeriesOperator):
     """Engulfing pattern: reversal (body completely engulfs previous)"""
@@ -671,6 +688,7 @@ class CDL_Engulfing(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_evening_star",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_EveningStar(SeriesOperator):
     """Evening Star: bearish reversal (3-bar pattern)"""
@@ -717,6 +735,7 @@ class CDL_EveningStar(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_gravestone_doji",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_GravestoneDoji(SeriesOperator):
     """Gravestone Doji: bearish reversal (inverted T, long upper shadow)"""
@@ -752,6 +771,7 @@ class CDL_GravestoneDoji(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_hammer",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Hammer(SeriesOperator):
     """Hammer: bullish reversal (small body, long lower shadow)"""
@@ -787,6 +807,7 @@ class CDL_Hammer(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_hanging_man",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_HangingMan(SeriesOperator):
     """Hanging Man: bearish reversal (same shape as hammer, but at top)"""
@@ -823,6 +844,7 @@ class CDL_HangingMan(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_harami",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Harami(SeriesOperator):
     """Harami: reversal pattern (small body inside previous large body)"""
@@ -872,6 +894,7 @@ class CDL_Harami(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_harami_cross",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_HaramiCross(SeriesOperator):
     """Harami Cross: reversal pattern (doji inside previous body)"""
@@ -919,6 +942,7 @@ class CDL_HaramiCross(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_inside_bar",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_InsideBar(SeriesOperator):
     """Inside Bar: consolidation (range within previous bar)"""
@@ -950,6 +974,7 @@ class CDL_InsideBar(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_inverted_hammer",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_InvertedHammer(SeriesOperator):
     """Inverted Hammer: bullish reversal (small body, long upper shadow)"""
@@ -985,6 +1010,7 @@ class CDL_InvertedHammer(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_marubozu",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Marubozu(SeriesOperator):
     """Marubozu: strong trend (no or minimal shadows)"""
@@ -1019,6 +1045,7 @@ class CDL_Marubozu(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_morning_star",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_MorningStar(SeriesOperator):
     """Morning Star: bullish reversal (3-bar pattern)"""
@@ -1064,6 +1091,7 @@ class CDL_MorningStar(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_outside_bar",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_OutsideBar(SeriesOperator):
     """Outside Bar: expansion (range engulfs previous bar)"""
@@ -1102,6 +1130,7 @@ class CDL_OutsideBar(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_piercing",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_Piercing(SeriesOperator):
     """Piercing Pattern: bullish reversal (2-bar, opposite of dark cloud)"""
@@ -1145,6 +1174,7 @@ class CDL_Piercing(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_shooting_star",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_ShootingStar(SeriesOperator):
     """Shooting Star: bearish reversal (same shape as inverted hammer, at top)"""
@@ -1181,6 +1211,7 @@ class CDL_ShootingStar(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_spinning_top",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_SpinningTop(SeriesOperator):
     """Spinning Top: indecision (small body, long shadows both sides)"""
@@ -1216,6 +1247,7 @@ class CDL_SpinningTop(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_three_black_crows",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_ThreeBlackCrows(SeriesOperator):
     """Three Black Crows: bearish reversal (3 consecutive bearish candles)"""
@@ -1255,6 +1287,7 @@ class CDL_ThreeBlackCrows(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_three_white_soldiers",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_ThreeWhiteSoldiers(SeriesOperator):
     """Three White Soldiers: bullish reversal (3 consecutive bullish candles)"""
@@ -1294,6 +1327,7 @@ class CDL_ThreeWhiteSoldiers(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_tweezer_bottom",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_TweezerBottom(SeriesOperator):
     """Tweezer Bottom: bullish reversal (two candles with same low)"""
@@ -1333,6 +1367,7 @@ class CDL_TweezerBottom(SeriesOperator):
     category="candlestick_pattern",
     canonical="cdl_tweezer_top",
     source="polars_native_candlestick",
+    research_only=True,
 )
 class CDL_TweezerTop(SeriesOperator):
     """Tweezer Top: bearish reversal (two candles with same high)"""

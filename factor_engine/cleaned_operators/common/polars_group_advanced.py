@@ -82,6 +82,7 @@ def _group_long_transform(
     canonical="group_ex_self_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupExSelfMeanNative(SeriesOperator):
     """Group mean excluding self."""
@@ -115,6 +116,7 @@ class GroupExSelfMeanNative(SeriesOperator):
     canonical="group_ex_self_std",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupExSelfStdNative(SeriesOperator):
     """Group std excluding self."""
@@ -147,6 +149,7 @@ class GroupExSelfStdNative(SeriesOperator):
     canonical="group_ex_self_mad",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupExSelfMadNative(SeriesOperator):
     """Group MAD excluding self."""
@@ -180,6 +183,7 @@ class GroupExSelfMadNative(SeriesOperator):
     canonical="group_ex_self_quantile",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupExSelfQuantileNative(SeriesOperator):
     """Group quantile excluding self."""
@@ -217,6 +221,7 @@ class GroupExSelfQuantileNative(SeriesOperator):
     canonical="group_ex_self_weighted_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupExSelfWeightedMeanNative(SeriesOperator):
     """Group weighted mean excluding self."""
@@ -299,6 +304,7 @@ class GroupExSelfWeightedMeanNative(SeriesOperator):
     canonical="group_topk_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupTopkMeanNative(SeriesOperator):
     """Mean of top-k values in each group."""
@@ -363,6 +369,7 @@ class GroupTopkMeanNative(SeriesOperator):
     canonical="group_valid_count",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupValidCountNative(SeriesOperator):
     """Count of valid (non-null) values in each group."""
@@ -392,6 +399,7 @@ class GroupValidCountNative(SeriesOperator):
     canonical="group_weighted_mean",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupWeightedMeanNative(SeriesOperator):
     """Group weighted mean."""
@@ -462,6 +470,7 @@ class GroupWeightedMeanNative(SeriesOperator):
     canonical="group_weighted_zscore",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupWeightedZscoreNative(SeriesOperator):
     """Group weighted z-score: (x - weighted_mean) / std."""
@@ -542,6 +551,7 @@ class GroupWeightedZscoreNative(SeriesOperator):
     canonical="group_skewness",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupSkewnessNative(SeriesOperator):
     """Group skewness."""
@@ -579,6 +589,7 @@ class GroupSkewnessNative(SeriesOperator):
     canonical="group_kurtosis",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupKurtosisNative(SeriesOperator):
     """Group kurtosis."""
@@ -615,6 +626,7 @@ class GroupKurtosisNative(SeriesOperator):
     canonical="group_quantile_spread",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupQuantileSpreadNative(SeriesOperator):
     """Group quantile spread: Q3 - Q1."""
@@ -646,6 +658,7 @@ class GroupQuantileSpreadNative(SeriesOperator):
     canonical="group_tail_ratio",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupTailRatioNative(SeriesOperator):
     """Group tail ratio: (Q3 - Q2) / (Q2 - Q1)."""
@@ -687,6 +700,7 @@ class GroupTailRatioNative(SeriesOperator):
     canonical="group_impute_median",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupImputeMedianNative(SeriesOperator):
     """Impute missing values with group median."""
@@ -717,6 +731,7 @@ class GroupImputeMedianNative(SeriesOperator):
     canonical="group_ts_decay_linear",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupTsDecayLinearNative(SeriesOperator):
     """Group time-series linear decay weighted mean."""
@@ -769,6 +784,7 @@ class GroupTsDecayLinearNative(SeriesOperator):
     canonical="group_multi_resid",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupMultiResidNative(SeriesOperator):
     """Group residual after removing multiple group effects (uses simple demean approximation)."""
@@ -800,6 +816,7 @@ class GroupMultiResidNative(SeriesOperator):
     canonical="hierarchical_group_neutralize",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class HierarchicalGroupNeutralizeNative(SeriesOperator):
     """Hierarchical group neutralization (simplified two-level demean)."""
@@ -836,6 +853,7 @@ class HierarchicalGroupNeutralizeNative(SeriesOperator):
     canonical="group_peer_deviation_index",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupPeerDeviationIndexNative(SeriesOperator):
     """Peer deviation index: (x - group_median) / group_MAD."""
@@ -871,6 +889,7 @@ class GroupPeerDeviationIndexNative(SeriesOperator):
     canonical="group_return_dispersion_exposure",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupReturnDispersionExposureNative(SeriesOperator):
     """Return dispersion exposure: (x - group_mean) * group_std."""
@@ -902,6 +921,7 @@ class GroupReturnDispersionExposureNative(SeriesOperator):
     canonical="group_tail_centrality",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupTailCentralityNative(SeriesOperator):
     """Tail centrality: distance from group tails (min of distance to Q10 and Q90)."""
@@ -937,6 +957,7 @@ class GroupTailCentralityNative(SeriesOperator):
     canonical="group_leader_laggard_exposure",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class GroupLeaderLaggardExposureNative(SeriesOperator):
     """Leader/laggard exposure: percentile rank - 0.5 (centered at median)."""

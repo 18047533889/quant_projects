@@ -284,6 +284,7 @@ def _lead_lag_panel(
     business_category="intraday_microstructure",
     canonical="intra_bar_range_persistence",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraBarRangePersistence(SessionAggregationOperator):
     """当日分钟区间（high-low）形状与历史均值曲线的余弦相似度。"""
@@ -309,6 +310,7 @@ class IntraBarRangePersistence(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_bar_range_deviation",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraBarRangeDeviation(SessionAggregationOperator):
     """当日分钟区间水平相对历史均值的整体偏差（同槽位平均差异）。"""
@@ -338,6 +340,7 @@ class IntraBarRangeDeviation(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_tail_volume_share",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraTailVolumeShare(SessionAggregationOperator):
     """最大 |分钟收益| 尾部 bar 的成交量占全天比例。"""
@@ -378,6 +381,7 @@ class IntraTailVolumeShare(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_volume_price_alignment",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraVolumePriceAlignment(SessionAggregationOperator):
     """分钟收益与分钟成交量的日内相关（上涨放量 vs 下跌放量）。"""
@@ -414,6 +418,7 @@ class IntraVolumePriceAlignment(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_ute_high",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraUteHigh(SessionAggregationOperator):
     """U 型时间效应-两翼：开收盘边缘窗口已实现方差占全天比例。"""
@@ -457,6 +462,7 @@ class IntraUteHigh(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_ute_low",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraUteLow(SessionAggregationOperator):
     """U 型时间效应-午间低谷：中午窗口已实现方差占全天比例。"""
@@ -495,6 +501,7 @@ class IntraUteLow(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_slot_volume_surprise",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraSlotVolumeSurprise(SessionAggregationOperator):
     """同槽位成交量相对历史均值的平均偏离（log 尺度）。"""
@@ -518,6 +525,7 @@ class IntraSlotVolumeSurprise(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_slot_amount_surprise",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraSlotAmountSurprise(SessionAggregationOperator):
     """同槽位成交额相对历史均值的平均偏离（log 尺度）。"""
@@ -541,6 +549,7 @@ class IntraSlotAmountSurprise(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_slot_volatility_surprise",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraSlotVolatilitySurprise(SessionAggregationOperator):
     """同槽位 bar 区间（波动代理）相对历史均值的平均偏离。"""
@@ -570,6 +579,7 @@ class IntraSlotVolatilitySurprise(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_market_lead_lag_ex_self",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraMarketLeadLagExSelf(SessionAggregationOperator):
     """日内 ex-self 市场领先滞后：corr(r_t, m_{t-k}) - corr(r_t, m_{t+k})。"""
@@ -592,6 +602,7 @@ class IntraMarketLeadLagExSelf(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_industry_lead_lag_ex_self",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraIndustryLeadLagExSelf(SessionAggregationOperator):
     """日内同行业（剔除自身）领先滞后。industry 为日频标签面板。"""
@@ -619,6 +630,7 @@ class IntraIndustryLeadLagExSelf(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_session_return_asymmetry",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraSessionReturnAsymmetry(SessionAggregationOperator):
     """上午/下午绝对收益强度不对称：(morning - afternoon)/(morning + afternoon)。"""
@@ -651,6 +663,7 @@ class IntraSessionReturnAsymmetry(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_close_participation",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraCloseParticipation(SessionAggregationOperator):
     """收盘前 tail_minutes 分钟成交量占全天比例（尾盘参与度）。"""
@@ -690,6 +703,7 @@ class IntraCloseParticipation(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_high_low_affinity",
     source="intraday.time_structure_v2",
+    research_only=True,
 )
 class IntraHighLowAffinity(SessionAggregationOperator):
     """日内高点/低点出现时刻与历史均值时刻的相似度（越固定越接近 1）。"""

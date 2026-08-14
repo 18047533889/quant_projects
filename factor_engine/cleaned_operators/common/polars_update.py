@@ -34,6 +34,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     canonical="update_surprise",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UpdateSurpriseNative(SeriesOperator):
     """Surprise in update magnitude relative to history."""
@@ -66,6 +67,7 @@ class UpdateSurpriseNative(SeriesOperator):
     canonical="update_acceleration",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UpdateAccelerationNative(SeriesOperator):
     """Acceleration in update magnitude."""
@@ -98,6 +100,7 @@ class UpdateAccelerationNative(SeriesOperator):
     canonical="update_direction_persistence",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UpdateDirectionPersistenceNative(SeriesOperator):
     """Persistence of update direction over time."""
@@ -130,6 +133,7 @@ class UpdateDirectionPersistenceNative(SeriesOperator):
     canonical="update_path_efficiency",
     source=_SRC,
     backend="polars",
+    research_only=True,
 )
 class UpdatePathEfficiencyNative(SeriesOperator):
     """Path efficiency: net change / sum of absolute changes."""

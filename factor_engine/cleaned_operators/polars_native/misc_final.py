@@ -35,6 +35,7 @@ def _result_df(data_cols: dict, template_df: pl.DataFrame) -> pl.DataFrame:
     canonical="ashare_one_price_limit_streak",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class AshareOnePriceLimitStreak(SeriesOperator):
     """A-share consecutive one-price limit (一字板) streak detection.
@@ -135,6 +136,7 @@ class AshareOnePriceLimitStreak(SeriesOperator):
     canonical="cash_flow_lifecycle_stage",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class CashFlowLifecycleStage(SeriesOperator):
     """Classify company lifecycle stage based on cash flow patterns.
@@ -207,6 +209,7 @@ class CashFlowLifecycleStage(SeriesOperator):
     canonical="quarter_from_cumulative",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class QuarterFromCumulative(SeriesOperator):
     """Extract quarterly value from cumulative year-to-date financial data.
@@ -260,6 +263,7 @@ class QuarterFromCumulative(SeriesOperator):
     canonical="revision_delta",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class RevisionDelta(SeriesOperator):
     """Analyst estimate revision delta (current vs. prior vintage).
@@ -312,6 +316,7 @@ class RevisionDelta(SeriesOperator):
     canonical="industry_fiscal_resid",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class IndustryFiscalResid(SeriesOperator):
     """Industry-adjusted fiscal metric residual.
@@ -358,6 +363,7 @@ class IndustryFiscalResid(SeriesOperator):
     canonical="industry_rolling_pca_loading",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class IndustryRollingPCALoading(SeriesOperator):
     """Rolling PCA loading of instrument on industry factor.
@@ -414,6 +420,7 @@ class IndustryRollingPCALoading(SeriesOperator):
     canonical="session_event_recovery_score",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class SessionEventRecoveryScore(SeriesOperator):
     """Intraday recovery score after a significant event.
@@ -482,6 +489,7 @@ class SessionEventRecoveryScore(SeriesOperator):
     canonical="turnover_chip_age_cost_surface",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class TurnoverChipAgeCostSurface(SeriesOperator):
     """Chip distribution age-weighted cost surface.
@@ -549,6 +557,7 @@ class TurnoverChipAgeCostSurface(SeriesOperator):
     canonical="turnover_chip_overhang_surface",
     source="polars_native_misc_final",
     backend="polars",
+    research_only=True,
 )
 class TurnoverChipOverhangSurface(SeriesOperator):
     """Chip distribution overhang (trapped holders above current price).
