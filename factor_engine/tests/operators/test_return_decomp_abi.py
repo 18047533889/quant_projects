@@ -215,12 +215,12 @@ def test_vwap_to_close_return_attribution():
 
 
 def test_return_chain_composition():
-    """ABI: overnight + intraday ≈ total close-to-close return (multiplicative)."""
+    """ABI: overnight and intraday returns chain multiplicatively to close/pre-close."""
     idx = pd.date_range("2024-01-01", periods=2)
 
     # Day 1: close = 100
     # Day 2: pre_close = 100, open = 105, close = 110
-    # overnight: +5%, intraday: +10%, total: 1.05 * 1.10 - 1 = 15.5%
+    # overnight: +5%, intraday: 110/105 - 1, total: 110/100 - 1 = 10%
 
     pre_close = pd.DataFrame([[100.0]], index=idx[:1], columns=["A"])
     open_px = pd.DataFrame([[105.0]], index=idx[:1], columns=["A"])
@@ -229,12 +229,20 @@ def test_return_chain_composition():
     overnight = _op("overnight_return").calculate(open_px, pre_close, price_basis="raw").iloc[0, 0]
     intraday = _op("open_close_return").calculate(open_px, close, price_basis="raw").iloc[0, 0]
 
-    # (1 + overnight) * (1 + intraday) - 1 = total return
-    total_return = (1 + overnight) * (1 + intraday) - 1
-    expected_total = 0.155  # 15.5%
+    chained_growth = (1 + overnight) * (1 + intraday)
+    expected_growth = close.iloc[0, 0] / pre_close.iloc[0, 0]
+    expected_total = expected_growth - 1
 
-    assert abs(total_return - expected_total) < 1e-10, \
-        f"Return composition failed: {total_return} != {expected_total}"
+    # Independent price-ratio oracle: (open/pre_close) * (close/open) = close/pre_close.
+    price_ratio_product = (
+        open_px.iloc[0, 0] / pre_close.iloc[0, 0]
+    ) * (
+        close.iloc[0, 0] / open_px.iloc[0, 0]
+    )
+    assert abs(price_ratio_product - expected_growth) < 1e-10
+    assert abs(chained_growth - expected_growth) < 1e-10
+    assert abs((chained_growth - 1) - expected_total) < 1e-10, \
+        f"Return composition failed: {chained_growth - 1} != {expected_total}"
 
 
 # ---------------------------------------------------------------------------
