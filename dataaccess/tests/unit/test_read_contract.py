@@ -11,13 +11,45 @@ import pytest
 
 from data_access.core.exceptions import ValidationError
 from data_access.registry.params_validation import validate_params, ParamSpec
-from data_access.read.read_contract import build_data_snapshot, canonicalize_params
+from data_access.read.read_contract import (
+    FileVersion,
+    build_data_snapshot,
+    canonicalize_params,
+    file_manifest_hash,
+    schema_hash_from_decl,
+)
 
 
 def test_canonicalize_params_stable():
     a = canonicalize_params({"factor_id": "mom_3d", "version": 1})
     b = canonicalize_params({"version": 1, "factor_id": "mom_3d"})
     assert a == b
+
+
+def test_identity_digests_are_full_sha256():
+    assert len(schema_hash_from_decl({"x": "int"})) == 64
+    assert len(file_manifest_hash([FileVersion(path="a", size=1)])) == 64
+
+
+def test_canonicalize_params_preserves_typed_key_distinctions():
+    with pytest.raises(ValidationError, match="collide"):
+        canonicalize_params({1: "int", "1": "str"})
+
+
+def test_canonicalize_params_rejects_unknown_types():
+    class Unknown:
+        pass
+
+    with pytest.raises(ValidationError, match="Cannot encode|unsupported parameter value"):
+        canonicalize_params({"value": Unknown()})
+
+
+def test_file_manifest_rejects_unknown_metadata_types():
+    class Unknown:
+        pass
+
+    with pytest.raises(ValidationError, match="Cannot encode"):
+        file_manifest_hash([FileVersion(path="a", last_modified=Unknown())])
 
 
 def test_validate_params_rejects_path_traversal():

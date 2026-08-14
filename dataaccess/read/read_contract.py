@@ -12,37 +12,66 @@ from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
 
+from data_access.core.exceptions import ValidationError
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
+
+
+_STRICT_IDENTITY_ENCODER = CanonicalIdentityEncoder(strict=True)
+
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _identity_digest(value: Any) -> str:
+    """Return the full strict SHA-256 digest used by correctness identities."""
+    return _STRICT_IDENTITY_ENCODER.hash_identity(value, bits=256)
+
+
 def canonicalize_params(params: Mapping[str, Any] | None) -> dict[str, Any]:
-    """稳定序列化 params（用于 scope / snapshot fingerprint）。"""
+    """Return stable JSON-shaped params, rejecting lossy identity fallbacks.
+
+    The returned mapping retains the historical string-key API.  A key collision
+    after stringification is rejected because silently merging ``1`` and ``"1"``
+    would make two distinct typed parameter maps share an identity.
+    """
     if not params:
         return {}
     out: dict[str, Any] = {}
-    for key in sorted(params):
-        val = params[key]
-        if isinstance(val, (str, int, float, bool)) or val is None:
-            out[str(key)] = val
-        elif isinstance(val, (list, tuple)):
-            out[str(key)] = [_jsonable(v) for v in val]
-        elif isinstance(val, dict):
-            out[str(key)] = canonicalize_params(val)
+    for key in sorted(params, key=lambda item: str(item)):
+        text_key = str(key)
+        if text_key in out:
+            raise ValidationError(
+                "DA-P0-013: parameter mapping keys collide after stringification: "
+                f"{key!r}"
+            )
+        value = params[key]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            out[text_key] = value
+        elif isinstance(value, (list, tuple)):
+            out[text_key] = [_canonical_param_value(v) for v in value]
+        elif isinstance(value, dict):
+            out[text_key] = canonicalize_params(value)
         else:
-            out[str(key)] = repr(val)
+            # Validate and fail closed; never make repr part of a correctness ID.
+            _STRICT_IDENTITY_ENCODER.encode(value)
+            raise ValidationError(
+                f"DA-P0-011: unsupported parameter value type {type(value).__name__}"
+            )
     return out
 
 
-def _jsonable(value: Any) -> Any:
+def _canonical_param_value(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, (list, tuple)):
-        return [_jsonable(v) for v in value]
+        return [_canonical_param_value(item) for item in value]
     if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in sorted(value.items())}
-    return repr(value)
+        return canonicalize_params(value)
+    _STRICT_IDENTITY_ENCODER.encode(value)
+    raise ValidationError(
+        f"DA-P0-011: unsupported parameter value type {type(value).__name__}"
+    )
 
 
 @dataclass(frozen=True)
@@ -178,10 +207,8 @@ class ReadResult:
 
 
 def schema_hash_from_decl(schema: Mapping[str, str] | None) -> str:
-    if not schema:
-        return "empty"
-    payload = json.dumps(dict(sorted(schema.items())), sort_keys=True, separators=(",", ":"))
-    return _sha256_text(payload)[:16]
+    """Hash the declared schema with the full strict correctness digest."""
+    return _identity_digest(dict(schema or {}))
 
 
 # R32-P0-045/046: Remote metadata cache must be security/credential scoped with
@@ -462,6 +489,7 @@ def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[Fi
 
 
 def file_manifest_hash(files: Sequence[FileVersion]) -> str:
+    """Hash file metadata with strict typed encoding and full SHA-256 output."""
     payload = [
         {
             "path": f.path,
@@ -475,8 +503,7 @@ def file_manifest_hash(files: Sequence[FileVersion]) -> str:
         }
         for f in files
     ]
-    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    return _sha256_text(text)[:16]
+    return _identity_digest(payload)
 
 
 def build_data_snapshot(
@@ -503,19 +530,15 @@ def build_data_snapshot(
     manifest_hash = file_manifest_hash(file_versions)
     schema_hash = schema_hash_from_decl(schema)
     # R32-P0-042/043: Unified identity algorithm without build_sha
-    identity = json.dumps(
+    snapshot_id = _identity_digest(
         {
             "dataset": dataset,
             "registry_hash": registry_hash,
             "schema_hash": schema_hash,
             "manifest_hash": manifest_hash,
             "params": canon,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
+        }
     )
-    snapshot_id = _sha256_text(identity)[:24]
     return DataSnapshot(
         snapshot_id=snapshot_id,
         dataset=dataset,
@@ -542,20 +565,17 @@ def rebuild_snapshot_files(
     manifest_hash = file_manifest_hash(file_versions)
     # R32-P0-043: Use canonicalize_params for consistency
     canon = canonicalize_params(dict(snapshot.params))
-    identity = json.dumps(
+    snapshot_id = _identity_digest(
         {
             "dataset": snapshot.dataset,
             "registry_hash": snapshot.registry_hash,
             "schema_hash": snapshot.schema_hash,
             "manifest_hash": manifest_hash,
             "params": canon,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
+        }
     )
     return DataSnapshot(
-        snapshot_id=_sha256_text(identity)[:24],
+        snapshot_id=snapshot_id,
         dataset=snapshot.dataset,
         registry_hash=snapshot.registry_hash,
         schema_hash=snapshot.schema_hash,
@@ -611,22 +631,16 @@ def merge_sql_data_snapshots(
         for k, v in snap.params:
             merged_params[f"{snap.dataset}.{k}"] = v
 
-    identity = json.dumps(
+    snapshot_id = _identity_digest(
         {
             "kind": "sql_merge",
             "datasets": [s.dataset for s in ordered],
             "child_snapshot_ids": [s.snapshot_id for s in ordered],
             "registry_hash": registry_hash,
             "manifest_hash": manifest_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
+        }
     )
-    snapshot_id = _sha256_text(identity)[:24]
-    schema_hash = _sha256_text(
-        "|".join(s.schema_hash for s in ordered)
-    )[:16]
+    schema_hash = _identity_digest([s.schema_hash for s in ordered])
     return DataSnapshot(
         snapshot_id=snapshot_id,
         dataset=",".join(s.dataset for s in ordered),
