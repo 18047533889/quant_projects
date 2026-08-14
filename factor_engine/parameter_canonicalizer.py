@@ -66,6 +66,16 @@ Review R10 #18/#19/#20/#28/#29/#30 fixes in this module:
 * R10 #30 — a relational predicate that RAISES is a :data:`CONTRACT_ERROR`
   marker, never ``_PROBE_NOT_APPLICABLE`` (an infeasible-but-real parameter
   combination).
+
+FE-P0-021 (2026-08-14) — production active_when must fail-closed:
+
+* When a ``ParamSpec`` declares ``active_when`` but the controller parameter is
+  missing and has no decidable default, production mode
+  (``production_mode=True``) raises :class:`ParameterContractError`
+  (fail-closed), while research mode (``production_mode=False``, the default)
+  skips the check (fail-open, legacy behavior).  This ensures production
+  canonicalization never silently accepts parameter combinations whose
+  active/inactive state is undecidable.
 """
 from __future__ import annotations
 
@@ -204,6 +214,7 @@ class ParameterCanonicalizer:
         terminal_rank_equivalence: bool = False,
         param_specs: dict[str, Any] | None = None,
         param_aliases: dict[str, str] | None = None,
+        run_mode: str | None = None,
     ):
         self.canonical = canonical
         self.normalizers = {n.name: n for n in normalizers}
@@ -214,6 +225,12 @@ class ParameterCanonicalizer:
         # of its aliases must map to the SAME logical target, bound at most once
         # per call.
         self.param_aliases: dict[str, str] = dict(param_aliases) if param_aliases else {}
+        # FE-P0-021: production canonicalizer must fail-closed when active_when
+        # controller is missing or undecidable; research mode preserves legacy
+        # fail-open behavior for backward compatibility. Derive from
+        # resolve_run_mode() rather than requiring callers to pass a boolean.
+        from runtime.production_policy import resolve_run_mode
+        self.run_mode = resolve_run_mode(run_mode)
 
     def _sequence_dtype_is_bool(self, name: str) -> bool:
         spec = self.param_specs.get(name)
@@ -277,12 +294,18 @@ class ParameterCanonicalizer:
             bound_logical[target] = name
 
     def _validate_active_when(self, params: dict[str, Any]) -> None:
-        """R10 #18: enforce ``ParamSpec.active_when`` with controller defaults.
+        """R10 #18 + FE-P0-021: enforce ``ParamSpec.active_when`` with controller defaults.
 
         When the controller is omitted from ``params`` its ``ParamSpec.default``
         is used to decide whether the dependent parameter is active.  An
         INACTIVE parameter that is explicitly bound to a NON-default value is
         rejected — a dead knob must not manufacture a second AST.
+
+        FE-P0-021: In production mode, if the controller is missing and has no
+        decidable default, the canonicalizer raises ParameterContractError
+        (fail-closed). In research/legacy mode, undecidable controllers are
+        skipped (fail-open) to preserve backward compatibility with legacy
+        operators that lack complete active_when specifications.
         """
         for name, spec in self.param_specs.items():
             if spec is None:
@@ -295,7 +318,18 @@ class ParameterCanonicalizer:
             if ctrl_val is None:
                 ctrl_val = _resolve_controller_default(controller, self.param_specs)
             if ctrl_val is None:
-                continue  # controller undecidable -> fail-open (cannot judge)
+                # FE-P0-021: controller undecidable (no default, no explicit value).
+                # Production mode: fail-closed with ParameterContractError.
+                # Research mode: fail-open (skip check) for legacy compatibility.
+                if self.run_mode == "production":
+                    raise ParameterContractError(
+                        f"{self.canonical}: active_when controller {controller!r} "
+                        f"for parameter {name!r} is missing and has no decidable "
+                        f"default (FE-P0-021: production mode requires explicit "
+                        f"controller values or ParamSpec defaults for all active_when "
+                        f"controllers; cannot judge whether {name!r} is active)"
+                    )
+                continue  # research mode: controller undecidable -> fail-open (cannot judge)
             if _active_allows(allowed, ctrl_val):
                 continue  # active
             # INACTIVE: only tolerate an omitted parameter or its canonical
