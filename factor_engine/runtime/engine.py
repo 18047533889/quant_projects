@@ -230,6 +230,9 @@ def _scope_from_factor(
     取不到时保持空串，**绝不**静默默认 ``"A"``（避免把 US 因子当 A 算，交给
     下游 gate / ``infer_market(universe)`` 决定）。P1-04: ``source_scope_hash``
     缺失时由真实数据源配置现算，确保不同 source scope 的因子不共享 CSE 节点。
+
+    FE-P0-032: production 模式下 frequency / calendar 缺失时必须显式报错，
+    禁止静默默认（会改变数学定义）。
     """
 
     def _pick(*candidates: Any) -> str | None:
@@ -247,21 +250,40 @@ def _scope_from_factor(
             getattr(semantic, "universe_id", None),
             getattr(factor, "universe", None),
         )
-        frequency = (
-            _pick(
-                getattr(semantic, "frequency", None),
-                getattr(factor, "freq", None),
-            )
-            or "1d"
+        # FE-P0-032: production 下 frequency 缺失必须显式报错（已在 else 分支实现），
+        # semantic_identity 路径同样必须 fail-closed。
+        _freq_raw = _pick(
+            getattr(semantic, "frequency", None),
+            getattr(factor, "freq", None),
         )
-        calendar_id = (
-            _pick(
-                getattr(semantic, "calendar_id", None),
-                getattr(factor, "calendar_id", None),
-                getattr(factor, "calendar", None),
-            )
-            or ""
+        _calendar_raw = _pick(
+            getattr(semantic, "calendar_id", None),
+            getattr(factor, "calendar_id", None),
+            getattr(factor, "calendar", None),
         )
+
+        from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+
+        if is_production_mode():
+            # FE-P0-032: production requires explicit frequency and calendar (grain/session)
+            if _freq_raw is None or not str(_freq_raw).strip():
+                raise ProductionPolicyViolation(
+                    f"factor '{getattr(factor, 'name', '<unnamed>')}': frequency is "
+                    f"missing in semantic_identity; refusing to guess '1d' in production. "
+                    f"FE-P0-032: grain/frequency/calendar must be explicit or from "
+                    f"validated contract (minute/hour factors defaulted to daily would "
+                    f"cause under-read in warmup/history)"
+                )
+            if _calendar_raw is None or not str(_calendar_raw).strip():
+                raise ProductionPolicyViolation(
+                    f"factor '{getattr(factor, 'name', '<unnamed>')}': calendar_id is "
+                    f"missing in semantic_identity; refusing to guess calendar in production. "
+                    f"FE-P0-032: grain/frequency/calendar must be explicit (session/calendar "
+                    f"determines bar boundaries and business-day alignment)"
+                )
+
+        frequency = str(_freq_raw) if _freq_raw else "1d"
+        calendar_id = str(_calendar_raw) if _calendar_raw else ""
         decision_time_policy = (
             _pick(
                 getattr(semantic, "decision_time_policy", None),
@@ -279,26 +301,36 @@ def _scope_from_factor(
     else:
         market = getattr(factor, "market", None)
         universe_raw = getattr(factor, "universe", None)
-        # R34 P0-019：production 下缺 frequency 必须显式报错，禁止静默默认 "1d"——
-        # minute source metadata 丢失时 1d fallback 会 warmup/history under-read，
-        # 产出错误结果。research 可显式 fallback 但必须 warning。
+        # R34 P0-019 + FE-P0-032：production 下缺 frequency/calendar 必须显式报错，
+        # 禁止静默默认 "1d"—— minute source metadata 丢失时 1d fallback 会
+        # warmup/history under-read，产出错误结果。research 可显式 fallback 但必须 warning。
         _freq_raw = getattr(factor, "freq", None)
-        if _freq_raw is None or not str(_freq_raw).strip():
-            from runtime.production_policy import is_production_mode
-
-            if is_production_mode():
-                raise ValueError(
-                    "factor.freq is missing; refusing to guess '1d' in production "
-                    "(R34 P0-019 unknown/missing frequency must fail closed)"
-                )
-            frequency = "1d"
-        else:
-            frequency = str(_freq_raw)
-        calendar_id = str(
+        _calendar_raw = (
             getattr(factor, "calendar_id", None)
             or getattr(factor, "calendar", None)
-            or ""
         )
+
+        from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+
+        if is_production_mode():
+            # FE-P0-032: production requires explicit frequency and calendar
+            if _freq_raw is None or not str(_freq_raw).strip():
+                raise ProductionPolicyViolation(
+                    f"factor '{getattr(factor, 'name', '<unnamed>')}': freq is missing; "
+                    f"refusing to guess '1d' in production. FE-P0-032: grain/frequency/"
+                    f"calendar must be explicit (R34 P0-019 unknown/missing frequency "
+                    f"causes under-read in warmup/history)"
+                )
+            if _calendar_raw is None or not str(_calendar_raw).strip():
+                raise ProductionPolicyViolation(
+                    f"factor '{getattr(factor, 'name', '<unnamed>')}': calendar_id is "
+                    f"missing; refusing to guess calendar in production. FE-P0-032: "
+                    f"grain/frequency/calendar must be explicit (session/calendar determines "
+                    f"bar boundaries and business-day alignment)"
+                )
+
+        frequency = str(_freq_raw) if _freq_raw else "1d"
+        calendar_id = str(_calendar_raw) if _calendar_raw else ""
         decision_time_policy = str(
             getattr(factor, "decision_time_policy", None) or ""
         )
@@ -559,7 +591,47 @@ def assert_execution_scope_contract(
     权威，直接放行；否则抛 ``ProductionPolicyViolation``，绝不静默在全源上计算
     截面。后续接线 DataAccess universe-filter 以应用命名 universe mask
     （documented follow-up）。
+
+    FE-P0-031: production 模式下，cross-sectional operator 必须有 validated
+    UniverseSnapshotIdentity（目前通过 scoped data_source 强制），universe
+    缺失时不得默认 "ALL"。
     """
+    from runtime.production_policy import ProductionPolicyViolation, is_production_mode
+
+    # FE-P0-031: production + cross-sectional → universe 必须是 validated
+    # UniverseSnapshotIdentity (digest/members/policy_version)，不能只是字符串名字。
+    # 当前通过 scoped data_source 强制（documented in docstring），但字符串
+    # universe（如 "CSI300"）无法证明 membership snapshot / digest / effective
+    # interval。在 DataAccess 供应真实 UniverseSnapshotIdentity 之前，production
+    # cross-sectional 必须 fail-closed。
+    if is_production_mode() and _plan_has_cross_sectional_ops(plan):
+        univ = str(scope.universe_id or "").strip()
+        # 任何非空字符串 universe（包括 "CSI300"）都不是 validated snapshot identity
+        if not univ or univ.upper() == "ALL":
+            raise ProductionPolicyViolation(
+                f"execution-scope contract violation: factor '{factor_name}' declares "
+                f"universe_id={scope.universe_id!r} (missing or defaulted to 'ALL') "
+                f"but the plan computes cross-sectional operator(s) in production mode. "
+                f"FE-P0-031: cross-sectional operators require validated "
+                f"UniverseSnapshotIdentity (digest/members/policy_version/effective_interval), "
+                f"not a string name. Refusing to proceed until DataAccess supplies "
+                f"immutable snapshot identity."
+            )
+        # 即使有字符串名字（如 "CSI300"），也不是 validated snapshot
+        # TODO(FE-P0-031): 接入 DataAccess UniverseSnapshot.snapshot_id 后，
+        # 改为检查 scope 是否携带 .universe_snapshot: UniverseSnapshot 属性
+        if not _data_source_scoped(data_source):
+            raise ProductionPolicyViolation(
+                f"execution-scope contract violation: factor '{factor_name}' declares "
+                f"universe_id={scope.universe_id!r} but the plan computes cross-sectional "
+                f"operator(s) in production mode. FE-P0-031: a mere universe string "
+                f"(e.g. 'CSI300') cannot prove membership snapshot/digest/effective interval. "
+                f"Currently enforced through scoped data_source; until DataAccess supplies "
+                f"UniverseSnapshotIdentity, production cross-sectional must be backed by "
+                f"scoped data_source. Set explicit scoped data_source or wait for "
+                f"DataAccess integration."
+            )
+
     if _is_whole_market_universe(scope):
         return
     if not _plan_has_cross_sectional_ops(plan):
@@ -567,8 +639,6 @@ def assert_execution_scope_contract(
     # P1-03：数据源声称的 universe 明确且与 factor 不一致 → 拒绝（放行前校验）。
     conflict = _data_source_universe_conflict(scope, data_source)
     if conflict is not None:
-        from runtime.production_policy import ProductionPolicyViolation
-
         raise ProductionPolicyViolation(
             f"execution-scope contract violation: factor '{factor_name}' has "
             f"{conflict} but the plan computes cross-sectional operator(s). "
@@ -577,7 +647,6 @@ def assert_execution_scope_contract(
         )
     if _data_source_scoped(data_source):
         return
-    from runtime.production_policy import ProductionPolicyViolation
 
     raise ProductionPolicyViolation(
         f"execution-scope contract violation: factor '{factor_name}' declares "
