@@ -6,6 +6,10 @@ distance to highs/lows, channel position, and swing analysis.
 """
 from __future__ import annotations
 
+import math
+
+import numpy as np
+
 try:
     import polars as pl
 except ImportError:  # pragma: no cover
@@ -60,18 +64,26 @@ class TSSkewNative(SeriesOperator):
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=3)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            # Polars doesn't have rolling_skew, compute manually
-            val = x[c]
-            mean = val.rolling_mean(window_size=w)
-            std = val.rolling_std(window_size=w)
-            m3 = ((val - mean) ** 3).rolling_mean(window_size=w)
-            skew = pl.when((std.is_null()) | (std == 0)).then(None).otherwise(m3 / (std ** 3))
-            exprs.append(skew.alias(c))
-        result = x.with_columns(exprs)
-        return result
+
+        def skew_fn(values: pl.Series) -> float:
+            # One current trailing window; pandas rolling.skew() is unbiased.
+            valid = np.asarray(values.to_numpy(), dtype=float)
+            valid = valid[np.isfinite(valid)]
+            n = valid.size
+            if n < w:
+                return math.nan
+            centered = valid - float(np.mean(valid))
+            sum_sq = float(np.sum(centered * centered))
+            if sum_sq == 0.0:
+                return math.nan
+            sum_cube = float(np.sum(centered * centered * centered))
+            return (n * sum_cube) / ((n - 1) * (n - 2) * (sum_sq / (n - 1)) ** 1.5)
+
+        exprs = [
+            pl.col(c).rolling_map(skew_fn, window_size=w, min_samples=1).alias(c)
+            for c in _numeric_cols(x)
+        ]
+        return x.with_columns(exprs)
 
 
 @register_operator(
@@ -104,18 +116,25 @@ class TSTrimmedMeanNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=5)
         trim = float(trim_pct)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            lo_q = val.rolling_quantile(quantile=trim, window_size=w, interpolation="linear")
-            hi_q = val.rolling_quantile(quantile=1.0 - trim, window_size=w, interpolation="linear")
-            # Clip values and compute mean
-            clipped = val.clip(lo_q, hi_q)
-            trimmed_mean = clipped.rolling_mean(window_size=w)
-            exprs.append(trimmed_mean.alias(c))
-        result = x.with_columns(exprs)
-        return result
+        if not np.isfinite(trim) or not 0.0 <= trim < 0.5:
+            raise ValueError("trim_pct must satisfy 0 <= trim_pct < 0.5")
+
+        def trimmed_mean_fn(values: pl.Series) -> float:
+            valid = np.asarray(values.to_numpy(), dtype=float)
+            valid = valid[np.isfinite(valid)]
+            if valid.size < w:
+                return math.nan
+            ordered = np.sort(valid)
+            cut = int(np.floor(trim * ordered.size))
+            if cut * 2 >= ordered.size:
+                return math.nan
+            return float(np.mean(ordered[cut : ordered.size - cut]))
+
+        exprs = [
+            pl.col(c).rolling_map(trimmed_mean_fn, window_size=w, min_samples=1).alias(c)
+            for c in _numeric_cols(x)
+        ]
+        return x.with_columns(exprs)
 
 
 @register_operator(
@@ -183,17 +202,36 @@ class TSQnScaleNative(SeriesOperator):
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=4)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            q25 = val.rolling_quantile(quantile=0.25, window_size=w, interpolation="linear")
-            q75 = val.rolling_quantile(quantile=0.75, window_size=w, interpolation="linear")
-            iqr = q75 - q25
-            qn = iqr / pl.lit(1.349)
-            exprs.append(qn.alias(c))
-        result = x.with_columns(exprs)
-        return result
+        qn_constant = 2.21914446598508
+        finite_corrections = {
+            2: 0.399356, 3: 0.99365, 4: 0.51321, 5: 0.84401,
+            6: 0.61220, 7: 0.85877, 8: 0.66993, 9: 0.87344,
+            10: 0.72014, 11: 0.88906, 12: 0.75743,
+        }
+
+        def qn_fn(values: pl.Series) -> float:
+            valid = np.asarray(values.to_numpy(), dtype=float)
+            valid = valid[np.isfinite(valid)]
+            n = valid.size
+            if n < w:
+                return math.nan
+            h = n // 2 + 1
+            k = h * (h - 1) // 2
+            diffs = np.abs(valid[np.newaxis, :] - valid[:, np.newaxis])
+            order_stat = float(np.partition(diffs[np.triu_indices(n, 1)], k - 1)[k - 1])
+            if n in finite_corrections:
+                dn = finite_corrections[n]
+            elif n % 2:
+                dn = 1.0 / (1.0 + 1.60188 / n - 2.1284 / n**2 - 5.172 / n**3)
+            else:
+                dn = 1.0 / (1.0 + 3.67561 / n + 1.9654 / n**2 + 6.987 / n**3 - 77.0 / n**4)
+            return qn_constant * dn * order_stat
+
+        exprs = [
+            pl.col(c).rolling_map(qn_fn, window_size=w, min_samples=1).alias(c)
+            for c in _numeric_cols(x)
+        ]
+        return x.with_columns(exprs)
 
 
 @register_operator(
@@ -445,17 +483,25 @@ class TSExpectedShortfallNative(SeriesOperator):
 
         w = strict_integer(window, "window", minimum=10)
         a = float(alpha)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            var_threshold = val.rolling_quantile(quantile=a, window_size=w, interpolation="linear")
-            # Mean of values below VaR
-            below_var = pl.when(val <= var_threshold).then(val).otherwise(None)
-            es = below_var.rolling_mean(window_size=w)
-            exprs.append(es.alias(c))
-        result = x.with_columns(exprs)
-        return result
+        if not np.isfinite(a) or not 0.0 < a <= 0.5:
+            raise ValueError("alpha must satisfy 0 < alpha <= 0.5")
+
+        def es_fn(values: pl.Series) -> float:
+            valid = np.asarray(values.to_numpy(), dtype=float)
+            valid = valid[np.isfinite(valid)]
+            if valid.size < w:
+                return math.nan
+            threshold = float(np.quantile(valid, a))
+            tail = valid[valid <= threshold]
+            if tail.size < 1:
+                return math.nan
+            return float(np.mean(tail))
+
+        exprs = [
+            pl.col(c).rolling_map(es_fn, window_size=w, min_samples=1).alias(c)
+            for c in _numeric_cols(x)
+        ]
+        return x.with_columns(exprs)
 
 
 @register_operator(
