@@ -214,7 +214,7 @@ class QExecutor:
                 resident_handle = None
                 if return_resident_handle:
                     resident_handle = QResidentTableHandle(
-                        table_name=output_symbol,
+                        table_name=plan.output_table,
                         q_table_ref=q_result,
                         row_count=rows,
                         byte_size=int(output_bytes),
@@ -222,6 +222,7 @@ class QExecutor:
                         connection_id=id(q),
                         workspace_id=workspace_id,
                         generation_id=generation_id,
+                        q_symbol=output_symbol,
                     )
                     self._register_lease(resident_handle)
 
@@ -229,7 +230,7 @@ class QExecutor:
                 f"q Region {plan.region_id} executed: "
                 f"{rows} rows, {execution_time:.2f}ms"
             )
-            return QExecutionResult(
+            result = QExecutionResult(
                 region_id=plan.region_id,
                 output_df=output_df,
                 execution_time_ms=execution_time,
@@ -237,10 +238,17 @@ class QExecutor:
                 success=True,
                 resident_handle=resident_handle,
             )
+            if resident_handle is None:
+                with self._connection_lock:
+                    self._cleanup_workspace(q, workspace_id, generation_id)
+            return result
 
         except (QDataUnavailableError, QProcessUnavailableError):
             raise
         except Exception as e:
+            if "q" in locals():
+                with self._connection_lock:
+                    self._cleanup_workspace(q, workspace_id, generation_id)
             error_msg = f"q execution failed for region {plan.region_id}: {e}"
             logger.error(error_msg)
 
@@ -291,14 +299,15 @@ class QExecutor:
 
     @staticmethod
     def _validate_lease(handle: QResidentTableHandle, q: Any) -> None:
-        if handle.connection_id != id(q):
+        if handle.connection_id is not None and handle.connection_id != id(q):
             raise QExecutionError(
                 f"Stale Q-resident handle for {handle.table_name}: connection changed"
             )
         if handle.workspace_id is None or handle.generation_id is None:
-            raise QExecutionError(
-                f"Stale Q-resident handle for {handle.table_name}: missing workspace identity"
-            )
+            # Legacy direct handles without ownership metadata are allowed only
+            # when they explicitly identify a connection; None is an unbound
+            # compatibility handle and cannot claim stale ownership.
+            return
         with _LEASE_LOCK:
             lease = _ACTIVE_LEASES.get(handle.workspace_id)
             expected = (handle.generation_id, id(q))
@@ -316,7 +325,10 @@ class QExecutor:
             symbols = tuple(lease[2])
             del _ACTIVE_LEASES[workspace_id]
         for symbol in symbols:
-            q(f"delete {symbol} from `.")
+            try:
+                q(f"delete {symbol} from `.")
+            except Exception:
+                logger.warning("Failed to clean q workspace symbol %s", symbol, exc_info=True)
 
     def _increment_telemetry(self, key: str, amount: int = 1) -> None:
         with self._telemetry_lock:
@@ -334,59 +346,37 @@ class QExecutor:
     def _load_inputs_to_q(
         self,
         q: Any,
+        input_data: dict[str, pd.DataFrame | QResidentTableHandle],
+        *,
+        workspace_id: str,
+        generation_id: str,
         workspace_prefix: str,
     ) -> dict[str, str]:
-        """将输入数据加载到 q workspace。
-
-        支持 QResidentTableHandle 复用以消除 region 间 ping-pong。
-
-        参数:
-            q: q 连接
-            input_data: {table_name: DataFrame or QResidentTableHandle}
-        """
+        """Load inputs into an execution-owned q namespace."""
+        bindings: dict[str, str] = {}
         for table_name, data in input_data.items():
-            # 检查是否是 Q-resident handle
+            symbol = f"{workspace_prefix}{_safe_q_identifier(table_name)}"
+            bindings[table_name] = symbol
             if isinstance(data, QResidentTableHandle):
-                if data.connection_id is not None and data.connection_id != id(q):
-                    raise RuntimeError(
-                        f"Stale Q-resident handle for {data.table_name}: "
-                        "owning q connection is no longer active"
-                    )
-
-                # 数据已在 Q 中，无需上传
-                logger.debug(
-                    f"Reusing Q-resident table {data.table_name} "
-                    f"({data.row_count} rows, {data.byte_size} bytes) "
-                    f"from region {data.region_id}"
-                )
-                # 如果名称不同，创建引用
-                if data.table_name != table_name:
-                    q(f"{table_name}: {data.table_name}")
-                    logger.debug(f"Aliased {data.table_name} -> {table_name}")
-
-                # 更新 telemetry
+                self._validate_lease(data, q)
+                if data.table_name != symbol:
+                    q(f"{symbol}: {data.q_symbol or data.table_name}")
                 self._increment_telemetry("resident_reuse_count")
             else:
-                # 标准 DataFrame，需要上传
-                df = data
-                # 转换为 q table
-                q_table = self.type_adapter.pandas_to_q(
-                    df,
-                    preserve_index=True,
-                    zero_copy=True,  # 优化提示
+                q[symbol] = self.type_adapter.pandas_to_q(
+                    data, preserve_index=True, zero_copy=True
                 )
-
-                # 赋值到 q workspace
-                q[table_name] = q_table
-
-                # 记录上传字节数
-                upload_bytes = df.memory_usage(deep=True).sum()
-                self._increment_telemetry("python_to_q_bytes", int(upload_bytes))
-
-                logger.debug(
-                    f"Loaded {table_name}: {len(df)} rows "
-                    f"({upload_bytes} bytes) to q"
+                self._increment_telemetry(
+                    "python_to_q_bytes", int(data.memory_usage(deep=True).sum())
                 )
+            with _LEASE_LOCK:
+                lease = _ACTIVE_LEASES.setdefault(
+                    workspace_id, (generation_id, id(q), set())
+                )
+                if lease[:2] != (generation_id, id(q)):
+                    raise QExecutionError("Execution workspace lease identity conflict")
+                lease[2].add(symbol)
+        return bindings
 
     def execute_batch_regions(
         self,
@@ -409,31 +399,43 @@ class QExecutor:
         """
         results = []
         available_inputs: dict[str, pd.DataFrame | QResidentTableHandle] = dict(input_data)
+        workspace_id = uuid.uuid4().hex
+        generation_id = uuid.uuid4().hex
 
-        for i, plan in enumerate(plans):
-            is_last = (i == len(plans) - 1)
-            region_inputs = {
-                name: available_inputs[name]
-                for name in plan.input_tables
-                if name in available_inputs
-            }
+        try:
+            for i, plan in enumerate(plans):
+                is_last = (i == len(plans) - 1)
+                region_inputs = {
+                    name: available_inputs[name]
+                    for name in plan.input_tables
+                    if name in available_inputs
+                }
 
-            result = self.execute_region(
-                plan,
-                region_inputs,
-                fallback_policy=fallback_policy,
-                return_resident_handle=enable_residency and not is_last,
-                materialize_output=is_last or not enable_residency,
-            )
-            results.append(result)
-
-            if enable_residency and not is_last and result.resident_handle:
-                available_inputs[plan.output_table] = result.resident_handle
-                logger.info(
-                    f"Retained resident handle from {plan.region_id} for downstream regions"
+                result = self.execute_region(
+                    plan,
+                    region_inputs,
+                    fallback_policy=fallback_policy,
+                    return_resident_handle=enable_residency and not is_last,
+                    materialize_output=is_last or not enable_residency,
+                    workspace_id=workspace_id,
+                    generation_id=generation_id,
                 )
+                results.append(result)
 
-        return results
+                if enable_residency and not is_last and result.resident_handle:
+                    available_inputs[plan.output_table] = result.resident_handle
+                    logger.info(
+                        f"Retained resident handle from {plan.region_id} for downstream regions"
+                    )
+            return results
+        finally:
+            with self._connection_lock:
+                try:
+                    q = self.process_manager.get_connection()
+                except Exception:
+                    q = None
+                if q is not None:
+                    self._cleanup_workspace(q, workspace_id, generation_id)
 
 
 # Global singleton

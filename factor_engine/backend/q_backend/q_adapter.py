@@ -38,18 +38,22 @@ class QResidentTableHandle:
     Allows consecutive Q regions to reuse intermediate results without re-uploading.
     Eliminates region-level data pingpong (文档 §85 Q_BACKEND_OPERATOR_LEVEL_PINGPONG_ZERO).
     """
-    table_name: str  # Name in Q workspace
+    table_name: str  # Logical name exposed to the region planner
     q_table_ref: Any  # Reference to Q table object
     row_count: int
     byte_size: int  # Estimated memory footprint
     region_id: str  # Origin region ID
     connection_id: int | None = None  # Identity of the owning q connection
+    workspace_id: str | None = None  # Owning execution workspace
+    generation_id: str | None = None  # Lease generation within the process
+    q_symbol: str | None = None  # Physical symbol in the owning workspace
 
     def __repr__(self) -> str:
         return (
             f"QResidentTableHandle(table={self.table_name}, "
             f"rows={self.row_count}, bytes={self.byte_size}, "
-            f"region={self.region_id})"
+            f"region={self.region_id}, workspace={self.workspace_id}, "
+            f"generation={self.generation_id})"
         )
 
 
