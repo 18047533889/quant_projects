@@ -77,6 +77,18 @@ class SplitSpec:
             if self.val_start < self.train_end:
                 raise SplitError("val_start must be >= train_end (no overlap)")
 
+            # FM2-P0-006: Enforce gap_days between train_end and val_start
+            if self.gap_days > 0:
+                # gap_days=5 means 5 full calendar days between, so val_start >= train_end + 6 days
+                actual_gap_days = (self.val_start - self.train_end).days
+                required_gap_days = self.gap_days + 1
+                if actual_gap_days < required_gap_days:
+                    raise SplitError(
+                        f"gap_days={self.gap_days} requires at least {required_gap_days} days between "
+                        f"train_end and val_start, but actual gap is {actual_gap_days} days "
+                        f"(train_end={self.train_end.date()}, val_start={self.val_start.date()})"
+                    )
+
         # Validate test period if specified
         if self.test_start is not None or self.test_end is not None:
             if self.test_start is None or self.test_end is None:

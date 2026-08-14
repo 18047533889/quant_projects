@@ -41,19 +41,22 @@ class FittedTransform(ABC):
         pass
 
     @abstractmethod
-    def transform(self, X: np.ndarray, apply_start_time: Optional[Any] = None) -> np.ndarray:
+    def transform(self, X: np.ndarray, apply_start_time: Any) -> np.ndarray:
         """
-        Apply fitted transform to new data.
+        Apply fitted transform to new data (OUT-OF-SAMPLE ONLY).
 
         Args:
             X: Data to transform (T, N)
-            apply_start_time: Start time of data being transformed (required for OOS validation)
+            apply_start_time: Start time of data being transformed (REQUIRED for OOS validation).
+                This parameter is REQUIRED and cannot be None. For in-sample transformation
+                during training, use fit_transform() instead.
 
         Returns:
             Transformed data with same shape
 
         Raises:
-            FitWindowError: If transform not fitted or apply_start_time required but missing
+            TypeError: If apply_start_time is None (use fit_transform() for in-sample)
+            FitWindowError: If transform not fitted
             FutureLeakageError: If apply_start_time is before fit_window.fit_end
         """
         pass
@@ -64,7 +67,7 @@ class FittedTransform(ABC):
 
         This method should ONLY be used when transforming the SAME data that was
         used for fitting (i.e., training data). For out-of-sample data (validation/test),
-        use fit() then transform() separately with explicit application_period.
+        use fit() then transform() separately with explicit apply_start_time.
 
         Args:
             X: Training data to fit and transform (T, N)
@@ -79,9 +82,9 @@ class FittedTransform(ABC):
             always use fit() then transform() with apply_start_time.
         """
         self.fit(X, fit_window)
-        # Transform without application_period check since this is in-sample (training)
-        # The training data by definition is within the fit window
-        return self.transform(X, apply_start_time=None)
+        # FM2-P0-012~015: Internal in-sample path uses fit_window.fit_end as apply_start_time
+        # This is safe because we're transforming the same data we just fit on.
+        return self.transform(X, apply_start_time=fit_window.fit_end)
 
     def _validate_temporal_ordering(self, apply_start_time: Any):
         """Validate that fit happened before application (no future leakage)."""
@@ -132,18 +135,34 @@ class CrossSectionalScaler(FittedTransform):
         self._fitted = True
         return self
 
-    def transform(self, X: np.ndarray, apply_start_time: Optional[Any] = None) -> np.ndarray:
-        """Apply fitted scaling."""
+    def transform(self, X: np.ndarray, apply_start_time: Any) -> np.ndarray:
+        """Apply fitted scaling (OUT-OF-SAMPLE ONLY).
+
+        Args:
+            X: Data to transform
+            apply_start_time: Start time of data (REQUIRED for OOS validation).
+                Cannot be None. For in-sample use, call fit_transform() instead.
+
+        Raises:
+            TypeError: If apply_start_time is None
+            FitWindowError: If not fitted
+            FutureLeakageError: If apply_start_time is before fit_window.fit_end
+        """
+        # FM2-P0-012~015: Enforce apply_start_time requirement (no silent None bypass)
+        if apply_start_time is None:
+            raise TypeError(
+                "transform() requires apply_start_time for OOS safety. "
+                "For in-sample (training) data, use fit_transform() instead."
+            )
+
         if not self._fitted:
             raise FitWindowError("Transform must be fitted before applying")
 
         if self.fit_window is None:
             raise FitWindowError("fit_window not recorded during fit")
 
-        # For OOS data, require explicit application period
-        # Only allow None for in-sample (fit_transform on training data)
-        if apply_start_time is not None:
-            self._validate_temporal_ordering(apply_start_time)
+        # Always validate temporal ordering when apply_start_time is provided
+        self._validate_temporal_ordering(apply_start_time)
 
         if self.method == "zscore":
             return (X - self.mean_) / self.std_

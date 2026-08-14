@@ -1,8 +1,13 @@
 """
-Modeling: Model input preparation layer.
+Modeling: Model input preparation layer (ADAPTERS ONLY).
 
-Provides contracts and adapters for preparing factor data for predictive models,
-with strict temporal contracts to prevent future leakage.
+**SCOPE DECLARATION (MODEL2-P0-006)**:
+This package provides MINIMAL CONTRACTS for adapting factor_preprocess to
+factor_engine. It does NOT implement model training, walk-forward, or enforcement.
+
+For actual model training with temporal leakage prevention, use
+``factor_engine.modeling`` (the authoritative package at
+``/home/shw/quant_projects/factor_engine/modeling/``).
 
 This package defines the interface between factor selection (FactorAssets) and
 actual model training. It reuses factor_preprocess implementations where possible.

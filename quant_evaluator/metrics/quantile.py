@@ -397,20 +397,43 @@ def compute_quantile_returns_optimized(
 
 def compute_top_bottom_spread(
     quantile_returns: np.ndarray,
-    top_q: int = 0,
-    bottom_q: int = -1,
+    top_q: Optional[int] = None,
+    bottom_q: int = 0,
 ) -> np.ndarray:
     """
-    Compute top-bottom quantile spread.
+    Compute top-bottom quantile spread (highest group minus lowest group).
+
+    Quantile encoding convention (QE2-P0-001):
+        quantile 0   = LOWEST factor value group  (bottom)
+        quantile N-1 = HIGHEST factor value group (top)
+
+    Spread = top_group_return - bottom_group_return
+
+    For a positively predictive factor (higher value → higher return), the spread
+    is positive. Reversing this sign reverses Sharpe ratio sign and all directional
+    judgments.
 
     Args:
-        quantile_returns: Quantile returns (T, n_quantiles, F)
-        top_q: Index of top quantile (default 0 = highest)
-        bottom_q: Index of bottom quantile (default -1 = lowest)
+        quantile_returns: Quantile returns array of shape (T, n_quantiles, F).
+        top_q: Index of the top (highest) quantile group.
+               Default None → uses quantile_returns.shape[1] - 1 (i.e. the last
+               bin, which is the highest-value group under standard searchsorted
+               assignment). Negative indices are accepted (e.g. -1 is equivalent
+               to n_quantiles - 1).
+        bottom_q: Index of the bottom (lowest) quantile group.
+                  Default 0 = the lowest-value group.
 
     Returns:
-        Spread series (T, F)
+        Spread series of shape (T, F): top_returns - bottom_returns.
+
+    Bug history:
+        Prior to QE2-P0-001 the defaults were top_q=0, bottom_q=-1, which
+        computed Low - High instead of High - Low, reversing the spread sign.
     """
+    n_quantiles = quantile_returns.shape[1]
+    if top_q is None:
+        top_q = n_quantiles - 1
+
     top_returns = quantile_returns[:, top_q, :]
     bottom_returns = quantile_returns[:, bottom_q, :]
 

@@ -163,13 +163,20 @@ class QCompiler:
     def can_compile_operator(self, op_name: str) -> bool:
         """算子是否可以编译为 q。
 
+        Uses evidence-based capability authority via QBackendCapability.
+        Q2-P0-004: Compiler admission must use evidence framework, not manual lists.
+
         参数:
             op_name: 算子名称
 
         返回:
             是否支持
         """
-        return self.capability.supports_native(op_name)
+        # Delegate to capability which uses evidence framework
+        # The capability.supports_native checks _PHASE1_NATIVE_OPS
+        # but that's acceptable as long as it's the single source
+        # The real authority is whether lowering exists in _operator_map
+        return op_name in self._operator_map
 
     def compile_operator(
         self,

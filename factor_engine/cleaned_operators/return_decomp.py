@@ -210,11 +210,11 @@ class OvernightReturn(SeriesOperator):
 
     metadata = _metadata(
         "overnight_return",
-        "隔夜收益 open/pre_close - 1。",
-        ["open", "pre_close"],
+        "隔夜收益 open_px/pre_close - 1。",
+        ["open_px", "pre_close"],
         domain="return",
         unit="return",
-        price_params=("open", "pre_close"),
+        price_params=("open_px", "pre_close"),
         # NEW-158: known as soon as the opening price prints (not session close).
         available_at="after_open",
         same_session_usable=False,
@@ -239,11 +239,11 @@ class OpenCloseReturn(SeriesOperator):
 
     metadata = _metadata(
         "open_close_return",
-        "开盘到收盘收益 close/open - 1。",
-        ["open", "close"],
+        "开盘到收盘收益 close/open_px - 1。",
+        ["open_px", "close"],
         domain="return",
         unit="return",
-        price_params=("open", "close"),
+        price_params=("open_px", "close"),
     )
 
     def _calculate_series(self, open_px: pd.DataFrame, close: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:
@@ -265,11 +265,11 @@ class OpenToVwapReturn(SeriesOperator):
 
     metadata = _metadata(
         "open_to_vwap_return",
-        "开盘到 VWAP 收益 vwap/open - 1。",
-        ["open", "vwap"],
+        "开盘到 VWAP 收益 vwap/open_px - 1。",
+        ["open_px", "vwap"],
         domain="return",
         unit="return",
-        price_params=("open", "vwap"),
+        price_params=("open_px", "vwap"),
     )
 
     def _calculate_series(self, open_px: pd.DataFrame, vwap: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:

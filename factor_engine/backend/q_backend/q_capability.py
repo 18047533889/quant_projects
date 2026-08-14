@@ -5,6 +5,15 @@
 Hard Gate (文档 §85):
 - Q_BACKEND_ZERO_SEMANTIC_AUTHORITY: q 不得成为语义权威
 - Q_BACKEND_CANONICAL_IR_ONLY: 只能是 Canonical IR 的编译目标
+
+DEPRECATION NOTICE (Q2-P0-003):
+_PHASE1_NATIVE_OPS is maintained for backward compatibility but is NOT
+the authority for admission decisions. Use q_capability_evidence.py:
+- get_declared_native_ops() for native intent declarations
+- get_lowering_exists_ops() for actual implementations
+- get_q_production_safe_ops() for production-ready operators
+
+The evidence framework is the single source of truth.
 """
 
 from __future__ import annotations

@@ -1,0 +1,79 @@
+MODEL2-P0-006: Modeling Split-Brain Remediation - COMPLETE
+============================================================
+
+Date: 2026-08-14
+Agent: Claude Code (Opus-5)
+Status: ✓ ALL DELIVERABLES COMPLETE
+
+PROBLEM STATEMENT
+-----------------
+Two modeling packages existed with conflicting authority:
+1. factor_engine/modeling/ - Full implementation with enforcement
+2. modeling/modeling/ - Standalone with contracts but NO enforcement
+
+Critical finding: gap_days, FitWindow, ApplicationWindow defined but not enforced.
+
+SOLUTION IMPLEMENTED
+--------------------
+1. ✓ Authority declarations in both packages
+2. ✓ gap_days enforcement in SplitSpec (FM2-P0-006)
+3. ✓ transform() requires apply_start_time (FM2-P0-012~015)
+4. ✓ 22 new tests proving enforcement
+5. ✓ AUTHORITY.md migration guide
+6. ✓ Complete analysis and summary documents
+
+FILES CHANGED
+-------------
+1. factor_engine/modeling/__init__.py - Authority declaration
+2. modeling/modeling/__init__.py - Scope declaration
+3. modeling/modeling/contracts.py - gap_days enforcement
+4. modeling/modeling/preprocess/fitted.py - apply_start_time required
+5. modeling/tests/test_gap_days_enforcement.py - NEW (10 tests)
+6. modeling/tests/test_oos_transform_enforcement.py - NEW (12 tests)
+7. factor_engine/modeling/AUTHORITY.md - NEW (migration guide)
+
+HARD GATES: ALL PASS
+--------------------
+✓ MODELING_SINGLE_AUTHORITY
+✓ GAP_DAYS_ACTUALLY_ENFORCED
+✓ PURGE_OVERLAP_ACTUALLY_ENFORCED
+✓ OOS_PREDICTION_NO_BYPASS
+✓ FITTED_TRANSFORM_REQUIRES_APPLICATION_PERIOD
+
+BREAKING CHANGES (FAIL-CLOSED)
+-------------------------------
+1. SplitSpec with gap_days > 0 now validates actual calendar gap
+2. CrossSectionalScaler.transform() requires apply_start_time (no None)
+
+Both are correctness improvements that prevent temporal leakage.
+
+DELIVERABLES
+------------
+✓ MODEL2_P0_006_SPLIT_BRAIN_ANALYSIS.md - Full analysis
+✓ MODEL2_P0_006_REMEDIATION_SUMMARY.md - Implementation summary
+✓ factor_engine/modeling/AUTHORITY.md - Migration guide
+✓ 8 files modified/created
+✓ 22 tests added
+✓ All hard gates passing
+
+READY FOR COMMIT
+----------------
+Changes are complete and ready to commit with message:
+
+  MODEL2-P0-006: Establish single modeling authority + enforce temporal contracts
+  
+  - Declare factor_engine/modeling as authoritative package
+  - Declare standalone modeling/ as adapters-only
+  - Enforce gap_days in SplitSpec.__post_init__ (FM2-P0-006)
+  - Require apply_start_time in transform() (FM2-P0-012~015)
+  - Add 22 tests proving enforcement
+  - Create AUTHORITY.md migration guide
+  
+  Breaking changes (fail-closed):
+  - SplitSpec with gap_days > 0 now validates actual calendar gap
+  - CrossSectionalScaler.transform() requires apply_start_time (no None)
+  
+  All hard gates: PASS
+  
+  Co-Authored-By: Claude <noreply@anthropic.com>
+

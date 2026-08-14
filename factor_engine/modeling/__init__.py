@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """FactorEngine model-layer redesign package (Model Layer Major Redesign taskbook).
 
+**AUTHORITY DECLARATION (MODEL2-P0-006)**:
+This is the SINGLE SOURCE OF TRUTH for model training, walk-forward splitting,
+label-interval purge, embargo enforcement, and temporal contracts. The standalone
+``modeling/`` package at ``/home/shw/quant_projects/modeling/`` is for minimal
+adapter contracts only and MUST NOT reimplement enforcement logic.
+
 Splits the model layer into five execution classes:
 
     A. LOCAL_ROLLING_ESTIMATOR      — rolling/statistical local estimators

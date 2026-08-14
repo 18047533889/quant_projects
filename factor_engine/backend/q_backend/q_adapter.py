@@ -72,17 +72,23 @@ class QType(Enum):
 
 @dataclass(frozen=True)
 class QNullSemantics:
-    """q null 值语义定义。"""
+    """q null 值语义定义。
+
+    Q2-P0-023: NULL semantics must be distinct from default values.
+    - Boolean null is conceptually 3-state but q represents as 0b (indistinguishable from False)
+    - Symbol null is ` (empty symbol), distinct from "" (char vector) and " " (char)
+    - Integer nulls have distinct sentinels per width
+    """
     # q null values by type
-    null_boolean: int = 0  # 0b
+    null_boolean: int = 0  # 0b (WARNING: indistinguishable from False in q)
     null_byte: int = 0x00
     null_short: int = -32768  # 0Nh
     null_int: int = -2147483648  # 0Ni
-    null_long: int = -9223372036854775808  # 0N
+    null_long: int = -9223372036854775808  # 0Nj (note: j suffix)
     null_real: float = float("nan")  # 0Ne
     null_float: float = float("nan")  # 0n
     null_char: str = " "
-    null_symbol: str = ""  # `
+    null_symbol: str = ""  # ` (backtick; empty symbol, NOT empty string)
     # Infinity
     pos_inf_real: float = float("inf")  # 0we
     neg_inf_real: float = float("-inf")  # -0we
@@ -193,15 +199,18 @@ class QTypeAdapter:
         converted_df = self._prepare_pandas_for_q(df)
 
         # 转换到 q（zero_copy 只是优化提示）
-        try:
-            if zero_copy:
-                # 尝试零拷贝，但不强制
+        # Q2-P0-026: Zero-copy fallback must not mask semantic/type errors
+        if zero_copy:
+            try:
+                # 尝试零拷贝
                 q_table = kx.toq(converted_df, zero_copy=True)
-            else:
-                q_table = kx.toq(converted_df)
-        except Exception as e:
-            logger.warning(f"Zero-copy conversion failed, falling back: {e}")
-            q_table = kx.toq(converted_df)
+            except (TypeError, ValueError) as e:
+                # Zero-copy 可能因数据布局失败，允许 fallback
+                logger.debug(f"Zero-copy not possible, using copy: {e}")
+                q_table = kx.toq(converted_df, zero_copy=False)
+            # 其他异常（语义错误、类型错误）不应被捕获
+        else:
+            q_table = kx.toq(converted_df, zero_copy=False)
 
         return q_table
 

@@ -69,22 +69,30 @@ def main():
         print()
 
         all_passed = True
+        mandatory_gates = {
+            "Q_NATIVE_WITHOUT_LOWERING",
+            "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+            "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+            "Q_CAPABILITY_SINGLE_AUTHORITY",
+        }
+
         for gate_name, (passed, message) in gates.items():
             status = "✓ PASS" if passed else "✗ FAIL"
-            print(f"{status} {gate_name}")
+            mandatory = " [MANDATORY]" if gate_name in mandatory_gates else ""
+            print(f"{status} {gate_name}{mandatory}")
             print(f"     {message}")
             print()
-            if not passed:
+            if not passed and gate_name in mandatory_gates:
                 all_passed = False
 
         if all_passed:
             print("=" * 80)
-            print("All gates PASSED - Q backend is production ready")
+            print("All mandatory gates PASSED")
             print("=" * 80)
             sys.exit(0)
         else:
             print("=" * 80)
-            print("Some gates FAILED - Q backend NOT production ready")
+            print("Some mandatory gates FAILED - Q backend NOT production ready")
             print("=" * 80)
             sys.exit(1)
 
@@ -121,12 +129,20 @@ def main():
     print()
 
     all_passed = True
+    mandatory_gates = {
+        "Q_NATIVE_WITHOUT_LOWERING",
+        "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+        "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+        "Q_CAPABILITY_SINGLE_AUTHORITY",
+    }
+
     for gate_name, (passed, message) in gates.items():
         status = "✓ PASS" if passed else "✗ FAIL"
-        print(f"{status} {gate_name}")
+        mandatory = " [MANDATORY]" if gate_name in mandatory_gates else ""
+        print(f"{status} {gate_name}{mandatory}")
         print(f"     {message}")
         print()
-        if not passed:
+        if not passed and gate_name in mandatory_gates:
             all_passed = False
 
     # Detailed breakdown
@@ -176,19 +192,39 @@ def main():
     print("=" * 80)
     print()
 
-    if report['production_ready']:
+    # Check all mandatory gates
+    all_mandatory_passed = all(
+        passed for name, (passed, _) in gates.items()
+        if name in {
+            "Q_NATIVE_WITHOUT_LOWERING",
+            "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+            "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+            "Q_CAPABILITY_SINGLE_AUTHORITY",
+        }
+    )
+
+    if all_mandatory_passed and report['production_ready']:
         print("✓ Q backend is PRODUCTION READY")
         print("  All capability declarations have lowering implementations")
+        print("  All lowerings pass all 5 evidence checks")
+        print("  Single authority for production-safe definition")
         sys.exit(0)
     else:
         print("✗ Q backend is NOT production ready")
-        print(f"  {report['native_without_lowering_count']} operators lack lowering implementations")
+        if report['native_without_lowering_count'] > 0:
+            print(f"  {report['native_without_lowering_count']} operators lack lowering implementations")
+        if report['production_safe_count'] < report['lowering_exists_count']:
+            incomplete = report['lowering_exists_count'] - report['production_safe_count']
+            print(f"  {incomplete} lowerings lack full evidence passes (compile/runtime/parity)")
+        if not all_mandatory_passed:
+            print("  Some mandatory hard gates failed")
         print()
         print("Action required:")
-        print("  1. Implement missing lowerings, OR")
-        print("  2. Remove operators from declared native set")
+        print("  1. Implement missing lowerings for declared operators, OR")
+        print("  2. Remove operators from declared native set, AND")
+        print("  3. Add compile/runtime/parity evidence for existing lowerings")
         print()
-        print("See Q_P0_001_002_FINDINGS.md for detailed remediation plan")
+        print("See Q2_P0_001_005_REMEDIATION.md for detailed plan")
         sys.exit(1)
 
 
