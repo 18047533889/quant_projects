@@ -48,6 +48,73 @@ except ImportError:  # pragma: no cover
 
 
 @dataclass(frozen=True)
+class SemanticCatalogIdentity:
+    """FE-P0-022: Immutable typed identity for SemanticFieldCatalog.
+
+    DataAccess issues this based on canonical public state. FactorEngine
+    consumes it as an opaque typed identity and must never inspect
+    catalog._fields or use repr/str fallback.
+
+    Production: unavailable catalog -> exception (fail-closed).
+    Research: explicit diagnostic type prevents cache pollution.
+
+    Attributes:
+        digest: 256-bit canonical hash of catalog state (when available).
+        available: bool = True when catalog loaded successfully.
+        diagnostic: Explicit reason when unavailable (research only).
+    """
+
+    digest: str | None
+    available: bool
+    diagnostic: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate identity contract."""
+        if self.available:
+            if not self.digest:
+                raise ValidationError(
+                    "FE-P0-022: available=True requires non-None digest"
+                )
+            if len(self.digest) != 64:  # 256-bit hex = 64 chars
+                raise ValidationError(
+                    f"FE-P0-022: digest must be 256-bit hex (64 chars), got {len(self.digest)}"
+                )
+            if self.diagnostic is not None:
+                raise ValidationError(
+                    "FE-P0-022: available=True must not have diagnostic"
+                )
+        else:
+            if self.digest is not None:
+                raise ValidationError(
+                    "FE-P0-022: available=False must have digest=None"
+                )
+            if self.diagnostic is None:
+                raise ValidationError(
+                    "FE-P0-022: unavailable identity must provide explicit diagnostic"
+                )
+
+    def is_cacheable(self) -> bool:
+        """FE-P0-022: Research unavailable states are explicitly uncacheable.
+
+        Production never reaches unavailable state (raises at construction).
+        Research unavailable identities have unique diagnostics preventing
+        cache reuse across catalog state changes.
+        """
+        return self.available
+
+    def cache_key(self) -> str:
+        """FE-P0-022: Cache key for field plans.
+
+        Available: returns stable digest.
+        Unavailable: returns unique diagnostic (no cache reuse).
+        """
+        if self.available:
+            return self.digest  # type: ignore[return-value]
+        # Research: unique diagnostic prevents cache pollution
+        return f"unavailable:{self.diagnostic}"
+
+
+@dataclass(frozen=True)
 class SemanticField:
     """一个逻辑字段的完整语义声明（catalog 的原子条目）。"""
 
@@ -741,7 +808,12 @@ class SemanticFieldCatalog:
         return {name: f.to_dict() for name, f in self._fields.items()}
 
     def fingerprint(self) -> str:
-        """语义 catalog 稳定指纹（#3：缓存 key 必须覆盖 catalog 语义版本）。"""
+        """DEPRECATED: Use get_identity() instead.
+
+        Legacy 16-char fingerprint method. New code should use get_identity()
+        which returns a typed SemanticCatalogIdentity with full 256-bit hash
+        and proper fail-closed semantics (FE-P0-022).
+        """
         import hashlib
         import json
 
@@ -752,6 +824,57 @@ class SemanticFieldCatalog:
             default=str,
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    def get_identity(self, *, strict: bool = False) -> SemanticCatalogIdentity:
+        """FE-P0-022: Issue immutable typed SemanticCatalogIdentity.
+
+        DataAccess semantic catalog issues identity based on canonical public
+        state. FactorEngine consumes it without inspecting _fields or using
+        repr/str fallback.
+
+        Uses CanonicalIdentityEncoder from data_access.core for production-grade
+        identity with proper fail-closed semantics.
+
+        Args:
+            strict: If True (production), any encoding failure raises exception.
+                    If False (research), returns unavailable diagnostic identity.
+
+        Returns:
+            SemanticCatalogIdentity with 256-bit digest when available.
+
+        Raises:
+            ValidationError: In strict mode when encoding fails.
+        """
+        try:
+            from data_access.core.identity_encoder import create_identity_encoder
+
+            encoder = create_identity_encoder(strict=strict)
+
+            # Build canonical payload from PUBLIC API only (to_dict())
+            payload = {name: field.to_dict() for name, field in self._fields.items()}
+
+            # Use 256-bit hash for production identity
+            digest = encoder.hash_identity(payload, bits=256)
+
+            return SemanticCatalogIdentity(
+                digest=digest,
+                available=True,
+                diagnostic=None,
+            )
+        except Exception as exc:
+            if strict:
+                raise ValidationError(
+                    f"FE-P0-022: Failed to encode SemanticCatalogIdentity in production: {exc}"
+                ) from exc
+
+            # Research: explicit diagnostic preventing cache reuse
+            import time
+            diagnostic = f"encoding_failed_at_{int(time.time())}:{type(exc).__name__}"
+            return SemanticCatalogIdentity(
+                digest=None,
+                available=False,
+                diagnostic=diagnostic,
+            )
 
     def semantic_coverage_audit(self, registry: Any) -> dict[str, Any]:
         """#30 语义覆盖审计：registry 物理字段 vs catalog。

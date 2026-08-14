@@ -1199,15 +1199,69 @@ class DataAccessSource(DataSource):
             catalog_by_name[name] = resolved[0]
         return catalog_by_name
 
+    def semantic_catalog_identity(self) -> str:
+        """FE-P0-022: Get typed SemanticCatalogIdentity cache key from DataAccess.
+
+        FactorEngine consumes the identity issued by DataAccess semantic catalog
+        and MUST NOT inspect catalog._fields, use repr/str fallback, or substitute
+        'unavailable' in production.
+
+        DataAccess issues identity through catalog.get_identity() based on public
+        canonical state (SemanticField.to_dict()). FactorEngine only calls the
+        issuer and extracts the cache key.
+
+        Production: catalog unavailable -> CatalogUnavailable exception (fail-closed).
+        Research: returns explicit unique diagnostic (no cache reuse across changes).
+
+        Returns:
+            Cache key string for field plans.
+
+        Raises:
+            CatalogUnavailable: In production when catalog cannot be loaded.
+            CatalogCorrupt: In production when catalog identity cannot be issued.
+        """
+        try:
+            from data_access.read.semantic_catalog import get_semantic_catalog
+
+            catalog = get_semantic_catalog()
+        except Exception as exc:
+            # FE-P0-022: production must fail-closed when catalog unavailable.
+            if self.strict_unknown_fields:
+                raise CatalogUnavailable(
+                    f"FE-P0-022: SemanticFieldCatalog unavailable in production "
+                    f"for dataset={self.dataset!r}: {exc}"
+                ) from exc
+            # Research: explicit unique diagnostic (no stable 'unavailable')
+            import time
+            return f"catalog_unavailable_at_{int(time.time())}"
+
+        # FE-P0-022: Call DataAccess identity issuer; do NOT inspect _fields.
+        try:
+            identity = catalog.get_identity(strict=self.strict_unknown_fields)
+            return identity.cache_key()
+        except Exception as exc:
+            if self.strict_unknown_fields:
+                raise CatalogCorrupt(
+                    f"FE-P0-022: Failed to issue SemanticCatalogIdentity in production "
+                    f"for dataset={self.dataset!r}: {exc}"
+                ) from exc
+            # Research: explicit unique diagnostic
+            import time
+            return f"catalog_identity_failed_at_{int(time.time())}"
+
     @staticmethod
     def _semantic_catalog_version() -> str:
-        """Deterministic version token over the loaded SemanticFieldCatalog.
+        """DEPRECATED: Use semantic_catalog_identity() instead.
 
-        The catalog is the single source of truth for field scale/mapping
-        semantics; keying the field-plan cache by this token invalidates stale
-        plans whenever the catalog's field declarations change (round-7 P0).
-        Returns ``"unavailable"`` when the catalog cannot be loaded — a stable
-        token so a later catalog availability change still busts the cache.
+        Legacy method kept for compatibility. Returns a deterministic version
+        token over the loaded SemanticFieldCatalog, or "unavailable" when the
+        catalog cannot be loaded.
+
+        FE-P0-022: This method is deprecated because it returns "unavailable"
+        as a stable token, which hides catalog state changes and violates
+        production fail-closed semantics. New code should use
+        semantic_catalog_identity() which raises in production and provides
+        explicit diagnostics in research.
         """
         try:
             from data_access.read.semantic_catalog import get_semantic_catalog
@@ -1345,13 +1399,24 @@ class DataAccessSource(DataSource):
     def _ensure_field_plans(self, names: Iterable[str]) -> dict[str, NormalizedFieldPlan]:
         """Return cached plans for ``names``, building only the missing ones.
 
-        Round-7 P0: the plan cache is keyed by ``(logical_name,
-        semantic_catalog_version)`` so a catalog semantic change (scale / mapping /
-        mining_allowed) invalidates the cached plans instead of silently serving
-        stale normalization contracts.  ``clear_cache()`` drops the whole cache.
+        FE-P0-022: the plan cache is keyed by ``(logical_name, catalog_identity)``
+        where catalog_identity uses strict DataAccess CanonicalIdentityEncoder.
+        Production: catalog unavailable -> fail-closed exception. Research: explicit
+        timestamped diagnostic prevents cache reuse across catalog state changes.
+
+        Round-7 P0: a catalog semantic change (scale / mapping / mining_allowed)
+        invalidates the cached plans instead of silently serving stale normalization
+        contracts. ``clear_cache()`` drops the whole cache.
         """
         names = list(names)
-        version = self._semantic_catalog_version()
+        # FE-P0-022: use strict semantic_catalog_identity() instead of
+        # _semantic_catalog_version() which returns stable "unavailable"
+        try:
+            version = self.semantic_catalog_identity()
+        except (CatalogUnavailable, CatalogCorrupt) as exc:
+            # FE-P0-022: production catalog identity failure must propagate
+            # (fail-closed), not fall back to a default that hides the issue
+            raise
         missing = [n for n in names if (n, version) not in self._field_plans]
         if missing:
             built = self._build_field_plans(missing)
