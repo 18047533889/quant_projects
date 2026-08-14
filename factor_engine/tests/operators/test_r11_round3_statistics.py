@@ -276,3 +276,80 @@ def test_residual_polars_matches_pandas():
     np.testing.assert_allclose(
         pl_out.to_numpy().ravel(), pd_out.to_numpy(dtype=float).ravel(), equal_nan=True
     )
+
+
+# ---------------------------------------------------------------------------
+# 6. Ridge regression usability
+# ---------------------------------------------------------------------------
+
+
+def test_ridge_dual_input_recovers_known_slope():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
+    y = 2.0 * x
+    out = Ridge().calculate(y, x, window=5, alpha=0.0)
+    assert out.iloc[:4, 0].isna().all()
+    assert out.iloc[-1, 0] == pytest.approx(2.0)
+
+
+def test_ridge_alpha_changes_regularized_slope():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
+    y = 2.0 * x
+    unregularized = Ridge().calculate(y, x, window=5, alpha=0.0)
+    regularized = Ridge().calculate(y, x, window=5, alpha=10.0)
+    assert regularized.iloc[-1, 0] != pytest.approx(unregularized.iloc[-1, 0])
+    assert abs(regularized.iloc[-1, 0]) < abs(unregularized.iloc[-1, 0])
+
+
+def test_ridge_positional_and_keyword_alpha_are_equivalent():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 9.0)})
+    y = 2.0 * x
+    positional = Ridge().calculate(y, x, 5, 0.5)
+    keyword = Ridge().calculate(y, x, window=5, alpha=0.5)
+    pd.testing.assert_frame_equal(positional, keyword)
+
+
+def test_ridge_dual_all_nan_preserves_nan_without_masking_other_column():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 9.0), "B": [np.nan] * 8})
+    y = 2.0 * x
+    out = Ridge().calculate(y, x, window=5, alpha=0.0)
+    assert out["B"].isna().all()
+    assert out["A"].iloc[-1] == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("window", [0, 2, 3.5, True])
+def test_ridge_rejects_invalid_window(window):
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 8.0)})
+    with pytest.raises(ValueError, match="window"):
+        Ridge().calculate(x, window=window)
+
+
+def test_ridge_rejects_shape_mismatch_and_ambiguous_calls():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": np.arange(1.0, 8.0)})
+    y = pd.DataFrame({"B": np.arange(1.0, 8.0)})
+    with pytest.raises(ValueError, match="identical"):
+        Ridge().calculate(y, x, window=3)
+    with pytest.raises(ValueError, match="accepted forms"):
+        Ridge().calculate(x, 3, 0.1, 99)
+    with pytest.raises(ValueError, match="alpha"):
+        Ridge().calculate(x, window=3, alpha=-1.0)
+
+
+def test_ridge_degenerate_predictor_window_is_nan():
+    from cleaned_operators.common.statistics import Ridge
+
+    x = pd.DataFrame({"A": [1.0] * 8})
+    y = pd.DataFrame({"A": np.arange(1.0, 9.0)})
+    out = Ridge().calculate(y, x, window=5, alpha=0.0)
+    assert out.iloc[4:, 0].isna().all()

@@ -1675,63 +1675,106 @@ class residual(SeriesOperator):
     backend="pandas_numpy"
 )
 class Ridge(SeriesOperator):
-    """Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归"""
+    """Rolling ridge slope with an explicit unary/paired ABI.
+
+    Accepted forms are ``ridge(x[, window[, alpha]])`` and
+    ``ridge(y, x[, window[, alpha]])``.  The intercept is fitted but is not
+    penalized; only the slope receives the L2 penalty.  A result is emitted
+    only for a complete trailing window with at least three finite pairs.
+    """
+
+    _HANDLES_CALL_CONTRACT = True
+
     metadata = OperatorMetadata(
         name="ridge", category="statistics",
-        description="Ridge回归(L2正则化)，单参数时返回序列的L2正则化趋势，双参数时执行Ridge回归",
-        examples=["ridge(close, 20)", "ridge(close, market, 20, 0.1)"],
-        param_names=["x", "window_or_y", "window", "alpha"], return_type="series",
-        tags=["statistics", "regression", "ridge", "regularization"]
+        description="L2-regularized rolling trend or paired regression slope",
+        examples=["ridge(close, 20)", "ridge(y, x, 20, 0.1)"],
+        param_names=["x", "window", "alpha"], return_type="series",
+        tags=["statistics", "regression", "ridge", "regularization"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
+            "alpha": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.NUMERICAL),
+        },
     )
-    def _calculate_series(self, x: pd.DataFrame, *args, **kwargs) -> pd.DataFrame:
-        window = 20
-        alpha = 0.1
-        y = None
 
-        if len(args) >= 1:
-            if isinstance(args[0], pd.DataFrame):
-                y = args[0]
-                if len(args) >= 2:
-                    window = int(args[1]) if not isinstance(args[1], pd.DataFrame) else window
-                if len(args) >= 3:
-                    alpha = float(args[3]) if len(args) > 3 else alpha
+    def calculate(self, *args, **kwargs) -> pd.DataFrame:
+        from backend.operator_errors import OperatorParameterError, OperatorShapeError
+
+        unknown = set(kwargs) - {"x", "y", "window", "alpha"}
+        if unknown:
+            raise OperatorParameterError(f"ridge: undeclared keyword(s) {sorted(unknown)!r}")
+        x_kw = kwargs.get("x")
+        y_kw = kwargs.get("y")
+        window_kw = kwargs.get("window")
+        alpha_kw = kwargs.get("alpha")
+        positional = list(args)
+        if y_kw is not None:
+            if x_kw is None or positional:
+                raise OperatorParameterError("ridge: keyword y requires keyword x and no positional panels")
+            y, x, scalar_args = y_kw, x_kw, []
+        elif x_kw is not None:
+            if positional:
+                raise OperatorParameterError("ridge: x cannot be mixed with positional arguments")
+            y, x, scalar_args = None, x_kw, []
+        else:
+            if not positional:
+                raise OperatorParameterError("ridge: requires x, or y and x panels")
+            first = positional.pop(0)
+            if positional and isinstance(positional[0], pd.DataFrame):
+                y, x = first, positional.pop(0)
             else:
-                try:
-                    window = int(args[0])
-                except (TypeError, ValueError):
-                    pass
-                if len(args) >= 2:
-                    try:
-                        alpha = float(args[1])
-                    except (TypeError, ValueError):
-                        pass
+                y, x = None, first
+            scalar_args = positional
+        if not isinstance(x, pd.DataFrame) or (y is not None and not isinstance(y, pd.DataFrame)):
+            raise OperatorParameterError("ridge: x and y must be pandas DataFrame panels")
+        if y is not None and (not y.index.equals(x.index) or not y.columns.equals(x.columns)):
+            raise OperatorShapeError("ridge: y and x must have identical index and columns")
+        if len(scalar_args) > 2:
+            raise OperatorParameterError(
+                "ridge: accepted forms are ridge(x[, window[, alpha]]) or "
+                "ridge(y, x[, window[, alpha]])"
+            )
+        if scalar_args and window_kw is not None:
+            raise OperatorParameterError("ridge: window supplied twice")
+        if len(scalar_args) == 2 and alpha_kw is not None:
+            raise OperatorParameterError("ridge: alpha supplied twice")
+        window = scalar_args[0] if scalar_args else (20 if window_kw is None else window_kw)
+        alpha = scalar_args[1] if len(scalar_args) == 2 else (0.1 if alpha_kw is None else alpha_kw)
+        if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or int(window) < 3:
+            raise OperatorParameterError(f"ridge: window must be an integer >= 3, got {window!r}")
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float, np.number)):
+            raise OperatorParameterError(f"ridge: alpha must be a finite float >= 0, got {alpha!r}")
+        alpha = float(alpha)
+        if not np.isfinite(alpha) or alpha < 0.0:
+            raise OperatorParameterError(f"ridge: alpha must be a finite float >= 0, got {alpha!r}")
+        processed_args, _ = self._prepare_call((x, int(window), alpha), {})
+        return self._calculate_series(
+            processed_args[0], y=y, window=processed_args[1], alpha=processed_args[2]
+        )
 
-        def _ridge_trend(x_vals):
-            n = len(x_vals)
-            valid = np.isfinite(x_vals)
-            if int(valid.sum()) < 3:
-                return np.nan
-            xv = x_vals[valid]
-            idx = np.arange(n)[valid]
-            if y is None:
-                X = np.column_stack([np.ones(len(idx)), (idx - idx.mean()) / (idx.std() + 1e-10)])
-                try:
-                    XtX = X.T @ X + alpha * np.eye(X.shape[1])
-                    XtX_inv = np.linalg.inv(XtX)
-                    coeffs = XtX_inv @ (X.T @ xv)
-                    return coeffs[-1]
-                except np.linalg.LinAlgError:
-                    return np.nan
-            return np.nan
-
-        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+    def _calculate_series(
+        self, x: pd.DataFrame, *, y: pd.DataFrame | None, window: int, alpha: float
+    ) -> pd.DataFrame:
+        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
-            try:
-                result[col] = x[col].rolling(window=window, min_periods=3).apply(
-                    _ridge_trend, raw=True
-                )
-            except Exception:
-                result[col] = np.nan
+            x_all = x[col].to_numpy(dtype=float, copy=False)
+            y_all = None if y is None else y[col].to_numpy(dtype=float, copy=False)
+            for end in range(window - 1, len(x_all)):
+                start = end - window + 1
+                predictor = x_all[start : end + 1]
+                response = predictor if y_all is None else y_all[start : end + 1]
+                if y_all is None:
+                    predictor = np.arange(window, dtype=float)
+                valid = np.isfinite(predictor) & np.isfinite(response)
+                if int(valid.sum()) < 3:
+                    continue
+                xv = predictor[valid]
+                yv = response[valid]
+                xc = xv - xv.mean()
+                yc = yv - yv.mean()
+                denominator = float(np.dot(xc, xc) + alpha)
+                if denominator > 0.0 and np.isfinite(denominator):
+                    result.iat[end, result.columns.get_loc(col)] = float(np.dot(xc, yc) / denominator)
         return result
 
 
