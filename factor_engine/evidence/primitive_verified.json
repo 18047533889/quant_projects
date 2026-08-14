@@ -13968,7 +13968,7 @@
       "implementation_hash_duckdb_fiscal_v2": "732a6cfd496c0ea1"
     }
   },
-  "commit_sha": "c1f3564b5f9ee4b542f34abc1a974d01fff4f633",
-  "updated_at": "2026-08-14T07:06:15.071479+00:00",
-  "updated_reason": "Evidence integrity fix: updated stale commit SHA binding to current HEAD"
+  "commit_sha": "b7677d54733c4df48b4e65b939f7ae8aefd6c43f",
+  "updated_at": "2026-08-14T07:07:19.050542+00:00",
+  "updated_reason": "Evidence integrity: bound to commit that fixed stale evidence"
 }
