@@ -214,7 +214,7 @@ class ParameterCanonicalizer:
         terminal_rank_equivalence: bool = False,
         param_specs: dict[str, Any] | None = None,
         param_aliases: dict[str, str] | None = None,
-        production_mode: bool = False,
+        run_mode: str | None = None,
     ):
         self.canonical = canonical
         self.normalizers = {n.name: n for n in normalizers}
@@ -227,8 +227,10 @@ class ParameterCanonicalizer:
         self.param_aliases: dict[str, str] = dict(param_aliases) if param_aliases else {}
         # FE-P0-021: production canonicalizer must fail-closed when active_when
         # controller is missing or undecidable; research mode preserves legacy
-        # fail-open behavior for backward compatibility.
-        self.production_mode = production_mode
+        # fail-open behavior for backward compatibility. Derive from
+        # resolve_run_mode() rather than requiring callers to pass a boolean.
+        from runtime.production_policy import resolve_run_mode
+        self.run_mode = resolve_run_mode(run_mode)
 
     def _sequence_dtype_is_bool(self, name: str) -> bool:
         spec = self.param_specs.get(name)
@@ -319,7 +321,7 @@ class ParameterCanonicalizer:
                 # FE-P0-021: controller undecidable (no default, no explicit value).
                 # Production mode: fail-closed with ParameterContractError.
                 # Research mode: fail-open (skip check) for legacy compatibility.
-                if self.production_mode:
+                if self.run_mode == "production":
                     raise ParameterContractError(
                         f"{self.canonical}: active_when controller {controller!r} "
                         f"for parameter {name!r} is missing and has no decidable "

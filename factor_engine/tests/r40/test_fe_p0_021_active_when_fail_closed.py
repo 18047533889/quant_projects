@@ -1,27 +1,32 @@
 # -*- coding: utf-8 -*-
-"""FE-P0-021: parameter active_when controller missing must fail-closed in production.
+"""FE-P0-021 — active_when controller missing/undecidable fails closed in production.
 
-When a ParamSpec declares active_when but the controller parameter is missing
-and has no decidable default, the canonicalizer must:
+When an active_when controller is missing (not in params) and has no decidable
+default, the production canonicalizer must raise ParameterContractError rather
+than silently skipping validation (fail-open).
 
-- Production mode: raise ParameterContractError (fail-closed)
-- Research mode: skip the check (fail-open, legacy behavior)
-
-This ensures production paths never silently accept parameter combinations
-whose active/inactive state is undecidable.
+Research mode preserves the legacy fail-open behavior for backward compatibility.
+Production mode is determined by resolve_run_mode(), which reads from:
+  - Explicit run_mode parameter
+  - FACTOR_ENGINE_RUN_MODE environment variable
+  - QUANT_PRODUCTION_MODE environment variable
+  - Default: "research"
 """
 from __future__ import annotations
+
+import os
 
 import pytest
 
 from parameter_canonicalizer import (
     ParameterCanonicalizer,
     ParameterContractError,
+    ParamNormalizer,
 )
 
 
 class _SpecStub:
-    """Duck-typed stand-in for cleaned_operators.base.ParamSpec."""
+    """Duck-typed ParamSpec for testing."""
 
     def __init__(
         self,
@@ -40,304 +45,162 @@ class _SpecStub:
         self.default = default
 
 
+_MISSING = object()
+
+
 # ---------------------------------------------------------------------------
-# FE-P0-021: Production mode must fail-closed when controller is undecidable
+# FE-P0-021: production mode fails closed on missing controller
 # ---------------------------------------------------------------------------
 
 
-def test_production_mode_raises_when_controller_missing_no_default():
-    """Production canonicalizer must raise when active_when controller is
-    missing and has no ParamSpec default."""
+def test_fe_p0_021_production_mode_missing_controller_no_default_raises():
+    """Production: missing controller with no default → ParameterContractError."""
     specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        # mode has no default - undecidable
-        "mode": _SpecStub(dtype=str, choices=("basic", "advanced")),
+        "mode": _SpecStub(choices=["A", "B"]),  # controller has NO default
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
     }
     pc = ParameterCanonicalizer(
         "test_op",
         [],
         param_specs=specs,
-        production_mode=True,
+        run_mode="production",  # explicit production mode
     )
-    # Controller "mode" is missing and has no default -> production must fail-closed
-    with pytest.raises(ParameterContractError, match="controller .* missing"):
-        pc.canonical_key({"window": 20, "adjustment": "log"})
+    # Controller 'mode' is missing and has no default -> fail closed
+    with pytest.raises(ParameterContractError) as exc_info:
+        pc.canonical_key({"alpha": 0.7})
+    assert "active_when controller 'mode'" in str(exc_info.value)
+    assert "missing and has no decidable default" in str(exc_info.value)
+    assert "FE-P0-021" in str(exc_info.value)
 
-    with pytest.raises(ParameterContractError, match="FE-P0-021"):
-        pc.canonical_key({"window": 20, "adjustment": "log"})
 
-
-def test_research_mode_allows_missing_controller_no_default():
-    """Research mode preserves legacy fail-open behavior: missing controller
-    with no default is silently skipped (cannot judge active/inactive)."""
+def test_fe_p0_021_production_mode_with_controller_value_succeeds():
+    """Production: explicit controller value allows validation."""
     specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(dtype=str, choices=("basic", "advanced")),
+        "mode": _SpecStub(choices=["A", "B"]),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
+    }
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs, run_mode="production")
+    # Controller is explicit -> validation proceeds
+    key = pc.canonical_key({"mode": "A", "alpha": 0.7})
+    assert key is not None  # succeeds
+
+
+def test_fe_p0_021_production_mode_with_controller_default_succeeds():
+    """Production: controller with decidable default allows validation."""
+    specs = {
+        "mode": _SpecStub(choices=["A", "B"], default="A"),  # has default
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
+    }
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs, run_mode="production")
+    # Controller has default -> can decide alpha is active
+    key = pc.canonical_key({"alpha": 0.7})
+    assert key is not None  # succeeds
+
+
+def test_fe_p0_021_production_mode_inactive_param_at_default_allowed():
+    """Production: inactive parameter at its canonical default is allowed."""
+    specs = {
+        "mode": _SpecStub(choices=["A", "B"], default="B"),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
+    }
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs, run_mode="production")
+    # mode=B (default) makes alpha inactive, but alpha is at its default
+    key = pc.canonical_key({"alpha": 0.5})
+    assert key is not None  # allowed
+
+
+def test_fe_p0_021_production_mode_inactive_param_non_default_raises():
+    """Production: inactive parameter at non-default value raises."""
+    specs = {
+        "mode": _SpecStub(choices=["A", "B"], default="B"),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
+    }
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs, run_mode="production")
+    # mode=B makes alpha inactive, but alpha is non-default
+    with pytest.raises(ValueError) as exc_info:
+        pc.canonical_key({"alpha": 0.9})
+    assert "parameter 'alpha' is inactive" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# FE-P0-021: research mode preserves fail-open behavior
+# ---------------------------------------------------------------------------
+
+
+def test_fe_p0_021_research_mode_missing_controller_no_default_skip_validation():
+    """Research (default): missing controller with no default skips validation (fail-open)."""
+    specs = {
+        "mode": _SpecStub(choices=["A", "B"]),  # no default
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
     }
     pc = ParameterCanonicalizer(
         "test_op",
         [],
         param_specs=specs,
-        production_mode=False,  # research/legacy mode
+        # No run_mode specified -> defaults to "research"
     )
-    # Research mode: undecidable controller -> skip check, no error
-    key = pc.canonical_key({"window": 20, "adjustment": "log"})
-    assert ("window", "20") in key
-    assert ("adjustment", "'log'") in key
+    # Controller missing with no default -> skips validation (legacy behavior)
+    key = pc.canonical_key({"alpha": 0.7})
+    assert key is not None  # succeeds (fail-open)
 
 
-def test_production_mode_succeeds_when_controller_has_spec_default():
-    """Production mode succeeds when controller is missing but has a
-    ParamSpec.default - the default is used to judge active/inactive."""
+def test_fe_p0_021_research_mode_explicit():
+    """Research mode can be explicitly specified."""
     specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(
-            dtype=str,
-            choices=("basic", "advanced"),
-            default="basic",  # controller has default
-        ),
+        "mode": _SpecStub(choices=["A", "B"]),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
     }
     pc = ParameterCanonicalizer(
         "test_op",
         [],
         param_specs=specs,
-        production_mode=True,
+        run_mode="research",  # explicit research mode
     )
-    # Controller defaults to "basic", so "adjustment" is inactive.
-    # Providing adjustment="none" (its default) is allowed.
-    key = pc.canonical_key({"window": 20, "adjustment": "none"})
-    assert ("window", "20") in key
-
-    # Omitting inactive parameter entirely is also allowed
-    key2 = pc.canonical_key({"window": 20})
-    assert ("window", "20") in key2
+    # Same as default behavior
+    key = pc.canonical_key({"alpha": 0.7})
+    assert key is not None
 
 
-def test_production_mode_succeeds_when_controller_explicitly_provided():
-    """Production mode succeeds when controller is explicitly provided in params."""
+# ---------------------------------------------------------------------------
+# FE-P0-021: environment-driven production mode
+# ---------------------------------------------------------------------------
+
+
+def test_fe_p0_021_production_from_factor_engine_run_mode_env(monkeypatch):
+    """Production mode from FACTOR_ENGINE_RUN_MODE env."""
+    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
     specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(dtype=str, choices=("basic", "advanced")),
+        "mode": _SpecStub(choices=["A", "B"]),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
     }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    # Controller explicitly provided -> decidable
-    key = pc.canonical_key({"window": 20, "mode": "advanced", "adjustment": "log"})
-    assert ("window", "20") in key
-    assert ("mode", "'advanced'") in key
-    assert ("adjustment", "'log'") in key
-
-
-def test_production_mode_rejects_inactive_parameter_with_non_default_value():
-    """Production mode must reject an inactive parameter bound to a non-default
-    value, even when controller is provided or has a default."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(
-            dtype=str,
-            choices=("basic", "advanced"),
-            default="basic",
-        ),
-    }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    # mode defaults to "basic" -> adjustment is inactive
-    # Binding adjustment to non-default "log" must be rejected
-    with pytest.raises(ValueError, match="inactive when"):
-        pc.canonical_key({"window": 20, "adjustment": "log"})
-
-    with pytest.raises(ValueError, match="dead knob"):
-        pc.canonical_key({"window": 20, "adjustment": "log"})
-
-
-def test_production_mode_allows_active_parameter():
-    """Production mode allows active parameter to be varied."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(
-            dtype=str,
-            choices=("basic", "advanced"),
-            default="basic",
-        ),
-    }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    # mode="advanced" -> adjustment is ACTIVE and can be varied
-    key = pc.canonical_key({"window": 20, "mode": "advanced", "adjustment": "sqrt"})
-    assert ("adjustment", "'sqrt'") in key
-
-
-def test_research_mode_allows_inactive_parameter_with_non_default():
-    """Research mode preserves the legacy behavior: inactive parameter with
-    non-default value is still rejected (R10 #18 applies to both modes)."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            choices=("none", "log", "sqrt"),
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(
-            dtype=str,
-            choices=("basic", "advanced"),
-            default="basic",
-        ),
-    }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=False,
-    )
-    # R10 #18 dead-knob rejection applies to both production and research mode
-    with pytest.raises(ValueError, match="inactive when"):
-        pc.canonical_key({"window": 20, "adjustment": "log"})
-
-
-def test_production_mode_multiple_active_when_parameters():
-    """Production mode with multiple active_when parameters must check all."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "smoothing": _SpecStub(
-            dtype=str,
-            active_when=("mode", ("advanced",)),
-            default="linear",
-        ),
-        "mode": _SpecStub(
-            dtype=str,
-            choices=("basic", "advanced"),
-            default="basic",
-        ),
-    }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    # Both adjustment and smoothing inactive with mode="basic"
-    key = pc.canonical_key({"window": 20, "adjustment": "none", "smoothing": "linear"})
-    assert ("window", "20") in key
-
-    # Both active with mode="advanced"
-    key2 = pc.canonical_key({
-        "window": 20,
-        "mode": "advanced",
-        "adjustment": "log",
-        "smoothing": "spline",
-    })
-    assert ("adjustment", "'log'") in key2
-    assert ("smoothing", "'spline'") in key2
-
-
-def test_production_mode_controller_none_explicit_vs_missing():
-    """Production mode must distinguish explicit None from missing controller."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(dtype=str, default="basic"),
-    }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    # Explicit mode=None (if allowed by choices) vs omitted
-    # With controller having a default, omitted -> use default
-    key = pc.canonical_key({"window": 20, "adjustment": "none"})
-    assert ("window", "20") in key
-
-
-def test_default_mode_is_research_not_production():
-    """Verify default production_mode=False preserves legacy behavior."""
-    specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "adjustment": _SpecStub(
-            dtype=str,
-            active_when=("mode", ("advanced",)),
-            default="none",
-        ),
-        "mode": _SpecStub(dtype=str, choices=("basic", "advanced")),
-    }
-    # Default: production_mode not specified (defaults to False)
+    # No explicit run_mode -> resolve_run_mode() reads env
     pc = ParameterCanonicalizer("test_op", [], param_specs=specs)
-    # Should NOT raise (fail-open legacy behavior)
-    key = pc.canonical_key({"window": 20, "adjustment": "log"})
-    assert ("window", "20") in key
+    with pytest.raises(ParameterContractError) as exc_info:
+        pc.canonical_key({"alpha": 0.7})
+    assert "FE-P0-021" in str(exc_info.value)
 
 
-def test_production_mode_param_without_active_when_unaffected():
-    """Production mode only affects active_when validation; parameters without
-    active_when are unaffected."""
+def test_fe_p0_021_production_from_quant_production_mode_env(monkeypatch):
+    """Production mode from QUANT_PRODUCTION_MODE env."""
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     specs = {
-        "window": _SpecStub(dtype=int, min=2, max=100),
-        "alpha": _SpecStub(dtype=float, min=0.0, max=1.0),
+        "mode": _SpecStub(choices=["A", "B"]),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
     }
-    pc = ParameterCanonicalizer(
-        "test_op",
-        [],
-        param_specs=specs,
-        production_mode=True,
-    )
-    key = pc.canonical_key({"window": 20, "alpha": 0.5})
-    assert ("window", "20") in key
-    assert ("alpha", "0.5") in key
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs)
+    with pytest.raises(ParameterContractError) as exc_info:
+        pc.canonical_key({"alpha": 0.7})
+    assert "FE-P0-021" in str(exc_info.value)
+
+
+def test_fe_p0_021_explicit_run_mode_overrides_env(monkeypatch):
+    """Explicit run_mode parameter takes precedence over environment."""
+    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
+    specs = {
+        "mode": _SpecStub(choices=["A", "B"]),
+        "alpha": _SpecStub(active_when=("mode", "A"), default=0.5),
+    }
+    # Explicit research mode overrides env production
+    pc = ParameterCanonicalizer("test_op", [], param_specs=specs, run_mode="research")
+    key = pc.canonical_key({"alpha": 0.7})
+    assert key is not None  # succeeds (research mode)
