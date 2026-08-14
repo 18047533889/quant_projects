@@ -34,15 +34,28 @@ def _rolling_window(x: pl.DataFrame, window: int, expr_fn) -> pl.DataFrame:
 
 @register_operator(name="m_var", category="time_series", business_category="time_series", canonical="ts_var", source="factor_dsl_polars")
 class TSVarPolars(SeriesOperator):
-    """Polars 滚动方差"""
+    """Polars 滚动方差
+
+    Parameters:
+    - window: rolling window size
+    - ddof: Delta Degrees of Freedom. ddof=1 (default) for sample variance, ddof=0 for population variance
+    - min_periods: minimum number of observations required (default=1)
+    """
     metadata = OperatorMetadata(
         name="m_var", category="time_series", description="滚动方差",
-        param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        param_names=["x", "window", "ddof", "min_periods"], return_type="series", tags=["time_series", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, ddof: int = 1, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
-        return _rolling_window(x, w, lambda c, n: c.rolling_var(window_size=n, min_samples=1))
+        # Extract ddof from kwargs for backwards compatibility
+        ddof_val = int(kwargs.get("ddof", ddof))
+        min_samples = int(kwargs.get("min_periods", min_periods))
+
+        return _rolling_window(
+            x, w,
+            lambda c, n: c.rolling_var(window_size=n, min_samples=min_samples, ddof=ddof_val)
+        )
 
 
 @register_operator(name="m_median", category="time_series", business_category="time_series", canonical="ts_median", source="factor_dsl_polars")
