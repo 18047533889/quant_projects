@@ -106,7 +106,7 @@ def test_operator_capability_imports_from_contracts():
 
 def test_production_mode_defaults_to_fail_closed():
     """FE-P0-005: Production mode defaults to True (fail closed)."""
-    from backend.polars_backend_kind import polars_backend_kind, BackendKind
+    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
     from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
     # Mock operator without _physical_spec
@@ -121,12 +121,12 @@ def test_production_mode_defaults_to_fail_closed():
     # Default behavior: production mode (fail closed)
     with pytest.warns(UserWarning, match="Production mode.*UNSUPPORTED"):
         kind = polars_backend_kind(op)  # No production_mode arg
-        assert kind == BackendKind.UNSUPPORTED
+        assert kind == PolarsImplementationKind.UNSUPPORTED
 
 
 def test_explicit_research_mode():
     """FE-P0-005: Explicit production_mode=False allows heuristic fallback."""
-    from backend.polars_backend_kind import polars_backend_kind, BackendKind
+    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
 
     class MockOperatorNoSpec:
         canonical = "test_no_spec"
@@ -140,12 +140,12 @@ def test_explicit_research_mode():
     with pytest.warns(UserWarning, match="Research mode.*heuristics"):
         kind = polars_backend_kind(op, production_mode=False)
         # Will be POLARS_NATIVE from heuristic fallback
-        assert kind in {BackendKind.POLARS_NATIVE, BackendKind.POLARS_UDF_PANDAS_DELEGATE}
+        assert kind in {PolarsImplementationKind.POLARS_NATIVE, PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE}
 
 
 def test_explicit_spec_works_in_production_mode():
     """FE-P0-005: Operators with explicit spec work in production mode."""
-    from backend.polars_backend_kind import polars_backend_kind, BackendKind, get_physical_spec
+    from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind, get_physical_spec
     from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
     class MockOperatorWithSpec:
@@ -166,7 +166,7 @@ def test_explicit_spec_works_in_production_mode():
 
     # Production mode: works fine (no warning)
     kind = polars_backend_kind(op, production_mode=True)
-    assert kind == BackendKind.POLARS_NATIVE
+    assert kind == PolarsImplementationKind.POLARS_NATIVE
 
 
 def test_backend_capability_record_native_execution():
@@ -204,6 +204,35 @@ def test_no_duplicate_enum_definitions():
     # All should be the exact same class
     assert PolarsEK is ContractsEK
     assert CapabilityEK is ContractsEK
+
+
+def test_no_duplicate_backend_kind():
+    """FE-BE-P0-001: Single BackendKind authority (physical engines only).
+
+    PolarsImplementationKind is semantically distinct - it classifies
+    implementation quality, not physical backend choice.
+    """
+    from backend.contracts import BackendKind
+    from backend.polars_backend_kind import PolarsImplementationKind
+
+    # BackendKind has physical engines
+    assert hasattr(BackendKind, "PANDAS_NUMPY")
+    assert hasattr(BackendKind, "POLARS")
+    assert hasattr(BackendKind, "DUCKDB_SQL")
+
+    # PolarsImplementationKind has quality classification
+    assert hasattr(PolarsImplementationKind, "POLARS_NATIVE")
+    assert hasattr(PolarsImplementationKind, "POLARS_UDF_PANDAS_DELEGATE")
+    assert hasattr(PolarsImplementationKind, "UNSUPPORTED")
+
+    # Zero overlap in member values (disjoint enums)
+    backend_values = {m.value for m in BackendKind}
+    impl_values = {m.value for m in PolarsImplementationKind}
+    assert backend_values.isdisjoint(impl_values), "Enums must have disjoint values"
+
+    # Different semantic purposes (no naming conflict)
+    assert BackendKind.__name__ == "BackendKind"
+    assert PolarsImplementationKind.__name__ == "PolarsImplementationKind"
 
 
 if __name__ == "__main__":

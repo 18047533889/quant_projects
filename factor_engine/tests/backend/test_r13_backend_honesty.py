@@ -44,7 +44,7 @@ def loaded():
 
 def test_polars_backend_kind_classifies_gap_coverage_as_delegate(loaded):
     from backend.polars_backend_kind import (
-        BackendKind,
+        PolarsImplementationKind,
         canonical_polars_is_delegate,
         canonical_polars_kind,
     )
@@ -60,7 +60,7 @@ def test_polars_backend_kind_classifies_gap_coverage_as_delegate(loaded):
             (OperatorRegistry._catalog.get(canonical, {}) or {}).get("backend_meta") or {}
         ).get("polars", {}) or {}
         if str(meta.get("source") or "") == "polars_udf":
-            assert canonical_polars_kind(canonical) == BackendKind.POLARS_UDF_PANDAS_DELEGATE
+            assert canonical_polars_kind(canonical) == PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
             assert canonical_polars_is_delegate(canonical)
             delegate.append(canonical)
     assert len(delegate) > 0

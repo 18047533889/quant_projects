@@ -93,14 +93,14 @@ def _reconcile_delegate_metadata() -> None:
     slots stay native.
     """
     from backend.polars_backend_kind import (
-        BackendKind,
+        PolarsImplementationKind,
         canonical_polars_kind,
     )
 
     for canonical in list(OperatorRegistry._catalog):
         if "polars" not in OperatorRegistry.backends_for(canonical):
             continue
-        if canonical_polars_kind(canonical) == BackendKind.POLARS_UDF_PANDAS_DELEGATE:
+        if canonical_polars_kind(canonical) == PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE:
             _stamp_delegate_meta(canonical)
 
 

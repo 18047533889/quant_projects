@@ -9,6 +9,7 @@ to exactly one split.  Purge (§9) drops training rows whose label interval
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable
@@ -19,6 +20,8 @@ import pandas as pd
 from modeling.contracts import LabelContract
 from modeling.dataset import PanelDataset
 from market.exchange_session_calendar import ExchangeSessionCalendar
+
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "WalkForwardSpec",
@@ -39,7 +42,13 @@ __all__ = [
 
 @dataclass(frozen=True)
 class WalkForwardSpec:
-    """Walk-forward training specification (§3.4 / §68)."""
+    """Walk-forward training specification (§3.4 / §68).
+
+    ``gap_days`` enforces temporal separation between train_end and
+    validation_start to prevent feature leakage. gap_days=5 means 5 full
+    calendar days between the last training date and first validation date.
+    Distinct from label-interval purge (which prevents label leakage).
+    """
 
     train_lookback_bars: int | None = None
     train_expanding: bool = False
@@ -49,6 +58,7 @@ class WalkForwardSpec:
     retrain_every_bars: int = 21
     purge_policy: str = "label_interval"  # "label_interval" | "purge_bars"
     embargo_bars: int = 0
+    gap_days: int = 0
     min_train_dates: int = 252
     min_train_stocks: int = 30
     min_train_obs: int = 10000
@@ -62,6 +72,10 @@ class WalkForwardSpec:
     min_test_label_coverage: float = 0.0
     min_valid_daily_ic_dates: int = 0
     decay_half_life_bars: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.gap_days < 0:
+            raise ValueError("gap_days must be >= 0")
 
 
 class OOSStitchPolicy(str, Enum):
@@ -230,8 +244,9 @@ def make_walk_forward_splits(
         else:
             train_start_pos = pos - lookback
         if validation_bars := spec.validation_bars:
-            val_start_pos = pos
-            val_end_pos = pos + validation_bars - 1
+            # Apply gap_days: skip gap_days positions between train_end and val_start
+            val_start_pos = pos + spec.gap_days
+            val_end_pos = val_start_pos + validation_bars - 1
             test_start_pos = val_end_pos + 1
         else:
             val_start_pos = val_end_pos = None
@@ -282,8 +297,12 @@ def make_walk_forward_splits(
     return folds
 
 
-def check_fold_order(folds: list[WalkForwardFold]) -> list[str]:
-    """Report §59 order violations; empty list when all folds are clean."""
+def check_fold_order(folds: list[WalkForwardFold], *, gap_days: int = 0) -> list[str]:
+    """Report §59 order violations; empty list when all folds are clean.
+
+    When ``gap_days > 0``, validates that each fold has at least gap_days
+    full calendar days between train_end and validation_start.
+    """
     violations: list[str] = []
     for fold in folds:
         if fold.validation_start is not None and fold.train_end is not None:
@@ -292,6 +311,18 @@ def check_fold_order(folds: list[WalkForwardFold]) -> list[str]:
                     f"fold {fold.fold_id}: train_end >= validation_start "
                     f"({fold.train_end} >= {fold.validation_start})"
                 )
+            # Validate gap_days requirement
+            if gap_days > 0:
+                train_end_ts = pd.Timestamp(fold.train_end)
+                val_start_ts = pd.Timestamp(fold.validation_start)
+                actual_gap = (val_start_ts - train_end_ts).days
+                required_gap = gap_days + 1  # gap_days=5 means 6 calendar days apart
+                if actual_gap < required_gap:
+                    violations.append(
+                        f"fold {fold.fold_id}: gap between train_end and validation_start "
+                        f"is {actual_gap} days but gap_days={gap_days} requires >= {required_gap} days "
+                        f"(train_end={fold.train_end}, validation_start={fold.validation_start})"
+                    )
         if fold.validation_end is not None and fold.test_start is not None:
             if fold.validation_end >= fold.test_start:
                 violations.append(
@@ -316,6 +347,7 @@ def purge_overlap(
     *,
     date_col: str = "date",
     calendar: ExchangeSessionCalendar | None = None,
+    validate: bool = True,
 ) -> PanelDataset:
     """§9 label-interval purge.
 
@@ -323,27 +355,63 @@ def purge_overlap(
     validation start — i.e. keep rows where ``date < validation_start`` AND
     ``date + horizon_bars < validation_start`` (strict).  Implemented in bar
     positions so string / date / datetime dates are handled uniformly.
+
+    When ``validate=True`` (default), verifies that rows were actually purged
+    when horizon_bars > 0 and validation exists (detects purge bypass).
     """
     if validation_ds is None or len(validation_ds.frame) == 0 or train_ds.n_rows == 0:
         return train_ds
+
     col = _date_col_of(train_ds, date_col)
     vcol = _date_col_of(validation_ds, date_col)
     val_start = validation_ds.frame[vcol].min()
     horizon = int(getattr(label_contract, "horizon_bars", 0))
+
+    # Capture pre-purge state for validation
+    pre_purge_rows = train_ds.n_rows
+    pre_purge_dates = set(train_ds.frame[col].unique())
+
+    # Perform purge
     if calendar is not None:
         cutoff = calendar.shift_session(val_start, -(horizon + 1))
-        return _filter_by_dates(train_ds, None, cutoff, col)
-    train_dates = train_ds.frame[col].unique()
-    validation_dates = validation_ds.frame[vcol].unique()
-    # Build bar positions from both sides of the boundary.  Using only dates
-    # present in train makes a missing session collapse the gap and can purge a
-    # label that actually matures before validation begins.
-    dates = np.sort(np.concatenate([train_dates, validation_dates]))
-    p = int(pd.Index(dates).searchsorted(val_start, side="left"))
-    cutoff_pos = p - horizon - 1
-    if cutoff_pos < 0:
-        return _empty_like(train_ds)
-    return _filter_by_dates(train_ds, None, dates[cutoff_pos], col)
+        result = _filter_by_dates(train_ds, None, cutoff, col)
+    else:
+        train_dates = train_ds.frame[col].unique()
+        validation_dates = validation_ds.frame[vcol].unique()
+        # Build bar positions from both sides of the boundary.  Using only dates
+        # present in train makes a missing session collapse the gap and can purge a
+        # label that actually matures before validation begins.
+        dates = np.sort(np.concatenate([train_dates, validation_dates]))
+        p = int(pd.Index(dates).searchsorted(val_start, side="left"))
+        cutoff_pos = p - horizon - 1
+        if cutoff_pos < 0:
+            result = _empty_like(train_ds)
+        else:
+            result = _filter_by_dates(train_ds, None, dates[cutoff_pos], col)
+
+    # Validate and log purge statistics
+    post_purge_rows = result.n_rows
+    post_purge_dates = set(result.frame[col].unique()) if post_purge_rows > 0 else set()
+    dropped_rows = pre_purge_rows - post_purge_rows
+    dropped_dates = pre_purge_dates - post_purge_dates
+
+    if validate and horizon > 0:
+        # When horizon > 0, purge MUST drop at least some rows (label overlap exists)
+        if dropped_rows == 0:
+            _log.warning(
+                f"purge_overlap: horizon_bars={horizon} but no rows were purged. "
+                f"This may indicate purge bypass. "
+                f"val_start={val_start}, train_end={max(pre_purge_dates) if pre_purge_dates else None}"
+            )
+
+    if dropped_rows > 0:
+        cutoff_date = max(post_purge_dates) if post_purge_dates else None
+        _log.debug(
+            f"purge_overlap: dropped {dropped_rows} rows ({len(dropped_dates)} dates) "
+            f"with horizon_bars={horizon}. Cutoff date: {cutoff_date}, val_start: {val_start}"
+        )
+
+    return result
 
 
 def apply_embargo(

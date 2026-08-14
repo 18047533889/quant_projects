@@ -71,7 +71,8 @@ def main():
 
         # Import test
         print("\n[4/5] Import test...")
-        import_test = """
+        import_script = tmpdir / "test_imports.py"
+        import_script.write_text("""
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
@@ -82,8 +83,8 @@ from modeling.errors import FutureLeakageError
 
 print(f'modeling version: {__version__}')
 print('✓ Imports OK')
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{import_test}'", check=False)
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {import_script}", check=False)
         if code != 0:
             print(f"FAILED: Import\n{stderr}")
             return 1
@@ -91,7 +92,8 @@ print('✓ Imports OK')
 
         # Smoke test
         print("\n[5/5] Smoke test...")
-        smoke_test = """
+        smoke_script = tmpdir / "test_smoke.py"
+        smoke_script.write_text("""
 from modeling.contracts import FitWindow
 from datetime import datetime
 
@@ -99,9 +101,9 @@ window = FitWindow(
     fit_start=datetime(2020, 1, 1),
     fit_end=datetime(2020, 12, 31),
 )
-print(f"✓ Created FitWindow: {window.fit_start} to {window.fit_end}")
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{smoke_test}'", check=False)
+print(f'✓ Created FitWindow: {window.fit_start} to {window.fit_end}')
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {smoke_script}", check=False)
         if code != 0:
             print(f"FAILED: Smoke\n{stderr}")
             return 1

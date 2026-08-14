@@ -43,6 +43,8 @@ __all__ = [
     "RichModelTiming",
     "SampleAdequacyContract",
     "LabelContract",
+    "EmbargoSpec",
+    "ApplicationWindow",
     "DecisionClock",
     "TradingTimestamp",
     "SessionPhase",
@@ -308,7 +310,104 @@ def sample_adequacy_met(
 
 
 # --------------------------------------------------------------------------- #
-# 5. Label contract (§7) — VWAP-to-VWAP is the A-share label authority (§8).
+# 5. Embargo specification (MODEL-P0-003) — explicit temporal buffer contract.
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class EmbargoSpec:
+    """Explicit embargo contract for temporal leakage prevention (MODEL-P0-003).
+
+    Embargo ensures a mandatory temporal buffer between training and validation/test
+    to prevent information leakage via label maturity, feature lag, or execution timing.
+
+    ``days`` must be >= label horizon to ensure labels are fully mature before the
+    boundary. The embargo is enforced independently of label purge (which handles
+    label interval overlap); embargo provides an additional safety margin.
+    """
+
+    days: int
+    rationale: str
+    applies_to: str = "validation"  # "validation" | "test" | "both"
+
+    def __post_init__(self) -> None:
+        if self.days < 0:
+            raise ValueError("embargo days must be >= 0")
+        if self.applies_to not in {"validation", "test", "both"}:
+            raise ValueError(
+                f"applies_to must be 'validation', 'test', or 'both', got {self.applies_to!r}"
+            )
+
+    def validate_against_label(self, label_contract: "LabelContract") -> list[str]:
+        """Validate that embargo is sufficient for the label horizon.
+
+        Returns a list of violations (empty when valid).
+        """
+        violations: list[str] = []
+        if self.days < label_contract.horizon_bars:
+            violations.append(
+                f"embargo days {self.days} < label horizon {label_contract.horizon_bars}; "
+                f"embargo must be >= horizon to ensure labels are mature before boundary"
+            )
+        return violations
+
+
+# --------------------------------------------------------------------------- #
+# 6. Application window (MODEL-P0-005) — OOS transform temporal boundary.
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class ApplicationWindow:
+    """Temporal window for out-of-sample transform application (MODEL-P0-005).
+
+    When applying a fitted preprocessing transform (scaler/PCA/imputer) to OOS data,
+    the application window enforces that the transform is only applied to data that
+    exists after the training cutoff. This prevents accidental leakage where a
+    transform trained on train+validation is applied to validation-period data.
+
+    The public FittedTransform.transform() API MUST require an ApplicationWindow;
+    only internal fit_transform (used during training) may bypass this check.
+    """
+
+    start: Any  # First legal date/timestamp for OOS application
+    end: Any | None = None  # Last legal date/timestamp (None = unbounded)
+    strict: bool = True  # If True, reject any data before start
+
+    def __post_init__(self) -> None:
+        if self.start is None:
+            raise ValueError("ApplicationWindow.start cannot be None")
+        if self.end is not None and self.start > self.end:
+            raise ValueError(
+                f"ApplicationWindow.start {self.start} > end {self.end}"
+            )
+
+    def validate_dates(self, dates: Any) -> tuple[bool, list[str]]:
+        """Validate that dates fall within the application window.
+
+        Returns (valid, violations) where violations lists dates outside the window.
+        """
+        violations: list[str] = []
+        dates_array = np.asarray(dates)
+
+        if self.strict:
+            # Check all dates are >= start
+            before_start = dates_array < self.start
+            if np.any(before_start):
+                n_violations = int(np.sum(before_start))
+                violations.append(
+                    f"{n_violations} dates before application window start {self.start}"
+                )
+
+        if self.end is not None:
+            after_end = dates_array > self.end
+            if np.any(after_end):
+                n_violations = int(np.sum(after_end))
+                violations.append(
+                    f"{n_violations} dates after application window end {self.end}"
+                )
+
+        return (not violations), violations
+
+
+# --------------------------------------------------------------------------- #
+# 7. Label contract (§7) — VWAP-to-VWAP is the A-share label authority (§8).
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class LabelContract:
@@ -359,7 +458,7 @@ class LabelContract:
 
 
 # --------------------------------------------------------------------------- #
-# 6. Decision clock (§11) — the hidden-future-function defense line.
+# 8. Decision clock (§11) — the hidden-future-function defense line.
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class DecisionClock:
@@ -539,7 +638,7 @@ def ashare_decision_clock(scenario: str = AFTER_CLOSE_TO_NEXT_VWAP) -> DecisionC
 
 
 # --------------------------------------------------------------------------- #
-# 7. Model parameter role taxonomy (§14) — model-level, distinct from the
+# 9. Model parameter role taxonomy (§14) — model-level, distinct from the
 #    operator alpha-search ParamRole in cleaned_operators.base.
 # --------------------------------------------------------------------------- #
 class ParamRole(str, enum.Enum):
@@ -573,7 +672,7 @@ OPERATOR_ROLE_MAP: dict[ParamRole, str] = {
 
 
 # --------------------------------------------------------------------------- #
-# 8. Parameter search policy (§16).
+# 10. Parameter search policy (§16).
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class ParameterSearchPolicy:
@@ -595,7 +694,7 @@ class ParameterSearchPolicy:
 
 
 # --------------------------------------------------------------------------- #
-# 9. Refactored model-operator contract (§33) — additive superset.
+# 11. Refactored model-operator contract (§33) — additive superset.
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class ModelOperatorSpec:
@@ -647,7 +746,7 @@ def validate_model_operator_spec(spec: ModelOperatorSpec) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
-# 10. Legacy local predictive variant (§2.1 / §67).
+# 12. Legacy local predictive variant (§2.1 / §67).
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class LegacyLocalPredictive:

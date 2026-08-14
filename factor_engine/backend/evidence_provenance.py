@@ -76,8 +76,13 @@ def collect_runtime_versions() -> dict[str, str]:
 
 
 def compute_payload_hash(payload: Mapping[str, Any]) -> str:
+    """Full 256-bit SHA-256 for evidence correctness binding.
+
+    DA-ID-P0-002: Evidence certification is correctness-critical. 64-bit hash
+    collision could certify wrong operator semantics. Use full 256-bit.
+    """
     text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def compute_case_registry_hash(registry: Mapping[str, Any]) -> str:
@@ -97,7 +102,12 @@ def compute_case_registry_hash(registry: Mapping[str, Any]) -> str:
 
 
 def compute_implementation_hash(source: str) -> str:
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    """Full 256-bit SHA-256 for implementation binding.
+
+    DA-ID-P0-002: Implementation hash binds operator contract to source code.
+    Collision could certify wrong implementation. Use full 256-bit.
+    """
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def emitter_hashes() -> dict[str, str]:

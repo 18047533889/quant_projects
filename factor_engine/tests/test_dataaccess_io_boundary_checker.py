@@ -25,7 +25,9 @@ from check_dataaccess_io_boundary import (
     run_check,
     scan_file,
     is_authorized,
-    AUTHORIZED_MODULES,
+)
+from physical_io_authority_policy import (
+    PHYSICAL_IO_AUTHORITY_POLICY,
 )
 
 
@@ -42,7 +44,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None, "Should not have scan error"
             assert len(violations) >= 1
             assert any("duckdb.connect" in v.pattern for v in violations)
         finally:
@@ -58,7 +61,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             assert len(violations) >= 1
             assert any("pd.read_parquet" in v.pattern for v in violations)
         finally:
@@ -74,7 +78,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             assert len(violations) >= 1
             assert any(".to_parquet" in v.pattern for v in violations)
         finally:
@@ -92,7 +97,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             # Should not detect patterns in plain string literals
             assert len(violations) == 0
         finally:
@@ -108,7 +114,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             assert len(violations) == 0
         finally:
             temp_path.unlink()
@@ -155,7 +162,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             assert len(violations) >= 1
             assert any("pq.read_table" in v.pattern for v in violations)
         finally:
@@ -171,7 +179,8 @@ class TestIOBoundaryChecker:
             temp_path = Path(f.name)
 
         try:
-            violations = scan_file(temp_path)
+            violations, scan_error = scan_file(temp_path)
+            assert scan_error is None
             assert len(violations) >= 1
             assert any("pl.read_parquet" in v.pattern for v in violations)
         finally:
@@ -211,7 +220,8 @@ class TestIOBoundaryChecker:
             temp_violation_file.write_text(runtime_fixture.read_text())
 
             # Run check - should detect violations
-            violations = scan_file(temp_violation_file)
+            violations, scan_error = scan_file(temp_violation_file)
+            assert scan_error is None
 
             # Should detect 2 violations (pd.read_parquet, .to_parquet)
             assert len(violations) >= 2, (
@@ -232,6 +242,26 @@ class TestIOBoundaryChecker:
             # Clean up
             if temp_violation_file.exists():
                 temp_violation_file.unlink()
+
+    def test_scanner_failure_returns_scan_error(self):
+        """ARCH-P0-002: Scanner failures return ScanError, not empty violations."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False
+        ) as f:
+            # Write file with syntax error
+            f.write("import duckdb\nconn = duckdb.connect(':memory:'  # Missing closing paren\n")
+            f.flush()
+            temp_path = Path(f.name)
+
+        try:
+            violations, scan_error = scan_file(temp_path)
+
+            # Should return ScanError, not violations
+            assert scan_error is not None, "Expected ScanError for syntax error"
+            assert scan_error.exception_type == "SyntaxError"
+            assert len(violations) == 0, "Violations should be empty when scan fails"
+        finally:
+            temp_path.unlink()
 
 
 if __name__ == "__main__":

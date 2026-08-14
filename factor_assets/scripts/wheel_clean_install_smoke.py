@@ -84,24 +84,26 @@ def main():
 
         # Import public API
         print("\n[4/5] Importing public API...")
-        import_test = """
+        import_script = tmpdir / "test_imports.py"
+        import_script.write_text("""
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_assets
-from factor_assets import __version__
-from factor_assets.registry import FactorAsset, AssetRegistry
-from factor_assets.selection import SelectionGate, CompositeGate
-from factor_assets.similarity import CosineSimilarity
-from factor_assets.novelty import NoveltyOrchestrator
+from factor_assets.contracts.asset import FactorAsset, AssetMetadata
+from factor_assets.registry import AssetRepository
+from factor_assets.contracts.lifecycle import LifecycleState
+from factor_assets.contracts.lineage import LineageRef
 
-print(f'factor_assets version: {__version__}')
-print(f'AssetRegistry: {AssetRegistry}')
+print('factor_assets imported')
+print(f'FactorAsset: {FactorAsset}')
+print(f'AssetRepository: {AssetRepository}')
+print(f'LifecycleState: {LifecycleState}')
 print('✓ All imports successful')
-"""
+""")
 
         code, stdout, stderr = run_command(
-            f"{python_exe} -c '{import_test}'",
+            f"{python_exe} {import_script}",
             check=False,
         )
         if code != 0:
@@ -111,24 +113,48 @@ print('✓ All imports successful')
 
         # Smoke test
         print("\n[5/5] Running smoke test...")
-        smoke_test = """
-from factor_assets.registry import FactorAsset, AssetRegistry
+        smoke_script = tmpdir / "test_smoke.py"
+        smoke_script.write_text("""
+from datetime import datetime
+from factor_assets.contracts.asset import AssetMetadata
+from factor_assets.contracts.lifecycle import LifecycleState
+from factor_assets.contracts.lineage import LineageRef
+from factor_assets.registry import AssetRepository
 
-registry = AssetRegistry()
-asset = FactorAsset(
-    asset_id="test_factor",
-    expression="close / ts_delay(close, 1) - 1",
-    metadata={"source": "smoke_test"},
+# Create repository
+repo = AssetRepository()
+
+# Create asset metadata
+metadata = AssetMetadata(
+    factor_id="test_factor",
+    canonical_repr="close / ts_delay(close, 1) - 1",
+    canonical_hash="test_hash_12345",
+    frequency="daily",
+    domains=("equity",),
+    timing="daily",
+    description="Test momentum factor"
 )
-registry.register(asset)
 
-retrieved = registry.get("test_factor")
-assert retrieved.asset_id == "test_factor"
-print(f"✓ Registered and retrieved asset: {retrieved.asset_id}")
-"""
+# Create lineage (no parents for this test factor)
+lineage = LineageRef(
+    factor_id="test_factor",
+    parents=(),
+    campaign_id="smoke_test",
+    created_at=datetime.utcnow().isoformat(),
+)
+
+# Register (returns FactorAsset)
+asset = repo.register(metadata, lineage)
+
+# Retrieve
+retrieved = repo.get(asset.factor_id)
+assert retrieved.factor_id == "test_factor"
+assert retrieved.lifecycle_state == LifecycleState.REGISTERED
+print(f"✓ Registered and retrieved asset: {retrieved.factor_id}")
+""")
 
         code, stdout, stderr = run_command(
-            f"{python_exe} -c '{smoke_test}'",
+            f"{python_exe} {smoke_script}",
             check=False,
         )
         if code != 0:

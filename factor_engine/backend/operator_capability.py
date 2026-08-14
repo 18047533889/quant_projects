@@ -69,85 +69,14 @@ _SQL_BACKENDS: tuple[BackendName, ...] = ("duckdb_sql", "clickhouse_sql")
 
 @dataclass(frozen=True)
 class BackendCapability:
-    canonical: str
-    backend: BackendName
-    status: CapabilityStatus
-    execution_kind: str = "unsupported"
-    estimated_speedup: float = 1.0
-    supports_nulls: bool = False
-    supports_nan: bool = False
-    supports_inf: bool = False
-    supports_scalar_broadcast: bool = False
-    supports_min_periods: bool = False
-    supports_group: bool = False
-    supports_window: bool = False
-    supports_lazy: bool = False
-    supports_streaming: bool = False
-    materializes_full_panel: bool = False
-    notes: str = ""
-    registry_version: str = CAPABILITY_REGISTRY_VERSION
+    """Unified backend capability record (FE-BE-P0-002: merged with BackendCapabilityRecord).
 
-    def to_csv_row(self) -> dict[str, str | float | bool]:
-        return {
-            "canonical": self.canonical,
-            "backend": self.backend,
-            "status": self.status,
-            "execution_kind": self.execution_kind,
-            "estimated_speedup": self.estimated_speedup,
-            "supports_nulls": self.supports_nulls,
-            "supports_nan": self.supports_nan,
-            "supports_inf": self.supports_inf,
-            "supports_scalar_broadcast": self.supports_scalar_broadcast,
-            "supports_min_periods": self.supports_min_periods,
-            "supports_group": self.supports_group,
-            "supports_window": self.supports_window,
-            "supports_lazy": self.supports_lazy,
-            "supports_streaming": self.supports_streaming,
-            "materializes_full_panel": self.materializes_full_panel,
-            "notes": self.notes,
-        }
+    Single authority for backend capability metadata. Uses typed enums for all
+    classification fields to ensure ABI consistency across the platform.
 
-    def is_production_eligible(self) -> bool:
-        """Check if this capability is production-safe."""
-        return self.status == "production_safe"
-
-    def is_native_execution(self) -> bool:
-        """Check if execution is truly native (not delegate)."""
-        return self.execution_kind in {
-            "native_expr",
-            "native_group",
-            "native_streaming",
-        }
-
-
-@dataclass(frozen=True)
-class OperatorCapabilitySummary:
-    canonical: str
-    pandas_numpy: CapabilityStatus
-    polars: CapabilityStatus
-    duckdb_sql: CapabilityStatus
-    clickhouse_sql: CapabilityStatus
-    allow_in_production: bool
-    parity_verified: bool
-    polars_long_tier: str = "unsupported"
-    notes: str = ""
-
-
-@dataclass(frozen=True)
-class CapabilityDecision:
-    """调用级（canonical + bound params × dialect）SQL capability 判定。"""
-
-    canonical: str
-    dialect: str
-    supported: bool
-    production_safe: bool
-    reason: str
-    estimated_cost: float = 1.0
-
-
-@dataclass(frozen=True)
-class BackendCapabilityRecord:
-    """Complete capability record (alias for BackendCapability, merged from capability_registry)."""
+    FE-BE-P0-001: Single authority - all capability queries return this type.
+    FE-BE-P0-002: Unified record - no duplicate capability dataclasses.
+    """
     canonical: str
     backend: BackendKind
     level: CapabilityLevel
@@ -176,6 +105,26 @@ class BackendCapabilityRecord:
     # Notes
     notes: str = ""
 
+    def to_csv_row(self) -> dict[str, str | float | bool]:
+        return {
+            "canonical": self.canonical,
+            "backend": self.backend.value if isinstance(self.backend, BackendKind) else str(self.backend),
+            "level": self.level.value if isinstance(self.level, CapabilityLevel) else str(self.level),
+            "execution_kind": self.execution_kind.value if isinstance(self.execution_kind, ExecutionKind) else str(self.execution_kind),
+            "estimated_speedup": self.estimated_speedup,
+            "supports_nulls": self.supports_nulls,
+            "supports_nan": self.supports_nan,
+            "supports_inf": self.supports_inf,
+            "supports_scalar_broadcast": self.supports_scalar_broadcast,
+            "supports_min_periods": self.supports_min_periods,
+            "supports_group": self.supports_group,
+            "supports_window": self.supports_window,
+            "supports_lazy": self.supports_lazy,
+            "supports_streaming": self.supports_streaming,
+            "materializes_full_panel": self.materializes_full_panel,
+            "notes": self.notes,
+        }
+
     def is_production_eligible(self) -> bool:
         """Check if this capability is production-safe."""
         return self.level == CapabilityLevel.PRODUCTION_SAFE
@@ -183,7 +132,7 @@ class BackendCapabilityRecord:
     def is_native_execution(self) -> bool:
         """Check if execution is truly native (not delegate).
 
-        FE-P0-003: Updated to use unified ExecutionKind enum members.
+        FE-BE-P0-002: Updated to use unified ExecutionKind enum members.
         """
         return self.execution_kind in {
             ExecutionKind.NATIVE_EXPR,
@@ -194,13 +143,51 @@ class BackendCapabilityRecord:
             ExecutionKind.DUCKDB_NATIVE_SQL,
         }
 
+    # Legacy compatibility properties
+    @property
+    def status(self) -> CapabilityStatus:
+        """Legacy property mapping level to status string."""
+        return self.level.value  # type: ignore
+
+
+@dataclass(frozen=True)
+class OperatorCapabilitySummary:
+    canonical: str
+    pandas_numpy: CapabilityStatus
+    polars: CapabilityStatus
+    duckdb_sql: CapabilityStatus
+    clickhouse_sql: CapabilityStatus
+    allow_in_production: bool
+    parity_verified: bool
+    polars_long_tier: str = "unsupported"
+    notes: str = ""
+
+
+@dataclass(frozen=True)
+class CapabilityDecision:
+    """调用级（canonical + bound params × dialect）SQL capability 判定。"""
+
+    canonical: str
+    dialect: str
+    supported: bool
+    production_safe: bool
+    reason: str
+    estimated_cost: float = 1.0
+
+
+# FE-BE-P0-002: BackendCapabilityRecord is now an alias for BackendCapability
+BackendCapabilityRecord = BackendCapability
+
 
 @dataclass(frozen=True)
 class CapabilityQueryResult:
-    """Result of a capability query with reasoning (merged from capability_registry)."""
+    """Result of a capability query with reasoning (merged from capability_registry).
+
+    FE-BE-P0-002: Uses unified BackendCapability (BackendCapabilityRecord is an alias).
+    """
     supported: bool
     production_safe: bool
-    record: BackendCapabilityRecord | None
+    record: BackendCapability | None
     reason: str
     registry_version: str = CAPABILITY_REGISTRY_VERSION
 
@@ -496,10 +483,10 @@ def _polars_status(canon: str, *, production_mode: bool = True) -> CapabilitySta
 
     # Delegates must never reach production_safe (they round-trip through pandas)
     # FE-P0-005: Pass production_mode flag to enforce explicit spec requirement
-    from backend.polars_backend_kind import canonical_polars_is_delegate, canonical_polars_kind, BackendKind as PolarsBK
+    from backend.polars_backend_kind import canonical_polars_is_delegate, canonical_polars_kind, PolarsImplementationKind
 
     polars_kind = canonical_polars_kind(canon, production_mode=production_mode)
-    if production_mode and polars_kind == PolarsBK.UNSUPPORTED:
+    if production_mode and polars_kind == PolarsImplementationKind.UNSUPPORTED:
         # No explicit spec in production mode
         return "unsupported"
 
@@ -710,6 +697,10 @@ def production_eligible_backends(
 
 
 def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
+    """Get capability record for canonical×backend.
+
+    FE-BE-P0-002: Returns unified BackendCapability with enum types.
+    """
     from backend.operator_cost import default_backend_speedup
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.registry import OperatorRegistry
@@ -767,16 +758,52 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         # KNN/graph/matrix_profile 并非真 streaming，即使 backend_meta 声明过强也强制降级。
         supports_streaming = False
         materializes_full_panel = True
+
+    # Map backend string to BackendKind enum
+    backend_kind_map = {
+        "pandas_numpy": BackendKind.PANDAS_NUMPY,
+        "polars": BackendKind.POLARS,
+        "duckdb_sql": BackendKind.DUCKDB_SQL,
+        "clickhouse_sql": BackendKind.CLICKHOUSE_SQL,
+    }
+    backend_kind = backend_kind_map.get(backend, BackendKind.PANDAS_NUMPY)
+
+    # Map status string to CapabilityLevel enum
+    level_map = {
+        "unsupported": CapabilityLevel.UNSUPPORTED,
+        "implemented": CapabilityLevel.IMPLEMENTED,
+        "parity_verified": CapabilityLevel.PARITY_VERIFIED,
+        "production_safe": CapabilityLevel.PRODUCTION_SAFE,
+    }
+    level = level_map.get(status, CapabilityLevel.UNSUPPORTED)
+
+    # Map execution_kind string to ExecutionKind enum
+    execution_kind_str = str(
+        backend_meta.get(
+            "execution_kind",
+            "pandas_numpy_reference" if backend == "pandas_numpy" else "unsupported",
+        )
+    )
+    execution_kind_map = {
+        "unsupported": ExecutionKind.UNSUPPORTED,
+        "native_expr": ExecutionKind.NATIVE_EXPR,
+        "native_streaming": ExecutionKind.NATIVE_STREAMING,
+        "python_udf": ExecutionKind.DELEGATE_PYTHON,
+        "pandas_fallback": ExecutionKind.DELEGATE_PANDAS,
+        "pandas_materialization_fallback": ExecutionKind.DELEGATE_PANDAS,
+        "pandas_numpy_reference": ExecutionKind.REFERENCE,
+        "polars_native_expr": ExecutionKind.POLARS_NATIVE_EXPR,
+        "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
+        "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
+        "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
+    }
+    exec_kind = execution_kind_map.get(execution_kind_str, ExecutionKind.UNSUPPORTED)
+
     return BackendCapability(
         canonical=canon,
-        backend=backend,
-        status=status,
-        execution_kind=str(
-            backend_meta.get(
-                "execution_kind",
-                "pandas_numpy_reference" if backend == "pandas_numpy" else "unsupported",
-            )
-        ),
+        backend=backend_kind,
+        level=level,
+        execution_kind=exec_kind,
         estimated_speedup=default_backend_speedup(canon, backend, status),
         supports_nulls=bool(backend_meta.get("supports_nulls", backend == "pandas_numpy")),
         supports_nan=bool(backend_meta.get("supports_nan", backend == "pandas_numpy")),
@@ -1177,8 +1204,11 @@ class BackendCapabilityRegistry:
         canonical: str,
         backend: BackendKind,
         data_source_kind: str,
-    ) -> BackendCapabilityRecord:
-        """Build complete capability record."""
+    ) -> BackendCapability:
+        """Build complete capability record.
+
+        FE-BE-P0-002: Returns unified BackendCapability.
+        """
         backend_name_map = {
             BackendKind.PANDAS_NUMPY: "pandas_numpy",
             BackendKind.POLARS: "polars",
@@ -1189,48 +1219,8 @@ class BackendCapabilityRegistry:
         backend_name: BackendName = backend_name_map[backend]  # type: ignore
         cap = capability_for(canonical, backend_name)
 
-        level_map = {
-            "unsupported": CapabilityLevel.UNSUPPORTED,
-            "implemented": CapabilityLevel.IMPLEMENTED,
-            "parity_verified": CapabilityLevel.PARITY_VERIFIED,
-            "production_safe": CapabilityLevel.PRODUCTION_SAFE,
-        }
-        level = level_map.get(cap.status, CapabilityLevel.UNSUPPORTED)
-
-        execution_kind_map = {
-            "unsupported": ExecutionKind.UNSUPPORTED,
-            "native_expr": ExecutionKind.NATIVE_EXPR,
-            "native_streaming": ExecutionKind.NATIVE_STREAMING,
-            "python_udf": ExecutionKind.DELEGATE_PYTHON,
-            "pandas_fallback": ExecutionKind.DELEGATE_PANDAS,
-            "pandas_materialization_fallback": ExecutionKind.DELEGATE_PANDAS,
-            "pandas_numpy_reference": ExecutionKind.REFERENCE,
-            # FE-P0-003: Map additional execution kinds
-            "polars_native_expr": ExecutionKind.POLARS_NATIVE_EXPR,
-            "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
-            "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
-            "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
-        }
-        exec_kind = execution_kind_map.get(cap.execution_kind, ExecutionKind.UNSUPPORTED)
-
-        return BackendCapabilityRecord(
-            canonical=canonical,
-            backend=backend,
-            level=level,
-            execution_kind=exec_kind,
-            supports_nulls=cap.supports_nulls,
-            supports_nan=cap.supports_nan,
-            supports_inf=cap.supports_inf,
-            supports_scalar_broadcast=cap.supports_scalar_broadcast,
-            supports_min_periods=cap.supports_min_periods,
-            supports_group=cap.supports_group,
-            supports_window=cap.supports_window,
-            supports_lazy=cap.supports_lazy,
-            supports_streaming=cap.supports_streaming,
-            materializes_full_panel=cap.materializes_full_panel,
-            estimated_speedup=cap.estimated_speedup,
-            notes=cap.notes,
-        )
+        # capability_for already returns BackendCapability with proper enum types
+        return cap
 
     @classmethod
     def supports_backend(

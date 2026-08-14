@@ -10,6 +10,9 @@ Performance:
   - Standard: ~26s
   - Numba: ~18s (1.5x speedup)
 - Speedup increases with more factors due to better parallelization
+
+QE-Q-P0-001: Quantile tie policy enforcement
+QE-Q-P0-002: NumPy-Numba boundary parity validation
 """
 
 from typing import Optional, Tuple
@@ -17,6 +20,10 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.contracts.quantile_policy import (
+    QuantileTiePolicy,
+    validate_tie_policy,
+)
 
 # Import Numba-optimized version if available
 try:
@@ -68,19 +75,31 @@ def compute_quantile_returns_fast(
 def assign_quantiles(
     values: np.ndarray,
     n_quantiles: int = 5,
-    method: str = "average",
+    method: str = "max",
 ) -> np.ndarray:
     """
     Assign quantile IDs to values with tie handling.
 
+    QE-Q-P0-001: Enforces tie-breaking policy contract.
+
     Args:
         values: Input values (1D or 2D)
         n_quantiles: Number of quantiles
-        method: Tie-breaking method ("average" for average ranks)
+        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
+                - 'min': ties at boundary get LOWER bin (searchsorted side='left')
+                - 'max': ties at boundary get HIGHER bin (searchsorted side='right')
+                'average' and 'first' are not implemented.
 
     Returns:
         Quantile assignments (0 to n_quantiles-1), or -1 for NaN
+
+    Raises:
+        ValueError: If method is invalid
+        NotImplementedError: If method is 'average' or 'first'
     """
+    # QE-Q-P0-001: Validate that method parameter actually affects behavior
+    policy = validate_tie_policy(method)
+
     if values.ndim == 1:
         values = values.reshape(-1, 1)
 
@@ -97,15 +116,18 @@ def assign_quantiles(
 
         v_finite = v[finite_mask]
 
-        # Fast path: use np.partition to find quantile boundaries in O(n)
-        # Only need n_quantiles-1 partition points
-        boundary_indices = np.linspace(0, n_finite - 1, n_quantiles + 1, dtype=np.int64)
-        boundaries = np.partition(v_finite, boundary_indices[1:-1])[boundary_indices[1:-1]]
+        # Use percentile for more consistent quantile boundaries
+        percentiles = np.linspace(0, 100, n_quantiles + 1)
+        boundaries = np.percentile(v_finite, percentiles[1:-1])
 
-        # Use searchsorted for O(n log k) binning instead of O(n log n) sorting
-        # Add small epsilon to boundaries to handle ties consistently
-        boundaries_sorted = np.sort(boundaries)
-        q_bins = np.searchsorted(boundaries_sorted, v_finite, side='right')
+        # QE-Q-P0-002: Boundary comparison must match Numba implementation
+        # searchsorted(side='left'): value == boundary → lower bin (MIN policy)
+        # searchsorted(side='right'): value == boundary → higher bin (MAX policy)
+        if policy == QuantileTiePolicy.MIN:
+            q_bins = np.searchsorted(boundaries, v_finite, side='left')
+        else:  # QuantileTiePolicy.MAX
+            q_bins = np.searchsorted(boundaries, v_finite, side='right')
+
         q_bins = np.clip(q_bins, 0, n_quantiles - 1)
 
         quantiles[t, finite_mask] = q_bins
@@ -116,9 +138,12 @@ def assign_quantiles(
 def assign_quantiles_fast(
     values: np.ndarray,
     n_quantiles: int = 5,
+    method: str = "max",
 ) -> np.ndarray:
     """
     Fast quantile assignment using percentile-based boundaries.
+
+    QE-Q-P0-001: Enforces tie-breaking policy.
 
     Uses np.percentile for boundary computation (single pass) and
     vectorized comparison for binning. Significantly faster for large arrays.
@@ -126,10 +151,13 @@ def assign_quantiles_fast(
     Args:
         values: Input values shape (T, N) or (T, N, F)
         n_quantiles: Number of quantiles
+        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
 
     Returns:
         Quantile assignments (0 to n_quantiles-1), or -1 for NaN
     """
+    policy = validate_tie_policy(method)
+
     if values.ndim == 2:
         T, N = values.shape
         F = 1
@@ -156,9 +184,12 @@ def assign_quantiles_fast(
             # Compute quantile boundaries using percentile (fast, approximate)
             boundaries = np.percentile(v_finite, percentiles)
 
-            # Vectorized binning: count how many boundaries each value exceeds
-            # This is O(n * k) where k is number of quantiles
-            q_bins = np.searchsorted(boundaries, v_finite, side='right')
+            # QE-Q-P0-002: Match boundary logic with Numba
+            if policy == QuantileTiePolicy.MIN:
+                q_bins = np.searchsorted(boundaries, v_finite, side='left')
+            else:  # MAX
+                q_bins = np.searchsorted(boundaries, v_finite, side='right')
+
             q_bins = np.clip(q_bins, 0, n_quantiles - 1)
 
             quantiles[t, finite_mask, f] = q_bins
@@ -171,9 +202,12 @@ def assign_quantiles_fast(
 def assign_quantiles_batch(
     values: np.ndarray,
     n_quantiles: int = 5,
+    method: str = "max",
 ) -> np.ndarray:
     """
     Ultra-fast batch quantile assignment with minimal Python loops.
+
+    QE-Q-P0-001: Enforces tie-breaking policy.
 
     Processes entire time×asset×factor tensor with vectorized operations.
     Best performance for large batches.
@@ -181,10 +215,13 @@ def assign_quantiles_batch(
     Args:
         values: Input values shape (T, N, F)
         n_quantiles: Number of quantiles
+        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
 
     Returns:
         Quantile assignments shape (T, N, F), -1 for NaN
     """
+    policy = validate_tie_policy(method)
+
     if values.ndim == 2:
         values = values[:, :, np.newaxis]
 
@@ -210,8 +247,12 @@ def assign_quantiles_batch(
             percentiles = np.linspace(0, 100, n_quantiles + 1)[1:-1]
             boundaries = np.percentile(v_finite, percentiles)
 
-            # Vectorized binning with searchsorted
-            q_bins = np.searchsorted(boundaries, v_finite, side='right')
+            # QE-Q-P0-002: Boundary logic must match Numba
+            if policy == QuantileTiePolicy.MIN:
+                q_bins = np.searchsorted(boundaries, v_finite, side='left')
+            else:  # MAX
+                q_bins = np.searchsorted(boundaries, v_finite, side='right')
+
             quantiles[t, mask, f] = q_bins
 
     return quantiles.squeeze() if quantiles.shape[2] == 1 else quantiles

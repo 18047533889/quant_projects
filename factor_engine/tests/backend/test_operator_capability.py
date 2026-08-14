@@ -19,7 +19,7 @@ from backend.operator_capability import (
 
 def test_execution_kind_has_single_authority():
     from backend.polars_backend_kind import (
-        BackendKind as PolarsBackendKind,
+        PolarsImplementationKind,
         ExecutionKind as PolarsExecutionKind,
         PhysicalImplementationSpec,
         polars_backend_kind,
@@ -37,7 +37,7 @@ def test_execution_kind_has_single_authority():
             execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
         )
 
-    assert polars_backend_kind(DeclaredPolarsKernel()) is PolarsBackendKind.POLARS_NATIVE
+    assert polars_backend_kind(DeclaredPolarsKernel()) is PolarsImplementationKind.POLARS_NATIVE
 
 
 @pytest.fixture(scope="module")

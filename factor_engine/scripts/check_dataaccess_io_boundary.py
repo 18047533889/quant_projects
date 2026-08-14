@@ -16,12 +16,15 @@ Unauthorized usage bypasses:
 
 Exit codes:
     0: All checks passed
-    1: Violations detected
-    2: Internal error
+    1: Violations detected (ARCH-P0-001: always fails on violations)
+    2: Internal error / scanner infrastructure failure (ARCH-P0-002)
 
 Usage:
     python scripts/check_dataaccess_io_boundary.py
-    python scripts/check_dataaccess_io_boundary.py --strict  # Fail on any violation
+    python scripts/check_dataaccess_io_boundary.py --strict  # (deprecated: now default)
+
+ARCH-P0-001: Violations always cause exit code 1 (fail-closed).
+ARCH-P0-002: Scanner failures cause exit code 2 (infrastructure failure).
 """
 
 from __future__ import annotations
@@ -32,44 +35,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
-# ---------------------------------------------------------------------------
-# Authorized modules (with responsibility documentation)
-# ---------------------------------------------------------------------------
-
-#: Modules explicitly authorized for direct physical I/O operations.
-#: ONLY storage/sources (DataAccess boundary) and storage/ persistence layer.
-#: Runtime, backend, export, and most scripts are VIOLATIONS - they bypass
-#: DataAccess governance and must be migrated.
-#: Paths are relative to repo root (factor_engine/ directory).
-AUTHORIZED_MODULES: dict[str, str] = {
-    # Storage sources - the legitimate DataAccess physical I/O boundary
-    "storage/sources/kline_parquet_source.py": "DataAccess kline reader - governed parquet read with PIT",
-    "storage/sources/parquet_source.py": "DataAccess generic parquet reader - governed physical I/O",
-    "storage/sources/staging_loader.py": "DataAccess staging loader - ingestion with validation",
-    "storage/sources/lqtp_logical_source.py": "DataAccess LQTP source - logical query physical execution",
-
-    # Storage layer - persistent cache and materialization (governed writes)
-    "storage/cache.py": "Factor cache - governed persistent result cache",
-    "storage/result_store.py": "Result store - governed factor result persistence",
-    "storage/delta_store.py": "Delta store - governed incremental update storage",
-    "storage/block_lake.py": "Block lake - governed versioned parquet blocks",
-    "storage/parquet_batch_writer.py": "Batch writer - governed low-level parquet streaming",
-    "storage/schema_migration.py": "Schema migration - governed legacy format conversion",
-    "storage/lake_version.py": "Lake versioning - governed snapshot management",
-    "storage/matrix_block_layout.py": "Matrix layout - governed wide-form storage",
-
-    # Storage materialization - governed factor result persistence
-    "storage/materialize/materializer.py": "Materializer - governed atomic factor result persistence",
-    "storage/materialize/factor_matrix_materializer.py": "Matrix materializer - governed wide-form persistence",
-    "storage/materialize/lake_publish.py": "Lake publisher - governed multi-partition atomic commit",
-}
-
-#: Test patterns allowed (limited to explicit test directories and fixtures)
-#: Tests may use direct I/O for fixtures, mocks, and isolated validation.
-TEST_ALLOWLIST_PATTERNS = [
-    "tests/",  # All test files - may need direct I/O for fixtures and validation
-    "benchmarks/",  # Benchmark fixtures - isolated performance harness
-]
+# Import single authority policy (ARCH-P0-003)
+try:
+    from physical_io_authority_policy import (
+        PHYSICAL_IO_AUTHORITY_POLICY,
+        AUTOMATIC_EXEMPTION_PATTERNS,
+        is_path_exempted,
+        ExemptionCategory,
+    )
+except ImportError:
+    # Fallback when running from different directory
+    script_dir = Path(__file__).parent
+    sys.path.insert(0, str(script_dir))
+    from physical_io_authority_policy import (
+        PHYSICAL_IO_AUTHORITY_POLICY,
+        AUTOMATIC_EXEMPTION_PATTERNS,
+        is_path_exempted,
+        ExemptionCategory,
+    )
 
 #: Patterns that trigger violations
 VIOLATION_PATTERNS = [
@@ -100,16 +83,31 @@ class Violation:
 
 
 @dataclass
+class ScanError:
+    """A scanner infrastructure failure (ARCH-P0-002 requirement)."""
+
+    file: str
+    error: str
+    exception_type: str
+
+
+@dataclass
 class CheckResult:
     """Overall check result."""
 
     violations: list[Violation] = field(default_factory=list)
+    scan_errors: list[ScanError] = field(default_factory=list)
     files_scanned: int = 0
     files_skipped: int = 0
 
     @property
     def passed(self) -> bool:
-        return len(self.violations) == 0
+        # ARCH-P0-002: Scanner failures are infrastructure failures
+        return len(self.violations) == 0 and len(self.scan_errors) == 0
+
+    @property
+    def has_infrastructure_failure(self) -> bool:
+        return len(self.scan_errors) > 0
 
 
 class IOBoundaryVisitor(ast.NodeVisitor):
@@ -159,8 +157,15 @@ class IOBoundaryVisitor(ast.NodeVisitor):
         return ""
 
 
-def scan_file(filepath: Path) -> list[Violation]:
-    """Scan a single Python file for I/O boundary violations using AST."""
+def scan_file(filepath: Path) -> tuple[list[Violation], ScanError | None]:
+    """Scan a single Python file for I/O boundary violations using AST.
+
+    Returns:
+        (violations, scan_error): violations found, or scan_error if scanner failed.
+
+    ARCH-P0-002: Scanner failures are returned as ScanError, not empty violations.
+    This distinguishes "scanned successfully, no violations" from "scan failed".
+    """
     try:
         source = filepath.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(filepath))
@@ -168,14 +173,23 @@ def scan_file(filepath: Path) -> list[Violation]:
         visitor = IOBoundaryVisitor(str(filepath))
         visitor.visit(tree)
 
-        return visitor.violations
+        return visitor.violations, None
 
-    except SyntaxError:
-        # Skip files with syntax errors (may be from concurrent edits)
-        return []
+    except SyntaxError as exc:
+        # ARCH-P0-002: Syntax errors are infrastructure failures, not "no violations"
+        # A file with syntax errors cannot be scanned - this is fail-closed
+        return [], ScanError(
+            file=str(filepath),
+            error=f"Syntax error at line {exc.lineno}: {exc.msg}",
+            exception_type="SyntaxError",
+        )
     except Exception as exc:
-        print(f"WARNING: Failed to scan {filepath}: {exc}", file=sys.stderr)
-        return []
+        # ARCH-P0-002: Any scanner failure is an infrastructure failure
+        return [], ScanError(
+            file=str(filepath),
+            error=str(exc),
+            exception_type=type(exc).__name__,
+        )
 
 
 def should_skip_path(path: Path) -> bool:
@@ -204,21 +218,14 @@ def should_skip_path(path: Path) -> bool:
 
 
 def is_authorized(filepath: Path, repo_root: Path) -> bool:
-    """Check if file is in the authorized module list."""
+    """Check if file is exempted by the single authority policy (ARCH-P0-003)."""
     try:
         rel_path = filepath.relative_to(repo_root)
         rel_str = str(rel_path)
 
-        # Check exact authorized modules
-        if rel_str in AUTHORIZED_MODULES:
-            return True
-
-        # Check test allowlist patterns
-        for pattern in TEST_ALLOWLIST_PATTERNS:
-            if pattern in rel_str:
-                return True
-
-        return False
+        # Use single authority policy
+        is_exempted, category, reason = is_path_exempted(rel_str)
+        return is_exempted
 
     except ValueError:
         # Not under repo_root
@@ -245,8 +252,13 @@ def run_check(repo_root: Path, strict: bool = False) -> CheckResult:
             result.files_skipped += 1
             continue
 
-        violations = scan_file(filepath)
-        result.violations.extend(violations)
+        violations, scan_error = scan_file(filepath)
+
+        if scan_error is not None:
+            # ARCH-P0-002: Scanner failures are infrastructure failures
+            result.scan_errors.append(scan_error)
+        else:
+            result.violations.extend(violations)
 
     return result
 
@@ -260,7 +272,30 @@ def print_report(result: CheckResult, repo_root: Path) -> None:
     print(f"Files scanned: {result.files_scanned}")
     print(f"Files skipped (authorized): {result.files_skipped}")
     print(f"Violations detected: {len(result.violations)}")
+    print(f"Scanner failures (ARCH-P0-002): {len(result.scan_errors)}")
     print()
+
+    # ARCH-P0-002: Report scanner failures first (infrastructure issues)
+    if result.scan_errors:
+        print("SCANNER INFRASTRUCTURE FAILURES:")
+        print("-" * 80)
+        print()
+        for err in result.scan_errors:
+            try:
+                rel_path = Path(err.file).relative_to(repo_root)
+            except ValueError:
+                rel_path = Path(err.file)
+
+            print(f"{rel_path}")
+            print(f"  Type: {err.exception_type}")
+            print(f"  Error: {err.error}")
+            print()
+
+        print("-" * 80)
+        print("ARCH-P0-002: Scanner failures are CHECK_INFRASTRUCTURE_FAILURE.")
+        print("These files could not be scanned and may contain violations.")
+        print("Fix the syntax/parse errors and re-run the check.")
+        print()
 
     if result.violations:
         print("VIOLATIONS:")
@@ -286,15 +321,28 @@ def print_report(result: CheckResult, repo_root: Path) -> None:
         print()
         print("-" * 80)
         print("FIX: Move I/O operations to authorized DataAccess modules, or")
-        print("     add module to AUTHORIZED_MODULES with responsibility comment.")
-    else:
+        print("     add module to PHYSICAL_IO_AUTHORITY_POLICY (scripts/physical_io_authority_policy.py)")
+        print("     with appropriate ExemptionCategory and responsibility comment.")
+
+    if not result.violations and not result.scan_errors:
         print("✓ All checks PASSED")
 
     print()
-    print("Authorized modules:")
-    for module, responsibility in sorted(AUTHORIZED_MODULES.items()):
-        print(f"  {module}")
-        print(f"    → {responsibility}")
+    print("Authorized modules (ARCH-P0-003 single authority):")
+    # Group by category
+    from collections import defaultdict
+    by_category = defaultdict(list)
+    for module in PHYSICAL_IO_AUTHORITY_POLICY:
+        by_category[module.category].append(module)
+
+    for category in ExemptionCategory:
+        modules = by_category.get(category, [])
+        if not modules:
+            continue
+        print(f"\n  {category.value.upper()}:")
+        for module in modules:
+            print(f"    {module.path}")
+            print(f"      → {module.responsibility}")
 
 
 def main() -> int:
@@ -307,7 +355,7 @@ def main() -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit code 1 on any violation (for CI)",
+        help="(Deprecated: now default behavior) Exit code 1 on any violation",
     )
     parser.add_argument(
         "--repo-root",
@@ -334,7 +382,13 @@ def main() -> int:
         result = run_check(repo_root, strict=args.strict)
         print_report(result, repo_root)
 
-        if args.strict and not result.passed:
+        # ARCH-P0-002: Scanner failures are infrastructure failures (exit 2)
+        if result.has_infrastructure_failure:
+            return 2
+
+        # ARCH-P0-001 fix: violations always cause hard failure (exit 1)
+        # The --strict flag is now redundant but kept for backward compatibility
+        if not result.passed:
             return 1
 
         return 0

@@ -98,8 +98,12 @@ class DataKnowledgeIdentity:
         return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
     def digest(self) -> str:
-        """SHA-256 hex —— 可作 FactorId / lineage 维度。"""
-        return hashlib.sha256(self.to_key().encode("utf-8")).hexdigest()[:16]
+        """SHA-256 hex (full 256-bit) —— 可作 FactorId / lineage 维度。
+
+        DA-ID-P0-002: 使用完整 256-bit hash 避免 FactorId 命名空间碰撞。
+        64-bit 在 ~4B 因子时有 50% 碰撞概率（生日悖论），生产环境不可接受。
+        """
+        return hashlib.sha256(self.to_key().encode("utf-8")).hexdigest()
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, DataKnowledgeIdentity) and self.to_key() == other.to_key()

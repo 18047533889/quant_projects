@@ -71,19 +71,20 @@ def main():
 
         # Import test
         print("\n[4/5] Import test...")
-        import_test = """
+        import_script = tmpdir / "test_import.py"
+        import_script.write_text("""
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_optimizer
 from factor_optimizer import __version__
-from factor_optimizer.search import SearchPolicy
-from factor_optimizer.diagnosis import DiagnosisMapper
+from factor_optimizer.search import SearchRunner, SearchConfig
+from factor_optimizer.grammar import MutationSpec, MutationRegistry
 
 print(f'factor_optimizer version: {__version__}')
 print('✓ Imports OK')
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{import_test}'", check=False)
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {import_script}", check=False)
         if code != 0:
             print(f"FAILED: Import\n{stderr}")
             return 1
@@ -91,16 +92,16 @@ print('✓ Imports OK')
 
         # Smoke test
         print("\n[5/5] Smoke test...")
-        smoke_test = """
-from factor_optimizer.search import SearchPolicy
+        smoke_script = tmpdir / "test_smoke.py"
+        smoke_script.write_text("""
+from factor_optimizer.contracts.search_budget import SearchBudget
+from factor_optimizer.search import SearchConfig
 
-policy = SearchPolicy(
-    max_iterations=10,
-    exploration_rate=0.2,
-)
-print(f"✓ Created policy: max_iter={policy.max_iterations}")
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{smoke_test}'", check=False)
+budget = SearchBudget(max_trials=10, max_evaluations=50)
+config = SearchConfig(budget=budget, plateau_window=20)
+print(f"✓ Created config with budget: {budget.max_trials} trials")
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {smoke_script}", check=False)
         if code != 0:
             print(f"FAILED: Smoke\n{stderr}")
             return 1

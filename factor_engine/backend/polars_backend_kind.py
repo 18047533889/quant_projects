@@ -40,8 +40,14 @@ from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 
 
-class BackendKind(str, Enum):
-    """Explicit backend-kind classification (legacy compatibility)."""
+class PolarsImplementationKind(str, Enum):
+    """Classification of how a Polars implementation executes.
+
+    This enum classifies the execution characteristics of a registered polars
+    backend slot, distinguishing native implementations from pandas delegates.
+    It is semantically distinct from backend.contracts.BackendKind (which
+    identifies physical execution engines like pandas_numpy, polars, duckdb_sql).
+    """
 
     POLARS_NATIVE = "polars_native"
     POLARS_UDF_PANDAS_DELEGATE = "polars_udf_pandas_delegate"
@@ -140,10 +146,10 @@ def polars_backend_kind(
     source: str = "",
     module: str = "",
     production_mode: bool = True,  # FE-P0-005: Default to fail-closed
-) -> BackendKind:
+) -> PolarsImplementationKind:
     """Classify a registered ``polars`` implementation.
 
-    Returns one of the :class:`BackendKind` values.  ``source`` / ``module`` are
+    Returns one of the :class:`PolarsImplementationKind` values.  ``source`` / ``module`` are
     the registry ``backend_meta["source"]`` and the operator class module; when
     they are known the classification is exact without source inspection.
 
@@ -158,23 +164,23 @@ def polars_backend_kind(
     # Try explicit declaration first
     spec = get_physical_spec(operator)
     if spec is not None:
-        # Map ExecutionKind to BackendKind (legacy compatibility)
+        # Map ExecutionKind to PolarsImplementationKind (legacy compatibility)
         if spec.execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE:
-            return BackendKind.POLARS_UDF_PANDAS_DELEGATE
+            return PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
         elif spec.execution_kind in {
             ExecutionKind.POLARS_NATIVE_EXPR,
             ExecutionKind.POLARS_NUMPY_KERNEL,
         }:
-            return BackendKind.POLARS_NATIVE
+            return PolarsImplementationKind.POLARS_NATIVE
         elif spec.execution_kind == ExecutionKind.PANDAS_REFERENCE:
-            return BackendKind.PANDAS_REFERENCE
+            return PolarsImplementationKind.PANDAS_REFERENCE
         elif spec.execution_kind in {
             ExecutionKind.DUCKDB_NATIVE_SQL,
             ExecutionKind.SQL_PYTHON_UDF,
         }:
-            return BackendKind.SQL_NATIVE
+            return PolarsImplementationKind.SQL_NATIVE
         else:
-            return BackendKind.UNSUPPORTED
+            return PolarsImplementationKind.UNSUPPORTED
 
     # FE-P0-005: Production requires explicit spec; fail closed
     if production_mode:
@@ -185,7 +191,7 @@ def polars_backend_kind(
             f"Add _physical_spec attribute or physical_spec() method for production eligibility.",
             stacklevel=2,
         )
-        return BackendKind.UNSUPPORTED
+        return PolarsImplementationKind.UNSUPPORTED
 
     # Research/diagnostic mode: fallback to heuristics with warning
     canonical = getattr(operator, "canonical", "unknown")
@@ -197,18 +203,18 @@ def polars_backend_kind(
     )
 
     if _source_is_delegate(source):
-        return BackendKind.POLARS_UDF_PANDAS_DELEGATE
+        return PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
     if _module_is_delegate(operator, module=module):
-        return BackendKind.POLARS_UDF_PANDAS_DELEGATE
+        return PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
     if _kernel_is_delegate(operator):
-        return BackendKind.POLARS_UDF_PANDAS_DELEGATE
+        return PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
     if getattr(operator, "_calculate_series", None) is not None:
         # Genuine polars implementation (expression or per-column numpy UDF).
-        return BackendKind.POLARS_NATIVE
-    return BackendKind.POLARS_NATIVE
+        return PolarsImplementationKind.POLARS_NATIVE
+    return PolarsImplementationKind.POLARS_NATIVE
 
 
-def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> BackendKind:
+def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> PolarsImplementationKind:
     """Return the backend-kind of a canonical's registered ``polars`` slot.
 
     FE-P0-005: Defaults to production_mode=True (fail closed).
@@ -216,12 +222,12 @@ def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> Ba
     try:
         from cleaned_operators.registry import OperatorRegistry
     except Exception:  # pragma: no cover - registry unavailable
-        return BackendKind.UNSUPPORTED
+        return PolarsImplementationKind.UNSUPPORTED
     if "polars" not in OperatorRegistry.backends_for(canonical):
-        return BackendKind.UNSUPPORTED
+        return PolarsImplementationKind.UNSUPPORTED
     op = OperatorRegistry.get(canonical, "polars")
     if op is None:
-        return BackendKind.UNSUPPORTED
+        return PolarsImplementationKind.UNSUPPORTED
     meta = (
         (OperatorRegistry._catalog.get(canonical, {}) or {}).get("backend_meta") or {}
     ).get("polars", {}) or {}
@@ -234,11 +240,18 @@ def canonical_polars_is_delegate(canonical: str, *, production_mode: bool = True
 
     FE-P0-005: Defaults to production_mode=True (fail closed).
     """
-    return canonical_polars_kind(canonical, production_mode=production_mode) == BackendKind.POLARS_UDF_PANDAS_DELEGATE
+    return canonical_polars_kind(canonical, production_mode=production_mode) == PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
 
 
-def capability_quality(canonical: str, backend: str) -> str:
+def capability_quality(canonical: str, backend: str, *, production_mode: bool = False) -> str:
     """Capability-quality label for a canonical × backend slot (audit R13 P1-84).
+
+    **RESEARCH/DIAGNOSTIC USE ONLY (FE-BE-P0-003)**: This function uses heuristic
+    source inspection and should NOT be used for production routing, admission, or
+    evidence. Production systems must read explicit PhysicalImplementationSpec only.
+
+    Set production_mode=True to enforce explicit spec requirement (will warn/fail
+    for operators without _physical_spec).
 
     Replaces the boolean "Pandas/Polars/SQL supported" slot report with a quality
     classification:
@@ -260,8 +273,8 @@ def capability_quality(canonical: str, backend: str) -> str:
     if b == "pandas_numpy":
         return "pandas_native"
     if b in {"polars", "polars_panel"}:
-        kind = canonical_polars_kind(canonical)
-        if kind == BackendKind.POLARS_UDF_PANDAS_DELEGATE:
+        kind = canonical_polars_kind(canonical, production_mode=production_mode)
+        if kind == PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE:
             return "polars_pandas_delegate"
 
         # Try explicit spec first
@@ -279,16 +292,18 @@ def capability_quality(canonical: str, backend: str) -> str:
                         return "polars_pandas_delegate"
 
                 # Fallback: distinguish expression vs per-column numpy kernel by source inspection
-                kernel = getattr(op, "_calculate_series", None)
-                if kernel is not None:
-                    import inspect
+                # (research/diagnostic only)
+                if not production_mode:
+                    kernel = getattr(op, "_calculate_series", None)
+                    if kernel is not None:
+                        import inspect
 
-                    try:
-                        body = inspect.getsource(kernel)
-                    except (OSError, TypeError):
-                        body = ""
-                    if "pl." in body or "import polars" in body:
-                        return "polars_native_expression"
+                        try:
+                            body = inspect.getsource(kernel)
+                        except (OSError, TypeError):
+                            body = ""
+                        if "pl." in body or "import polars" in body:
+                            return "polars_native_expression"
         except Exception:
             pass
         return "polars_native_kernel"
@@ -300,7 +315,7 @@ def capability_quality(canonical: str, backend: str) -> str:
 
 
 __all__ = [
-    "BackendKind",
+    "PolarsImplementationKind",
     "ExecutionKind",
     "PhysicalImplementationSpec",
     "get_physical_spec",

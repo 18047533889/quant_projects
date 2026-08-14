@@ -71,19 +71,20 @@ def main():
 
         # Import test
         print("\n[4/5] Import test...")
-        import_test = """
+        import_script = tmpdir / "test_import.py"
+        import_script.write_text("""
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_preprocess
 from factor_preprocess import __version__
-from factor_preprocess.transforms import rank_transform, zscore_transform
-from factor_preprocess.neutralization import orthogonalize_ols
+from factor_preprocess.transforms import cs_rank, cs_zscore, rolling_mean
+from factor_preprocess.neutralization import ols_neutralize
 
-print(f'factor_preprocess version: {__version__}')
-print('✓ Imports OK')
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{import_test}'", check=False)
+print(f"factor_preprocess version: {__version__}")
+print("✓ Imports OK")
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {import_script}", check=False)
         if code != 0:
             print(f"FAILED: Import\n{stderr}")
             return 1
@@ -91,15 +92,16 @@ print('✓ Imports OK')
 
         # Smoke test
         print("\n[5/5] Smoke test...")
-        smoke_test = """
+        smoke_script = tmpdir / "test_smoke.py"
+        smoke_script.write_text("""
 import numpy as np
-from factor_preprocess.transforms import rank_transform
+from factor_preprocess.transforms import cs_rank
 
 data = np.array([[3.0, 1.0, 2.0], [6.0, 4.0, 5.0]])
-ranked = rank_transform(data, axis=1)
-print(f"✓ rank_transform: {ranked.shape}")
-"""
-        code, stdout, stderr = run_command(f"{python_exe} -c '{smoke_test}'", check=False)
+ranked = cs_rank(data)
+print(f"✓ cs_rank: {ranked.shape}")
+""")
+        code, stdout, stderr = run_command(f"{python_exe} {smoke_script}", check=False)
         if code != 0:
             print(f"FAILED: Smoke\n{stderr}")
             return 1

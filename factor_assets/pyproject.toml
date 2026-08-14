@@ -22,8 +22,26 @@ adapters = [
     "quant_evaluator>=0.0.1a1,<0.2",
 ]
 
-[tool.setuptools.packages]
-find = {}
+[tool.setuptools]
+package-dir = {"factor_assets" = "."}
+packages = [
+    "factor_assets",
+    "factor_assets.adapters",
+    "factor_assets.aggregation",
+    "factor_assets.assembly",
+    "factor_assets.campaigns",
+    "factor_assets.clustering",
+    "factor_assets.contracts",
+    "factor_assets.graph",
+    "factor_assets.identity",
+    "factor_assets.lifecycle",
+    "factor_assets.novelty",
+    "factor_assets.optimizer",
+    "factor_assets.registry",
+    "factor_assets.seen_index",
+    "factor_assets.selection",
+    "factor_assets.similarity",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

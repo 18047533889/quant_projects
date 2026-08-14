@@ -87,7 +87,8 @@ def main():
 
         # Step 4: Import public API
         print("\n[4/5] Importing public API...")
-        import_test = """
+        import_script = tmpdir / "test_imports.py"
+        import_script.write_text("""
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]  # Ensure no monorepo leakage
 
@@ -106,10 +107,10 @@ print(f'quant_evaluator version: {__version__}')
 print(f'FactorBatch: {FactorBatch}')
 print(f'Metrics available: {len(list_metrics())}')
 print('✓ All imports successful')
-"""
+""")
 
         code, stdout, stderr = run_command(
-            f"{python_exe} -c '{import_test}'",
+            f'{python_exe} {import_script}',
             check=False,
         )
         if code != 0:
@@ -119,15 +120,18 @@ print('✓ All imports successful')
 
         # Step 5: Run basic smoke evaluation
         print("\n[5/5] Running smoke evaluation...")
-        smoke_test = """
+        smoke_script = tmpdir / "test_smoke.py"
+        smoke_script.write_text("""
 import numpy as np
 from quant_evaluator.contracts import FactorBatch, LabelBundle, AxisRef
-from quant_evaluator.metrics.ic import compute_ic
+from quant_evaluator.metrics.ic import compute_daily_ic
 
 # Create minimal test data
 T, N, F = 10, 20, 2
-time_axis = AxisRef("time", "datetime64", T, values=np.arange(T))
-asset_axis = AxisRef("asset", "int64", N, values=np.arange(N))
+time_values = np.arange(T)
+asset_values = np.arange(N)
+time_axis = AxisRef("time", "int64", T, values=time_values)
+asset_axis = AxisRef("asset", "int64", N, values=asset_values)
 factor_values = np.random.randn(T, N, F)
 
 batch = FactorBatch(
@@ -138,19 +142,24 @@ batch = FactorBatch(
 )
 
 labels = LabelBundle(
-    label_values=np.random.randn(T, N),
-    time_axis=time_axis,
-    asset_axis=asset_axis,
+    target_id="forward_return_1d",
+    values=np.random.randn(T, N),
+    horizon=1,
+    execution_delay=0,
+    decision_time=tuple(time_values),
+    execution_time=tuple(time_values),
+    label_start_time=tuple(time_values),
+    label_end_time=tuple(time_values + 1),
 )
 
 # Compute IC
-ic_values = compute_ic(batch.values[:, :, 0], labels.label_values)
-print(f"IC computed: shape={ic_values.shape}, mean={np.nanmean(ic_values):.4f}")
+ic_series, valid_counts = compute_daily_ic(batch, labels)
+print(f"IC computed: shape={ic_series.shape}, mean={np.nanmean(ic_series):.4f}")
 print("✓ Smoke evaluation passed")
-"""
+""")
 
         code, stdout, stderr = run_command(
-            f"{python_exe} -c '{smoke_test}'",
+            f'{python_exe} {smoke_script}',
             check=False,
         )
         if code != 0:
