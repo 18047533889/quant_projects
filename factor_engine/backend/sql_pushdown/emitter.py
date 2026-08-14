@@ -7493,13 +7493,22 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         w = _window_int(node)
+        if dialect != SqlDialect.DUCKDB:
+            return None
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        skew_fn = "skewness" if dialect == SqlDialect.DUCKDB else "skewSamp"
+        # Skewness requires minimum 3 data points.
+        # pandas rolling.skew() silently skips ±Inf values (optimized implementation).
+        # DuckDB throws on Inf, so filter Inf→NULL before window function.
+        min_periods = _int_attr(node, "min_periods", default=w)
+        min_periods_val = f"GREATEST({min_periods}, 3)"
         return _Layer(
-            f"SELECT ts, inst, {skew_fn}(_v) OVER ({over}) AS _v "
-            f"FROM ({inner.sql}) t",
+            f"SELECT ts, inst, "
+            f"CASE WHEN COUNT(_v) OVER ({over}) < {min_periods_val} THEN NULL "
+            f"ELSE SKEWNESS(_v) OVER ({over}) END AS _v "
+            f"FROM (SELECT ts, inst, CASE WHEN isinf(_v) THEN NULL ELSE _v END AS _v "
+            f"FROM ({inner.sql}) t) filtered",
             has_inst_window=True,
         )
 
@@ -9398,19 +9407,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     # Second batch: More time series, cross-sectional, and financial operators
     # ========================================================================
 
-    if op == "ts_skew":
-        inner = _compile_layer(node.inputs[0], dialect=dialect)
-        if inner is None:
-            return None
-        spec = _window_spec(node)
-        if dialect != SqlDialect.DUCKDB:
-            return None
-        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
-        return _Layer(
-            f"SELECT ts, inst, SKEWNESS(_v) OVER ({over}) AS _v FROM ({inner.sql}) t",
-            has_inst_window=True,
-        )
-
     if op == "ts_kurt":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -9419,15 +9415,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB:
             return None
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
-        # pandas rolling.kurt: any ±Inf in the window → NaN (does not skip Inf).
-        inf_cnt = (
-            f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND isinf(_v)) OVER ({over})"
-        )
+        # Kurtosis requires minimum 4 data points.
+        # pandas rolling.kurt() silently skips ±Inf values (optimized implementation).
+        # DuckDB throws on Inf, so filter Inf→NULL before window function.
+        min_periods_val = max(spec.min_periods, 4)
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN {inf_cnt} > 0 THEN NULL "
+            f"CASE WHEN COUNT(_v) OVER ({over}) < {min_periods_val} THEN NULL "
             f"ELSE KURTOSIS(_v) OVER ({over}) END AS _v "
-            f"FROM ({inner.sql}) t",
+            f"FROM (SELECT ts, inst, CASE WHEN isinf(_v) THEN NULL ELSE _v END AS _v "
+            f"FROM ({inner.sql}) t) filtered",
             has_inst_window=True,
         )
 
