@@ -141,7 +141,13 @@ def polars_long_to_multiindex_series(
     value_col: str,
     template_index: pd.Index | None = None,
 ) -> pd.Series:
-    """Long table → MultiIndex Series（仅在最终输出调用一次）。"""
+    """Long table → MultiIndex Series（仅在最终输出调用一次）。
+
+    R47 P1-05: This is a legitimate boundary conversion where native Polars
+    computation completes and the final result is converted to pandas for
+    API compatibility. The .to_pandas() call here is the single point of
+    conversion for all native execution paths.
+    """
     from storage.factor_format import long_table_to_series
 
     pdf = frame.to_pandas() if hasattr(frame, "to_pandas") else frame
@@ -164,7 +170,12 @@ def polars_long_to_multiindex_series(
 
 
 def optional_universe_index(ctx: Any) -> pd.Index | None:
-    """``FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE=1`` 时用 ``scan_index_long`` 构造对齐索引。"""
+    """``FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE=1`` 时用 ``scan_index_long`` 构造对齐索引。
+
+    R47 P1-05: Legitimate boundary conversion - constructing pandas MultiIndex
+    from native Polars frame. The .to_pandas() call is necessary because
+    pd.MultiIndex.from_arrays requires pandas-compatible arrays.
+    """
     import os
 
     if os.environ.get("FACTOR_ENGINE_POLARS_LONG_ALIGN_UNIVERSE", "").strip().lower() not in {

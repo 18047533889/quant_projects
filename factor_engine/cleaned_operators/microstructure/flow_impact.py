@@ -227,9 +227,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
     category="intraday_microstructure",
     business_category="intraday_microstructure",
     canonical="intraday_bvc_imbalance",
-    source="microstructure.flow_impact",
-    research_only=True,
-)
+    source="microstructure.flow_impact")
 class IntradayBvcImbalance(SeriesOperator):
     """BV-C signed order-flow imbalance, one scalar per (date, symbol).
 
@@ -302,9 +300,7 @@ class IntradayBvcImbalance(SeriesOperator):
     category="intraday_microstructure",
     business_category="intraday_microstructure",
     canonical="intraday_impact_beta",
-    source="microstructure.flow_impact",
-    research_only=True,
-)
+    source="microstructure.flow_impact")
 class IntradayImpactBeta(SeriesOperator):
     """Per-day price-impact regression slope ``lambda``.
 
@@ -351,9 +347,7 @@ class IntradayImpactBeta(SeriesOperator):
     category="intraday_microstructure",
     business_category="intraday_microstructure",
     canonical="intraday_impact_asymmetry",
-    source="microstructure.flow_impact",
-    research_only=True,
-)
+    source="microstructure.flow_impact")
 class IntradayImpactAsymmetry(SeriesOperator):
     """Buy vs sell price-impact asymmetry.
 
@@ -413,9 +407,7 @@ class IntradayImpactAsymmetry(SeriesOperator):
     category="intraday_microstructure",
     business_category="intraday_microstructure",
     canonical="intraday_return_wasserstein_shift",
-    source="microstructure.flow_impact",
-    research_only=True,
-)
+    source="microstructure.flow_impact")
 class IntradayReturnWassersteinShift(SeriesOperator):
     """Wasserstein-1 shift between today's return distribution and the past.
 
@@ -465,9 +457,7 @@ class IntradayReturnWassersteinShift(SeriesOperator):
     category="intraday_microstructure",
     business_category="intraday_microstructure",
     canonical="micro_bvc_vpin",
-    source="microstructure.flow_impact",
-    research_only=True,
-)
+    source="microstructure.flow_impact")
 class MicroBvcVpin(SeriesOperator):
     """VPIN built from BV-C flow over equal-volume buckets.
 

@@ -149,9 +149,7 @@ def _id_value_map(
     category="relation",
     business_category="relation",
     canonical="relation_topk_concentration",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationTopkConcentration(SeriesOperator):
     """名次面板前 k 名占比（rank-slot 语义）：分子=Σ(s1..sk)，前 k 个名次槽任一缺失 ⇒ NaN。
 
@@ -250,9 +248,7 @@ def _kurtosis(values: np.ndarray) -> float:
     category="relation",
     business_category="relation",
     canonical="relation_distribution_skew",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationDistributionSkew(SeriesOperator):
     """名次面板截面偏度（同一行 10 个名次值的偏度）。"""
 
@@ -298,9 +294,7 @@ def _pearson_kurtosis(values: np.ndarray) -> float:
     category="relation",
     business_category="relation",
     canonical="relation_distribution_pearson_kurtosis",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationDistributionPearsonKurtosis(SeriesOperator):
     """名次面板截面峰度（Pearson：E[(X-μ)⁴]/σ⁴，正态≈3）。"""
 
@@ -334,9 +328,7 @@ class RelationDistributionPearsonKurtosis(SeriesOperator):
     category="relation",
     business_category="relation",
     canonical="relation_distribution_excess_kurtosis",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationDistributionExcessKurtosis(SeriesOperator):
     """名次面板截面超额峰度 = Pearson 峰度 − 3（正态≈0）。"""
 
@@ -384,9 +376,7 @@ def _delta(panel: np.ndarray, window: int) -> np.ndarray:
     category="relation",
     business_category="relation",
     canonical="relation_hhi_change",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationHhiChange(SeriesOperator):
     """集中度窗口变化：value[t] - value[t-window]。"""
 
@@ -414,9 +404,7 @@ class RelationHhiChange(SeriesOperator):
     category="relation",
     business_category="relation",
     canonical="relation_entropy_change",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationEntropyChange(SeriesOperator):
     """分布熵窗口变化：value[t] - value[t-window]。"""
 
@@ -444,9 +432,7 @@ class RelationEntropyChange(SeriesOperator):
     category="relation",
     business_category="relation",
     canonical="relation_concentration_acceleration",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationConcentrationAcceleration(SeriesOperator):
     """集中度二阶差分：(v[t]-v[t-w]) - (v[t-w]-v[t-2w])。"""
 
@@ -513,9 +499,7 @@ def _mean_panel_change(stacked: np.ndarray, window: int) -> np.ndarray:
     category="relation",
     business_category="relation",
     canonical="relation_rank_mobility",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationRankMobility(SeriesOperator):
     """名次**槽位**（slot）移动性：窗口内各名次槽绝对变化的均值。
 
@@ -566,9 +550,7 @@ class RelationRankMobility(SeriesOperator):
     category="relation",
     business_category="relation",
     canonical="relation_rank_entity_mobility",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationRankEntityMobility(SeriesOperator):
     """实体匹配的名次值移动性：跨期同一实体 |value_cur - value_prev| 的均值。
 
@@ -635,9 +617,7 @@ class RelationRankEntityMobility(SeriesOperator):
     category="relation",
     business_category="relation",
     canonical="relation_share_mobility",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class RelationShareMobility(SeriesOperator):
     """份额面板移动性：窗口内各份额绝对变化的均值。"""
 
@@ -717,9 +697,7 @@ def _group_shape(
     category="cross_sectional",
     business_category="group_neutralization",
     canonical="group_skewness",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class GroupSkewness(SeriesOperator):
     """组内截面偏度。"""
 
@@ -742,9 +720,7 @@ class GroupSkewness(SeriesOperator):
     category="cross_sectional",
     business_category="group_neutralization",
     canonical="group_kurtosis",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class GroupKurtosis(SeriesOperator):
     """组内截面峰度。"""
 
@@ -767,9 +743,7 @@ class GroupKurtosis(SeriesOperator):
     category="cross_sectional",
     business_category="group_neutralization",
     canonical="group_quantile_spread",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class GroupQuantileSpread(SeriesOperator):
     """组内分位数距：(Q_high - Q_low)。"""
 
@@ -799,9 +773,7 @@ class GroupQuantileSpread(SeriesOperator):
     category="cross_sectional",
     business_category="group_neutralization",
     canonical="group_tail_ratio",
-    source="relation.distribution",
-    research_only=True,
-)
+    source="relation.distribution")
 class GroupTailRatio(SeriesOperator):
     """组内尾部比：abs(Q_high)/abs(Q_low)，Q_low≈0 返回 NaN。"""
 

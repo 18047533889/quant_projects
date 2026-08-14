@@ -80,9 +80,7 @@ def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int
     business_category="time_series_risk",
     canonical="ts_downside_deviation",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsDownsideDeviation(SeriesOperator):
     """下行偏离：sqrt(mean(min(x - target, 0)^2))。
 
@@ -137,9 +135,7 @@ class TsDownsideDeviation(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_upside_deviation",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsUpsideDeviation(SeriesOperator):
     """上行偏离：sqrt(mean(max(x - target, 0)^2))。
 
@@ -194,9 +190,7 @@ class TsUpsideDeviation(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_current_drawdown_duration",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsCurrentDrawdownDuration(SeriesOperator):
     """当前连续处于回撤（低于窗口运行最高价）的交易行数。"""
 
@@ -260,9 +254,7 @@ class TsCurrentDrawdownDuration(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_time_under_water",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsTimeUnderWater(SeriesOperator):
     """窗口内价格低于此前运行最高价的日期比例。"""
 
@@ -434,9 +426,7 @@ def _best_lag_corr_excess(
     business_category="time_series_risk",
     canonical="ts_best_lag_corr_raw",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsBestLagCorrRaw(SeriesOperator):
     """source x 领先 target y 的绝对相关强度（原始峰值，无选择校正）。
 
@@ -483,9 +473,7 @@ class TsBestLagCorrRaw(SeriesOperator):
     business_category="time_series_risk",
     canonical="ts_best_lag_corr_excess",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsBestLagCorrExcess(SeriesOperator):
     """source x 领先 target y：原始峰值减去循环块置换零模型期望。
 
@@ -582,9 +570,7 @@ def _price_delay_model(
     business_category="time_series_risk",
     canonical="ts_price_delay",
     source="downside_risk",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsPriceDelay(SeriesOperator):
     """价格延迟代理（Hou–Moskowitz 式）：1 - R²_restricted / R²_full。
 

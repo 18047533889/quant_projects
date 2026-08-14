@@ -91,9 +91,7 @@ def _group_ex_self_mean_row(x_row: np.ndarray, g_row: np.ndarray, finite: np.nda
     business_category="group_neutralization",
     canonical="group_ex_self_mean",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class GroupExSelfMean(SeriesOperator):
     """组内除自身外其余成员的均值（leave-one-out peer mean）。"""
 
@@ -124,9 +122,7 @@ class GroupExSelfMean(SeriesOperator):
     business_category="group_neutralization",
     canonical="group_ex_self_weighted_mean",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class GroupExSelfWeightedMean(SeriesOperator):
     """组内除自身外其余成员的权重加权均值。"""
 
@@ -179,9 +175,7 @@ class GroupExSelfWeightedMean(SeriesOperator):
     business_category="group_neutralization",
     canonical="hierarchical_group_neutralize",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class HierarchicalGroupNeutralize(SeriesOperator):
     """分级中性化：按 ``(group, subgroup)`` 组合键去均值（真 nested 中性化）。
 
@@ -267,9 +261,7 @@ class HierarchicalGroupNeutralize(SeriesOperator):
     business_category="cross_sectional_regression",
     canonical="cs_trimmed_ols_resid",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsRobustResid(SeriesOperator):
     """横截面残差：先按 trim_ratio 截尾样本拟合 y=a+bx（trimmed-OLS），再输出当前残差。
 
@@ -544,9 +536,7 @@ def _cs_robust_resid(y: pd.DataFrame, x: pd.DataFrame, fit_fn: Any, add_intercep
     business_category="cross_sectional_regression",
     canonical="cs_huber_resid",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsHuberResid(SeriesOperator):
     """横截面残差：Huber M-估计量回归（Huber loss, delta≈1.345·MAD）对离群点稳健。
 
@@ -582,9 +572,7 @@ class CsHuberResid(SeriesOperator):
     business_category="cross_sectional_regression",
     canonical="cs_lad_resid",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsLadResid(SeriesOperator):
     """横截面残差：LAD（L1 / 中位数）回归残差，对离群点稳健。
 
@@ -758,9 +746,7 @@ def _group_multi_resid_row(
     business_category="group_neutralization",
     canonical="group_multi_resid",
     source="group_ext",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class GroupMultiResid(SeriesOperator):
     """组内多元线性回归残差（多自变量 OLS）。
 

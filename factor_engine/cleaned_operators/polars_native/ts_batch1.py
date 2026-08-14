@@ -22,7 +22,7 @@ from cleaned_operators.base import (
 # Basic Rolling Statistics (ts_mean, ts_std, ts_sum, etc.)
 # ============================================================================
 
-@register_operator(name="ts_mean_if", canonical="ts_mean_if", backend="polars", research_only=True)
+@register_operator(name="ts_mean_if", canonical="ts_mean_if", backend="polars")
 class TSMeanIfPolarsNative(SeriesOperator):
     """Conditional rolling mean - mean of values where condition is True"""
 
@@ -55,7 +55,7 @@ class TSMeanIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_std_if", canonical="ts_std_if", backend="polars", research_only=True)
+@register_operator(name="ts_std_if", canonical="ts_std_if", backend="polars")
 class TSStdIfPolarsNative(SeriesOperator):
     """Conditional rolling std"""
 
@@ -88,7 +88,7 @@ class TSStdIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_sum_if", canonical="ts_sum_if", backend="polars", research_only=True)
+@register_operator(name="ts_sum_if", canonical="ts_sum_if", backend="polars")
 class TSSumIfPolarsNative(SeriesOperator):
     """Conditional rolling sum"""
 
@@ -121,7 +121,7 @@ class TSSumIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_min_if", canonical="ts_min_if", backend="polars", research_only=True)
+@register_operator(name="ts_min_if", canonical="ts_min_if", backend="polars")
 class TSMinIfPolarsNative(SeriesOperator):
     """Conditional rolling min"""
     metadata = OperatorMetadata(
@@ -153,7 +153,7 @@ class TSMinIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_max_if", canonical="ts_max_if", backend="polars", research_only=True)
+@register_operator(name="ts_max_if", canonical="ts_max_if", backend="polars")
 class TSMaxIfPolarsNative(SeriesOperator):
     """Conditional rolling max"""
     metadata = OperatorMetadata(
@@ -185,7 +185,7 @@ class TSMaxIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_median", canonical="ts_median", backend="polars", research_only=True)
+@register_operator(name="ts_median", canonical="ts_median", backend="polars")
 class TSMedianPolarsNative(SeriesOperator):
     """Rolling median"""
     metadata = OperatorMetadata(
@@ -214,7 +214,7 @@ class TSMedianPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_quantile", canonical="ts_quantile", backend="polars", research_only=True)
+@register_operator(name="ts_quantile", canonical="ts_quantile", backend="polars")
 class TSQuantilePolarsNative(SeriesOperator):
     """Rolling quantile"""
     metadata = OperatorMetadata(
@@ -244,7 +244,7 @@ class TSQuantilePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_quantile_if", canonical="ts_quantile_if", backend="polars", research_only=True)
+@register_operator(name="ts_quantile_if", canonical="ts_quantile_if", backend="polars")
 class TSQuantileIfPolarsNative(SeriesOperator):
     """Conditional rolling quantile"""
     metadata = OperatorMetadata(
@@ -277,7 +277,7 @@ class TSQuantileIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_rank_if", canonical="ts_rank_if", backend="polars", research_only=True)
+@register_operator(name="ts_rank_if", canonical="ts_rank_if", backend="polars")
 class TSRankIfPolarsNative(SeriesOperator):
     """Conditional rolling rank (current value rank in window)"""
     metadata = OperatorMetadata(
@@ -320,35 +320,41 @@ class TSRankIfPolarsNative(SeriesOperator):
 # Correlation & Covariance
 # ============================================================================
 
-@register_operator(name="ts_corr", canonical="ts_corr", backend="polars", research_only=True)
+@register_operator(name="ts_corr", canonical="ts_corr", backend="polars")
 class TSCorrPolarsNative(SeriesOperator):
     """Rolling correlation between two series"""
     metadata = OperatorMetadata(
         name="ts_corr",
         category="time_series",
         description="Rolling correlation between two series",
-        param_names=['x', 'y', 'window'],
+        param_names=['x', 'y', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=2, default=2, param_role=ParamRole.SUPPORT_POLICY),
     }
 
-    def _calculate_series(self, x, y, window, **kwargs):
+    def _calculate_series(self, x, y, window, min_periods=2, **kwargs):
+        # Use rolling_corr with min_periods parameter
         df = pl.DataFrame({"x": x, "y": y})
         return (
             df.lazy()
             .select([
-                pl.corr("x", "y", ddof=1)
-                .rolling_map(lambda s: s.corr(df["y"].tail(len(s))), window_size=window)
-                .alias("result")
+                pl.rolling_corr(
+                    pl.col("x").fill_nan(None),
+                    pl.col("y").fill_nan(None),
+                    window_size=window,
+                    min_periods=min_periods,
+                    ddof=1
+                ).alias("result")
             ])
             .collect()["result"]
         )
 
 
-@register_operator(name="ts_cov", canonical="ts_cov", backend="polars", research_only=True)
+@register_operator(name="ts_cov", canonical="ts_cov", backend="polars")
 class TSCovPolarsNative(SeriesOperator):
     """Rolling covariance between two series"""
     metadata = OperatorMetadata(
@@ -380,7 +386,7 @@ class TSCovPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_corr_if", canonical="ts_corr_if", backend="polars", research_only=True)
+@register_operator(name="ts_corr_if", canonical="ts_corr_if", backend="polars")
 class TSCorrIfPolarsNative(SeriesOperator):
     """Conditional rolling correlation"""
     metadata = OperatorMetadata(
@@ -410,7 +416,7 @@ class TSCorrIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_cov_if", canonical="ts_cov_if", backend="polars", research_only=True)
+@register_operator(name="ts_cov_if", canonical="ts_cov_if", backend="polars")
 class TSCovIfPolarsNative(SeriesOperator):
     """Conditional rolling covariance"""
     metadata = OperatorMetadata(
@@ -450,7 +456,7 @@ class TSCovIfPolarsNative(SeriesOperator):
 # Lag & Shift Operations
 # ============================================================================
 
-@register_operator(name="ts_nth_value", canonical="ts_nth_value", backend="polars", research_only=True)
+@register_operator(name="ts_nth_value", canonical="ts_nth_value", backend="polars")
 class TSNthValuePolarsNative(SeriesOperator):
     """Get the value n rows back in time."""
     metadata = OperatorMetadata(
@@ -482,7 +488,7 @@ class TSNthValuePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_last_if", canonical="ts_last_if", backend="polars", research_only=True)
+@register_operator(name="ts_last_if", canonical="ts_last_if", backend="polars")
 class TSLastIfPolarsNative(SeriesOperator):
     """Get last value where condition was True within window"""
     metadata = OperatorMetadata(
@@ -522,7 +528,7 @@ class TSLastIfPolarsNative(SeriesOperator):
 # Counting & Coverage
 # ============================================================================
 
-@register_operator(name="ts_count_if", canonical="ts_count_if", backend="polars", research_only=True)
+@register_operator(name="ts_count_if", canonical="ts_count_if", backend="polars")
 class TSCountIfPolarsNative(SeriesOperator):
     """Count of True values in rolling window"""
     metadata = OperatorMetadata(
@@ -552,7 +558,7 @@ class TSCountIfPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_valid_count", canonical="ts_valid_count", backend="polars", research_only=True)
+@register_operator(name="ts_valid_count", canonical="ts_valid_count", backend="polars")
 class TSValidCountPolarsNative(SeriesOperator):
     """Count of non-null values in rolling window"""
     metadata = OperatorMetadata(
@@ -582,7 +588,7 @@ class TSValidCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_coverage_ratio", canonical="ts_coverage_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_coverage_ratio", canonical="ts_coverage_ratio", backend="polars")
 class TSCoverageRatioPolarsNative(SeriesOperator):
     """Ratio of non-null values in rolling window"""
     metadata = OperatorMetadata(
@@ -612,7 +618,7 @@ class TSCoverageRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_positive_ratio", canonical="ts_positive_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_positive_ratio", canonical="ts_positive_ratio", backend="polars")
 class TSPositiveRatioPolarsNative(SeriesOperator):
     """Ratio of positive values in rolling window"""
     metadata = OperatorMetadata(
@@ -641,7 +647,7 @@ class TSPositiveRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_negative_ratio", canonical="ts_negative_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_negative_ratio", canonical="ts_negative_ratio", backend="polars")
 class TSNegativeRatioPolarsNative(SeriesOperator):
     """Ratio of negative values in rolling window"""
     metadata = OperatorMetadata(
@@ -670,7 +676,7 @@ class TSNegativeRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_zero_ratio", canonical="ts_zero_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_zero_ratio", canonical="ts_zero_ratio", backend="polars")
 class TSZeroRatioPolarsNative(SeriesOperator):
     """Ratio of zero values in rolling window"""
     metadata = OperatorMetadata(
@@ -703,7 +709,7 @@ class TSZeroRatioPolarsNative(SeriesOperator):
 # Extrema & Positional
 # ============================================================================
 
-@register_operator(name="ts_argmax", canonical="ts_argmax", backend="polars", research_only=True)
+@register_operator(name="ts_argmax", canonical="ts_argmax", backend="polars")
 class TSArgmaxPolarsNative(SeriesOperator):
     """Index of maximum value in rolling window (0=oldest, window-1=current)"""
     metadata = OperatorMetadata(
@@ -732,7 +738,7 @@ class TSArgmaxPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_argmin", canonical="ts_argmin", backend="polars", research_only=True)
+@register_operator(name="ts_argmin", canonical="ts_argmin", backend="polars")
 class TSArgminPolarsNative(SeriesOperator):
     """Index of minimum value in rolling window"""
     metadata = OperatorMetadata(
@@ -761,7 +767,7 @@ class TSArgminPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_argmax_age", canonical="ts_argmax_age", backend="polars", research_only=True)
+@register_operator(name="ts_argmax_age", canonical="ts_argmax_age", backend="polars")
 class TSArgmaxAgePolarsNative(SeriesOperator):
     """Periods since maximum value in rolling window"""
     metadata = OperatorMetadata(
@@ -791,7 +797,7 @@ class TSArgmaxAgePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_argmin_age", canonical="ts_argmin_age", backend="polars", research_only=True)
+@register_operator(name="ts_argmin_age", canonical="ts_argmin_age", backend="polars")
 class TSArgminAgePolarsNative(SeriesOperator):
     """Periods since minimum value in rolling window"""
     metadata = OperatorMetadata(
@@ -825,7 +831,7 @@ class TSArgminAgePolarsNative(SeriesOperator):
 # TopK & BottomK
 # ============================================================================
 
-@register_operator(name="ts_topk_mean", canonical="ts_topk_mean", backend="polars", research_only=True)
+@register_operator(name="ts_topk_mean", canonical="ts_topk_mean", backend="polars")
 class TSTopkMeanPolarsNative(SeriesOperator):
     """Mean of top k values in rolling window"""
     metadata = OperatorMetadata(
@@ -856,7 +862,7 @@ class TSTopkMeanPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_topk_sum", canonical="ts_topk_sum", backend="polars", research_only=True)
+@register_operator(name="ts_topk_sum", canonical="ts_topk_sum", backend="polars")
 class TSTopkSumPolarsNative(SeriesOperator):
     """Sum of top k values in rolling window"""
     metadata = OperatorMetadata(
@@ -887,7 +893,7 @@ class TSTopkSumPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_topk_std", canonical="ts_topk_std", backend="polars", research_only=True)
+@register_operator(name="ts_topk_std", canonical="ts_topk_std", backend="polars")
 class TSTopkStdPolarsNative(SeriesOperator):
     """Std of top k values in rolling window"""
     metadata = OperatorMetadata(
@@ -918,7 +924,7 @@ class TSTopkStdPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_bottomk_mean", canonical="ts_bottomk_mean", backend="polars", research_only=True)
+@register_operator(name="ts_bottomk_mean", canonical="ts_bottomk_mean", backend="polars")
 class TSBottomkMeanPolarsNative(SeriesOperator):
     """Mean of bottom k values in rolling window"""
     metadata = OperatorMetadata(
@@ -949,7 +955,7 @@ class TSBottomkMeanPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_bottomk_sum", canonical="ts_bottomk_sum", backend="polars", research_only=True)
+@register_operator(name="ts_bottomk_sum", canonical="ts_bottomk_sum", backend="polars")
 class TSBottomkSumPolarsNative(SeriesOperator):
     """Sum of bottom k values in rolling window"""
     metadata = OperatorMetadata(
@@ -980,7 +986,7 @@ class TSBottomkSumPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_bottomk_std", canonical="ts_bottomk_std", backend="polars", research_only=True)
+@register_operator(name="ts_bottomk_std", canonical="ts_bottomk_std", backend="polars")
 class TSBottomkStdPolarsNative(SeriesOperator):
     """Std of bottom k values in rolling window"""
     metadata = OperatorMetadata(
@@ -1015,7 +1021,7 @@ class TSBottomkStdPolarsNative(SeriesOperator):
 # Moments & Distribution Stats
 # ============================================================================
 
-@register_operator(name="ts_kurt", canonical="ts_kurt", backend="polars", research_only=True)
+@register_operator(name="ts_kurt", canonical="ts_kurt", backend="polars")
 class TSKurtPolarsNative(SeriesOperator):
     """Rolling kurtosis"""
     metadata = OperatorMetadata(
@@ -1044,7 +1050,7 @@ class TSKurtPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_moment", canonical="ts_moment", backend="polars", research_only=True)
+@register_operator(name="ts_moment", canonical="ts_moment", backend="polars")
 class TSMomentPolarsNative(SeriesOperator):
     """Rolling nth central moment"""
     metadata = OperatorMetadata(
@@ -1077,7 +1083,7 @@ class TSMomentPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_quantile_range", canonical="ts_quantile_range", backend="polars", research_only=True)
+@register_operator(name="ts_quantile_range", canonical="ts_quantile_range", backend="polars")
 class TSQuantileRangePolarsNative(SeriesOperator):
     """Rolling IQR or quantile range"""
     metadata = OperatorMetadata(
@@ -1108,7 +1114,7 @@ class TSQuantileRangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_trimmed_mean", canonical="ts_trimmed_mean", backend="polars", research_only=True)
+@register_operator(name="ts_trimmed_mean", canonical="ts_trimmed_mean", backend="polars")
 class TSTrimmedMeanPolarsNative(SeriesOperator):
     """Rolling trimmed mean (exclude top/bottom percentiles)"""
     metadata = OperatorMetadata(
@@ -1151,7 +1157,7 @@ class TSTrimmedMeanPolarsNative(SeriesOperator):
 # Ratio & Scaling
 # ============================================================================
 
-@register_operator(name="ts_ratio", canonical="ts_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_ratio", canonical="ts_ratio", backend="polars")
 class TSRatioPolarsNative(SeriesOperator):
     """Current value / rolling statistic (mean, median, etc.)"""
     metadata = OperatorMetadata(
@@ -1189,7 +1195,7 @@ class TSRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_location_shift", canonical="ts_location_shift", backend="polars", research_only=True)
+@register_operator(name="ts_location_shift", canonical="ts_location_shift", backend="polars")
 class TSLocationShiftPolarsNative(SeriesOperator):
     """(current - rolling_mean) / rolling_std"""
     metadata = OperatorMetadata(
@@ -1217,7 +1223,7 @@ class TSLocationShiftPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_scale_shift", canonical="ts_scale_shift", backend="polars", research_only=True)
+@register_operator(name="ts_scale_shift", canonical="ts_scale_shift", backend="polars")
 class TSScaleShiftPolarsNative(SeriesOperator):
     """Rolling std / long-term rolling std"""
     metadata = OperatorMetadata(
@@ -1250,7 +1256,7 @@ class TSScaleShiftPolarsNative(SeriesOperator):
 # Decay & Weighted Operations
 # ============================================================================
 
-@register_operator(name="ts_decay_linear", canonical="ts_decay_linear", backend="polars", research_only=True)
+@register_operator(name="ts_decay_linear", canonical="ts_decay_linear", backend="polars")
 class TSDecayLinearPolarsNative(SeriesOperator):
     """Linear decay weighted sum: most recent gets weight window, oldest gets 1"""
     metadata = OperatorMetadata(
@@ -1287,7 +1293,7 @@ class TSDecayLinearPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_sum_decay", canonical="ts_sum_decay", backend="polars", research_only=True)
+@register_operator(name="ts_sum_decay", canonical="ts_sum_decay", backend="polars")
 class TSSumDecayPolarsNative(SeriesOperator):
     """Exponentially decayed sum"""
     metadata = OperatorMetadata(
@@ -1324,7 +1330,7 @@ class TSSumDecayPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_decay_exp_window", canonical="ts_decay_exp_window", backend="polars", research_only=True)
+@register_operator(name="ts_decay_exp_window", canonical="ts_decay_exp_window", backend="polars")
 class TSDecayExpWindowPolarsNative(SeriesOperator):
     """Exponentially weighted mean with specified window"""
     metadata = OperatorMetadata(
@@ -1360,7 +1366,7 @@ class TSDecayExpWindowPolarsNative(SeriesOperator):
 # Time-based Features
 # ============================================================================
 
-@register_operator(name="ts_days_since", canonical="ts_days_since", backend="polars", research_only=True)
+@register_operator(name="ts_days_since", canonical="ts_days_since", backend="polars")
 class TSDaysSincePolarsNative(SeriesOperator):
     """Days since condition was last True"""
     metadata = OperatorMetadata(
@@ -1398,7 +1404,7 @@ class TSDaysSincePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_days_since_high", canonical="ts_days_since_high", backend="polars", research_only=True)
+@register_operator(name="ts_days_since_high", canonical="ts_days_since_high", backend="polars")
 class TSDaysSinceHighPolarsNative(SeriesOperator):
     """Days since rolling window high"""
     metadata = OperatorMetadata(
@@ -1444,7 +1450,7 @@ class TSDaysSinceHighPolarsNative(SeriesOperator):
         return pl.Series(result)
 
 
-@register_operator(name="ts_days_since_low", canonical="ts_days_since_low", backend="polars", research_only=True)
+@register_operator(name="ts_days_since_low", canonical="ts_days_since_low", backend="polars")
 class TSDaysSinceLowPolarsNative(SeriesOperator):
     """Days since rolling window low"""
     metadata = OperatorMetadata(
@@ -1490,7 +1496,7 @@ class TSDaysSinceLowPolarsNative(SeriesOperator):
         return pl.Series(result)
 
 
-@register_operator(name="ts_time_since_change", canonical="ts_time_since_change", backend="polars", research_only=True)
+@register_operator(name="ts_time_since_change", canonical="ts_time_since_change", backend="polars")
 class TSTimeSinceChangePolarsNative(SeriesOperator):
     """Periods since value changed"""
     metadata = OperatorMetadata(
@@ -1534,7 +1540,7 @@ class TSTimeSinceChangePolarsNative(SeriesOperator):
 # Streak & Pattern Detection
 # ============================================================================
 
-@register_operator(name="ts_true_streak", canonical="ts_true_streak", backend="polars", research_only=True)
+@register_operator(name="ts_true_streak", canonical="ts_true_streak", backend="polars")
 class TSTrueStreakPolarsNative(SeriesOperator):
     """Current streak length of True values"""
     metadata = OperatorMetadata(
@@ -1569,7 +1575,7 @@ class TSTrueStreakPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_transition_count", canonical="ts_transition_count", backend="polars", research_only=True)
+@register_operator(name="ts_transition_count", canonical="ts_transition_count", backend="polars")
 class TSTransitionCountPolarsNative(SeriesOperator):
     """Count of state transitions (value changes) in rolling window"""
     metadata = OperatorMetadata(
@@ -1602,7 +1608,7 @@ class TSTransitionCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_new_high", canonical="ts_new_high", backend="polars", research_only=True)
+@register_operator(name="ts_new_high", canonical="ts_new_high", backend="polars")
 class TSNewHighPolarsNative(SeriesOperator):
     """Boolean: current value equals rolling max"""
     metadata = OperatorMetadata(
@@ -1630,7 +1636,7 @@ class TSNewHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_new_low", canonical="ts_new_low", backend="polars", research_only=True)
+@register_operator(name="ts_new_low", canonical="ts_new_low", backend="polars")
 class TSNewLowPolarsNative(SeriesOperator):
     """Boolean: current value equals rolling min"""
     metadata = OperatorMetadata(
@@ -1662,7 +1668,7 @@ class TSNewLowPolarsNative(SeriesOperator):
 # Distance & Channel Features
 # ============================================================================
 
-@register_operator(name="ts_distance_to_high", canonical="ts_distance_to_high", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_high", canonical="ts_distance_to_high", backend="polars")
 class TSDistanceToHighPolarsNative(SeriesOperator):
     """(rolling_max - current) / rolling_max"""
     metadata = OperatorMetadata(
@@ -1694,7 +1700,7 @@ class TSDistanceToHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_distance_to_low", canonical="ts_distance_to_low", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_low", canonical="ts_distance_to_low", backend="polars")
 class TSDistanceToLowPolarsNative(SeriesOperator):
     """(current - rolling_min) / current"""
     metadata = OperatorMetadata(
@@ -1726,7 +1732,7 @@ class TSDistanceToLowPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_channel_width", canonical="ts_channel_width", backend="polars", research_only=True)
+@register_operator(name="ts_channel_width", canonical="ts_channel_width", backend="polars")
 class TSChannelWidthPolarsNative(SeriesOperator):
     """rolling_max - rolling_min"""
     metadata = OperatorMetadata(
@@ -1754,7 +1760,7 @@ class TSChannelWidthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_channel_width_pct", canonical="ts_channel_width_pct", backend="polars", research_only=True)
+@register_operator(name="ts_channel_width_pct", canonical="ts_channel_width_pct", backend="polars")
 class TSChannelWidthPctPolarsNative(SeriesOperator):
     """(rolling_max - rolling_min) / rolling_mean"""
     metadata = OperatorMetadata(
@@ -1783,7 +1789,7 @@ class TSChannelWidthPctPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_channel_position", canonical="ts_channel_position", backend="polars", research_only=True)
+@register_operator(name="ts_channel_position", canonical="ts_channel_position", backend="polars")
 class TSChannelPositionPolarsNative(SeriesOperator):
     """(current - rolling_min) / (rolling_max - rolling_min)"""
     metadata = OperatorMetadata(
@@ -1819,7 +1825,7 @@ class TSChannelPositionPolarsNative(SeriesOperator):
 # Drawdown & Performance
 # ============================================================================
 
-@register_operator(name="ts_max_drawdown", canonical="ts_max_drawdown", backend="polars", research_only=True)
+@register_operator(name="ts_max_drawdown", canonical="ts_max_drawdown", backend="polars")
 class TSMaxDrawdownPolarsNative(SeriesOperator):
     """Maximum drawdown in rolling window"""
     metadata = OperatorMetadata(
@@ -1855,7 +1861,7 @@ class TSMaxDrawdownPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_time_under_water", canonical="ts_time_under_water", backend="polars", research_only=True)
+@register_operator(name="ts_time_under_water", canonical="ts_time_under_water", backend="polars")
 class TSTimeUnderWaterPolarsNative(SeriesOperator):
     """Periods since last peak (underwater duration)"""
     metadata = OperatorMetadata(
@@ -1901,7 +1907,7 @@ class TSTimeUnderWaterPolarsNative(SeriesOperator):
         return pl.Series(result)
 
 
-@register_operator(name="ts_recovery_fraction", canonical="ts_recovery_fraction", backend="polars", research_only=True)
+@register_operator(name="ts_recovery_fraction", canonical="ts_recovery_fraction", backend="polars")
 class TSRecoveryFractionPolarsNative(SeriesOperator):
     """How much of max drawdown has been recovered"""
     metadata = OperatorMetadata(
@@ -1945,7 +1951,7 @@ class TSRecoveryFractionPolarsNative(SeriesOperator):
 # Volatility & Risk
 # ============================================================================
 
-@register_operator(name="ts_downside_deviation", canonical="ts_downside_deviation", backend="polars", research_only=True)
+@register_operator(name="ts_downside_deviation", canonical="ts_downside_deviation", backend="polars")
 class TSDownsideDeviationPolarsNative(SeriesOperator):
     """Std of negative returns only"""
     metadata = OperatorMetadata(
@@ -1979,7 +1985,7 @@ class TSDownsideDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_upside_deviation", canonical="ts_upside_deviation", backend="polars", research_only=True)
+@register_operator(name="ts_upside_deviation", canonical="ts_upside_deviation", backend="polars")
 class TSUpsideDeviationPolarsNative(SeriesOperator):
     """Std of positive returns only"""
     metadata = OperatorMetadata(
@@ -2013,7 +2019,7 @@ class TSUpsideDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_expected_shortfall", canonical="ts_expected_shortfall", backend="polars", research_only=True)
+@register_operator(name="ts_expected_shortfall", canonical="ts_expected_shortfall", backend="polars")
 class TSExpectedShortfallPolarsNative(SeriesOperator):
     """Mean of worst outcomes (CVaR)"""
     metadata = OperatorMetadata(
@@ -2050,7 +2056,7 @@ class TSExpectedShortfallPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_lower_partial_moment", canonical="ts_lower_partial_moment", backend="polars", research_only=True)
+@register_operator(name="ts_lower_partial_moment", canonical="ts_lower_partial_moment", backend="polars")
 class TSLowerPartialMomentPolarsNative(SeriesOperator):
     """LPM(n) - mean of (threshold - x)^n for x < threshold"""
     metadata = OperatorMetadata(
@@ -2084,7 +2090,7 @@ class TSLowerPartialMomentPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_upper_partial_moment", canonical="ts_upper_partial_moment", backend="polars", research_only=True)
+@register_operator(name="ts_upper_partial_moment", canonical="ts_upper_partial_moment", backend="polars")
 class TSUpperPartialMomentPolarsNative(SeriesOperator):
     """UPM(n) - mean of (x - threshold)^n for x > threshold"""
     metadata = OperatorMetadata(
@@ -2118,7 +2124,7 @@ class TSUpperPartialMomentPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_vol_of_vol", canonical="ts_vol_of_vol", backend="polars", research_only=True)
+@register_operator(name="ts_vol_of_vol", canonical="ts_vol_of_vol", backend="polars")
 class TSVolOfVolPolarsNative(SeriesOperator):
     """Volatility of volatility - std of rolling std"""
     metadata = OperatorMetadata(
@@ -2152,7 +2158,7 @@ class TSVolOfVolPolarsNative(SeriesOperator):
 # Trend & Regression
 # ============================================================================
 
-@register_operator(name="ts_regression_slope", canonical="ts_regression_slope", backend="polars", research_only=True)
+@register_operator(name="ts_regression_slope", canonical="ts_regression_slope", backend="polars")
 class TSRegressionSlopePolarsNative(SeriesOperator):
     """Linear regression slope of feature vs time"""
     metadata = OperatorMetadata(
@@ -2195,7 +2201,7 @@ class TSRegressionSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_intercept", canonical="ts_regression_intercept", backend="polars", research_only=True)
+@register_operator(name="ts_regression_intercept", canonical="ts_regression_intercept", backend="polars")
 class TSRegressionInterceptPolarsNative(SeriesOperator):
     """Linear regression intercept"""
     metadata = OperatorMetadata(
@@ -2239,7 +2245,7 @@ class TSRegressionInterceptPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_r2", canonical="ts_regression_r2", backend="polars", research_only=True)
+@register_operator(name="ts_regression_r2", canonical="ts_regression_r2", backend="polars")
 class TSRegressionR2PolarsNative(SeriesOperator):
     """Linear regression R-squared"""
     metadata = OperatorMetadata(
@@ -2293,7 +2299,7 @@ class TSRegressionR2PolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_resid", canonical="ts_regression_resid", backend="polars", research_only=True)
+@register_operator(name="ts_regression_resid", canonical="ts_regression_resid", backend="polars")
 class TSRegressionResidPolarsNative(SeriesOperator):
     """Current value - predicted value from rolling regression"""
     metadata = OperatorMetadata(
@@ -2341,7 +2347,7 @@ class TSRegressionResidPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_time_slope", canonical="ts_time_slope", backend="polars", research_only=True)
+@register_operator(name="ts_time_slope", canonical="ts_time_slope", backend="polars")
 class TSTimeSlopePolarsNative(SeriesOperator):
     """Alias for regression slope"""
     metadata = OperatorMetadata(
@@ -2361,7 +2367,7 @@ class TSTimeSlopePolarsNative(SeriesOperator):
         return op._calculate_series(feature, window, **kwargs)
 
 
-@register_operator(name="ts_monotonicity", canonical="ts_monotonicity", backend="polars", research_only=True)
+@register_operator(name="ts_monotonicity", canonical="ts_monotonicity", backend="polars")
 class TSMonotonicityPolarsNative(SeriesOperator):
     """Measure of monotonic trend: (up_count - down_count) / window"""
     metadata = OperatorMetadata(
@@ -2401,7 +2407,7 @@ class TSMonotonicityPolarsNative(SeriesOperator):
 # State & Persistence
 # ============================================================================
 
-@register_operator(name="ts_staleness", canonical="ts_staleness", backend="polars", research_only=True)
+@register_operator(name="ts_staleness", canonical="ts_staleness", backend="polars")
 class TSStalenessPolarsNative(SeriesOperator):
     """Ratio of unique values to window size (1 - uniqueness)"""
     metadata = OperatorMetadata(
@@ -2436,7 +2442,7 @@ class TSStalenessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_sign_persistence", canonical="ts_sign_persistence", backend="polars", research_only=True)
+@register_operator(name="ts_sign_persistence", canonical="ts_sign_persistence", backend="polars")
 class TSSignPersistencePolarsNative(SeriesOperator):
     """Average streak length of same sign"""
     metadata = OperatorMetadata(
@@ -2477,7 +2483,7 @@ class TSSignPersistencePolarsNative(SeriesOperator):
 # EWM & Adaptive
 # ============================================================================
 
-@register_operator(name="ts_ewm_corr", canonical="ts_ewm_corr", backend="polars", research_only=True)
+@register_operator(name="ts_ewm_corr", canonical="ts_ewm_corr", backend="polars")
 class TSEwmCorrPolarsNative(SeriesOperator):
     """Exponentially weighted correlation"""
     metadata = OperatorMetadata(
@@ -2521,7 +2527,7 @@ class TSEwmCorrPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_ewm_cov", canonical="ts_ewm_cov", backend="polars", research_only=True)
+@register_operator(name="ts_ewm_cov", canonical="ts_ewm_cov", backend="polars")
 class TSEwmCovPolarsNative(SeriesOperator):
     """Exponentially weighted covariance"""
     metadata = OperatorMetadata(
@@ -2559,7 +2565,7 @@ class TSEwmCovPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_kama", canonical="ts_kama", backend="polars", research_only=True)
+@register_operator(name="ts_kama", canonical="ts_kama", backend="polars")
 class TSKamaPolarsNative(SeriesOperator):
     """Kaufman Adaptive Moving Average"""
     metadata = OperatorMetadata(
@@ -2629,7 +2635,7 @@ class TSKamaPolarsNative(SeriesOperator):
 # Autocorrelation & Memory
 # ============================================================================
 
-@register_operator(name="ts_autocorrelation_time", canonical="ts_autocorrelation_time", backend="polars", research_only=True)
+@register_operator(name="ts_autocorrelation_time", canonical="ts_autocorrelation_time", backend="polars")
 class TSAutocorrelationTimePolarsNative(SeriesOperator):
     """Integrated autocorrelation time"""
     metadata = OperatorMetadata(
@@ -2683,7 +2689,7 @@ class TSAutocorrelationTimePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_mean_reversion_half_life", canonical="ts_mean_reversion_half_life", backend="polars", research_only=True)
+@register_operator(name="ts_mean_reversion_half_life", canonical="ts_mean_reversion_half_life", backend="polars")
 class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
     """Half-life of mean reversion (AR(1) model)"""
     metadata = OperatorMetadata(
@@ -2744,7 +2750,7 @@ class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
 # Swing & Pivot Detection
 # ============================================================================
 
-@register_operator(name="ts_prev_high", canonical="ts_prev_high", backend="polars", research_only=True)
+@register_operator(name="ts_prev_high", canonical="ts_prev_high", backend="polars")
 class TSPrevHighPolarsNative(SeriesOperator):
     """Previous rolling window high"""
     metadata = OperatorMetadata(
@@ -2773,7 +2779,7 @@ class TSPrevHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_prev_low", canonical="ts_prev_low", backend="polars", research_only=True)
+@register_operator(name="ts_prev_low", canonical="ts_prev_low", backend="polars")
 class TSPrevLowPolarsNative(SeriesOperator):
     """Previous rolling window low"""
     metadata = OperatorMetadata(
@@ -2802,7 +2808,7 @@ class TSPrevLowPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_swing_amplitude", canonical="ts_swing_amplitude", backend="polars", research_only=True)
+@register_operator(name="ts_swing_amplitude", canonical="ts_swing_amplitude", backend="polars")
 class TSSwingAmplitudePolarsNative(SeriesOperator):
     """Current swing range (from last pivot)"""
     metadata = OperatorMetadata(
@@ -2832,7 +2838,7 @@ class TSSwingAmplitudePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_swing_amplitude_pct", canonical="ts_swing_amplitude_pct", backend="polars", research_only=True)
+@register_operator(name="ts_swing_amplitude_pct", canonical="ts_swing_amplitude_pct", backend="polars")
 class TSSwingAmplitudePctPolarsNative(SeriesOperator):
     """Swing amplitude as percentage of price"""
     metadata = OperatorMetadata(
@@ -2869,7 +2875,7 @@ class TSSwingAmplitudePctPolarsNative(SeriesOperator):
 # Path & Efficiency
 # ============================================================================
 
-@register_operator(name="ts_path_efficiency", canonical="ts_path_efficiency", backend="polars", research_only=True)
+@register_operator(name="ts_path_efficiency", canonical="ts_path_efficiency", backend="polars")
 class TSPathEfficiencyPolarsNative(SeriesOperator):
     """Straight-line distance / path distance"""
     metadata = OperatorMetadata(
@@ -2906,7 +2912,7 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_roughness", canonical="ts_roughness", backend="polars", research_only=True)
+@register_operator(name="ts_roughness", canonical="ts_roughness", backend="polars")
 class TSRoughnessPolarsNative(SeriesOperator):
     """Path roughness: sum of |diff| / straight distance"""
     metadata = OperatorMetadata(
@@ -2943,7 +2949,7 @@ class TSRoughnessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_turning_rate", canonical="ts_turning_rate", backend="polars", research_only=True)
+@register_operator(name="ts_turning_rate", canonical="ts_turning_rate", backend="polars")
 class TSTurningRatePolarsNative(SeriesOperator):
     """Rate of direction changes (sign changes in first diff)"""
     metadata = OperatorMetadata(
@@ -2984,7 +2990,7 @@ class TSTurningRatePolarsNative(SeriesOperator):
 # Rank & Score
 # ============================================================================
 
-@register_operator(name="ts_score_rank_weighted_mean", canonical="ts_score_rank_weighted_mean", backend="polars", research_only=True)
+@register_operator(name="ts_score_rank_weighted_mean", canonical="ts_score_rank_weighted_mean", backend="polars")
 class TSScoreRankWeightedMeanPolarsNative(SeriesOperator):
     """Weighted mean where weights are ranks of a score series"""
     metadata = OperatorMetadata(
@@ -3027,7 +3033,7 @@ class TSScoreRankWeightedMeanPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="expanding_rank", canonical="expanding_rank", backend="polars", research_only=True)
+@register_operator(name="expanding_rank", canonical="expanding_rank", backend="polars")
 class ExpandingRankPolarsNative(SeriesOperator):
     """Rank of current value within all historical values"""
     metadata = OperatorMetadata(
@@ -3058,7 +3064,7 @@ class ExpandingRankPolarsNative(SeriesOperator):
 # Robust Statistics
 # ============================================================================
 
-@register_operator(name="ts_robust_zscore_prior", canonical="ts_robust_zscore_prior", backend="polars", research_only=True)
+@register_operator(name="ts_robust_zscore_prior", canonical="ts_robust_zscore_prior", backend="polars")
 class TSRobustZscorePriorPolarsNative(SeriesOperator):
     """Z-score using prior window (not including current value)"""
     metadata = OperatorMetadata(
@@ -3091,7 +3097,7 @@ class TSRobustZscorePriorPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_robust_zscore_inclusive", canonical="ts_robust_zscore_inclusive", backend="polars", research_only=True)
+@register_operator(name="ts_robust_zscore_inclusive", canonical="ts_robust_zscore_inclusive", backend="polars")
 class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
     """Z-score using median and MAD instead of mean and std"""
     metadata = OperatorMetadata(
@@ -3130,7 +3136,7 @@ class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_qn_scale", canonical="ts_qn_scale", backend="polars", research_only=True)
+@register_operator(name="ts_qn_scale", canonical="ts_qn_scale", backend="polars")
 class TSQnScalePolarsNative(SeriesOperator):
     """Qn robust scale estimator"""
     metadata = OperatorMetadata(
@@ -3180,7 +3186,7 @@ class TSQnScalePolarsNative(SeriesOperator):
 # Regression Variants
 # ============================================================================
 
-@register_operator(name="ts_regression_resid_mean", canonical="ts_regression_resid_mean", backend="polars", research_only=True)
+@register_operator(name="ts_regression_resid_mean", canonical="ts_regression_resid_mean", backend="polars")
 class TSRegressionResidMeanPolarsNative(SeriesOperator):
     """Mean of regression residuals in window"""
     metadata = OperatorMetadata(
@@ -3228,7 +3234,7 @@ class TSRegressionResidMeanPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_tstat", canonical="ts_regression_tstat", backend="polars", research_only=True)
+@register_operator(name="ts_regression_tstat", canonical="ts_regression_tstat", backend="polars")
 class TSRegressionTstatPolarsNative(SeriesOperator):
     """T-statistic of regression slope"""
     metadata = OperatorMetadata(
@@ -3283,7 +3289,7 @@ class TSRegressionTstatPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_forecast_error", canonical="ts_regression_forecast_error", backend="polars", research_only=True)
+@register_operator(name="ts_regression_forecast_error", canonical="ts_regression_forecast_error", backend="polars")
 class TSRegressionForecastErrorPolarsNative(SeriesOperator):
     """Forecast error: actual next value - predicted next value"""
     metadata = OperatorMetadata(
@@ -3332,7 +3338,7 @@ class TSRegressionForecastErrorPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_regression_forecast_error_z", canonical="ts_regression_forecast_error_z", backend="polars", research_only=True)
+@register_operator(name="ts_regression_forecast_error_z", canonical="ts_regression_forecast_error_z", backend="polars")
 class TSRegressionForecastErrorZPolarsNative(SeriesOperator):
     """Standardized forecast error"""
     metadata = OperatorMetadata(
@@ -3389,7 +3395,7 @@ class TSRegressionForecastErrorZPolarsNative(SeriesOperator):
 # Beta Estimation
 # ============================================================================
 
-@register_operator(name="ts_beta_if", canonical="ts_beta_if", backend="polars", research_only=True)
+@register_operator(name="ts_beta_if", canonical="ts_beta_if", backend="polars")
 class TSBetaIfPolarsNative(SeriesOperator):
     """Conditional rolling beta: cov(x,y) / var(y)"""
     metadata = OperatorMetadata(
@@ -3432,7 +3438,7 @@ class TSBetaIfPolarsNative(SeriesOperator):
 # Tail & Extreme Statistics
 # ============================================================================
 
-@register_operator(name="ts_tail_ratio", canonical="ts_tail_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_tail_ratio", canonical="ts_tail_ratio", backend="polars")
 class TSTailRatioPolarsNative(SeriesOperator):
     """Ratio of upper tail to lower tail (e.g., 95th percentile / 5th percentile)"""
     metadata = OperatorMetadata(
@@ -3467,7 +3473,7 @@ class TSTailRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_tail_mean", canonical="ts_tail_mean", backend="polars", research_only=True)
+@register_operator(name="ts_tail_mean", canonical="ts_tail_mean", backend="polars")
 class TSTailMeanPolarsNative(SeriesOperator):
     """Mean of extreme tail (beyond threshold quantile)"""
     metadata = OperatorMetadata(
@@ -3504,7 +3510,7 @@ class TSTailMeanPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_expected_shortfall_asymmetry", canonical="ts_expected_shortfall_asymmetry", backend="polars", research_only=True)
+@register_operator(name="ts_expected_shortfall_asymmetry", canonical="ts_expected_shortfall_asymmetry", backend="polars")
 class TSExpectedShortfallAsymmetryPolarsNative(SeriesOperator):
     """Ratio of upper ES to lower ES"""
     metadata = OperatorMetadata(
@@ -3554,7 +3560,7 @@ class TSExpectedShortfallAsymmetryPolarsNative(SeriesOperator):
 # Partial Correlation & Multivariate
 # ============================================================================
 
-@register_operator(name="ts_partial_corr", canonical="ts_partial_corr", backend="polars", research_only=True)
+@register_operator(name="ts_partial_corr", canonical="ts_partial_corr", backend="polars")
 class TSPartialCorrPolarsNative(SeriesOperator):
     """Partial correlation of x and y controlling for z"""
     metadata = OperatorMetadata(
@@ -3613,7 +3619,7 @@ class TSPartialCorrPolarsNative(SeriesOperator):
 # Distance Correlation
 # ============================================================================
 
-@register_operator(name="ts_distance_corr", canonical="ts_distance_corr", backend="polars", research_only=True)
+@register_operator(name="ts_distance_corr", canonical="ts_distance_corr", backend="polars")
 class TSDistanceCorrPolarsNative(SeriesOperator):
     """Distance correlation (detects nonlinear dependencies)"""
     metadata = OperatorMetadata(
@@ -3675,7 +3681,7 @@ class TSDistanceCorrPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_distance_cov", canonical="ts_distance_cov", backend="polars", research_only=True)
+@register_operator(name="ts_distance_cov", canonical="ts_distance_cov", backend="polars")
 class TSDistanceCovPolarsNative(SeriesOperator):
     """Distance covariance"""
     metadata = OperatorMetadata(
@@ -3733,7 +3739,7 @@ class TSDistanceCovPolarsNative(SeriesOperator):
 # Fill & Imputation
 # ============================================================================
 
-@register_operator(name="ts_ffill_limited", canonical="ts_ffill_limited", backend="polars", research_only=True)
+@register_operator(name="ts_ffill_limited", canonical="ts_ffill_limited", backend="polars")
 class TSFfillLimitedPolarsNative(SeriesOperator):
     """Forward fill with maximum fill limit"""
     metadata = OperatorMetadata(
@@ -3784,7 +3790,7 @@ class TSFfillLimitedPolarsNative(SeriesOperator):
 # Filtering & Smoothing
 # ============================================================================
 
-@register_operator(name="ts_median3_causal", canonical="ts_median3_causal", backend="polars", research_only=True)
+@register_operator(name="ts_median3_causal", canonical="ts_median3_causal", backend="polars")
 class TSMedian3CausalPolarsNative(SeriesOperator):
     """3-point median filter (causal: uses current and 2 past)"""
     metadata = OperatorMetadata(
@@ -3809,7 +3815,7 @@ class TSMedian3CausalPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_rolling_median_causal", canonical="ts_rolling_median_causal", backend="polars", research_only=True)
+@register_operator(name="ts_rolling_median_causal", canonical="ts_rolling_median_causal", backend="polars")
 class TSRollingMedianCausalPolarsNative(SeriesOperator):
     """Rolling median (alias for ts_median)"""
     metadata = OperatorMetadata(
@@ -3837,7 +3843,7 @@ class TSRollingMedianCausalPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_robust_ema", canonical="ts_robust_ema", backend="polars", research_only=True)
+@register_operator(name="ts_robust_ema", canonical="ts_robust_ema", backend="polars")
 class TSRobustEmaPolarsNative(SeriesOperator):
     """Robust EMA that clips outliers before smoothing"""
     metadata = OperatorMetadata(
@@ -3882,7 +3888,7 @@ class TSRobustEmaPolarsNative(SeriesOperator):
 # Run & Streak Analysis
 # ============================================================================
 
-@register_operator(name="ts_run_strength", canonical="ts_run_strength", backend="polars", research_only=True)
+@register_operator(name="ts_run_strength", canonical="ts_run_strength", backend="polars")
 class TSRunStrengthPolarsNative(SeriesOperator):
     """Average absolute return during runs (consecutive same-sign moves)"""
     metadata = OperatorMetadata(
@@ -3938,7 +3944,7 @@ class TSRunStrengthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_run_efficiency", canonical="ts_run_efficiency", backend="polars", research_only=True)
+@register_operator(name="ts_run_efficiency", canonical="ts_run_efficiency", backend="polars")
 class TSRunEfficiencyPolarsNative(SeriesOperator):
     """Ratio of run-based distance to total distance"""
     metadata = OperatorMetadata(
@@ -3996,7 +4002,7 @@ class TSRunEfficiencyPolarsNative(SeriesOperator):
 # Quantile & Expectile Regression
 # ============================================================================
 
-@register_operator(name="ts_quantile_regression_slope", canonical="ts_quantile_regression_slope", backend="polars", research_only=True)
+@register_operator(name="ts_quantile_regression_slope", canonical="ts_quantile_regression_slope", backend="polars")
 class TSQuantileRegressionSlopePolarsNative(SeriesOperator):
     """Quantile regression slope (simplified via weighted least squares)"""
     metadata = OperatorMetadata(
@@ -4051,7 +4057,7 @@ class TSQuantileRegressionSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_expectile", canonical="ts_expectile", backend="polars", research_only=True)
+@register_operator(name="ts_expectile", canonical="ts_expectile", backend="polars")
 class TSExpectilePolarsNative(SeriesOperator):
     """Rolling expectile (asymmetric mean)"""
     metadata = OperatorMetadata(
@@ -4106,7 +4112,7 @@ class TSExpectilePolarsNative(SeriesOperator):
 # Support & Resistance
 # ============================================================================
 
-@register_operator(name="ts_support_level", canonical="ts_support_level", backend="polars", research_only=True)
+@register_operator(name="ts_support_level", canonical="ts_support_level", backend="polars")
 class TSSupportLevelPolarsNative(SeriesOperator):
     """Support level (rolling minimum with buffer)"""
     metadata = OperatorMetadata(
@@ -4134,7 +4140,7 @@ class TSSupportLevelPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_resistance_level", canonical="ts_resistance_level", backend="polars", research_only=True)
+@register_operator(name="ts_resistance_level", canonical="ts_resistance_level", backend="polars")
 class TSResistanceLevelPolarsNative(SeriesOperator):
     """Resistance level (rolling maximum with buffer)"""
     metadata = OperatorMetadata(
@@ -4162,7 +4168,7 @@ class TSResistanceLevelPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars")
 class TSDistanceToSupportPolarsNative(SeriesOperator):
     """Distance from current price to support level"""
     metadata = OperatorMetadata(
@@ -4194,7 +4200,7 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars")
 class TSDistanceToResistancePolarsNative(SeriesOperator):
     """Distance from current price to resistance level"""
     metadata = OperatorMetadata(
@@ -4226,7 +4232,7 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_breakout_high", canonical="ts_breakout_high", backend="polars", research_only=True)
+@register_operator(name="ts_breakout_high", canonical="ts_breakout_high", backend="polars")
 class TSBreakoutHighPolarsNative(SeriesOperator):
     """Boolean: price breaks above resistance"""
     metadata = OperatorMetadata(
@@ -4257,7 +4263,7 @@ class TSBreakoutHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_breakdown_low", canonical="ts_breakdown_low", backend="polars", research_only=True)
+@register_operator(name="ts_breakdown_low", canonical="ts_breakdown_low", backend="polars")
 class TSBreakdownLowPolarsNative(SeriesOperator):
     """Boolean: price breaks below support"""
     metadata = OperatorMetadata(

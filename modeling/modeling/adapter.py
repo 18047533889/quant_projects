@@ -221,6 +221,7 @@ class FactorPreprocessAdapter:
             fit_window=contract.fit_window,
             missing_indicators=missing_indicators,
             exposure_residuals=exposure_residuals,
+            created_at=data_end,
             producer="modeling.adapter.factor_preprocess",
         )
 

@@ -50,9 +50,7 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     business_category="cross_sectional_anomaly",
     canonical="cs_isolation_forest_score",
     source="cs_batch1",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsIsolationForestScore(SeriesOperator):
     """横截面孤立森林异常得分（Isolation Forest anomaly score）。
 
@@ -158,9 +156,7 @@ class CsIsolationForestScore(SeriesOperator):
     business_category="cross_sectional_bucket",
     canonical="cs_factor_bucket_return",
     source="cs_batch1",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsFactorBucketReturn(SeriesOperator):
     """横截面因子分桶平均收益（factor bucket mean return）。
 
@@ -265,9 +261,7 @@ class CsFactorBucketReturn(SeriesOperator):
     business_category="cross_sectional_shrinkage",
     canonical="cs_empirical_bayes_shrinkage",
     source="cs_batch1",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsEmpiricalBayesShrinkage(SeriesOperator):
     """横截面经验贝叶斯收缩（empirical Bayes shrinkage）。
 
@@ -368,9 +362,7 @@ class CsEmpiricalBayesShrinkage(SeriesOperator):
     business_category="cross_sectional_shrinkage",
     canonical="cs_shrink_to_group_mean",
     source="cs_batch1",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class CsShrinkToGroupMean(SeriesOperator):
     """横截面向组均值收缩（shrink to group mean）。
 
@@ -472,9 +464,7 @@ class CsShrinkToGroupMean(SeriesOperator):
     business_category="cross_sectional_graph",
     canonical="panel_peer_graph_aggregate",
     source="cs_batch1",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class PanelPeerGraphAggregate(SeriesOperator):
     """横截面图聚合（peer graph aggregation）。
 

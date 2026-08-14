@@ -207,7 +207,7 @@ class ModelReadyData:
     exposure_residuals: Optional[Any] = None
 
     # Provenance
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = None
     producer: str = "modeling"
     producer_version: str = "0.1.0"
 

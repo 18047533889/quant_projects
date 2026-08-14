@@ -32,9 +32,7 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     business_category="ohlc_price",
     canonical="open_close_return",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class OpenCloseReturnNative(SeriesOperator):
     """Intraday return: (close - open) / open."""
 
@@ -69,9 +67,7 @@ class OpenCloseReturnNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="overnight_return",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class OvernightReturnNative(SeriesOperator):
     """Overnight return: (open_t - close_{t-1}) / close_{t-1}."""
 
@@ -107,9 +103,7 @@ class OvernightReturnNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="overnight_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class OvernightVolatilityNative(SeriesOperator):
     """Rolling std of overnight returns."""
 
@@ -152,9 +146,7 @@ class OvernightVolatilityNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="true_range",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TrueRangeNative(SeriesOperator):
     """True range: max(high-low, |high-prev_close|, |low-prev_close|)."""
 
@@ -188,9 +180,7 @@ class TrueRangeNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="garman_klass_vol",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class GarmanKlassVolNative(SeriesOperator):
     """Garman-Klass volatility estimator."""
 
@@ -229,9 +219,7 @@ class GarmanKlassVolNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="parkinson_vol",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class ParkinsonVolNative(SeriesOperator):
     """Parkinson volatility: sqrt(mean(log(H/L)^2 / (4*ln(2))))."""
 
@@ -271,9 +259,7 @@ class ParkinsonVolNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="rogers_satchell_vol",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RogersSatchellVolNative(SeriesOperator):
     """Rogers-Satchell volatility estimator."""
 
@@ -314,9 +300,7 @@ class RogersSatchellVolNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="yang_zhang_vol",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class YangZhangVolNative(SeriesOperator):
     """Yang-Zhang volatility (simplified)."""
 
@@ -361,9 +345,7 @@ class YangZhangVolNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="range_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RangeVolatilityNative(SeriesOperator):
     """Rolling std of (high - low) / close."""
 
@@ -400,9 +382,7 @@ class RangeVolatilityNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="intraday_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntradayVolatilityNative(SeriesOperator):
     """Rolling std of (high - low)."""
 
@@ -444,9 +424,7 @@ class IntradayVolatilityNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_body",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleBodyNative(SeriesOperator):
     """Candle body: close - open."""
 
@@ -476,9 +454,7 @@ class CandleBodyNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_abs_body",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleAbsBodyNative(SeriesOperator):
     """Absolute candle body: |close - open|."""
 
@@ -508,9 +484,7 @@ class CandleAbsBodyNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_range",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleRangeNative(SeriesOperator):
     """Candle range: high - low."""
 
@@ -540,9 +514,7 @@ class CandleRangeNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_upper_shadow",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleUpperShadowNative(SeriesOperator):
     """Upper shadow: high - max(open, close)."""
 
@@ -573,9 +545,7 @@ class CandleUpperShadowNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_lower_shadow",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleLowerShadowNative(SeriesOperator):
     """Lower shadow: min(open, close) - low."""
 
@@ -606,9 +576,7 @@ class CandleLowerShadowNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_body_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleBodyRatioNative(SeriesOperator):
     """Body ratio: |close - open| / (high - low)."""
 
@@ -645,9 +613,7 @@ class CandleBodyRatioNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_upper_shadow_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleUpperShadowRatioNative(SeriesOperator):
     """Upper shadow ratio: upper_shadow / range."""
 
@@ -685,9 +651,7 @@ class CandleUpperShadowRatioNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_lower_shadow_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleLowerShadowRatioNative(SeriesOperator):
     """Lower shadow ratio: lower_shadow / range."""
 
@@ -725,9 +689,7 @@ class CandleLowerShadowRatioNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_direction",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleDirectionNative(SeriesOperator):
     """Candle direction: sign(close - open)."""
 
@@ -757,9 +719,7 @@ class CandleDirectionNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_gap",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleGapNative(SeriesOperator):
     """Gap: open_t - close_{t-1}."""
 
@@ -790,9 +750,7 @@ class CandleGapNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_gap_pct",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleGapPctNative(SeriesOperator):
     """Gap percent: (open_t - close_{t-1}) / close_{t-1}."""
 
@@ -828,9 +786,7 @@ class CandleGapPctNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_close_location",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleCloseLocationNative(SeriesOperator):
     """Close location within range: (close - low) / (high - low)."""
 
@@ -866,9 +822,7 @@ class CandleCloseLocationNative(SeriesOperator):
     business_category="ohlc_price",
     canonical="candle_body_position",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CandleBodyPositionNative(SeriesOperator):
     """Body position: (open + close) / 2 relative to range."""
 

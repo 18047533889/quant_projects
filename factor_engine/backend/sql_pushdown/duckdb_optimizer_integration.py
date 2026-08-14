@@ -149,10 +149,16 @@ def execute_batch_compiled_sql_optimized(
         part = df.select(["ts", "inst", *chunk_aliases]).lazy()
 
         for sid, alias in chunk:
-            # 提取单列并转换为 Series
+            # 提取单列并转换为 Series（使用统一的 long_frame 转换器）
             sid_df = part.select(["ts", "inst", pl.col(alias).alias("_v")]).collect()
-            pdf = sid_df.to_pandas().set_index(["ts", "inst"])
-            out[sid] = pdf["_v"]
+            # R47 P1-05: Use polars_long_to_multiindex_series for native conversion
+            from backend.long_frame import polars_long_to_multiindex_series
+            out[sid] = polars_long_to_multiindex_series(
+                sid_df,
+                timestamp_col="ts",
+                instrument_col="inst",
+                value_col="_v",
+            )
 
     return out
 

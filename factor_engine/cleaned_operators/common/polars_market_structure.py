@@ -38,9 +38,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     business_category="market_structure",
     canonical="a_share_cap_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class AShareCapRatioNative(SeriesOperator):
     """A-share market cap / total market cap."""
 
@@ -77,9 +75,7 @@ class AShareCapRatioNative(SeriesOperator):
     business_category="market_structure",
     canonical="circulating_cap_ratio_change",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CirculatingCapRatioChangeNative(SeriesOperator):
     """Change in circulating cap / total cap ratio over d periods."""
 
@@ -119,9 +115,7 @@ class CirculatingCapRatioChangeNative(SeriesOperator):
     business_category="market_structure",
     canonical="circulating_cap_unlock_proxy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CirculatingCapUnlockProxyNative(SeriesOperator):
     """Positive changes in circulating cap ratio (unlock events)."""
 
@@ -156,9 +150,7 @@ class CirculatingCapUnlockProxyNative(SeriesOperator):
     business_category="market_structure",
     canonical="market_cap_free_cap_gap",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class MarketCapFreeCapGapNative(SeriesOperator):
     """(total_cap - free_cap) / total_cap; locked share ratio."""
 
@@ -199,9 +191,7 @@ class MarketCapFreeCapGapNative(SeriesOperator):
     business_category="listing",
     canonical="listing_age",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class ListingAgeNative(SeriesOperator):
     """Days since listing date."""
 
@@ -233,9 +223,7 @@ class ListingAgeNative(SeriesOperator):
     business_category="suspension",
     canonical="suspension_frequency",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class SuspensionFrequencyNative(SeriesOperator):
     """Rolling count of suspension days / window."""
 
@@ -273,9 +261,7 @@ class SuspensionFrequencyNative(SeriesOperator):
     business_category="suspension",
     canonical="suspension_status_coverage",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class SuspensionStatusCoverageNative(SeriesOperator):
     """Rolling non-null suspension status ratio."""
 
@@ -317,9 +303,7 @@ class SuspensionStatusCoverageNative(SeriesOperator):
     business_category="capital_change",
     canonical="capital_change_age",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CapitalChangeAgeNative(SeriesOperator):
     """Days since last capital change event."""
 
@@ -351,9 +335,7 @@ class CapitalChangeAgeNative(SeriesOperator):
     business_category="capital_change",
     canonical="capital_change_magnitude",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class CapitalChangeMagnitudeNative(SeriesOperator):
     """Relative change in total shares: (new - old) / old."""
 
@@ -390,9 +372,7 @@ class CapitalChangeMagnitudeNative(SeriesOperator):
     business_category="index",
     canonical="index_member",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexMemberNative(SeriesOperator):
     """Binary index membership indicator."""
 
@@ -423,9 +403,7 @@ class IndexMemberNative(SeriesOperator):
     business_category="index",
     canonical="index_membership_age",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexMembershipAgeNative(SeriesOperator):
     """Days since entry into index (consecutive membership)."""
 
@@ -460,9 +438,7 @@ class IndexMembershipAgeNative(SeriesOperator):
     business_category="index",
     canonical="index_weight",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexWeightNative(SeriesOperator):
     """Index weight (pass-through, may normalize)."""
 
@@ -487,9 +463,7 @@ class IndexWeightNative(SeriesOperator):
     business_category="index",
     canonical="index_weight_change",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexWeightChangeNative(SeriesOperator):
     """Change in index weight over d periods."""
 
@@ -527,9 +501,7 @@ class IndexWeightChangeNative(SeriesOperator):
     business_category="index",
     canonical="index_weight_gap_to_free_float",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexWeightGapToFreeFloatNative(SeriesOperator):
     """index_weight - free_float_cap / sum(free_float_cap)."""
 
@@ -565,9 +537,7 @@ class IndexWeightGapToFreeFloatNative(SeriesOperator):
     business_category="index",
     canonical="index_entry_exit_event",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexEntryExitEventNative(SeriesOperator):
     """Index entry/exit indicator: +1 entry, -1 exit, 0 no change."""
 
@@ -601,9 +571,7 @@ class IndexEntryExitEventNative(SeriesOperator):
     business_category="index",
     canonical="index_event_decay",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexEventDecayNative(SeriesOperator):
     """Exponential decay of index entry/exit events."""
 
@@ -650,9 +618,7 @@ class IndexEventDecayNative(SeriesOperator):
     business_category="index",
     canonical="index_reconstitution_churn",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IndexReconstitutionChurnNative(SeriesOperator):
     """Rolling sum of |entry_exit_event| over window."""
 
@@ -693,9 +659,7 @@ class IndexReconstitutionChurnNative(SeriesOperator):
     business_category="index",
     canonical="multi_index_entry_intensity",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class MultiIndexEntryIntensityNative(SeriesOperator):
     """Sum of entry events across multiple index memberships."""
 

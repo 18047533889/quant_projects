@@ -329,6 +329,11 @@ def convert_polars_to_panel_bulk(result: Any, template: pd.DataFrame, *, strict:
 
     经 ``to_pandas`` 单次物化（避免 ``select().to_numpy()`` 的 Python 往返），
     再对齐 template 时间轴。仅应在 ``_polars_to_panel_can_bulk`` 返回 True 时调用。
+
+    R47 P1-05: This is a legitimate boundary conversion - the bulk conversion
+    path from native Polars computation back to pandas panel format. The
+    .to_pandas() call is at the representation boundary where native execution
+    completes and the result is materialized for the caller.
     """
     if pl is None:
         raise ImportError("polars is required for polars operator backend")

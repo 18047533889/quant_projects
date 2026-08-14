@@ -8,15 +8,14 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 
 
+@register_operator(
     name="ts_sma_cn",
     category="time_series",
     business_category="time_series",
     canonical="ts_sma_cn",
     source="lqtp_compat",
     backend="pandas_numpy",
-    status="research",
-    research_only=True,
-)
+    status="research")
 class ChineseRecursiveSMA(SeriesOperator):
     """Chinese/JQ recursive SMA: y=(m*x+(n-m)*prev)/n."""
     metadata = OperatorMetadata(
@@ -47,15 +46,14 @@ class ChineseRecursiveSMA(SeriesOperator):
         return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
+@register_operator(
     name="lqtp_historical_cvar",
     category="time_series",
     business_category="risk",
     canonical="lqtp_historical_cvar",
     source="lqtp_compat",
     backend="pandas_numpy",
-    status="research",
-    research_only=True,
-)
+    status="research")
 class LQTPHistoricalCVaR(SeriesOperator):
     """Historical Expected Shortfall: negative mean of observations <= rolling q-quantile."""
     metadata = OperatorMetadata(

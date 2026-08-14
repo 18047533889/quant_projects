@@ -5,9 +5,12 @@ Provides interfaces for exposure-based transformations that can be
 implemented directly or delegated to factor_preprocess.
 """
 from typing import Optional, List
+import logging
 import numpy as np
 
 from modeling.errors import InsufficientDataError, ContractViolation
+
+logger = logging.getLogger(__name__)
 
 
 def compute_exposure_residual(
@@ -90,9 +93,23 @@ def _cross_sectional_residual(
     if method == "ols":
         # Simple OLS: beta = (X'X)^-1 X'y
         try:
-            beta = np.linalg.lstsq(X_valid, y_valid, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            return y
+            result = np.linalg.lstsq(X_valid, y_valid, rcond=None)
+            beta = result[0]
+            rank = result[2]
+            # Check if matrix is rank-deficient
+            if rank < X_valid.shape[1]:
+                logger.warning(
+                    f"Exposure neutralization failed: matrix is rank-deficient "
+                    f"(rank={rank}, expected={X_valid.shape[1]}). "
+                    f"Returning NaN to signal computation failure."
+                )
+                return np.full_like(y, np.nan)
+        except np.linalg.LinAlgError as e:
+            logger.warning(
+                f"Exposure neutralization failed due to singular matrix: {e}. "
+                f"Returning NaN to signal computation failure."
+            )
+            return np.full_like(y, np.nan)
     elif method == "weighted_ols" and weights is not None:
         # Weighted OLS: beta = (X'WX)^-1 X'Wy
         w_valid = weights[valid_mask]
@@ -101,8 +118,12 @@ def _cross_sectional_residual(
             XtWX = X_valid.T @ W @ X_valid
             XtWy = X_valid.T @ W @ y_valid
             beta = np.linalg.solve(XtWX, XtWy)
-        except np.linalg.LinAlgError:
-            return y
+        except np.linalg.LinAlgError as e:
+            logger.warning(
+                f"Weighted OLS neutralization failed due to singular matrix: {e}. "
+                f"Returning NaN to signal computation failure."
+            )
+            return np.full_like(y, np.nan)
     elif method == "ridge":
         # Ridge regression with small lambda
         lambda_ridge = 0.01
@@ -110,8 +131,12 @@ def _cross_sectional_residual(
             XtX = X_valid.T @ X_valid
             Xty = X_valid.T @ y_valid
             beta = np.linalg.solve(XtX + lambda_ridge * np.eye(X_valid.shape[1]), Xty)
-        except np.linalg.LinAlgError:
-            return y
+        except np.linalg.LinAlgError as e:
+            logger.warning(
+                f"Ridge neutralization failed due to singular matrix: {e}. "
+                f"Returning NaN to signal computation failure."
+            )
+            return np.full_like(y, np.nan)
     else:
         raise ValueError(f"Unknown method: {method}")
 

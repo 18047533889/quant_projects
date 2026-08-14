@@ -39,9 +39,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     business_category="intraday_profile",
     canonical="intra_volume_profile_cosine",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeProfileCosineNative(SeriesOperator):
     """Cosine similarity between today's and average volume profile."""
 
@@ -72,9 +70,7 @@ class IntraVolumeProfileCosineNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_volume_profile_jsd",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeProfileJsdNative(SeriesOperator):
     """Jensen-Shannon divergence of volume profile."""
 
@@ -106,9 +102,7 @@ class IntraVolumeProfileJsdNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_amount_profile_cosine",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraAmountProfileCosineNative(SeriesOperator):
     """Cosine similarity between today's and average amount profile."""
 
@@ -139,9 +133,7 @@ class IntraAmountProfileCosineNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_amount_profile_jsd",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraAmountProfileJsdNative(SeriesOperator):
     """Jensen-Shannon divergence of amount profile."""
 
@@ -177,9 +169,7 @@ class IntraAmountProfileJsdNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_return_profile_cosine",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity of return profile."""
 
@@ -210,9 +200,7 @@ class IntraReturnProfileCosineNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_signed_return_profile_cosine",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraSignedReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity preserving return sign."""
 
@@ -243,9 +231,7 @@ class IntraSignedReturnProfileCosineNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_abs_return_profile_cosine",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraAbsReturnProfileCosineNative(SeriesOperator):
     """Cosine similarity of absolute return profile."""
 
@@ -281,9 +267,7 @@ class IntraAbsReturnProfileCosineNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_volume_profile_peak_geometry",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeProfilePeakGeometryNative(SeriesOperator):
     """Geometry of volume profile peak (time, width, height)."""
 
@@ -309,9 +293,7 @@ class IntraVolumeProfilePeakGeometryNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_volume_profile_supply_structure",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeProfileSupplyStructureNative(SeriesOperator):
     """Supply structure from volume profile (overhead/below)."""
 
@@ -339,9 +321,7 @@ class IntraVolumeProfileSupplyStructureNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_volume_profile_value_area",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeProfileValueAreaNative(SeriesOperator):
     """Value area (70% volume concentration range)."""
 
@@ -369,9 +349,7 @@ class IntraVolumeProfileValueAreaNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intra_volume_at_price_profile",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumeAtPriceProfileNative(SeriesOperator):
     """Volume-at-price distribution characteristics."""
 
@@ -404,9 +382,7 @@ class IntraVolumeAtPriceProfileNative(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_round_price_clustering_share",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraRoundPriceClusteringShareNative(SeriesOperator):
     """Share of volume at round price levels."""
 
@@ -440,9 +416,7 @@ class IntraRoundPriceClusteringShareNative(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_round_price_barrier_response",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraRoundPriceBarrierResponseNative(SeriesOperator):
     """Price response at round number barriers."""
 
@@ -475,9 +449,7 @@ class IntraRoundPriceBarrierResponseNative(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_bar_range_persistence",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraBarRangePersistenceNative(SeriesOperator):
     """Persistence of bar range (high-low)."""
 
@@ -517,9 +489,7 @@ class IntraBarRangePersistenceNative(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_bar_range_deviation",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraBarRangeDeviationNative(SeriesOperator):
     """Deviation of bar range from average."""
 
@@ -562,9 +532,7 @@ class IntraBarRangeDeviationNative(SeriesOperator):
     business_category="intraday_microstructure",
     canonical="intra_consolidation_quality",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraConsolidationQualityNative(SeriesOperator):
     """Quality of price consolidation (tight range)."""
 
@@ -604,9 +572,7 @@ class IntraConsolidationQualityNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_extreme_bar_return",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraExtremeBarReturnNative(SeriesOperator):
     """Return of most extreme intraday bar."""
 
@@ -632,9 +598,7 @@ class IntraExtremeBarReturnNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_tail_event_count",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraTailEventCountNative(SeriesOperator):
     """Count of tail events (beyond threshold)."""
 
@@ -673,9 +637,7 @@ class IntraTailEventCountNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_tail_volume_share",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraTailVolumeShareNative(SeriesOperator):
     """Volume share in tail events."""
 
@@ -718,9 +680,7 @@ class IntraTailVolumeShareNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_negative_tail_variation",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraNegativeTailVariationNative(SeriesOperator):
     """Variation in negative tail (downside extremes)."""
 
@@ -759,9 +719,7 @@ class IntraNegativeTailVariationNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_positive_tail_variation",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraPositiveTailVariationNative(SeriesOperator):
     """Variation in positive tail (upside extremes)."""
 
@@ -800,9 +758,7 @@ class IntraPositiveTailVariationNative(SeriesOperator):
     business_category="intraday_extremes",
     canonical="intra_signed_tail_variation_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraSignedTailVariationRatioNative(SeriesOperator):
     """Ratio of positive to negative tail variation."""
 
@@ -842,9 +798,7 @@ class IntraSignedTailVariationRatioNative(SeriesOperator):
     business_category="intraday_vwap",
     canonical="intra_price_vwap_max_positive_excursion",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraPriceVwapMaxPositiveExcursionNative(SeriesOperator):
     """Maximum positive excursion from VWAP."""
 
@@ -881,9 +835,7 @@ class IntraPriceVwapMaxPositiveExcursionNative(SeriesOperator):
     business_category="intraday_vwap",
     canonical="intra_price_vwap_max_negative_excursion",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraPriceVwapMaxNegativeExcursionNative(SeriesOperator):
     """Maximum negative excursion from VWAP."""
 
@@ -925,9 +877,7 @@ class IntraPriceVwapMaxNegativeExcursionNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intraday_profile_pca_residual",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntradayProfilePcaResidualNative(SeriesOperator):
     """PCA residual of intraday profile."""
 
@@ -953,9 +903,7 @@ class IntradayProfilePcaResidualNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intraday_profile_phase_shift",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntradayProfilePhaseShiftNative(SeriesOperator):
     """Phase shift of intraday profile relative to average."""
 
@@ -983,9 +931,7 @@ class IntradayProfilePhaseShiftNative(SeriesOperator):
     business_category="intraday_profile",
     canonical="intraday_profile_surprise_energy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntradayProfileSurpriseEnergyNative(SeriesOperator):
     """Energy of profile surprise (L2 norm of deviation)."""
 

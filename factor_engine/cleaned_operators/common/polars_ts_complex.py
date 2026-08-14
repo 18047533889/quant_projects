@@ -38,9 +38,7 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     business_category="state_space",
     canonical="ts_kalman_filter",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSKalmanFilterNative(SeriesOperator):
     """Kalman filter state estimate."""
 
@@ -73,9 +71,7 @@ class TSKalmanFilterNative(SeriesOperator):
     business_category="state_space",
     canonical="ts_kalman_gain",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSKalmanGainNative(SeriesOperator):
     """Kalman gain sequence."""
 
@@ -108,9 +104,7 @@ class TSKalmanGainNative(SeriesOperator):
     business_category="state_space",
     canonical="ts_kalman_innovation",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSKalmanInnovationNative(SeriesOperator):
     """Kalman filter innovation sequence."""
 
@@ -143,9 +137,7 @@ class TSKalmanInnovationNative(SeriesOperator):
     business_category="state_space",
     canonical="ts_kalman_smoothed",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSKalmanSmoothedNative(SeriesOperator):
     """Kalman smoother (backward pass)."""
 
@@ -182,9 +174,7 @@ class TSKalmanSmoothedNative(SeriesOperator):
     business_category="volatility",
     canonical="ts_garch_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSGarchVolatilityNative(SeriesOperator):
     """GARCH(1,1) conditional volatility."""
 
@@ -219,9 +209,7 @@ class TSGarchVolatilityNative(SeriesOperator):
     business_category="volatility",
     canonical="ts_garch_standardized_resid",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSGarchStandardizedResidNative(SeriesOperator):
     """GARCH standardized residuals."""
 
@@ -256,9 +244,7 @@ class TSGarchStandardizedResidNative(SeriesOperator):
     business_category="volatility",
     canonical="ts_gjr_garch_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSGJRGarchVolatilityNative(SeriesOperator):
     """GJR-GARCH asymmetric volatility."""
 
@@ -296,9 +282,7 @@ class TSGJRGarchVolatilityNative(SeriesOperator):
     business_category="volatility",
     canonical="ts_har_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSHARVolatilityNative(SeriesOperator):
     """HAR (Heterogeneous AutoRegressive) volatility."""
 
@@ -338,9 +322,7 @@ class TSHARVolatilityNative(SeriesOperator):
     business_category="spectral",
     canonical="ts_spectral_density",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSSpectralDensityNative(SeriesOperator):
     """Power spectral density at dominant frequency."""
 
@@ -371,9 +353,7 @@ class TSSpectralDensityNative(SeriesOperator):
     business_category="spectral",
     canonical="ts_spectral_centroid",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSSpectralCentroidNative(SeriesOperator):
     """Spectral centroid (center of mass of spectrum)."""
 
@@ -404,9 +384,7 @@ class TSSpectralCentroidNative(SeriesOperator):
     business_category="spectral",
     canonical="ts_spectral_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSSpectralEntropyNative(SeriesOperator):
     """Spectral entropy (frequency domain disorder)."""
 
@@ -437,9 +415,7 @@ class TSSpectralEntropyNative(SeriesOperator):
     business_category="wavelet",
     canonical="ts_wavelet_energy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSWaveletEnergyNative(SeriesOperator):
     """Wavelet decomposition energy at specified scale."""
 
@@ -472,9 +448,7 @@ class TSWaveletEnergyNative(SeriesOperator):
     business_category="wavelet",
     canonical="ts_wavelet_variance",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSWaveletVarianceNative(SeriesOperator):
     """Wavelet variance at specified scale."""
 
@@ -511,9 +485,7 @@ class TSWaveletVarianceNative(SeriesOperator):
     business_category="entropy",
     canonical="ts_sample_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSSampleEntropyNative(SeriesOperator):
     """Sample entropy measure of time series regularity."""
 
@@ -548,9 +520,7 @@ class TSSampleEntropyNative(SeriesOperator):
     business_category="entropy",
     canonical="ts_approximate_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSApproximateEntropyNative(SeriesOperator):
     """Approximate entropy (ApEn)."""
 
@@ -585,9 +555,7 @@ class TSApproximateEntropyNative(SeriesOperator):
     business_category="entropy",
     canonical="ts_permutation_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSPermutationEntropyNative(SeriesOperator):
     """Permutation entropy based on ordinal patterns."""
 
@@ -620,9 +588,7 @@ class TSPermutationEntropyNative(SeriesOperator):
     business_category="entropy",
     canonical="ts_mutual_information",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSMutualInformationNative(SeriesOperator):
     """Mutual information between time series and its lag."""
 
@@ -657,9 +623,7 @@ class TSMutualInformationNative(SeriesOperator):
     business_category="entropy",
     canonical="ts_transfer_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSTransferEntropyNative(SeriesOperator):
     """Transfer entropy from y to x."""
 
@@ -698,9 +662,7 @@ class TSTransferEntropyNative(SeriesOperator):
     business_category="extreme_value",
     canonical="ts_gpd_shape",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSGPDShapeNative(SeriesOperator):
     """Generalized Pareto Distribution shape parameter."""
 
@@ -733,9 +695,7 @@ class TSGPDShapeNative(SeriesOperator):
     business_category="extreme_value",
     canonical="ts_gpd_scale",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSGPDScaleNative(SeriesOperator):
     """GPD scale parameter."""
 
@@ -768,9 +728,7 @@ class TSGPDScaleNative(SeriesOperator):
     business_category="extreme_value",
     canonical="ts_evt_var",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSEVTVaRNative(SeriesOperator):
     """Value-at-Risk from extreme value theory."""
 
@@ -805,9 +763,7 @@ class TSEVTVaRNative(SeriesOperator):
     business_category="extreme_value",
     canonical="ts_hill_estimator",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSHillEstimatorNative(SeriesOperator):
     """Hill estimator for tail index."""
 
@@ -840,9 +796,7 @@ class TSHillEstimatorNative(SeriesOperator):
     business_category="extreme_value",
     canonical="ts_pickands_estimator",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSPickandsEstimatorNative(SeriesOperator):
     """Pickands estimator for extreme value index."""
 
@@ -879,9 +833,7 @@ class TSPickandsEstimatorNative(SeriesOperator):
     business_category="nonlinear",
     canonical="ts_lyapunov_exponent",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSLyapunovExponentNative(SeriesOperator):
     """Largest Lyapunov exponent (chaos indicator)."""
 
@@ -914,9 +866,7 @@ class TSLyapunovExponentNative(SeriesOperator):
     business_category="nonlinear",
     canonical="ts_dfa_exponent",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSDFAExponentNative(SeriesOperator):
     """Detrended Fluctuation Analysis scaling exponent."""
 
@@ -949,9 +899,7 @@ class TSDFAExponentNative(SeriesOperator):
     business_category="nonlinear",
     canonical="ts_hurst_exponent",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSHurstExponentNative(SeriesOperator):
     """Hurst exponent (long-range dependence)."""
 
@@ -982,9 +930,7 @@ class TSHurstExponentNative(SeriesOperator):
     business_category="nonlinear",
     canonical="ts_fractal_dimension",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSFractalDimensionNative(SeriesOperator):
     """Fractal dimension (Higuchi method)."""
 
@@ -1017,9 +963,7 @@ class TSFractalDimensionNative(SeriesOperator):
     business_category="nonlinear",
     canonical="ts_correlation_dimension",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSCorrelationDimensionNative(SeriesOperator):
     """Correlation dimension (Grassberger-Procaccia)."""
 
@@ -1056,9 +1000,7 @@ class TSCorrelationDimensionNative(SeriesOperator):
     business_category="regime",
     canonical="ts_markov_regime_prob",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSMarkovRegimeProbNative(SeriesOperator):
     """Markov regime switching probability."""
 
@@ -1091,9 +1033,7 @@ class TSMarkovRegimeProbNative(SeriesOperator):
     business_category="regime",
     canonical="ts_regime_volatility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSRegimeVolatilityNative(SeriesOperator):
     """Volatility of current regime."""
 
@@ -1126,9 +1066,7 @@ class TSRegimeVolatilityNative(SeriesOperator):
     business_category="regime",
     canonical="ts_two_state_filter",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSTwoStateFilterNative(SeriesOperator):
     """Two-state filter (high/low volatility)."""
 
@@ -1165,9 +1103,7 @@ class TSTwoStateFilterNative(SeriesOperator):
     business_category="recurrence",
     canonical="ts_recurrence_rate",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSRecurrenceRateNative(SeriesOperator):
     """Recurrence rate from recurrence plot."""
 
@@ -1200,9 +1136,7 @@ class TSRecurrenceRateNative(SeriesOperator):
     business_category="recurrence",
     canonical="ts_determinism",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSDeterminismNative(SeriesOperator):
     """Determinism from RQA (recurrence quantification)."""
 
@@ -1237,9 +1171,7 @@ class TSDeterminismNative(SeriesOperator):
     business_category="recurrence",
     canonical="ts_laminarity",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSLaminarityNative(SeriesOperator):
     """Laminarity from RQA."""
 
@@ -1274,9 +1206,7 @@ class TSLaminarityNative(SeriesOperator):
     business_category="recurrence",
     canonical="ts_trapping_time",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSTrappingTimeNative(SeriesOperator):
     """Average trapping time from RQA."""
 
@@ -1313,9 +1243,7 @@ class TSTrappingTimeNative(SeriesOperator):
     business_category="pattern",
     canonical="ts_matrix_profile_min",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSMatrixProfileMinNative(SeriesOperator):
     """Matrix profile minimum distance."""
 
@@ -1348,9 +1276,7 @@ class TSMatrixProfileMinNative(SeriesOperator):
     business_category="pattern",
     canonical="ts_motif_count",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSMotifCountNative(SeriesOperator):
     """Count of repeated motifs."""
 
@@ -1385,9 +1311,7 @@ class TSMotifCountNative(SeriesOperator):
     business_category="pattern",
     canonical="ts_ordinal_pattern_distribution",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSOrdinalPatternDistributionNative(SeriesOperator):
     """Distribution entropy of ordinal patterns."""
 
@@ -1424,9 +1348,7 @@ class TSOrdinalPatternDistributionNative(SeriesOperator):
     business_category="technical",
     canonical="ts_support_level",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSSupportLevelNative(SeriesOperator):
     """Support level from local minima."""
 
@@ -1459,9 +1381,7 @@ class TSSupportLevelNative(SeriesOperator):
     business_category="technical",
     canonical="ts_resistance_level",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSResistanceLevelNative(SeriesOperator):
     """Resistance level from local maxima."""
 
@@ -1494,9 +1414,7 @@ class TSResistanceLevelNative(SeriesOperator):
     business_category="technical",
     canonical="ts_pivot_point",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSPivotPointNative(SeriesOperator):
     """Pivot point from high/low/close."""
 
@@ -1528,9 +1446,7 @@ class TSPivotPointNative(SeriesOperator):
     business_category="quantile",
     canonical="ts_quantile_tracking",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSQuantileTrackingNative(SeriesOperator):
     """Rolling quantile with exponential smoothing."""
 
@@ -1565,9 +1481,7 @@ class TSQuantileTrackingNative(SeriesOperator):
     business_category="quantile",
     canonical="ts_quantile_crossing",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSQuantileCrossingNative(SeriesOperator):
     """Indicator of crossing a rolling quantile."""
 
@@ -1600,9 +1514,7 @@ class TSQuantileCrossingNative(SeriesOperator):
     business_category="quantile",
     canonical="ts_expectile",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSExpectileNative(SeriesOperator):
     """Expectile (asymmetric least squares analogue of quantile)."""
 

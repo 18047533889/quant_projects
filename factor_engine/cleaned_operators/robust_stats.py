@@ -108,9 +108,7 @@ def _rolling_prior_apply_2d(
     business_category="robust_statistics",
     canonical="ts_quantile_range",
     source="robust_stats",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsQuantileRange(SeriesOperator):
     """滚动分位区间：Q(x, q_high) - Q(x, q_low)。q_low=0.25/q_high=0.75 即 IQR。"""
 
@@ -163,9 +161,7 @@ class TsQuantileRange(SeriesOperator):
     business_category="robust_statistics",
     canonical="ts_trimmed_mean",
     source="robust_stats",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsTrimmedMean(SeriesOperator):
     """滚动截尾均值：删除最低/最高 trim_ratio 后对剩余求平均。"""
 
@@ -223,9 +219,7 @@ class TsTrimmedMean(SeriesOperator):
     business_category="robust_statistics",
     canonical="ts_robust_zscore_inclusive",
     source="robust_stats",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsRobustZscore(SeriesOperator):
     """稳健 z-score：(x - center) / (scale)，center 中位数、scale MAD。
 
@@ -297,9 +291,7 @@ class TsRobustZscore(SeriesOperator):
     business_category="robust_statistics",
     canonical="ts_robust_zscore_prior",
     source="robust_stats",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsRobustZscorePrior(SeriesOperator):
     """稳健 z-score，baseline 仅在 ``[t-W, t-1]``。
 

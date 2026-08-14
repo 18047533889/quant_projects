@@ -57,9 +57,7 @@ def _has_spread(valid: np.ndarray, *, eps: float = 1e-12, min_count: int = 2) ->
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_lower_partial_moment",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsLowerPartialMoment(SeriesOperator):
     """下偏矩：mean(max(threshold - x, 0)^order)，order=1 下行缺口、order=2 下行方差。"""
 
@@ -96,9 +94,7 @@ class TsLowerPartialMoment(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_upper_partial_moment",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsUpperPartialMoment(SeriesOperator):
     """上偏矩：mean(max(x - threshold, 0)^order)。"""
 
@@ -134,9 +130,7 @@ class TsUpperPartialMoment(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_expected_shortfall",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsExpectedShortfall(SeriesOperator):
     """历史期望损失（尾部均值）：side='lower' 左尾、side='upper' 右尾，尾部样本不足返回 NaN。"""
 
@@ -183,9 +177,7 @@ class TsExpectedShortfall(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_quantile_skew",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsQuantileSkew(SeriesOperator):
     """Bowley 分位数偏度：(Q_high + Q_low - 2 Q_mid) / (Q_high - Q_low)。"""
 
@@ -223,9 +215,7 @@ class TsQuantileSkew(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_quantile_kurtosis",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsQuantileKurtosis(SeriesOperator):
     """分位数峰度（尾部宽度比）：(Q_outer_hi - Q_outer_lo) / (Q_inner_hi - Q_inner_lo)。标准正态约 2.906。"""
 
@@ -265,9 +255,7 @@ class TsQuantileKurtosis(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_tail_ratio",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsTailRatio(SeriesOperator):
     """尾部比：abs(Q_high) / abs(Q_low)，Q_low=0 返回 NaN（分母保护）。"""
 
@@ -303,9 +291,7 @@ class TsTailRatio(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_extreme_cluster_ratio",
-    source="robust_tail",
-    research_only=True,
-)
+    source="robust_tail")
 class TsExtremeClusterRatio(SeriesOperator):
     """极端事件聚集比：相邻极端-极端对 / 极端事件数，衡量极端是否连续出现。"""
 

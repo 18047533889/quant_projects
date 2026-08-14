@@ -114,9 +114,7 @@ def _ols_fit(y: np.ndarray) -> tuple[float, float, float]:
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_monotonicity",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsMonotonicity(SeriesOperator):
     """Kendall 单调性: (C - D) / (C + D), 范围 [-1, 1]。
 
@@ -165,9 +163,7 @@ class TsMonotonicity(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_turning_rate",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsTurningRate(SeriesOperator):
     """转向率 (Definition A): 窗口内相邻 delta 符号翻转数 / 全部相邻 delta 对数, 范围 [0,1]。
 
@@ -227,9 +223,7 @@ class TsTurningRate(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_effective_turning_rate",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsEffectiveTurningRate(SeriesOperator):
     """有效转向率 (Definition B): 相邻 delta 对中, 两 delta 均有效(非零)的对里
     符号翻转的比例, 范围 [0,1]。
@@ -289,9 +283,7 @@ class TsEffectiveTurningRate(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_turning_intensity",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsTurningIntensity(SeriesOperator):
     """转向猛烈度: 仅转向点上的 |Δ²x| 均值 / 窗口内 Δx 的 MAD。
 
@@ -343,9 +335,7 @@ class TsTurningIntensity(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_path_efficiency",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsPathEfficiency(SeriesOperator):
     """路径效率: |x_t - x_{窗口首}| / 窗口内 |Δx| 之和, 范围 [0,1]。
 
@@ -388,9 +378,7 @@ class TsPathEfficiency(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_roughness",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsRoughness(SeriesOperator):
     """路径粗糙度: Σ(Δ²x)² / (Σ(Δx)² + eps)。衡量局部锯齿程度。"""
 
@@ -426,9 +414,7 @@ class TsRoughness(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_trend_break_score",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsTrendBreakScore(SeriesOperator):
     """趋势断点分: (b_recent - b_old) / (σ_recent_resid + eps)。
 
@@ -486,9 +472,7 @@ class TsTrendBreakScore(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_weighted_time_centroid",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsWeightedTimeCentroid(SeriesOperator):
     """时间加权质心: TC = 2*sum(j*w_j)/((n-1)*sum(w_j) + eps) - 1, 范围 [-1,1]。
 
@@ -532,9 +516,7 @@ class TsWeightedTimeCentroid(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_endpoint_deviation",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsEndpointDeviation(SeriesOperator):
     """端点偏离: (x_t - OLS 预测_x_t) / 残差 std。
 
@@ -579,9 +561,7 @@ class TsEndpointDeviation(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_mass_concentration",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsMassConcentration(SeriesOperator):
     """质量集中度: (HHI - 1/n) / (1 - 1/n), 范围 [0,1]。
 
@@ -626,9 +606,7 @@ class TsMassConcentration(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_chord_excursion_area",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsChordExcursionArea(SeriesOperator):
     """弦弓形面积: Σ_j(x_j - L_j) / (Σ_j|x_j - L_j| + eps), 范围 [-1,1]。
 
@@ -671,9 +649,7 @@ class TsChordExcursionArea(SeriesOperator):
     category="time_series_shape",
     business_category="time_series_shape",
     canonical="ts_max_chord_excursion",
-    source="alpha_language_shape",
-    research_only=True,
-)
+    source="alpha_language_shape")
 class TsMaxChordExcursion(SeriesOperator):
     """最大弦偏移: max_j|x_j - L_j| / (Σ|Δx| + eps)。
 

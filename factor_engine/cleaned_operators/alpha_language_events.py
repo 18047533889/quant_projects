@@ -83,9 +83,7 @@ def _fundamental_metadata(
     category="time_series_event",
     business_category="time_series_event",
     canonical="event_frequency",
-    source="alpha_language_events",
-    research_only=True,
-)
+    source="alpha_language_events")
 class EventFrequency(SeriesOperator):
     """事件频率: 窗口内条件为真的有效观测占比(即 ts_count_if/window 的 fused)。"""
 
@@ -117,9 +115,7 @@ class EventFrequency(SeriesOperator):
     category="time_series_event",
     business_category="time_series_event",
     canonical="event_cluster_count",
-    source="alpha_language_events",
-    research_only=True,
-)
+    source="alpha_language_events")
 class EventClusterCount(SeriesOperator):
     """事件簇计数: 窗口内事件按 max_gap 分簇, 返回簇数。无事件 -> 0。"""
 
@@ -156,9 +152,7 @@ class EventClusterCount(SeriesOperator):
     category="time_series_event",
     business_category="time_series_event",
     canonical="event_cluster_mean_size",
-    source="alpha_language_events",
-    research_only=True,
-)
+    source="alpha_language_events")
 class EventClusterMeanSize(SeriesOperator):
     """事件簇平均规模: 窗口内平均每簇事件数。无事件 -> NaN。"""
 

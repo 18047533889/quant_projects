@@ -1967,7 +1967,12 @@ def _compile_polars_impl(
             expr = pl.col(_VAL).ewm_std(alpha=alpha, adjust=False)
         else:
             expr = pl.col(_VAL).ewm_var(alpha=alpha, adjust=False)
-        return inner.with_columns(expr.over(_INST, order_by=_TS).alias(_VAL))
+        # R-EMA-DIVERGENCE: Polars ewm_mean produces null at NaN input positions,
+        # while pandas ewm().mean() carries forward the previous EMA state.
+        # Forward-fill within each instrument group to match pandas semantics.
+        return inner.with_columns(
+            expr.forward_fill().over(_INST, order_by=_TS).alias(_VAL)
+        )
 
     if op in {"coalesce"}:
         if len(node.inputs) < 2:

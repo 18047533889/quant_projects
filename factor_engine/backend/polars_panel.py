@@ -41,6 +41,10 @@ def pandas_panel_to_polars(panel: Any) -> Any:
 def polars_panel_to_pandas(panel: Any) -> Any:
     """将 Polars 宽表转为 pandas DataFrame。
 
+    R47 P1-05: This is an explicit API conversion function whose purpose is
+    to convert Polars to pandas. The .to_pandas() call here is legitimate
+    and expected by design.
+
     参数:
         panel: polars 或 pandas DataFrame。
 

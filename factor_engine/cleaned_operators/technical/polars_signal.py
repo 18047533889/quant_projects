@@ -90,14 +90,13 @@ class RSIPolars(SeriesOperator):
         return x.with_columns(exprs)
 
 
+@register_operator(
     name="RSI_WILDER",
     category="financial",
     business_category="technical_signal",
     canonical="RSI_WILDER",
     source="factor_dsl_polars",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RSIWilderPolars(SeriesOperator):
     """Polars Wilder 平滑 RSI"""
     metadata = OperatorMetadata(
@@ -205,14 +204,13 @@ class ATRPolars(SeriesOperator):
         return close.with_columns(exprs)
 
 
+@register_operator(
     name="ATR_WILDER",
     category="financial",
     business_category="technical_signal",
     canonical="ATR_WILDER",
     source="factor_dsl_polars",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class ATRWilderPolars(SeriesOperator):
     """Polars Wilder 平滑 ATR"""
     metadata = OperatorMetadata(

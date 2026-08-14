@@ -36,7 +36,7 @@ from cleaned_operators.crossing import _crossing_acceleration_series
 # Concentration and Entropy Measures
 # ============================================================================
 
-@register_operator(name="ts_abs_concentration", canonical="ts_abs_concentration", backend="polars", research_only=True)
+@register_operator(name="ts_abs_concentration", canonical="ts_abs_concentration", backend="polars")
 class TSAbsConcentrationPolarsNative(SeriesOperator):
     """Herfindahl-Hirschman Index of absolute values (concentration measure)"""
 
@@ -84,7 +84,7 @@ class TSAbsConcentrationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_abs_entropy", canonical="ts_abs_entropy", backend="polars", research_only=True)
+@register_operator(name="ts_abs_entropy", canonical="ts_abs_entropy", backend="polars")
 class TSAbsEntropyPolarsNative(SeriesOperator):
     """Shannon entropy of absolute values (binned)"""
 
@@ -125,7 +125,7 @@ class TSAbsEntropyPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_abs_entropy_nats", canonical="ts_abs_entropy_nats", backend="polars", research_only=True)
+@register_operator(name="ts_abs_entropy_nats", canonical="ts_abs_entropy_nats", backend="polars")
 class TSAbsEntropyNatsPolarsNative(SeriesOperator):
     """Shannon entropy of absolute values in nats (natural log)"""
 
@@ -163,7 +163,7 @@ class TSAbsEntropyNatsPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_abs_entropy_normalized", canonical="ts_abs_entropy_normalized", backend="polars", research_only=True)
+@register_operator(name="ts_abs_entropy_normalized", canonical="ts_abs_entropy_normalized", backend="polars")
 class TSAbsEntropyNormalizedPolarsNative(SeriesOperator):
     """Shannon entropy of absolute values normalized by max entropy"""
 
@@ -206,7 +206,7 @@ class TSAbsEntropyNormalizedPolarsNative(SeriesOperator):
 # Information Theory Measures
 # ============================================================================
 
-@register_operator(name="ts_active_information_storage", canonical="ts_active_information_storage", backend="polars", research_only=True)
+@register_operator(name="ts_active_information_storage", canonical="ts_active_information_storage", backend="polars")
 class TSActiveInformationStoragePolarsNative(SeriesOperator):
     """Active Information Storage: mutual information between past and present"""
 
@@ -237,7 +237,7 @@ class TSActiveInformationStoragePolarsNative(SeriesOperator):
 # Activity Clock (Event-based timing)
 # ============================================================================
 
-@register_operator(name="ts_activity_clock_age", canonical="ts_activity_clock_age", backend="polars", research_only=True)
+@register_operator(name="ts_activity_clock_age", canonical="ts_activity_clock_age", backend="polars")
 class TSActivityClockAgePolarsNative(SeriesOperator):
     """Number of periods since last activity (condition True)"""
 
@@ -275,7 +275,7 @@ class TSActivityClockAgePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_activity_clock_lagged_value", canonical="ts_activity_clock_lagged_value", backend="polars", research_only=True)
+@register_operator(name="ts_activity_clock_lagged_value", canonical="ts_activity_clock_lagged_value", backend="polars")
 class TSActivityClockLaggedValuePolarsNative(SeriesOperator):
     """Value at last activity event (when condition was True)"""
 
@@ -309,7 +309,7 @@ class TSActivityClockLaggedValuePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_activity_clock_lagged_value_prior", canonical="ts_activity_clock_lagged_value_prior", backend="polars", research_only=True)
+@register_operator(name="ts_activity_clock_lagged_value_prior", canonical="ts_activity_clock_lagged_value_prior", backend="polars")
 class TSActivityClockLaggedValuePriorPolarsNative(SeriesOperator):
     """Value at last activity event, excluding current period"""
 
@@ -349,7 +349,7 @@ class TSActivityClockLaggedValuePriorPolarsNative(SeriesOperator):
 # Filtering - Kalman, Alpha-Beta, Butterworth, Savitzky-Golay
 # ============================================================================
 
-@register_operator(name="ts_adaptive_noise_kalman", canonical="ts_adaptive_noise_kalman", backend="polars", research_only=True)
+@register_operator(name="ts_adaptive_noise_kalman", canonical="ts_adaptive_noise_kalman", backend="polars")
 class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
     """Adaptive Kalman filter with noise estimation"""
 
@@ -372,7 +372,7 @@ class TSAdaptiveNoiseKalmanPolarsNative(SeriesOperator):
         return feature.ewm(span=10, adjust=False).mean()
 
 
-@register_operator(name="ts_alpha_beta_filter", canonical="ts_alpha_beta_filter", backend="polars", research_only=True)
+@register_operator(name="ts_alpha_beta_filter", canonical="ts_alpha_beta_filter", backend="polars")
 class TSAlphaBetaFilterPolarsNative(SeriesOperator):
     """Alpha-beta filter (g-h filter) for position and velocity tracking"""
 
@@ -411,7 +411,7 @@ class TSAlphaBetaFilterPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_bessel_lowpass_causal", canonical="ts_bessel_lowpass_causal", backend="polars", research_only=True)
+@register_operator(name="ts_bessel_lowpass_causal", canonical="ts_bessel_lowpass_causal", backend="polars")
 class TSBesselLowpassCausalPolarsNative(SeriesOperator):
     """Bessel low-pass filter (causal, online)"""
 
@@ -435,7 +435,7 @@ class TSBesselLowpassCausalPolarsNative(SeriesOperator):
         return feature.ewm(span=span, adjust=False).mean()
 
 
-@register_operator(name="ts_butterworth_lowpass_causal", canonical="ts_butterworth_lowpass_causal", backend="polars", research_only=True)
+@register_operator(name="ts_butterworth_lowpass_causal", canonical="ts_butterworth_lowpass_causal", backend="polars")
 class TSButterworthLowpassCausalPolarsNative(SeriesOperator):
     """Butterworth low-pass filter (causal, online)"""
 
@@ -459,7 +459,7 @@ class TSButterworthLowpassCausalPolarsNative(SeriesOperator):
         return feature.ewm(span=span, adjust=False).mean()
 
 
-@register_operator(name="ts_causal_local_linear_smoother", canonical="ts_causal_local_linear_smoother", backend="polars", research_only=True)
+@register_operator(name="ts_causal_local_linear_smoother", canonical="ts_causal_local_linear_smoother", backend="polars")
 class TSCausalLocalLinearSmootherPolarsNative(SeriesOperator):
     """Causal local linear smoother (Nadaraya-Watson with linear fit)"""
 
@@ -490,7 +490,7 @@ class TSCausalLocalLinearSmootherPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_causal_savgol_endpoint", canonical="ts_causal_savgol_endpoint", backend="polars", research_only=True)
+@register_operator(name="ts_causal_savgol_endpoint", canonical="ts_causal_savgol_endpoint", backend="polars")
 class TSCausalSavgolEndpointPolarsNative(SeriesOperator):
     """Causal Savitzky-Golay filter endpoint value"""
 
@@ -526,7 +526,7 @@ class TSCausalSavgolEndpointPolarsNative(SeriesOperator):
 # Argmax/Argmin Variants
 # ============================================================================
 
-@register_operator(name="ts_argmax_index_from_oldest", canonical="ts_argmax_index_from_oldest", backend="polars", research_only=True)
+@register_operator(name="ts_argmax_index_from_oldest", canonical="ts_argmax_index_from_oldest", backend="polars")
 class TSArgmaxIndexFromOldestPolarsNative(SeriesOperator):
     """Index of max value counting from oldest (0=oldest, window-1=newest)"""
 
@@ -560,7 +560,7 @@ class TSArgmaxIndexFromOldestPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_argmin_index_from_oldest", canonical="ts_argmin_index_from_oldest", backend="polars", research_only=True)
+@register_operator(name="ts_argmin_index_from_oldest", canonical="ts_argmin_index_from_oldest", backend="polars")
 class TSArgminIndexFromOldestPolarsNative(SeriesOperator):
     """Index of min value counting from oldest (0=oldest, window-1=newest)"""
 
@@ -597,7 +597,7 @@ class TSArgminIndexFromOldestPolarsNative(SeriesOperator):
 # Autocorrelation Features
 # ============================================================================
 
-@register_operator(name="ts_autocorr_decay_half_life", canonical="ts_autocorr_decay_half_life", backend="polars", research_only=True)
+@register_operator(name="ts_autocorr_decay_half_life", canonical="ts_autocorr_decay_half_life", backend="polars")
 class TSAutocorrDecayHalfLifePolarsNative(SeriesOperator):
     """Half-life of autocorrelation decay"""
 
@@ -643,7 +643,7 @@ class TSAutocorrDecayHalfLifePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_autocorrelation_time_initial_positive_sequence", canonical="ts_autocorrelation_time_initial_positive_sequence", backend="polars", research_only=True)
+@register_operator(name="ts_autocorrelation_time_initial_positive_sequence", canonical="ts_autocorrelation_time_initial_positive_sequence", backend="polars")
 class TSAutocorrelationTimeInitialPositiveSequencePolarsNative(SeriesOperator):
     """Autocorrelation time: sum of ACF while positive"""
 
@@ -691,7 +691,7 @@ class TSAutocorrelationTimeInitialPositiveSequencePolarsNative(SeriesOperator):
 # Volume and Basic Statistics
 # ============================================================================
 
-@register_operator(name="ts_average_volume", canonical="ts_average_volume", backend="polars", research_only=True)
+@register_operator(name="ts_average_volume", canonical="ts_average_volume", backend="polars")
 class TSAverageVolumePolarsNative(SeriesOperator):
     """Rolling average of volume (or any feature)"""
 
@@ -723,7 +723,7 @@ class TSAverageVolumePolarsNative(SeriesOperator):
 # Statistical Tests and Measures
 # ============================================================================
 
-@register_operator(name="ts_bds_statistic", canonical="ts_bds_statistic", backend="polars", research_only=True)
+@register_operator(name="ts_bds_statistic", canonical="ts_bds_statistic", backend="polars")
 class TSBdsStatisticPolarsNative(SeriesOperator):
     """BDS test statistic for non-linear dependence"""
 
@@ -752,7 +752,7 @@ class TSBdsStatisticPolarsNative(SeriesOperator):
 # Correlation and Lag Analysis
 # ============================================================================
 
-@register_operator(name="ts_best_lag_corr_excess", canonical="ts_best_lag_corr_excess", backend="polars", research_only=True)
+@register_operator(name="ts_best_lag_corr_excess", canonical="ts_best_lag_corr_excess", backend="polars")
 class TSBestLagCorrExcessPolarsNative(SeriesOperator):
     """Best lagged correlation minus lag-0 correlation"""
 
@@ -797,7 +797,7 @@ class TSBestLagCorrExcessPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_best_lag_corr_raw", canonical="ts_best_lag_corr_raw", backend="polars", research_only=True)
+@register_operator(name="ts_best_lag_corr_raw", canonical="ts_best_lag_corr_raw", backend="polars")
 class TSBestLagCorrRawPolarsNative(SeriesOperator):
     """Maximum absolute lagged correlation"""
 
@@ -848,7 +848,7 @@ class TSBestLagCorrRawPolarsNative(SeriesOperator):
 # Regime and Break Detection
 # ============================================================================
 
-@register_operator(name="ts_beta_break_score", canonical="ts_beta_break_score", backend="polars", research_only=True)
+@register_operator(name="ts_beta_break_score", canonical="ts_beta_break_score", backend="polars")
 class TSBetaBreakScorePolarsNative(SeriesOperator):
     """Beta instability: recent vs historical beta divergence"""
 
@@ -882,7 +882,7 @@ class TSBetaBreakScorePolarsNative(SeriesOperator):
 # Topological and Geometric Features
 # ============================================================================
 
-@register_operator(name="ts_betti_1_max_persistence", canonical="ts_betti_1_max_persistence", backend="polars", research_only=True)
+@register_operator(name="ts_betti_1_max_persistence", canonical="ts_betti_1_max_persistence", backend="polars")
 class TSBetti1MaxPersistencePolarsNative(SeriesOperator):
     """Maximum persistence of 1-cycles in topological data analysis"""
 
@@ -910,7 +910,7 @@ class TSBetti1MaxPersistencePolarsNative(SeriesOperator):
 # Higher-order Spectral Analysis
 # ============================================================================
 
-@register_operator(name="ts_bicoherence_top_decile_excess", canonical="ts_bicoherence_top_decile_excess", backend="polars", research_only=True)
+@register_operator(name="ts_bicoherence_top_decile_excess", canonical="ts_bicoherence_top_decile_excess", backend="polars")
 class TSBicoherenceTopDecileExcessPolarsNative(SeriesOperator):
     """Bicoherence top decile minus median (phase coupling strength)"""
 
@@ -933,7 +933,7 @@ class TSBicoherenceTopDecileExcessPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_bicoherence_top_decile_mean", canonical="ts_bicoherence_top_decile_mean", backend="polars", research_only=True)
+@register_operator(name="ts_bicoherence_top_decile_mean", canonical="ts_bicoherence_top_decile_mean", backend="polars")
 class TSBicoherenceTopDecileMeanPolarsNative(SeriesOperator):
     """Mean of top decile bicoherence values"""
 
@@ -960,7 +960,7 @@ class TSBicoherenceTopDecileMeanPolarsNative(SeriesOperator):
 # Response and Monotonicity Analysis
 # ============================================================================
 
-@register_operator(name="ts_binned_response_curvature", canonical="ts_binned_response_curvature", backend="polars", research_only=True)
+@register_operator(name="ts_binned_response_curvature", canonical="ts_binned_response_curvature", backend="polars")
 class TSBinnedResponseCurvaturePolarsNative(SeriesOperator):
     """Curvature of binned response curve (non-linearity measure)"""
 
@@ -985,7 +985,7 @@ class TSBinnedResponseCurvaturePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_binned_response_monotonicity", canonical="ts_binned_response_monotonicity", backend="polars", research_only=True)
+@register_operator(name="ts_binned_response_monotonicity", canonical="ts_binned_response_monotonicity", backend="polars")
 class TSBinnedResponseMonotonicityPolarsNative(SeriesOperator):
     """Monotonicity score of binned response curve"""
 
@@ -1013,7 +1013,7 @@ class TSBinnedResponseMonotonicityPolarsNative(SeriesOperator):
 # Matrix Distance and Divergence
 # ============================================================================
 
-@register_operator(name="ts_bures_corr_shift", canonical="ts_bures_corr_shift", backend="polars", research_only=True)
+@register_operator(name="ts_bures_corr_shift", canonical="ts_bures_corr_shift", backend="polars")
 class TSBuresCorrShiftPolarsNative(SeriesOperator):
     """Bures distance between correlation matrices (regime shift)"""
 
@@ -1040,7 +1040,7 @@ class TSBuresCorrShiftPolarsNative(SeriesOperator):
 # Change Point Detection
 # ============================================================================
 
-@register_operator(name="ts_change_point_probability", canonical="ts_change_point_probability", backend="polars", research_only=True)
+@register_operator(name="ts_change_point_probability", canonical="ts_change_point_probability", backend="polars")
 class TSChangePointProbabilityPolarsNative(SeriesOperator):
     """Bayesian change point probability"""
 
@@ -1068,7 +1068,7 @@ class TSChangePointProbabilityPolarsNative(SeriesOperator):
 # Dependence Measures
 # ============================================================================
 
-@register_operator(name="ts_chatterjee_xi", canonical="ts_chatterjee_xi", backend="polars", research_only=True)
+@register_operator(name="ts_chatterjee_xi", canonical="ts_chatterjee_xi", backend="polars")
 class TSChatterjeeXiPolarsNative(SeriesOperator):
     """Chatterjee's ξ (xi) correlation coefficient (non-parametric)"""
 
@@ -1129,7 +1129,7 @@ class TSChatterjeeXiPolarsNative(SeriesOperator):
 # Geometric Features
 # ============================================================================
 
-@register_operator(name="ts_chord_excursion_area", canonical="ts_chord_excursion_area", backend="polars", research_only=True)
+@register_operator(name="ts_chord_excursion_area", canonical="ts_chord_excursion_area", backend="polars")
 class TSChordExcursionAreaPolarsNative(SeriesOperator):
     """Area between curve and chord connecting endpoints"""
 
@@ -1174,7 +1174,7 @@ class TSChordExcursionAreaPolarsNative(SeriesOperator):
 # Information Theory - Transfer Entropy and Mutual Information
 # ============================================================================
 
-@register_operator(name="ts_conditional_mutual_information", canonical="ts_conditional_mutual_information", backend="polars", research_only=True)
+@register_operator(name="ts_conditional_mutual_information", canonical="ts_conditional_mutual_information", backend="polars")
 class TSConditionalMutualInformationPolarsNative(SeriesOperator):
     """Conditional mutual information I(X;Y|Z)"""
 
@@ -1198,7 +1198,7 @@ class TSConditionalMutualInformationPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_conditional_transfer_entropy", canonical="ts_conditional_transfer_entropy", backend="polars", research_only=True)
+@register_operator(name="ts_conditional_transfer_entropy", canonical="ts_conditional_transfer_entropy", backend="polars")
 class TSConditionalTransferEntropyPolarsNative(SeriesOperator):
     """Conditional transfer entropy TE(X→Y|Z)"""
 
@@ -1227,7 +1227,7 @@ class TSConditionalTransferEntropyPolarsNative(SeriesOperator):
 # Pivot Points
 # ============================================================================
 
-@register_operator(name="ts_confirmed_pivot_high", canonical="ts_confirmed_pivot_high", backend="polars", research_only=True)
+@register_operator(name="ts_confirmed_pivot_high", canonical="ts_confirmed_pivot_high", backend="polars")
 class TSConfirmedPivotHighPolarsNative(SeriesOperator):
     """Confirmed pivot high: local max with confirmation on both sides"""
 
@@ -1268,7 +1268,7 @@ class TSConfirmedPivotHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_confirmed_pivot_low", canonical="ts_confirmed_pivot_low", backend="polars", research_only=True)
+@register_operator(name="ts_confirmed_pivot_low", canonical="ts_confirmed_pivot_low", backend="polars")
 class TSConfirmedPivotLowPolarsNative(SeriesOperator):
     """Confirmed pivot low: local min with confirmation on both sides"""
 
@@ -1312,7 +1312,7 @@ class TSConfirmedPivotLowPolarsNative(SeriesOperator):
 # Consolidation and Range Analysis
 # ============================================================================
 
-@register_operator(name="ts_consolidation_slope", canonical="ts_consolidation_slope", backend="polars", research_only=True)
+@register_operator(name="ts_consolidation_slope", canonical="ts_consolidation_slope", backend="polars")
 class TSConsolidationSlopePolarsNative(SeriesOperator):
     """Slope during consolidation (low volatility) periods"""
 
@@ -1355,7 +1355,7 @@ class TSConsolidationSlopePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_consolidation_volume_decay", canonical="ts_consolidation_volume_decay", backend="polars", research_only=True)
+@register_operator(name="ts_consolidation_volume_decay", canonical="ts_consolidation_volume_decay", backend="polars")
 class TSConsolidationVolumeDecayPolarsNative(SeriesOperator):
     """Volume decay rate during consolidation"""
 
@@ -1398,7 +1398,7 @@ class TSConsolidationVolumeDecayPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_consolidation_width", canonical="ts_consolidation_width", backend="polars", research_only=True)
+@register_operator(name="ts_consolidation_width", canonical="ts_consolidation_width", backend="polars")
 class TSConsolidationWidthPolarsNative(SeriesOperator):
     """Price range width during consolidation"""
 
@@ -1437,7 +1437,7 @@ class TSConsolidationWidthPolarsNative(SeriesOperator):
 # Copula and Tail Dependence
 # ============================================================================
 
-@register_operator(name="ts_copula_central_asymmetry", canonical="ts_copula_central_asymmetry", backend="polars", research_only=True)
+@register_operator(name="ts_copula_central_asymmetry", canonical="ts_copula_central_asymmetry", backend="polars")
 class TSCopulaCentralAsymmetryPolarsNative(SeriesOperator):
     """Copula asymmetry between upper and lower tail"""
 
@@ -1464,7 +1464,7 @@ class TSCopulaCentralAsymmetryPolarsNative(SeriesOperator):
 # CPT (Continuous Piecewise Linear) and Spectral
 # ============================================================================
 
-@register_operator(name="ts_cpt_value", canonical="ts_cpt_value", backend="polars", research_only=True)
+@register_operator(name="ts_cpt_value", canonical="ts_cpt_value", backend="polars")
 class TSCptValuePolarsNative(SeriesOperator):
     """Change point transformation value"""
 
@@ -1487,7 +1487,7 @@ class TSCptValuePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_cross_extremogram", canonical="ts_cross_extremogram", backend="polars", research_only=True)
+@register_operator(name="ts_cross_extremogram", canonical="ts_cross_extremogram", backend="polars")
 class TSCrossExtremogramPolarsNative(SeriesOperator):
     """Cross-extremogram: dependence in extreme events"""
 
@@ -1512,7 +1512,7 @@ class TSCrossExtremogramPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_cross_quantilogram", canonical="ts_cross_quantilogram", backend="polars", research_only=True)
+@register_operator(name="ts_cross_quantilogram", canonical="ts_cross_quantilogram", backend="polars")
 class TSCrossQuantilogramPolarsNative(SeriesOperator):
     """Cross-quantilogram: quantile-based dependence"""
 
@@ -1537,7 +1537,7 @@ class TSCrossQuantilogramPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_cross_spectral_coherence", canonical="ts_cross_spectral_coherence", backend="polars", research_only=True)
+@register_operator(name="ts_cross_spectral_coherence", canonical="ts_cross_spectral_coherence", backend="polars")
 class TSCrossSpectralCoherencePolarsNative(SeriesOperator):
     """Cross-spectral coherence at dominant frequency"""
 
@@ -1560,7 +1560,7 @@ class TSCrossSpectralCoherencePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_cross_spectral_phase", canonical="ts_cross_spectral_phase", backend="polars", research_only=True)
+@register_operator(name="ts_cross_spectral_phase", canonical="ts_cross_spectral_phase", backend="polars")
 class TSCrossSpectralPhasePolarsNative(SeriesOperator):
     """Cross-spectral phase at dominant frequency"""
 
@@ -1587,7 +1587,7 @@ class TSCrossSpectralPhasePolarsNative(SeriesOperator):
 # Crossing Analysis
 # ============================================================================
 
-@register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars", research_only=True)
+@register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars")
 class TSCrossingAccelerationPolarsNative(SeriesOperator):
     """Second difference of ``x - y`` on crossing bars, normalized by volatility."""
 
@@ -1612,7 +1612,7 @@ class TSCrossingAccelerationPolarsNative(SeriesOperator):
         return pd.Series(values, index=x.index, name=x.name)
 
 
-@register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars", research_only=True)
+@register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars")
 class TSCrossingSpeedPolarsNative(SeriesOperator):
     """Average threshold crossing frequency"""
 
@@ -1638,7 +1638,7 @@ class TSCrossingSpeedPolarsNative(SeriesOperator):
 # CUSUM and Deviation Measures
 # ============================================================================
 
-@register_operator(name="ts_cumulative_deviation_score", canonical="ts_cumulative_deviation_score", backend="polars", research_only=True)
+@register_operator(name="ts_cumulative_deviation_score", canonical="ts_cumulative_deviation_score", backend="polars")
 class TSCumulativeDeviationScorePolarsNative(SeriesOperator):
     """Cumulative deviation from baseline (normalized)"""
 
@@ -1663,7 +1663,7 @@ class TSCumulativeDeviationScorePolarsNative(SeriesOperator):
         return cum_dev / volatility.replace(0, np.nan)
 
 
-@register_operator(name="ts_cusum_pressure", canonical="ts_cusum_pressure", backend="polars", research_only=True)
+@register_operator(name="ts_cusum_pressure", canonical="ts_cusum_pressure", backend="polars")
 class TSCusumPressurePolarsNative(SeriesOperator):
     """CUSUM pressure: cumulative sum pressure indicator"""
 
@@ -1695,7 +1695,7 @@ class TSCusumPressurePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_cusum_vol_break_score", canonical="ts_cusum_vol_break_score", backend="polars", research_only=True)
+@register_operator(name="ts_cusum_vol_break_score", canonical="ts_cusum_vol_break_score", backend="polars")
 class TSCusumVolBreakScorePolarsNative(SeriesOperator):
     """CUSUM-based volatility break score"""
 
@@ -1735,7 +1735,7 @@ class TSCusumVolBreakScorePolarsNative(SeriesOperator):
 # Directional Change (DC) Events
 # ============================================================================
 
-@register_operator(name="ts_dc_duration_asymmetry", canonical="ts_dc_duration_asymmetry", backend="polars", research_only=True)
+@register_operator(name="ts_dc_duration_asymmetry", canonical="ts_dc_duration_asymmetry", backend="polars")
 class TSDcDurationAsymmetryPolarsNative(SeriesOperator):
     """Directional change: uptrend vs downtrend duration asymmetry"""
 
@@ -1759,7 +1759,7 @@ class TSDcDurationAsymmetryPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dc_event_rate", canonical="ts_dc_event_rate", backend="polars", research_only=True)
+@register_operator(name="ts_dc_event_rate", canonical="ts_dc_event_rate", backend="polars")
 class TSDcEventRatePolarsNative(SeriesOperator):
     """Directional change event frequency"""
 
@@ -1783,7 +1783,7 @@ class TSDcEventRatePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dc_overshoot_asymmetry", canonical="ts_dc_overshoot_asymmetry", backend="polars", research_only=True)
+@register_operator(name="ts_dc_overshoot_asymmetry", canonical="ts_dc_overshoot_asymmetry", backend="polars")
 class TSDcOvershootAsymmetryPolarsNative(SeriesOperator):
     """DC overshoot asymmetry between up and down events"""
 
@@ -1807,7 +1807,7 @@ class TSDcOvershootAsymmetryPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dc_overshoot_ratio", canonical="ts_dc_overshoot_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_dc_overshoot_ratio", canonical="ts_dc_overshoot_ratio", backend="polars")
 class TSDcOvershootRatioPolarsNative(SeriesOperator):
     """Average DC overshoot ratio"""
 
@@ -1835,7 +1835,7 @@ class TSDcOvershootRatioPolarsNative(SeriesOperator):
 # Advanced Analysis - DFA, DMD, Distance Measures
 # ============================================================================
 
-@register_operator(name="ts_delay_intrinsic_dimension", canonical="ts_delay_intrinsic_dimension", backend="polars", research_only=True)
+@register_operator(name="ts_delay_intrinsic_dimension", canonical="ts_delay_intrinsic_dimension", backend="polars")
 class TSDelayIntrinsicDimensionPolarsNative(SeriesOperator):
     """Intrinsic dimension of delay embedding (complexity measure)"""
 
@@ -1860,7 +1860,7 @@ class TSDelayIntrinsicDimensionPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_detrended_level_spectral_entropy", canonical="ts_detrended_level_spectral_entropy", backend="polars", research_only=True)
+@register_operator(name="ts_detrended_level_spectral_entropy", canonical="ts_detrended_level_spectral_entropy", backend="polars")
 class TSDeTrendedLevelSpectralEntropyPolarsNative(SeriesOperator):
     """Spectral entropy of detrended levels"""
 
@@ -1883,7 +1883,7 @@ class TSDeTrendedLevelSpectralEntropyPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dfa_hurst", canonical="ts_dfa_hurst", backend="polars", research_only=True)
+@register_operator(name="ts_dfa_hurst", canonical="ts_dfa_hurst", backend="polars")
 class TSDfaHurstPolarsNative(SeriesOperator):
     """Hurst exponent via Detrended Fluctuation Analysis"""
 
@@ -1913,7 +1913,7 @@ class TSDfaHurstPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars")
 class TSDistanceToResistancePolarsNative(SeriesOperator):
     """Distance to resistance level (local maximum)"""
 
@@ -1934,7 +1934,7 @@ class TSDistanceToResistancePolarsNative(SeriesOperator):
         return (feature - rolling_max) / rolling_max.replace(0, np.nan)
 
 
-@register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars", research_only=True)
+@register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars")
 class TSDistanceToSupportPolarsNative(SeriesOperator):
     """Distance to support level (local minimum)"""
 
@@ -1959,7 +1959,7 @@ class TSDistanceToSupportPolarsNative(SeriesOperator):
 # Dynamic Mode Decomposition (DMD)
 # ============================================================================
 
-@register_operator(name="ts_dmd_level_dominant_frequency", canonical="ts_dmd_level_dominant_frequency", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_level_dominant_frequency", canonical="ts_dmd_level_dominant_frequency", backend="polars")
 class TSDmdLevelDominantFrequencyPolarsNative(SeriesOperator):
     """DMD dominant frequency of level series"""
 
@@ -1984,7 +1984,7 @@ class TSDmdLevelDominantFrequencyPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dmd_level_dominant_growth_rate", canonical="ts_dmd_level_dominant_growth_rate", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_level_dominant_growth_rate", canonical="ts_dmd_level_dominant_growth_rate", backend="polars")
 class TSDmdLevelDominantGrowthRatePolarsNative(SeriesOperator):
     """DMD dominant growth rate of level series"""
 
@@ -2008,7 +2008,7 @@ class TSDmdLevelDominantGrowthRatePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dmd_level_mode_concentration", canonical="ts_dmd_level_mode_concentration", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_level_mode_concentration", canonical="ts_dmd_level_mode_concentration", backend="polars")
 class TSDmdLevelModeConcentrationPolarsNative(SeriesOperator):
     """DMD mode concentration (energy in top mode)"""
 
@@ -2032,7 +2032,7 @@ class TSDmdLevelModeConcentrationPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dmd_return_dominant_frequency", canonical="ts_dmd_return_dominant_frequency", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_return_dominant_frequency", canonical="ts_dmd_return_dominant_frequency", backend="polars")
 class TSDmdReturnDominantFrequencyPolarsNative(SeriesOperator):
     """DMD dominant frequency of return series"""
 
@@ -2058,7 +2058,7 @@ class TSDmdReturnDominantFrequencyPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dmd_return_dominant_growth_rate", canonical="ts_dmd_return_dominant_growth_rate", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_return_dominant_growth_rate", canonical="ts_dmd_return_dominant_growth_rate", backend="polars")
 class TSDmdReturnDominantGrowthRatePolarsNative(SeriesOperator):
     """DMD dominant growth rate of return series"""
 
@@ -2083,7 +2083,7 @@ class TSDmdReturnDominantGrowthRatePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dmd_return_mode_concentration", canonical="ts_dmd_return_mode_concentration", backend="polars", research_only=True)
+@register_operator(name="ts_dmd_return_mode_concentration", canonical="ts_dmd_return_mode_concentration", backend="polars")
 class TSDmdReturnModeConcentrationPolarsNative(SeriesOperator):
     """DMD mode concentration of return series"""
 
@@ -2108,7 +2108,7 @@ class TSDmdReturnModeConcentrationPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_dominant_cycle_period", canonical="ts_dominant_cycle_period", backend="polars", research_only=True)
+@register_operator(name="ts_dominant_cycle_period", canonical="ts_dominant_cycle_period", backend="polars")
 class TSDominantCyclePeriodPolarsNative(SeriesOperator):
     """Dominant cycle period via FFT"""
 
@@ -2135,7 +2135,7 @@ class TSDominantCyclePeriodPolarsNative(SeriesOperator):
 # Transfer Entropy and Turning Rate
 # ============================================================================
 
-@register_operator(name="ts_effective_transfer_entropy", canonical="ts_effective_transfer_entropy", backend="polars", research_only=True)
+@register_operator(name="ts_effective_transfer_entropy", canonical="ts_effective_transfer_entropy", backend="polars")
 class TSEffectiveTransferEntropyPolarsNative(SeriesOperator):
     """Effective transfer entropy (TE with significance threshold)"""
 
@@ -2160,7 +2160,7 @@ class TSEffectiveTransferEntropyPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_effective_turning_rate", canonical="ts_effective_turning_rate", backend="polars", research_only=True)
+@register_operator(name="ts_effective_turning_rate", canonical="ts_effective_turning_rate", backend="polars")
 class TSEffectiveTurningRatePolarsNative(SeriesOperator):
     """Effective turning rate (significant direction changes)"""
 
@@ -2191,7 +2191,7 @@ class TSEffectiveTurningRatePolarsNative(SeriesOperator):
 # Endpoint and Energy Analysis
 # ============================================================================
 
-@register_operator(name="ts_endpoint_deviation", canonical="ts_endpoint_deviation", backend="polars", research_only=True)
+@register_operator(name="ts_endpoint_deviation", canonical="ts_endpoint_deviation", backend="polars")
 class TSEndpointDeviationPolarsNative(SeriesOperator):
     """Current value deviation from window endpoints (start/end average)"""
 
@@ -2226,7 +2226,7 @@ class TSEndpointDeviationPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_energy_break_score", canonical="ts_energy_break_score", backend="polars", research_only=True)
+@register_operator(name="ts_energy_break_score", canonical="ts_energy_break_score", backend="polars")
 class TSEnergyBreakScorePolarsNative(SeriesOperator):
     """Energy regime break: change in squared returns"""
 
@@ -2257,7 +2257,7 @@ class TSEnergyBreakScorePolarsNative(SeriesOperator):
 # Envelope Analysis
 # ============================================================================
 
-@register_operator(name="ts_envelope_boundary_dwell", canonical="ts_envelope_boundary_dwell", backend="polars", research_only=True)
+@register_operator(name="ts_envelope_boundary_dwell", canonical="ts_envelope_boundary_dwell", backend="polars")
 class TSEnvelopeBoundaryDwellPolarsNative(SeriesOperator):
     """Time spent near envelope boundaries"""
 
@@ -2292,7 +2292,7 @@ class TSEnvelopeBoundaryDwellPolarsNative(SeriesOperator):
         return near_boundary.rolling(window).mean()
 
 
-@register_operator(name="ts_envelope_compression", canonical="ts_envelope_compression", backend="polars", research_only=True)
+@register_operator(name="ts_envelope_compression", canonical="ts_envelope_compression", backend="polars")
 class TSEnvelopeCompressionPolarsNative(SeriesOperator):
     """Envelope compression: bandwidth narrowing"""
 
@@ -2317,7 +2317,7 @@ class TSEnvelopeCompressionPolarsNative(SeriesOperator):
         return bandwidth.pct_change()
 
 
-@register_operator(name="ts_envelope_pressure", canonical="ts_envelope_pressure", backend="polars", research_only=True)
+@register_operator(name="ts_envelope_pressure", canonical="ts_envelope_pressure", backend="polars")
 class TSEnvelopePressurePolarsNative(SeriesOperator):
     """Envelope pressure: position within band * momentum"""
 
@@ -2352,7 +2352,7 @@ class TSEnvelopePressurePolarsNative(SeriesOperator):
 # Event Spacing
 # ============================================================================
 
-@register_operator(name="ts_event_spacing_cv", canonical="ts_event_spacing_cv", backend="polars", research_only=True)
+@register_operator(name="ts_event_spacing_cv", canonical="ts_event_spacing_cv", backend="polars")
 class TSEventSpacingCvPolarsNative(SeriesOperator):
     """Coefficient of variation of event spacing"""
 
@@ -2375,7 +2375,7 @@ class TSEventSpacingCvPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_event_spacing_mean", canonical="ts_event_spacing_mean", backend="polars", research_only=True)
+@register_operator(name="ts_event_spacing_mean", canonical="ts_event_spacing_mean", backend="polars")
 class TSEventSpacingMeanPolarsNative(SeriesOperator):
     """Mean time between events"""
 
@@ -2404,7 +2404,7 @@ class TSEventSpacingMeanPolarsNative(SeriesOperator):
 # EVT and Expectile Regression
 # ============================================================================
 
-@register_operator(name="ts_evt_threshold_stability", canonical="ts_evt_threshold_stability", backend="polars", research_only=True)
+@register_operator(name="ts_evt_threshold_stability", canonical="ts_evt_threshold_stability", backend="polars")
 class TSEvtThresholdStabilityPolarsNative(SeriesOperator):
     """Extreme Value Theory threshold stability"""
 
@@ -2428,7 +2428,7 @@ class TSEvtThresholdStabilityPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_expectile_beta", canonical="ts_expectile_beta", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_beta", canonical="ts_expectile_beta", backend="polars")
 class TSExpectileBetaPolarsNative(SeriesOperator):
     """Expectile-based beta (asymmetric regression)"""
 
@@ -2454,7 +2454,7 @@ class TSExpectileBetaPolarsNative(SeriesOperator):
         return cov_xy / var_y.replace(0, np.nan)
 
 
-@register_operator(name="ts_expectile_beta_spread", canonical="ts_expectile_beta_spread", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_beta_spread", canonical="ts_expectile_beta_spread", backend="polars")
 class TSExpectileBetaSpreadPolarsNative(SeriesOperator):
     """Spread between upper and lower expectile betas"""
 
@@ -2480,7 +2480,7 @@ class TSExpectileBetaSpreadPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_expectile_regression_coeff", canonical="ts_expectile_regression_coeff", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_regression_coeff", canonical="ts_expectile_regression_coeff", backend="polars")
 class TSExpectileRegressionCoeffPolarsNative(SeriesOperator):
     """Expectile regression coefficient"""
 
@@ -2505,7 +2505,7 @@ class TSExpectileRegressionCoeffPolarsNative(SeriesOperator):
         return cov_xy / var_x.replace(0, np.nan)
 
 
-@register_operator(name="ts_expectile_regression_coeff_prior", canonical="ts_expectile_regression_coeff_prior", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_regression_coeff_prior", canonical="ts_expectile_regression_coeff_prior", backend="polars")
 class TSExpectileRegressionCoeffPriorPolarsNative(SeriesOperator):
     """Expectile regression coefficient (PIT-safe, excluding current)"""
 
@@ -2529,7 +2529,7 @@ class TSExpectileRegressionCoeffPriorPolarsNative(SeriesOperator):
         return cov_xy / var_x.replace(0, np.nan)
 
 
-@register_operator(name="ts_expectile_regression_forecast_error", canonical="ts_expectile_regression_forecast_error", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_regression_forecast_error", canonical="ts_expectile_regression_forecast_error", backend="polars")
 class TSExpectileRegressionForecastErrorPolarsNative(SeriesOperator):
     """Expectile regression out-of-sample forecast error"""
 
@@ -2557,7 +2557,7 @@ class TSExpectileRegressionForecastErrorPolarsNative(SeriesOperator):
         return y - predicted
 
 
-@register_operator(name="ts_expectile_regression_resid", canonical="ts_expectile_regression_resid", backend="polars", research_only=True)
+@register_operator(name="ts_expectile_regression_resid", canonical="ts_expectile_regression_resid", backend="polars")
 class TSExpectileRegressionResidPolarsNative(SeriesOperator):
     """Expectile regression residual (in-sample)"""
 
@@ -2611,7 +2611,7 @@ class TSExpectileRegressionResidPolarsNative(SeriesOperator):
 # Additional Operators to Complete Batch 1 (100 total)
 # ============================================================================
 
-@register_operator(name="ts_extrema_confirmation_rate", canonical="ts_extrema_confirmation_rate", backend="polars", research_only=True)
+@register_operator(name="ts_extrema_confirmation_rate", canonical="ts_extrema_confirmation_rate", backend="polars")
 class TSExtremaConfirmationRatePolarsNative(SeriesOperator):
     """Rate at which local extrema are confirmed by subsequent price action"""
 
@@ -2636,7 +2636,7 @@ class TSExtremaConfirmationRatePolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extrema_divergence_strength", canonical="ts_extrema_divergence_strength", backend="polars", research_only=True)
+@register_operator(name="ts_extrema_divergence_strength", canonical="ts_extrema_divergence_strength", backend="polars")
 class TSExtremaDivergenceStrengthPolarsNative(SeriesOperator):
     """Strength of divergence between price and indicator extrema"""
 
@@ -2659,7 +2659,7 @@ class TSExtremaDivergenceStrengthPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extremal_dependence_decay", canonical="ts_extremal_dependence_decay", backend="polars", research_only=True)
+@register_operator(name="ts_extremal_dependence_decay", canonical="ts_extremal_dependence_decay", backend="polars")
 class TSExtremalDependenceDecayPolarsNative(SeriesOperator):
     """Rate of decay in extremal dependence with lag"""
 
@@ -2684,7 +2684,7 @@ class TSExtremalDependenceDecayPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extremal_index", canonical="ts_extremal_index", backend="polars", research_only=True)
+@register_operator(name="ts_extremal_index", canonical="ts_extremal_index", backend="polars")
 class TSExtremalIndexPolarsNative(SeriesOperator):
     """Extremal index: clustering measure for extreme events"""
 
@@ -2735,7 +2735,7 @@ class TSExtremalIndexPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extreme_cluster_ratio", canonical="ts_extreme_cluster_ratio", backend="polars", research_only=True)
+@register_operator(name="ts_extreme_cluster_ratio", canonical="ts_extreme_cluster_ratio", backend="polars")
 class TSExtremeClusterRatioPolarsNative(SeriesOperator):
     """Ratio of clustered to isolated extreme events"""
 
@@ -2788,7 +2788,7 @@ class TSExtremeClusterRatioPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extremogram", canonical="ts_extremogram", backend="polars", research_only=True)
+@register_operator(name="ts_extremogram", canonical="ts_extremogram", backend="polars")
 class TSExtremogramPolarsNative(SeriesOperator):
     """Extremogram: autocorrelation of extreme events"""
 
@@ -2834,7 +2834,7 @@ class TSExtremogramPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_feature_effective_rank", canonical="ts_feature_effective_rank", backend="polars", research_only=True)
+@register_operator(name="ts_feature_effective_rank", canonical="ts_feature_effective_rank", backend="polars")
 class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
     """Effective rank of feature (entropy-based diversity measure)"""
 

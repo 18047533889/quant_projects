@@ -17,7 +17,7 @@ from operators.base import SeriesOperator, PanelOperator
 # Realized Variance and Volatility Measures
 # ============================================================================
 
-@register_operator(name="intra_realized_variance", backend="polars", research_only=True)
+@register_operator(name="intra_realized_variance", backend="polars")
 class IntraRealizedVariancePolarsNative(SeriesOperator):
     """Sum of squared returns within each trading day."""
 
@@ -35,7 +35,7 @@ class IntraRealizedVariancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_realized_volatility", backend="polars", research_only=True)
+@register_operator(name="intra_realized_volatility", backend="polars")
 class IntraRealizedVolatilityPolarsNative(SeriesOperator):
     """Square root of realized variance (intraday volatility)."""
 
@@ -53,7 +53,7 @@ class IntraRealizedVolatilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_bipower_variation", backend="polars", research_only=True)
+@register_operator(name="intra_bipower_variation", backend="polars")
 class IntaBipowerVariationPolarsNative(SeriesOperator):
     """Bipower variation: sum of products of consecutive absolute returns.
     More robust to jumps than realized variance."""
@@ -80,7 +80,7 @@ class IntaBipowerVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_tripower_quarticity", backend="polars", research_only=True)
+@register_operator(name="intra_tripower_quarticity", backend="polars")
 class IntraTriPowerQuarticityPolarsNative(SeriesOperator):
     """Tripower quarticity: for testing presence of jumps."""
 
@@ -107,7 +107,7 @@ class IntraTriPowerQuarticityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_realized_quarticity", backend="polars", research_only=True)
+@register_operator(name="intra_realized_quarticity", backend="polars")
 class IntraRealizedQuarticityPolarsNative(SeriesOperator):
     """Sum of fourth power of returns."""
 
@@ -125,7 +125,7 @@ class IntraRealizedQuarticityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_continuous_variance", backend="polars", research_only=True)
+@register_operator(name="intra_continuous_variance", backend="polars")
 class IntraContinuousVariancePolarsNative(SeriesOperator):
     """Continuous component of variance (RV - Jump variation)."""
 
@@ -156,7 +156,7 @@ class IntraContinuousVariancePolarsNative(SeriesOperator):
 # Semivariance and Asymmetric Measures
 # ============================================================================
 
-@register_operator(name="intra_realized_semivariance", backend="polars", research_only=True)
+@register_operator(name="intra_realized_semivariance", backend="polars")
 class IntraRealizedSemivariancePolarsNative(SeriesOperator):
     """Sum of squared negative returns (downside volatility)."""
 
@@ -178,7 +178,7 @@ class IntraRealizedSemivariancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_positive_tail_variation", backend="polars", research_only=True)
+@register_operator(name="intra_positive_tail_variation", backend="polars")
 class IntraPositiveTailVariationPolarsNative(SeriesOperator):
     """Sum of squared returns above a threshold (positive tail)."""
 
@@ -200,7 +200,7 @@ class IntraPositiveTailVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_negative_tail_variation", backend="polars", research_only=True)
+@register_operator(name="intra_negative_tail_variation", backend="polars")
 class IntraNegativeTailVariationPolarsNative(SeriesOperator):
     """Sum of squared returns below a threshold (negative tail)."""
 
@@ -226,7 +226,7 @@ class IntraNegativeTailVariationPolarsNative(SeriesOperator):
 # Higher Moments
 # ============================================================================
 
-@register_operator(name="intra_realized_skewness", backend="polars", research_only=True)
+@register_operator(name="intra_realized_skewness", backend="polars")
 class IntraRealizedSkewnessPolarsNative(SeriesOperator):
     """Realized skewness using standardized third moment."""
 
@@ -249,7 +249,7 @@ class IntraRealizedSkewnessPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_realized_kurtosis", backend="polars", research_only=True)
+@register_operator(name="intra_realized_kurtosis", backend="polars")
 class IntraRealizedKurtosisPolarsNative(SeriesOperator):
     """Realized kurtosis using standardized fourth moment."""
 
@@ -276,7 +276,7 @@ class IntraRealizedKurtosisPolarsNative(SeriesOperator):
 # Jump Measures
 # ============================================================================
 
-@register_operator(name="intra_jump_variation", backend="polars", research_only=True)
+@register_operator(name="intra_jump_variation", backend="polars")
 class IntraJumpVariationPolarsNative(SeriesOperator):
     """Jump component: RV - Bipower variation."""
 
@@ -313,7 +313,7 @@ class IntraJumpVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_jump_count", backend="polars", research_only=True)
+@register_operator(name="intra_jump_count", backend="polars")
 class IntraJumpCountPolarsNative(SeriesOperator):
     """Count of significant jumps (returns exceeding threshold)."""
 
@@ -344,7 +344,7 @@ class IntraJumpCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_positive_jump_variation", backend="polars", research_only=True)
+@register_operator(name="intra_positive_jump_variation", backend="polars")
 class IntraPositiveJumpVariationPolarsNative(SeriesOperator):
     """Variation from positive jumps only."""
 
@@ -378,7 +378,7 @@ class IntraPositiveJumpVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_negative_jump_variation", backend="polars", research_only=True)
+@register_operator(name="intra_negative_jump_variation", backend="polars")
 class IntraNegativeJumpVariationPolarsNative(SeriesOperator):
     """Variation from negative jumps only."""
 
@@ -412,7 +412,7 @@ class IntraNegativeJumpVariationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_jump_ratio", backend="polars", research_only=True)
+@register_operator(name="intra_jump_ratio", backend="polars")
 class IntraJumpRatioPolarsNative(SeriesOperator):
     """Ratio of jump variation to total realized variance."""
 
@@ -461,7 +461,7 @@ class IntraJumpRatioPolarsNative(SeriesOperator):
 # Drawdown and Path Measures
 # ============================================================================
 
-@register_operator(name="intra_max_drawdown", backend="polars", research_only=True)
+@register_operator(name="intra_max_drawdown", backend="polars")
 class IntraMaxDrawdownPolarsNative(SeriesOperator):
     """Maximum drawdown within each trading day."""
 
@@ -490,7 +490,7 @@ class IntraMaxDrawdownPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_max_drawup", backend="polars", research_only=True)
+@register_operator(name="intra_max_drawup", backend="polars")
 class IntraMaxDrawupPolarsNative(SeriesOperator):
     """Maximum drawup (gain from minimum) within each trading day."""
 
@@ -519,7 +519,7 @@ class IntraMaxDrawupPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_path_efficiency", backend="polars", research_only=True)
+@register_operator(name="intra_path_efficiency", backend="polars")
 class IntraPathEfficiencyPolarsNative(SeriesOperator):
     """Ratio of net displacement to total path length."""
 
@@ -546,7 +546,7 @@ class IntraPathEfficiencyPolarsNative(SeriesOperator):
 # Timing Measures
 # ============================================================================
 
-@register_operator(name="intra_high_time", backend="polars", research_only=True)
+@register_operator(name="intra_high_time", backend="polars")
 class IntraHighTimePolarsNative(SeriesOperator):
     """Time (as fraction of day) when intraday high occurred."""
 
@@ -572,7 +572,7 @@ class IntraHighTimePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_low_time", backend="polars", research_only=True)
+@register_operator(name="intra_low_time", backend="polars")
 class IntraLowTimePolarsNative(SeriesOperator):
     """Time (as fraction of day) when intraday low occurred."""
 
@@ -602,7 +602,7 @@ class IntraLowTimePolarsNative(SeriesOperator):
 # Volume and Liquidity Measures
 # ============================================================================
 
-@register_operator(name="intra_amihud", backend="polars", research_only=True)
+@register_operator(name="intra_amihud", backend="polars")
 class IntraAmihudPolarsNative(SeriesOperator):
     """Intraday Amihud illiquidity: average of |return|/volume."""
 
@@ -623,7 +623,7 @@ class IntraAmihudPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_concentration", backend="polars", research_only=True)
+@register_operator(name="intra_concentration", backend="polars")
 class IntraConcentrationPolarsNative(SeriesOperator):
     """HHI of volume distribution across the day."""
 
@@ -643,7 +643,7 @@ class IntraConcentrationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_entropy", backend="polars", research_only=True)
+@register_operator(name="intra_entropy", backend="polars")
 class IntraEntropyPolarsNative(SeriesOperator):
     """Shannon entropy of volume distribution."""
 
@@ -679,7 +679,7 @@ class IntraEntropyPolarsNative(SeriesOperator):
 # Interval and Segment Measures
 # ============================================================================
 
-@register_operator(name="intra_interval_return", backend="polars", research_only=True)
+@register_operator(name="intra_interval_return", backend="polars")
 class IntraIntervalReturnPolarsNative(SeriesOperator):
     """Return in a specific time interval of the day."""
 
@@ -716,7 +716,7 @@ class IntraIntervalReturnPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_interval_realized_variance", backend="polars", research_only=True)
+@register_operator(name="intra_interval_realized_variance", backend="polars")
 class IntraIntervalRealizedVariancePolarsNative(SeriesOperator):
     """Realized variance in a specific time interval."""
 
@@ -750,7 +750,7 @@ class IntraIntervalRealizedVariancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_interval_volume_share", backend="polars", research_only=True)
+@register_operator(name="intra_interval_volume_share", backend="polars")
 class IntraIntervalVolumeSharePolarsNative(SeriesOperator):
     """Share of daily volume in a specific time interval."""
 
@@ -794,7 +794,7 @@ class IntraIntervalVolumeSharePolarsNative(SeriesOperator):
 # VWAP-based Measures
 # ============================================================================
 
-@register_operator(name="intra_vwap_above_ratio", backend="polars", research_only=True)
+@register_operator(name="intra_vwap_above_ratio", backend="polars")
 class IntraVwapAboveRatioPolarsNative(SeriesOperator):
     """Fraction of time price is above VWAP."""
 
@@ -828,7 +828,7 @@ class IntraVwapAboveRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_vwap_cross_count", backend="polars", research_only=True)
+@register_operator(name="intra_vwap_cross_count", backend="polars")
 class IntraVwapCrossCountPolarsNative(SeriesOperator):
     """Number of times price crosses VWAP."""
 
@@ -873,7 +873,7 @@ class IntraVwapCrossCountPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_close_participation", backend="polars", research_only=True)
+@register_operator(name="intra_close_participation", backend="polars")
 class IntraCloseParticipationPolarsNative(SeriesOperator):
     """Fraction of daily volume in last N% of the day."""
 
@@ -915,7 +915,7 @@ class IntraCloseParticipationPolarsNative(SeriesOperator):
 # Return Distribution Measures
 # ============================================================================
 
-@register_operator(name="intra_return_activity_corr", backend="polars", research_only=True)
+@register_operator(name="intra_return_activity_corr", backend="polars")
 class IntraReturnActivityCorrPolarsNative(SeriesOperator):
     """Correlation between absolute returns and volume within day."""
 
@@ -939,7 +939,7 @@ class IntraReturnActivityCorrPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_signed_return_profile_cosine", backend="polars", research_only=True)
+@register_operator(name="intra_signed_return_profile_cosine", backend="polars")
 class IntraSignedReturnProfileCosinePolarsNative(SeriesOperator):
     """Cosine similarity between current day and average signed return profile."""
 

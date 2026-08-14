@@ -64,8 +64,59 @@ Continue autonomous platform improvement. Previous 6-hour session stopped accide
 - factor_preprocess: Corrected import to use `cs_rank`, `ols_neutralize` (actual API)
 - factor_optimizer: Corrected SearchBudget parameters to `max_trials`, `max_evaluations`
 
-**Next Priority:** Begin P0 task execution, starting with FP-001 (QE cache dependency removal)
+### [T+0:30] First P0 Wave Complete
+**Completed Tasks:**
+- ✅ All 5 clean-wheel tests passing
+- ✅ FP-001: Removed QE cache dependency (deleted unused cache_integration.py)
+- ✅ FA-013: Verified Leiden clustering already fail-closed (no action needed)
+- ✅ FO-001/003/004: Documented as premature (stub implementation, deferred)
+
+**In Progress:**
+- 🔄 QE-002: Cache key audit (agent running)
+- 🔄 FO-004: Test split audit (agent running)
+
+**Key Findings:**
+1. FP-001 was simpler than expected - entire file unused (296 lines dead code)
+2. FA-013 already production-safe with `allow_toy_algorithm=False` gate
+3. FO split tasks premature - SearchRunner is mock/stub, no real evaluation yet
+4. Created stub types in factor_optimizer/contracts/splits.py for future guidance
+
+**Statistics:**
+- Tasks completed: 7 (4 smoke + FP-001 + FA-013 + FO-001/003/004 documented)
+- Agents active: 2
+- Files modified: 2 (test scripts fixed)
+- Files deleted: 1 (cache_integration.py)
+- Files created: 4 (analysis docs + stub types)
+
+### [T+1:00] Agent Audits Complete - Critical Issues Found
+**Agent Results:**
+- ✅ QE-002: Cache key audit complete - **CRITICAL correctness bug found**
+  - False cache hits: same ID, different values returns stale results
+  - Missing: factor values, labels, validity masks, metric config, universe, splits
+  - Test case demonstrates silent data corruption
+  - 10 missing dimensions documented
+  
+- ✅ FO-004: Test split audit complete - **CRITICAL contamination risk**
+  - No train/test separation in current API
+  - 8 contamination vectors identified (best score, plateau, metadata, evidence, pareto, lineage, LLM, admission)
+  - Architecture sketch for SealedTestResult provided
+  - 4-phase implementation plan
+
+**Status Update:**
+- QE-002: P1 confirmed, requires comprehensive cache key redesign
+- FO-004: Confirmed as design debt (current impl is stub/mock, but architecture critical)
+
+**Tasks Completed:** 9 total
+- 5 smoke tests ✅
+- FP-001 (QE dependency removed) ✅
+- FA-013 (Leiden verified safe) ✅
+- FO-001/003/004 (documented as premature) ✅
+- QE-002 audit ✅
+- FO-004 audit ✅
+
+**Next Actions:**
+- Document implementation priorities
+- Continue with remaining P1/P2 tasks
+- Update final report
 
 ---
-
-*This log will be updated every 30 minutes.*

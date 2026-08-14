@@ -192,9 +192,7 @@ def _metadata(
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_stratified_mean_spread",
-    source="weighted_tail",
-    research_only=True,
-)
+    source="weighted_tail")
 class TsStratifiedMeanSpread(SeriesOperator):
     """Mean of ``target`` on the high-``sorter`` tail minus the low-sorter tail.
 
@@ -269,9 +267,7 @@ class TsStratifiedMeanSpread(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_weighted_semivariance",
-    source="weighted_tail",
-    research_only=True,
-)
+    source="weighted_tail")
 class TsWeightedSemivariance(SeriesOperator):
     """Weight-normalised SEMIvariance below ``target`` (NO sqrt; R3-113).
 
@@ -331,9 +327,7 @@ class TsWeightedSemivariance(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_weighted_downside_deviation",
-    source="weighted_tail",
-    research_only=True,
-)
+    source="weighted_tail")
 class TsWeightedDownsideDeviation(SeriesOperator):
     """Weight-normalised DOWNside DEVIATION below ``target`` (sqrt; R3-113).
 
@@ -391,9 +385,7 @@ class TsWeightedDownsideDeviation(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_weighted_expected_shortfall",
-    source="weighted_tail",
-    research_only=True,
-)
+    source="weighted_tail")
 class TsWeightedExpectedShortfall(SeriesOperator):
     """Weight-normalised mean of the tail beyond a weighted quantile.
 
@@ -474,9 +466,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
     category="time_series_risk",
     business_category="time_series_risk",
     canonical="ts_weighted_drawdown_area",
-    source="weighted_tail",
-    research_only=True,
-)
+    source="weighted_tail")
 class TsWeightedDrawdownArea(SeriesOperator):
     """Weight-normalised drawdown-depth area from the running peak.
 

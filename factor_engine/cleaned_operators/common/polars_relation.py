@@ -54,9 +54,7 @@ def _cs_long_transform(x: pl.DataFrame, transform) -> pl.DataFrame:
     business_category="relation",
     canonical="relation_hhi",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationHHINative(SeriesOperator):
     """Herfindahl-Hirschman Index: sum of squared shares."""
 
@@ -85,9 +83,7 @@ class RelationHHINative(SeriesOperator):
     business_category="relation",
     canonical="relation_hhi_change",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationHHIChangeNative(SeriesOperator):
     """Period-over-period change in HHI."""
 
@@ -118,9 +114,7 @@ class RelationHHIChangeNative(SeriesOperator):
     business_category="relation",
     canonical="relation_entropy",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationEntropyNative(SeriesOperator):
     """Shannon entropy of the cross-sectional distribution."""
 
@@ -150,9 +144,7 @@ class RelationEntropyNative(SeriesOperator):
     business_category="relation",
     canonical="relation_entropy_change",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationEntropyChangeNative(SeriesOperator):
     """Period-over-period change in entropy."""
 
@@ -183,9 +175,7 @@ class RelationEntropyChangeNative(SeriesOperator):
     business_category="relation",
     canonical="relation_concentration_acceleration",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationConcentrationAccelerationNative(SeriesOperator):
     """Second derivative of HHI."""
 
@@ -216,9 +206,7 @@ class RelationConcentrationAccelerationNative(SeriesOperator):
     business_category="relation",
     canonical="relation_topk_concentration",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationTopkConcentrationNative(SeriesOperator):
     """Share of total held by top-k entities."""
 
@@ -249,9 +237,7 @@ class RelationTopkConcentrationNative(SeriesOperator):
     business_category="relation",
     canonical="relation_topk_sum",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationTopkSumNative(SeriesOperator):
     """Sum of top-k values."""
 
@@ -282,9 +268,7 @@ class RelationTopkSumNative(SeriesOperator):
     business_category="relation",
     canonical="relation_rank_weighted_sum",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationRankWeightedSumNative(SeriesOperator):
     """Sum weighted by rank position."""
 
@@ -309,9 +293,7 @@ class RelationRankWeightedSumNative(SeriesOperator):
     business_category="relation",
     canonical="relation_distinct_count",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationDistinctCountNative(SeriesOperator):
     """Count of distinct non-null values."""
 
@@ -338,9 +320,7 @@ class RelationDistinctCountNative(SeriesOperator):
     business_category="relation",
     canonical="relation_entry_count",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationEntryCountNative(SeriesOperator):
     """Count of new non-null entries vs prior period."""
 
@@ -371,9 +351,7 @@ class RelationEntryCountNative(SeriesOperator):
     business_category="relation",
     canonical="relation_exit_count",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationExitCountNative(SeriesOperator):
     """Count of entities that exited vs prior period."""
 
@@ -404,9 +382,7 @@ class RelationExitCountNative(SeriesOperator):
     business_category="relation",
     canonical="relation_jaccard",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationJaccardNative(SeriesOperator):
     """Jaccard similarity of non-null sets across periods."""
 
@@ -437,9 +413,7 @@ class RelationJaccardNative(SeriesOperator):
     business_category="relation",
     canonical="relation_overlap_ratio",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationOverlapRatioNative(SeriesOperator):
     """Ratio of overlapping non-null entities."""
 
@@ -470,9 +444,7 @@ class RelationOverlapRatioNative(SeriesOperator):
     business_category="relation",
     canonical="relation_rank_mobility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationRankMobilityNative(SeriesOperator):
     """Average absolute rank change."""
 
@@ -503,9 +475,7 @@ class RelationRankMobilityNative(SeriesOperator):
     business_category="relation",
     canonical="relation_rank_entity_mobility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationRankEntityMobilityNative(SeriesOperator):
     """Entity-specific rank change."""
 
@@ -536,9 +506,7 @@ class RelationRankEntityMobilityNative(SeriesOperator):
     business_category="relation",
     canonical="relation_share_mobility",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationShareMobilityNative(SeriesOperator):
     """Change in entity's share of total."""
 
@@ -569,9 +537,7 @@ class RelationShareMobilityNative(SeriesOperator):
     business_category="relation",
     canonical="relation_category_share",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationCategoryShareNative(SeriesOperator):
     """Entity's share within its category."""
 
@@ -599,9 +565,7 @@ class RelationCategoryShareNative(SeriesOperator):
     business_category="relation",
     canonical="relation_category_signed_contribution",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationCategorySignedContributionNative(SeriesOperator):
     """Signed contribution to category change."""
 
@@ -634,9 +598,7 @@ class RelationCategorySignedContributionNative(SeriesOperator):
     business_category="relation",
     canonical="relation_weighted_change",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationWeightedChangeNative(SeriesOperator):
     """Weighted average change across entities."""
 
@@ -669,9 +631,7 @@ class RelationWeightedChangeNative(SeriesOperator):
     business_category="relation",
     canonical="relation_peer_weighted_mean_ex_self",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationPeerWeightedMeanExSelfNative(SeriesOperator):
     """Weighted mean of peers excluding self."""
 
@@ -699,9 +659,7 @@ class RelationPeerWeightedMeanExSelfNative(SeriesOperator):
     business_category="relation",
     canonical="relation_weighted_std_ex_self",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationWeightedStdExSelfNative(SeriesOperator):
     """Weighted std of peers excluding self."""
 
@@ -729,9 +687,7 @@ class RelationWeightedStdExSelfNative(SeriesOperator):
     business_category="relation",
     canonical="relation_distribution_skew",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationDistributionSkewNative(SeriesOperator):
     """Cross-sectional skewness."""
 
@@ -758,9 +714,7 @@ class RelationDistributionSkewNative(SeriesOperator):
     business_category="relation",
     canonical="relation_distribution_excess_kurtosis",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationDistributionExcessKurtosisNative(SeriesOperator):
     """Cross-sectional excess kurtosis."""
 
@@ -787,9 +741,7 @@ class RelationDistributionExcessKurtosisNative(SeriesOperator):
     business_category="relation",
     canonical="relation_distribution_pearson_kurtosis",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationDistributionPearsonKurtosisNative(SeriesOperator):
     """Pearson's measure: (mean - mode) / std."""
 
@@ -814,9 +766,7 @@ class RelationDistributionPearsonKurtosisNative(SeriesOperator):
     business_category="relation",
     canonical="relation_diffusion_score",
     source=_SRC,
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RelationDiffusionScoreNative(SeriesOperator):
     """Measure of how broadly a change is diffused."""
 

@@ -117,9 +117,7 @@ def _realized_skewness(close_v: np.ndarray) -> float:
     canonical="intra_realized_skewness",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraRealizedSkewness(SessionAggregationOperator):
     """日内已实现偏度 sqrt(N)*sum(r^3)/(sum(r^2))^(3/2)。"""
 
@@ -150,9 +148,7 @@ def _realized_kurtosis(close_v: np.ndarray) -> float:
     canonical="intra_realized_kurtosis",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraRealizedKurtosis(SessionAggregationOperator):
     """日内已实现峰度 N*sum(r^4)/(sum(r^2))^2。"""
 
@@ -177,9 +173,7 @@ def _realized_quarticity(close_v: np.ndarray) -> float:
     canonical="intra_realized_quarticity",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraRealizedQuarticity(SessionAggregationOperator):
     """日内已实现四次变差 RQ = N/3 * sum(r^4)。"""
 
@@ -216,9 +210,7 @@ def _tripower_quarticity(close_v: np.ndarray) -> float:
     canonical="intra_tripower_quarticity",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraTripowerQuarticity(SessionAggregationOperator):
     """日内三次幂四次变差（跳跃稳健）。"""
 
@@ -250,9 +242,7 @@ def _continuous_and_jump(close_v: np.ndarray) -> tuple[float, float]:
     canonical="intra_continuous_variance",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraContinuousVariance(SessionAggregationOperator):
     """日内连续方差分量 min(RV, BV)。"""
 
@@ -273,9 +263,7 @@ class IntraContinuousVariance(SessionAggregationOperator):
     canonical="intra_jump_variation",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpVariation(SessionAggregationOperator):
     """日内跳跃方差分量 max(RV-BV, 0)。"""
 
@@ -328,9 +316,7 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
     canonical="intra_positive_jump_variation",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraPositiveJumpVariation(SessionAggregationOperator):
     """日内正向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
@@ -354,9 +340,7 @@ class IntraPositiveJumpVariation(SessionAggregationOperator):
     canonical="intra_negative_jump_variation",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraNegativeJumpVariation(SessionAggregationOperator):
     """日内负向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
@@ -380,9 +364,7 @@ class IntraNegativeJumpVariation(SessionAggregationOperator):
     canonical="intra_signed_jump_ratio",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraSignedJumpRatio(SessionAggregationOperator):
     """有符号跳跃比 (posTail-negTail)/(posTail+negTail+eps)。
 
@@ -418,9 +400,7 @@ class IntraSignedJumpRatio(SessionAggregationOperator):
     canonical="intra_jump_count",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpCount(SessionAggregationOperator):
     """日内跳跃分钟数量（阈值判定）。"""
 
@@ -451,9 +431,7 @@ def _tail_op(name: str, description: str, unit: str, index: int):
         canonical=name,
         source="intraday.higher_moments",
         backend="pandas_numpy",
-        status="experimental",
-    research_only=True,
-    )
+        status="experimental")
     class _TailOp(SessionAggregationOperator):
         metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit)
 
@@ -493,9 +471,7 @@ _tail_op(
     canonical="intra_signed_tail_variation_ratio",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraSignedTailVariationRatio(SessionAggregationOperator):
     """有符号尾部比 (pos-neg)/(pos+neg+eps)。"""
 
@@ -522,9 +498,7 @@ class IntraSignedTailVariationRatio(SessionAggregationOperator):
     canonical="intra_jump_concentration",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpConcentration(SessionAggregationOperator):
     """跳跃集中度 sum(jump_share_i^2)，单根集中为 1、分散趋近 0。"""
 
@@ -548,9 +522,7 @@ class IntraJumpConcentration(SessionAggregationOperator):
     canonical="intra_jump_first_time",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpFirstTime(SessionAggregationOperator):
     """首次跳跃的标准化时点（0=首根, 1=末根）。"""
 
@@ -574,9 +546,7 @@ class IntraJumpFirstTime(SessionAggregationOperator):
     canonical="intra_jump_last_time",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpLastTime(SessionAggregationOperator):
     """末次跳跃的标准化时点（0=首根, 1=末根）。"""
 
@@ -600,9 +570,7 @@ class IntraJumpLastTime(SessionAggregationOperator):
     canonical="intra_jump_clustering",
     source="intraday.higher_moments",
     backend="pandas_numpy",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class IntraJumpClustering(SessionAggregationOperator):
     """跳跃事件间隔变异系数（>=3 次跳跃时定义）。"""
 
@@ -662,9 +630,7 @@ def _rv_signature_slope(close_v: np.ndarray) -> float:
     business_category="intraday_microstructure",
     canonical="intraday_rv_signature_slope",
     source="intraday.higher_moments",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntradayRvSignatureSlope(SessionAggregationOperator):
     """日内 volatility signature 斜率（采样间隔 1/2/5/10 分钟）。
 

@@ -130,7 +130,7 @@ class QEPairwiseSimilarity:
                        If None, falls back to stub mode.
         """
         self._qe_adapter = qe_adapter
-        self._cache: dict[tuple[str, str], list[SimilarityResult]] = {}
+        self._cache: dict[tuple[str, str, str, str, str, str], SimilarityResult] = {}
 
     def compute_similarity(
         self,
@@ -206,14 +206,22 @@ class QEPairwiseSimilarity:
         # In production, would delegate to QE batch correlation
         # For now, use cache
         results = []
+        seen_factor_ids = set()
 
-        for (fid_a, fid_b), cached_results in self._cache.items():
-            if fid_a != factor_id:
+        for key, result in self._cache.items():
+            # key is (fid_a, fid_b, method_val, universe, start, end)
+            fid_a, fid_b, method_val, _, _, _ = key
+
+            if fid_a != factor_id or method_val != method.value:
                 continue
 
-            for result in cached_results:
-                if result.method == method and result.is_high_similarity(threshold):
-                    results.append(result)
+            # Avoid duplicates (we store symmetric pairs)
+            if fid_b in seen_factor_ids:
+                continue
+
+            if result.is_high_similarity(threshold):
+                results.append(result)
+                seen_factor_ids.add(fid_b)
 
         results.sort(key=lambda r: abs(r.similarity_score), reverse=True)
         return results[:max_results]
@@ -225,17 +233,42 @@ class QEPairwiseSimilarity:
         Args:
             result: Similarity result to cache
         """
-        key_a = (result.factor_id_a, result.factor_id_b)
-        key_b = (result.factor_id_b, result.factor_id_a)
+        key_a = self._make_cache_key(
+            result.factor_id_a, result.factor_id_b, result.method,
+            result.universe_ref, result.period_start, result.period_end
+        )
+        key_b = self._make_cache_key(
+            result.factor_id_b, result.factor_id_a, result.method,
+            result.universe_ref, result.period_start, result.period_end
+        )
 
-        if key_a not in self._cache:
-            self._cache[key_a] = []
-        self._cache[key_a].append(result)
+        # Store with both orderings for symmetric lookup
+        self._cache[key_a] = result
+        self._cache[key_b] = result
 
-        # Store symmetric result
-        if key_b not in self._cache:
-            self._cache[key_b] = []
-        self._cache[key_b].append(result)
+    def _make_cache_key(
+        self,
+        factor_id_a: str,
+        factor_id_b: str,
+        method: SimilarityMethod,
+        universe_ref: Optional[str],
+        period_start: Optional[str],
+        period_end: Optional[str],
+    ) -> tuple[str, str, str, str, str, str]:
+        """
+        Build comprehensive cache key including all distinguishing parameters.
+
+        Prevents cache collisions when same factor pair is evaluated with
+        different methods, universes, or time periods.
+        """
+        return (
+            factor_id_a,
+            factor_id_b,
+            method.value,
+            universe_ref or "",
+            period_start or "",
+            period_end or "",
+        )
 
     def _get_from_cache(
         self,
@@ -246,25 +279,12 @@ class QEPairwiseSimilarity:
         period_start: Optional[str],
         period_end: Optional[str],
     ) -> Optional[SimilarityResult]:
-        """Retrieve from cache with filters."""
-        key = (factor_id_a, factor_id_b)
-        if key not in self._cache:
-            return None
-
-        results = self._cache[key]
-        results = [r for r in results if r.method == method]
-
-        if universe_ref:
-            results = [r for r in results if r.universe_ref == universe_ref]
-        if period_start:
-            results = [r for r in results if r.period_start == period_start]
-        if period_end:
-            results = [r for r in results if r.period_end == period_end]
-
-        if results:
-            return sorted(results, key=lambda r: r.timestamp, reverse=True)[0]
-
-        return None
+        """Retrieve from cache using comprehensive key."""
+        key = self._make_cache_key(
+            factor_id_a, factor_id_b, method,
+            universe_ref, period_start, period_end
+        )
+        return self._cache.get(key)
 
     def _convert_qe_result(self, qe_result, method: SimilarityMethod) -> SimilarityResult:
         """Convert QE correlation result to SimilarityResult."""
@@ -288,8 +308,8 @@ class QEPairwiseSimilarity:
         self._cache.clear()
 
     def count(self) -> int:
-        """Get total number of cached results."""
-        return sum(len(results) for results in self._cache.values()) // 2
+        """Get total number of cached results (accounting for symmetric storage)."""
+        return len(self._cache) // 2
 
 
 class CorrelationSimilarity:
@@ -301,7 +321,7 @@ class CorrelationSimilarity:
     """
 
     def __init__(self):
-        self._cache: dict[tuple[str, str], list[SimilarityResult]] = {}
+        self._cache: dict[tuple[str, str, str, str, str, str], SimilarityResult] = {}
 
     def add_result(self, result: SimilarityResult) -> None:
         """
@@ -310,17 +330,42 @@ class CorrelationSimilarity:
         Args:
             result: Similarity result to cache
         """
-        key_a = (result.factor_id_a, result.factor_id_b)
-        key_b = (result.factor_id_b, result.factor_id_a)
+        key_a = self._make_cache_key(
+            result.factor_id_a, result.factor_id_b, result.method,
+            result.universe_ref, result.period_start, result.period_end
+        )
+        key_b = self._make_cache_key(
+            result.factor_id_b, result.factor_id_a, result.method,
+            result.universe_ref, result.period_start, result.period_end
+        )
 
-        if key_a not in self._cache:
-            self._cache[key_a] = []
-        self._cache[key_a].append(result)
+        # Store with both orderings for symmetric lookup
+        self._cache[key_a] = result
+        self._cache[key_b] = result
 
-        # Store symmetric result
-        if key_b not in self._cache:
-            self._cache[key_b] = []
-        self._cache[key_b].append(result)
+    def _make_cache_key(
+        self,
+        factor_id_a: str,
+        factor_id_b: str,
+        method: SimilarityMethod,
+        universe_ref: Optional[str],
+        period_start: Optional[str],
+        period_end: Optional[str],
+    ) -> tuple[str, str, str, str, str, str]:
+        """
+        Build comprehensive cache key including all distinguishing parameters.
+
+        Prevents cache collisions when same factor pair is evaluated with
+        different methods, universes, or time periods.
+        """
+        return (
+            factor_id_a,
+            factor_id_b,
+            method.value,
+            universe_ref or "",
+            period_start or "",
+            period_end or "",
+        )
 
     def compute_similarity(
         self,
@@ -336,28 +381,11 @@ class CorrelationSimilarity:
 
         In production, this would compute correlation using DA.
         """
-        key = (factor_id_a, factor_id_b)
-        if key not in self._cache:
-            return None
-
-        results = self._cache[key]
-
-        # Filter by method
-        results = [r for r in results if r.method == method]
-
-        # Filter by constraints if specified
-        if universe_ref:
-            results = [r for r in results if r.universe_ref == universe_ref]
-        if period_start:
-            results = [r for r in results if r.period_start == period_start]
-        if period_end:
-            results = [r for r in results if r.period_end == period_end]
-
-        # Return most recent
-        if results:
-            return sorted(results, key=lambda r: r.timestamp, reverse=True)[0]
-
-        return None
+        key = self._make_cache_key(
+            factor_id_a, factor_id_b, method,
+            universe_ref, period_start, period_end
+        )
+        return self._cache.get(key)
 
     def find_similar(
         self,
@@ -372,14 +400,22 @@ class CorrelationSimilarity:
         In production, this would query a similarity index.
         """
         results = []
+        seen_factor_ids = set()
 
-        for (fid_a, fid_b), cached_results in self._cache.items():
-            if fid_a != factor_id:
+        for key, result in self._cache.items():
+            # key is (fid_a, fid_b, method_val, universe, start, end)
+            fid_a, fid_b, method_val, _, _, _ = key
+
+            if fid_a != factor_id or method_val != method.value:
                 continue
 
-            for result in cached_results:
-                if result.method == method and result.is_high_similarity(threshold):
-                    results.append(result)
+            # Avoid duplicates (we store symmetric pairs)
+            if fid_b in seen_factor_ids:
+                continue
+
+            if result.is_high_similarity(threshold):
+                results.append(result)
+                seen_factor_ids.add(fid_b)
 
         # Sort by descending similarity score
         results.sort(key=lambda r: abs(r.similarity_score), reverse=True)
@@ -387,9 +423,9 @@ class CorrelationSimilarity:
         return results[:max_results]
 
     def count(self) -> int:
-        """Get total number of cached similarity results."""
+        """Get total number of cached similarity results (accounting for symmetric storage)."""
         # Divide by 2 since we store symmetric pairs
-        return sum(len(results) for results in self._cache.values()) // 2
+        return len(self._cache) // 2
 
     def clear(self) -> None:
         """Clear all cached results."""

@@ -119,9 +119,7 @@ def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     business_category="research_transform",
     canonical="ts_wavelet_lowpass_reconstruct",
     source="research_transform",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsWaveletLowpassReconstruct(SeriesOperator):
     """Haar 低频重建信号（严格 trailing/causal，level 个最粗细节层保留）。"""
 
@@ -272,9 +270,7 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
     business_category="research_transform",
     canonical="ts_signature_mahalanobis_anomaly",
     source="research_transform",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsSignatureMahalanobisAnomaly(SeriesOperator):
     """三字段 level-2 路径签名向量的 shrinkage-Mahalanobis 异常度。"""
 
@@ -365,9 +361,7 @@ def _bifurcation_score(chunk: np.ndarray, tau: int, dim: int) -> float:
     business_category="research_transform",
     canonical="ts_persistence_birth_dispersion",
     source="research_transform",
-    status="experimental",
-    research_only=True,
-)
+    status="experimental")
 class TsBettiCrockerBifurcationScore(SeriesOperator):
     """持久图特征出生时间的散布度（bifurcation proxy，仅 Research）。
 

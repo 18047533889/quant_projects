@@ -126,9 +126,7 @@ def _kalman_filter_1d(observations: np.ndarray, process_var: float = 1e-5, obs_v
     business_category="intraday_microstructure",
     canonical="intra_kalman_latent_price",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraKalmanLatentPrice(SessionAggregationOperator):
     """日内 Kalman 滤波潜在价格偏离度。
 
@@ -169,9 +167,7 @@ class IntraKalmanLatentPrice(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_kalman_latent_price",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraKalmanLatentPricePolars(SessionAggregationOperator):
     """Polars backend for intra_kalman_latent_price."""
 
@@ -212,9 +208,7 @@ class IntraKalmanLatentPricePolars(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_space_volume_components",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
     """日内成交量状态空间分解：趋势/周期能量比。
 
@@ -262,9 +256,7 @@ class IntraStateSpaceVolumeComponents(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_state_space_volume_components",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
     """Polars backend for intra_state_space_volume_components."""
 
@@ -311,9 +303,7 @@ class IntraStateSpaceVolumeComponentsPolars(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_functional_motif_score",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraFunctionalMotifScore(SessionAggregationOperator):
     """日内价格轨迹功能性模式得分。
 
@@ -371,9 +361,7 @@ class IntraFunctionalMotifScore(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_functional_motif_score",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
     """Polars backend for intra_functional_motif_score."""
 
@@ -428,9 +416,7 @@ class IntraFunctionalMotifScorePolars(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_visibility_graph_features",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraVisibilityGraphFeatures(SessionAggregationOperator):
     """日内价格序列可见性图特征。
 
@@ -485,9 +471,7 @@ class IntraVisibilityGraphFeatures(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_visibility_graph_features",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVisibilityGraphFeaturesPolars(SessionAggregationOperator):
     """Polars backend for intra_visibility_graph_features."""
 
@@ -538,9 +522,7 @@ class IntraVisibilityGraphFeaturesPolars(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_smart_money_fcm_score",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraSmartMoneyFcmScore(SessionAggregationOperator):
     """Smart money flow composite metric combining volume/price/timing patterns.
 
@@ -641,9 +623,7 @@ class IntraSmartMoneyFcmScore(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_smart_money_fcm_score",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraSmartMoneyFcmScorePolars(SessionAggregationOperator):
     """Polars backend for intra_smart_money_fcm_score."""
 
@@ -740,9 +720,7 @@ class IntraSmartMoneyFcmScorePolars(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_market_profile_corr_ex_self",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraMarketProfileCorrExSelf(SessionAggregationOperator):
     """Market profile correlation excluding self.
 
@@ -842,9 +820,7 @@ class IntraMarketProfileCorrExSelf(SessionAggregationOperator):
     business_category="intraday_microstructure",
     canonical="intra_market_profile_corr_ex_self",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraMarketProfileCorrExSelfPolars(SessionAggregationOperator):
     """Polars backend for intra_market_profile_corr_ex_self."""
 
@@ -937,9 +913,7 @@ class IntraMarketProfileCorrExSelfPolars(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intra_price_peak_ridge_valley_state",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraPricePeakRidgeValleyState(SessionAggregationOperator):
     """Classify price action into peak/ridge/valley/flat states."""
 
@@ -988,9 +962,7 @@ class IntraPricePeakRidgeValleyState(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intra_price_peak_ridge_valley_state",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraPricePeakRidgeValleyStatePolars(SessionAggregationOperator):
     """Polars backend for intra_price_peak_ridge_valley_state."""
 
@@ -1043,9 +1015,7 @@ class IntraPricePeakRidgeValleyStatePolars(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intra_volume_peak_ridge_valley_state",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntraVolumePeakRidgeValleyState(SessionAggregationOperator):
     """Classify volume action into peak/ridge/valley/flat states."""
 
@@ -1094,9 +1064,7 @@ class IntraVolumePeakRidgeValleyState(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intra_volume_peak_ridge_valley_state",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntraVolumePeakRidgeValleyStatePolars(SessionAggregationOperator):
     """Polars backend for intra_volume_peak_ridge_valley_state."""
 
@@ -1149,9 +1117,7 @@ class IntraVolumePeakRidgeValleyStatePolars(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intraday_value_at_extreme_state",
     source="intraday.intra_state_space",
-    backend="pandas_numpy",
-    research_only=True,
-)
+    backend="pandas_numpy")
 class IntradayValueAtExtremeState(SessionAggregationOperator):
     """Compute value (volume × price) at price/volume extremes."""
 
@@ -1204,9 +1170,7 @@ class IntradayValueAtExtremeState(SessionAggregationOperator):
     business_category="intraday_pattern",
     canonical="intraday_value_at_extreme_state",
     source="intraday.intra_state_space",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class IntradayValueAtExtremeStatePolars(SessionAggregationOperator):
     """Polars backend for intraday_value_at_extreme_state."""
 

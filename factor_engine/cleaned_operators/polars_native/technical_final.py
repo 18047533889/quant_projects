@@ -59,9 +59,7 @@ def _panel_result(base: pl.DataFrame, values: dict[str, pl.Series]) -> pl.DataFr
     category="technical_indicator",
     canonical="ElderRay",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class ElderRay(SeriesOperator):
     """Elder Ray Index (Bull Power + Bear Power combined indicator)"""
 
@@ -99,9 +97,7 @@ class ElderRay(SeriesOperator):
     category="technical_indicator",
     canonical="FisherTransform",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class FisherTransform(SeriesOperator):
     """Fisher Transform: converts prices to Gaussian normal distribution"""
 
@@ -139,9 +135,7 @@ class FisherTransform(SeriesOperator):
     category="technical_indicator",
     canonical="PSAR",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class PSAR(SeriesOperator):
     """Parabolic SAR: Stop and Reverse indicator"""
 
@@ -243,9 +237,7 @@ class PSAR(SeriesOperator):
     category="technical_indicator",
     canonical="QQE",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class QQE(SeriesOperator):
     """Quantitative Qualitative Estimation: smoothed RSI with ATR bands"""
 
@@ -288,9 +280,7 @@ class QQE(SeriesOperator):
     category="technical_indicator",
     canonical="RSX",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class RSX(SeriesOperator):
     """Relative Strength Xtra: noise-free RSI using Jurik-style smoothing"""
 
@@ -339,9 +329,7 @@ class RSX(SeriesOperator):
     category="technical_indicator",
     canonical="SupertrendDirection",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class SupertrendDirection(SeriesOperator):
     """Supertrend Direction: +1 for uptrend, -1 for downtrend"""
 
@@ -425,9 +413,7 @@ class SupertrendDirection(SeriesOperator):
     category="technical_indicator",
     canonical="TSI",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSI(SeriesOperator):
     """True Strength Index: double-smoothed momentum oscillator"""
 
@@ -456,9 +442,7 @@ class TSI(SeriesOperator):
     category="technical_indicator",
     canonical="TSI_signal",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class TSI_signal(SeriesOperator):
     """TSI signal line: EMA of TSI"""
 
@@ -488,9 +472,7 @@ class TSI_signal(SeriesOperator):
     category="technical_indicator",
     canonical="VortexMinus",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class VortexMinus(SeriesOperator):
     """Vortex Indicator Minus (VI-)"""
 
@@ -545,9 +527,7 @@ class VortexMinus(SeriesOperator):
     category="technical_indicator",
     canonical="VortexPlus",
     source="polars_native_technical_final",
-    backend="polars",
-    research_only=True,
-)
+    backend="polars")
 class VortexPlus(SeriesOperator):
     """Vortex Indicator Plus (VI+)"""
 

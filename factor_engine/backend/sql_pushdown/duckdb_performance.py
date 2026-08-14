@@ -284,11 +284,15 @@ def duckdb_result_to_series_arrow(
             f"got {df.columns}"
         )
 
-    # Polars → Pandas（只在最终边界转换）
-    pdf = df.select([timestamp_col, instrument_col, value_col]).to_pandas()
-    pdf = pdf.set_index([timestamp_col, instrument_col])
+    # R47 P1-05: Use polars_long_to_multiindex_series for consistent boundary conversion
+    from backend.long_frame import polars_long_to_multiindex_series
 
-    return pdf[value_col]
+    return polars_long_to_multiindex_series(
+        df,
+        timestamp_col=timestamp_col,
+        instrument_col=instrument_col,
+        value_col=value_col,
+    )
 
 
 # ============================================================================
@@ -444,6 +448,7 @@ class OptimizedDuckDBExecutor:
     ) -> dict[str, pd.Series]:
         """执行 UNION ALL 合并查询。"""
         import hashlib
+        from backend.long_frame import polars_long_to_multiindex_series
 
         # Optimization 2: 查询计划缓存
         query_hash = hashlib.sha256(union_query.encode()).hexdigest()[:16]
@@ -465,8 +470,13 @@ class OptimizedDuckDBExecutor:
         result: dict[str, pd.Series] = {}
         for sid in df["_sid"].unique().to_list():
             sid_df = df.filter(df["_sid"] == sid).select(["ts", "inst", "_v"])
-            pdf = sid_df.to_pandas().set_index(["ts", "inst"])
-            result[sid] = pdf["_v"]
+            # R47 P1-05: Use polars_long_to_multiindex_series for native conversion
+            result[sid] = polars_long_to_multiindex_series(
+                sid_df,
+                timestamp_col="ts",
+                instrument_col="inst",
+                value_col="_v",
+            )
 
         return result
 

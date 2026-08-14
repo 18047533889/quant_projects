@@ -28,7 +28,7 @@ from cleaned_operators.base import (
 # INTENSITY & RATIO METRICS
 # ============================================================================
 
-@register_operator(name="fin_acquisition_cash_intensity", canonical="fin_acquisition_cash_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_acquisition_cash_intensity", canonical="fin_acquisition_cash_intensity", backend="polars")
 class FinAcquisitionCashIntensityPolarsNative(SeriesOperator):
     """Cash paid for acquisitions / Total assets."""
     
@@ -56,7 +56,7 @@ class FinAcquisitionCashIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_borrowing_intensity", canonical="fin_borrowing_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_borrowing_intensity", canonical="fin_borrowing_intensity", backend="polars")
 class FinBorrowingIntensityPolarsNative(SeriesOperator):
     """New borrowing / Total assets."""
     
@@ -84,7 +84,7 @@ class FinBorrowingIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_capex_intensity", canonical="fin_capex_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_capex_intensity", canonical="fin_capex_intensity", backend="polars")
 class FinCapexIntensityPolarsNative(SeriesOperator):
     """Capital expenditure / Revenue."""
     
@@ -112,7 +112,7 @@ class FinCapexIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_goodwill_intensity", canonical="fin_goodwill_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_goodwill_intensity", canonical="fin_goodwill_intensity", backend="polars")
 class FinGoodwillIntensityPolarsNative(SeriesOperator):
     """Goodwill / Total assets."""
     
@@ -140,7 +140,7 @@ class FinGoodwillIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_impairment_intensity", canonical="fin_impairment_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_impairment_intensity", canonical="fin_impairment_intensity", backend="polars")
 class FinImpairmentIntensityPolarsNative(SeriesOperator):
     """Impairment charges / Total assets."""
     
@@ -168,7 +168,7 @@ class FinImpairmentIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_lease_intensity", canonical="fin_lease_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_lease_intensity", canonical="fin_lease_intensity", backend="polars")
 class FinLeaseIntensityPolarsNative(SeriesOperator):
     """Lease liabilities / Total assets."""
     
@@ -196,7 +196,7 @@ class FinLeaseIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_rd_total_intensity", canonical="fin_rd_total_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_rd_total_intensity", canonical="fin_rd_total_intensity", backend="polars")
 class FinRdTotalIntensityPolarsNative(SeriesOperator):
     """R&D expense / Revenue."""
     
@@ -225,7 +225,7 @@ class FinRdTotalIntensityPolarsNative(SeriesOperator):
 
 
 
-@register_operator(name="fin_debt_repayment_intensity", canonical="fin_debt_repayment_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_debt_repayment_intensity", canonical="fin_debt_repayment_intensity", backend="polars")
 class FinDebtRepaymentIntensityPolarsNative(SeriesOperator):
     """Debt repayment / Operating cash flow."""
     
@@ -253,7 +253,7 @@ class FinDebtRepaymentIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_contract_asset_intensity", canonical="fin_contract_asset_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_contract_asset_intensity", canonical="fin_contract_asset_intensity", backend="polars")
 class FinContractAssetIntensityPolarsNative(SeriesOperator):
     """Contract assets / Total assets."""
     
@@ -281,7 +281,7 @@ class FinContractAssetIntensityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_contract_liability_intensity", canonical="fin_contract_liability_intensity", backend="polars", research_only=True)
+@register_operator(name="fin_contract_liability_intensity", canonical="fin_contract_liability_intensity", backend="polars")
 class FinContractLiabilityIntensityPolarsNative(SeriesOperator):
     """Contract liabilities / Total liabilities."""
     
@@ -313,7 +313,7 @@ class FinContractLiabilityIntensityPolarsNative(SeriesOperator):
 # GROWTH METRICS
 # ============================================================================
 
-@register_operator(name="fin_capex_growth", canonical="fin_capex_growth", backend="polars", research_only=True)
+@register_operator(name="fin_capex_growth", canonical="fin_capex_growth", backend="polars")
 class FinCapexGrowthPolarsNative(SeriesOperator):
     """YoY growth rate of capital expenditure."""
     
@@ -339,7 +339,7 @@ class FinCapexGrowthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_equity_capital_growth", canonical="fin_equity_capital_growth", backend="polars", research_only=True)
+@register_operator(name="fin_equity_capital_growth", canonical="fin_equity_capital_growth", backend="polars")
 class FinEquityCapitalGrowthPolarsNative(SeriesOperator):
     """YoY growth rate of shareholders' equity."""
     
@@ -365,7 +365,7 @@ class FinEquityCapitalGrowthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_contract_asset_growth", canonical="fin_contract_asset_growth", backend="polars", research_only=True)
+@register_operator(name="fin_contract_asset_growth", canonical="fin_contract_asset_growth", backend="polars")
 class FinContractAssetGrowthPolarsNative(SeriesOperator):
     """Period-over-period growth of contract assets."""
     
@@ -391,7 +391,7 @@ class FinContractAssetGrowthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_contract_liability_growth", canonical="fin_contract_liability_growth", backend="polars", research_only=True)
+@register_operator(name="fin_contract_liability_growth", canonical="fin_contract_liability_growth", backend="polars")
 class FinContractLiabilityGrowthPolarsNative(SeriesOperator):
     """Period-over-period growth of contract liabilities."""
     
@@ -417,7 +417,7 @@ class FinContractLiabilityGrowthPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cagr", canonical="fin_cagr", backend="polars", research_only=True)
+@register_operator(name="fin_cagr", canonical="fin_cagr", backend="polars")
 class FinCagrPolarsNative(SeriesOperator):
     """Compound annual growth rate over specified periods."""
     
@@ -448,7 +448,7 @@ class FinCagrPolarsNative(SeriesOperator):
 # DIVERGENCE & GAP METRICS
 # ============================================================================
 
-@register_operator(name="fin_actual_expectation_divergence", canonical="fin_actual_expectation_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_actual_expectation_divergence", canonical="fin_actual_expectation_divergence", backend="polars")
 class FinActualExpectationDivergencePolarsNative(SeriesOperator):
     """Divergence between actual and expected values."""
     
@@ -476,7 +476,7 @@ class FinActualExpectationDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cash_earnings_gap", canonical="fin_cash_earnings_gap", backend="polars", research_only=True)
+@register_operator(name="fin_cash_earnings_gap", canonical="fin_cash_earnings_gap", backend="polars")
 class FinCashEarningsGapPolarsNative(SeriesOperator):
     """Operating cash flow minus net income (accruals proxy)."""
     
@@ -504,7 +504,7 @@ class FinCashEarningsGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cash_sales_divergence", canonical="fin_cash_sales_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_cash_sales_divergence", canonical="fin_cash_sales_divergence", backend="polars")
 class FinCashSalesDivergencePolarsNative(SeriesOperator):
     """Difference in growth rates: cash from operations vs revenue."""
     
@@ -538,7 +538,7 @@ class FinCashSalesDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_comprehensive_income_gap", canonical="fin_comprehensive_income_gap", backend="polars", research_only=True)
+@register_operator(name="fin_comprehensive_income_gap", canonical="fin_comprehensive_income_gap", backend="polars")
 class FinComprehensiveIncomeGapPolarsNative(SeriesOperator):
     """Comprehensive income minus net income."""
     
@@ -566,7 +566,7 @@ class FinComprehensiveIncomeGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_deferred_tax_gap", canonical="fin_deferred_tax_gap", backend="polars", research_only=True)
+@register_operator(name="fin_deferred_tax_gap", canonical="fin_deferred_tax_gap", backend="polars")
 class FinDeferredTaxGapPolarsNative(SeriesOperator):
     """Change in deferred tax assets minus deferred tax liabilities."""
     
@@ -598,7 +598,7 @@ class FinDeferredTaxGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_expense_sales_divergence", canonical="fin_expense_sales_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_expense_sales_divergence", canonical="fin_expense_sales_divergence", backend="polars")
 class FinExpenseSalesDivergencePolarsNative(SeriesOperator):
     """Difference in growth rates: operating expenses vs revenue."""
     
@@ -632,7 +632,7 @@ class FinExpenseSalesDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_inventory_sales_divergence", canonical="fin_inventory_sales_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_inventory_sales_divergence", canonical="fin_inventory_sales_divergence", backend="polars")
 class FinInventorySalesDivergencePolarsNative(SeriesOperator):
     """Difference in growth rates: inventory vs revenue."""
     
@@ -666,7 +666,7 @@ class FinInventorySalesDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_receivable_sales_divergence", canonical="fin_receivable_sales_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_receivable_sales_divergence", canonical="fin_receivable_sales_divergence", backend="polars")
 class FinReceivableSalesDivergencePolarsNative(SeriesOperator):
     """Difference in growth rates: accounts receivable vs revenue."""
     
@@ -700,7 +700,7 @@ class FinReceivableSalesDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_contract_asset_liability_gap", canonical="fin_contract_asset_liability_gap", backend="polars", research_only=True)
+@register_operator(name="fin_contract_asset_liability_gap", canonical="fin_contract_asset_liability_gap", backend="polars")
 class FinContractAssetLiabilityGapPolarsNative(SeriesOperator):
     """Contract assets minus contract liabilities."""
     
@@ -728,7 +728,7 @@ class FinContractAssetLiabilityGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_lease_asset_liability_gap", canonical="fin_lease_asset_liability_gap", backend="polars", research_only=True)
+@register_operator(name="fin_lease_asset_liability_gap", canonical="fin_lease_asset_liability_gap", backend="polars")
 class FinLeaseAssetLiabilityGapPolarsNative(SeriesOperator):
     """Right-of-use assets minus lease liabilities."""
     
@@ -756,7 +756,7 @@ class FinLeaseAssetLiabilityGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_financing_gap", canonical="fin_financing_gap", backend="polars", research_only=True)
+@register_operator(name="fin_financing_gap", canonical="fin_financing_gap", backend="polars")
 class FinFinancingGapPolarsNative(SeriesOperator):
     """Operating CF + Investing CF (measures external financing need)."""
     
@@ -784,7 +784,7 @@ class FinFinancingGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_divergence", canonical="fin_divergence", backend="polars", research_only=True)
+@register_operator(name="fin_divergence", canonical="fin_divergence", backend="polars")
 class FinDivergencePolarsNative(SeriesOperator):
     """Generic divergence between two financial metrics."""
     
@@ -817,7 +817,7 @@ class FinDivergencePolarsNative(SeriesOperator):
 # QUALITY & COVERAGE METRICS
 # ============================================================================
 
-@register_operator(name="fin_core_earnings_ratio", canonical="fin_core_earnings_ratio", backend="polars", research_only=True)
+@register_operator(name="fin_core_earnings_ratio", canonical="fin_core_earnings_ratio", backend="polars")
 class FinCoreEarningsRatioPolarsNative(SeriesOperator):
     """Core earnings / Reported earnings."""
     
@@ -845,7 +845,7 @@ class FinCoreEarningsRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_discontinued_operation_ratio", canonical="fin_discontinued_operation_ratio", backend="polars", research_only=True)
+@register_operator(name="fin_discontinued_operation_ratio", canonical="fin_discontinued_operation_ratio", backend="polars")
 class FinDiscontinuedOperationRatioPolarsNative(SeriesOperator):
     """Income from discontinued operations / Total net income."""
     
@@ -873,7 +873,7 @@ class FinDiscontinuedOperationRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_noncore_income_ratio", canonical="fin_noncore_income_ratio", backend="polars", research_only=True)
+@register_operator(name="fin_noncore_income_ratio", canonical="fin_noncore_income_ratio", backend="polars")
 class FinNoncoreIncomeRatioPolarsNative(SeriesOperator):
     """Non-core income / Total income."""
     
@@ -901,7 +901,7 @@ class FinNoncoreIncomeRatioPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_minority_profit_share", canonical="fin_minority_profit_share", backend="polars", research_only=True)
+@register_operator(name="fin_minority_profit_share", canonical="fin_minority_profit_share", backend="polars")
 class FinMinorityProfitSharePolarsNative(SeriesOperator):
     """Minority interest / Net income."""
     
@@ -929,7 +929,7 @@ class FinMinorityProfitSharePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_fair_value_income_dependence", canonical="fin_fair_value_income_dependence", backend="polars", research_only=True)
+@register_operator(name="fin_fair_value_income_dependence", canonical="fin_fair_value_income_dependence", backend="polars")
 class FinFairValueIncomeDependencePolarsNative(SeriesOperator):
     """Fair value gains / Net income."""
     
@@ -957,7 +957,7 @@ class FinFairValueIncomeDependencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_investment_income_dependence", canonical="fin_investment_income_dependence", backend="polars", research_only=True)
+@register_operator(name="fin_investment_income_dependence", canonical="fin_investment_income_dependence", backend="polars")
 class FinInvestmentIncomeDependencePolarsNative(SeriesOperator):
     """Investment income / Net income."""
     
@@ -985,7 +985,7 @@ class FinInvestmentIncomeDependencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_other_earnings_dependence", canonical="fin_other_earnings_dependence", backend="polars", research_only=True)
+@register_operator(name="fin_other_earnings_dependence", canonical="fin_other_earnings_dependence", backend="polars")
 class FinOtherEarningsDependencePolarsNative(SeriesOperator):
     """Other income / Net income."""
     
@@ -1013,7 +1013,7 @@ class FinOtherEarningsDependencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_goodwill_risk_score", canonical="fin_goodwill_risk_score", backend="polars", research_only=True)
+@register_operator(name="fin_goodwill_risk_score", canonical="fin_goodwill_risk_score", backend="polars")
 class FinGoodwillRiskScorePolarsNative(SeriesOperator):
     """Goodwill / Market cap (higher = more impairment risk)."""
     
@@ -1041,7 +1041,7 @@ class FinGoodwillRiskScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_applicability_mask", canonical="fin_applicability_mask", backend="polars", research_only=True)
+@register_operator(name="fin_applicability_mask", canonical="fin_applicability_mask", backend="polars")
 class FinApplicabilityMaskPolarsNative(SeriesOperator):
     """Binary mask indicating if metric is applicable (non-null, non-zero)."""
     
@@ -1068,7 +1068,7 @@ class FinApplicabilityMaskPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_fundamental_strength_coverage", canonical="fin_fundamental_strength_coverage", backend="polars", research_only=True)
+@register_operator(name="fin_fundamental_strength_coverage", canonical="fin_fundamental_strength_coverage", backend="polars")
 class FinFundamentalStrengthCoveragePolarsNative(SeriesOperator):
     """Count of non-null strength metrics / Total expected."""
     
@@ -1100,7 +1100,7 @@ class FinFundamentalStrengthCoveragePolarsNative(SeriesOperator):
 # CONVERSION & ACCRUAL METRICS
 # ============================================================================
 
-@register_operator(name="fin_cash_conversion", canonical="fin_cash_conversion", backend="polars", research_only=True)
+@register_operator(name="fin_cash_conversion", canonical="fin_cash_conversion", backend="polars")
 class FinCashConversionPolarsNative(SeriesOperator):
     """Operating cash flow / Net income."""
     
@@ -1128,7 +1128,7 @@ class FinCashConversionPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_total_operating_accruals", canonical="fin_total_operating_accruals", backend="polars", research_only=True)
+@register_operator(name="fin_total_operating_accruals", canonical="fin_total_operating_accruals", backend="polars")
 class FinTotalOperatingAccrualsPolarsNative(SeriesOperator):
     """Net income minus operating cash flow."""
     
@@ -1156,7 +1156,7 @@ class FinTotalOperatingAccrualsPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_working_capital_accruals", canonical="fin_working_capital_accruals", backend="polars", research_only=True)
+@register_operator(name="fin_working_capital_accruals", canonical="fin_working_capital_accruals", backend="polars")
 class FinWorkingCapitalAccrualsPolarsNative(SeriesOperator):
     """Change in working capital (proxy for accruals)."""
     
@@ -1182,7 +1182,7 @@ class FinWorkingCapitalAccrualsPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_working_capital_change", canonical="fin_working_capital_change", backend="polars", research_only=True)
+@register_operator(name="fin_working_capital_change", canonical="fin_working_capital_change", backend="polars")
 class FinWorkingCapitalChangePolarsNative(SeriesOperator):
     """Period-over-period change in working capital."""
     
@@ -1208,7 +1208,7 @@ class FinWorkingCapitalChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_delta_noa", canonical="fin_delta_noa", backend="polars", research_only=True)
+@register_operator(name="fin_delta_noa", canonical="fin_delta_noa", backend="polars")
 class FinDeltaNoaPolarsNative(SeriesOperator):
     """Change in net operating assets."""
     
@@ -1238,7 +1238,7 @@ class FinDeltaNoaPolarsNative(SeriesOperator):
 # COVERAGE & PROXY METRICS
 # ============================================================================
 
-@register_operator(name="fin_debt_service_coverage_proxy", canonical="fin_debt_service_coverage_proxy", backend="polars", research_only=True)
+@register_operator(name="fin_debt_service_coverage_proxy", canonical="fin_debt_service_coverage_proxy", backend="polars")
 class FinDebtServiceCoverageProxyPolarsNative(SeriesOperator):
     """Operating CF / (Interest expense + principal repayment proxy)."""
     
@@ -1267,7 +1267,7 @@ class FinDebtServiceCoverageProxyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_interest_coverage", canonical="fin_interest_coverage", backend="polars", research_only=True)
+@register_operator(name="fin_interest_coverage", canonical="fin_interest_coverage", backend="polars")
 class FinInterestCoveragePolarsNative(SeriesOperator):
     """EBIT / Interest expense (interest coverage ratio)
 
@@ -1299,7 +1299,7 @@ class FinInterestCoveragePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cash_burn_runway", canonical="fin_cash_burn_runway", backend="polars", research_only=True)
+@register_operator(name="fin_cash_burn_runway", canonical="fin_cash_burn_runway", backend="polars")
 class FinCashBurnRunwayPolarsNative(SeriesOperator):
     """Cash / Abs(negative operating CF) - quarters of runway."""
     
@@ -1331,7 +1331,7 @@ class FinCashBurnRunwayPolarsNative(SeriesOperator):
 # COMMON SIZE & COMPONENT METRICS
 # ============================================================================
 
-@register_operator(name="fin_common_size", canonical="fin_common_size", backend="polars", research_only=True)
+@register_operator(name="fin_common_size", canonical="fin_common_size", backend="polars")
 class FinCommonSizePolarsNative(SeriesOperator):
     """Line item / Total (revenue or assets for common-size analysis)."""
     
@@ -1359,7 +1359,7 @@ class FinCommonSizePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_component_score", canonical="fin_component_score", backend="polars", research_only=True)
+@register_operator(name="fin_component_score", canonical="fin_component_score", backend="polars")
 class FinComponentScorePolarsNative(SeriesOperator):
     """Weighted component contribution to aggregate metric."""
     
@@ -1387,7 +1387,7 @@ class FinComponentScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_fundamental_strength_score", canonical="fin_fundamental_strength_score", backend="polars", research_only=True)
+@register_operator(name="fin_fundamental_strength_score", canonical="fin_fundamental_strength_score", backend="polars")
 class FinFundamentalStrengthScorePolarsNative(SeriesOperator):
     """Composite fundamental quality score (normalized sum of sub-scores)."""
     
@@ -1418,7 +1418,7 @@ class FinFundamentalStrengthScorePolarsNative(SeriesOperator):
 # TIME SERIES METRICS
 # ============================================================================
 
-@register_operator(name="fin_announcement_lag", canonical="fin_announcement_lag", backend="polars", research_only=True)
+@register_operator(name="fin_announcement_lag", canonical="fin_announcement_lag", backend="polars")
 class FinAnnouncementLagPolarsNative(SeriesOperator):
     """Days between period end and announcement date."""
     
@@ -1446,7 +1446,7 @@ class FinAnnouncementLagPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_days_since_update", canonical="fin_days_since_update", backend="polars", research_only=True)
+@register_operator(name="fin_days_since_update", canonical="fin_days_since_update", backend="polars")
 class FinDaysSinceUpdatePolarsNative(SeriesOperator):
     """Days since last financial data update."""
     
@@ -1474,7 +1474,7 @@ class FinDaysSinceUpdatePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_average_balance", canonical="fin_average_balance", backend="polars", research_only=True)
+@register_operator(name="fin_average_balance", canonical="fin_average_balance", backend="polars")
 class FinAverageBalancePolarsNative(SeriesOperator):
     """Average of current and prior period balance sheet item."""
     
@@ -1500,7 +1500,7 @@ class FinAverageBalancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_log_change", canonical="fin_log_change", backend="polars", research_only=True)
+@register_operator(name="fin_log_change", canonical="fin_log_change", backend="polars")
 class FinLogChangePolarsNative(SeriesOperator):
     """Log change: log(current / previous)."""
     
@@ -1526,7 +1526,7 @@ class FinLogChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth_change", canonical="fin_growth_change", backend="polars", research_only=True)
+@register_operator(name="fin_growth_change", canonical="fin_growth_change", backend="polars")
 class FinGrowthChangePolarsNative(SeriesOperator):
     """Change in growth rate (acceleration/deceleration)."""
     
@@ -1555,7 +1555,7 @@ class FinGrowthChangePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_growth_volatility", canonical="fin_growth_volatility", backend="polars", research_only=True)
+@register_operator(name="fin_growth_volatility", canonical="fin_growth_volatility", backend="polars")
 class FinGrowthVolatilityPolarsNative(SeriesOperator):
     """Rolling standard deviation of growth rates."""
     
@@ -1583,7 +1583,7 @@ class FinGrowthVolatilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_earnings_cash_gap_volatility", canonical="fin_earnings_cash_gap_volatility", backend="polars", research_only=True)
+@register_operator(name="fin_earnings_cash_gap_volatility", canonical="fin_earnings_cash_gap_volatility", backend="polars")
 class FinEarningsCashGapVolatilityPolarsNative(SeriesOperator):
     """Rolling volatility of earnings-cash flow gap."""
     
@@ -1614,7 +1614,7 @@ class FinEarningsCashGapVolatilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_stability", canonical="fin_stability", backend="polars", research_only=True)
+@register_operator(name="fin_stability", canonical="fin_stability", backend="polars")
 class FinStabilityPolarsNative(SeriesOperator):
     """Inverse of coefficient of variation (mean / std)."""
     
@@ -1643,7 +1643,7 @@ class FinStabilityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_mean_abs_deviation", canonical="fin_mean_abs_deviation", backend="polars", research_only=True)
+@register_operator(name="fin_mean_abs_deviation", canonical="fin_mean_abs_deviation", backend="polars")
 class FinMeanAbsDeviationPolarsNative(SeriesOperator):
     """Rolling mean absolute deviation."""
     
@@ -1672,7 +1672,7 @@ class FinMeanAbsDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_median_abs_deviation", canonical="fin_median_abs_deviation", backend="polars", research_only=True)
+@register_operator(name="fin_median_abs_deviation", canonical="fin_median_abs_deviation", backend="polars")
 class FinMedianAbsDeviationPolarsNative(SeriesOperator):
     """Rolling median absolute deviation."""
     
@@ -1701,7 +1701,7 @@ class FinMedianAbsDeviationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_range", canonical="fin_range", backend="polars", research_only=True)
+@register_operator(name="fin_range", canonical="fin_range", backend="polars")
 class FinRangePolarsNative(SeriesOperator):
     """Rolling range (max - min)."""
     
@@ -1733,7 +1733,7 @@ class FinRangePolarsNative(SeriesOperator):
 # TREND & REGRESSION METRICS
 # ============================================================================
 
-@register_operator(name="fin_trend_slope", canonical="fin_trend_slope", backend="polars", research_only=True)
+@register_operator(name="fin_trend_slope", canonical="fin_trend_slope", backend="polars")
 class FinTrendSlopePolarsNative(SeriesOperator):
     """Linear regression slope over rolling window."""
     
@@ -1763,7 +1763,7 @@ class FinTrendSlopePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_trend_r2", canonical="fin_trend_r2", backend="polars", research_only=True)
+@register_operator(name="fin_trend_r2", canonical="fin_trend_r2", backend="polars")
 class FinTrendR2PolarsNative(SeriesOperator):
     """R-squared of linear trend fit."""
     
@@ -1793,7 +1793,7 @@ class FinTrendR2PolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_trend_tstat", canonical="fin_trend_tstat", backend="polars", research_only=True)
+@register_operator(name="fin_trend_tstat", canonical="fin_trend_tstat", backend="polars")
 class FinTrendTstatPolarsNative(SeriesOperator):
     """T-statistic of linear trend (slope / std error proxy)."""
     
@@ -1827,7 +1827,7 @@ class FinTrendTstatPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_trend_acceleration", canonical="fin_trend_acceleration", backend="polars", research_only=True)
+@register_operator(name="fin_trend_acceleration", canonical="fin_trend_acceleration", backend="polars")
 class FinTrendAccelerationPolarsNative(SeriesOperator):
     """Change in trend slope (second derivative proxy)."""
     
@@ -1856,7 +1856,7 @@ class FinTrendAccelerationPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_monotonicity", canonical="fin_monotonicity", backend="polars", research_only=True)
+@register_operator(name="fin_monotonicity", canonical="fin_monotonicity", backend="polars")
 class FinMonotonicityPolarsNative(SeriesOperator):
     """Fraction of periods with consistent direction over window."""
     
@@ -1885,7 +1885,7 @@ class FinMonotonicityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_negative_streak", canonical="fin_negative_streak", backend="polars", research_only=True)
+@register_operator(name="fin_negative_streak", canonical="fin_negative_streak", backend="polars")
 class FinNegativeStreakPolarsNative(SeriesOperator):
     """Count of consecutive negative values."""
     
@@ -1916,7 +1916,7 @@ class FinNegativeStreakPolarsNative(SeriesOperator):
 # TTM & PERIOD TRANSFORMATIONS
 # ============================================================================
 
-@register_operator(name="fin_ttm_cumulative", canonical="fin_ttm_cumulative", backend="polars", research_only=True)
+@register_operator(name="fin_ttm_cumulative", canonical="fin_ttm_cumulative", backend="polars")
 class FinTtmCumulativePolarsNative(SeriesOperator):
     """Trailing twelve months sum (4 quarters)."""
     
@@ -1941,7 +1941,7 @@ class FinTtmCumulativePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_ttm_quarterly", canonical="fin_ttm_quarterly", backend="polars", research_only=True)
+@register_operator(name="fin_ttm_quarterly", canonical="fin_ttm_quarterly", backend="polars")
 class FinTtmQuarterlyPolarsNative(SeriesOperator):
     """Convert cumulative YTD to quarterly by subtracting prior quarter."""
     
@@ -1967,7 +1967,7 @@ class FinTtmQuarterlyPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_quarter_from_cumulative", canonical="fin_quarter_from_cumulative", backend="polars", research_only=True)
+@register_operator(name="fin_quarter_from_cumulative", canonical="fin_quarter_from_cumulative", backend="polars")
 class FinQuarterFromCumulativePolarsNative(SeriesOperator):
     """Extract quarterly value from YTD cumulative."""
     
@@ -1997,7 +1997,7 @@ class FinQuarterFromCumulativePolarsNative(SeriesOperator):
 # EQUITY & LEVERAGE METRICS
 # ============================================================================
 
-@register_operator(name="fin_oci_to_equity", canonical="fin_oci_to_equity", backend="polars", research_only=True)
+@register_operator(name="fin_oci_to_equity", canonical="fin_oci_to_equity", backend="polars")
 class FinOciToEquityPolarsNative(SeriesOperator):
     """Other comprehensive income / Shareholders' equity."""
     
@@ -2025,7 +2025,7 @@ class FinOciToEquityPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_roe_cash_gap", canonical="fin_roe_cash_gap", backend="polars", research_only=True)
+@register_operator(name="fin_roe_cash_gap", canonical="fin_roe_cash_gap", backend="polars")
 class FinRoeCashGapPolarsNative(SeriesOperator):
     """ROE minus Cash ROE (accruals impact on ROE)."""
     
@@ -2058,7 +2058,7 @@ class FinRoeCashGapPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_net_debt_issuance", canonical="fin_net_debt_issuance", backend="polars", research_only=True)
+@register_operator(name="fin_net_debt_issuance", canonical="fin_net_debt_issuance", backend="polars")
 class FinNetDebtIssuancePolarsNative(SeriesOperator):
     """Debt issued minus debt repaid."""
     
@@ -2086,7 +2086,7 @@ class FinNetDebtIssuancePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_net_borrowing_cashflow", canonical="fin_net_borrowing_cashflow", backend="polars", research_only=True)
+@register_operator(name="fin_net_borrowing_cashflow", canonical="fin_net_borrowing_cashflow", backend="polars")
 class FinNetBorrowingCashflowPolarsNative(SeriesOperator):
     """Net cash from borrowing activities."""
     
@@ -2108,7 +2108,7 @@ class FinNetBorrowingCashflowPolarsNative(SeriesOperator):
 # R&D & CAPITALIZATION METRICS
 # ============================================================================
 
-@register_operator(name="fin_rd_capitalization_ratio", canonical="fin_rd_capitalization_ratio", backend="polars", research_only=True)
+@register_operator(name="fin_rd_capitalization_ratio", canonical="fin_rd_capitalization_ratio", backend="polars")
 class FinRdCapitalizationRatioPolarsNative(SeriesOperator):
     """Capitalized R&D / Total R&D spending."""
     
@@ -2140,7 +2140,7 @@ class FinRdCapitalizationRatioPolarsNative(SeriesOperator):
 # REVISION & RESTATEMENT METRICS
 # ============================================================================
 
-@register_operator(name="fin_period_restated", canonical="fin_period_restated", backend="polars", research_only=True)
+@register_operator(name="fin_period_restated", canonical="fin_period_restated", backend="polars")
 class FinPeriodRestatedPolarsNative(SeriesOperator):
     """Binary indicator: 1 if period was restated."""
     
@@ -2165,7 +2165,7 @@ class FinPeriodRestatedPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_restated_flag", canonical="fin_restated_flag", backend="polars", research_only=True)
+@register_operator(name="fin_restated_flag", canonical="fin_restated_flag", backend="polars")
 class FinRestatedFlagPolarsNative(SeriesOperator):
     """Binary indicator: 1 if financial data was restated."""
     
@@ -2190,7 +2190,7 @@ class FinRestatedFlagPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_period_revision_count", canonical="fin_period_revision_count", backend="polars", research_only=True)
+@register_operator(name="fin_period_revision_count", canonical="fin_period_revision_count", backend="polars")
 class FinPeriodRevisionCountPolarsNative(SeriesOperator):
     """Number of times a period's data has been revised."""
     
@@ -2207,7 +2207,7 @@ class FinPeriodRevisionCountPolarsNative(SeriesOperator):
         return revision_count
 
 
-@register_operator(name="fin_period_revision_age", canonical="fin_period_revision_age", backend="polars", research_only=True)
+@register_operator(name="fin_period_revision_age", canonical="fin_period_revision_age", backend="polars")
 class FinPeriodRevisionAgePolarsNative(SeriesOperator):
     """Days since last revision of period data."""
     
@@ -2239,7 +2239,7 @@ class FinPeriodRevisionAgePolarsNative(SeriesOperator):
 # TURNOVER & ASSET EFFICIENCY
 # ============================================================================
 
-@register_operator(name="fin_turnover", canonical="fin_turnover", backend="polars", research_only=True)
+@register_operator(name="fin_turnover", canonical="fin_turnover", backend="polars")
 class FinTurnoverPolarsNative(SeriesOperator):
     """Generic turnover ratio: Revenue / Average asset."""
     
