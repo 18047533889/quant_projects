@@ -130,9 +130,9 @@ class TestTsCorrParity:
         valid = pd_result[pd_result.notna()]
         assert len(valid) >= 5
 
-        # Correlation results should be in [-1, 1] range
+        # Correlation results should be in [-1, 1] range (allow 1e-12 for fp rounding)
         vals = valid.values
-        assert np.all(vals >= -1.0) and np.all(vals <= 1.0)
+        assert np.all(vals >= -1.0 - 1e-12) and np.all(vals <= 1.0 + 1e-12)
 
     def test_anti_correlation(self, anti_corr_source):
         """Test perfect negative correlation."""
@@ -154,15 +154,15 @@ class TestTsCorrParity:
         pd_result = _run_ts_corr(simple_source, window=5, backend="pandas")
         pl_result = _run_ts_corr(simple_source, window=5, backend="polars")
 
-        # Check pandas results
+        # Check pandas results (allow 1e-12 for floating-point rounding)
         valid_pd = pd_result[pd_result.notna()]
         vals_pd = valid_pd.values
-        assert np.all(vals_pd >= -1.0) and np.all(vals_pd <= 1.0)
+        assert np.all(vals_pd >= -1.0 - 1e-12) and np.all(vals_pd <= 1.0 + 1e-12)
 
         # Check polars results
         valid_pl = pl_result[pl_result.notna()]
         vals_pl = valid_pl.values
-        assert np.all(vals_pl >= -1.0) and np.all(vals_pl <= 1.0)
+        assert np.all(vals_pl >= -1.0 - 1e-12) and np.all(vals_pl <= 1.0 + 1e-12)
 
     def test_insufficient_data(self):
         """Test behavior with insufficient data."""
