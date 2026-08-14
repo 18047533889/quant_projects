@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import pytest
 
+from data_access.core.exceptions import ValidationError
+
 from api.factor import Factor, FactorSemanticIdentity
 from expr.base import Expr
 from planner.dag import FactorExecutionScope
@@ -215,7 +217,8 @@ def test_compute_source_scope_hash_differs_by_config():
     h1 = compute_source_scope_hash(data_source_config={"dataset": "ashare_daily"})
     h2 = compute_source_scope_hash(data_source_config={"dataset": "us_daily"})
     assert h1 != h2
-    assert len(h1) == 16
+    assert len(h1) == 64
+    assert all(c in "0123456789abcdef" for c in h1)
 
 
 def test_compute_source_scope_hash_stable_across_dict_order():
@@ -236,6 +239,27 @@ def test_compute_source_scope_hash_sensitive_to_semantic_fields():
     assert base != other_pit
 
 
+def test_compute_source_scope_hash_rejects_unknown_values():
+    class Unknown:
+        def __str__(self):
+            return "same-looking-value"
+
+    with pytest.raises(ValidationError, match="Cannot encode"):
+        compute_source_scope_hash(data_source_config={"opaque": Unknown()})
+
+
+def test_compute_source_scope_hash_preserves_typed_collision_distinction():
+    int_hash = compute_source_scope_hash(data_source_config={"value": 1})
+    string_hash = compute_source_scope_hash(data_source_config={"value": "1"})
+    assert int_hash != string_hash
+
+
+def test_compute_source_scope_hash_accepts_typed_source_scope_id():
+    from planner.physical_factor_dag import SourceScopeId
+
+    scope = SourceScopeId(dataset="prices", snapshot_id="s1", market="A")
+    digest = compute_source_scope_hash(data_source_config={"scope": scope})
+    assert len(digest) == 64
 def test_scope_from_factor_with_data_source_computes_source_hash():
     class _DS:
         dataset = "ashare_daily"
@@ -244,9 +268,16 @@ def test_scope_from_factor_with_data_source_computes_source_hash():
     factor = Factor(name="src", expr=Expr(), universe="CSI300")
     scope = _scope_from_factor(factor, data_source=_DS())
     assert scope.source_scope_hash != ""
-    # Deterministic: an identical data source yields the same scope hash.
     scope2 = _scope_from_factor(factor, data_source=_DS())
     assert scope.source_scope_hash == scope2.source_scope_hash
+
+
+def test_physical_region_plan_hash_is_full_sha256():
+    from planner.backend_region import PhysicalRegionPlan
+
+    digest = PhysicalRegionPlan.compute_plan_hash((), (), "logical")
+    assert len(digest) == 64
+    assert digest == PhysicalRegionPlan.compute_plan_hash((), (), "logical")
 
 
 def test_scope_from_factor_different_data_sources_differ():

@@ -90,18 +90,19 @@ def _empty_factor_series() -> pd.Series:
 
 
 def _stable_config(value: Any) -> Any:
-    """把任意配置值归一为稳定可 JSON 序列化的结构（dict 递归 / set 排序 list）。"""
-    if value is None or isinstance(value, (bool, str, int, float)):
-        return value
+    """Return a value for the authoritative strict identity encoder.
+
+    DataAccess owns typed canonicalization. Keep this compatibility helper as a
+    recursive identity-preserving projection, but never coerce unknown values to
+    ``str``: the shared encoder must reject them rather than create a collision.
+    """
     if isinstance(value, dict):
-        return {str(k): _stable_config(v) for k, v in value.items()}
+        return {_stable_config(k): _stable_config(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_stable_config(v) for v in value]
+        return type(value)(_stable_config(v) for v in value)
     if isinstance(value, (set, frozenset)):
-        return sorted(_stable_config(v) for v in value)
-    if hasattr(value, "isoformat"):  # datetime / date
-        return value.isoformat()
-    return str(value)
+        return type(value)(_stable_config(v) for v in value)
+    return value
 
 
 def _data_source_to_scope_config(data_source: Any) -> dict[str, Any]:
@@ -173,25 +174,23 @@ def compute_source_scope_hash(
     因子绝不共享 CSE 节点。
     """
     import hashlib
-    import json
+
+    from data_access.core.identity_encoder import CanonicalIdentityEncoder
 
     payload = {
         "data_source_config": _stable_config(data_source_config or {}),
-        "market": str(market or ""),
-        "universe": str(universe or ""),
-        "calendar_id": str(calendar_id or ""),
-        "snapshot_policy": str(snapshot_policy or ""),
-        "field_catalog_version": str(field_catalog_version or ""),
-        "pit_mode": str(pit_mode or ""),
+        "market": market or "",
+        "universe": universe or "",
+        "calendar_id": calendar_id or "",
+        "snapshot_policy": snapshot_policy or "",
+        "field_catalog_version": field_catalog_version or "",
+        "pit_mode": pit_mode or "",
     }
-    raw = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        default=str,
-    )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    # DataAccess is the single authority for typed canonical identity.  The
+    # resulting full SHA-256 is a correctness identity; short display IDs must
+    # be derived by callers and never used as this scope key.
+    canonical = CanonicalIdentityEncoder(strict=True).encode(payload)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @functools.lru_cache(maxsize=1)
