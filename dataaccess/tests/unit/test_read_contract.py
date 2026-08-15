@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pyarrow as pa
@@ -166,3 +167,16 @@ ds:
     assert result.table.num_rows == 2
     assert result.snapshot.snapshot_id
     assert result.stats.rows == 2
+
+
+def test_read_contract_compiles_and_remote_cache_key_is_generation_scoped():
+    source_path = Path(__file__).parents[2] / "read" / "read_contract.py"
+    ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+
+    from data_access.read.read_contract import _RemoteMetaCacheKey
+
+    first = _RemoteMetaCacheKey("s3://bucket/object", "scope", "generation-1")
+    rotated = _RemoteMetaCacheKey("s3://bucket/object", "scope", "generation-2")
+    assert first != rotated
+    assert first.credential_generation == "generation-1"
+    assert rotated.credential_generation == "generation-2"
