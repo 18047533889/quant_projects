@@ -30,8 +30,10 @@ design
 from __future__ import annotations
 
 import enum
+import socket
+import ssl
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 
 class CloudErrorKind(str, enum.Enum):
@@ -79,32 +81,61 @@ class CloudErrorClassifier:
 
         # ---- botocore (boto3) ----
         if exc_type == "ClientError":
-            response = getattr(exc, "response", {})
-            error = response.get("Error", {})
-            code = error.get("Code", "")
-            http_status = response.get("ResponseMetadata", ).get("HTTPStatusCode", 0)
-            original_code = code or str(http_status)
+            raw_response = getattr(exc, "response", None)
+            response = raw_response if isinstance(raw_response, Mapping) else {}
+            raw_error = response.get("Error", {})
+            error = raw_error if isinstance(raw_error, Mapping) else {}
+            code = str(error.get("Code") or "")
+            raw_metadata = response.get("ResponseMetadata", {})
+            metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
+            http_status = metadata.get("HTTPStatusCode", 0)
+            try:
+                http_status = int(http_status)
+            except (TypeError, ValueError):
+                http_status = 0
+            original_code = code or (str(http_status) if http_status else exc_type)
+            normalized_code = code.lower()
 
-            if code in ("NoSuchKey", "NoSuchBucket", "NotFound") or http_status == 404:
+            # Credential failures often arrive inside ClientError with HTTP 403.
+            # They must retain their more specific typed outcome instead of being
+            # collapsed into generic authorization failure.
+            if normalized_code in {
+                "expiredtoken",
+                "expiredtokenexception",
+                "invalidtoken",
+                "invalidtokenid",
+                "invalidaccesskeyid",
+                "invalidsecurity",
+                "signaturedoesnotmatch",
+                "tokenrefreshrequired",
+                "unrecognizedclientexception",
+            }:
+                return CloudErrorCode(
+                    kind=CloudErrorKind.CREDENTIALS_INVALID,
+                    retryable=False,
+                    security_sensitive=True,
+                    original_code=original_code,
+                )
+            if normalized_code in {"nosuchkey", "nosuchbucket", "notfound", "nosuchobject"} or http_status == 404:
                 return CloudErrorCode(
                     kind=CloudErrorKind.NOT_FOUND,
                     retryable=False,
                     original_code=original_code,
                 )
-            if code in ("AccessDenied", "Forbidden") or http_status in (401, 403):
+            if normalized_code in {"accessdenied", "forbidden", "unauthorized"} or http_status in (401, 403):
                 return CloudErrorCode(
                     kind=CloudErrorKind.AUTH_FAILED,
                     retryable=False,
                     security_sensitive=True,
                     original_code=original_code,
                 )
-            if code == "PreconditionFailed" or http_status in (409, 412):
+            if normalized_code == "preconditionfailed" or http_status in (409, 412):
                 return CloudErrorCode(
                     kind=CloudErrorKind.PRECONDITION_FAILED,
                     retryable=False,
                     original_code=original_code,
                 )
-            if code in ("RequestLimitExceeded", "Throttling", "TooManyRequests") or http_status == 429:
+            if normalized_code in {"requestlimitexceeded", "throttling", "throttlingexception", "toomanyrequests"} or http_status == 429:
                 retry_after = _extract_retry_after(response)
                 return CloudErrorCode(
                     kind=CloudErrorKind.THROTTLED,
@@ -152,7 +183,7 @@ class CloudErrorClassifier:
                 )
 
         # ---- timeout ----
-        if "timeout" in exc_type.lower() or "timeout" in exc_str:
+        if isinstance(exc, (TimeoutError, socket.timeout)) or "timeout" in exc_type.lower() or "timeout" in exc_str:
             return CloudErrorCode(
                 kind=CloudErrorKind.DEADLINE_EXCEEDED,
                 retryable=True,
@@ -160,9 +191,23 @@ class CloudErrorClassifier:
             )
 
         # ---- network / DNS / TLS ----
-        if any(
-            kw in exc_type.lower()
-            for kw in ("connection", "network", "dns", "ssl", "tls", "certificate")
+        # Match concrete stdlib transport exceptions as well as SDK wrapper names
+        # and messages (socket.gaierror's type name does not contain "dns").
+        if isinstance(exc, (ConnectionError, socket.gaierror, ssl.SSLError)) or any(
+            kw in f"{exc_type} {exc_str}".lower()
+            for kw in (
+                "connection",
+                "network",
+                "dns",
+                "name resolution",
+                "name or service not known",
+                "temporary failure in name resolution",
+                "gaierror",
+                "ssl",
+                "tls",
+                "certificate",
+                "socket error",
+            )
         ):
             return CloudErrorCode(
                 kind=CloudErrorKind.NETWORK_ERROR,
@@ -191,9 +236,12 @@ class CloudErrorClassifier:
         return CloudErrorCode(kind=CloudErrorKind.UNKNOWN, retryable=False, original_code=exc_type)
 
 
-def _extract_retry_after(response: dict[str, Any]) -> float | None:
+def _extract_retry_after(response: Mapping[str, Any]) -> float | None:
     """从 HTTP 响应提取 Retry-After header（秒）。"""
-    headers = response.get("ResponseMetadata", {}).get("HTTPHeaders", {})
+    raw_metadata = response.get("ResponseMetadata", {})
+    metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
+    raw_headers = metadata.get("HTTPHeaders", {})
+    headers = raw_headers if isinstance(raw_headers, Mapping) else {}
     retry_after = headers.get("retry-after") or headers.get("Retry-After")
     if retry_after:
         try:
