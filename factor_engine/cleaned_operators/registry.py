@@ -2039,8 +2039,16 @@ class OperatorRegistry:
             # is missing (incl. backend-keyed provenance for the moved backends).
             merged = _merge_catalog_contracts(dict(new_cat), old_cat, keep=new)
             for backend, op in list(cls._operators.get(old, {}).items()):
-                if backend not in cls._operators[new]:
+                target_op = cls._operators[new].get(backend)
+                if backend not in cls._operators[new] or target_op is None:
+                    # A catalog/runtime placeholder is not an implementation.  A
+                    # concrete renamed source must fill that slot; a concrete
+                    # target remains authoritative and is never silently replaced.
                     cls._operators[new][backend] = op
+                    if target_op is None:
+                        source_meta = (old_cat.get("backend_meta") or {}).get(backend)
+                        if source_meta is not None:
+                            merged.setdefault("backend_meta", {})[backend] = source_meta
             merged["backends"] = sorted(cls._operators[new].keys())
             # Prefer non-empty description / params from either side.
             if not merged.get("description") and old_cat.get("description"):

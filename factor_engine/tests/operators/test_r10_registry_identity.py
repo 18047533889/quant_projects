@@ -373,8 +373,75 @@ def test_rename_canonical_pure_rename_carries_full_contract(mutable_registry):
     assert "r10_p_alias" in cat["aliases"]
     assert "__r10_pure_old" in cat["aliases"]
     # operator metadata renamed to the new canonical.
-    op = mutable_registry.get("__r10_pure_new", "pandas_numpy")
+    op = mutable_registry.get("__r10_pure_new", "pandas_numpy", mode="any")
     assert op is not None and op.metadata.name == "__r10_pure_new"
+
+
+def test_rename_canonical_merge_fills_none_backend_placeholder(mutable_registry):
+    """A concrete source implementation must replace a None target slot."""
+    source = _make_kernel("__r10_collision_source")
+    mutable_registry.register(
+        source,
+        canonical="__r10_collision_source",
+        source="src_concrete",
+    )
+    mutable_registry._operators["__r10_collision_target"] = {"pandas_numpy": None}
+    mutable_registry._catalog["__r10_collision_target"] = {
+        "canonical": "__r10_collision_target",
+        "aliases": [],
+        "backends": ["pandas_numpy"],
+        "backend_meta": {
+            "pandas_numpy": {"explicit": True, "source": "target_placeholder"}
+        },
+    }
+
+    mutable_registry.rename_canonical(
+        "__r10_collision_source", "__r10_collision_target"
+    )
+
+    assert (
+        mutable_registry.get(
+            "__r10_collision_target", "pandas_numpy", mode="any"
+        )
+        is source
+    )
+    assert (
+        mutable_registry._catalog["__r10_collision_target"]["backend_meta"]
+        ["pandas_numpy"]["source"]
+        == "src_concrete"
+    )
+
+
+def test_rename_canonical_merge_preserves_concrete_target_backend(mutable_registry):
+    """A concrete target backend remains authoritative during a merge."""
+    target = _make_kernel("__r10_concrete_target")
+    source = _make_kernel("__r10_concrete_source")
+    mutable_registry.register(
+        target,
+        canonical="__r10_concrete_target",
+        source="target_concrete",
+    )
+    mutable_registry.register(
+        source,
+        canonical="__r10_concrete_source",
+        source="source_concrete",
+    )
+
+    mutable_registry.rename_canonical(
+        "__r10_concrete_source", "__r10_concrete_target"
+    )
+
+    assert (
+        mutable_registry.get(
+            "__r10_concrete_target", "pandas_numpy", mode="any"
+        )
+        is target
+    )
+    assert (
+        mutable_registry._catalog["__r10_concrete_target"]["backend_meta"]
+        ["pandas_numpy"]["source"]
+        == "target_concrete"
+    )
 
 
 def test_rename_canonical_merge_rejects_different_param_specs(mutable_registry):
