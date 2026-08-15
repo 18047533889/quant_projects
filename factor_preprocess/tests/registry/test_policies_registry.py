@@ -454,8 +454,8 @@ class TestDefaultPolicies:
         policy = registry.get("production_full")
         assert policy is not None
 
-        # Find forward_fill step and check limit parameter
+        # Find forward_fill step and check bounded freshness parameter.
         ff_step = next((s for s in policy.steps if s.name == "forward_fill"), None)
         assert ff_step is not None
-        assert "limit" in ff_step.parameters
-        assert ff_step.parameters["limit"] <= 5  # Production should be conservative
+        assert "max_lag" in ff_step.parameters
+        assert ff_step.parameters["max_lag"] <= 5  # Production should be conservative

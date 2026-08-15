@@ -185,7 +185,7 @@ def create_default_policies() -> PolicyRegistry:
         steps=[
             TransformStep(
                 name="forward_fill",
-                parameters={"limit": 5},
+                parameters={"max_lag": 5},
             ),
             TransformStep(
                 name="cs_winsor",
@@ -193,7 +193,7 @@ def create_default_policies() -> PolicyRegistry:
             ),
             TransformStep(
                 name="ewma",
-                parameters={"span": 20},
+                parameters={"halflife": 20},
             ),
             TransformStep(
                 name="cs_rank",
@@ -219,7 +219,7 @@ def create_default_policies() -> PolicyRegistry:
         steps=[
             TransformStep(
                 name="forward_fill",
-                parameters={"limit": 3},
+                parameters={"max_lag": 3},
             ),
             TransformStep(
                 name="missing_indicator",
@@ -231,7 +231,7 @@ def create_default_policies() -> PolicyRegistry:
             ),
             TransformStep(
                 name="ewma",
-                parameters={"span": 20, "min_periods": 10},
+                parameters={"halflife": 20, "min_periods": 10},
             ),
             TransformStep(
                 name="volatility_scale",
@@ -310,7 +310,7 @@ def create_default_policies() -> PolicyRegistry:
         steps=[
             TransformStep(
                 name="forward_fill",
-                parameters={"limit": 10},
+                parameters={"max_lag": 10},
             ),
             TransformStep(
                 name="missing_rate",
