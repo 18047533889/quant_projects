@@ -2045,6 +2045,8 @@ class OperatorRegistry:
                     # concrete renamed source must fill that slot; a concrete
                     # target remains authoritative and is never silently replaced.
                     cls._operators[new][backend] = op
+                    if hasattr(op, "metadata"):
+                        op.metadata.name = new
                     if target_op is None:
                         source_meta = (old_cat.get("backend_meta") or {}).get(backend)
                         if source_meta is not None:

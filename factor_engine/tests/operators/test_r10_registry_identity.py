@@ -102,6 +102,10 @@ def mutable_registry():
     """Thaw the (frozen) registry, yield it, then remove every test canonical
     and restore the FROZEN lifecycle even if the test body fails."""
     OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
+    first_registered_before = dict(OperatorRegistry._first_registered)
+    override_chain_before = dict(OperatorRegistry._override_chain)
+    declared_manifest_before = dict(OperatorRegistry._DECLARED_OVERRIDE_MANIFEST)
+    overwrite_log_before = list(OperatorRegistry._overwrite_log)
     try:
         yield OperatorRegistry
     finally:
@@ -114,6 +118,13 @@ def mutable_registry():
         for alias in list(OperatorRegistry._aliases):
             if alias.startswith("__r10_") or alias.startswith("r10_"):
                 OperatorRegistry._aliases.pop(alias, None)
+        OperatorRegistry._first_registered.clear()
+        OperatorRegistry._first_registered.update(first_registered_before)
+        OperatorRegistry._override_chain.clear()
+        OperatorRegistry._override_chain.update(override_chain_before)
+        OperatorRegistry._DECLARED_OVERRIDE_MANIFEST.clear()
+        OperatorRegistry._DECLARED_OVERRIDE_MANIFEST.update(declared_manifest_before)
+        OperatorRegistry._overwrite_log[:] = overwrite_log_before
         if OperatorRegistry.lifecycle() == "building":
             OperatorRegistry.finalize()
         OperatorRegistry.freeze()
@@ -410,6 +421,7 @@ def test_rename_canonical_merge_fills_none_backend_placeholder(mutable_registry)
         ["pandas_numpy"]["source"]
         == "src_concrete"
     )
+    assert source.metadata.name == "__r10_collision_target"
 
 
 def test_rename_canonical_merge_preserves_concrete_target_backend(mutable_registry):
