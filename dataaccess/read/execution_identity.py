@@ -61,24 +61,21 @@ class ExecutionIdentity:
 
 
 def get_current_execution_identity() -> ExecutionIdentity:
-    """Get current execution identity from build metadata and runtime config."""
+    """Get code/build facts from the frozen build authority."""
     try:
-        from data_access._build_meta import (
-            build_sha,
-            build_id,
-            build_time,
-            package_version,
-        )
+        from data_access.core.build_metadata import load_build_info
 
-        sha = build_sha()
-        ver = package_version()
-        bid = build_id()
-        btime = build_time()
+        info = load_build_info()
+        sha = info.build_sha
+        ver = info.version
+        bid = info.build_id
+        btime = (
+            datetime.fromisoformat(info.build_time.replace("Z", "+00:00"))
+            if info.build_time
+            else None
+        )
     except Exception:
-        sha = None
-        ver = None
-        bid = None
-        btime = None
+        sha = ver = bid = btime = None
 
     try:
         from data_access.read.query_budget import get_runtime_mode
