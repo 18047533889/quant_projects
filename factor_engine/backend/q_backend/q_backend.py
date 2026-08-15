@@ -288,22 +288,37 @@ class QBackend(Backend):
         visited = set()
 
         def visit(node: PlanNode):
-            if node.node_id in visited:
+            # PlanNode.node_id is optional for generic planning, but q compiler
+            # references every node by ID. Inventing IDs or semantic defaults in
+            # this backend would make the generated region non-canonical.
+            node_id = node.node_id
+            if node_id is None:
+                raise ValueError(
+                    "Q region conversion requires canonical PlanNode.node_id"
+                )
+            if node_id in visited:
                 return
-            visited.add(node.node_id)
+            visited.add(node_id)
 
-            # 先访问子节点
-            for child in node.children:
+            # Canonical PlanNode ABI: op, inputs, attrs, semantic_attrs, node_id.
+            # semantic_attrs remain metadata owned by the planner; q receives
+            # only operator attributes needed by the compiler.
+            inputs = tuple(node.inputs)
+            for child in inputs:
+                if child.node_id is None:
+                    raise ValueError(
+                        "Q region conversion requires canonical node_id on every input"
+                    )
                 visit(child)
 
-            # 提取节点信息
-            node_dict = {
-                "id": node.node_id,
-                "operator": node.operator,
-                "inputs": [c.node_id for c in node.children],
-                "params": getattr(node, "params", {}),
-            }
-            nodes.append(node_dict)
+            nodes.append(
+                {
+                    "id": node_id,
+                    "operator": node.op,
+                    "inputs": [child.node_id for child in inputs],
+                    "params": dict(node.attrs),
+                }
+            )
 
         visit(plan)
         return nodes

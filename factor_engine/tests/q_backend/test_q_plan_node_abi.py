@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from backend.q_backend.q_backend import QBackend
+from backend.q_backend.q_errors import QPhysicalRegionNotImplemented
+from planner.logical_plan import PlanNode
+
+
+def _backend_with_compiler(compiler: object) -> QBackend:
+    backend = QBackend.__new__(QBackend)
+    backend._compiler = compiler
+    backend._production_mode = False
+    return backend
+
+
+def test_extract_nodes_uses_canonical_plan_node_abi() -> None:
+    leaf = PlanNode(
+        op="column",
+        inputs=(),
+        attrs={"name": "close"},
+        semantic_attrs={"unit": "price"},
+        node_id="leaf",
+    )
+    root = PlanNode(
+        op="ts_mean",
+        inputs=(leaf,),
+        attrs={"window": 5},
+        semantic_attrs={"frequency": "daily"},
+        node_id="root",
+    )
+
+    nodes = _backend_with_compiler(object())._extract_nodes_topological(root)
+
+    assert nodes == [
+        {
+            "id": "leaf",
+            "operator": "column",
+            "inputs": [],
+            "params": {"name": "close"},
+        },
+        {
+            "id": "root",
+            "operator": "ts_mean",
+            "inputs": ["leaf"],
+            "params": {"window": 5},
+        },
+    ]
+
+
+def test_plan_to_q_region_passes_canonical_nodes_to_compile_preparation() -> None:
+    leaf = PlanNode(op="column", attrs={"name": "close"}, node_id="leaf")
+    root = PlanNode(op="ts_mean", inputs=(leaf,), attrs={"window": 5}, node_id="root")
+    calls: dict[str, object] = {}
+
+    class Compiler:
+        def validate_region(self, nodes, *, mode):
+            calls["validated"] = (nodes, mode)
+            return True, []
+
+        def compile_region(self, region_id, nodes, *, input_tables, output_name, mode):
+            calls["compiled"] = (region_id, nodes, input_tables, output_name, mode)
+            return SimpleNamespace(region_id=region_id, node_ids=tuple(n["id"] for n in nodes))
+
+    result = _backend_with_compiler(Compiler())._plan_to_q_region(root, None)
+
+    assert result.region_id == "region_root"
+    assert calls["validated"] == (calls["compiled"][1], "research")
+    assert calls["compiled"][1][-1]["params"] == {"window": 5}
+
+
+def test_production_whole_tree_execution_remains_disabled() -> None:
+    backend = QBackend.__new__(QBackend)
+    backend._production_mode = True
+    plan = PlanNode(op="column", attrs={"name": "close"}, node_id="root")
+
+    with pytest.raises(QPhysicalRegionNotImplemented, match="whole-tree"):
+        backend.execute(plan, None)
+
+
+def test_extract_nodes_fails_closed_without_canonical_node_id() -> None:
+    root = PlanNode(op="column", attrs={"name": "close"})
+
+    with pytest.raises(ValueError, match="canonical PlanNode.node_id"):
+        _backend_with_compiler(object())._extract_nodes_topological(root)
+
+
+def test_extract_nodes_fails_closed_without_child_node_id() -> None:
+    child = PlanNode(op="column", attrs={"name": "close"})
+    root = PlanNode(op="ts_mean", inputs=(child,), attrs={"window": 5}, node_id="root")
+
+    with pytest.raises(ValueError, match="node_id on every input"):
+        _backend_with_compiler(object())._extract_nodes_topological(root)
