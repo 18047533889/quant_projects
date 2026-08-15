@@ -33,16 +33,20 @@ class ExecutionIdentity:
     semantic_execution_version: str | None = None
 
     def digest(self) -> str:
-        """Canonical digest of execution identity."""
+        """Canonical full-width digest of execution identity."""
+        build_time = self.build_time
+        if build_time is not None and build_time.tzinfo is not None:
+            build_time = build_time.astimezone(timezone.utc)
         payload = {
             "build_sha": self.build_sha or "",
             "package_version": self.package_version or "",
             "build_id": self.build_id or "",
+            "build_time": build_time.isoformat() if build_time else "",
             "runtime_mode": self.runtime_mode or "",
             "semantic_execution_version": self.semantic_execution_version or "",
         }
         text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         return {

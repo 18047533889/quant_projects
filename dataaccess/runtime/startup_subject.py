@@ -77,25 +77,13 @@ def build_startup_subject_digest(store: Any) -> StartupSubjectDigest:
 
 
 def _get_build_sha() -> str:
-    """获取 build SHA（_build_info.py 或 git）。"""
+    """Return the full SHA from the frozen runtime build authority."""
     try:
-        from data_access import _build_info
-        return getattr(_build_info, "BUILD_SHA", "")[:16]
+        from data_access.core.build_metadata import load_build_info
+
+        return str(load_build_info().build_sha or "unknown")
     except Exception:
-        pass
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()[:16]
-    except Exception:
-        pass
-    return "unknown"
+        return "unknown"
 
 
 def _get_package_version() -> str:
