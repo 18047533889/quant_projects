@@ -18,7 +18,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from modeling.artifact import PredictionContext
 from modeling.contracts import (
+    ApplicationWindow,
     AFTER_CLOSE_TO_NEXT_VWAP,
     LabelContract,
     SampleAdequacyContract,
@@ -167,7 +169,17 @@ def test_train_model_with_decay_half_life_bars_works():
         label_contract=contract,
         decision_clock=ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
         sample_contract=_lenient(),
+        feature_schema_hash="test-schema",
         decay_half_life_bars=2,
     )
     assert result.artifact is not None
-    assert np.isfinite(result.artifact.predict(train_ds.as_matrix()[0][:10])).all()
+    from modeling.artifact import PredictionContext
+    from modeling.contracts import ApplicationWindow
+    X_val = val_ds.as_matrix()[0][:10]
+    ctx = PredictionContext(
+        application_window=ApplicationWindow(start=dates[7], end=dates[8]),
+        dates=pd.DatetimeIndex(val_ds.frame["date"].iloc[:10]),
+        asof=dates[8],
+        feature_schema_hash=result.artifact.manifest.feature_schema_hash,
+    )
+    assert np.isfinite(result.artifact.predict(X_val, context=ctx)).all()

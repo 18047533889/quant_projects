@@ -47,10 +47,12 @@ class FactorBatch:
             raise ValueError("values cannot be None")
 
         expected_shape = (self.time_axis.size, self.asset_axis.size, len(self.factor_ids))
-        if self.layout == "wide" and self.values.shape != expected_shape[:2] + (len(self.factor_ids),):
+        if self.layout != "wide":
+            raise ValueError(f"Unsupported FactorBatch layout: {self.layout}; only 'wide' is accepted")
+        if self.values.ndim != 3 or self.values.shape != expected_shape:
             raise ValueError(
                 f"Shape mismatch for layout={self.layout}: "
-                f"expected (*{expected_shape}, {len(self.factor_ids)}), got {self.values.shape}"
+                f"expected {expected_shape}, got {self.values.shape}"
             )
 
         if self.validity is not None and self.validity.shape != self.values.shape:

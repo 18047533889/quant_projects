@@ -6,7 +6,8 @@ incrementally, and maintains constant memory usage for 100k+ factors.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable, Iterator, Tuple
+from types import MappingProxyType
+from typing import Any, Dict, List, Optional, Callable, Iterator, Tuple, Mapping
 import numpy as np
 import time
 
@@ -16,6 +17,21 @@ from quant_evaluator.contracts.errors import InvalidContractError, InsufficientO
 
 from quant_evaluator.planner.dependency_plan import MetricKind
 from quant_evaluator.runtime.budgets import ComputationBudget, BudgetTracker, ResourceUsage
+
+
+@dataclass(frozen=True)
+class _InternalChunkDescriptor:
+    """Global coordinates for a batch split; never inferred from array shape."""
+    time_slice: Tuple[int, int]
+    factor_slice: Tuple[int, int]
+    asset_slice: Tuple[int, int]
+    total_time: int
+    total_factors: int
+    parent_identity: Tuple[Any, ...]
+    factor_ids: Tuple[Any, ...]
+    asset_coords: Tuple[Any, ...]
+    timing_vectors: Tuple[Tuple[Any, ...], ...]
+    timing_offsets: Tuple[Any, ...]
 
 
 @dataclass
@@ -40,6 +56,8 @@ class StreamingMetricState:
     sum_yy: Optional[np.ndarray] = None
     sum_xy: Optional[np.ndarray] = None
     valid_counts: Optional[np.ndarray] = None
+    valid_count: int = 0
+    total_count: int = 0
 
     # Track expected full dimensions for proper concatenation
     expected_total_time: Optional[int] = None
@@ -49,6 +67,7 @@ class StreamingMetricState:
 
     # Custom accumulator storage
     custom_state: Dict[str, Any] = field(default_factory=dict)
+    current_chunk_descriptor: Optional[_InternalChunkDescriptor] = None
 
     def finalize(self) -> Any:
         """
@@ -68,6 +87,26 @@ class StreamingMetricState:
 
     def _finalize_ic(self) -> np.ndarray:
         """Finalize IC computation from accumulated sums."""
+        if self.custom_state.get("ic_parts") is not None:
+            result = np.full(
+                (self.expected_total_time or 0, self.expected_total_factors or 0),
+                np.nan,
+                dtype=np.float64,
+            )
+            for descriptor, stats in self.custom_state["ic_parts"].items():
+                t0, t1 = descriptor.time_slice
+                f0, f1 = descriptor.factor_slice
+                sx, sy, sxx, syy, sxy, counts = stats
+                n = counts.astype(np.float64)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    numerator = n * sxy - sx * sy
+                    denom_x = n * sxx - sx ** 2
+                    denom_y = n * syy - sy ** 2
+                    values = numerator / np.sqrt(denom_x * denom_y)
+                result[t0:t1, f0:f1] = np.where(
+                    (n < 10) | (denom_x <= 0) | (denom_y <= 0), np.nan, values
+                )
+            return result
         if self.sum_x is None or self.valid_counts is None:
             return np.array([])
 
@@ -86,10 +125,10 @@ class StreamingMetricState:
         return ic_values
 
     def _finalize_coverage(self) -> float:
-        """Finalize coverage as mean of accumulated values."""
-        if self.count == 0:
-            return 0.0
-        return self.sum_values / self.count
+        """Finalize coverage from paired valid observations, not chunk ratios."""
+        if self.total_count == 0:
+            return self.sum_values / self.count if self.count else 0.0
+        return self.valid_count / self.total_count
 
     def _finalize_summary(self) -> Dict[str, float]:
         """Finalize summary statistics."""
@@ -118,6 +157,7 @@ class StreamingEvaluationResult:
     peak_memory_mb: float = 0.0
     resource_usage: Optional[ResourceUsage] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    provenance: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def get_metric(self, metric_id: str, default=None) -> Any:
         """Retrieve a metric by ID."""
@@ -141,6 +181,8 @@ class StreamingEvaluationResult:
             result["resource_usage"] = self.resource_usage.to_dict()
         if self.metadata:
             result["metadata"] = self.metadata
+        if self.provenance:
+            result["provenance"] = self.provenance
         return result
 
 
@@ -204,6 +246,49 @@ class StreamingEvaluator:
             self._freeze_identity(label_bundle.metadata),
         )
 
+    def _stream_provenance(
+        self,
+        parent_identity: Tuple[Any, ...],
+        factor_ids: Tuple[Any, ...],
+        asset_coords: Tuple[Any, ...],
+        timing_vectors: Tuple[Tuple[Any, ...], ...],
+        timing_offsets: Tuple[Any, ...],
+    ) -> Mapping[str, Any]:
+        """Build a deeply immutable provenance record shared by both entry points."""
+        return MappingProxyType({
+            "parent_identity": parent_identity,
+            "factor_ids": factor_ids,
+            "asset_coords": asset_coords,
+            "timing_vectors": timing_vectors,
+            "timing_offsets": timing_offsets,
+        })
+
+    @staticmethod
+    def _timing_vectors(label_bundle: LabelBundle) -> Tuple[Tuple[Any, ...], ...]:
+        return (
+            tuple(label_bundle.decision_time),
+            tuple(label_bundle.execution_time),
+            tuple(label_bundle.label_start_time),
+            tuple(label_bundle.label_end_time),
+        )
+
+    @staticmethod
+    def _timing_offsets(label_bundle: LabelBundle) -> Tuple[Tuple[Any, ...], ...]:
+        decision = label_bundle.decision_time
+        try:
+            return (
+                tuple(e - d for e, d in zip(label_bundle.execution_time, decision)),
+                tuple(s - d for s, d in zip(label_bundle.label_start_time, decision)),
+                tuple(e - d for e, d in zip(label_bundle.label_end_time, decision)),
+            )
+        except (TypeError, ValueError) as exc:
+            raise InvalidContractError("label timing coordinates must support relative comparison") from exc
+
+    @staticmethod
+    def _timing_rule(timing_offsets: Tuple[Tuple[Any, ...], ...]) -> Tuple[Tuple[Any, ...], ...]:
+        """Compare per-row timing offsets without requiring equal chunk lengths."""
+        return tuple(sorted(set(zip(*timing_offsets)), key=repr))
+
     @staticmethod
     def _coordinates(axis: Any, fallback: Tuple[Any, ...]) -> Tuple[Any, ...]:
         """Use explicit axis coordinates when present; otherwise supplied labels."""
@@ -220,12 +305,19 @@ class StreamingEvaluator:
         """Enforce continuity and identity for externally supplied chunks."""
         self._validate_chunk(factor_batch, label_bundle)
         identity = self._stream_identity(factor_batch, label_bundle)
+        timing_offsets = self._timing_offsets(label_bundle)
+        timing_rule = self._timing_rule(timing_offsets)
         if stream_state.get("identity") is None:
             stream_state["identity"] = identity
+            stream_state["timing_offsets"] = timing_offsets
+            stream_state["timing_rule"] = timing_rule
+            stream_state["timing_vectors"] = self._timing_vectors(label_bundle)
             stream_state["factor_ids"] = tuple(factor_batch.factor_ids)
             stream_state["asset_coords"] = self._coordinates(factor_batch.asset_axis, tuple(range(factor_batch.num_assets)))
         elif identity != stream_state["identity"]:
             raise SnapshotMismatchError("stream identity/context changed between chunks")
+        elif timing_rule != stream_state["timing_rule"]:
+            raise SnapshotMismatchError("stream label timing changed between chunks")
 
         times = self._coordinates(factor_batch.time_axis, tuple(label_bundle.decision_time))
         if len(times) != factor_batch.num_times:
@@ -298,7 +390,12 @@ class StreamingEvaluator:
         total_obs = 0
         stream_state: Dict[str, Any] = {}
 
-        for factor_batch, label_bundle in data_generator:
+        for item in data_generator:
+            if len(item) == 3:
+                factor_batch, label_bundle, chunk_descriptor = item
+            else:
+                factor_batch, label_bundle = item
+                chunk_descriptor = None
             self.budget_tracker.check_budget(raise_on_exceed=True)
 
             # Validate chunk and public stream continuity before updating state.
@@ -306,6 +403,25 @@ class StreamingEvaluator:
                 self._validate_chunk(factor_batch, label_bundle)
             else:
                 self._validate_stream_boundary(factor_batch, label_bundle, stream_state)
+
+            for state in metric_states.values():
+                state.current_chunk_descriptor = chunk_descriptor
+
+            if chunk_descriptor is not None:
+                if stream_state.get("identity") is None:
+                    stream_state["identity"] = chunk_descriptor.parent_identity
+                    stream_state["factor_ids"] = chunk_descriptor.factor_ids
+                    stream_state["asset_coords"] = chunk_descriptor.asset_coords
+                    stream_state["timing_offsets"] = chunk_descriptor.timing_offsets
+                    stream_state["timing_vectors"] = chunk_descriptor.timing_vectors
+                elif chunk_descriptor.parent_identity != stream_state["identity"]:
+                    raise SnapshotMismatchError("internal chunk parent identity changed")
+            elif stream_state.get("timing_vectors") is not None:
+                current_vectors = self._timing_vectors(label_bundle)
+                stream_state["timing_vectors"] = tuple(
+                    previous + current
+                    for previous, current in zip(stream_state["timing_vectors"], current_vectors)
+                )
 
             # Update each metric state with this chunk
             for metric_id, state in metric_states.items():
@@ -343,6 +459,14 @@ class StreamingEvaluator:
         result.metadata["chunk_size_time"] = self.chunk_size_time
         result.metadata["chunk_size_factors"] = self.chunk_size_factors
         result.metadata["num_metrics"] = len(metric_states)
+        if stream_state.get("identity") is not None:
+            result.provenance = self._stream_provenance(
+                stream_state["identity"],
+                stream_state["factor_ids"],
+                stream_state["asset_coords"],
+                stream_state["timing_vectors"],
+                stream_state["timing_offsets"],
+            )
 
         return result
 
@@ -365,13 +489,15 @@ class StreamingEvaluator:
         Returns:
             StreamingEvaluationResult with finalized metrics
         """
-        generator = self._batch_to_generator(factor_batch, label_bundle)
+        generator = self._batch_to_generator(factor_batch, label_bundle, include_descriptors=True)
         return self.evaluate_stream(generator, metric_specs, _internal_splitter=True)
 
     def _batch_to_generator(
         self,
         factor_batch: FactorBatch,
         label_bundle: LabelBundle,
+        *,
+        include_descriptors: bool = False,
     ) -> Iterator[Tuple[FactorBatch, LabelBundle]]:
         """
         Convert large batch into chunk generator.
@@ -381,8 +507,11 @@ class StreamingEvaluator:
         T = factor_batch.num_times
         N = factor_batch.num_assets
         F = factor_batch.num_factors
-
-        # Chunk along time and factor dimensions
+        parent_identity = self._stream_identity(factor_batch, label_bundle)
+        factor_ids = tuple(factor_batch.factor_ids)
+        asset_coords = self._coordinates(factor_batch.asset_axis, tuple(range(N)))
+        timing_vectors = self._timing_vectors(label_bundle)
+        timing_offsets = self._timing_offsets(label_bundle)
         for t_start in range(0, T, self.chunk_size_time):
             t_end = min(t_start + self.chunk_size_time, T)
 
@@ -402,7 +531,13 @@ class StreamingEvaluator:
                     0, N,
                 )
 
-                yield chunk_batch, chunk_labels
+                if include_descriptors:
+                    yield chunk_batch, chunk_labels, _InternalChunkDescriptor(
+                        (t_start, t_end), (f_start, f_end), (0, N), T, F,
+                        parent_identity, factor_ids, asset_coords, timing_vectors, timing_offsets,
+                    )
+                else:
+                    yield chunk_batch, chunk_labels
 
     def _extract_chunk_batch(
         self,
@@ -425,11 +560,15 @@ class StreamingEvaluator:
             name=factor_batch.time_axis.name,
             dtype=factor_batch.time_axis.dtype,
             size=t_end - t_start,
+            values=(factor_batch.time_axis.values[t_start:t_end].copy()
+                    if factor_batch.time_axis.values is not None else None),
         )
         chunk_asset_axis = AxisRef(
             name=factor_batch.asset_axis.name,
             dtype=factor_batch.asset_axis.dtype,
             size=a_end - a_start,
+            values=(factor_batch.asset_axis.values[a_start:a_end].copy()
+                    if factor_batch.asset_axis.values is not None else None),
         )
 
         return FactorBatch(
@@ -440,6 +579,8 @@ class StreamingEvaluator:
             validity=chunk_validity,
             layout=factor_batch.layout,
             dtype=factor_batch.dtype,
+            context_refs=dict(factor_batch.context_refs),
+            value_hash=factor_batch.value_hash,
         )
 
     def _extract_chunk_labels(
@@ -464,6 +605,9 @@ class StreamingEvaluator:
             label_start_time=label_bundle.label_start_time[t_start:t_end],
             label_end_time=label_bundle.label_end_time[t_start:t_end],
             validity=chunk_validity,
+            source_ref=label_bundle.source_ref,
+            calendar_ref=label_bundle.calendar_ref,
+            metadata=dict(label_bundle.metadata),
         )
 
     def _initialize_metric_states(
@@ -574,6 +718,19 @@ def streaming_ic_updater(
     chunk_sum_xy = np.where(finite_mask, factors * labels_expanded, 0.0).sum(axis=1)
     chunk_valid_counts = np.sum(finite_mask, axis=1, dtype=np.int32)
 
+    descriptor = state.current_chunk_descriptor
+    if descriptor is not None:
+        if descriptor.parent_identity != state.custom_state.get("parent_identity", descriptor.parent_identity):
+            raise SnapshotMismatchError("internal chunk parent identity changed")
+        state.custom_state.setdefault("parent_identity", descriptor.parent_identity)
+        state.expected_total_time = descriptor.total_time
+        state.expected_total_factors = descriptor.total_factors
+        state.custom_state.setdefault("ic_parts", {})[descriptor] = (
+            chunk_sum_x, chunk_sum_y, chunk_sum_xx, chunk_sum_yy,
+            chunk_sum_xy, chunk_valid_counts,
+        )
+        return state
+
     # Initialize or concatenate accumulators
     if state.sum_x is None:
         # First chunk - initialize
@@ -658,18 +815,23 @@ def streaming_coverage_updater(
 
     Accumulates count of valid observations.
     """
-    total_elements = factor_batch.values.size
-
+    total_count = factor_batch.values.shape[0] * factor_batch.values.shape[1] * factor_batch.values.shape[2]
+    factor_mask = np.isfinite(factor_batch.values)
     if factor_batch.validity is not None:
-        valid_elements = np.sum(factor_batch.validity)
+        factor_mask &= factor_batch.validity
+
+    if label_bundle.values.ndim == 1:
+        label_values = np.broadcast_to(label_bundle.values[:, None], factor_batch.values.shape[:2])
     else:
-        valid_elements = np.sum(np.isfinite(factor_batch.values))
-
-    coverage_fraction = valid_elements / total_elements if total_elements > 0 else 0.0
-
-    state.sum_values += coverage_fraction
+        label_values = label_bundle.values
+    label_mask = np.isfinite(label_values)
+    if label_bundle.validity is not None:
+        label_mask &= label_bundle.validity
+    pair_mask = factor_mask & label_mask[:, :, None]
+    total_count = int(np.prod(pair_mask.shape))
+    state.valid_count += int(np.sum(pair_mask))
+    state.total_count += total_count
     state.count += 1
-
     return state
 
 

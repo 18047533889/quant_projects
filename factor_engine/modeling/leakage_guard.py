@@ -169,6 +169,20 @@ def _purge_immature_dates(ds: PanelDataset, horizon: int) -> PanelDataset:
     )
 
 
+def _prediction_context(artifact: ModelArtifact, dates: Any) -> PredictionContext:
+    normalized_dates = np.asarray(dates)
+    if normalized_dates.ndim != 1 or len(normalized_dates) == 0:
+        raise ValueError("negative-control prediction requires non-empty row-aligned dates")
+    return PredictionContext(
+        application_window=ApplicationWindow(
+            start=normalized_dates.min(), end=normalized_dates.max()
+        ),
+        dates=normalized_dates,
+        asof=normalized_dates.max(),
+        feature_schema_hash=artifact.manifest.feature_schema_hash,
+    )
+
+
 def _identity_preprocessing() -> FrozenPreprocessing:
     return FrozenPreprocessing([])
 
@@ -315,7 +329,7 @@ def future_poison(
         ds, evaluation_cutoff=ds.frame.loc[mask_le, ds.date_col].max()
     )
     X_le = ds.frame.loc[mask_le, ds.feature_cols].to_numpy(dtype=np.float64)
-    pred_before = artifact.predict(X_le)
+    pred_before = artifact.predict(X_le, context=_prediction_context(artifact, ds.frame.loc[mask_le, ds.date_col].to_numpy()))
 
     poisoned = ds.frame.copy()
     after_idx = ds.frame.index[after_mask]
@@ -329,7 +343,7 @@ def future_poison(
         _panel_from_frame(ds, poisoned),
         evaluation_cutoff=ds.frame.loc[mask_le, ds.date_col].max(),
     )
-    pred_after = poisoned_artifact.predict(X_le)
+    pred_after = poisoned_artifact.predict(X_le, context=_prediction_context(poisoned_artifact, ds.frame.loc[mask_le, ds.date_col].to_numpy()))
     # Known-bad mutation: replacing np.allclose with a lambda that always returns True
     # must alter the control's conclusion (mutation is "killed" when detected).
     ok = bool(np.allclose(pred_before, pred_after, equal_nan=True))
@@ -365,7 +379,7 @@ def label_poison(
     artifact_orig = trainer_fn(ds, label_contract=label_contract)
     params_orig = artifact_orig.frozen.params
     X_all = ds.frame[ds.feature_cols].to_numpy(dtype=np.float64)
-    pred_orig = artifact_orig.predict(X_all)
+    pred_orig = artifact_orig.predict(X_all, context=_prediction_context(artifact_orig, ds.frame[ds.date_col].to_numpy()))
 
     mutated = ds.frame.copy()
     uniq = sorted(mutated[ds.date_col].unique())
@@ -379,7 +393,7 @@ def label_poison(
     artifact_poison = trainer_fn(ds_poison, label_contract=label_contract)
     params_poison = artifact_poison.frozen.params
     params_ok = _params_equal(params_orig, params_poison)
-    pred_poison = artifact_poison.predict(X_all)
+    pred_poison = artifact_poison.predict(X_all, context=_prediction_context(artifact_poison, mutated[ds.date_col].to_numpy()))
     pred_ok = bool(np.allclose(pred_orig, pred_poison, equal_nan=True))
     ok = bool(params_ok and pred_ok)
     return {
@@ -417,7 +431,7 @@ def scaler_poison(
     )
     state_before = artifact.preprocessing.state_hash()
     X_before = ds.frame.loc[before_mask, ds.feature_cols].to_numpy(dtype=np.float64)
-    pred_before = artifact.predict(X_before)
+    pred_before = artifact.predict(X_before, context=_prediction_context(artifact, ds.frame.loc[before_mask, ds.date_col].to_numpy()))
 
     mutated = ds.frame.copy()
     after_idx = ds.frame.index[after_mask]
@@ -432,7 +446,7 @@ def scaler_poison(
         evaluation_cutoff=ds.frame.loc[before_mask, ds.date_col].max(),
     )
     state_after = poisoned_artifact.preprocessing.state_hash()
-    pred_after = poisoned_artifact.predict(X_before)
+    pred_after = poisoned_artifact.predict(X_before, context=_prediction_context(poisoned_artifact, ds.frame.loc[before_mask, ds.date_col].to_numpy()))
     state_ok = state_before == state_after
     pred_ok = bool(np.allclose(pred_before, pred_after, equal_nan=True))
     return _control_result(
@@ -460,7 +474,10 @@ def _select_hyperparams(
         Xv, yv, dts, _, _ = val_ds.as_matrix()
         if yv is None:
             continue
-        pred = art.predict(Xv)
+        pred = art.predict(
+            Xv,
+            context=_prediction_context(art, val_ds.frame[val_ds.date_col].to_numpy()),
+        )
         mask = np.isfinite(pred) & np.isfinite(yv)
         if mask.sum() < 3:
             continue
@@ -532,7 +549,7 @@ def universe_poison(
     ds = dataset_fn()
     artifact = trainer_fn(ds)
     X_orig = ds.frame[ds.feature_cols].to_numpy(dtype=np.float64)
-    pred_before = artifact.predict(X_orig)
+    pred_before = artifact.predict(X_orig, context=_prediction_context(artifact, ds.frame[ds.date_col].to_numpy()))
 
     # Add a brand-new stock (only exists in the future half of the panel).
     new_stock = "SNEW999"
@@ -545,7 +562,7 @@ def universe_poison(
         grown[ds.stock_col].isin(ds.frame[ds.stock_col].unique()),
         ds.feature_cols,
     ].to_numpy(dtype=np.float64)
-    pred_after = artifact.predict(X_again)
+    pred_after = artifact.predict(X_again, context=_prediction_context(artifact, grown.loc[grown[ds.stock_col].isin(ds.frame[ds.stock_col].unique()), ds.date_col].to_numpy()))
     ok = len(X_orig) == len(X_again) and bool(
         np.allclose(pred_before, pred_after, equal_nan=True)
     )

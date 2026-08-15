@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
+from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest, PredictionContext
 from modeling.contracts import ApplicationWindow
 
 
@@ -25,7 +25,7 @@ from modeling.contracts import ApplicationWindow
 def test_application_window_basic_construction():
     """Basic ApplicationWindow with start date."""
     window = ApplicationWindow(start="2020-01-01")
-    assert window.start == "2020-01-01"
+    assert window.start == pd.Timestamp("2020-01-01", tz="UTC")
     assert window.end is None
     assert window.strict is True
 
@@ -33,8 +33,8 @@ def test_application_window_basic_construction():
 def test_application_window_with_end():
     """ApplicationWindow with both start and end."""
     window = ApplicationWindow(start="2020-01-01", end="2020-12-31")
-    assert window.start == "2020-01-01"
-    assert window.end == "2020-12-31"
+    assert window.start == pd.Timestamp("2020-01-01", tz="UTC")
+    assert window.end == pd.Timestamp("2020-12-31", tz="UTC")
 
 
 def test_application_window_non_strict():
@@ -130,7 +130,7 @@ def test_frozen_preprocessing_transform_accepts_window():
 
     window = ApplicationWindow(start="2020-01-01")
     # Should not raise
-    result = preproc.transform(X, application_window=window)
+    result = preproc.transform(X, application_window=window, dates=pd.date_range("2020-01-02", periods=len(X)))
     assert result.shape == X.shape
 
 
@@ -155,7 +155,7 @@ def test_frozen_preprocessing_transform_with_standardizer():
     X = np.array([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]])
     window = ApplicationWindow(start="2020-01-01")
 
-    result = preproc.transform(X, application_window=window)
+    result = preproc.transform(X, application_window=window, dates=pd.date_range("2020-01-02", periods=len(X)))
     # Verify standardization happened
     expected = (X - mean) / scale
     np.testing.assert_allclose(result, expected)
@@ -176,7 +176,7 @@ def _make_test_artifact() -> ModelArtifact:
     frozen = FrozenModel(
         learner_name="pcr",
         family="linear",
-        params={"coef": np.array([1.0, 1.0]), "intercept": 0.0},
+        params={"center": np.zeros(2), "scale": np.ones(2), "components": np.eye(2), "beta_pca": np.array([1.0, 1.0]), "coef": np.array([1.0, 1.0]), "intercept": 0.0},
         metadata={},
     )
 
@@ -189,9 +189,20 @@ def _make_test_artifact() -> ModelArtifact:
         train_start="2020-01-01",
         train_end="2020-06-30",
         available_at="2020-07-01",
+        feature_schema_hash="test-schema",
     )
 
     return ModelArtifact(manifest, learner, frozen, preproc)
+
+
+def _context(dates, *, start="2020-07-01", end=None, asof=None):
+    dates = pd.DatetimeIndex(dates)
+    return PredictionContext(
+        application_window=ApplicationWindow(start=start, end=end),
+        dates=dates,
+        asof=asof or dates.max(),
+        feature_schema_hash="test-schema",
+    )
 
 
 def test_model_artifact_predict_oos_requires_window():
@@ -199,8 +210,8 @@ def test_model_artifact_predict_oos_requires_window():
     artifact = _make_test_artifact()
     X = np.random.randn(10, 2)
 
-    with pytest.raises(ValueError, match="predict_oos requires application_window"):
-        artifact.predict_oos(X, application_window=None)
+    with pytest.raises(TypeError, match="PredictionContext"):
+        artifact.predict_oos(X, context=None)
 
 
 def test_model_artifact_predict_oos_requires_correct_type():
@@ -208,8 +219,8 @@ def test_model_artifact_predict_oos_requires_correct_type():
     artifact = _make_test_artifact()
     X = np.random.randn(10, 2)
 
-    with pytest.raises(TypeError, match="must be ApplicationWindow"):
-        artifact.predict_oos(X, application_window="2020-07-01")  # Wrong type
+    with pytest.raises(TypeError, match="PredictionContext"):
+        artifact.predict_oos(X, context="2020-07-01")  # Wrong type
 
 
 def test_model_artifact_predict_oos_with_valid_window():
@@ -219,7 +230,7 @@ def test_model_artifact_predict_oos_with_valid_window():
 
     window = ApplicationWindow(start="2020-07-01")
     # Should not raise
-    predictions = artifact.predict_oos(X, application_window=window)
+    predictions = artifact.predict_oos(X, context=_context(pd.date_range("2020-07-02", periods=10)))
     assert predictions.shape[0] == 10
 
 
@@ -234,8 +245,8 @@ def test_model_artifact_predict_oos_validates_dates():
     # Dates before window start should fail
     dates = pd.date_range("2020-06-20", periods=10, freq="D")  # Before 07-01
 
-    with pytest.raises(ValueError, match="violates application window"):
-        artifact.predict_oos(X, application_window=window, dates=dates)
+    with pytest.raises(ValueError, match="artifact is not available at prediction asof"):
+        artifact.predict_oos(X, context=_context(dates))
 
 
 def test_model_artifact_predict_oos_allows_valid_dates():
@@ -247,7 +258,7 @@ def test_model_artifact_predict_oos_allows_valid_dates():
     dates = pd.date_range("2020-07-10", periods=10, freq="D")  # After window start
 
     # Should not raise
-    predictions = artifact.predict_oos(X, application_window=window, dates=dates)
+    predictions = artifact.predict_oos(X, context=_context(dates))
     assert predictions.shape[0] == 10
 
 
@@ -258,7 +269,7 @@ def test_model_artifact_predict_oos_no_dates_skips_validation():
 
     window = ApplicationWindow(start="2020-07-01")
     # No dates provided = no date validation (caller's responsibility)
-    predictions = artifact.predict_oos(X, application_window=window, dates=None)
+    predictions = artifact.predict_oos(X, context=_context(pd.date_range("2020-07-02", periods=10)))
     assert predictions.shape[0] == 10
 
 
@@ -271,7 +282,7 @@ def test_model_artifact_predict_for_in_sample():
     X = np.random.randn(10, 2)
 
     # predict() works without ApplicationWindow (in-sample use)
-    predictions = artifact.predict(X)
+    predictions = artifact.predict(X, context=_context(pd.date_range("2020-07-02", periods=10)))
     assert predictions.shape[0] == 10
 
 
@@ -281,7 +292,7 @@ def test_model_artifact_predict_does_not_require_window():
     X = np.random.randn(10, 2)
 
     # Should work without any window
-    predictions = artifact.predict(X)
+    predictions = artifact.predict(X, context=_context(pd.date_range("2020-07-02", periods=10)))
     assert predictions.shape[0] == 10
 
 
@@ -298,8 +309,8 @@ def test_cannot_apply_oos_transform_to_training_period():
     window = ApplicationWindow(start="2020-07-01", strict=True)
     training_dates = pd.date_range("2020-06-20", periods=10, freq="D")
 
-    with pytest.raises(ValueError, match="violates application window"):
-        artifact.predict_oos(X, application_window=window, dates=training_dates)
+    with pytest.raises(ValueError, match="artifact is not available at prediction asof"):
+        artifact.predict_oos(X, context=_context(training_dates))
 
 
 def test_cannot_apply_oos_transform_before_availability():
@@ -312,8 +323,8 @@ def test_cannot_apply_oos_transform_before_availability():
     window = ApplicationWindow(start="2020-07-01")
     boundary_dates = pd.date_range("2020-06-30", periods=5, freq="D")  # Includes 06-30
 
-    with pytest.raises(ValueError, match="violates application window"):
-        artifact.predict_oos(X, application_window=window, dates=boundary_dates)
+    with pytest.raises(ValueError, match="artifact is not available at prediction asof"):
+        artifact.predict_oos(X, context=_context(boundary_dates, start="2020-07-01", asof="2020-06-30"))
 
 
 def test_oos_window_prevents_train_val_refit_leakage():
@@ -334,6 +345,7 @@ def test_oos_window_prevents_train_val_refit_leakage():
         final_fit_end="2020-08-31",  # Refit used validation
         refit_used_validation=True,
         available_at="2020-09-01",  # Available after final_fit_end
+        feature_schema_hash="test-schema",
     )
 
     from modeling.learners.pcr import PCRLearner
@@ -344,7 +356,7 @@ def test_oos_window_prevents_train_val_refit_leakage():
     frozen = FrozenModel(
         learner_name="pcr",
         family="linear",
-        params={"coef": np.array([1.0, 1.0]), "intercept": 0.0},
+        params={"center": np.zeros(2), "scale": np.ones(2), "components": np.eye(2), "beta_pca": np.array([1.0, 1.0]), "coef": np.array([1.0, 1.0]), "intercept": 0.0},
         metadata={},
     )
     preproc = FrozenPreprocessing([])
@@ -358,12 +370,17 @@ def test_oos_window_prevents_train_val_refit_leakage():
     # Try to apply to validation period (2020-07-01 to 2020-08-31) - should fail
     val_dates = pd.date_range("2020-07-15", periods=10, freq="D")
 
-    with pytest.raises(ValueError, match="violates application window"):
-        artifact.predict_oos(X, application_window=window, dates=val_dates)
+    with pytest.raises(ValueError, match="artifact is not available at prediction asof"):
+        artifact.predict_oos(X, context=PredictionContext(
+            application_window=window,
+            dates=val_dates,
+            asof=val_dates.max(),
+            feature_schema_hash="test-schema",
+        ))
 
     # But applying to test period (after 2020-09-01) should work
     test_dates = pd.date_range("2020-09-05", periods=10, freq="D")
-    predictions = artifact.predict_oos(X, application_window=window, dates=test_dates)
+    predictions = artifact.predict_oos(X, context=_context(test_dates, start="2020-09-01"))
     assert predictions.shape[0] == 10
 
 

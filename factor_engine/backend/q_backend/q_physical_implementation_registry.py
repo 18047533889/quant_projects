@@ -112,8 +112,13 @@ class QPhysicalImplementationRegistry:
         return bool((impl := self.get(canonical)) and impl.lowering_id)
 
     def is_production_certified(self, canonical: str) -> bool:
-        if self.has_disagreement():
-            return False
+        """Return this operator's certification independently of other gaps.
+
+        A declaration/lowering disagreement is a backend-wide readiness failure,
+        but it must not hide an otherwise independently certified operator.
+        Callers checking global readiness use ``get_production_ready`` or
+        ``has_disagreement`` in addition to this per-operator query.
+        """
         return bool((impl := self.get(canonical)) and impl.production_ready)
 
     def admission_disagreements(self) -> dict[str, list[str]]:
@@ -160,6 +165,11 @@ class QPhysicalImplementationRegistry:
 _REGISTRY: QPhysicalImplementationRegistry | None = None
 
 
+def get_installed_q_physical_implementation_registry() -> QPhysicalImplementationRegistry | None:
+    """Return an explicitly installed registry without bootstrapping one."""
+    return _REGISTRY
+
+
 def build_q_physical_implementation_registry(
     lowerings: Mapping[str, str],
     declared_targets: frozenset[str],
@@ -175,6 +185,10 @@ def install_q_physical_implementation_registry(
     registry: QPhysicalImplementationRegistry,
 ) -> QPhysicalImplementationRegistry:
     global _REGISTRY
+    if _REGISTRY is not None and _REGISTRY is not registry:
+        # An explicit evidence registry is authoritative for the process.  A
+        # later lazy getter/compiler bootstrap must never replace it.
+        return _REGISTRY
     _REGISTRY = registry
     return registry
 

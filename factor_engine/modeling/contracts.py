@@ -372,19 +372,9 @@ class ApplicationWindow:
 
     @staticmethod
     def normalize_boundary(value: Any, name: str = "boundary") -> pd.Timestamp:
-        if value is None:
-            raise ValueError(f"ApplicationWindow.{name} cannot be None")
-        try:
-            parsed = pd.to_datetime(value, errors="raise", utc=True)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError(
-                f"ApplicationWindow.{name} is not a valid timestamp: {value!r}"
-            ) from exc
-        if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
-            raise ValueError(
-                f"ApplicationWindow.{name} is not a valid scalar timestamp: {value!r}"
-            )
-        return parsed
+        from modeling.artifact import normalize_timestamp
+
+        return normalize_timestamp(value, name=f"ApplicationWindow.{name}")
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ApplicationWindow":
@@ -401,21 +391,14 @@ class ApplicationWindow:
         return {"start": self.start.isoformat(), "end": self.end.isoformat() if self.end is not None else None, "strict": self.strict}
 
     def normalize_dates(self, dates: Any) -> np.ndarray:
-        values = np.asarray(dates)
-        if values.ndim != 1:
-            raise ValueError("dates must be a one-dimensional sequence")
-        try:
-            parsed = pd.to_datetime(values, errors="raise", utc=True)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("dates contain malformed timestamp values") from exc
-        if pd.isna(parsed).any():
-            raise ValueError("dates contain null timestamp values")
-        return parsed.to_numpy(dtype="datetime64[ns]")
+        from modeling.artifact import normalize_timestamps
+
+        return normalize_timestamps(dates, name="dates")
 
     def validate_dates(self, dates: Any) -> tuple[bool, list[str]]:
         dates_array = self.normalize_dates(dates)
-        start = self.start.to_datetime64()
-        end = self.end.to_datetime64() if self.end is not None else None
+        start = self.start
+        end = self.end
         violations: list[str] = []
         if self.strict:
             before_start = dates_array < start

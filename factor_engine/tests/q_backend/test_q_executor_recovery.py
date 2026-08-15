@@ -315,6 +315,45 @@ def test_batch_diamond_fan_in_routes_both_physical_predecessors_into_final_q_cod
     assert "_base" in final_q_code
 
 
+def test_compiler_intermediates_are_namespaced_and_cleaned_with_the_workspace():
+    connection = _DiamondQRecorder()
+    manager = MagicMock()
+    manager.check_availability.return_value = MagicMock(
+        status=QAvailabilityStatus.AVAILABLE,
+        error_message=None,
+    )
+    manager.get_connection.return_value = connection
+    adapter = MagicMock()
+    adapter.pandas_to_q.return_value = object()
+    adapter.q_to_pandas.return_value = pd.DataFrame({"value": [1.0]})
+    executor = QExecutor(process_manager=manager, type_adapter=adapter)
+    plan = QRegionPlan(
+        region_id="nodes",
+        node_ids=("first-node", "middle.node", "final-node"),
+        q_code="first-node: 0!base; middle.node: first-node; final-node: middle.node",
+        input_tables=("base",),
+        output_table="final-node",
+    )
+
+    executor.execute_region(plan, {"base": pd.DataFrame({"x": [1.0]})})
+
+    emitted = next(query for query in connection.calls if "middle_node:" in query)
+    assert "first-node" not in emitted
+    assert "middle.node" not in emitted
+    assert "final-node" not in emitted
+    deleted = {
+        query.removeprefix("delete ").removesuffix(" from `.")
+        for query in connection.calls
+        if query.startswith("delete ")
+    }
+    compiler_symbols = {
+        symbol
+        for symbol in deleted
+        if symbol.endswith(("first_node", "middle_node", "final_node"))
+    }
+    assert len(compiler_symbols) == 3
+
+
 def test_two_executor_instances_serialize_shared_connection():
     manager = MagicMock()
     manager.check_availability.return_value = MagicMock(

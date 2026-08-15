@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from modeling.artifact import PredictionContext
+from modeling.contracts import ApplicationWindow
+
 from modeling.diagnostics import feature_ablation, label_shuffle_control
 from modeling.leakage_guard import future_poison, scaler_poison, synthetic_panel
 from modeling.learners import PCRLearner
@@ -102,7 +105,9 @@ def test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining():
     frozen = base.fit(X, y)
 
     class Artifact:
-        def predict(self, values):
+        manifest = type("Manifest", (), {"feature_schema_hash": "test"})()
+
+        def predict(self, values, *, context):
             return base.predict(frozen, values)
 
     retrain_calls = []
@@ -115,9 +120,15 @@ def test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining():
             retrain_calls.append(self.removed)
             return values[:, 0]
 
+    context = PredictionContext(
+        application_window=ApplicationWindow(start=dates.min(), end=dates.max()),
+        dates=dates,
+        asof=dates.max(),
+        feature_schema_hash="test",
+    )
     result = feature_ablation(
         Artifact(), X, y, _corr, dates=dates, shuffle_mode="within_date",
-        retrain_without_feature_fn=Retrained,
+        retrain_without_feature_fn=Retrained, context=context,
     )
     assert result["retrained"] is True
     assert set(result["occlusion"]) == set(result["permutation"])

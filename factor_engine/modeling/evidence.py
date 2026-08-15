@@ -25,8 +25,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
-from modeling.contracts import DecisionClock, LabelContract
+from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest, PredictionContext
+from modeling.contracts import ApplicationWindow, DecisionClock, LabelContract
 from modeling.dataset import PanelDataset
 from modeling.evaluation import evaluate_predictions, per_date_rank_ic
 from modeling.learners.base import LearnerSpec
@@ -251,6 +251,13 @@ def run_walk_forward_evidence(
             evaluation_boundary=dates[fold["test_start_i"]],
         )
         artifact: ModelArtifact = result.artifact
+        if artifact is None:
+            raise ValueError("walk-forward trainer returned no artifact")
+        schema_hash = artifact.manifest.feature_schema_hash
+        if not isinstance(schema_hash, str) or not schema_hash:
+            raise ValueError(
+                "artifact manifest feature_schema_hash is required for production evidence"
+            )
         hp = dict(getattr(result, "selected_hyperparams", {}) or {})
         val_ic = getattr(result, "validation_best_rank_ic", None)
         if val_ic is None:
@@ -263,7 +270,16 @@ def run_walk_forward_evidence(
             val_ic = float(max(finite_ics)) if finite_ics else float("nan")
         else:
             val_ic = float(val_ic)
-        pred = predictor.predict(artifact, Xte)
+        pred = predictor.predict(
+            artifact,
+            Xte,
+            PredictionContext(
+                application_window=ApplicationWindow(start=dte.min(), end=dte.max()),
+                dates=dte,
+                asof=dte.max(),
+                feature_schema_hash=artifact.manifest.feature_schema_hash,
+            ),
+        )
 
         fold_results.append(
             FoldResult(
@@ -718,10 +734,11 @@ def _probe_asof_resolution() -> bool:
         dates = sorted(ds.frame[ds.date_col].unique())
         early = ds.filter_dates(dates[0], dates[4])
         late = ds.filter_dates(dates[5], dates[9])
+        probe_dates = pd.DatetimeIndex(dates).tz_localize("UTC")
 
         def _with_cutoff(art: ModelArtifact, artifact_id: str, cutoff: Any) -> ModelArtifact:
             m = art.manifest
-            cutoff_s = str(cutoff)
+            cutoff_s = pd.Timestamp(cutoff).tz_convert("UTC").isoformat()
             manifest = ModelArtifactManifest(
                 model_name=m.model_name, model_version=m.model_version,
                 artifact_id=artifact_id, train_start=m.train_start, train_end=m.train_end,
@@ -732,18 +749,18 @@ def _probe_asof_resolution() -> bool:
             return ModelArtifact(manifest, art.learner, art.frozen, art.preprocessing)
 
         art_early = _with_cutoff(
-            default_trainer_fn(early, label_contract=lc), "asof-early", dates[4]
+            default_trainer_fn(early, label_contract=lc), "asof-early", probe_dates[4]
         )
         art_late = _with_cutoff(
-            default_trainer_fn(late, label_contract=lc), "asof-late", dates[9]
+            default_trainer_fn(late, label_contract=lc), "asof-late", probe_dates[9]
         )
         resolver = ArtifactResolver(store=ArtifactStore())
         resolver.register(art_early)
         resolver.register(art_late)
         name = art_early.model_name
-        before = resolver.resolve(name, str(dates[0]))    # < early cutoff -> None
-        mid = resolver.resolve(name, str(dates[4]))       # == early cutoff -> early
-        after = resolver.resolve(name, str(dates[10]))    # > late cutoff -> late
+        before = resolver.resolve(name, probe_dates[0])    # < early cutoff -> None
+        mid = resolver.resolve(name, probe_dates[4])       # == early cutoff -> early
+        after = resolver.resolve(name, probe_dates[10])    # > late cutoff -> late
         return bool(
             before is None
             and mid is not None and mid.artifact_id == "asof-early"

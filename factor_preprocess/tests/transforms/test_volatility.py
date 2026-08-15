@@ -52,8 +52,8 @@ class TestVolatilityScale:
         expected = 2.0 * (2.0 / lagged_std)
         np.testing.assert_allclose(result.iloc[3], expected, rtol=1e-5)
 
-    def test_zero_volatility_produces_inf(self):
-        """Test that zero volatility produces inf (division by zero)."""
+    def test_zero_volatility_produces_nan(self):
+        """Zero historical volatility follows the documented NaN contract."""
         df = pd.DataFrame({
             "asset_id": ["A"] * 5,
             "date": pd.date_range("2020-01-01", periods=5),
@@ -62,8 +62,8 @@ class TestVolatilityScale:
 
         result = volatility_scale(df, window=3)
 
-        # At index 3, lagged volatility is 0 (all 5.0), produces inf
-        assert np.isinf(result.iloc[3])
+        # At index 3, lagged volatility is 0 (all 5.0).
+        assert pd.isna(result.iloc[3])
 
     def test_per_asset_isolation(self):
         """Test that assets are processed independently."""
@@ -441,3 +441,80 @@ class TestGARCHInspiredVolatility:
         assert pd.notna(asset_a_vol)
         assert pd.notna(asset_b_vol)
         assert asset_b_vol > asset_a_vol * 5  # At least 5x higher
+
+
+class TestVolatilityAssetLayoutMetamorphics:
+    """Asset layout must not alter per-asset temporal results."""
+
+    @staticmethod
+    def _frame(layout: str) -> pd.DataFrame:
+        dates = pd.date_range("2022-01-01", periods=8)
+        rows = []
+        series = {
+            "A": [1.0, 2.0, 4.0, 3.0, 7.0, 5.0, 9.0, 6.0],
+            "B": [20.0, 18.0, 25.0, 21.0, 30.0, 24.0, 33.0, 27.0],
+        }
+        if layout == "interleaved":
+            for i, date in enumerate(dates):
+                for asset in ("A", "B"):
+                    rows.append((asset, date, series[asset][i]))
+        else:
+            asset_order = ("B", "A") if layout == "blocks_reordered" else ("A", "B")
+            for asset in asset_order:
+                rows.extend((asset, date, series[asset][i]) for i, date in enumerate(dates))
+        frame = pd.DataFrame(rows, columns=["asset_id", "date", "value"])
+        frame.index = pd.Index(np.arange(100, 100 + 3 * len(frame), 3), name="row_id")
+        return frame
+
+    @staticmethod
+    def _keyed(frame: pd.DataFrame, result: pd.Series) -> pd.Series:
+        aligned = frame[["asset_id", "date"]].copy()
+        aligned["result"] = result
+        return aligned.set_index(["asset_id", "date"])["result"].sort_index()
+
+    @pytest.mark.parametrize(
+        "transform,kwargs",
+        [
+            (volatility_scale, {"window": 3}),
+            (realized_volatility, {"window": 3}),
+            (ewma_volatility, {"halflife": 2.0, "min_periods": 2}),
+            (
+                garch_inspired_volatility,
+                {"short_window": 2, "long_window": 4, "min_periods": 2},
+            ),
+        ],
+    )
+    def test_interleaved_assets_match_isolated_execution(self, transform, kwargs):
+        interleaved = self._frame("interleaved")
+        actual = transform(interleaved, **kwargs)
+
+        assert actual.index.equals(interleaved.index)
+        expected = pd.Series(index=interleaved.index, dtype=float)
+        for _, group in interleaved.groupby("asset_id", sort=False):
+            expected.loc[group.index] = transform(group, **kwargs)
+
+        expected.name = actual.name
+        pd.testing.assert_series_equal(actual, expected)
+
+    @pytest.mark.parametrize(
+        "transform,kwargs",
+        [
+            (volatility_scale, {"window": 3}),
+            (realized_volatility, {"window": 3}),
+            (ewma_volatility, {"halflife": 2.0, "min_periods": 2}),
+            (
+                garch_inspired_volatility,
+                {"short_window": 2, "long_window": 4, "min_periods": 2},
+            ),
+        ],
+    )
+    def test_block_reorder_preserves_key_alignment(self, transform, kwargs):
+        original = self._frame("blocks")
+        reordered = self._frame("blocks_reordered")
+
+        expected = self._keyed(original, transform(original, **kwargs))
+        actual_result = transform(reordered, **kwargs)
+        assert actual_result.index.equals(reordered.index)
+        actual = self._keyed(reordered, actual_result)
+
+        pd.testing.assert_series_equal(actual, expected)

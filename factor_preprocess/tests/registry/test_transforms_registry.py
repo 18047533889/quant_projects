@@ -298,6 +298,16 @@ class TestDefaultRegistry:
             with pytest.raises(ValueError, match="OFFLINE_ONLY"):
                 registry.validate_production(name)
 
+    def test_full_sample_transforms_are_research_only(self):
+        registry = get_default_registry()
+        for name in ["impute_with_fallback", "detect_correlation_regime"]:
+            metadata = registry.get(name)
+            assert metadata is not None
+            assert metadata.causal_safe is False
+            assert metadata.admission == "RESEARCH_ONLY"
+            with pytest.raises(ValueError, match="RESEARCH_ONLY"):
+                registry.validate_production(name)
+
     def test_production_validation_rejects_unknown_transform(self):
         with pytest.raises(ValueError, match="not registered"):
             TransformRegistry().validate_production("unregistered_transform")

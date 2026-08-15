@@ -16,8 +16,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
-from modeling.contracts import SampleAdequacyContract
+from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest, PredictionContext
+from modeling.contracts import ApplicationWindow, SampleAdequacyContract
 from modeling.dsl_bridge import (
     ArtifactResolver,
     ArtifactStore,
@@ -276,6 +276,7 @@ def _make_artifact(
         train_end=training_cutoff,
         training_cutoff=training_cutoff,
         available_at=available_at,
+        feature_schema_hash="test-schema",
     )
     return ModelArtifact(
         manifest=manifest,
@@ -285,7 +286,15 @@ def _make_artifact(
     )
 
 
-def test_artifact_store_round_trip(tmp_path):
+def _prediction_context(artifact, dates, asof):
+    return PredictionContext(
+        application_window=ApplicationWindow(start=min(dates), end=max(dates)),
+        dates=np.asarray(dates, dtype=object),
+        asof=asof,
+        feature_schema_hash=artifact.manifest.feature_schema_hash,
+    )
+
+
     store = ArtifactStore(base_dir=str(tmp_path / "store"))
     art = _make_artifact("alpha", "2020-01-01", "2020-01-01", seed=1)
     aid = store.put(art)
@@ -294,7 +303,8 @@ def test_artifact_store_round_trip(tmp_path):
     loaded = store.get(aid)
     assert loaded is not None
     X = np.random.default_rng(3).normal(0.0, 1.0, (50, 2))
-    np.testing.assert_allclose(loaded.predict(X), art.predict(X))
+    ctx = _prediction_context(art, ["2020-01-02"] * len(X), "2020-06-01")
+    np.testing.assert_allclose(loaded.predict(X, context=ctx), art.predict(X, context=ctx))
     assert store.list() == [aid]
     assert store.get("missing-id") is None
 
@@ -329,7 +339,8 @@ def test_score_asof_scores_legal_artifact():
     resolver.register(art)
     X = np.random.default_rng(4).normal(0.0, 1.0, (20, 2))
     out = score_asof("alpha", X, asof="2021-01-01", resolver=resolver)
-    np.testing.assert_allclose(out, art.predict(X))
+    ctx = _prediction_context(art, ["2020-01-02"] * len(X), "2021-01-01")
+    np.testing.assert_allclose(out, art.predict(X, context=ctx))
 
 
 def test_score_asof_raises_lookup_error_with_no_legal_artifact():
@@ -356,8 +367,10 @@ def test_replay_historical_scores_uses_per_date_legal_artifacts():
         {"2020-06-01": X_old, "2021-06-01": X_new},
         resolver,
     )
-    np.testing.assert_allclose(out["2020-06-01"], old.predict(X_old))
-    np.testing.assert_allclose(out["2021-06-01"], new.predict(X_new))
+    old_ctx = _prediction_context(old, ["2020-06-01"] * len(X_old), "2020-06-01")
+    new_ctx = _prediction_context(new, ["2021-06-01"] * len(X_new), "2021-06-01")
+    np.testing.assert_allclose(out["2020-06-01"], old.predict(X_old, context=old_ctx))
+    np.testing.assert_allclose(out["2021-06-01"], new.predict(X_new, context=new_ctx))
 
 
 def test_replay_historical_scores_raises_on_missing_date():

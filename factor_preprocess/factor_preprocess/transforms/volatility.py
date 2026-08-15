@@ -67,13 +67,18 @@ def volatility_scale(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    grouped = values.groupby(asset_col, sort=False)[value_col]
+    # Compute lagged volatility independently within each asset. Applying
+    # rolling directly to the shifted, interleaved Series would let one
+    # asset's observations enter another asset's window.
+    lagged_vol = values.groupby(asset_col, sort=False)[value_col].transform(
+        lambda series: series.shift(1).rolling(
+            window=window,
+            min_periods=min_periods,
+        ).std(ddof=ddof)
+    )
 
-    # Compute lagged volatility (exclude current observation)
-    lagged = grouped.shift(1)
-    lagged_vol = lagged.rolling(window=window, min_periods=min_periods).std(ddof=ddof)
-
-    # Scale current value by lagged volatility
+    # The public contract specifies NaN for a zero-volatility history.
+    lagged_vol = lagged_vol.mask(lagged_vol == 0.0)
     current = values[value_col]
     result = current * (target_vol / lagged_vol)
 
@@ -190,11 +195,13 @@ def realized_volatility(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    grouped = values.groupby(asset_col, sort=False)[value_col]
-
-    # Compute volatility from lagged observations
-    lagged = grouped.shift(1)
-    vol = lagged.rolling(window=window, min_periods=min_periods).std(ddof=ddof)
+    # Compute volatility from lagged observations within each asset.
+    vol = values.groupby(asset_col, sort=False)[value_col].transform(
+        lambda series: series.shift(1).rolling(
+            window=window,
+            min_periods=min_periods,
+        ).std(ddof=ddof)
+    )
 
     # Apply annualization factor
     result = vol * annualization_factor
@@ -323,14 +330,18 @@ def garch_inspired_volatility(
 
     grouped = values.groupby(asset_col, sort=False)[value_col]
 
-    # Compute lagged observations
-    lagged = grouped.shift(1)
-
-    # Short-term volatility (recent shocks)
-    short_vol = lagged.rolling(window=short_window, min_periods=min_periods).std(ddof=ddof)
-
-    # Long-term volatility (baseline)
-    long_vol = lagged.rolling(window=long_window, min_periods=long_window).std(ddof=ddof)
+    # Both components restart at every asset boundary; transform retains the
+    # caller's original row index and order, including interleaved assets.
+    short_vol = grouped.transform(
+        lambda series: series.shift(1).rolling(
+            window=short_window, min_periods=min_periods
+        ).std(ddof=ddof)
+    )
+    long_vol = grouped.transform(
+        lambda series: series.shift(1).rolling(
+            window=long_window, min_periods=long_window
+        ).std(ddof=ddof)
+    )
 
     # Combine: weight recent volatility more heavily
     combined_vol = 0.7 * short_vol + 0.3 * long_vol

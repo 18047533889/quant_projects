@@ -10,14 +10,56 @@ from typing import Optional, Protocol, List, Tuple
 from enum import Enum
 import warnings
 
+
+def _validate_embedding_dim(embedding_dim: int) -> None:
+    if not isinstance(embedding_dim, int) or isinstance(embedding_dim, bool) or embedding_dim <= 0:
+        raise ValueError("embedding_dim must be a positive integer")
+
+
+def _validate_build_inputs(factor_ids: List[str], embeddings: "np.ndarray", embedding_dim: int) -> None:
+    _validate_embedding_dim(embedding_dim)
+    if not isinstance(embeddings, np.ndarray) or embeddings.ndim != 2:
+        raise ValueError("embeddings must be a 2D numpy array")
+    if len(factor_ids) != embeddings.shape[0]:
+        raise ValueError("Number of factor_ids must match embeddings rows")
+    if embeddings.shape[1] != embedding_dim:
+        raise ValueError(f"Expected embedding_dim={embedding_dim}, got {embeddings.shape[1]}")
+    if len(set(factor_ids)) != len(factor_ids):
+        raise ValueError("factor_ids must be unique")
+    if not np.isfinite(embeddings).all():
+        raise ValueError("embeddings must contain only finite values")
+    if np.any(np.linalg.norm(embeddings, axis=1) == 0):
+        raise ValueError("zero vectors are not valid embeddings")
+
+
+def _validate_positive_k(k: int) -> None:
+    if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
+        raise ValueError("k must be a positive integer")
+
+
+def _validate_query(query_embedding: "np.ndarray", embedding_dim: int, k: int) -> "np.ndarray":
+    _validate_positive_k(k)
+    if not isinstance(query_embedding, np.ndarray) or query_embedding.ndim != 1:
+        raise ValueError("query_embedding must be a 1D numpy array")
+    if query_embedding.shape[0] != embedding_dim:
+        raise ValueError(f"Expected embedding_dim={embedding_dim}, got {query_embedding.shape[0]}")
+    if not np.isfinite(query_embedding).all():
+        raise ValueError("query_embedding must contain only finite values")
+    if np.linalg.norm(query_embedding) == 0:
+        raise ValueError("zero query vectors are not valid embeddings")
+    return np.ascontiguousarray(query_embedding, dtype=np.float32)
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 try:
     import faiss
-    import numpy as np
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
     faiss = None
-    np = None
 
 try:
     from annoy import AnnoyIndex
@@ -48,8 +90,10 @@ class ANNSearchResult:
     def __post_init__(self):
         if not self.factor_id:
             raise ValueError("factor_id is required")
-        if self.distance < 0:
-            raise ValueError("distance must be non-negative")
+        if not np.isfinite(self.distance) or self.distance < 0:
+            raise ValueError("distance must be finite and non-negative")
+        if self.similarity_score is not None and not -1.0 <= self.similarity_score <= 1.0:
+            raise ValueError("similarity_score must be in [-1, 1]")
 
 
 class ANNIndex(Protocol):
@@ -132,10 +176,14 @@ class FaissANNIndex:
             )
 
         self.embedding_dim = embedding_dim
-        self.normalize = normalize
+        _validate_embedding_dim(embedding_dim)
+        if not normalize:
+            raise ValueError("normalize=False is unsupported; canonical score is cosine similarity")
+        self.normalize = True
         self._index = faiss.IndexFlatIP(embedding_dim)  # Inner product index
         self._factor_ids: List[str] = []
         self._id_to_idx: dict[str, int] = {}
+        self._embeddings = np.empty((0, embedding_dim), dtype=np.float32)
 
     def build(self, factor_ids: List[str], embeddings: "np.ndarray") -> None:
         """
@@ -145,12 +193,7 @@ class FaissANNIndex:
             factor_ids: List of factor identifiers
             embeddings: 2D array of shape (n_factors, embedding_dim)
         """
-        if len(factor_ids) != embeddings.shape[0]:
-            raise ValueError("Number of factor_ids must match embeddings rows")
-        if embeddings.shape[1] != self.embedding_dim:
-            raise ValueError(f"Expected embedding_dim={self.embedding_dim}, got {embeddings.shape[1]}")
-        if len(set(factor_ids)) != len(factor_ids):
-            raise ValueError("factor_ids must be unique")
+        _validate_build_inputs(factor_ids, embeddings, self.embedding_dim)
 
         staged_embeddings = np.ascontiguousarray(embeddings, dtype=np.float32).copy()
         if self.normalize:
@@ -164,6 +207,7 @@ class FaissANNIndex:
         self._index = staged_index
         self._factor_ids = staged_factor_ids
         self._id_to_idx = staged_id_to_idx
+        self._embeddings = staged_embeddings
 
     def search(
         self,
@@ -182,11 +226,11 @@ class FaissANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        query = _validate_query(query_embedding, self.embedding_dim, k)
         if len(self._factor_ids) == 0:
             return []
 
-        # Ensure query is 2D and correct dtype
-        query = query_embedding.reshape(1, -1).astype(np.float32)
+        query = query.reshape(1, -1)
 
         if self.normalize:
             faiss.normalize_L2(query)
@@ -201,17 +245,17 @@ class FaissANNIndex:
             if idx == -1:
                 continue
 
-            # Convert inner product to similarity (already normalized if requested)
+            # FAISS IndexFlatIP returns inner-product similarity; expose the
+            # backend's equivalent non-negative distance alongside canonical score.
             similarity = float(dist) if self.normalize else None
+            backend_distance = 1.0 - float(dist) if self.normalize else abs(float(dist))
 
-            # Apply threshold
-            if min_similarity is not None and similarity is not None:
-                if similarity < min_similarity:
-                    continue
+            if min_similarity is not None and (similarity is None or similarity < min_similarity):
+                continue
 
             results.append(ANNSearchResult(
                 factor_id=self._factor_ids[idx],
-                distance=float(dist),
+                distance=backend_distance,
                 similarity_score=similarity,
             ))
 
@@ -234,6 +278,7 @@ class FaissANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        _validate_positive_k(k)
         if factor_id not in self._id_to_idx:
             return []
 
@@ -281,6 +326,7 @@ class AnnoyANNIndex:
         self._factor_ids: List[str] = []
         self._id_to_idx: dict[str, int] = {}
         self._built = False
+        self._embeddings = np.empty((0, embedding_dim), dtype=np.float32)
 
     def build(self, factor_ids: List[str], embeddings: "np.ndarray") -> None:
         """
@@ -290,21 +336,18 @@ class AnnoyANNIndex:
             factor_ids: List of factor identifiers
             embeddings: 2D array of shape (n_factors, embedding_dim)
         """
-        if len(factor_ids) != embeddings.shape[0]:
-            raise ValueError("Number of factor_ids must match embeddings rows")
-        if embeddings.shape[1] != self.embedding_dim:
-            raise ValueError(f"Expected embedding_dim={self.embedding_dim}, got {embeddings.shape[1]}")
+        _validate_build_inputs(factor_ids, embeddings, self.embedding_dim)
+        staged_embeddings = np.ascontiguousarray(embeddings, dtype=np.float32).copy()
+        staged_index = AnnoyIndex(self.embedding_dim, 'angular')
 
-        # Store factor IDs
+        for idx, embedding in enumerate(staged_embeddings):
+            staged_index.add_item(idx, embedding.tolist())
+
+        staged_index.build(self.n_trees)
+        self._index = staged_index
         self._factor_ids = list(factor_ids)
         self._id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
-
-        # Add embeddings to index
-        for idx, embedding in enumerate(embeddings):
-            self._index.add_item(idx, embedding)
-
-        # Build index
-        self._index.build(self.n_trees)
+        self._embeddings = staged_embeddings
         self._built = True
 
     def search(
@@ -324,23 +367,20 @@ class AnnoyANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        query = _validate_query(query_embedding, self.embedding_dim, k)
         if not self._built or len(self._factor_ids) == 0:
             return []
 
-        # Search (Annoy returns indices and distances)
-        k_actual = min(k, len(self._factor_ids))
         indices, distances = self._index.get_nns_by_vector(
-            query_embedding.flatten().tolist(),
-            k_actual,
-            include_distances=True
+            query.tolist(), min(k, len(self._factor_ids)), include_distances=True
         )
 
         # Convert to results
         results = []
         for idx, dist in zip(indices, distances):
-            # Angular distance to cosine similarity: sim = 1 - (dist^2 / 2)
-            # For small distances, sim ≈ 1 - dist
-            similarity = 1.0 - (dist ** 2 / 2.0)
+            # Annoy angular distance is backend distance; canonical signed
+            # cosine similarity is 1 - distance^2 / 2.
+            similarity = 1.0 - (float(dist) ** 2 / 2.0)
 
             # Apply threshold
             if min_similarity is not None and similarity < min_similarity:
@@ -371,12 +411,12 @@ class AnnoyANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        _validate_positive_k(k)
         if not self._built or factor_id not in self._id_to_idx:
             return []
 
+        _validate_query(self._embeddings[self._id_to_idx[factor_id]], self.embedding_dim, k)
         idx = self._id_to_idx[factor_id]
-
-        # Get k+1 neighbors (to exclude self)
         k_actual = min(k + 1, len(self._factor_ids))
         indices, distances = self._index.get_nns_by_item(
             idx,

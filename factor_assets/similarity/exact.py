@@ -99,6 +99,9 @@ class SimilarityMeasure(Protocol):
         threshold: float = 0.7,
         max_results: int = 10,
         method: SimilarityMethod = SimilarityMethod.PEARSON,
+        universe_ref: Optional[str] = None,
+        period_start: Optional[str] = None,
+        period_end: Optional[str] = None,
     ) -> list[SimilarityResult]:
         """
         Find factors similar to the given factor.
@@ -190,6 +193,9 @@ class QEPairwiseSimilarity:
         threshold: float = 0.7,
         max_results: int = 10,
         method: SimilarityMethod = SimilarityMethod.PEARSON,
+        universe_ref: Optional[str] = None,
+        period_start: Optional[str] = None,
+        period_end: Optional[str] = None,
     ) -> list[SimilarityResult]:
         """
         Find factors similar to given factor via QE.
@@ -210,9 +216,15 @@ class QEPairwiseSimilarity:
 
         for key, result in self._cache.items():
             # key is (fid_a, fid_b, method_val, universe, start, end)
-            fid_a, fid_b, method_val, _, _, _ = key
+            fid_a, fid_b, method_val, universe, start, end = key
 
             if fid_a != factor_id or method_val != method.value:
+                continue
+            if universe_ref is not None and universe != universe_ref:
+                continue
+            if period_start is not None and start != period_start:
+                continue
+            if period_end is not None and end != period_end:
                 continue
 
             # Avoid duplicates (we store symmetric pairs)
@@ -393,6 +405,9 @@ class CorrelationSimilarity:
         threshold: float = 0.7,
         max_results: int = 10,
         method: SimilarityMethod = SimilarityMethod.PEARSON,
+        universe_ref: Optional[str] = None,
+        period_start: Optional[str] = None,
+        period_end: Optional[str] = None,
     ) -> list[SimilarityResult]:
         """
         Find cached similar factors above threshold.
@@ -404,9 +419,15 @@ class CorrelationSimilarity:
 
         for key, result in self._cache.items():
             # key is (fid_a, fid_b, method_val, universe, start, end)
-            fid_a, fid_b, method_val, _, _, _ = key
+            fid_a, fid_b, method_val, universe, start, end = key
 
             if fid_a != factor_id or method_val != method.value:
+                continue
+            if universe_ref is not None and universe != universe_ref:
+                continue
+            if period_start is not None and start != period_start:
+                continue
+            if period_end is not None and end != period_end:
                 continue
 
             # Avoid duplicates (we store symmetric pairs)

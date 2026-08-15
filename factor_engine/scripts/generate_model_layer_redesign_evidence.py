@@ -162,6 +162,8 @@ def main() -> int:
     from modeling.presets import PREDICTIVE_LINEAR_DEFAULT
     from modeling.timing import vwap_to_vwap_label
     from modeling.contracts import ashare_decision_clock, AFTER_CLOSE_TO_NEXT_VWAP
+    from modeling.artifact import PredictionContext
+    from modeling.contracts import ApplicationWindow
     import numpy as np
     import pandas as pd
 
@@ -243,7 +245,16 @@ def main() -> int:
                 "fit_code_commit": art.manifest.fit_code_commit,
             })
             Xt, yt, dt, st, fm = fold.test_ds.as_matrix()
-            pr = predictor.predict(art, Xt)
+            pr = predictor.predict(
+                art,
+                Xt,
+                PredictionContext(
+                    application_window=ApplicationWindow(start=dt.min(), end=dt.max()),
+                    dates=dt,
+                    asof=dt.max(),
+                    feature_schema_hash=art.manifest.feature_schema_hash,
+                ),
+            )
             all_pred.append(pr); all_y.append(yt); all_dates.append(dt); all_stocks.append(st)
         if all_pred:
             import numpy as np

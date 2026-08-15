@@ -14,6 +14,7 @@ from typing import Any, Callable
 import numpy as np
 
 from modeling.artifact import PredictionContext
+from modeling.contracts import ApplicationWindow
 from modeling.learners.base import BaseLearner, FrozenModel
 
 __all__ = [
@@ -164,6 +165,24 @@ def _shuffle_indices(
     raise ValueError("shuffle mode must be 'global', 'within_date', or 'block'")
 
 
+def _predict_for_diagnostics(artifact: Any, X: np.ndarray, dates: np.ndarray | None) -> np.ndarray:
+    """Score an artifact with explicit temporal context; learners stay training-only."""
+    if not hasattr(artifact, "manifest"):
+        raise TypeError("diagnostics require a ModelArtifact with a manifest")
+    if dates is None:
+        raise ValueError("artifact diagnostics require row-aligned dates")
+    dates_arr = np.asarray(dates)
+    context = PredictionContext(
+        application_window=ApplicationWindow(
+            start=dates_arr.min(), end=dates_arr.max()
+        ),
+        dates=dates_arr,
+        asof=dates_arr.max(),
+        feature_schema_hash=artifact.manifest.feature_schema_hash,
+    )
+    return artifact.predict(X, context=context)
+
+
 def feature_ablation(
     artifact: Any,
     X: np.ndarray,
@@ -174,8 +193,9 @@ def feature_ablation(
     shuffle_mode: str = "global",
     block_size: int | None = None,
     retrain_without_feature_fn: Callable[[int], Any] | None = None,
+    context: PredictionContext,
 ) -> dict[str, Any]:
-    """Separate frozen-model occlusion/permutation from retrained ablation.
+    """Separate frozen-model perturbation from retrained ablation.
 
     Occlusion and permutation perturb an already-frozen artifact and are not
     called ablation.  True feature ablation requires ``retrain_without_feature_fn``
@@ -187,7 +207,7 @@ def feature_ablation(
         raise ValueError("X must be 2-D and aligned with y")
     dates_arr = None if dates is None else np.asarray(dates)
     d = X.shape[1]
-    baseline = float(eval_fn(artifact.predict(X), y))
+    baseline = float(eval_fn(artifact.predict(X, context=context), y))
     occlusion: dict[str, float] = {}
     permutation: dict[str, float] = {}
     retrained: dict[str, float] = {}
@@ -195,13 +215,13 @@ def feature_ablation(
     for j in range(d):
         Xd = X.copy()
         Xd[:, j] = np.nanmean(X[:, j])
-        occlusion[str(j)] = float(baseline - eval_fn(artifact.predict(Xd), y))
+        occlusion[str(j)] = float(baseline - eval_fn(artifact.predict(Xd, context=context), y))
         Xs = X.copy()
         indices = _shuffle_indices(
             len(X), rng, mode=shuffle_mode, dates=dates_arr, block_size=block_size
         )
         Xs[:, j] = X[indices, j]
-        permutation[str(j)] = float(baseline - eval_fn(artifact.predict(Xs), y))
+        permutation[str(j)] = float(baseline - eval_fn(artifact.predict(Xs, context=context), y))
         if retrain_without_feature_fn is not None:
             rebuilt = retrain_without_feature_fn(j)
             X_without = np.delete(X, j, axis=1)

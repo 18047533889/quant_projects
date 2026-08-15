@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from modeling.contracts import (
     AFTER_CLOSE_TO_NEXT_VWAP,
@@ -22,6 +23,7 @@ from modeling.contracts import (
 )
 from modeling.dataset import PanelDataset
 from modeling.learners import PCRLearner
+from modeling.timing import LabelMaturityUnavailableError
 from modeling.trainer import PreprocessingSpec, train_model
 from modeling.walk_forward import purge_before_boundary
 
@@ -77,7 +79,8 @@ def test_train_model_no_validation_purges_test_boundary():
     tail whose labels would mature inside the test window."""
     ds = _panel(n_dates=10, n_stocks=100, seed=3)
     dates = sorted(ds.frame["date"].unique())
-    train_ds = ds.filter_dates(start=dates[0], end=dates[6])   # 7 dates
+    train_ds = ds.filter_dates(start=dates[0], end=dates[7])
+    train_ds.frame.loc[train_ds.frame["date"] == dates[7], "label"] = np.nan
     test_start = dates[7]
     contract = LabelContract(label_name="ret_1", horizon_bars=1)
 
@@ -94,26 +97,25 @@ def test_train_model_no_validation_purges_test_boundary():
     )
     m = result.artifact.manifest
     # selection_train_end advanced to the last row that does NOT leak into test
-    assert m.selection_train_end < str(dates[6])
-    assert m.selection_train_end <= str(dates[5])
+    assert m.selection_train_end <= pd.Timestamp(dates[6], tz="UTC")
+    assert m.selection_train_end <= pd.Timestamp(dates[5], tz="UTC")
 
 
-def test_train_model_no_validation_without_boundary_no_purge():
-    """Backward compatible: no evaluation_boundary -> no purge of the tail."""
+def test_train_model_no_validation_without_boundary_fails_closed_without_maturity_horizon():
+    """A train-only calendar ending at the fit anchor cannot prove label maturity."""
     ds = _panel(n_dates=10, n_stocks=100, seed=4)
     dates = sorted(ds.frame["date"].unique())
     train_ds = ds.filter_dates(start=dates[0], end=dates[6])
     contract = LabelContract(label_name="ret_1", horizon_bars=1)
-    result = train_model(
-        PCRLearner, train_ds, None,
-        preprocessing_spec=PreprocessingSpec(),
-        hyperparam_grid=[{"n_components": 2}],
-        label_contract=contract,
-        decision_clock=ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
-        sample_contract=_lenient(),
-    )
-    m = result.artifact.manifest
-    assert m.selection_train_end == str(dates[6])
+    with pytest.raises(LabelMaturityUnavailableError, match="label not yet mature"):
+        train_model(
+            PCRLearner, train_ds, None,
+            preprocessing_spec=PreprocessingSpec(),
+            hyperparam_grid=[{"n_components": 2}],
+            label_contract=contract,
+            decision_clock=ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
+            sample_contract=_lenient(),
+        )
 
 
 def test_validation_path_still_purges_by_validation_start():
@@ -133,7 +135,7 @@ def test_validation_path_still_purges_by_validation_start():
         evaluation_boundary=dates[8],
     )
     m = result.artifact.manifest
-    assert m.validation_start == str(dates[6])
+    assert m.validation_start == pd.Timestamp(dates[6], tz="UTC")
     # selection_train_end purged against validation start (dates[6]):
     # keep d + 1 < dates[6] -> d <= dates[4]
-    assert m.selection_train_end <= str(dates[4])
+    assert m.selection_train_end <= pd.Timestamp(dates[4], tz="UTC")

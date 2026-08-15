@@ -13,6 +13,7 @@ from typing import Any, Mapping
 import numpy as np
 
 from modeling.artifact import ModelArtifact, PredictionContext
+from modeling.contracts import ApplicationWindow
 from modeling.learners.base import LearnerSpec, get_learner
 from modeling.model_catalog import (
     ModelArtifactCatalog,
@@ -168,6 +169,8 @@ class ScoringContext:
     asof: Any
     clock_id: str
     schema_hash: str
+    application_window: ApplicationWindow | None = None
+    dates: Any = None
     production: bool = True
     max_stale_age_seconds: float | None = None
 
@@ -422,8 +425,8 @@ class FrozenScorer:
     def artifact_id(self) -> str:
         return self._artifact.artifact_id
 
-    def score(self, features: np.ndarray) -> np.ndarray:
-        return self._artifact.predict(np.asarray(features, dtype=np.float64))
+    def score(self, features: np.ndarray, context: PredictionContext) -> np.ndarray:
+        return self._artifact.predict(np.asarray(features, dtype=np.float64), context=context)
 
 
 class FrozenPredictor:
@@ -444,7 +447,17 @@ class FrozenPredictor:
             raise ValueError("SCHEMA_MISMATCH")
         if not self._artifact.is_legal_asof(context.asof):
             raise ValueError("ARTIFACT_NOT_AVAILABLE_ASOF")
-        return self._artifact.predict(np.asarray(features, dtype=np.float64))
+        if context.application_window is None or context.dates is None:
+            raise ValueError("production ScoringContext requires application_window and dates")
+        prediction_context = PredictionContext(
+            application_window=context.application_window,
+            dates=context.dates,
+            asof=context.asof,
+            feature_schema_hash=context.schema_hash,
+        )
+        return self._artifact.predict(
+            np.asarray(features, dtype=np.float64), context=prediction_context
+        )
 
 
 _default_resolver: ArtifactResolver | None = None
@@ -593,7 +606,13 @@ def _score_block(
     if result.artifact is None:
         raise RuntimeError("resolved artifact result is missing its artifact payload")
     artifact = result.artifact
-    values = FrozenScorer(artifact).score(features)
+    prediction_context = PredictionContext(
+        application_window=ApplicationWindow(start=asof, end=asof),
+        dates=np.full(len(np.asarray(features)), asof, dtype=object),
+        asof=asof,
+        feature_schema_hash=artifact.manifest.feature_schema_hash,
+    )
+    values = FrozenScorer(artifact).score(features, prediction_context)
     m = artifact.manifest
     return ModelScoreBlock(
         values=values,

@@ -202,18 +202,14 @@ def missing_rate(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    grouped = values.groupby(asset_col, sort=False)[value_col]
-
-    # Create missing indicator
+    # Shift and roll inside each asset so interleaved rows cannot contaminate
+    # another asset's history. transform preserves the input index and order.
     is_missing = pd.isna(values[value_col]).astype(np.float64)
-
-    # Shift to exclude current, then rolling mean
-    result = (
-        pd.Series(is_missing.values, index=values.index)
-        .groupby(values[asset_col], sort=False)
-        .shift(1)
-        .rolling(window=window, min_periods=min_periods)
-        .mean()
+    result = is_missing.groupby(values[asset_col], sort=False).transform(
+        lambda series: series.shift(1).rolling(
+            window=window,
+            min_periods=min_periods,
+        ).mean()
     )
 
     return result

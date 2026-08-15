@@ -4,6 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from modeling.artifact import PredictionContext
+from modeling.contracts import ApplicationWindow
+
 from modeling.dsl_bridge import (
     ArtifactResolver,
     ArtifactStore,
@@ -60,7 +63,13 @@ def test_frozen_scorer_has_no_fit_surface():
     scorer = FrozenScorer(artifact)
     assert not hasattr(scorer, "fit")
     X = np.random.default_rng(4).normal(size=(8, 2))
-    np.testing.assert_allclose(scorer.score(X), artifact.predict(X))
+    context = PredictionContext(
+        application_window=ApplicationWindow(start="2020-01-01", end="2021-01-01"),
+        dates=np.full(len(X), "2020-06-01", dtype=object),
+        asof="2021-01-01",
+        feature_schema_hash=artifact.manifest.feature_schema_hash,
+    )
+    np.testing.assert_allclose(scorer.score(X, context), artifact.predict(X, context=context))
 
 
 def test_artifact_id_machine_validator_rejects_path_escape():

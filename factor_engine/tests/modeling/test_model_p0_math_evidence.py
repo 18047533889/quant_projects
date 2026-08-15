@@ -43,7 +43,7 @@ from modeling.learners import (
 )
 from modeling.learners.base import LearnerSpec, ModelConvergenceError
 from modeling.sample_policy import resolve_sample_contract
-from modeling.timing import vwap_to_vwap_label
+from modeling.timing import maturity_cutoff_fail_closed, vwap_to_vwap_label
 from modeling.trainer import PreprocessingSpec, train_model
 
 
@@ -70,6 +70,22 @@ def _lenient():
     return SampleAdequacyContract(
         min_raw_obs=500, min_effective_obs=300, min_unique_dates=3,
         min_unique_stocks=30, min_obs_per_parameter=10,
+    )
+
+
+def _patch_authoritative_source_calendar(monkeypatch, source_ds):
+    """Use the source calendar for maturity without widening fit cohorts."""
+    source_calendar = np.sort(
+        pd.to_datetime(source_ds.frame[source_ds.date_col]).unique().to_numpy()
+    )
+
+    def maturity_from_source(final_fit_end, horizon_bars, _bounded_calendar):
+        return maturity_cutoff_fail_closed(
+            final_fit_end, horizon_bars, source_calendar
+        )
+
+    monkeypatch.setattr(
+        "modeling.trainer._maturity_cutoff", maturity_from_source
     )
 
 
@@ -133,8 +149,9 @@ def test_evidence_freshness_and_no_fit_gates_green_at_consistency():
 # --------------------------------------------------------------------------- #
 # 2. artifact availability lookahead
 # --------------------------------------------------------------------------- #
-def test_train_plus_validation_artifact_not_legal_at_train_end():
+def test_train_plus_validation_artifact_not_legal_at_train_end(monkeypatch):
     ds = _panel(n_dates=10, n_stocks=200, seed=1)
+    _patch_authoritative_source_calendar(monkeypatch, ds)
     dates = sorted(ds.frame["date"].unique())
     train_ds = ds.filter_dates(start=dates[0], end=dates[5])
     val_ds = ds.filter_dates(start=dates[6], end=dates[7])
@@ -155,8 +172,11 @@ def test_train_plus_validation_artifact_not_legal_at_train_end():
     # the original train_end (the P0 lookahead).
     assert m.training_cutoff is not None and m.available_at is not None
     assert m.training_cutoff == m.available_at
-    assert m.training_cutoff >= m.final_fit_end
+    assert m.final_fit_end == pd.Timestamp(dates[7]).tz_localize("UTC")
+    assert m.training_cutoff == pd.Timestamp(dates[8]).tz_localize("UTC")
     assert m.training_cutoff > m.train_end  # advanced past selection window
+    assert train_ds.n_rows == 6 * 200
+    assert val_ds.n_rows == 2 * 200
     # At the original train_end the artifact was NOT yet legal.
     assert art.is_legal_asof(asof=pd.Timestamp(m.train_end)) is False
     # It is legal once the final fit (labels) matured.
@@ -238,7 +258,7 @@ def test_pls_coefficients_match_score_ols_oracle(n_components):
 
     ref_std = _pls_reference_predict(Xs, W, P, ys)
     my_std = (learner.predict(frozen, X) - my) / (sy if sy > 0 else 1.0)
-    assert np.max(np.abs(my_std - ref_std) < 1e-9
+    assert np.max(np.abs(my_std - ref_std)) < 1e-9
 
 
 def test_pls_scale_transformed_input_oracle():
@@ -258,7 +278,7 @@ def test_pls_scale_transformed_input_oracle():
     ys = (y - y.mean()) / y.std()
     ref = _pls_reference_predict(Xs, W, P, ys)
     mine = (learner.predict(frozen, X) - y.mean()) / y.std()
-    assert np.max(np.abs(mine - ref) < 1e-9
+    assert np.max(np.abs(mine - ref)) < 1e-9
 
 
 def test_pls_ill_conditioned_input_finite_or_fails_closed():
@@ -307,7 +327,7 @@ def test_pls_matches_sklearn_plsregression_oracle(n_components):
     sk_std = sk.predict(Xs).ravel()
     sk_raw = my + sy * sk_std
     mine = learner.predict(frozen, X)
-    assert np.max(np.abs(mine - sk_raw) < 1e-6, (
+    assert np.max(np.abs(mine - sk_raw)) < 1e-6, (
         f"PLS n_components={n_components} deviates from sklearn PLSRegression "
         f"(max {np.max(np.abs(mine - sk_raw)):.2e})"
     )
@@ -453,13 +473,14 @@ def test_train_model_no_validation_purges_against_evaluation_boundary():
     )
     m = result.artifact.manifest
     # final fit end (max anchor) must stay strictly below the test boundary.
-    assert m.final_fit_end < str(test_boundary)
+    assert m.final_fit_end < pd.Timestamp(test_boundary).tz_localize("UTC")
     # and even the label-matured cutoff never reaches into the test window.
-    assert m.training_cutoff <= str(test_boundary)
+    assert m.training_cutoff <= pd.Timestamp(test_boundary).tz_localize("UTC")
 
 
-def test_train_model_no_validation_without_boundary_records_none():
+def test_train_model_no_validation_without_boundary_uses_source_calendar(monkeypatch):
     ds = _panel(n_dates=8, n_stocks=100, seed=10)
+    _patch_authoritative_source_calendar(monkeypatch, ds)
     dates = sorted(ds.frame["date"].unique())
     train_ds = ds.filter_dates(start=dates[0], end=dates[5])
     contract = vwap_to_vwap_label("ret_1", horizon_bars=1)
@@ -471,7 +492,10 @@ def test_train_model_no_validation_without_boundary_records_none():
         decision_clock=ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
         sample_contract=_lenient(),
     )
-    assert result.artifact.manifest.training_cutoff >= result.artifact.manifest.final_fit_end
+    m = result.artifact.manifest
+    assert m.final_fit_end == pd.Timestamp(dates[5]).tz_localize("UTC")
+    assert m.training_cutoff == pd.Timestamp(dates[6]).tz_localize("UTC")
+    assert train_ds.n_rows == 6 * 100
 
 
 # --------------------------------------------------------------------------- #

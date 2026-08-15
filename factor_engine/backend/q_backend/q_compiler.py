@@ -13,13 +13,15 @@ Hard Gates (文档 §85):
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
+from numbers import Real
 from typing import Any, Literal
 
 from backend.q_backend.q_capability import QBackendCapability
 from backend.q_backend.q_physical_implementation_registry import (
     QPhysicalImplementationRegistry,
-    build_q_physical_implementation_registry,
+    get_installed_q_physical_implementation_registry,
     install_q_physical_implementation_registry,
 )
 
@@ -50,14 +52,18 @@ class QCompiler:
     """
 
     def __init__(self, capability: QBackendCapability | None = None):
-        # The registry is derived from this compiler's executable map.  A
-        # caller-provided capability remains supported for isolated fixtures.
-        self.capability = capability or QBackendCapability(
-            QPhysicalImplementationRegistry(
-                declared_targets=QPhysicalImplementationRegistry._DECLARED_TARGETS
-            )
-        )
+        # Build the executable map before binding the instance-owned registry.
+        # This keeps direct compiler instances and the global compiler on the
+        # same lowering authority without sharing mutable registry state.
         self._operator_map = self._build_operator_map()
+        if capability is None:
+            registry = QPhysicalImplementationRegistry(
+                lowerings=self._operator_map,
+                declared_targets=QPhysicalImplementationRegistry._DECLARED_TARGETS,
+            )
+            self.capability = QBackendCapability(registry)
+        else:
+            self.capability = capability
 
     def executable_lowerings(self) -> dict[str, str]:
         return dict(self._operator_map)
@@ -72,7 +78,7 @@ class QCompiler:
             "add": "+",
             "subtract": "-",
             "multiply": "*",
-            "divide": "/",
+            "divide": "%",
             "negate": "neg",
             "abs": "abs",
             "power": "xexp",
@@ -221,49 +227,77 @@ class QCompiler:
                 raise ValueError(f"{op_name} requires canonical parameter '{name}'")
             return params[name]
 
+        def positive_int(name: str) -> int:
+            value = required_param(name)
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValueError(f"{op_name} parameter '{name}' must be a positive integer")
+            if not math.isfinite(float(value)) or int(value) != value or value <= 0:
+                raise ValueError(f"{op_name} parameter '{name}' must be a positive integer")
+            return int(value)
+
+        def probability(name: str) -> float:
+            value = required_param(name)
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValueError(f"{op_name} parameter '{name}' must be finite in [0, 1]")
+            value = float(value)
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"{op_name} parameter '{name}' must be finite in [0, 1]")
+            return value
+
+        def finite_number(name: str) -> Real:
+            value = required_param(name)
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
+                raise ValueError(f"{op_name} parameter '{name}' must be a finite number")
+            return value
+
         # Preserve the public rank lowering contract before generic function
         # and lambda dispatch can change the emitted expression shape.
-        if op_name in {"rank", "cs_rank"}:
+        if op_name == "cs_rank":
             if len(inputs) != 1:
-                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            return f"rank {inputs[0]}" if op_name == "rank" else "{iasc iasc x}"
+                raise ValueError(f"cs_rank requires 1 input, got {len(inputs)}")
+            return f"({q_func})[{inputs[0]}]"
+
+        if op_name == "rank":
+            if len(inputs) != 1:
+                raise ValueError(f"rank requires 1 input, got {len(inputs)}")
+            return f"rank {inputs[0]}"
 
         # Lag must run before generic q-function/lambda handling.
         if op_name == "lag":
-            periods = required_param("periods")
+            periods = positive_int("periods")
             if len(inputs) != 1:
-                raise ValueError(f"lag requires 1 input, got {len(inputs)}")
+                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"prev {inputs[0]}" if periods == 1 else f"{periods} prev\\{inputs[0]}"
 
         # Windowed special lowerings must run before generic lambda handling.
         if op_name in {"ts_corr", "ts_cov"}:
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
 
         if op_name == "ts_beta":
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 2:
                 raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
             return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
 
         if op_name == "ema":
-            span = required_param("span")
+            span = positive_int("span")
             alpha = 2.0 / (span + 1)
             if len(inputs) != 1:
                 raise ValueError(f"ema requires 1 input, got {len(inputs)}")
             return f"ema[{alpha};{inputs[0]}]"
 
         if op_name == "wma":
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 1:
                 raise ValueError(f"wma requires 1 input, got {len(inputs)}")
             return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
 
         if op_name == "clip":
-            lower = required_param("lower")
-            upper = required_param("upper")
+            lower = finite_number("lower")
+            upper = finite_number("upper")
             if len(inputs) != 1:
                 raise ValueError(f"clip requires 1 input, got {len(inputs)}")
             return f"({inputs[0]}|{lower})&{upper}"
@@ -274,16 +308,16 @@ class QCompiler:
             return f"?[{inputs[0]};{inputs[1]};{inputs[2]}]"
 
         if op_name == "fillna":
-            fill_value = required_param("fill_value")
+            fill_value = finite_number("fill_value")
             if len(inputs) != 1:
                 raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
             return f"{inputs[0]}^{fill_value}"
 
         if op_name in {"ts_quantile", "cs_quantile"}:
-            q_val = required_param("q")
+            q_val = probability("q")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            window = required_param("window") if op_name.startswith("ts_") else None
+            window = positive_int("window") if op_name.startswith("ts_") else None
             return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}" if window else f"{q_val} quantile {inputs[0]}"
 
         if op_name == "cs_percentile_rank":
@@ -317,13 +351,13 @@ class QCompiler:
 
         # 滚动窗口算子
         if op_name.startswith("ts_") and q_func in {"mavg", "msum", "mdev", "mmin", "mmax", "mcount"}:
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{window} {q_func} {inputs[0]}"
 
         if op_name == "sma":
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 1:
                 raise ValueError(f"sma requires 1 input, got {len(inputs)}")
             return f"{window} mavg {inputs[0]}"
@@ -336,20 +370,20 @@ class QCompiler:
 
         # Correlation/Covariance/Beta
         if op_name in {"ts_corr", "ts_cov"}:
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
 
         if op_name == "ts_beta":
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 2:
                 raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
             return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
 
         # EMA (exponential moving average)
         if op_name == "ema":
-            span = required_param("span")
+            span = positive_int("span")
             alpha = 2.0 / (span + 1)
             if len(inputs) != 1:
                 raise ValueError(f"ema requires 1 input, got {len(inputs)}")
@@ -357,15 +391,15 @@ class QCompiler:
 
         # WMA (weighted moving average)
         if op_name == "wma":
-            window = required_param("window")
+            window = positive_int("window")
             if len(inputs) != 1:
                 raise ValueError(f"wma requires 1 input, got {len(inputs)}")
             return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
 
         # Clip
         if op_name == "clip":
-            lower = required_param("lower")
-            upper = required_param("upper")
+            lower = finite_number("lower")
+            upper = finite_number("upper")
             if len(inputs) != 1:
                 raise ValueError(f"clip requires 1 input, got {len(inputs)}")
             return f"({inputs[0]}|{lower})&{upper}"
@@ -378,17 +412,17 @@ class QCompiler:
 
         # Fill operations
         if op_name == "fillna":
-            fill_value = required_param("fill_value")
+            fill_value = finite_number("fill_value")
             if len(inputs) != 1:
                 raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
             return f"{inputs[0]}^{fill_value}"
 
         # Quantile
         if op_name in {"ts_quantile", "cs_quantile"}:
-            q_val = required_param("q")
+            q_val = probability("q")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            window = required_param("window") if op_name.startswith("ts_") else None
+            window = positive_int("window") if op_name.startswith("ts_") else None
             if window:
                 return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}"
             else:
@@ -511,13 +545,17 @@ _COMPILER: QCompiler | None = None
 
 
 def get_q_compiler() -> QCompiler:
-    """获取全局 q 编译器。"""
+    """Return the global compiler bound to the installed registry authority."""
     global _COMPILER
+    installed = get_installed_q_physical_implementation_registry()
     if _COMPILER is None:
-        _COMPILER = QCompiler()
-        registry = build_q_physical_implementation_registry(
-            _COMPILER.executable_lowerings(),
-            _COMPILER.declared_targets(),
+        _COMPILER = QCompiler(
+            QBackendCapability(installed) if installed is not None else None
         )
-        install_q_physical_implementation_registry(registry)
+        install_q_physical_implementation_registry(_COMPILER.capability.registry)
+    elif installed is not None and _COMPILER.capability.registry is not installed:
+        raise RuntimeError(
+            "q physical implementation registry was replaced after compiler "
+            "bootstrap; restart with the intended registry installed first"
+        )
     return _COMPILER

@@ -90,10 +90,30 @@ import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_assets
+import importlib
+import pkgutil
 from factor_assets.contracts.asset import FactorAsset, AssetMetadata
 from factor_assets.registry import AssetRepository
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
+
+failures = {}
+modules = [factor_assets.__name__]
+modules.extend(
+    info.name
+    for info in pkgutil.walk_packages(
+        factor_assets.__path__, prefix=f"{factor_assets.__name__}."
+    )
+    if not info.name.startswith("factor_assets.tests")
+    and info.name not in {"factor_assets.setup", "factor_assets.examples_usage"}
+)
+for module_name in sorted(modules):
+    try:
+        importlib.import_module(module_name)
+    except Exception as exc:
+        failures[module_name] = f"{type(exc).__name__}: {exc}"
+if failures:
+    raise AssertionError(f"Broken shipped imports: {failures}")
 
 print('factor_assets imported')
 print(f'FactorAsset: {FactorAsset}')

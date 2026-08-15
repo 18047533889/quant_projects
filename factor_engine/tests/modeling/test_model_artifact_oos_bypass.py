@@ -56,22 +56,22 @@ def _context(dates, *, start="2020-07-03", end="2020-07-31", asof="2020-07-31", 
 
 
 def test_direct_predict_requires_explicit_context():
-    with pytest.raises(ValueError, match="production predict requires PredictionContext"):
+    with pytest.raises(TypeError, match="context"):
         _artifact().predict(np.ones((2, 2)))
 
 
 def test_direct_predict_research_escape_hatch_is_explicit():
-    actual = _artifact().predict(np.array([[3.0, 6.0], [5.0, 10.0]]), research_only=True)
+    actual = _artifact().predict(np.array([[3.0, 6.0], [5.0, 10.0]]), context=_context(["2020-07-04", "2020-07-05"]))
     np.testing.assert_allclose(actual, [2.0, 4.0])
 
 
 def test_missing_window_dates_and_schema_are_rejected():
     artifact = _artifact()
     X = np.ones((2, 2))
-    with pytest.raises(ValueError, match="requires application_window"):
-        artifact.predict_oos(X, application_window=None, dates=[], asof="2020-07-31", feature_schema_hash=SCHEMA_HASH)
-    with pytest.raises(ValueError, match="requires dates"):
-        artifact.predict_oos(X, application_window=ApplicationWindow(start="2020-07-03"), dates=None, asof="2020-07-31", feature_schema_hash=SCHEMA_HASH)
+    with pytest.raises(TypeError, match="PredictionContext"):
+        artifact.predict_oos(X, context=None)
+    with pytest.raises(TypeError, match="PredictionContext"):
+        artifact.predict_oos(X, context=None)
     with pytest.raises(ValueError, match="feature schema mismatch"):
         artifact.predict(X, context=_context(["2020-07-04", "2020-07-05"], schema="wrong"))
 

@@ -1,29 +1,35 @@
-"""
-Factor Assets Campaigns: Optimization campaign coordination and ledger integration.
+"""Campaign coordination and ledger integration.
 
-Coordinates with research_control for campaign lifecycle tracking.
+Only symbols implemented in this distribution are exported. Split-ledger
+storage is not shipped here, so this namespace remains usable with an injected
+ledger while advertising that the complete campaign surface is research-only.
 """
 
 from factor_assets.campaigns.campaign_coordinator import (
     CampaignCoordinator,
-    CampaignSpec,
-    CampaignStatus,
     CampaignState,
+    CampaignConfig,
+    CampaignBudget,
+    Campaign,
 )
-from factor_assets.campaigns.ledger_adapter import (
-    CampaignLedgerAdapter,
-    TrialRecord,
-)
-from factor_assets.campaigns.split_ledger import (
-    SplitContaminationLedger,
-)
+from factor_assets.campaigns.ledger_adapter import LedgerAdapter
+
+RESEARCH_ONLY = True
+
+# Compatibility aliases for names used by the pre-extraction contract.
+CampaignSpec = CampaignConfig
+CampaignStatus = CampaignState
+CampaignLedgerAdapter = LedgerAdapter
 
 __all__ = [
     "CampaignCoordinator",
+    "CampaignConfig",
     "CampaignSpec",
-    "CampaignStatus",
     "CampaignState",
+    "CampaignStatus",
+    "CampaignBudget",
+    "Campaign",
+    "LedgerAdapter",
     "CampaignLedgerAdapter",
-    "TrialRecord",
-    "SplitContaminationLedger",
+    "RESEARCH_ONLY",
 ]

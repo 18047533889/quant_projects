@@ -76,7 +76,7 @@ class TestANNSearchResult:
         if not ANN_MODULE_AVAILABLE:
             pytest.skip("ANN module not available")
 
-        with pytest.raises(ValueError, match="distance must be non-negative"):
+        with pytest.raises(ValueError, match="distance must be finite and non-negative"):
             ANNSearchResult(
                 factor_id="F001",
                 distance=-0.1,
@@ -370,3 +370,91 @@ class TestANNIntegration:
         for r1, r2 in zip(results1, results2):
             assert r1.factor_id == r2.factor_id
             assert abs(r1.distance - r2.distance) < 1e-6
+
+
+    @pytest.mark.parametrize("distance", [float("nan"), float("inf"), float("-inf"), -0.1])
+    def test_distance_must_be_finite_and_nonnegative(self, distance):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            ANNSearchResult(factor_id="F001", distance=distance)
+
+
+class TestBackendIndependentANNContracts:
+    @pytest.mark.parametrize("k", [0, -1, 1.5, True, "1", None])
+    def test_validate_query_rejects_nonpositive_noninteger_k(self, k):
+        from factor_assets.similarity.ann import _validate_query
+
+        with pytest.raises(ValueError, match="k must be a positive integer"):
+            _validate_query(np.array([1.0, 0.0]), 2, k)
+
+
+class ANNContractMixin:
+    backend_class = None
+
+    def make_index(self):
+        kwargs = {"n_trees": 20} if self.backend_class is AnnoyANNIndex else {"normalize": True}
+        return self.backend_class(embedding_dim=2, **kwargs)
+
+    def test_signed_score_and_distance_contract(self):
+        index = self.make_index()
+        index.build(["same", "orthogonal", "opposite"], np.array([[1., 0.], [0., 1.], [-1., 0.]]))
+        results = index.search(np.array([1., 0.]), k=3)
+        by_id = {result.factor_id: result for result in results}
+        assert by_id["same"].similarity_score == pytest.approx(1.0, abs=1e-5)
+        assert by_id["orthogonal"].similarity_score == pytest.approx(0.0, abs=1e-5)
+        assert by_id["opposite"].similarity_score == pytest.approx(-1.0, abs=1e-5)
+        assert all(result.distance >= 0 for result in results)
+        assert [r.similarity_score for r in results] == sorted(
+            (r.similarity_score for r in results), reverse=True
+        )
+
+    @pytest.mark.parametrize("k", [0, -1, 1.5, True])
+    def test_invalid_k_rejected(self, k):
+        index = self.make_index()
+        index.build(["F001"], np.array([[1., 0.]]))
+        with pytest.raises(ValueError, match="k must be a positive integer"):
+            index.search(np.array([1., 0.]), k=k)
+
+    @pytest.mark.parametrize("k", [0, -1, 1.5, True])
+    def test_invalid_k_rejected_before_unknown_id(self, k):
+        index = self.make_index()
+        index.build(["F001"], np.array([[1., 0.]]))
+        with pytest.raises(ValueError, match="k must be a positive integer"):
+            index.search_by_id("UNKNOWN", k=k)
+
+    def test_query_shape_dimension_and_zero_rejected(self):
+        index = self.make_index()
+        index.build(["F001"], np.array([[1., 0.]]))
+        for query, message in [
+            (np.array([[1., 0.]]), "1D"),
+            (np.array([1., 0., 0.]), "Expected embedding_dim"),
+            (np.array([0., 0.]), "zero query vectors"),
+        ]:
+            with pytest.raises(ValueError, match=message):
+                index.search(query, k=1)
+
+    def test_duplicate_and_zero_build_failures_preserve_index(self):
+        index = self.make_index()
+        index.build(["OLD"], np.array([[1., 0.]]))
+        with pytest.raises(ValueError, match="factor_ids must be unique"):
+            index.build(["DUP", "DUP"], np.array([[1., 0.], [0., 1.]]))
+        with pytest.raises(ValueError, match="zero vectors"):
+            index.build(["ZERO"], np.array([[0., 0.]]))
+        assert index.num_factors == 1
+        assert index.search(np.array([1., 0.]), k=1)[0].factor_id == "OLD"
+
+    def test_rebuild_replaces_previous_contents(self):
+        index = self.make_index()
+        index.build(["OLD"], np.array([[1., 0.]]))
+        index.build(["NEW"], np.array([[0., 1.]]))
+        assert index.search_by_id("OLD") == []
+        assert index.num_factors == 1
+
+
+@pytest.mark.skipif(not FAISS_AVAILABLE, reason="faiss not available")
+class TestFaissANNContract(ANNContractMixin):
+    backend_class = FaissANNIndex
+
+
+@pytest.mark.skipif(not ANNOY_AVAILABLE, reason="annoy not available")
+class TestAnnoyANNContract(ANNContractMixin):
+    backend_class = AnnoyANNIndex

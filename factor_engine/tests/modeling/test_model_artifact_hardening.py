@@ -84,8 +84,8 @@ def test_roundtrip_preserves_new_lineage_fields_and_emits_plain_data(tmp_path):
     payload = artifact.to_dict()
 
     assert payload["schema_version"] == ARTIFACT_SCHEMA_VERSION
-    assert payload["manifest"]["selection_train_end"] == "2020-12-31"
-    assert payload["manifest"]["final_fit_end"] == "2021-06-30"
+    assert payload["manifest"]["selection_train_end"] == "2020-12-31T00:00:00+00:00"
+    assert payload["manifest"]["final_fit_end"] == "2021-06-30T00:00:00+00:00"
     assert payload["manifest"]["refit_used_validation"] is True
     assert isinstance(payload["frozen"]["params"]["coef"], list)
 
@@ -111,7 +111,7 @@ def test_schema_and_lineage_gates_fail_closed():
         ModelArtifact.from_dict(future_schema, artifact.learner)
 
     tampered = artifact.to_dict()
-    tampered["manifest"]["available_at"] = "2021-07-03"
+    tampered["manifest"]["available_at"] = "2021-07-03T00:00:00+00:00"
     with pytest.raises(ValueError, match="lineage hash mismatch"):
         ModelArtifact.from_dict(tampered, artifact.learner)
 

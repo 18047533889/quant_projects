@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import numbers
 import os
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -29,11 +31,90 @@ __all__ = [
     "PredictionContext",
     "ModelArtifact",
     "FrozenPreprocessing",
+    "TimestampContractError",
+    "normalize_timestamp",
+    "normalize_timestamps",
     "PREPROCESSING_IDENTITY_KINDS",
     "ARTIFACT_SCHEMA_VERSION",
 ]
 
 ARTIFACT_SCHEMA_VERSION = 1
+
+
+class TimestampContractError(ValueError):
+    """Raised when a model timestamp violates the UTC contract."""
+
+
+def _timestamp_timezone(value: Any) -> bool | None:
+    """Return aware/naive classification, or raise for unsupported values."""
+    if isinstance(value, (bool, np.bool_)) or isinstance(value, numbers.Number):
+        raise TimestampContractError(f"numeric timestamps are not allowed: {value!r}")
+    if isinstance(value, np.datetime64):
+        return False
+    if isinstance(value, (bool, int, float, complex, np.number)):
+        raise TimestampContractError(f"invalid timestamp {value!r}")
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return value.tzinfo is not None
+    if isinstance(value, str):
+        try:
+            parsed = pd.Timestamp(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise TimestampContractError(
+                f"invalid timestamp {value!r}"
+            ) from exc
+        if pd.isna(parsed):
+            raise TimestampContractError(f"invalid timestamp {value!r}")
+        return parsed.tzinfo is not None
+    try:
+        parsed = pd.Timestamp(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TimestampContractError(f"invalid timestamp {value!r}") from exc
+    if pd.isna(parsed):
+        raise TimestampContractError(f"invalid timestamp {value!r}")
+    return parsed.tzinfo is not None
+
+
+def normalize_timestamp(value: Any, *, name: str = "timestamp") -> pd.Timestamp:
+    """Normalize one timestamp to UTC; naive values are repository-local UTC."""
+    if value is None:
+        raise TimestampContractError(f"{name} cannot be None")
+    try:
+        _timestamp_timezone(value)
+        parsed = pd.Timestamp(value)
+        if pd.isna(parsed):
+            raise ValueError
+        if parsed.tzinfo is None:
+            return parsed.tz_localize("UTC")
+        return parsed.tz_convert("UTC")
+    except TimestampContractError:
+        raise
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TimestampContractError(f"invalid {name}: {value!r}") from exc
+
+
+def normalize_timestamps(values: Any, *, name: str = "timestamps") -> np.ndarray:
+    """Normalize a one-dimensional timestamp sequence with strict timezone rules."""
+    raw_input = np.asarray(values)
+    if raw_input.ndim != 1:
+        raise TimestampContractError(f"{name} must be one-dimensional")
+    if np.issubdtype(raw_input.dtype, np.datetime64):
+        raw = [pd.Timestamp(value) for value in raw_input]
+    else:
+        raw = np.asarray(values, dtype=object)
+    if len(raw) == 0:
+        return np.asarray([], dtype=object)
+    kinds = {_timestamp_timezone(value) for value in raw}
+    if len(kinds) > 1:
+        raise TimestampContractError(
+            f"{name} mixes timezone-naive and timezone-aware values"
+        )
+    try:
+        return np.asarray(
+            [normalize_timestamp(value, name=f"{name}[{i}]") for i, value in enumerate(raw)],
+            dtype=object,
+        )
+    except TimestampContractError:
+        raise
 
 
 @dataclass(frozen=True)
@@ -57,8 +138,8 @@ class PredictionContext:
             raise ValueError("PredictionContext.asof is required")
         if not isinstance(self.feature_schema_hash, str) or not self.feature_schema_hash:
             raise ValueError("PredictionContext.feature_schema_hash is required")
-        normalized_dates = self.application_window.normalize_dates(dates)
-        normalized_asof = self.application_window.normalize_boundary(self.asof, "asof")
+        normalized_dates = normalize_timestamps(self.dates, name="PredictionContext.dates")
+        normalized_asof = normalize_timestamp(self.asof, name="PredictionContext.asof")
         object.__setattr__(self, "dates", normalized_dates)
         object.__setattr__(self, "asof", normalized_asof)
 
@@ -165,6 +246,28 @@ class ModelArtifactManifest:
             object.__setattr__(self, "final_fit_end", self.train_end)
         if self.final_fit_start is None:
             object.__setattr__(self, "final_fit_start", self.train_start)
+
+        # All manifest temporal fields share the same strict UTC boundary.
+        temporal_fields = (
+            "train_start", "train_end", "validation_start", "validation_end",
+            "selection_train_end", "final_fit_start", "final_fit_end",
+            "final_fit_anchor_end", "label_maturity_cutoff", "fit_completed_at",
+            "artifact_available_at", "activation_at", "training_cutoff", "available_at",
+        )
+        kinds = {
+            _timestamp_timezone(getattr(self, field_name))
+            for field_name in temporal_fields
+            if getattr(self, field_name) not in (None, "")
+        }
+        if len(kinds) > 1:
+            raise TimestampContractError("manifest mixes timezone-naive and timezone-aware values")
+        for field_name in temporal_fields:
+            value = getattr(self, field_name)
+            if value not in (None, ""):
+                object.__setattr__(
+                    self, field_name,
+                    normalize_timestamp(value, name=f"manifest.{field_name}"),
+                )
 
         # MF-P0-005: Backward compatibility + fail-closed ordering invariants.
         # If new fields are not set, derive from legacy fields.
@@ -316,15 +419,11 @@ class FrozenPreprocessing:
                 )
             if dates is None:
                 raise ValueError("application_window validation requires dates")
-            dates_array = np.asarray(dates)
-            if dates_array.ndim != 1:
-                raise ValueError("dates must be a one-dimensional sequence")
+            dates_array = normalize_timestamps(dates, name="dates")
             if len(dates_array) != len(X):
                 raise ValueError(
                     f"dates length {len(dates_array)} does not match X rows {len(X)}"
                 )
-            if not np.issubdtype(dates_array.dtype, np.datetime64):
-                dates_array = pd.to_datetime(dates_array).to_numpy()
             validation_window = application_window
             if np.issubdtype(dates_array.dtype, np.datetime64):
                 from modeling.contracts import ApplicationWindow
@@ -379,6 +478,8 @@ def _thaw(value: Any) -> Any:
         return [_thaw(v) for v in value]
     if isinstance(value, np.ndarray):
         return value.tolist()
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return value.isoformat()
     if isinstance(value, np.integer):
         return int(value)
     if isinstance(value, np.floating):
@@ -469,21 +570,27 @@ class ModelArtifact:
         return self.manifest.artifact_id
 
     def cache_key(self) -> str:
-        """§52 cache key — includes asof / vintage / cutoff."""
+        """§52 cache key — includes normalized temporal identity fields."""
         m = self.manifest
+
+        def _stable(value: Any) -> str:
+            if value in (None, ""):
+                return ""
+            return normalize_timestamp(value, name="artifact.cache_key").isoformat()
+
         return "|".join(
             [
-                m.model_name,
-                m.model_version,
-                m.training_cutoff,
-                m.available_at,
-                m.validation_end or "",
-                m.feature_schema_hash,
-                m.label_contract_id,
+                str(m.model_name),
+                str(m.model_version),
+                _stable(m.training_cutoff),
+                _stable(m.available_at),
+                _stable(m.validation_end),
+                str(m.feature_schema_hash),
+                str(m.label_contract_id),
                 self.preprocessing.state_hash(),
-                m.data_source_hash,
-                m.universe_hash,
-                self.frozen.metadata.get("code_hash", ""),
+                str(m.data_source_hash),
+                str(m.universe_hash),
+                str(self.frozen.metadata.get("code_hash", "")),
             ]
         )
 
@@ -549,9 +656,7 @@ class ModelArtifact:
             raise ValueError("application window contains dates after prediction asof")
 
         X_array = np.asarray(X, dtype=np.float64)
-        dates_array = np.asarray(dates)
-        if dates_array.ndim != 1:
-            raise ValueError("dates must be a one-dimensional sequence")
+        dates_array = normalize_timestamps(dates, name="dates")
         if len(dates_array) != len(X_array):
             raise ValueError(
                 f"dates length {len(dates_array)} does not match X rows {len(X_array)}"
@@ -668,11 +773,7 @@ class ModelArtifact:
 
 
 def _cmp_less(a: Any, b: Any) -> bool:
-    """``a < b`` with str/Timestamp normalisation."""
-    try:
-        return bool(a < b)
-    except TypeError:
-        try:
-            return bool(pd.Timestamp(str(a)) < pd.Timestamp(str(b)))
-        except Exception:
-            raise TypeError(f"cannot compare asof values {a!r} < {b!r}")
+    """Compare model timestamps only after strict UTC normalization."""
+    return normalize_timestamp(a, name="comparison.left") < normalize_timestamp(
+        b, name="comparison.right"
+    )

@@ -556,3 +556,56 @@ class TestImputeWithFallback:
 
         with pytest.raises(ValueError, match="Unknown fallback_strategy"):
             impute_with_fallback(df, fallback_strategy="invalid")
+
+
+class TestMissingRateAssetLayoutMetamorphics:
+    """Missing-rate history is local to an asset, regardless of row layout."""
+
+    @staticmethod
+    def _frame(layout: str) -> pd.DataFrame:
+        dates = pd.date_range("2022-02-01", periods=7)
+        series = {
+            "A": [1.0, np.nan, 3.0, np.nan, np.nan, 6.0, 7.0],
+            "B": [np.nan, 2.0, 3.0, 4.0, np.nan, 6.0, np.nan],
+        }
+        rows = []
+        if layout == "interleaved":
+            for i, date in enumerate(dates):
+                for asset in ("A", "B"):
+                    rows.append((asset, date, series[asset][i]))
+        else:
+            asset_order = ("B", "A") if layout == "blocks_reordered" else ("A", "B")
+            for asset in asset_order:
+                rows.extend((asset, date, series[asset][i]) for i, date in enumerate(dates))
+        frame = pd.DataFrame(rows, columns=["asset_id", "date", "value"])
+        frame.index = pd.Index(np.arange(200, 200 + 5 * len(frame), 5), name="row_id")
+        return frame
+
+    @staticmethod
+    def _keyed(frame: pd.DataFrame, result: pd.Series) -> pd.Series:
+        aligned = frame[["asset_id", "date"]].copy()
+        aligned["result"] = result
+        return aligned.set_index(["asset_id", "date"])["result"].sort_index()
+
+    def test_interleaved_assets_match_isolated_execution(self):
+        interleaved = self._frame("interleaved")
+        actual = missing_rate(interleaved, window=3, min_periods=2)
+
+        assert actual.index.equals(interleaved.index)
+        expected = pd.Series(index=interleaved.index, dtype=float)
+        for _, group in interleaved.groupby("asset_id", sort=False):
+            expected.loc[group.index] = missing_rate(group, window=3, min_periods=2)
+
+        expected.name = actual.name
+        pd.testing.assert_series_equal(actual, expected)
+
+    def test_block_reorder_preserves_key_alignment(self):
+        original = self._frame("blocks")
+        reordered = self._frame("blocks_reordered")
+
+        expected = self._keyed(original, missing_rate(original, window=3, min_periods=2))
+        actual_result = missing_rate(reordered, window=3, min_periods=2)
+        assert actual_result.index.equals(reordered.index)
+        actual = self._keyed(reordered, actual_result)
+
+        pd.testing.assert_series_equal(actual, expected)

@@ -120,6 +120,9 @@ def _free_parameter_count(candidate: dict[str, Any]) -> int:
     return max(1, len(candidate))
 
 
+def _schema_hash(columns: list[str]) -> str:
+    import hashlib
+    return hashlib.sha256("|".join(columns).encode("utf-8")).hexdigest()
 def _maturity_cutoff(
     final_fit_end: str,
     horizon_bars: int,
@@ -557,7 +560,7 @@ def train_model(
         refit_used_validation=refit_used_validation,
         decision_clock_id=decision_clock.decision_at,
         label_contract_id=label_contract.label_name,
-        feature_schema_hash=feature_schema_hash,
+        feature_schema_hash=feature_schema_hash or _schema_hash(train_ds.feature_cols),
         data_source_hash=data_source_hash,
         universe_hash=universe_hash,
         hyperparameters=dict(best_hyperparams),

@@ -75,7 +75,7 @@ def _clock():
 def test_train_plus_validation_cutoff_advances_past_train_end():
     ds = _multi_year_panel()
     train_ds = ds.filter_dates(start="2019-01-01", end="2023-12-31")
-    val_ds = ds.filter_dates(start="2024-01-01", end="2024-12-31")
+    val_ds = ds.filter_dates(start="2024-01-01", end="2025-01-02")
 
     result = train_model(
         PCRLearner, train_ds, val_ds,
@@ -85,14 +85,16 @@ def test_train_plus_validation_cutoff_advances_past_train_end():
         decision_clock=_clock(),
         sample_contract=_lenient(),
         retrain_policy="train_plus_validation",
+        evaluation_boundary=pd.Timestamp("2025-01-02"),
     )
     art = result.artifact
     m = art.manifest
 
-    # The final fit consumed the whole validation window.
+    # The final fit consumed every validation row whose label matured before test.
     assert m.refit_used_validation is True
     assert m.final_fit_start is not None
-    assert m.final_fit_end == m.validation_end
+    assert m.final_fit_end == pd.Timestamp("2024-12-31", tz="UTC")
+    assert m.validation_end == pd.Timestamp("2025-01-02", tz="UTC")
     assert m.final_fit_end != m.train_end
 
     # Selection happened on the train window only.
@@ -136,7 +138,7 @@ def test_train_only_keeps_cutoff_at_train_window():
 def test_no_validation_train_to_test_cutoff_stays_train_window():
     """validation_ds is None (train→test only): final fit is the train window."""
     ds = _multi_year_panel()
-    train_ds = ds.filter_dates(start="2019-01-01", end="2023-12-31")
+    train_ds = ds.filter_dates(start="2019-01-01", end="2024-01-02")
 
     result = train_model(
         PCRLearner, train_ds, None,
@@ -145,10 +147,12 @@ def test_no_validation_train_to_test_cutoff_stays_train_window():
         label_contract=_contract(),
         decision_clock=_clock(),
         sample_contract=_lenient(),
+        evaluation_boundary=pd.Timestamp("2024-01-02"),
     )
     m = result.artifact.manifest
     assert m.refit_used_validation is False
     assert m.final_fit_end == m.train_end
+    assert m.final_fit_end == pd.Timestamp("2023-12-29", tz="UTC")
     assert m.training_cutoff >= m.final_fit_end
     assert m.available_at >= m.final_fit_end
 
@@ -187,9 +191,9 @@ def test_manifest_roundtrips_new_fields():
         training_cutoff="2024-12-31", available_at="2024-12-31",
     )
     assert m.refit_used_validation is True
-    assert m.selection_train_end == "2023-12-31"
-    assert m.final_fit_start == "2020-01-01"
-    assert m.final_fit_end == "2024-12-31"
+    assert m.selection_train_end == pd.Timestamp("2023-12-31", tz="UTC")
+    assert m.final_fit_start == pd.Timestamp("2020-01-01", tz="UTC")
+    assert m.final_fit_end == pd.Timestamp("2024-12-31", tz="UTC")
     # lineage hash includes the new lineage facts (different window → different hash)
     m2 = ModelArtifactManifest(
         model_name="x", model_version="1", artifact_id="a",

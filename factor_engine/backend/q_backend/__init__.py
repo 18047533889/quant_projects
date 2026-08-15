@@ -52,4 +52,4 @@ from backend.q_backend.q_process_manager import (
 )
 from backend.q_backend.q_adapter import QTypeAdapter
 from backend.q_backend.q_executor import QExecutor
-from backend.q_backend.q_compiler import QCompiler
+from backend.q_backend.q_compiler import QCompiler, QRegionPlan, get_q_compiler

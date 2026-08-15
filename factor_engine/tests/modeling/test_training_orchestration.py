@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from modeling.artifact import ModelArtifact
+from modeling.artifact import ModelArtifact, PredictionContext
+from modeling.contracts import ApplicationWindow
 from modeling.contracts import (
     AFTER_CLOSE_TO_NEXT_VWAP,
     ModelExecutionClass,
@@ -359,7 +360,7 @@ def test_train_model_end_to_end():
         hyperparam_grid=grid,
         label_contract=contract,
         decision_clock=clock,
-        feature_schema_hash="abc",
+        feature_schema_hash="test-schema",
         universe_hash="u1",
         data_source_hash="d1",
         model_version="1.0",
@@ -372,7 +373,13 @@ def test_train_model_end_to_end():
     assert result.selected_hyperparams["n_components"] in (2, 3)
     assert len(result.validation_scores) == 2
     X_test = test_ds.as_matrix()[0]
-    pred = result.artifact.predict(X_test)
+    ctx = PredictionContext(
+        application_window=ApplicationWindow(start=dates[8], end=dates[9]),
+        dates=np.asarray(test_ds.frame["date"]),
+        asof=dates[9],
+        feature_schema_hash=result.artifact.manifest.feature_schema_hash,
+    )
+    pred = result.artifact.predict(X_test, context=ctx)
     assert np.isfinite(pred).all()
     assert result.artifact.manifest.preprocessing_state_hash != ""
     assert isinstance(result.artifact, ModelArtifact)
@@ -477,21 +484,48 @@ def test_predictor_never_calls_fit():
     spy = result.artifact.learner
     assert spy.fit_calls >= 1
     calls_before = spy.fit_calls
-    X = ds.as_matrix()[0][:20]
-    pred = Predictor().predict(result.artifact, X)
+    X = ds.as_matrix()[0][1000:1020]
+    ctx = PredictionContext(
+        application_window=ApplicationWindow(start=dates[5], end=dates[6]),
+        dates=np.asarray(ds.frame.iloc[1000:1020]["date"]),
+        asof=dates[6],
+        feature_schema_hash=result.artifact.manifest.feature_schema_hash,
+    )
+    pred = Predictor().predict(result.artifact, X, ctx)
     assert np.isfinite(pred).all()
     assert spy.fit_calls == calls_before
 
     # panel + batch parity
     ds_slice = PanelDataset(
-        frame=ds.frame.iloc[:40].reset_index(drop=True),
+        frame=ds.frame.iloc[1000:1040].reset_index(drop=True),
         date_col="date", stock_col="stock",
         feature_cols=["f0", "f1", "f2", "f3"], label_col=None,
     )
-    series = predict_panel(result.artifact, ds_slice)
+    panel_dates = pd.DatetimeIndex(ds_slice.frame["date"])
+    panel_ctx = PredictionContext(
+        application_window=ApplicationWindow(start=dates[5], end=dates[6]),
+        dates=panel_dates,
+        asof=dates[6],
+        feature_schema_hash=result.artifact.manifest.feature_schema_hash,
+    )
+    series = predict_panel(result.artifact, ds_slice, panel_ctx)
     assert len(series) == 40
     batches = [ds_slice.as_matrix()[0][:20], ds_slice.as_matrix()[0][20:]]
-    out = batch_predict(result.artifact, batches)
+    batch_contexts = [
+        PredictionContext(
+            application_window=panel_ctx.application_window,
+            dates=panel_dates[:20],
+            asof=panel_ctx.asof,
+            feature_schema_hash=panel_ctx.feature_schema_hash,
+        ),
+        PredictionContext(
+            application_window=panel_ctx.application_window,
+            dates=panel_dates[20:],
+            asof=panel_ctx.asof,
+            feature_schema_hash=panel_ctx.feature_schema_hash,
+        ),
+    ]
+    out = batch_predict(result.artifact, batches, batch_contexts)
     assert len(out) == 2
     assert np.allclose(np.concatenate(out), series.to_numpy())
 

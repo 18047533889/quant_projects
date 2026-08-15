@@ -45,6 +45,20 @@ class LabelBundle:
         if not self.label_end_time:
             raise ValueError("label_end_time is required")
 
+        if self.values.ndim not in (1, 2):
+            raise ValueError("LabelBundle values must be 1D or 2D")
+        n_times = self.values.shape[0]
+        for name, timing in (("decision_time", self.decision_time), ("label_start_time", self.label_start_time), ("label_end_time", self.label_end_time)):
+            if len(timing) != n_times:
+                raise ValueError(f"{name} length {len(timing)} must match label time length {n_times}")
+        if self.execution_time and len(self.execution_time) != n_times:
+            raise ValueError(f"execution_time length {len(self.execution_time)} must match label time length {n_times}")
+        try:
+            if any(self.decision_time[i] >= self.decision_time[i + 1] for i in range(n_times - 1)):
+                raise ValueError("decision_time must be strictly increasing")
+        except TypeError as exc:
+            raise ValueError("decision_time must be orderable") from exc
+
         if self.validity is not None and self.validity.shape != self.values.shape:
             raise ValueError(
                 f"Validity shape {self.validity.shape} must match values shape {self.values.shape}"

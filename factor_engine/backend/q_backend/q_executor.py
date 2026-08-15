@@ -192,21 +192,28 @@ class QExecutor:
                     allow_legacy_handles=allow_legacy_handles,
                 )
 
-                rewritten_code = self._rewrite_q_code(
-                    plan.q_code,
-                    {
-                        **bindings,
-                        plan.output_table: f"{workspace_prefix}{_safe_q_identifier(plan.output_table)}",
-                    },
-                )
+                # Compiler node identifiers are logical names.  Bind every
+                # emitted intermediate into this execution's namespace, not
+                # only region inputs and final output, so all q symbols are
+                # lease-tracked and removed with the workspace.
+                compiler_symbols = {
+                    node_id: f"{workspace_prefix}{_safe_q_identifier(node_id)}"
+                    for node_id in plan.node_ids
+                }
                 output_symbol = f"{workspace_prefix}{_safe_q_identifier(plan.output_table)}"
+                bindings = {
+                    **bindings,
+                    **compiler_symbols,
+                    plan.output_table: output_symbol,
+                }
+                rewritten_code = self._rewrite_q_code(plan.q_code, bindings)
                 with _LEASE_LOCK:
                     lease = _ACTIVE_LEASES.setdefault(
                         workspace_id, (generation_id, id(q), set())
                     )
                     if lease[:2] != (generation_id, id(q)):
                         raise QExecutionError("Execution workspace lease identity conflict")
-                    lease[2].add(output_symbol)
+                    lease[2].update((*compiler_symbols.values(), output_symbol))
                 logger.debug(f"Executing q Region {plan.region_id}:\n{rewritten_code}")
                 q(rewritten_code)
                 q_result = q(output_symbol)

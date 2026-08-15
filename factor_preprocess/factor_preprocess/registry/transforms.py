@@ -201,9 +201,11 @@ def create_default_registry() -> TransformRegistry:
         rolling_mean, rolling_std, rolling_zscore, ewma,
         volatility_scale, volatility_scale_returns, realized_volatility,
         forward_fill, missing_indicator, missing_run_length, missing_rate,
+        impute_with_fallback,
         days_since_update, observation_age, freshness_score, stale_data_indicator,
     )
     from factor_preprocess.neutralization import ols_neutralize, compute_exposures
+    from factor_preprocess.regime import detect_correlation_regime
     from factor_preprocess.transforms.decomposition import (
         bandpass_filter, extract_cycle, christiano_fitzgerald_filter,
         wavelet_decompose, wavelet_smooth, wavelet_denoise,
@@ -329,6 +331,25 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling missing data rate",
         tags={"missing", "rate"},
         causal_safe=True,
+    )
+    registry.register(
+        "impute_with_fallback", impute_with_fallback, TransformCategory.MISSINGNESS,
+        version="1.0.0",
+        description="Full-sample mean/median fallback is research-only",
+        tags={"missing", "impute", "full_sample", "research_only"},
+        causal_safe=False,
+        admission="RESEARCH_ONLY",
+    )
+
+    # Correlation-regime boundaries are fit over the full sample. Keep this
+    # implementation available for research while failing closed in production.
+    registry.register(
+        "detect_correlation_regime", detect_correlation_regime, TransformCategory.TEMPORAL,
+        version="1.0.0",
+        description="Full-sample correlation regime detector; research-only",
+        tags={"regime", "correlation", "full_sample", "research_only"},
+        causal_safe=False,
+        admission="RESEARCH_ONLY",
     )
 
     # Freshness transforms

@@ -651,8 +651,29 @@
 - Focused authority evidence currently reports `42 passed`; final independent validator remains active. At most this can close the authority/schema scope locally, not the q backend overall.
 - q backend remains open for compiler dispatch/defaults, package exports, PhysicalBackendRegion enforcement, process lifecycle/type semantics, and live q integration.
 
-### Open integration queue
+### OOS matrix update
+- Independent post-repair validation: factor_engine modeling collection `363` and standalone modeling collection `130` are unblocked.
+- Evidence/negative-control focus: `60 passed`; artifact/cache focus `21 passed, 2 stale`; orchestration `24 passed, 1 stale`; math evidence `27 passed, 3 stale`; extra UTC/as-of probes `37 passed, 3 stale`.
+- Confirmed: aware UTC normalization, before/equal/after as-of resolution, mandatory PredictionContext, numeric/bool rejection, cache identity stability, schema/diagnostics and negative controls.
+- OOS remains `PARTIAL`: residual failures are stale expectations for aware ISO timestamps, mixed-timezone validation ordering, row/date length mismatch, label maturity fixture horizon, and aware Timestamp/string assertions. No context enforcement was weakened.
 - FactorEngine ModelArtifact integration remains open: production callers must thread mandatory `PredictionContext`; ApplicationWindow must strictly parse timestamps. Do not restore contextless prediction.
 - q executor residency is locally tested but awaits final strong-diamond/current collection verdict before closure.
 - FactorAssets SeenIndex/FAISS atomicity and FactorOptimizer cost reservation are active disjoint P1 scopes.
+
+### Subsequent validator outcomes
+- q P0-B authority/schema: `CLOSED_LOCAL` only. Independent validator passed `21 + 21`; live boundary remains 110 declared, 80 executable lowerings, 0 production-ready. Overall q remains open.
+- FactorAssets SeenIndex: `CLOSED_LOCAL`; independent SQLite concurrency reproduced one persisted winner across 12 connections and 13 focused tests passed. FAISS remains `PARTIAL` because optional dependency tests were skipped.
+- FactorOptimizer cost budget: `CLOSED_LOCAL`; independent serial evidence was 149 tests, including invalid/nonfinite release, exact boundary, reconciliation/refund, overspend rejection, and 32-way reservation contention.
+
+### q P0-C correction queue
+The first compatibility patch is not closed despite focused green tests. Independent audit requires corrections before any closure:
+- q numeric division must use `%`; `/` is Over.
+- `cs_rank` lambda must be applied to the input.
+- `fin_lag`/`fin_delta` row-order lowerings must remain rejected until financial period/PIT semantics exist.
+- Direct `QCompiler` instances must bind their registry after building the lowering map; global getter must not overwrite explicitly installed evidence registries.
+- Every compiler-emitted intermediate node symbol must be namespaced and leased for cleanup.
+- Parameter domains must reject `None`, zero/negative, fractional, and string values.
+- Per-operator certification must not be blanket-disabled by unrelated declaration/lowering gaps, while overall backend readiness still fails on any gap.
+
+q P0-C structural scope is now `CLOSED_LOCAL` after independent `53` focused compatibility/Q2 tests and py_compile. This is only structural: no live PyKX/q runtime exists. Overall q remains `PARTIAL/RESEARCH_ONLY` because PhysicalBackendRegion, live type/process semantics, and broader package/runtime gates remain open.
 

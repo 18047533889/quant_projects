@@ -411,6 +411,42 @@ def test_correlation_similarity_symmetric():
     assert forward.similarity_score == backward.similarity_score
 
 
+def test_correlation_similarity_find_similar_filters_universe_and_period():
+    similarity = CorrelationSimilarity()
+    for factor_id, universe, start, end in [
+        ("MATCH", "US", "2024-01-01", "2024-12-31"),
+        ("OTHER_UNIVERSE", "EU", "2024-01-01", "2024-12-31"),
+        ("OTHER_PERIOD", "US", "2023-01-01", "2023-12-31"),
+    ]:
+        similarity.add_result(SimilarityResult(
+            factor_id_a="F001", factor_id_b=factor_id, similarity_score=0.9,
+            method=SimilarityMethod.PEARSON, timestamp="2025-01-01T00:00:00Z",
+            sample_size=100, universe_ref=universe, period_start=start, period_end=end,
+        ))
+
+    results = similarity.find_similar(
+        "F001", universe_ref="US", period_start="2024-01-01", period_end="2024-12-31"
+    )
+    assert [result.factor_id_b for result in results] == ["MATCH"]
+
+
+def test_correlation_similarity_find_similar_partial_filter_is_exact():
+    similarity = CorrelationSimilarity()
+    similarity.add_result(SimilarityResult(
+        factor_id_a="F001", factor_id_b="DATED", similarity_score=0.9,
+        method=SimilarityMethod.PEARSON, timestamp="2025-01-01T00:00:00Z",
+        sample_size=100, universe_ref="US", period_start="2024-01-01", period_end="2024-12-31",
+    ))
+    similarity.add_result(SimilarityResult(
+        factor_id_a="F001", factor_id_b="UNDATED", similarity_score=0.8,
+        method=SimilarityMethod.PEARSON, timestamp="2025-01-01T00:00:00Z",
+        sample_size=100, universe_ref="US",
+    ))
+
+    assert [r.factor_id_b for r in similarity.find_similar("F001", universe_ref="US")] == ["DATED", "UNDATED"]
+    assert [r.factor_id_b for r in similarity.find_similar("F001", period_start="2024-01-01")] == ["DATED"]
+
+
 def test_similarity_method_enum():
     """Test SimilarityMethod enum values."""
     assert SimilarityMethod.PEARSON.value == "pearson"

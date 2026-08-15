@@ -127,6 +127,23 @@ class TestStreamingEvaluationResult:
         assert data["metrics"]["test"] == 0.5
         assert data["chunks_processed"] == 10
         assert data["peak_memory_mb"] == 256.0
+    def test_to_dict_serializes_immutable_provenance(self):
+        from types import MappingProxyType
+
+        provenance = MappingProxyType({
+            "parent_identity": (("snapshot", "s1"),),
+            "factor_ids": ("factor_0",),
+            "asset_coords": ("asset-1",),
+            "timing_vectors": ((10, 11), (11, 12), (12, 13), (14, 15)),
+            "timing_offsets": ((), (0,), (1,)),
+        })
+        result = StreamingEvaluationResult(provenance=provenance)
+
+        data = result.to_dict()
+
+        assert data["provenance"] is provenance
+        with pytest.raises(TypeError):
+            data["provenance"]["factor_ids"] = ("changed",)
 
 
 class TestStreamingEvaluator:
@@ -243,6 +260,36 @@ class TestStreamingEvaluator:
         coverage = result.get_metric("coverage")
         assert 0.0 <= coverage <= 1.0
         assert result.chunks_processed > 1  # Multiple chunks processed
+
+    def test_large_batch_provenance_matches_unsplit_parent(self):
+        from types import MappingProxyType
+
+        evaluator = StreamingEvaluator(chunk_size_time=1, chunk_size_factors=1)
+        evaluator.register_streaming_metric("coverage", streaming_coverage_updater, MetricKind.COVERAGE)
+        batch = FactorBatch(
+            factor_ids=("f0", "f1"),
+            time_axis=AxisRef("time", "int64", 2, np.array([10, 11])),
+            asset_axis=AxisRef("asset", "str", 2, np.array(["a", "b"])),
+            values=np.ones((2, 2, 2)),
+            context_refs={"snapshot": "s1"},
+        )
+        labels = LabelBundle(
+            target_id="target", values=np.ones((2, 2)), horizon=1,
+            decision_time=(10, 11), execution_time=(11, 12),
+            label_start_time=(12, 13), label_end_time=(14, 15),
+            source_ref="labels", calendar_ref="cal", metadata={"revision": 3},
+        )
+
+        result = evaluator.evaluate_large_batch(
+            batch, labels, [{"metric_id": "coverage", "metric_kind": "coverage"}]
+        )
+
+        assert isinstance(result.provenance, MappingProxyType)
+        assert result.provenance["parent_identity"] == evaluator._stream_identity(batch, labels)
+        assert result.provenance["factor_ids"] == ("f0", "f1")
+        assert result.provenance["asset_coords"] == ("a", "b")
+        assert result.provenance["timing_offsets"] == ((1, 1), (2, 2), (4, 4))
+        assert result.to_dict()["provenance"] is result.provenance
 
     def test_evaluate_large_batch_summary(self):
         evaluator = StreamingEvaluator(chunk_size_time=50, chunk_size_factors=2)
@@ -636,7 +683,41 @@ class TestStreamingUpdaters:
         updated_state = streaming_coverage_updater(state, batch, labels)
 
         assert updated_state.count == 1
-        assert 0.0 <= updated_state.sum_values <= 1.0
+        assert updated_state.valid_count == updated_state.total_count == 10 * 20 * 2
+        assert updated_state.finalize() == 1.0
+
+    def test_streaming_coverage_uses_paired_valid_denominator(self):
+        """Each factor-label cell is eligible; NaNs and validity remove paired cells."""
+        factors = np.array([
+            [[1.0, np.nan], [2.0, 3.0]],
+            [[4.0, 5.0], [6.0, 7.0]],
+        ])
+        factor_validity = np.ones_like(factors, dtype=bool)
+        factor_validity[1, 0, 1] = False
+        labels = np.array([[1.0, np.nan], [2.0, 3.0]])
+        label_validity = np.ones_like(labels, dtype=bool)
+        label_validity[1, 1] = False
+        batch = FactorBatch(
+            factor_ids=("f0", "f1"),
+            time_axis=AxisRef("time", "int64", 2),
+            asset_axis=AxisRef("asset", "int64", 2),
+            values=factors,
+            validity=factor_validity,
+        )
+        label_bundle = LabelBundle(
+            target_id="target", values=labels, horizon=1,
+            decision_time=(0, 1), label_start_time=(0, 1), label_end_time=(1, 2),
+            validity=label_validity,
+        )
+        state = StreamingMetricState("coverage", MetricKind.COVERAGE)
+
+        result = streaming_coverage_updater(state, batch, label_bundle).finalize()
+
+        # Eight paired cells: one factor NaN, one factor-invalid cell, two label-NaN
+        # cells, and two label-invalid cells leave exactly two valid pairs.
+        assert state.valid_count == 2
+        assert state.total_count == 8
+        assert result == pytest.approx(1 / 4)
 
     def test_streaming_summary_updater(self):
         state = StreamingMetricState(
