@@ -342,6 +342,38 @@ def _polars_available() -> bool:
         return False
 
 
+def test_joint_energy_shift_polars_first_valid_row_and_cell_oracle():
+    if not _polars_available():
+        pytest.skip("polars not installed")
+    import polars as pl
+    from cleaned_operators.distribution_break import _joint_shift_cell
+
+    recent, prior = 4, 7
+    n = 30
+    t = np.arange(n, dtype=float)
+    features = (
+        _frame(np.sin(t / 3.0) + 0.03 * t),
+        _frame(np.cos(t / 5.0) - 0.02 * t),
+        _frame((t % 6.0) + 0.01 * t * t),
+    )
+    pandas_out = OperatorRegistry.get("ts_joint_energy_shift", "pandas_numpy").calculate(
+        *features, recent_window=recent, prior_window=prior
+    ).to_numpy(dtype=float)[:, 0]
+    polars_out = OperatorRegistry.get("ts_joint_energy_shift", "polars").calculate(
+        *(pl.from_pandas(frame) for frame in features),
+        recent_window=recent,
+        prior_window=prior,
+    ).to_pandas().to_numpy(dtype=float)[:, 0]
+
+    first_valid = recent + prior
+    block = np.column_stack([frame.to_numpy(dtype=float)[:, 0] for frame in features])
+    expected = _joint_shift_cell(block[: first_valid + 1], recent, prior)
+    assert np.isnan(polars_out[:first_valid]).all()
+    assert np.isfinite(polars_out[first_valid])
+    assert polars_out[first_valid] == pytest.approx(expected, abs=1e-12, rel=1e-12)
+    assert np.allclose(polars_out, pandas_out, equal_nan=True, atol=1e-12, rtol=1e-12)
+
+
 def test_dynamics_polars_parity():
     if not _polars_available():
         pytest.skip("polars not installed")

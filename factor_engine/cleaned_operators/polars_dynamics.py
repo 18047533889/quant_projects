@@ -561,8 +561,10 @@ def _joint_energy_family(f1, f2, f3, recent, prior, break_score, window):
         n = block.shape[0]
         shifts = np.full(n, np.nan)
         for t in range(n):
-            lo = max(0, t - (recent + prior) + 1)
-            if t - lo + 1 < recent + prior:
+            # The shared cell treats row t as a query and requires p + r prior
+            # observations, so pass exactly [t-p-r, t] (p + r + 1 rows).
+            lo = max(0, t - (recent + prior))
+            if t - lo + 1 < recent + prior + 1:
                 continue
             shifts[t] = _joint_shift_cell(block[lo : t + 1], recent, prior)
         if break_score:
