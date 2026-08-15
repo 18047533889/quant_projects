@@ -12,6 +12,8 @@ from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
 
+from data_access.core.exceptions import DataAccessError
+
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -193,6 +195,16 @@ class _RemoteMetaCacheKey:
     credential_scope_id: str | None = None
     credential_generation: str | None = None
 
+
+class RemoteMetadataError(DataAccessError):
+    """Typed failure proving remote object metadata could not be resolved."""
+
+    def __init__(self, kind: str, message: str, *, original: BaseException | None = None):
+        super().__init__(message)
+        self.kind = kind
+        self.original = original
+
+
 @dataclass
 class _RemoteMetaCacheEntry:
     """R32-P0-046: Typed cache entry with TTL and negative cache support."""
@@ -202,6 +214,7 @@ class _RemoteMetaCacheEntry:
     error_type: str | None = None
 
 _remote_meta_cache: dict[_RemoteMetaCacheKey, _RemoteMetaCacheEntry] = {}
+_remote_meta_last_error: RemoteMetadataError | None = None
 _REMOTE_META_TTL_SECONDS = 30.0
 _REMOTE_META_NEGATIVE_TTL_SECONDS = 5.0  # Shorter TTL for errors
 _REMOTE_META_MAX_ENTRIES = 10000  # R32-P0-046: Bounded cache size
@@ -215,6 +228,40 @@ def _evict_lru_remote_cache() -> None:
     to_remove = len(_remote_meta_cache) - int(_REMOTE_META_MAX_ENTRIES * 0.9)
     for key, _ in sorted_entries[:to_remove]:
         _remote_meta_cache.pop(key, None)
+
+
+def _credential_generation(provider: Any, creds: Any) -> tuple[str, bool]:
+    """Return a cache namespace for the current credential material.
+
+    Providers may expose an explicit monotonic generation.  For legacy providers
+    without one, hash the resolved material so rotation changes the namespace
+    without placing secrets in the key.  The boolean reports whether a usable
+    namespace was established.
+    """
+    generation = getattr(provider, "generation", None) if provider is not None else None
+    if generation is not None and str(generation).strip():
+        return str(generation), True
+    material = (
+        getattr(creds, "access_key_id", None),
+        getattr(creds, "secret_access_key", None),
+        getattr(creds, "session_token", None),
+        getattr(creds, "expires_at", None),
+        getattr(creds, "credential_scope_id", None),
+    )
+    if not material[0] or not material[1]:
+        return "", False
+    payload = "|".join("" if value is None else str(value) for value in material)
+    return _sha256_text("dataaccess-credential-rotation\0" + payload), True
+
+
+def _remote_error_kind(exc: BaseException) -> str:
+    """Map SDK failures to stable remote metadata error categories."""
+    try:
+        from data_access.snapshot.cloud_error import CloudErrorClassifier
+
+        return CloudErrorClassifier.classify(exc).kind.value
+    except Exception:
+        return type(exc).__name__.upper()
 
 
 def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | None:
@@ -233,37 +280,61 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
     R32-P0-047: Check credential expiry before use.
     """
     from data_access.cos.remote import cos_uri_to_s3_uri, resolve_s3_credentials
-    import boto3
-    from botocore.config import Config
 
-    # Get credentials and check expiry (R32-P0-047)
+    # Get credentials and check expiry before loading the optional SDK.  Provider
+    # failures remain visible even when boto3 is not installed.
     try:
+        from data_access.security.execution_context import current_credential_provider
+
+        provider = current_credential_provider()
+        if provider is None:
+            from data_access.security.credentials import _global_credential_provider
+
+            provider = _global_credential_provider()
         creds = resolve_s3_credentials()
-    except Exception:
+    except Exception as exc:
+        # Credential failures must never become a reusable negative cache entry:
+        # a provider may recover or rotate on the next request.
+        _remote_meta_last_error = RemoteMetadataError(
+            _remote_error_kind(exc), "remote credential resolution failed", original=exc
+        )
+        globals()['_remote_meta_last_error'] = _remote_meta_last_error
         return None
 
     # R32-P0-047: Check credential expires_at before queries
-    if creds.expires_at is not None:
-        import time
-        from datetime import timezone
+    if getattr(creds, "expires_at", None) is not None:
         now_utc = datetime.now(timezone.utc)
         # Add safety margin: 60s for expected operation + 30s skew
         required_valid_duration = 90
-        if creds.expires_at <= now_utc.timestamp() + required_valid_duration:
-            # Credential expired or expiring soon, don't use it
+        expiry = creds.expires_at.timestamp() if hasattr(creds.expires_at, "timestamp") else creds.expires_at
+        if expiry <= now_utc.timestamp() + required_valid_duration:
+            globals()['_remote_meta_last_error'] = RemoteMetadataError(
+                "credentials_invalid", "remote credentials expired or expiring soon"
+            )
             return None
 
-    # R32-P0-045: Build cache key with credential scope
+    # R32-P0-045: Build cache key with provider/material generation.  An
+    # unavailable generation bypasses the cache rather than reusing stale data.
+    credential_generation, generation_known = _credential_generation(provider, creds)
     cache_key = _RemoteMetaCacheKey(
         uri=str(uri),
-        credential_scope_id=creds.credential_scope_id,
-        credential_generation=None,  # TODO: Track credential generation
+        credential_scope_id=getattr(creds, "credential_scope_id", None),
+        credential_generation=credential_generation if generation_known else None,
     )
-
+    cache_allowed = generation_known
     now = time.monotonic()
 
-    # Check cache unless fresh=True
-    if not fresh:
+    try:
+        import boto3
+        from botocore.config import Config
+    except Exception as exc:
+        globals()['_remote_meta_last_error'] = RemoteMetadataError(
+            "network", "boto3 remote metadata client unavailable", original=exc
+        )
+        return None
+
+    # Check cache unless fresh=True or credential identity is unavailable.
+    if cache_allowed and not fresh:
         entry = _remote_meta_cache.get(cache_key)
         if entry is not None:
             # R32-P0-046: Different TTL for success vs error
@@ -282,28 +353,27 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
         path = s3_uri[len("s3://") :]
         bucket, sep, obj = path.partition("/")
         if not sep or not obj:
-            entry = _RemoteMetaCacheEntry(
-                value=None, cached_at=now, is_success=False, error_type="invalid_uri"
+            globals()['_remote_meta_last_error'] = RemoteMetadataError(
+                "malformed_response", "invalid remote object URI"
             )
-            _remote_meta_cache[cache_key] = entry
             return None
 
         # R32-P0-044: Pass aws_session_token for STS credentials
         client_kwargs = {
             "service_name": "s3",
             "endpoint_url": (
-                ("https://" if creds.use_ssl else "http://") + creds.endpoint
-                if creds.endpoint
+                ("https://" if getattr(creds, "use_ssl", True) else "http://") + getattr(creds, "endpoint", "")
+                if getattr(creds, "endpoint", "")
                 else None
             ),
-            "region_name": creds.region,
+            "region_name": getattr(creds, "region", None),
             "aws_access_key_id": creds.access_key_id,
             "aws_secret_access_key": creds.secret_access_key,
             "config": Config(
                 connect_timeout=2, read_timeout=5, retries={"max_attempts": 0}
             ),
         }
-        if creds.session_token:
+        if getattr(creds, "session_token", None):
             client_kwargs["aws_session_token"] = creds.session_token
 
         s3 = boto3.client(**client_kwargs)
@@ -318,15 +388,15 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
         entry = _RemoteMetaCacheEntry(
             value=meta, cached_at=now, is_success=True, error_type=None
         )
-        _remote_meta_cache[cache_key] = entry
+        if cache_allowed:
+            _remote_meta_cache[cache_key] = entry
+        globals()['_remote_meta_last_error'] = None
         return meta
     except Exception as e:
-        # R32-P0-046: Typed negative cache - distinguish error types
-        error_type = type(e).__name__
-        entry = _RemoteMetaCacheEntry(
-            value=None, cached_at=now, is_success=False, error_type=error_type
-        )
-        _remote_meta_cache[cache_key] = entry
+        # Keep failures typed for diagnostics, but never memoize failures: a
+        # transient auth/network problem must not become a stale correctness hit.
+        error = RemoteMetadataError(_remote_error_kind(e), "remote metadata HEAD failed", original=e)
+        globals()['_remote_meta_last_error'] = error
         return None
 
 

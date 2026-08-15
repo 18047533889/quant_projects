@@ -335,10 +335,49 @@ def test_remote_meta_cache_ttl_no_permanent_none(monkeypatch):
     monkeypatch.setattr(crm, "resolve_s3_credentials", no_creds)
     rc._remote_object_meta("s3://b/x.parquet")
     rc._remote_object_meta("s3://b/x.parquet")
-    assert calls["n"] == 1, "fresh TTL 内命中缓存，不重复尝试"
-    rc._remote_meta_cache["s3://b/x.parquet"] = (time.monotonic() - 100, None)
-    rc._remote_object_meta("s3://b/x.parquet")
-    assert calls["n"] == 2, "TTL 过期 → 重新尝试（首次无凭证、之后补凭证能拿到）"
+    assert calls["n"] == 2, "credential resolution failures are not memoized"
+    assert rc._remote_meta_cache == {}, "credential failures must not enter metadata cache"
+    assert rc._remote_meta_last_error.kind == "unknown"
+
+
+def test_remote_meta_credential_rotation_does_not_reuse_stale(monkeypatch):
+    import data_access.cos.remote as crm
+    import data_access.read.read_contract as rc
+
+    rc._remote_meta_cache.clear()
+    calls = {"head": 0}
+
+    class Provider:
+        generation = 1
+
+    provider = Provider()
+
+    class Creds:
+        use_ssl = False
+        endpoint = None
+        region = "us-east-1"
+        access_key_id = "key"
+        secret_access_key = "secret"
+        session_token = None
+        expires_at = None
+        credential_scope_id = "same-scope"
+
+    class Client:
+        def head_object(self, **kwargs):
+            calls["head"] += 1
+            return {"ETag": f'"etag-{provider.generation}"', "ContentLength": 5}
+
+    _install_fake_boto3(monkeypatch, lambda **kwargs: Client())
+    monkeypatch.setattr(crm, "resolve_s3_credentials", lambda: Creds())
+    import data_access.security.execution_context as context
+    monkeypatch.setattr(context, "current_credential_provider", lambda: provider)
+
+    assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-1"
+    assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-1"
+    provider.generation = 2
+    assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-2"
+    assert calls["head"] == 2
+    assert {key.credential_generation for key in rc._remote_meta_cache} == {"1", "2"}
 
 
 # ---------------------------------------------------------------------------
