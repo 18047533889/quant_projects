@@ -12,11 +12,15 @@ from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
 
-from data_access.core.exceptions import ValidationError
+from data_access.core.exceptions import DataAccessError, ValidationError
 from data_access.core.identity_encoder import CanonicalIdentityEncoder
 
 
 _STRICT_IDENTITY_ENCODER = CanonicalIdentityEncoder(strict=True)
+
+
+class SnapshotConflictError(DataAccessError):
+    """Two child snapshots claim conflicting identities for the same file path."""
 
 
 def _sha256_text(text: str) -> str:
@@ -31,27 +35,27 @@ def _identity_digest(value: Any) -> str:
 def canonicalize_params(params: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return stable JSON-shaped params, rejecting lossy identity fallbacks.
 
-    The returned mapping retains the historical string-key API.  A key collision
-    after stringification is rejected because silently merging ``1`` and ``"1"``
-    would make two distinct typed parameter maps share an identity.
+    Parameter names are an intentionally string-keyed API. Reject other key types
+    instead of stringifying them: otherwise separate requests such as ``{1: "x"}``
+    and ``{"1": "x"}`` acquire the same correctness identity.
     """
     if not params:
         return {}
     out: dict[str, Any] = {}
-    for key in sorted(params, key=lambda item: str(item)):
-        text_key = str(key)
-        if text_key in out:
+    for key in params:
+        if not isinstance(key, str):
             raise ValidationError(
-                "DA-P0-013: parameter mapping keys collide after stringification: "
-                f"{key!r}"
+                "DA-ID-P0-002: parameter mapping keys must be strings; "
+                f"got {type(key).__name__}"
             )
+    for key in sorted(params):
         value = params[key]
         if isinstance(value, (str, int, float, bool)) or value is None:
-            out[text_key] = value
+            out[key] = value
         elif isinstance(value, (list, tuple)):
-            out[text_key] = [_canonical_param_value(v) for v in value]
+            out[key] = [_canonical_param_value(v) for v in value]
         elif isinstance(value, dict):
-            out[text_key] = canonicalize_params(value)
+            out[key] = canonicalize_params(value)
         else:
             # Validate and fail closed; never make repr part of a correctness ID.
             _STRICT_IDENTITY_ENCODER.encode(value)
@@ -72,6 +76,44 @@ def _canonical_param_value(value: Any) -> Any:
     raise ValidationError(
         f"DA-P0-011: unsupported parameter value type {type(value).__name__}"
     )
+
+
+class _FrozenParamMap(tuple):
+    """Tuple-backed marker preserving mapping-vs-sequence semantics when frozen."""
+
+
+def _freeze_param_value(value: Any) -> Any:
+    """Freeze a canonical parameter value without changing its ordered semantics."""
+    if isinstance(value, _FrozenParamMap):
+        return value
+    if isinstance(value, dict):
+        return _FrozenParamMap(
+            (key, _freeze_param_value(item)) for key, item in sorted(value.items())
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_param_value(item) for item in value)
+    return value
+
+
+def _thaw_param_value(value: Any) -> Any:
+    """Restore JSON-shaped values for serialization of frozen snapshot params."""
+    if isinstance(value, _FrozenParamMap):
+        return {key: _thaw_param_value(item) for key, item in value}
+    if isinstance(value, tuple):
+        return [_thaw_param_value(item) for item in value]
+    return value
+
+
+def _snapshot_params(
+    params: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], tuple[tuple[str, Any], ...], bytes]:
+    """Return canonical, immutable, and canonical-byte forms of snapshot params."""
+    canon = canonicalize_params(params)
+    frozen = tuple(
+        (key, _freeze_param_value(value)) for key, value in sorted(canon.items())
+    )
+    canonical_bytes = _STRICT_IDENTITY_ENCODER.encode(canon).encode("utf-8")
+    return canon, frozen, canonical_bytes
 
 
 @dataclass(frozen=True)
@@ -104,7 +146,21 @@ class DataSnapshot:
     file_manifest_hash: str
     files: tuple[FileVersion, ...]
     params: tuple[tuple[str, Any], ...] = ()
+    params_canonical_bytes: bytes = field(default=b"", repr=False)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __post_init__(self) -> None:
+        frozen = tuple(
+            (key, _freeze_param_value(value)) for key, value in tuple(self.params)
+        )
+        object.__setattr__(self, "params", frozen)
+        if not self.params_canonical_bytes:
+            canon = {key: _thaw_param_value(value) for key, value in frozen}
+            object.__setattr__(
+                self,
+                "params_canonical_bytes",
+                _STRICT_IDENTITY_ENCODER.encode(canon).encode("utf-8"),
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,7 +186,9 @@ class DataSnapshot:
                 }
                 for f in self.files
             ],
-            "params": dict(self.params),
+            "params": {
+                key: _thaw_param_value(value) for key, value in self.params
+            },
             "created_at": self.created_at.isoformat(),
         }
 
@@ -447,7 +505,7 @@ def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[Fi
             if pattern not in seen:
                 seen.add(str(pattern))
                 extra: dict[str, Any] = {}
-                if enable_remote:
+                if enable_remote and not _path_has_glob(str(pattern)):
                     meta = _remote_object_meta(pattern)
                     if meta:
                         extra = meta
@@ -525,7 +583,7 @@ def build_data_snapshot(
     Both build_data_snapshot and rebuild_snapshot_files now use identical
     canonicalization logic (R32-P0-043).
     """
-    canon = canonicalize_params(params)
+    canon, frozen_params, params_bytes = _snapshot_params(params)
     file_versions = tuple(files) if files is not None else build_file_manifest(paths)
     manifest_hash = file_manifest_hash(file_versions)
     schema_hash = schema_hash_from_decl(schema)
@@ -546,7 +604,8 @@ def build_data_snapshot(
         schema_hash=schema_hash,
         file_manifest_hash=manifest_hash,
         files=file_versions,
-        params=tuple(sorted(canon.items())),
+        params=frozen_params,
+        params_canonical_bytes=params_bytes,
     )
 
 
@@ -563,8 +622,7 @@ def rebuild_snapshot_files(
     """
     file_versions = tuple(files)
     manifest_hash = file_manifest_hash(file_versions)
-    # R32-P0-043: Use canonicalize_params for consistency
-    canon = canonicalize_params(dict(snapshot.params))
+    canon = {key: _thaw_param_value(value) for key, value in snapshot.params}
     snapshot_id = _identity_digest(
         {
             "dataset": snapshot.dataset,
@@ -582,6 +640,7 @@ def rebuild_snapshot_files(
         file_manifest_hash=manifest_hash,
         files=file_versions,
         params=snapshot.params,
+        params_canonical_bytes=snapshot.params_canonical_bytes,
         created_at=snapshot.created_at,
     )
 
@@ -618,19 +677,26 @@ def merge_sql_data_snapshots(
 
     ordered = sorted(snapshots, key=lambda s: s.dataset)
     combined_files: list[FileVersion] = []
-    seen_paths: set[str] = set()
+    files_by_path: dict[str, FileVersion] = {}
     for snap in ordered:
         for fv in snap.files:
-            if fv.path not in seen_paths:
-                seen_paths.add(fv.path)
+            previous = files_by_path.get(fv.path)
+            if previous is None:
+                files_by_path[fv.path] = fv
                 combined_files.append(fv)
+            elif previous != fv:
+                raise SnapshotConflictError(
+                    "SQL snapshot merge found conflicting FileVersion identities "
+                    f"for path {fv.path!r}"
+                )
 
     manifest_hash = file_manifest_hash(combined_files)
     merged_params: dict[str, Any] = {}
     for snap in ordered:
         for k, v in snap.params:
-            merged_params[f"{snap.dataset}.{k}"] = v
+            merged_params[f"{snap.dataset}.{k}"] = _thaw_param_value(v)
 
+    _, frozen_params, params_bytes = _snapshot_params(merged_params)
     snapshot_id = _identity_digest(
         {
             "kind": "sql_merge",
@@ -648,6 +714,7 @@ def merge_sql_data_snapshots(
         schema_hash=schema_hash,
         file_manifest_hash=manifest_hash,
         files=tuple(combined_files),
-        params=tuple(sorted(merged_params.items())),
+        params=frozen_params,
+        params_canonical_bytes=params_bytes,
     )
 

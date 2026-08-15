@@ -12,7 +12,12 @@ import pytest
 from data_access.read.adapters import arrow_table_to_multiindex_columns
 from data_access.read.key_policy import KeyPolicy
 from data_access.write.publish_manifest import read_publish_manifest, write_publish_manifest
-from data_access.read.read_contract import merge_sql_data_snapshots, build_data_snapshot
+from data_access.read.read_contract import (
+    FileVersion,
+    SnapshotConflictError,
+    build_data_snapshot,
+    merge_sql_data_snapshots,
+)
 
 
 def test_write_publish_manifest_atomic(tmp_path: Path):
@@ -80,3 +85,47 @@ def test_merge_sql_snapshots_differs_from_single():
     assert merged.snapshot_id != a.snapshot_id
     assert merged.snapshot_id != b.snapshot_id
     assert "ds_a" in merged.dataset and "ds_b" in merged.dataset
+
+
+def test_merge_sql_snapshots_rejects_conflicting_identity_for_same_path():
+    common = "s3://bucket/shared.parquet"
+    a = build_data_snapshot(
+        dataset="ds_a",
+        registry_hash="reg",
+        schema={"x": "int"},
+        paths=[],
+        files=(FileVersion(path=common, etag="v1", content_length=10),),
+    )
+    b = build_data_snapshot(
+        dataset="ds_b",
+        registry_hash="reg",
+        schema={"y": "double"},
+        paths=[],
+        files=(FileVersion(path=common, etag="v2", content_length=10),),
+    )
+
+    with pytest.raises(SnapshotConflictError, match="conflicting FileVersion"):
+        merge_sql_data_snapshots([a, b], registry_hash="reg")
+
+
+def test_merge_sql_snapshots_allows_identical_shared_file_version():
+    shared = FileVersion(
+        path="s3://bucket/shared.parquet", etag="v1", content_length=10
+    )
+    a = build_data_snapshot(
+        dataset="ds_a",
+        registry_hash="reg",
+        schema={"x": "int"},
+        paths=[],
+        files=(shared,),
+    )
+    b = build_data_snapshot(
+        dataset="ds_b",
+        registry_hash="reg",
+        schema={"y": "double"},
+        paths=[],
+        files=(shared,),
+    )
+
+    merged = merge_sql_data_snapshots([a, b], registry_hash="reg")
+    assert merged.files == (shared,)
