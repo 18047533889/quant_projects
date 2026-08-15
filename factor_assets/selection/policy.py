@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 from datetime import datetime, timezone
+import math
 
 
 class SelectionReason(Enum):
@@ -172,8 +173,9 @@ class SelectionPolicy:
             self._decisions.append(decision)
             return decision
 
-        # Check gate results
-        all_gates_passed = all(
+        # Gate evaluation is mandatory for admission.  Keep this fail-closed:
+        # all([]) is True, but an approval without any evaluated gate is invalid.
+        all_gates_passed = bool(gate_evaluations) and all(
             hasattr(ev, 'passed') and ev.passed
             for ev in gate_evaluations
         )
@@ -184,6 +186,11 @@ class SelectionPolicy:
                 for ev in gate_evaluations
                 if hasattr(ev, 'passed') and not ev.passed
             ]
+            gate_note = (
+                "No gate evaluations provided"
+                if not gate_evaluations
+                else f"Failed gates: {', '.join(failed_gates)}"
+            )
             decision = SelectionDecision(
                 decision_id=decision_id,
                 factor_id=factor_id,
@@ -195,13 +202,34 @@ class SelectionPolicy:
                 gate_results=gate_result_ids,
                 similarity_refs=similarity_refs,
                 actor=actor,
-                notes=notes or f"Failed gates: {', '.join(failed_gates)}",
+                notes=notes or gate_note,
             )
             self._decisions.append(decision)
             return decision
 
-        # Check similarity threshold
-        if max_similarity is not None and max_similarity > self._similarity_threshold:
+        # Similarity scores use canonical absolute-score semantics at the policy
+        # boundary.  Nonfinite values are never admissible.
+        normalized_similarity = None
+        if max_similarity is not None:
+            if not math.isfinite(max_similarity):
+                decision = SelectionDecision(
+                    decision_id=decision_id,
+                    factor_id=factor_id,
+                    approved=False,
+                    reason=SelectionReason.REJECTED_SIMILARITY,
+                    timestamp=now,
+                    policy_version=self._policy_version,
+                    evidence_refs=evidence_refs,
+                    gate_results=gate_result_ids,
+                    similarity_refs=similarity_refs,
+                    actor=actor,
+                    notes=notes or f"Nonfinite similarity score {max_similarity!r}",
+                )
+                self._decisions.append(decision)
+                return decision
+            normalized_similarity = abs(max_similarity)
+
+        if normalized_similarity is not None and normalized_similarity > self._similarity_threshold:
             decision = SelectionDecision(
                 decision_id=decision_id,
                 factor_id=factor_id,
@@ -213,7 +241,7 @@ class SelectionPolicy:
                 gate_results=gate_result_ids,
                 similarity_refs=similarity_refs,
                 actor=actor,
-                notes=notes or f"Similarity {max_similarity:.3f} exceeds threshold {self._similarity_threshold:.3f}",
+                notes=notes or f"Similarity {normalized_similarity:.3f} exceeds threshold {self._similarity_threshold:.3f}",
             )
             self._decisions.append(decision)
             return decision
