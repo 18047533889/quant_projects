@@ -66,6 +66,57 @@ def test_unknown_row_estimate_is_not_production_ready():
     assert result.readiness_reason == "row-count estimate unavailable"
 
 
+def test_actual_cse_plan_ref_adds_sid_dependency():
+    shared = PlanNode(
+        "abs",
+        inputs=(PlanNode("column", node_id="source"),),
+        node_id="shared-node",
+    )
+    ref = PlanNode("plan_ref", attrs={"sid": "shared-sid"}, node_id="ref")
+    root = PlanNode("neg", inputs=(ref,), node_id="root")
+
+    result = BatchGlobalOptimizer().optimize_batch(
+        {"factor": root}, {"shared-sid": shared}, {}, _ctx(100, complete=True)
+    )
+
+    assert {"factor", "ref", "shared-sid", "source"}.issubset(
+        result.per_node_choices
+    )
+    assert result.physical_plan.logical_node_count == 4
+    ref_region = next(
+        region for region in result.physical_plan.regions if "ref" in region.node_ids
+    )
+    shared_region = next(
+        region
+        for region in result.physical_plan.regions
+        if "shared-sid" in region.node_ids
+    )
+    assert ref_region.region_id == shared_region.region_id or any(
+        edge.producer_region == shared_region.region_id
+        and edge.consumer_region == ref_region.region_id
+        for edge in result.physical_plan.edges
+    )
+
+
+def test_dangling_plan_ref_sid_fails_closed():
+    root = PlanNode("plan_ref", attrs={"sid": "missing"}, node_id="ref")
+
+    with pytest.raises(ValueError, match="dangling plan_ref sid 'missing'"):
+        BatchGlobalOptimizer().optimize_batch(
+            {"factor": root}, {}, {}, _ctx(100, complete=True)
+        )
+
+
+def test_cyclic_plan_ref_sid_fails_closed():
+    ref_a = PlanNode("plan_ref", attrs={"sid": "b"}, node_id="ref-a")
+    ref_b = PlanNode("plan_ref", attrs={"sid": "a"}, node_id="ref-b")
+
+    with pytest.raises(ValueError, match="cyclic plan dependency"):
+        BatchGlobalOptimizer().optimize_batch(
+            {"factor": ref_a}, {"a": ref_a, "b": ref_b}, {}, _ctx(100, complete=True)
+        )
+
+
 def test_known_rows_alone_are_not_production_ready():
     root = PlanNode("abs", inputs=(PlanNode("column"),))
 

@@ -188,17 +188,28 @@ class BatchGlobalOptimizer:
         object_names = {id(node): node_id for node_id, node in shared_nodes.items()}
         object_names.update({id(node): root_id for root_id, node in roots.items()})
         used_ids: set[str] = set()
+        visiting: set[str] = set()
 
         def discover(node: PlanNode, preferred: str | None = None) -> str:
             key = preferred or object_names.get(id(node)) or getattr(node, "node_id", None)
             key = str(key or f"node_{id(node)}")
             if key in used_ids and all_nodes.get(key) is not node:
                 key = f"{key}_{id(node)}"
+            if key in visiting:
+                raise ValueError(f"cyclic plan dependency at node {key!r}")
             if key in all_nodes:
                 return key
+            visiting.add(key)
             used_ids.add(key)
             all_nodes[key] = node
-            discovered_graph[key] = [discover(child) for child in (getattr(node, "inputs", ()) or ())]
+            children = [discover(child) for child in (getattr(node, "inputs", ()) or ())]
+            if getattr(node, "op", "") == "plan_ref":
+                sid = str((getattr(node, "attrs", None) or {}).get("sid") or "")
+                if not sid or sid not in shared_nodes:
+                    raise ValueError(f"dangling plan_ref sid {sid!r}")
+                children.append(discover(shared_nodes[sid], sid))
+            discovered_graph[key] = children
+            visiting.remove(key)
             return key
 
         for factor_id, root in roots.items():
@@ -265,6 +276,7 @@ class BatchGlobalOptimizer:
         # loses nested assignments and makes shared children un-routable.
         self.memo.clear()
         self._choices: dict[str, NodeBackendChoice] = {}
+        self._active_optimizations: set[str] = set()
         for root_id, root in roots.items():
             self._optimize_tree(root_id, root, node_graph, all_nodes, estimate_rows, ctx)
         for shared_id, shared_node in shared_nodes.items():
@@ -362,6 +374,10 @@ class BatchGlobalOptimizer:
 
         mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
 
+        if node_id in self._active_optimizations:
+            raise ValueError(f"cyclic plan dependency at node {node_id!r}")
+        self._active_optimizations.add(node_id)
+
         # Get eligible backends for this node
         op = getattr(node, "op", "")
         if op in {"column", "literal", "plan_ref"}:
@@ -379,7 +395,13 @@ class BatchGlobalOptimizer:
                 execution_kind=ExecutionKind.REFERENCE,
                 production_certified=True,
             )
-            self._choices[node_id] = choice
+            for child_id in node_graph.get(node_id, ()):
+                child_choice = self._optimize_tree(
+                    child_id, all_nodes[child_id], node_graph, all_nodes, rows, ctx
+                )
+                self._persist_choice(child_choice)
+            self._persist_choice(choice)
+            self._active_optimizations.remove(node_id)
             return choice
 
         canonical = op  # Simplified; real implementation would look up canonical
@@ -421,12 +443,13 @@ class BatchGlobalOptimizer:
         # Try each backend and pick best considering children
         best_choice: NodeBackendChoice | None = None
         best_cost = float("inf")
-        best_children: dict[str, NodeBackendChoice] = {}
+        best_descendants: dict[str, NodeBackendChoice] = {}
 
         children = node_graph.get(node_id, [])
 
         for backend, execution_kind, production_certified in eligible:
-            candidate_children: dict[str, NodeBackendChoice] = {}
+            choices_before = dict(self._choices)
+            active_before = set(self._active_optimizations)
             compute_cost = estimate_backend_cost(
                 canonical, backend.value, row_count_estimate=rows
             )
@@ -452,9 +475,8 @@ class BatchGlobalOptimizer:
                             execution_kind=ExecutionKind.REFERENCE,
                             production_certified=True,
                         )
-                    candidate_children[child_id] = child_choice
+                    self._choices[child_id] = child_choice
                     if child_choice.backend != backend:
-                        # Cross-backend transfer
                         transfer_cost += self._estimate_transfer_cost(
                             child_choice.backend, backend, rows
                         )
@@ -472,16 +494,33 @@ class BatchGlobalOptimizer:
                     execution_kind=execution_kind,
                     production_certified=production_certified,
                 )
-                best_children = candidate_children
+                best_descendants = dict(self._choices)
+            self._choices = choices_before
+            self._active_optimizations = set(active_before)
 
         if best_choice is None:
+            self._active_optimizations.remove(node_id)
             raise UnsupportedOperatorBackendError(
                 f"eligible backend costing produced no assignment for {canonical!r}"
             )
-        choice = best_choice
-        self._choices.update(best_children)
-        self._choices[node_id] = choice
-        return choice
+        for descendant in best_descendants.values():
+            self._persist_choice(descendant)
+        self._persist_choice(best_choice)
+        self._active_optimizations.remove(node_id)
+        return best_choice
+
+    def _persist_choice(self, choice: NodeBackendChoice) -> None:
+        """Persist one graph-wide assignment without silently overwriting it."""
+        existing = self._choices.get(choice.node_id)
+        if existing is not None and (
+            existing.backend != choice.backend
+            or existing.representation != choice.representation
+        ):
+            raise ValueError(
+                "conflicting backend assignment for shared node "
+                f"{choice.node_id!r}"
+            )
+        self._choices[choice.node_id] = choice
 
     @staticmethod
     def _has_source_residency(node: PlanNode) -> bool:
