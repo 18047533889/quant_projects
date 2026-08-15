@@ -30,6 +30,7 @@ from .source_snapshot import (
     content_digest_of_objects,
 )
 from data_access.snapshot.fidelity import SnapshotFidelity
+from data_access.snapshot.cloud_error import CloudErrorClassifier
 
 logger = logging.getLogger("data_access.source_snapshot")
 
@@ -41,6 +42,21 @@ _SNAPSHOT_POLICIES = frozenset({"latest", "pin", "fail_if_changed"})
 _SUPPORTED_MANIFEST_VERSIONS = frozenset({"1.0", "1.1", "1"})
 _MIN_MANIFEST_VERSION = "1.0"
 _MAX_MANIFEST_VERSION = "1.1"
+
+
+def _snapshot_remote_failure(operation: str, target: str, exc: Exception) -> SourceSnapshotUnavailable:
+    """Build a fail-closed exception without discarding remote failure semantics."""
+    classified = CloudErrorClassifier.classify(exc)
+    diagnostic = (
+        f"{operation} 失败（{target}）: kind={classified.kind.value}, "
+        f"retryable={str(classified.retryable).lower()}, "
+        f"original_code={classified.original_code or type(exc).__name__}"
+    )
+    unavailable = SourceSnapshotUnavailable(diagnostic)
+    # Keep a machine-readable classification on the raised diagnostic while the
+    # original SDK/transport exception remains available through __cause__.
+    unavailable.cloud_error = classified
+    return unavailable
 
 
 def _validate_manifest_version(version: str) -> None:
@@ -456,8 +472,16 @@ class SourceSnapshotResolver:
         manifest = None
         if self._source_manifest_fn is not None:
             try:
+                raw_manifest = self._source_manifest_fn(dataset)
+            except Exception as exc:
+                if strict:
+                    raise _snapshot_remote_failure(
+                        "source manifest fetch", dataset, exc
+                    ) from exc
+                raw_manifest = None
+            try:
                 manifest = parse_source_manifest(
-                    self._source_manifest_fn(dataset),
+                    raw_manifest,
                     strict=strict,
                     expected_dataset=dataset,
                 )
@@ -507,9 +531,7 @@ class SourceSnapshotResolver:
                         fidelity = SnapshotFidelity.REMOTE_VERSION_ID
                 except Exception as exc:
                     if strict:
-                        raise SourceSnapshotUnavailable(
-                            f"COS LIST 失败（{prefix}）：{exc}"
-                        ) from exc
+                        raise _snapshot_remote_failure("COS LIST", prefix, exc) from exc
 
         # 3) HEAD exact objects（paths 不含通配）——仅 manifest 缺席时。
         if not objects and not manifest_present and self._head_object_fn is not None and paths:
@@ -521,9 +543,7 @@ class SourceSnapshotResolver:
                     h = self._head_object_fn(p)
                 except Exception as exc:
                     if strict:
-                        raise SourceSnapshotUnavailable(
-                            f"COS HEAD 失败（{p}）：{exc}"
-                        ) from exc
+                        raise _snapshot_remote_failure("COS HEAD", p, exc) from exc
                     h = None
                 if h is not None:
                     head_objs.append(h)
