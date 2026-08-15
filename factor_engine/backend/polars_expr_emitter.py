@@ -1956,15 +1956,22 @@ def _compile_polars_impl(
             ).alias(_VAL)
         )
 
-    if op in {"ts_ema", "ema", "ewm_std", "ewm_var"}:
+    if op in {"ts_ema", "ema", "ewm_std", "ts_ewm_std", "ewm_var"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         alpha = _ewm_alpha(node)
         if op in {"ts_ema", "ema"}:
             expr = pl.col(_VAL).ewm_mean(alpha=alpha, adjust=False)
-        elif op == "ewm_std":
-            expr = pl.col(_VAL).ewm_std(alpha=alpha, adjust=False)
+        elif op in {"ewm_std", "ts_ewm_std"}:
+            raw = pl.col(_VAL).ewm_std(
+                alpha=alpha,
+                adjust=False,
+                bias=False,
+                min_samples=1,
+                ignore_nulls=False,
+            )
+            expr = pl.when(pl.col(_VAL).is_not_null().cum_sum() < 2).then(None).otherwise(raw)
         else:
             expr = pl.col(_VAL).ewm_var(alpha=alpha, adjust=False)
         # R-EMA-DIVERGENCE: Polars ewm_mean produces null at NaN input positions,
