@@ -551,6 +551,10 @@ _mk(
 # ---------------------------------------------------------------------------
 
 def _joint_energy_family(f1, f2, f3, recent, prior, break_score, window):
+    # Match the pandas canonical's minimum two-observation windows at the
+    # backend boundary, before strict-past rolling assembly.
+    recent = max(2, int(recent))
+    prior = max(2, int(prior))
     cols = _cols(f1)
     out: dict[str, np.ndarray] = {}
     for c in cols:
