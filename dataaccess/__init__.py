@@ -115,17 +115,12 @@ __all__ = [
     "semantic_contract_fingerprint",
 ]
 
-from importlib.metadata import PackageNotFoundError, version as _package_version
+# Build identity is frozen into _build_info at packaging time. Importing an
+# installed artifact never consults environment variables, package metadata, or Git.
+from data_access.core.build_metadata import load_build_info as _load_build_metadata
 
-try:
-    _base_version = _package_version("data-access")
-except PackageNotFoundError:
-    _base_version = "0.8.0+local"
-
-# R29-P0 #207：SCM/commit 驱动版本（0.10.2+build.<sha>），build SHA 也进
-# snapshot/lineage 身份——换代码构建即换数据身份，杜绝「两台机器都显示同版本、
-# 实际代码不同」的复现地狱。
-from data_access._build_meta import build_sha, full_version
-
-__version__ = full_version(_base_version)
-__build_sha__ = build_sha()
+_build_metadata = _load_build_metadata()
+__version__ = _build_metadata.version
+__build_sha__ = _build_metadata.build_sha
+__build_id__ = _build_metadata.build_id
+__build_time__ = _build_metadata.build_time
