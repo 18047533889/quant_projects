@@ -36,6 +36,67 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
 # Basic rolling statistics
 # ---------------------------------------------------------------------------
 
+
+@register_operator(
+    name="ts_zscore",
+    category="time_series",
+    business_category="statistics",
+    canonical="ts_zscore",
+    source=_SRC,
+    backend="polars")
+class TSZScoreNative(SeriesOperator):
+    """Rolling z-score with pandas-compatible finite-value semantics."""
+
+    metadata = OperatorMetadata(
+        name="ts_zscore",
+        category="time_series",
+        description="滚动Z-Score标准化",
+        param_names=["x", "window", "min_periods"],
+        return_type="series",
+        tags=["time_series", "statistics", "polars", "native"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+    )
+
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 20,
+        min_periods: int = 1,
+        **kwargs,
+    ) -> pl.DataFrame:
+        from cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=1)
+        minimum = strict_integer(min_periods, "min_periods", minimum=1)
+        if minimum > w:
+            raise ValueError("min_periods must be less than or equal to window")
+
+        def zscore_fn(values: pl.Series) -> float:
+            raw = np.asarray(values.to_numpy(), dtype=float)
+            finite = raw[np.isfinite(raw)]
+            if finite.size < minimum:
+                return math.nan
+            current = raw[-1]
+            if np.isnan(current):
+                return math.nan
+            if finite.size < 2:
+                return math.nan
+            mean = float(np.mean(finite))
+            std = float(np.std(finite, ddof=1))
+            if std == 0.0:
+                return 0.0
+            return float((current - mean) / std)
+
+        exprs = [
+            pl.col(c).rolling_map(zscore_fn, window_size=w, min_samples=1).alias(c)
+            for c in _numeric_cols(x)
+        ]
+        return x.with_columns(exprs)
+
+
 @register_operator(
     name="ts_skew",
     category="time_series",

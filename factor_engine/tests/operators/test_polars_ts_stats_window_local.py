@@ -100,6 +100,52 @@ def _oracle_es(values: np.ndarray, window: int, alpha: float) -> np.ndarray:
     return np.asarray(out)
 
 
+def _oracle_zscore(values: np.ndarray, window: int, min_periods: int) -> np.ndarray:
+    out = []
+    for chunk in _windows(values, window):
+        finite = _finite(chunk)
+        current = chunk[-1]
+        if finite.size < min_periods or np.isnan(current) or finite.size < 2:
+            out.append(np.nan)
+            continue
+        std = np.std(finite, ddof=1)
+        out.append(0.0 if std == 0.0 else (current - np.mean(finite)) / std)
+    return np.asarray(out)
+
+
+def test_registered_ts_zscore_matches_pandas_semantics_for_nonfinite_values(stats_module):
+    values = np.asarray([1.0, 2.0, np.nan, 4.0, np.inf, -np.inf, 4.0, 4.0, 5.0])
+    frame = pl.DataFrame({"x": values})
+    result = stats_module.TSZScoreNative()._calculate_series(
+        frame, window=5, min_periods=2
+    )["x"].to_numpy()
+    expected = _oracle_zscore(values, 5, 2)
+    np.testing.assert_allclose(result, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
+    assert np.isnan(result[2])
+    assert np.isposinf(result[4])
+    assert np.isneginf(result[5])
+    assert result[6] == 0.0
+
+
+def test_registered_ts_zscore_honors_warmup_and_zero_std(stats_module):
+    values = np.asarray([7.0, 7.0, 7.0, 8.0])
+    result = stats_module.TSZScoreNative()._calculate_series(
+        pl.DataFrame({"x": values}), window=3, min_periods=2
+    )["x"].to_numpy()
+    expected = _oracle_zscore(values, 3, 2)
+    np.testing.assert_allclose(result, expected, equal_nan=True)
+    assert np.isnan(result[0])
+    assert result[1] == 0.0
+    assert result[2] == 0.0
+
+
+def test_registered_ts_zscore_rejects_invalid_min_periods(stats_module):
+    with pytest.raises(ValueError, match="min_periods"):
+        stats_module.TSZScoreNative()._calculate_series(
+            pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=3
+        )
+
+
 @pytest.fixture
 def stats_module(monkeypatch):
     return _load_module(monkeypatch)
