@@ -341,9 +341,10 @@ class _FakeCal:
 
     has_data = True
     timezone = "Asia/Shanghai"
+    session = None
 
-    def available_from(self, knowledge, availability="next_trading_day"):
-        return knowledge + dt.timedelta(days=1)
+    def next_trading_day(self, day):
+        return day + dt.timedelta(days=1)
 
 
 def _ev_contract() -> object:
@@ -392,6 +393,7 @@ def test_asof_next_trading_day_visibility_with_calendar():
 
 
 def test_asof_next_trading_day_strict_without_calendar():
+    from data_access.core.exceptions import CalendarUnavailableError
     from data_access.cos_event_runtime import _select
 
     events = pd.DataFrame({
@@ -403,18 +405,16 @@ def test_asof_next_trading_day_strict_without_calendar():
         "__pit_position": [0, 1],
         "instrument": ["A", "A"],
         "decision_timestamp": [
-            pd.Timestamp("2024-01-02 09:00", tz="UTC"),   # == knowledge → 严格不可见
-            pd.Timestamp("2024-01-02 10:00", tz="UTC"),   # > knowledge → 可见
+            pd.Timestamp("2024-01-02 09:00", tz="UTC"),
+            pd.Timestamp("2024-01-02 10:00", tz="UTC"),
         ],
     })
-    # 无日历 → strict 回退：knowledge < decision 才可见（同 comparison_operator）。
-    picked = _select(
-        decisions, events, _ev_contract(), "decision_timestamp", "instrument",
-        "knowledge", "latest_available", availability="next_trading_day",
-        calendar=None,
-    )
-    assert picked[0] is None  # decision == knowledge → 严格不可见
-    assert picked[1] is not None and picked[1]["val"] == 10
+    with pytest.raises(CalendarUnavailableError, match="日历不可用"):
+        _select(
+            decisions, events, _ev_contract(), "decision_timestamp", "instrument",
+            "knowledge", "latest_available", availability="next_trading_day",
+            calendar=None,
+        )
 
 
 def test_asof_same_day_keeps_inclusive():
