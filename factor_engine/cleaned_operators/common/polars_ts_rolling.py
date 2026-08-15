@@ -13,6 +13,22 @@ except ImportError:  # pragma: no cover
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.base import ParamRole, ParamSpec
 
+_PAIRWISE_CANONICALS = frozenset({
+    "ts_corr",
+    "ts_cov",
+    "ts_regression_slope",
+    "ts_regression_intercept",
+    "ts_regression_resid",
+    "ts_regression_r2",
+})
+
+
+def _register_rolling_operator(**kwargs):
+    """Register only the repaired pairwise surface during normal bootstrap."""
+    if kwargs.get("canonical") in _PAIRWISE_CANONICALS:
+        return register_operator(**kwargs)
+    return lambda cls: cls
+
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
 
@@ -27,12 +43,50 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     return result
 
 
+def _pairwise_rolling_moments(
+    x_col: pl.Expr,
+    y_col: pl.Expr,
+    *,
+    window: int,
+    min_periods: int,
+) -> dict[str, pl.Expr]:
+    """Return direct-window moments over finite ``(x, y)`` pairs only."""
+    valid = x_col.is_finite().fill_null(False) & y_col.is_finite().fill_null(False)
+    x_valid = pl.when(valid).then(x_col).otherwise(None)
+    y_valid = pl.when(valid).then(y_col).otherwise(None)
+    count = valid.cast(pl.Float64).rolling_sum(window_size=window, min_samples=1)
+    # Translation does not change centered moments.  Subtract one finite global
+    # anchor before rolling arithmetic so large common offsets cannot erase the
+    # within-window variation in sum-of-squares identities.
+    x_anchor = x_valid.forward_fill().backward_fill().first()
+    y_anchor = y_valid.forward_fill().backward_fill().first()
+    x_centered = x_valid - x_anchor
+    y_centered = y_valid - y_anchor
+    sum_x = x_centered.rolling_sum(window_size=window, min_samples=1)
+    sum_y = y_centered.rolling_sum(window_size=window, min_samples=1)
+    sum_xx = (x_centered * x_centered).rolling_sum(window_size=window, min_samples=1)
+    sum_yy = (y_centered * y_centered).rolling_sum(window_size=window, min_samples=1)
+    sum_xy = (x_centered * y_centered).rolling_sum(window_size=window, min_samples=1)
+    ready = count >= min_periods
+
+    return {
+        "count": count,
+        "mean_x": pl.when(ready).then(x_anchor + sum_x / count).otherwise(None),
+        "mean_y": pl.when(ready).then(y_anchor + sum_y / count).otherwise(None),
+        "cross": pl.when(ready).then(sum_xy - sum_x * sum_y / count).otherwise(None),
+        "ss_x": pl.when(ready).then(sum_xx - sum_x * sum_x / count).otherwise(None),
+        "ss_y": pl.when(ready).then(sum_yy - sum_y * sum_y / count).otherwise(None),
+        "x_endpoint": x_valid,
+        "y_endpoint": y_valid,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Rolling correlation & covariance
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_corr",
     category="time_series",
     business_category="time_series",
@@ -47,13 +101,13 @@ class TSCorrNative(SeriesOperator):
         name="ts_corr",
         category="time_series",
         description="滚动相关系数",
-        param_names=["x", "y", "window"],
+        param_names=["x", "y", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
@@ -65,24 +119,18 @@ class TSCorrNative(SeriesOperator):
         exprs = []
         for c in cols:
             x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None)
+            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
 
-            # Pearson correlation: cov(x,y) / (std(x) * std(y))
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
-
-            x_std = x_col.rolling_std(window_size=w, min_samples=2)
-            y_std = y_col.rolling_std(window_size=w, min_samples=2)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
-
-            corr = pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov / (x_std * y_std))
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            corr = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(
+                None
+            ).otherwise(moments["cross"] / (moments["ss_x"] * moments["ss_y"]).sqrt())
             exprs.append(corr.alias(c))
 
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_cov",
     category="time_series",
     business_category="time_series",
@@ -124,27 +172,13 @@ class TSCovNative(SeriesOperator):
         exprs = []
         for c in cols:
             x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None)
+            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
 
-            # Compute rolling covariance manually with ddof support
-            # cov = E[(X - E[X])(Y - E[Y])] / (N - ddof)
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=min_p)
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=min_p)
-
-            # Count valid pairs (both x and y are non-null)
-            valid_count = (x_col.is_not_null() & y_col.is_not_null()).cast(pl.Int32).rolling_sum(
-                window_size=w, min_samples=min_p
+            moments = _pairwise_rolling_moments(
+                x_col, y_col, window=w, min_periods=min_p
             )
-
-            # Sum of (x - mean_x) * (y - mean_y)
-            cov_sum = ((x_col - x_mean) * (y_col - y_mean)).rolling_sum(
-                window_size=w, min_samples=min_p
-            )
-
-            # Apply ddof: divide by (n - ddof) instead of n
-            # If valid_count <= ddof, result is NaN
-            cov = pl.when(valid_count > ddof_val).then(
-                cov_sum / (valid_count - ddof_val)
+            cov = pl.when(moments["count"] > ddof_val).then(
+                moments["cross"] / (moments["count"] - ddof_val)
             ).otherwise(None)
 
             exprs.append(cov.alias(c))
@@ -152,7 +186,7 @@ class TSCovNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_ewm_corr",
     category="time_series",
     business_category="time_series",
@@ -186,7 +220,7 @@ class TSEwmCorrNative(SeriesOperator):
         exprs = []
         for c in cols:
             x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None)
+            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
 
             x_mean = x_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
             y_mean = y_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
@@ -209,7 +243,7 @@ class TSEwmCorrNative(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_regression_slope",
     category="time_series",
     business_category="time_series",
@@ -224,13 +258,13 @@ class TSRegressionSlopeNative(SeriesOperator):
         name="ts_regression_slope",
         category="time_series",
         description="滚动回归斜率",
-        param_names=["y", "x", "window"],
+        param_names=["y", "x", "window", "lag", "retval", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, *legacy_args, lag=None, retval=None, min_periods: int = 2, add_intercept=True, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
@@ -242,21 +276,18 @@ class TSRegressionSlopeNative(SeriesOperator):
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None)
+            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
 
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
-            var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
-
-            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
+                moments["cross"] / moments["ss_x"]
+            )
             exprs.append(slope.alias(c))
 
         return y.with_columns(exprs)
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_regression_intercept",
     category="time_series",
     business_category="time_series",
@@ -271,13 +302,13 @@ class TSRegressionInterceptNative(SeriesOperator):
         name="ts_regression_intercept",
         category="time_series",
         description="滚动回归截距",
-        param_names=["y", "x", "window"],
+        param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
@@ -289,23 +320,19 @@ class TSRegressionInterceptNative(SeriesOperator):
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None)
+            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
 
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
-            var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
-
-            # Numerical stability: avoid division by zero
-            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
-            intercept = y_mean - slope * x_mean
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
+                moments["cross"] / moments["ss_x"]
+            )
+            intercept = moments["mean_y"] - slope * moments["mean_x"]
             exprs.append(intercept.alias(c))
 
         return y.with_columns(exprs)
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_regression_resid",
     category="time_series",
     business_category="time_series",
@@ -320,13 +347,13 @@ class TSRegressionResidNative(SeriesOperator):
         name="ts_regression_resid",
         category="time_series",
         description="滚动回归残差",
-        param_names=["y", "x", "window"],
+        param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
@@ -338,26 +365,22 @@ class TSRegressionResidNative(SeriesOperator):
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None)
+            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
 
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
-            var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
-
-            # Numerical stability: avoid division by zero
-            slope = pl.when((var_x == 0) | var_x.is_null()).then(None).otherwise(cov / var_x)
-            intercept = y_mean - slope * x_mean
-            fitted = intercept + slope * x_col
-            resid = y_col - fitted
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
+                moments["cross"] / moments["ss_x"]
+            )
+            intercept = moments["mean_y"] - slope * moments["mean_x"]
+            fitted = intercept + slope * moments["x_endpoint"]
+            resid = moments["y_endpoint"] - fitted
 
             exprs.append(resid.alias(c))
 
         return y.with_columns(exprs)
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_regression_r2",
     category="time_series",
     business_category="time_series",
@@ -372,13 +395,13 @@ class TSRegressionR2Native(SeriesOperator):
         name="ts_regression_r2",
         category="time_series",
         description="滚动回归R平方",
-        param_names=["y", "x", "window"],
+        param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
+                         window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
@@ -390,17 +413,11 @@ class TSRegressionR2Native(SeriesOperator):
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None)
+            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
 
-            y_mean = y_col.rolling_mean(window_size=w, min_samples=2)
-            x_mean = x_col.rolling_mean(window_size=w, min_samples=2)
-
-            cov = ((x_col - x_mean) * (y_col - y_mean)).rolling_mean(window_size=w, min_samples=2)
-            var_x = ((x_col - x_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
-            var_y = ((y_col - y_mean) ** 2).rolling_mean(window_size=w, min_samples=2)
-
-            r2 = pl.when((var_x == 0) | (var_y == 0) | var_x.is_null() | var_y.is_null()).then(None).otherwise(
-                (cov ** 2) / (var_x * var_y)
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            r2 = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(None).otherwise(
+                (moments["cross"] ** 2) / (moments["ss_x"] * moments["ss_y"])
             )
             exprs.append(r2.alias(c))
 
@@ -412,7 +429,7 @@ class TSRegressionR2Native(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_decay_linear",
     category="time_series",
     business_category="time_series",
@@ -453,7 +470,7 @@ class TSDecayLinearNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_trend_slope",
     category="time_series",
     business_category="time_series",
@@ -502,7 +519,7 @@ class TSTrendSlopeNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_monotonicity",
     category="time_series",
     business_category="time_series",
@@ -538,7 +555,7 @@ class TSMonotonicityNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_rolling_operator(
     name="ts_expanding_rank",
     category="time_series",
     business_category="time_series",

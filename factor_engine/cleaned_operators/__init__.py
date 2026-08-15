@@ -55,6 +55,7 @@ _LOAD_MODULES = (
     "cleaned_operators.common.polars_limit_misc",
     "cleaned_operators.common.polars_group",
     "cleaned_operators.common.polars_daily_native",
+    "cleaned_operators.common.polars_ts_rolling",
     "cleaned_operators.research_polars",
     "cleaned_operators.price_volume.ops",
     "cleaned_operators.price_volume.polars_price_volume",

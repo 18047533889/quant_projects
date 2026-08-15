@@ -207,6 +207,21 @@ def register_polars_udf(canonical: str) -> None:
     from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
     from cleaned_operators.registry import OperatorRegistry
 
+    if canonical == "ts_regression_slope":
+        from cleaned_operators.common.polars_ts_rolling import TSRegressionSlopeNative
+
+        native = TSRegressionSlopeNative()
+        if OperatorRegistry.get(canonical, backend="polars") is None:
+            OperatorRegistry.register(
+                native,
+                canonical=canonical,
+                backend="polars",
+                source="factor_dsl_polars_native",
+                status="implemented",
+                backend_explicit=True,
+            )
+        return
+
     class _PolarsUdf(PolarsSeriesOperator):
         metadata = PolarsMetadata(name=canonical, category="polars_udf", param_names=[])
 
