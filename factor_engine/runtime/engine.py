@@ -66,6 +66,22 @@ logger = get_logger("runtime.engine")
 VALID_RUN_MODES = frozenset({"production", "research", "paper"})
 
 
+class PhysicalPlanRequiredError(TypeError):
+    """Raised when a physical-plan backend is given a logical plan."""
+
+
+def _assert_backend_plan_authority(backend: Any, plan: Any | None = None) -> None:
+    """Reject HybridBackend logical execution until a physical consumer is wired."""
+    if backend.__class__.__name__ != "HybridBackend":
+        return
+    if plan is None or isinstance(plan, PlanNode):
+        raise PhysicalPlanRequiredError(
+            "HybridBackend execution requires a planner-admitted PhysicalRegionPlan; "
+            "FactorEngine has no physical-plan consumer wired and refuses logical "
+            "PlanNode runtime rerouting"
+        )
+
+
 def _validate_run_mode(mode: str) -> None:
     """严格校验 run_mode：非法值启动即失败。"""
     if mode not in VALID_RUN_MODES:
@@ -2602,6 +2618,7 @@ class FactorEngine:
 
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
         record_production_fastpath_check(ctx, plan, mode=engine_to_use.run_mode)
+        _assert_backend_plan_authority(engine_to_use.backend, plan)
         result = engine_to_use.backend.execute(plan, ctx)
         from runtime.production_policy import assert_production_fastpath_runtime
 
@@ -3058,6 +3075,7 @@ class FactorEngine:
         """
         from runtime.batch_service import execute_run_many
 
+        _assert_backend_plan_authority(self.backend)
         return execute_run_many(
             self,
             factors,
@@ -3102,6 +3120,7 @@ class FactorEngine:
         """
         from runtime.batch_service import execute_run_many_iter
 
+        _assert_backend_plan_authority(self.backend)
         yield from execute_run_many_iter(
             self,
             factors,
@@ -3156,6 +3175,7 @@ class FactorEngine:
         """
         from runtime.batch_service import execute_run_many_parallel
 
+        _assert_backend_plan_authority(self.backend)
         return execute_run_many_parallel(
             self,
             factors,

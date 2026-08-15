@@ -12,7 +12,7 @@ from api.columns import col
 from api.factor import Factor
 from backend.factory import build_backend
 from cleaned_operators.operator_policy import normalize_bars_market
-from runtime.engine import FactorEngine
+from runtime.engine import FactorEngine, PhysicalPlanRequiredError, _assert_backend_plan_authority
 from runtime.production_policy import (
     ProductionPolicyViolation,
     assert_production_plan_ops,
@@ -21,7 +21,16 @@ from runtime.production_policy import (
 from runtime.warmup_service import prepare_run_warmup
 from tests.helpers import InMemorySeriesSource
 
+
 shuffle = make_cleaned_call_factory("shuffle")
+
+
+def test_hybrid_backend_rejects_logical_plan_without_physical_consumer():
+    from planner.logical_plan import PlanNode
+    from backend.hybrid_backend import HybridBackend
+
+    with pytest.raises(PhysicalPlanRequiredError, match="PhysicalRegionPlan"):
+        _assert_backend_plan_authority(HybridBackend(), PlanNode("column"))
 
 
 def test_normalize_bars_market_maps_ashare_to_cn():

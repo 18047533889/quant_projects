@@ -132,7 +132,7 @@ class BatchOptimizationResult:
     shared_benefits: dict[str, SharedNodeBenefit]
     total_shared_benefit_ms: float
     optimization_basis: str  # "dp_global" | "per_root_fallback"
-    production_ready: bool = True
+    production_ready: bool = False
     readiness_reason: str = ""
 
 
@@ -311,6 +311,7 @@ class BatchGlobalOptimizer:
             estimated_bytes=estimated_bytes,
             estimated_memory=estimated_memory,
             node_graph=node_graph,
+            run_mode=getattr(ctx, "run_mode", None),
         )
 
         return BatchOptimizationResult(
@@ -587,6 +588,7 @@ class BatchGlobalOptimizer:
         estimated_bytes: int | None,
         estimated_memory: int | None,
         node_graph: dict[str, list[str]],
+        run_mode: str | None,
     ) -> tuple[bool, str]:
         """Apply complete fail-closed production-readiness gates."""
         if not roots or not all_nodes:
@@ -675,6 +677,8 @@ class BatchGlobalOptimizer:
             return False, "transfer estimate unavailable"
         if plan.peak_memory_bytes <= 0 or plan.logical_node_count != len(all_nodes):
             return False, "plan estimates or node coverage incomplete"
+        if run_mode != "production":
+            return False, "production readiness requires production run mode"
         return True, ""
 
     def _build_physical_plan(

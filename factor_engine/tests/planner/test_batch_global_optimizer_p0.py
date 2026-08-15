@@ -128,16 +128,33 @@ def test_known_rows_alone_are_not_production_ready():
     assert result.readiness_reason == "byte estimate unavailable"
 
 
-def test_complete_estimates_and_contracts_are_production_ready():
+def test_complete_estimates_and_contracts_are_production_ready(monkeypatch):
+    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr("backend.operator_capability.capability_for", lambda *a, **k: SimpleNamespace(
+        execution_kind=ExecutionKind.PANDAS_REFERENCE,
+        is_production_eligible=lambda: True,
+    ))
     root = PlanNode("abs", inputs=(PlanNode("column"),))
 
     result = BatchGlobalOptimizer().optimize_batch(
-        {"root": root}, {}, {}, _ctx(100, complete=True)
+        {"root": root}, {}, {}, _ctx(100, mode="production", complete=True)
     )
 
     assert result.production_ready is True
     assert result.readiness_reason == ""
     assert result.physical_plan.peak_memory_bytes == 800
+
+
+def test_research_mode_never_certifies_production_readiness():
+    root = PlanNode("abs", inputs=(PlanNode("column"),))
+
+    result = BatchGlobalOptimizer().optimize_batch(
+        {"root": root}, {}, {}, _ctx(100, mode="research", complete=True)
+    )
+
+    assert result.production_ready is False
+    assert result.readiness_reason == "production readiness requires production run mode"
 
 
 def test_empty_plan_is_not_fake_production_ready():
@@ -207,7 +224,7 @@ def test_same_backend_representation_change_has_typed_transfer(monkeypatch):
     root = PlanNode("synthetic_polars", inputs=(source,), node_id="root")
 
     result = BatchGlobalOptimizer().optimize_batch(
-        {"root": root}, {}, {}, _ctx(100, complete=True)
+        {"root": root}, {}, {}, _ctx(100, mode="production", complete=True)
     )
 
     assert len(result.physical_plan.edges) == 1
@@ -247,7 +264,7 @@ def test_explicit_source_residency_creates_typed_transfer(monkeypatch):
     root = PlanNode("synthetic_pandas", inputs=(source,), node_id="root")
 
     result = BatchGlobalOptimizer().optimize_batch(
-        {"root": root}, {}, {}, _ctx(100, complete=True)
+        {"root": root}, {}, {}, _ctx(100, mode="production", complete=True)
     )
 
     assert len(result.physical_plan.edges) == 1
