@@ -161,6 +161,22 @@ class CalendarUnavailableError(ValidationError, TemporalContractError):
     """
 
 
+class AvailabilityLatencyError(TemporalContractError):
+    """非零 availability latency 无法应用到已编译的可见时点。
+
+    延迟应用失败时必须保留底层异常为 ``__cause__``，禁止返回未延迟值，因为后者
+    会把尚不可见的数据提前暴露给 PIT 查询。
+    """
+
+
+class SemanticCatalogUnavailableError(DataAccessError):
+    """权威 semantic catalog 无法导入、bootstrap 或读取其存储。
+
+    这与 catalog 成功加载但数据集没有 availability 声明严格不同；只有后者才可
+    按显式解析结果使用 ``same_day``。
+    """
+
+
 class FilterContractError(ValidationError):
     """R25 P0-004 / §78：过滤契约违例（required filter 缺失 / exactly-one 违反）。
 

@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
-from data_access.core.exceptions import ValidationError
-from data_access.read.temporal_join import (
-    availability_strict_next,
-    availability_uses_calendar,
+from data_access.core.exceptions import (
+    AvailabilityLatencyError,
+    SemanticCatalogUnavailableError,
+    ValidationError,
 )
+from data_access.read.temporal_join import availability_uses_calendar
 from .cos_contract import COSDatasetContract, resolve_event_clock, validate_event_filters
 from .cos_panel_runtime import compile_filters, quote
 from data_access.read.predicate import ensure_sequence_arg
+
+logger = logging.getLogger("data_access.cos_event_runtime")
 
 
 def _required(contract: COSDatasetContract, clock: str) -> list[str]:
@@ -150,25 +154,22 @@ def _normalize(events: pd.DataFrame, contract: COSDatasetContract, clock: str) -
 
 
 def _apply_latency_minutes(avail: Any, latency: int | None) -> Any:
-    """#P1-final closure 5：在 available_from 上叠加 availability_latency（分钟）。
-
-    真实 MarketCalendar 的 ``compile_available_from`` 已把 latency 算进结果；
-    Duck 类型假日历只实现 ``available_from``，这里统一叠加，保证两种日历的
-    延迟语义一致（默认 1 bar = 1 分钟）。date 结果先转当日 00:00 datetime。
-    """
+    """Apply a declared minute latency, failing closed on unsupported values."""
     if not latency:
         return avail
-    minutes = int(latency)
-    if isinstance(avail, _dt.datetime):
-        return avail + _dt.timedelta(minutes=minutes)
-    if isinstance(avail, _dt.date):
-        return _dt.datetime(avail.year, avail.month, avail.day) + _dt.timedelta(
-            minutes=minutes
-        )
     try:
+        minutes = int(latency)
+        if isinstance(avail, _dt.datetime):
+            return avail + _dt.timedelta(minutes=minutes)
+        if isinstance(avail, _dt.date):
+            return _dt.datetime(avail.year, avail.month, avail.day) + _dt.timedelta(
+                minutes=minutes
+            )
         return avail + _dt.timedelta(minutes=minutes)
-    except Exception:
-        return avail
+    except Exception as exc:
+        raise AvailabilityLatencyError(
+            f"availability_latency={latency!r} 无法应用到 available_from={avail!r}"
+        ) from exc
 
 
 def _select(
@@ -192,18 +193,14 @@ def _select(
           ``compile_available_from`` 把 knowledge 编译成 available_from
           （含 availability_latency 叠加），条件变 ``available_from <=
           decision``（与 read_joined 的 ``_session_avail_sql`` 同一语义）；
-        - 无日历 → 按统一 availability 回退：严格下一交易日类用 ``<``，其余
-          ``<=``（与 ``TemporalJoinSpec.comparison_operator`` 同一语义）。
+    Calendar-required availability is always compiled by the authoritative
+    AvailabilityCompiler.  A missing/empty calendar is a typed hard failure;
+    it is never approximated by comparing raw knowledge with decision time.
     """
     if mode not in {"latest_period", "latest_available"}:
         raise ValidationError("period_selection 只能是 latest_period 或 latest_available")
-    strict_next = availability_strict_next(availability)
-    use_calendar = (
-        availability_uses_calendar(availability)
-        and calendar is not None
-        and bool(getattr(calendar, "has_data", False))
-    )
-    cal_tz = getattr(calendar, "timezone", "UTC") if use_calendar else "UTC"
+    requires_calendar = availability_uses_calendar(availability)
+    cal_tz = getattr(calendar, "timezone", "UTC") if calendar is not None else "UTC"
 
     def _to_utc(avail: Any) -> Any:
         """``available_from`` 返回交易所本地 naive datetime/date → 统一 UTC aware。"""
@@ -216,15 +213,20 @@ def _select(
         return avail
 
     def _visible(knowledge: Any, decision: Any) -> bool:
-        if use_calendar:
-            # 真实 MarketCalendar 的 available_from == compile_available_from（统一
-            # IR，含 next_bar/session 粒度）；鸭子类型假日历自行实现 available_from。
-            # availability_latency 在编译结果上统一叠加（默认 1 bar = 1 分钟）。
-            avail = calendar.available_from(knowledge, availability)
-            if latency:
-                avail = _apply_latency_minutes(avail, latency)
+        if requires_calendar:
+            from data_access.read.session_calendar import compile_available_from
+
+            avail = compile_available_from(
+                knowledge,
+                availability,
+                calendar=calendar,
+                latency=None,
+                strict=True,
+            )
+            avail = _apply_latency_minutes(avail, latency)
             return _to_utc(avail) <= decision
-        return (knowledge < decision) if strict_next else (knowledge <= decision)
+        avail = _apply_latency_minutes(knowledge, latency)
+        return _to_utc(avail) <= decision
 
     chosen: list[pd.Series | None] = [None] * len(decisions)
     groups = {str(k): g.sort_values([clock, *([contract.period_column] if contract.period_column else [])], kind="mergesort") for k, g in events.groupby(contract.instrument_column, sort=False)}
@@ -277,13 +279,19 @@ def _resolve_event_availability(
     try:
         from data_access.read.semantic_catalog import get_semantic_catalog
 
+        catalog = get_semantic_catalog()
+        storage = catalog._fields
         fields = [
             f
-            for f in get_semantic_catalog()._fields.values()
+            for f in storage.values()
             if getattr(f, "dataset", None) == dataset
         ]
-    except Exception:
-        return "same_day", None
+    except Exception as exc:
+        if isinstance(exc, SemanticCatalogUnavailableError):
+            raise
+        raise SemanticCatalogUnavailableError(
+            f"数据集 {dataset!r} 的权威 semantic catalog 无法加载或读取"
+        ) from exc
     declared = [
         (str(f.availability), getattr(f, "availability_latency", None))
         for f in fields
