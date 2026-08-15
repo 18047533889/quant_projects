@@ -4,10 +4,12 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pandas as pd
 import polars as pl
 import pytest
 
 from cleaned_operators.base import ParamRole
+from cleaned_operators.common.time_series import TSZScore
 
 
 def _load_module(monkeypatch):
@@ -100,26 +102,17 @@ def _oracle_es(values: np.ndarray, window: int, alpha: float) -> np.ndarray:
     return np.asarray(out)
 
 
-def _oracle_zscore(values: np.ndarray, window: int, min_periods: int) -> np.ndarray:
-    out = []
-    for chunk in _windows(values, window):
-        finite = _finite(chunk)
-        current = chunk[-1]
-        if finite.size < min_periods or np.isnan(current) or finite.size < 2:
-            out.append(np.nan)
-            continue
-        std = np.std(finite, ddof=1)
-        out.append(0.0 if std == 0.0 else (current - np.mean(finite)) / std)
-    return np.asarray(out)
+def _pandas_zscore(values: np.ndarray, window: int) -> np.ndarray:
+    frame = pd.DataFrame({"x": values})
+    return TSZScore()._calculate_series(frame, window=window)["x"].to_numpy()
 
 
-def test_registered_ts_zscore_matches_pandas_semantics_for_nonfinite_values(stats_module):
+def test_ts_zscore_native_matches_pandas_reference_for_nonfinite_values(stats_module):
     values = np.asarray([1.0, 2.0, np.nan, 4.0, np.inf, -np.inf, 4.0, 4.0, 5.0])
-    frame = pl.DataFrame({"x": values})
-    result = stats_module.TSZScoreNative()._calculate_series(
-        frame, window=5, min_periods=2
+    result = stats_module.TSZScoreNative().calculate(
+        pl.DataFrame({"x": values}), window=5
     )["x"].to_numpy()
-    expected = _oracle_zscore(values, 5, 2)
+    expected = _pandas_zscore(values, 5)
     np.testing.assert_allclose(result, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
     assert np.isnan(result[2])
     assert np.isposinf(result[4])
@@ -127,23 +120,30 @@ def test_registered_ts_zscore_matches_pandas_semantics_for_nonfinite_values(stat
     assert result[6] == 0.0
 
 
-def test_registered_ts_zscore_honors_warmup_and_zero_std(stats_module):
+def test_ts_zscore_native_matches_pandas_warmup_and_zero_std(stats_module):
     values = np.asarray([7.0, 7.0, 7.0, 8.0])
-    result = stats_module.TSZScoreNative()._calculate_series(
-        pl.DataFrame({"x": values}), window=3, min_periods=2
+    result = stats_module.TSZScoreNative().calculate(
+        pl.DataFrame({"x": values}), window=3
     )["x"].to_numpy()
-    expected = _oracle_zscore(values, 3, 2)
+    expected = _pandas_zscore(values, 3)
     np.testing.assert_allclose(result, expected, equal_nan=True)
     assert np.isnan(result[0])
     assert result[1] == 0.0
     assert result[2] == 0.0
 
 
-def test_registered_ts_zscore_rejects_invalid_min_periods(stats_module):
-    with pytest.raises(ValueError, match="min_periods"):
-        stats_module.TSZScoreNative()._calculate_series(
-            pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=3
+def test_ts_zscore_native_public_api_matches_pandas_reference(stats_module):
+    assert stats_module.TSZScoreNative.metadata.param_names == ["x", "window"]
+    with pytest.raises(Exception, match="unknown|unexpected|min_periods"):
+        stats_module.TSZScoreNative().calculate(
+            pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=2
         )
+
+
+def test_bootstrap_does_not_load_window_local_ts_zscore_native():
+    from cleaned_operators import _LOAD_MODULES
+
+    assert "cleaned_operators.common.polars_ts_stats" not in _LOAD_MODULES
 
 
 @pytest.fixture

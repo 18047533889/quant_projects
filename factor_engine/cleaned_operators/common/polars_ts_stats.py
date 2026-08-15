@@ -51,12 +51,11 @@ class TSZScoreNative(SeriesOperator):
         name="ts_zscore",
         category="time_series",
         description="滚动Z-Score标准化",
-        param_names=["x", "window", "min_periods"],
+        param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "statistics", "polars", "native"],
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -64,25 +63,21 @@ class TSZScoreNative(SeriesOperator):
         self,
         x: pl.DataFrame,
         window: int = 20,
-        min_periods: int = 1,
         **kwargs,
     ) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=1)
-        minimum = strict_integer(min_periods, "min_periods", minimum=1)
-        if minimum > w:
-            raise ValueError("min_periods must be less than or equal to window")
+        if "min_periods" in kwargs:
+            raise TypeError("ts_zscore does not expose min_periods")
 
         def zscore_fn(values: pl.Series) -> float:
             raw = np.asarray(values.to_numpy(), dtype=float)
             finite = raw[np.isfinite(raw)]
-            if finite.size < minimum:
+            if finite.size < 2:
                 return math.nan
             current = raw[-1]
             if np.isnan(current):
-                return math.nan
-            if finite.size < 2:
                 return math.nan
             mean = float(np.mean(finite))
             std = float(np.std(finite, ddof=1))
