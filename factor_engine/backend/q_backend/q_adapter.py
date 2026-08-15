@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -104,17 +105,24 @@ class QNullSemantics:
 Q_ADAPTER_VERSION = "v1.0.0-phase1"
 
 
-class QTypeAdapter:
-    """q/K 类型适配器。
+class QZeroCopyUnavailable(RuntimeError):
+    """Raised only when a q boundary explicitly cannot do zero-copy."""
 
-    遵循文档 §P2-007: PyKX zero-copy 只是优化，不是 correctness 前提。
+
+class QTypeAdapter:
+    """q/K 类型适配器.
+
+    ``QType`` and ``QNullSemantics`` are the sole type/null authorities.  A
+    caller may provide a column-to-``QType`` schema when pandas' dtype is
+    ambiguous (notably ``object``); guessing a symbol in that case is unsafe.
+    PyKX zero-copy is an optimization and never a semantic fallback.
     """
 
     def __init__(self):
         self.semantics = QNullSemantics()
         self.version = Q_ADAPTER_VERSION
 
-    def pandas_to_q_type(self, dtype: np.dtype) -> QType:
+    def pandas_to_q_type(self, dtype: Any) -> QType:
         """Pandas dtype → q type 映射。
 
         参数:
@@ -141,7 +149,9 @@ class QTypeAdapter:
         elif dtype == np.float64:
             return QType.FLOAT
         elif dtype == np.object_:
-            return QType.SYMBOL  # Default for object
+            raise TypeError(
+                f"Object dtype for column {dtype!r} requires an explicit QType schema"
+            )
         elif np.issubdtype(dtype, np.datetime64):
             return QType.TIMESTAMP
         else:
@@ -179,6 +189,8 @@ class QTypeAdapter:
         *,
         preserve_index: bool = True,
         zero_copy: bool = False,
+        schema: Mapping[str, QType] | None = None,
+        q_module: Any | None = None,
     ) -> Any:
         """Pandas DataFrame → q table。
 
@@ -191,28 +203,29 @@ class QTypeAdapter:
             q table 对象
         """
         try:
-            import pykx as kx
+            kx = q_module
+            if kx is None:
+                import pykx as kx
         except ImportError:
             raise RuntimeError("PyKX not available for pandas_to_q conversion")
+
+        if schema is not None:
+            unknown = set(schema) - set(df.columns)
+            if unknown:
+                raise ValueError(f"Q schema names missing from DataFrame: {sorted(unknown)}")
 
         # 处理索引
         if preserve_index and not isinstance(df.index, pd.RangeIndex):
             df = df.reset_index()
 
-        # 类型转换：确保兼容 q
-        converted_df = self._prepare_pandas_for_q(df)
+        converted_df = self._prepare_pandas_for_q(df, schema=schema)
 
-        # 转换到 q（zero_copy 只是优化提示）
-        # Q2-P0-026: Zero-copy fallback must not mask semantic/type errors
         if zero_copy:
             try:
-                # 尝试零拷贝
                 q_table = kx.toq(converted_df, zero_copy=True)
-            except (TypeError, ValueError) as e:
-                # Zero-copy 可能因数据布局失败，允许 fallback
-                logger.debug(f"Zero-copy not possible, using copy: {e}")
+            except QZeroCopyUnavailable:
+                logger.debug("Zero-copy unavailable, using semantic copy conversion")
                 q_table = kx.toq(converted_df, zero_copy=False)
-            # 其他异常（语义错误、类型错误）不应被捕获
         else:
             q_table = kx.toq(converted_df, zero_copy=False)
 
@@ -223,6 +236,7 @@ class QTypeAdapter:
         q_obj: Any,
         *,
         handle_nulls: bool = True,
+        schema: Mapping[str, QType] | None = None,
     ) -> pd.DataFrame:
         """q table → Pandas DataFrame。
 
@@ -243,11 +257,16 @@ class QTypeAdapter:
 
         # 处理 null 语义
         if handle_nulls:
-            df = self._handle_q_nulls(df)
+            df = self._handle_q_nulls(df, schema=schema)
 
         return df
 
-    def _prepare_pandas_for_q(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _prepare_pandas_for_q(
+        self,
+        df: pd.DataFrame,
+        *,
+        schema: Mapping[str, QType] | None = None,
+    ) -> pd.DataFrame:
         """准备 Pandas DataFrame 以兼容 q。
 
         参数:
@@ -260,27 +279,73 @@ class QTypeAdapter:
 
         for col in result.columns:
             dtype = result[col].dtype
+            q_type = schema.get(col) if schema is not None else None
+            if q_type is None:
+                q_type = self._infer_nullable_q_type(result[col])
 
-            # NaN/inf 处理
-            if np.issubdtype(dtype, np.floating):
-                # Pandas NaN → q 0n (float null)
-                # Pandas inf → q 0w (infinity)
-                # 这些在 q 中有标准表示，无需特殊处理
-                pass
-
-            # 对象类型 → symbol
-            elif dtype == np.object_:
-                # 确保字符串可以转为 symbol
-                result[col] = result[col].fillna("").astype(str)
-
-            # datetime → timestamp
-            elif np.issubdtype(dtype, np.datetime64):
-                # Pandas datetime64[ns] → q timestamp
-                pass
+            if q_type in (QType.SYMBOL, QType.CHAR):
+                # Keep missing values as pd.NA.  In particular, never stringify
+                # the column: None/NA, empty string, and an empty q symbol differ.
+                if not (pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype)):
+                    raise TypeError(f"Column {col!r} is not text-compatible with {q_type.value}")
+                result[col] = result[col].astype("string")
+            elif q_type == QType.BOOLEAN:
+                if not (pd.api.types.is_bool_dtype(dtype) or pd.api.types.is_object_dtype(dtype)):
+                    raise TypeError(f"Column {col!r} is not boolean-compatible")
+                result[col] = result[col].astype("boolean")
+            elif q_type in (QType.BYTE, QType.SHORT, QType.INT, QType.LONG):
+                target = {
+                    QType.BYTE: "Int8", QType.SHORT: "Int16",
+                    QType.INT: "Int32", QType.LONG: "Int64",
+                }[q_type]
+                if not (pd.api.types.is_integer_dtype(dtype) or pd.api.types.is_object_dtype(dtype)):
+                    raise TypeError(f"Column {col!r} is not integer-compatible with {q_type.value}")
+                result[col] = result[col].astype(target)
+            elif q_type in (QType.REAL, QType.FLOAT):
+                if not (pd.api.types.is_numeric_dtype(dtype) or pd.api.types.is_object_dtype(dtype)):
+                    raise TypeError(f"Column {col!r} is not numeric-compatible with {q_type.value}")
+                result[col] = result[col].astype("float32" if q_type == QType.REAL else "float64")
+            elif q_type in (QType.TIMESTAMP, QType.DATE, QType.TIMESPAN, QType.TIME):
+                if not (pd.api.types.is_datetime64_any_dtype(dtype) or pd.api.types.is_timedelta64_dtype(dtype)):
+                    raise TypeError(f"Column {col!r} is not temporal-compatible with {q_type.value}")
+            else:
+                raise TypeError(f"Unsupported Q schema type for column {col!r}: {q_type!r}")
 
         return result
 
-    def _handle_q_nulls(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _infer_nullable_q_type(self, series: pd.Series) -> QType:
+        """Infer only unambiguous extension/numpy dtypes; object requires schema."""
+        dtype = series.dtype
+        if pd.api.types.is_object_dtype(dtype):
+            values = series.dropna()
+            if values.empty or all(isinstance(value, str) for value in values):
+                raise TypeError(
+                    f"Object column {series.name!r} requires an explicit QType schema"
+                )
+            raise TypeError(f"Object column {series.name!r} has ambiguous values")
+        if pd.api.types.is_string_dtype(dtype):
+            raise TypeError(
+                f"String column {series.name!r} requires an explicit QType schema"
+            )
+        if pd.api.types.is_bool_dtype(dtype):
+            return QType.BOOLEAN
+        if pd.api.types.is_integer_dtype(dtype):
+            bits = dtype.numpy_dtype.itemsize * 8
+            return {8: QType.BYTE, 16: QType.SHORT, 32: QType.INT, 64: QType.LONG}[bits]
+        if pd.api.types.is_float_dtype(dtype):
+            return QType.REAL if dtype.itemsize == 4 else QType.FLOAT
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+            return QType.TIMESTAMP
+        if pd.api.types.is_timedelta64_dtype(dtype):
+            return QType.TIMESPAN
+        raise TypeError(f"Unsupported pandas dtype for Q conversion: {dtype}")
+
+    def _handle_q_nulls(
+        self,
+        df: pd.DataFrame,
+        *,
+        schema: Mapping[str, QType] | None = None,
+    ) -> pd.DataFrame:
         """处理 q null → Pandas NaN/NaT。
 
         参数:
@@ -293,22 +358,48 @@ class QTypeAdapter:
 
         for col in result.columns:
             dtype = result[col].dtype
+            q_type = schema.get(col) if schema is not None else None
 
-            # 整数 null → NaN (升级为 float)
-            if np.issubdtype(dtype, np.integer):
-                # q null int (-2147483648) → pandas NaN
-                null_mask = result[col] == self.semantics.null_int
-                if null_mask.any():
-                    result[col] = result[col].astype(float)
-                    result[col][null_mask] = np.nan
+            if pd.api.types.is_integer_dtype(dtype):
+                # Apply the per-width null sentinel for the declared q type, not
+                # one global int null.  Byte is skipped: q byte null (0x00)
+                # equals the real value 0, so rewriting it would corrupt data.
+                sentinel = None
+                nullable_dtype = None
+                if q_type in (QType.SHORT, QType.INT, QType.LONG):
+                    sentinel = {
+                        QType.SHORT: self.semantics.null_short,
+                        QType.INT: self.semantics.null_int,
+                        QType.LONG: self.semantics.null_long,
+                    }[q_type]
+                    nullable_dtype = {
+                        QType.SHORT: "Int16", QType.INT: "Int32", QType.LONG: "Int64",
+                    }[q_type]
+                elif q_type is None:
+                    try:
+                        bits = dtype.numpy_dtype.itemsize * 8
+                    except AttributeError:
+                        bits = dtype.itemsize * 8
+                    if bits == 16:
+                        sentinel, nullable_dtype = self.semantics.null_short, "Int16"
+                    elif bits == 32:
+                        sentinel, nullable_dtype = self.semantics.null_int, "Int32"
+                    elif bits == 64:
+                        sentinel, nullable_dtype = self.semantics.null_long, "Int64"
+                if sentinel is not None:
+                    mask = result[col].eq(sentinel)
+                    if mask.any():
+                        result[col] = result[col].astype(nullable_dtype)
+                        result.loc[mask, col] = pd.NA
 
             # 浮点 null 已经是 NaN，无需处理
-            elif np.issubdtype(dtype, np.floating):
+            elif pd.api.types.is_floating_dtype(dtype):
                 pass
 
-            # 符号 null
-            elif dtype == np.object_:
-                result[col] = result[col].replace(self.semantics.null_symbol, None)
+            # 符号 null（仅当 schema 声明为 symbol；否则保持原值，避免把
+            # 真实空字符串 "" 误当 null 合并）
+            elif q_type == QType.SYMBOL and pd.api.types.is_object_dtype(dtype):
+                result[col] = result[col].replace(self.semantics.null_symbol, pd.NA)
 
         return result
 
