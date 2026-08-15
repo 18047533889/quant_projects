@@ -286,8 +286,8 @@ class StreamingEvaluator:
 
     @staticmethod
     def _timing_rule(timing_offsets: Tuple[Tuple[Any, ...], ...]) -> Tuple[Tuple[Any, ...], ...]:
-        """Compare per-row timing offsets without requiring equal chunk lengths."""
-        return tuple(sorted(set(zip(*timing_offsets)), key=repr))
+        """Compare invariant per-row offsets without requiring equal chunk lengths."""
+        return tuple(tuple(sorted(set(offsets), key=repr)) for offsets in timing_offsets)
 
     @staticmethod
     def _coordinates(axis: Any, fallback: Tuple[Any, ...]) -> Tuple[Any, ...]:
@@ -318,6 +318,16 @@ class StreamingEvaluator:
             raise SnapshotMismatchError("stream identity/context changed between chunks")
         elif timing_rule != stream_state["timing_rule"]:
             raise SnapshotMismatchError("stream label timing changed between chunks")
+        else:
+            current_vectors = self._timing_vectors(label_bundle)
+            stream_state["timing_vectors"] = tuple(
+                previous + current
+                for previous, current in zip(stream_state["timing_vectors"], current_vectors)
+            )
+            stream_state["timing_offsets"] = tuple(
+                previous + current
+                for previous, current in zip(stream_state["timing_offsets"], timing_offsets)
+            )
 
         times = self._coordinates(factor_batch.time_axis, tuple(label_bundle.decision_time))
         if len(times) != factor_batch.num_times:
@@ -416,12 +426,6 @@ class StreamingEvaluator:
                     stream_state["timing_vectors"] = chunk_descriptor.timing_vectors
                 elif chunk_descriptor.parent_identity != stream_state["identity"]:
                     raise SnapshotMismatchError("internal chunk parent identity changed")
-            elif stream_state.get("timing_vectors") is not None:
-                current_vectors = self._timing_vectors(label_bundle)
-                stream_state["timing_vectors"] = tuple(
-                    previous + current
-                    for previous, current in zip(stream_state["timing_vectors"], current_vectors)
-                )
 
             # Update each metric state with this chunk
             for metric_id, state in metric_states.items():

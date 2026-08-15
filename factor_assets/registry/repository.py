@@ -1,37 +1,73 @@
 """
-In-memory append-only repository for factor assets.
+Authoritative repository interfaces and the ephemeral in-memory implementation.
 
-Initial implementation uses in-memory storage only.
-NO SQLite, NO file I/O — just validated append-only operations.
+The in-memory repository is intentionally RESEARCH_ONLY. It provides the same
+atomic transition boundary expected from a future durable repository, but it
+must not be selected for production use.
 """
 
 from dataclasses import dataclass, replace
-from typing import Optional
 from datetime import datetime, timezone
+from threading import RLock
+from typing import Optional, Protocol, runtime_checkable
 
 from factor_assets.contracts.asset import FactorAsset, AssetMetadata
+from factor_assets.contracts.evidence_ref import (
+    EvidenceBundleRef,
+    evidence_bundle_event_id,
+)
 from factor_assets.contracts.lifecycle import (
     LifecycleState,
     StateEvent,
     validate_transition,
-    LifecycleConflictError,
 )
 from factor_assets.contracts.lineage import LineageRef
-
-
-class DuplicateIdentityError(Exception):
-    """Raised when attempting to register a factor that already exists."""
-    pass
+from factor_assets.errors import (
+    CapabilityError,
+    DuplicateIdentityError,
+    LifecycleConflictError,
+)
 
 
 class AssetNotFoundError(Exception):
     """Raised when a factor asset is not found in the repository."""
-    pass
+
+
+@dataclass(frozen=True)
+class CommittedTransition:
+    """Authoritative result of one committed state mutation and event append."""
+
+    asset: FactorAsset
+    event: StateEvent
+    revision: int
+
+
+@runtime_checkable
+class LifecycleRepository(Protocol):
+    """Repository boundary that owns lifecycle state and event authority."""
+
+    def commit_transition(
+        self,
+        factor_id: str,
+        to_state: LifecycleState,
+        evidence_refs: tuple[str, ...] = (),
+        decision_id: Optional[str] = None,
+        policy_version: Optional[str] = None,
+        actor: Optional[str] = None,
+        notes: Optional[str] = None,
+        *,
+        expected_state: Optional[LifecycleState] = None,
+        expected_revision: Optional[int] = None,
+        evidence_bundle_ref: Optional[EvidenceBundleRef] = None,
+    ) -> CommittedTransition:
+        """Atomically validate, mutate state, and append exactly one event."""
+        ...
 
 
 @dataclass
 class RepositoryStats:
     """Statistics about the repository state."""
+
     total_assets: int
     by_state: dict[LifecycleState, int]
     total_events: int
@@ -40,126 +76,189 @@ class RepositoryStats:
 
 
 class AssetRepository:
-    """
-    Append-only in-memory repository for factor assets.
+    """Append-only, process-local repository for research and tests only."""
 
-    Properties:
-    - Immutable identity: factor_id cannot change once registered
-    - Append-only events: state transitions are recorded, never deleted
-    - Exact seen history: first registration timestamp preserved
-    - Conservative transitions: validated state machine
-    - No raw values: only metadata and references stored
-    """
+    RESEARCH_ONLY = True
+    EPHEMERAL = True
+    PRODUCTION_CAPABLE = False
 
     def __init__(self):
         self._assets: dict[str, FactorAsset] = {}
         self._events: list[StateEvent] = []
-        self._canonical_hash_index: dict[str, str] = {}  # hash -> factor_id
+        self._canonical_hash_index: dict[str, str] = {}
+        self._revisions: dict[str, int] = {}
+        self._idempotency_keys: set[tuple[str, str]] = set()
+        self._lock = RLock()
 
     def register(
         self,
         metadata: AssetMetadata,
         lineage: LineageRef,
-        tags: tuple[str, ...] = ()
+        tags: tuple[str, ...] = (),
     ) -> FactorAsset:
-        """
-        Register a new factor asset.
-
-        Args:
-            metadata: Asset metadata including identity
-            lineage: Lineage and provenance information
-            tags: Optional classification tags
-
-        Returns:
-            Newly registered FactorAsset
-
-        Raises:
-            DuplicateIdentityError: If factor_id already exists
-            ValueError: If metadata.factor_id != lineage.factor_id
-        """
+        """Register an asset and append its initial registration event."""
         factor_id = metadata.factor_id
+        with self._lock:
+            if factor_id in self._assets:
+                raise DuplicateIdentityError(
+                    f"Factor {factor_id} is already registered at "
+                    f"{self._assets[factor_id].registered_at}"
+                )
+            if metadata.factor_id != lineage.factor_id:
+                raise ValueError(
+                    f"Metadata factor_id ({metadata.factor_id}) must match "
+                    f"lineage factor_id ({lineage.factor_id})"
+                )
+            if metadata.canonical_hash in self._canonical_hash_index:
+                existing_id = self._canonical_hash_index[metadata.canonical_hash]
+                raise DuplicateIdentityError(
+                    f"Factor with canonical_hash {metadata.canonical_hash} "
+                    f"already exists as {existing_id}"
+                )
 
-        if factor_id in self._assets:
-            raise DuplicateIdentityError(
-                f"Factor {factor_id} is already registered at "
-                f"{self._assets[factor_id].registered_at}"
+            now = datetime.now(timezone.utc).isoformat()
+            asset = FactorAsset(
+                metadata=metadata,
+                lineage=lineage,
+                lifecycle_state=LifecycleState.REGISTERED,
+                registered_at=now,
+                tags=tags,
             )
-
-        if metadata.factor_id != lineage.factor_id:
-            raise ValueError(
-                f"Metadata factor_id ({metadata.factor_id}) must match "
-                f"lineage factor_id ({lineage.factor_id})"
+            event = StateEvent(
+                factor_id=factor_id,
+                from_state=LifecycleState.REGISTERED,
+                to_state=LifecycleState.REGISTERED,
+                timestamp=now,
+                evidence_refs=(),
+                notes="Initial registration",
             )
-
-        # Check for canonical hash collision
-        if metadata.canonical_hash in self._canonical_hash_index:
-            existing_id = self._canonical_hash_index[metadata.canonical_hash]
-            raise DuplicateIdentityError(
-                f"Factor with canonical_hash {metadata.canonical_hash} "
-                f"already exists as {existing_id}"
-            )
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        asset = FactorAsset(
-            metadata=metadata,
-            lineage=lineage,
-            lifecycle_state=LifecycleState.REGISTERED,
-            registered_at=now,
-            tags=tags,
-        )
-
-        self._assets[factor_id] = asset
-        self._canonical_hash_index[metadata.canonical_hash] = factor_id
-
-        # Record initial registration event
-        event = StateEvent(
-            factor_id=factor_id,
-            from_state=LifecycleState.REGISTERED,
-            to_state=LifecycleState.REGISTERED,
-            timestamp=now,
-            evidence_refs=(),
-            notes="Initial registration"
-        )
-        self._events.append(event)
-
-        return asset
+            self._assets[factor_id] = asset
+            self._canonical_hash_index[metadata.canonical_hash] = factor_id
+            self._revisions[factor_id] = 0
+            self._events.append(event)
+            return asset
 
     def get(self, factor_id: str) -> FactorAsset:
-        """
-        Get a factor asset by ID.
+        """Get an asset by ID."""
+        with self._lock:
+            if factor_id not in self._assets:
+                raise AssetNotFoundError(f"Factor {factor_id} not found")
+            return self._assets[factor_id]
 
-        Args:
-            factor_id: Factor identifier
-
-        Returns:
-            FactorAsset
-
-        Raises:
-            AssetNotFoundError: If factor not found
-        """
-        if factor_id not in self._assets:
-            raise AssetNotFoundError(f"Factor {factor_id} not found")
-        return self._assets[factor_id]
+    def get_revision(self, factor_id: str) -> int:
+        """Return the current optimistic-concurrency revision."""
+        with self._lock:
+            if factor_id not in self._revisions:
+                raise AssetNotFoundError(f"Factor {factor_id} not found")
+            return self._revisions[factor_id]
 
     def exists(self, factor_id: str) -> bool:
-        """Check if a factor exists in the repository."""
-        return factor_id in self._assets
+        with self._lock:
+            return factor_id in self._assets
 
     def find_by_hash(self, canonical_hash: str) -> Optional[FactorAsset]:
-        """
-        Find a factor by its canonical hash.
+        with self._lock:
+            factor_id = self._canonical_hash_index.get(canonical_hash)
+            return None if factor_id is None else self._assets[factor_id]
 
-        Args:
-            canonical_hash: Canonical expression hash
+    def commit_transition(
+        self,
+        factor_id: str,
+        to_state: LifecycleState,
+        evidence_refs: tuple[str, ...] = (),
+        decision_id: Optional[str] = None,
+        policy_version: Optional[str] = None,
+        actor: Optional[str] = None,
+        notes: Optional[str] = None,
+        *,
+        expected_state: Optional[LifecycleState] = None,
+        expected_revision: Optional[int] = None,
+        evidence_bundle_ref: Optional[EvidenceBundleRef] = None,
+    ) -> CommittedTransition:
+        """Atomically perform the authoritative transition and event append."""
+        with self._lock:
+            if factor_id not in self._assets:
+                raise AssetNotFoundError(f"Factor {factor_id} not found")
+            asset = self._assets[factor_id]
+            from_state = asset.lifecycle_state
+            revision = self._revisions[factor_id]
 
-        Returns:
-            FactorAsset if found, None otherwise
-        """
-        factor_id = self._canonical_hash_index.get(canonical_hash)
-        if factor_id is None:
-            return None
-        return self._assets[factor_id]
+            if expected_state is not None and from_state != expected_state:
+                raise LifecycleConflictError(
+                    f"Expected state {expected_state.value} for factor {factor_id}, "
+                    f"found {from_state.value}"
+                )
+            if expected_revision is not None and revision != expected_revision:
+                raise LifecycleConflictError(
+                    f"Expected revision {expected_revision} for factor {factor_id}, "
+                    f"found {revision}"
+                )
+            if (
+                from_state == to_state == LifecycleState.EVALUATED
+                and expected_revision is None
+                and not decision_id
+            ):
+                raise LifecycleConflictError(
+                    "EVALUATED re-evaluation requires expected_revision or decision_id"
+                )
+            if decision_id is not None:
+                idempotency_key = (factor_id, decision_id)
+                if idempotency_key in self._idempotency_keys:
+                    raise LifecycleConflictError(
+                        f"Duplicate transition decision_id {decision_id} for factor {factor_id}"
+                    )
+            if evidence_bundle_ref is not None:
+                if not isinstance(evidence_bundle_ref, EvidenceBundleRef):
+                    raise TypeError("evidence_bundle_ref must be an EvidenceBundleRef")
+                if factor_id not in evidence_bundle_ref.factor_ids:
+                    raise LifecycleConflictError(
+                        f"Evidence bundle {evidence_bundle_ref.bundle_id} does not contain "
+                        f"factor {factor_id}"
+                    )
+                if to_state != LifecycleState.EVALUATED:
+                    raise LifecycleConflictError(
+                        "evidence_bundle_ref may only be committed with an EVALUATED transition"
+                    )
+
+            evidence_refs = tuple(evidence_refs)
+            if evidence_bundle_ref is not None:
+                evidence_refs = tuple(dict.fromkeys((
+                    *evidence_refs,
+                    "evaluation_bundle_ref",
+                    evidence_bundle_event_id(evidence_bundle_ref),
+                )))
+            validate_transition(from_state, to_state, set(evidence_refs))
+            now = datetime.now(timezone.utc).isoformat()
+            updates = {"lifecycle_state": to_state}
+            if to_state == LifecycleState.EVALUATED:
+                if evidence_bundle_ref is not None:
+                    updates["latest_evidence_ref"] = evidence_bundle_ref
+                if asset.first_evaluated_at is None:
+                    updates["first_evaluated_at"] = now
+            elif to_state == LifecycleState.APPROVED and asset.approved_at is None:
+                updates["approved_at"] = now
+            elif to_state == LifecycleState.PRODUCTION_READY and asset.production_ready_at is None:
+                updates["production_ready_at"] = now
+
+            updated_asset = replace(asset, **updates)
+            event = StateEvent(
+                factor_id=factor_id,
+                from_state=from_state,
+                to_state=to_state,
+                timestamp=now,
+                evidence_refs=evidence_refs,
+                decision_id=decision_id,
+                policy_version=policy_version,
+                actor=actor,
+                notes=notes,
+            )
+            new_revision = revision + 1
+            self._assets[factor_id] = updated_asset
+            self._revisions[factor_id] = new_revision
+            self._events.append(event)
+            if decision_id is not None:
+                self._idempotency_keys.add((factor_id, decision_id))
+            return CommittedTransition(updated_asset, event, new_revision)
 
     def transition(
         self,
@@ -170,98 +269,59 @@ class AssetRepository:
         policy_version: Optional[str] = None,
         actor: Optional[str] = None,
         notes: Optional[str] = None,
+        *,
+        expected_state: Optional[LifecycleState] = None,
+        expected_revision: Optional[int] = None,
+        evidence_bundle_ref: Optional[EvidenceBundleRef] = None,
     ) -> FactorAsset:
-        """
-        Transition a factor to a new lifecycle state.
-
-        Args:
-            factor_id: Factor identifier
-            to_state: Target lifecycle state
-            evidence_refs: Evidence supporting the transition
-            decision_id: Optional decision record ID
-            policy_version: Optional policy version
-            actor: Optional actor who initiated transition
-            notes: Optional notes
-
-        Returns:
-            Updated FactorAsset
-
-        Raises:
-            AssetNotFoundError: If factor not found
-            LifecycleConflictError: If transition is illegal or evidence missing
-        """
-        asset = self.get(factor_id)
-        from_state = asset.lifecycle_state
-
-        # Validate transition with evidence
-        validate_transition(from_state, to_state, set(evidence_refs))
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        # Update timestamps based on target state
-        updates = {"lifecycle_state": to_state}
-        if to_state == LifecycleState.EVALUATED and asset.first_evaluated_at is None:
-            updates["first_evaluated_at"] = now
-        elif to_state == LifecycleState.APPROVED and asset.approved_at is None:
-            updates["approved_at"] = now
-        elif to_state == LifecycleState.PRODUCTION_READY and asset.production_ready_at is None:
-            updates["production_ready_at"] = now
-
-        updated_asset = replace(asset, **updates)
-        self._assets[factor_id] = updated_asset
-
-        # Record event
-        event = StateEvent(
-            factor_id=factor_id,
-            from_state=from_state,
-            to_state=to_state,
-            timestamp=now,
-            evidence_refs=evidence_refs,
-            decision_id=decision_id,
-            policy_version=policy_version,
-            actor=actor,
-            notes=notes,
-        )
-        self._events.append(event)
-
-        return updated_asset
+        """Compatibility wrapper returning the committed asset."""
+        return self.commit_transition(
+            factor_id,
+            to_state,
+            evidence_refs,
+            decision_id,
+            policy_version,
+            actor,
+            notes,
+            expected_state=expected_state,
+            expected_revision=expected_revision,
+            evidence_bundle_ref=evidence_bundle_ref,
+        ).asset
 
     def list_by_state(self, state: LifecycleState) -> list[FactorAsset]:
-        """List all factors in a given lifecycle state."""
-        return [asset for asset in self._assets.values() if asset.lifecycle_state == state]
+        with self._lock:
+            return [asset for asset in self._assets.values() if asset.lifecycle_state == state]
 
     def list_all(self) -> list[FactorAsset]:
-        """List all registered factors."""
-        return list(self._assets.values())
+        with self._lock:
+            return list(self._assets.values())
 
     def get_events(self, factor_id: Optional[str] = None) -> list[StateEvent]:
-        """
-        Get lifecycle events.
-
-        Args:
-            factor_id: If provided, return only events for this factor
-
-        Returns:
-            List of StateEvent records
-        """
-        if factor_id is None:
-            return list(self._events)
-        return [e for e in self._events if e.factor_id == factor_id]
+        with self._lock:
+            if factor_id is None:
+                return list(self._events)
+            return [event for event in self._events if event.factor_id == factor_id]
 
     def stats(self) -> RepositoryStats:
-        """Get repository statistics."""
-        by_state: dict[LifecycleState, int] = {}
-        for asset in self._assets.values():
-            by_state[asset.lifecycle_state] = by_state.get(asset.lifecycle_state, 0) + 1
+        with self._lock:
+            by_state: dict[LifecycleState, int] = {}
+            for asset in self._assets.values():
+                by_state[asset.lifecycle_state] = by_state.get(asset.lifecycle_state, 0) + 1
+            timestamps = [asset.registered_at for asset in self._assets.values()]
+            return RepositoryStats(
+                total_assets=len(self._assets),
+                by_state=by_state,
+                total_events=len(self._events),
+                first_registration=min(timestamps) if timestamps else None,
+                last_registration=max(timestamps) if timestamps else None,
+            )
 
-        timestamps = [asset.registered_at for asset in self._assets.values()]
-        first = min(timestamps) if timestamps else None
-        last = max(timestamps) if timestamps else None
 
-        return RepositoryStats(
-            total_assets=len(self._assets),
-            by_state=by_state,
-            total_events=len(self._events),
-            first_registration=first,
-            last_registration=last,
+def create_repository(*, production: bool = False) -> AssetRepository:
+    """Create the available repository, refusing ephemeral storage in production."""
+    if production:
+        raise CapabilityError(
+            "No production-capable durable factor-assets repository is implemented; "
+            "the in-memory AssetRepository is RESEARCH_ONLY and ephemeral"
         )
+    return AssetRepository()

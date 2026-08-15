@@ -4,8 +4,8 @@ Tests for stateless transforms.
 import pytest
 import numpy as np
 
-from modeling.preprocess.stateless import rank_transform, zscore_transform, winsorize
-from modeling.errors import InsufficientDataError
+from modeling_adapters.preprocess.stateless import rank_transform, zscore_transform, winsorize
+from modeling_adapters.errors import InsufficientDataError
 
 
 class TestRankTransform:

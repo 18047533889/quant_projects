@@ -5,13 +5,142 @@ Test AssetRepository append-only operations and lifecycle management.
 import pytest
 
 from factor_assets.contracts.asset import AssetMetadata, FactorAsset
+from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.contracts.lineage import LineageRef, ParentRef
 from factor_assets.contracts.lifecycle import LifecycleState, LifecycleConflictError
 from factor_assets.registry import (
     AssetRepository,
     DuplicateIdentityError,
     AssetNotFoundError,
+    create_repository,
 )
+from factor_assets.errors import CapabilityError
+
+
+def _bundle(bundle_id="bundle-1", factor_ids=("F001",)):
+    return EvidenceBundleRef(
+        bundle_id=bundle_id,
+        evaluation_run_id=f"run-{bundle_id}",
+        factor_ids=factor_ids,
+        timestamp="2026-08-15T00:00:00+00:00",
+        qe_version="1.0",
+    )
+
+
+def test_evaluated_commit_projects_typed_evidence_onto_asset():
+    repo = AssetRepository()
+    repo.register(
+        AssetMetadata(
+            factor_id="F001",
+            canonical_repr="factor",
+            canonical_hash="hash-typed-evidence",
+            frequency="daily",
+            domains=("price",),
+            timing="daily",
+        ),
+        LineageRef(factor_id="F001", parents=()),
+    )
+    bundle = _bundle()
+
+    committed = repo.commit_transition(
+        "F001", LifecycleState.EVALUATED, evidence_bundle_ref=bundle
+    )
+
+    assert committed.asset.latest_evidence_ref is bundle
+    assert committed.asset.has_evidence is True
+    assert committed.event.evidence_refs == (
+        "evaluation_bundle_ref",
+        "qe-bundle:bundle-1",
+    )
+
+
+def test_policy_key_alone_is_not_projected_as_bundle_identity():
+    repo = AssetRepository()
+    repo.register(
+        AssetMetadata(
+            factor_id="F001",
+            canonical_repr="factor",
+            canonical_hash="hash-policy-key",
+            frequency="daily",
+            domains=("price",),
+            timing="daily",
+        ),
+        LineageRef(factor_id="F001", parents=()),
+    )
+
+    committed = repo.commit_transition(
+        "F001", LifecycleState.EVALUATED,
+        evidence_refs=("evaluation_bundle_ref",),
+    )
+
+    assert committed.asset.latest_evidence_ref is None
+    assert committed.asset.has_evidence is False
+
+
+def test_re_evaluation_requires_and_honors_revision_guard():
+    repo = AssetRepository()
+    repo.register(
+        AssetMetadata(
+            factor_id="F001",
+            canonical_repr="factor",
+            canonical_hash="hash-reevaluation",
+            frequency="daily",
+            domains=("price",),
+            timing="daily",
+        ),
+        LineageRef(factor_id="F001", parents=()),
+    )
+    repo.commit_transition(
+        "F001", LifecycleState.EVALUATED, evidence_bundle_ref=_bundle()
+    )
+
+    with pytest.raises(LifecycleConflictError, match="requires expected_revision"):
+        repo.commit_transition(
+            "F001", LifecycleState.EVALUATED,
+            evidence_bundle_ref=_bundle("bundle-2"),
+        )
+    assert repo.get_revision("F001") == 1
+    assert len(repo.get_events("F001")) == 2
+
+    committed = repo.commit_transition(
+        "F001", LifecycleState.EVALUATED,
+        expected_revision=1,
+        evidence_bundle_ref=_bundle("bundle-2"),
+    )
+    assert committed.revision == 2
+    assert committed.asset.latest_evidence_ref.bundle_id == "bundle-2"
+
+
+def test_evidence_bundle_must_reference_transitioned_factor():
+    repo = AssetRepository()
+    repo.register(
+        AssetMetadata(
+            factor_id="F001",
+            canonical_repr="factor",
+            canonical_hash="hash-factor-membership",
+            frequency="daily",
+            domains=("price",),
+            timing="daily",
+        ),
+        LineageRef(factor_id="F001", parents=()),
+    )
+
+    with pytest.raises(LifecycleConflictError, match="does not contain factor"):
+        repo.commit_transition(
+            "F001", LifecycleState.EVALUATED,
+            evidence_bundle_ref=_bundle(factor_ids=("F002",)),
+        )
+
+
+def test_root_facade_exports_lifecycle_authority_types():
+    import factor_assets
+
+    assert factor_assets.LifecycleOrchestrator
+    assert factor_assets.TransitionRequest
+    assert factor_assets.TransitionResult
+    assert factor_assets.LifecycleRepository
+    assert factor_assets.CommittedTransition
+    assert factor_assets.create_repository
 
 
 def test_repository_register_new_asset():
@@ -359,3 +488,35 @@ def test_repository_complete_lifecycle_flow():
     # Check event history
     events = repo.get_events("F001")
     assert len(events) == 4  # registration + 3 transitions
+
+
+def test_repository_freezes_evidence_refs_at_commit():
+    repo = AssetRepository()
+    metadata = AssetMetadata(
+        factor_id="F001",
+        canonical_repr="factor",
+        canonical_hash="hash-evidence",
+        frequency="daily",
+        domains=("price",),
+        timing="daily",
+    )
+    repo.register(metadata, LineageRef(factor_id="F001", parents=()))
+    evidence_refs = ["evaluation_bundle_ref"]
+
+    committed = repo.commit_transition(
+        "F001", LifecycleState.EVALUATED, evidence_refs=evidence_refs
+    )
+    evidence_refs.append("mutated_after_commit")
+
+    assert committed.event.evidence_refs == ("evaluation_bundle_ref",)
+    assert repo.get_events("F001")[-1].evidence_refs == ("evaluation_bundle_ref",)
+
+
+def test_in_memory_repository_is_explicitly_research_only():
+    repo = create_repository(production=False)
+    assert repo.RESEARCH_ONLY is True
+    assert repo.EPHEMERAL is True
+    assert repo.PRODUCTION_CAPABLE is False
+
+    with pytest.raises(CapabilityError, match="explicit SQLite db_path"):
+        create_repository(production=True)

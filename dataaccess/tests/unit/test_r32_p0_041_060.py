@@ -311,6 +311,13 @@ class TestP0044ToP0048_CredentialHandling:
         # Different credential scope = different cache key
         assert key1 != key2
 
+    def test_p0_036_cache_key_changes_on_credential_generation(self):
+        from data_access.read.read_contract import _RemoteMetaCacheKey
+
+        assert _RemoteMetaCacheKey("s3://b/x", "scope", "generation-1") != _RemoteMetaCacheKey(
+            "s3://b/x", "scope", "generation-2"
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

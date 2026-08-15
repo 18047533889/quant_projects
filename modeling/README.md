@@ -1,6 +1,6 @@
-# Modeling
+# Modeling Adapters
 
-Model input preparation layer for quantitative factor platform.
+Standalone model input contracts and `factor_preprocess` adapters. The import namespace is intentionally `modeling_adapters`; FactorEngine's authoritative production modeling package remains top-level `modeling`.
 
 ## Purpose
 
@@ -33,8 +33,8 @@ pip install -e ".[preprocess]"      # With factor_preprocess adapter
 
 ```python
 from datetime import datetime
-from modeling import FitWindow, SplitSpec
-from modeling.preprocess import create_fitted_scaler
+from modeling_adapters import FitWindow, SplitSpec
+from modeling_adapters.preprocess import create_fitted_scaler
 
 # Define split with leakage prevention
 split = SplitSpec(

@@ -4,8 +4,8 @@ Tests for exposure decomposition and soft neutralization.
 import pytest
 import numpy as np
 
-from modeling.exposure import compute_exposure_residual, soft_neutralization
-from modeling.errors import ContractViolation
+from modeling_adapters.exposure import compute_exposure_residual, soft_neutralization
+from modeling_adapters.errors import ContractViolation
 
 
 class TestComputeExposureResidual:
@@ -126,7 +126,7 @@ class TestSoftNeutralization:
 
 class TestExposureDecompositionIntegration:
     def test_pipeline_winsorize_then_neutralize(self):
-        from modeling.preprocess.stateless import winsorize
+        from modeling_adapters.preprocess.stateless import winsorize
         np.random.seed(42)
         T, N, K = 100, 50, 3
         factor_values = np.random.randn(T, N)

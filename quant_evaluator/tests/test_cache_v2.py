@@ -4,20 +4,26 @@ Tests for advanced cache system.
 Tests multi-level caching, compression, invalidation, and warming strategies.
 """
 
+import json
 import tempfile
 import time
 from pathlib import Path
 import numpy as np
 import pytest
 
+import quant_evaluator.runtime.cache_v2 as cache_v2_module
 from quant_evaluator.runtime.cache_v2 import (
     MultiLevelCache,
     MemoryCacheLayer,
     DiskCacheLayer,
+    RedisCacheLayer,
     create_compressor,
     ZlibCompressor,
     NoCompressor,
     CacheMetadata,
+    CacheConfigurationError,
+    CacheV2Config,
+    create_cache,
     MostRecentKeysStrategy,
 )
 
@@ -237,8 +243,215 @@ class TestDiskCacheLayer:
             assert len(temp_files) == 0
 
 
+class FrozenClock:
+    def __init__(self, now: float):
+        self.now = now
+
+    def time(self) -> float:
+        return self.now
+
+
+class FakeRedisLayer:
+    def __init__(self):
+        self.entries = {}
+
+    def get(self, key):
+        entry = self.entries.get(key)
+        if entry is None:
+            return None
+        value, metadata = entry
+        if metadata.is_expired(cache_v2_module.time.time()):
+            self.invalidate(key)
+            return None
+        return value, metadata
+
+    def put(self, key, value, ttl_seconds=None, dependencies=None, created_at=None):
+        now = cache_v2_module.time.time()
+        self.entries[key] = (
+            value,
+            CacheMetadata(
+                key=key,
+                created_at=now if created_at is None else created_at,
+                last_accessed=now,
+                access_count=0,
+                size_bytes=0,
+                compressed_size=0,
+                ttl_seconds=ttl_seconds,
+                dependencies=dependencies or set(),
+            ),
+        )
+        return True
+
+    def invalidate(self, key):
+        return self.entries.pop(key, None) is not None
+
+    def invalidate_dependencies(self, dependency):
+        keys = [
+            key for key, (_, metadata) in self.entries.items()
+            if dependency in metadata.dependencies
+        ]
+        for key in keys:
+            self.invalidate(key)
+        return len(keys)
+
+    def clear(self):
+        self.entries.clear()
+
+
+class FakeRedisClient:
+    def __init__(self, hashes, values):
+        self.hashes = dict(hashes)
+        self.values = dict(values)
+        self._pipeline_commands = []
+
+    def scan(self, cursor, match=None, count=None):
+        return 0, list(self.hashes)
+
+    def hgetall(self, key):
+        return self.hashes.get(key, {})
+
+    def delete(self, *keys):
+        removed = 0
+        for key in keys:
+            variants = {key}
+            if isinstance(key, bytes):
+                variants.add(key.decode("utf-8"))
+            elif isinstance(key, str):
+                variants.add(key.encode("utf-8"))
+            for variant in variants:
+                if variant in self.hashes:
+                    del self.hashes[variant]
+                    removed += 1
+                if variant in self.values:
+                    del self.values[variant]
+                    removed += 1
+        return removed
+
+    def pipeline(self):
+        self._pipeline_commands = []
+        return self
+
+    def execute(self):
+        results = []
+        for command, keys in self._pipeline_commands:
+            if command == "delete":
+                results.append(self.delete(*keys))
+        return results
+
+    def __getattr__(self, name):
+        if name == "delete":
+            return self.delete
+        raise AttributeError(name)
+
+    def queue_delete(self, *keys):
+        self._pipeline_commands.append(("delete", keys))
+        return self
+
+
+class FakeRedisPipelineClient(FakeRedisClient):
+    def pipeline(self):
+        client = self
+
+        class Pipeline:
+            def __init__(self):
+                self.commands = []
+
+            def delete(self, *keys):
+                self.commands.append(keys)
+                return self
+
+            def execute(self):
+                return [client.delete(*keys) for keys in self.commands]
+
+        return Pipeline()
+
+
 class TestMultiLevelCache:
     """Test multi-level cache coordinator."""
+
+    def test_production_config_factory_l1_only_works(self):
+        cache = create_cache(CacheV2Config(runtime_mode="production"))
+        assert cache.runtime_mode == "production"
+        assert cache.l1 is not None
+        assert cache.l2 is None
+        assert cache.l3 is None
+        assert cache.put("key", "value")
+        assert cache.get("key") == "value"
+
+    @pytest.mark.parametrize("layer", ["l2", "l3"])
+    def test_production_config_factory_rejects_durable_layers(self, tmp_path, layer):
+        kwargs = {"enable_l2": layer == "l2", "enable_l3": layer == "l3"}
+        if layer == "l2":
+            kwargs["disk_root"] = tmp_path
+        else:
+            kwargs["redis_url"] = "redis://localhost:6379/0"
+        with pytest.raises(CacheConfigurationError):
+            create_cache(CacheV2Config(runtime_mode="production", **kwargs))
+
+    def test_research_explicit_l2_opt_in_is_advisory(self, tmp_path):
+        cache = create_cache(CacheV2Config(
+            runtime_mode="research", disk_root=tmp_path, enable_l2=True
+        ))
+        assert cache.runtime_mode == "research"
+        assert cache.l2 is not None
+
+    @pytest.mark.parametrize(
+        "kwargs, message",
+        [
+            ({"enable_l2": True}, "disk_root"),
+            ({"enable_l3": True}, "redis_url"),
+        ],
+    )
+    def test_requested_durable_layer_unavailable_never_silently_falls_back(
+        self, kwargs, message
+    ):
+        with pytest.raises(CacheConfigurationError, match=message):
+            create_cache(CacheV2Config(runtime_mode="research", **kwargs))
+
+    def test_requested_redis_dependency_unavailable_never_silently_falls_back(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(cache_v2_module, "HAS_REDIS", False)
+        with pytest.raises(CacheConfigurationError, match="redis-py"):
+            create_cache(CacheV2Config(
+                runtime_mode="test",
+                redis_url="redis://localhost:6379/0",
+                enable_l3=True,
+            ))
+
+    def test_production_rejects_durable_layers(self, tmp_path):
+        with pytest.raises(CacheConfigurationError, match="L2 disk"):
+            MultiLevelCache(
+                disk_root=tmp_path,
+                enable_l2=True,
+                production_mode=True,
+            )
+
+        with pytest.raises(CacheConfigurationError, match="L3 Redis"):
+            MultiLevelCache(
+                redis_url="redis://localhost:6379/0",
+                enable_l3=True,
+                production_mode=True,
+            )
+
+    def test_production_defaults_to_l1_only(self, tmp_path):
+        cache = MultiLevelCache(disk_root=tmp_path, production_mode=True)
+        assert cache.l1 is not None
+        assert cache.l2 is None
+        assert cache.l3 is None
+        assert cache.put("key", "value")
+        assert cache.get("key") == "value"
+
+    def test_research_mode_requires_explicit_durable_opt_in(self, tmp_path):
+        default_cache = MultiLevelCache(disk_root=tmp_path)
+        assert default_cache.l2 is None
+
+        research_cache = MultiLevelCache(
+            disk_root=tmp_path,
+            enable_l2=True,
+            production_mode=False,
+        )
+        assert research_cache.l2 is not None
 
     def test_l1_hit(self):
         """Test L1 cache hit."""
@@ -302,6 +515,146 @@ class TestMultiLevelCache:
             result2 = cache.get("key1")
             stats = cache.get_stats()
             assert stats["l1_hits"] == 1  # L1 hit after promotion
+
+    def test_l2_promotion_preserves_absolute_expiry(self, monkeypatch):
+        """L2 promotion must not restart the entry TTL in L1."""
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=1.0,
+                disk_root=Path(tmpdir),
+                compression="zlib",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            cache.put("key1", "value", ttl_seconds=10.0)
+            cache.l1.clear()
+
+            clock.now = 1006.0
+            assert cache.get("key1") == "value"
+            promoted = cache.l1.get("key1")
+            assert promoted is not None
+            assert promoted[1].created_at == 1000.0
+
+            clock.now = 1010.1
+            assert cache.get("key1") is None
+            assert cache.l1.get("key1") is None
+            assert cache.l2.get("key1") is None
+
+    def test_l3_promotion_preserves_absolute_expiry(self, monkeypatch):
+        """L3 promotion into L2/L1 must preserve the original expiry."""
+        clock = FrozenClock(2000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=1.0,
+                disk_root=Path(tmpdir),
+                compression="zlib",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            cache.l3 = FakeRedisLayer()
+            cache.l3.put("key1", "value", ttl_seconds=10.0)
+
+            clock.now = 2006.0
+            assert cache.get("key1") == "value"
+            assert cache.l1.get("key1")[1].created_at == 2000.0
+            assert cache.l2.get("key1")[1].created_at == 2000.0
+
+            clock.now = 2010.1
+            assert cache.get("key1") is None
+            assert cache.l1.get("key1") is None
+            assert cache.l2.get("key1") is None
+            assert cache.l3.get("key1") is None
+
+    def test_dependency_invalidation_removes_l2_only_entry(self):
+        """A dependency invalidation must remove entries even when only L2 has them."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=1.0,
+                disk_root=Path(tmpdir),
+                compression="zlib",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            cache.put("key1", "stale", dependencies={"source"})
+            cache.l1.clear()
+
+            assert cache.invalidate_dependency("source") == 1
+            assert cache.l2.get("key1") is None
+            assert cache.get("key1") is None
+            assert cache.l1.get("key1") is None
+
+    def test_dependency_invalidation_removes_l3_only_entry(self):
+        """An invalidated L3-only entry must never be promoted back."""
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            enable_l1=True,
+            enable_l2=False,
+            enable_l3=False,
+        )
+        cache.l3 = FakeRedisLayer()
+        cache.l3.put("key1", "stale", dependencies={"source"})
+
+        assert cache.invalidate_dependency("source") == 1
+        assert cache.l3.get("key1") is None
+        assert cache.get("key1") is None
+        assert cache.l1.get("key1") is None
+
+    def test_dependency_invalidation_continues_after_corrupt_l3_metadata(self):
+        """Corrupt Redis metadata is quarantined without blocking later matches."""
+        compressor = create_compressor("zlib")
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = compressor
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+
+        matching = CacheMetadata(
+            key="matching",
+            created_at=1000.0,
+            last_accessed=1000.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+        )
+        unrelated = CacheMetadata(
+            key="unrelated",
+            created_at=1000.0,
+            last_accessed=1000.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"other"},
+        )
+        corrupt_meta = b"cache:corrupt:meta"
+        matching_meta = b"cache:matching:meta"
+        unrelated_meta = b"cache:unrelated:meta"
+        layer.client = FakeRedisPipelineClient(
+            hashes={
+                corrupt_meta: {b"data": b"{not-json"},
+                matching_meta: {b"data": json.dumps(matching.to_dict()).encode()},
+                unrelated_meta: {b"data": json.dumps(unrelated.to_dict()).encode()},
+            },
+            values={
+                b"cache:corrupt": b"stale-corrupt",
+                "cache:matching": b"stale-matching",
+                b"cache:unrelated": b"valid-unrelated",
+            },
+        )
+
+        assert layer.invalidate_dependencies("source") == 1
+        assert corrupt_meta not in layer.client.hashes
+        assert b"cache:corrupt" not in layer.client.values
+        assert matching_meta not in layer.client.hashes
+        assert "cache:matching" not in layer.client.values
+        assert unrelated_meta in layer.client.hashes
+        assert b"cache:unrelated" in layer.client.values
 
     def test_cache_miss(self):
         """Test cache miss across all layers."""

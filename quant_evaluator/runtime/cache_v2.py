@@ -22,9 +22,11 @@ import zlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 import numpy as np
+
+from quant_evaluator.contracts.errors import DurableCacheCapabilityError
 
 try:
     import redis
@@ -39,6 +41,10 @@ except ImportError:
     HAS_LZ4 = False
 
 logger = logging.getLogger(__name__)
+
+
+class CacheConfigurationError(DurableCacheCapabilityError, ValueError):
+    """Raised when cache layers violate runtime policy or are unavailable."""
 
 
 # ============================================================================
@@ -296,6 +302,7 @@ class MemoryCacheLayer:
         value: Any,
         ttl_seconds: Optional[float] = None,
         dependencies: Optional[Set[str]] = None,
+        created_at: Optional[float] = None,
     ) -> bool:
         """
         Put value into memory cache.
@@ -331,11 +338,13 @@ class MemoryCacheLayer:
                     logger.debug(f"Value too large for cache: {compressed_size} bytes")
                     return False
 
-                # Create metadata
+                # Preserve the original creation time when promoting between layers so
+                # an entry's absolute expiry is never extended by a cache hit.
                 now = time.time()
+                entry_created_at = now if created_at is None else created_at
                 metadata = CacheMetadata(
                     key=key,
-                    created_at=now,
+                    created_at=entry_created_at,
                     last_accessed=now,
                     access_count=0,
                     size_bytes=original_size,
@@ -517,6 +526,7 @@ class DiskCacheLayer:
         value: Any,
         ttl_seconds: Optional[float] = None,
         dependencies: Optional[Set[str]] = None,
+        created_at: Optional[float] = None,
     ) -> bool:
         """
         Put value into disk cache with atomic write.
@@ -537,11 +547,13 @@ class DiskCacheLayer:
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                 compressed, stats = self.compressor.compress(data)
 
-                # Create metadata
+                # Preserve the original creation time when promoting between layers so
+                # an entry's absolute expiry is never extended by a cache hit.
                 now = time.time()
+                entry_created_at = now if created_at is None else created_at
                 metadata = CacheMetadata(
                     key=key,
-                    created_at=now,
+                    created_at=entry_created_at,
                     last_accessed=now,
                     access_count=0,
                     size_bytes=len(data),
@@ -566,6 +578,9 @@ class DiskCacheLayer:
                 tmp_meta = cache_path.parent / f".tmp.{uuid.uuid4().hex}.meta.json"
 
                 try:
+                    # Open follow-ups intentionally outside this safety repair:
+                    # values still use pickle, and the data/metadata pair can be
+                    # observed between its two atomic renames (torn publish).
                     # Write temp files
                     tmp_cache.write_bytes(compressed)
 
@@ -603,6 +618,20 @@ class DiskCacheLayer:
             removed = True
 
         return removed
+
+    def invalidate_dependencies(self, dependency: str) -> int:
+        """Invalidate disk entries bound to the given dependency."""
+        keys_to_remove = []
+        for meta_path in self.root_dir.rglob("*.meta.json"):
+            try:
+                meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
+                metadata = CacheMetadata.from_dict(meta_data)
+                if dependency in metadata.dependencies:
+                    keys_to_remove.append(metadata.key)
+            except Exception as e:
+                logger.warning(f"Failed to inspect disk cache metadata {meta_path}: {e}")
+
+        return sum(1 for key in keys_to_remove if self.invalidate(key))
 
     def clear(self):
         """Clear all cache files."""
@@ -695,6 +724,7 @@ class RedisCacheLayer:
         value: Any,
         ttl_seconds: Optional[float] = None,
         dependencies: Optional[Set[str]] = None,
+        created_at: Optional[float] = None,
     ) -> bool:
         """
         Put value into Redis cache.
@@ -716,11 +746,12 @@ class RedisCacheLayer:
             data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
             compressed, stats = self.compressor.compress(data)
 
-            # Create metadata
+            # Preserve the original creation time when writing a promoted entry.
             now = time.time()
+            entry_created_at = now if created_at is None else created_at
             metadata = CacheMetadata(
                 key=key,
-                created_at=now,
+                created_at=entry_created_at,
                 last_accessed=now,
                 access_count=0,
                 size_bytes=len(data),
@@ -759,6 +790,50 @@ class RedisCacheLayer:
             logger.warning(f"Failed to invalidate Redis cache for key {key}: {e}")
             return False
 
+    def invalidate_dependencies(self, dependency: str) -> int:
+        """Invalidate Redis entries bound to the given dependency."""
+        try:
+            cursor = 0
+            keys_to_remove = []
+            pattern = f"{self.key_prefix}*:meta"
+            while True:
+                cursor, meta_keys = self.client.scan(cursor, match=pattern, count=100)
+                for meta_key in meta_keys:
+                    try:
+                        meta_dict = self.client.hgetall(meta_key)
+                        raw_data = meta_dict.get(b"data") or meta_dict.get("data")
+                        if not raw_data:
+                            continue
+                        if isinstance(raw_data, bytes):
+                            raw_data = raw_data.decode("utf-8")
+                        metadata = CacheMetadata.from_dict(json.loads(raw_data))
+                        if dependency in metadata.dependencies:
+                            keys_to_remove.append(metadata.key)
+                    except Exception as e:
+                        # One malformed record must not prevent later dependency-bound
+                        # entries from being invalidated. Quarantine the unusable pair
+                        # so it cannot remain as a promotion candidate.
+                        value_key = (
+                            meta_key[:-5]
+                            if meta_key.endswith(b":meta")
+                            else meta_key[:-5]
+                            if meta_key.endswith(":meta")
+                            else None
+                        )
+                        logger.warning(
+                            f"Failed to inspect Redis cache metadata {meta_key!r}: {e}"
+                        )
+                        if value_key is not None:
+                            self.client.delete(meta_key, value_key)
+                        else:
+                            self.client.delete(meta_key)
+                if cursor == 0:
+                    break
+            return sum(1 for key in keys_to_remove if self.invalidate(key))
+        except Exception as e:
+            logger.warning(f"Failed to invalidate Redis dependency {dependency}: {e}")
+            return 0
+
     def clear(self):
         """Clear all cache entries with this prefix."""
         try:
@@ -777,6 +852,41 @@ class RedisCacheLayer:
 # ============================================================================
 # Multi-level cache coordinator
 # ============================================================================
+
+@dataclass(frozen=True)
+class CacheV2Config:
+    """Production-facing cache factory configuration.
+
+    L2/L3 are advisory, trusted-environment accelerators in research/test modes;
+    they are not authenticated durable stores. Production therefore supports L1
+    only until the durable layers use a single authenticated atomic envelope.
+    """
+
+    runtime_mode: Literal["research", "test", "production"] = "research"
+    memory_size_mb: float = 512.0
+    disk_root: Optional[Path] = None
+    redis_url: Optional[str] = None
+    compression: str = "auto"
+    compression_level: int = 6
+    enable_l1: bool = True
+    enable_l2: bool = False
+    enable_l3: bool = False
+
+
+def create_cache(config: CacheV2Config) -> "MultiLevelCache":
+    """Create a cache from validated public configuration."""
+    return MultiLevelCache(
+        memory_size_mb=config.memory_size_mb,
+        disk_root=config.disk_root,
+        redis_url=config.redis_url,
+        compression=config.compression,
+        compression_level=config.compression_level,
+        enable_l1=config.enable_l1,
+        enable_l2=config.enable_l2,
+        enable_l3=config.enable_l3,
+        runtime_mode=config.runtime_mode,
+    )
+
 
 @dataclass
 class CacheStats:
@@ -810,8 +920,10 @@ class MultiLevelCache:
         compression: str = "auto",
         compression_level: int = 6,
         enable_l1: bool = True,
-        enable_l2: bool = True,
+        enable_l2: bool = False,
         enable_l3: bool = False,
+        runtime_mode: Literal["research", "test", "production"] = "research",
+        production_mode: Optional[bool] = None,
     ):
         """
         Initialize multi-level cache.
@@ -823,9 +935,35 @@ class MultiLevelCache:
             compression: Compression method ("auto", "lz4", "zlib", "none")
             compression_level: Compression level for zlib
             enable_l1: Enable L1 memory cache
-            enable_l2: Enable L2 disk cache
-            enable_l3: Enable L3 Redis cache
+            enable_l2: Enable L2 disk cache. Research/test use must opt in.
+            enable_l3: Enable L3 Redis cache. Research/test use must opt in.
+            runtime_mode: Runtime trust policy (research, test, or production).
+            production_mode: Deprecated boolean alias for runtime_mode.
         """
+        if production_mode is not None:
+            alias_mode = "production" if production_mode else "research"
+            if runtime_mode != "research" and runtime_mode != alias_mode:
+                raise CacheConfigurationError(
+                    "runtime_mode conflicts with production_mode alias"
+                )
+            runtime_mode = alias_mode
+        if runtime_mode not in {"research", "test", "production"}:
+            raise CacheConfigurationError(f"Unknown cache runtime mode: {runtime_mode!r}")
+        if runtime_mode == "production" and (enable_l2 or enable_l3):
+            requested_layers = []
+            if enable_l2:
+                requested_layers.append("L2 disk")
+            if enable_l3:
+                requested_layers.append("L3 Redis")
+            raise CacheConfigurationError(
+                "Durable cache layers are disabled in production mode: "
+                f"requested {', '.join(requested_layers)}. "
+                "Use L1 only in production; L2/L3 are trusted, advisory "
+                "research/test accelerators until authenticated atomic persistence exists."
+            )
+
+        self.runtime_mode = runtime_mode
+        self.production_mode = runtime_mode == "production"
         self.compressor = create_compressor(compression, compression_level)
         self.enable_l1 = enable_l1
         self.enable_l2 = enable_l2
@@ -844,21 +982,29 @@ class MultiLevelCache:
                 enable_compression=True,
             )
 
-        if enable_l2 and disk_root:
+        if enable_l2:
+            if disk_root is None:
+                raise CacheConfigurationError(
+                    "L2 disk cache was requested but disk_root is unavailable"
+                )
             self.l2 = DiskCacheLayer(
                 root_dir=Path(disk_root),
                 compressor=self.compressor,
             )
 
-        if enable_l3 and redis_url:
-            if not HAS_REDIS:
-                logger.warning("Redis not available, L3 cache disabled")
-                self.enable_l3 = False
-            else:
-                self.l3 = RedisCacheLayer(
-                    redis_url=redis_url,
-                    compressor=self.compressor,
+        if enable_l3:
+            if redis_url is None:
+                raise CacheConfigurationError(
+                    "L3 Redis cache was requested but redis_url is unavailable"
                 )
+            if not HAS_REDIS:
+                raise CacheConfigurationError(
+                    "L3 Redis cache was requested but redis-py is unavailable"
+                )
+            self.l3 = RedisCacheLayer(
+                redis_url=redis_url,
+                compressor=self.compressor,
+            )
 
         # Statistics
         self.stats = CacheStats()
@@ -897,6 +1043,7 @@ class MultiLevelCache:
                         value,
                         ttl_seconds=metadata.ttl_seconds,
                         dependencies=metadata.dependencies,
+                        created_at=metadata.created_at,
                     )
 
                 return value
@@ -916,6 +1063,7 @@ class MultiLevelCache:
                         value,
                         ttl_seconds=metadata.ttl_seconds,
                         dependencies=metadata.dependencies,
+                        created_at=metadata.created_at,
                     )
                 if self.l1:
                     self.l1.put(
@@ -923,6 +1071,7 @@ class MultiLevelCache:
                         value,
                         ttl_seconds=metadata.ttl_seconds,
                         dependencies=metadata.dependencies,
+                        created_at=metadata.created_at,
                     )
 
                 return value
@@ -1012,6 +1161,10 @@ class MultiLevelCache:
 
         if self.l1:
             count += self.l1.invalidate_dependencies(dependency)
+        if self.l2:
+            count += self.l2.invalidate_dependencies(dependency)
+        if self.l3:
+            count += self.l3.invalidate_dependencies(dependency)
 
         with self._stats_lock:
             self.stats.invalidations += count

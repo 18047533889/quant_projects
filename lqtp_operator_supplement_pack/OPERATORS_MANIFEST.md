@@ -1,0 +1,134 @@
+# LQTP 算子实现清单（参考代码见 lqtp_operators_to_add.py）
+
+- NEW（平台已知表无此名）: **115**
+- ALIAS（可选同名兼容）: **3**
+- 合计: **118**
+
+## 说明
+
+每个算子都是可运行的 pandas 参考实现。移植时保持：单票时序、因果、除零返 NaN。
+`tanh` 必须是双曲正切，禁止改写成 sigmoid。
+
+## NEW 算子
+
+- `true_range(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — TR = max(H-L, |H-Cprev|, |L-Cprev|). catalog / ATR 依赖。
+- `ATR(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — 平均真实波幅（SMA 平滑）。FE_ONLY；HTML 默认 ATR。
+- `ATR_WILDER(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — Wilder ATR。catalog 未知调用命中最高（~35）。推荐生产口径。
+- `RSI(x: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — RSI（SMA 平滑）。FE_ONLY。
+- `RSI_WILDER(x: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — Wilder RSI。
+- `ROC(x: 'pd.Series', window: 'int' = 10) -> 'pd.Series'` — 变动率 %：100 * (x / delay(x,n) - 1)。FE_ONLY。
+- `ADX(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — 平均趋向指数（Wilder DMI/ADX）。FE_ONLY。
+- `SMA(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 简单均线。FE_ONLY 名；语义 ≈ ts_mean / ma。建议仍注册同名以免拒单。
+- `tanh(x: 'pd.Series') -> 'pd.Series'` — 双曲正切。is_lqtp_native 黑名单；HTML 命中高。不可用 sigmoid 偷换语义。
+- `exp(x: 'pd.Series') -> 'pd.Series'` — 自然指数 e^x。catalog 未知。
+- `maximum(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 逐元素 max(a,b)。手册禁止 scalar max；HTML/DSL 大量用 maximum(open,close)。
+- `minimum(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 逐元素 min(a,b)。
+- `max(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — DSL 名 ``max`` 的实现（Python 保留字，平台侧注册为 max）。
+- `min(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — DSL 名 ``min`` 的实现。
+- `pow(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 幂运算。平台有 power；HTML/FE 写 pow。注册 ``pow`` 或改写均可。
+- `divide(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 安全除法别名（catalog 出现 divide）。建议 = safe_div。
+- `ts_median(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动中位数。手册写可用 ts_quantile(x,w,0.5)；HTML/DSL 仍大量写 ts_median。
+- `ts_zscore(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动 zscore：(x - ts_mean) / ts_std。catalog 未知。
+- `ts_ema(x: 'pd.Series', span: 'int') -> 'pd.Series'` — EMA。平台有 ema；DSL map 大量写 ts_ema，且 is_lqtp_native 把 ts_ema 当禁名。
+- `ewm_mean(x: 'pd.Series', span: 'int') -> 'pd.Series'` — 同 ts_ema / ema。禁名兼容。
+- `rolling_vwap(price: 'pd.Series', volume: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动 VWAP = sum(price*volume)/sum(volume)。catalog 未知。
+- `classify_volume_regime(volume: 'pd.Series', window: 'int' = 20, high_threshold: 'float' = 1.5, low_threshold: 'float' = 0.6) -> 'Tuple[pd.Series, pd.Series, pd.Series]'` — 成交量高低 regime。HTML 命中 ~27。
+- `decompose_overnight_intraday(close: 'pd.Series', open_price: 'pd.Series') -> 'Tuple[pd.Series, pd.Series]'` — 隔夜/日内收益。HTML 命中 ~3。
+- `imbalance(buy_vol: 'pd.Series', sell_vol: 'pd.Series') -> 'pd.Series'` — (buy-sell)/(buy+sell)。HTML 偶发。
+- `and_(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 逻辑与，数值 0/1。a!=0 and b!=0。
+- `or_(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — 逻辑或。
+- `not_(a: 'ArrayLike') -> 'pd.Series'` — 逻辑非。
+- `log1p(x: 'pd.Series') -> 'pd.Series'` — log(1+x)；x<=-1 → NaN。
+- `expm1(x: 'pd.Series') -> 'pd.Series'` — exp(x)-1。
+- `cbrt(x: 'pd.Series') -> 'pd.Series'` — 立方根（保留符号）。
+- `softsign(x: 'pd.Series') -> 'pd.Series'` — x / (1+|x|)，比 tanh 更轻量的饱和。
+- `softplus(x: 'pd.Series') -> 'pd.Series'` — log(1+exp(x))，数值稳定写法。
+- `relu(x: 'pd.Series') -> 'pd.Series'` — max(x, 0)。
+- `signed_power(x: 'pd.Series', p: 'float') -> 'pd.Series'` — sign(x) * |x|^p。
+- `saturate(x: 'pd.Series', scale: 'float' = 1.0) -> 'pd.Series'` — x / sqrt(scale^2 + x^2)，光滑饱和到 (-1,1)。
+- `sqrt_abs(x: 'pd.Series') -> 'pd.Series'` — sign(x)*sqrt(|x|)。
+- `unitize(x: 'pd.Series') -> 'pd.Series'` — x / (|x|+eps) → 近似 sign，零附近平滑。
+- `hl2(high: 'pd.Series', low: 'pd.Series') -> 'pd.Series'` — (H+L)/2。
+- `hlc3(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — 典型价 (H+L+C)/3。
+- `ohlc4(open_: 'pd.Series', high: 'pd.Series', low: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — (O+H+L+C)/4。
+- `candle_body(open_: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — 实体：close - open。
+- `upper_shadow(open_: 'pd.Series', high: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — 上影线：high - max(open, close)。
+- `lower_shadow(open_: 'pd.Series', low: 'pd.Series', close: 'pd.Series') -> 'pd.Series'` — 下影线：min(open, close) - low。
+- `dollar_volume(price: 'pd.Series', volume: 'pd.Series') -> 'pd.Series'` — 成交额代理：price * volume。
+- `relative_volume(volume: 'pd.Series', window: 'int' = 20) -> 'pd.Series'` — volume / ts_mean(volume, w)。
+- `vwap_deviation(price: 'pd.Series', volume: 'pd.Series', window: 'int' = 20) -> 'pd.Series'` — price / rolling_vwap - 1。
+- `amihud(close: 'pd.Series', volume: 'pd.Series', window: 'int' = 20) -> 'pd.Series'` — 非流动性：ts_mean(|r| / dollar_volume, w)。volume 作份额时需外部已是金额也可。
+- `WMA(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 加权移动平均（线性权重 1..w）。
+- `ts_var(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动方差（总体 ddof=0）。
+- `ts_mad(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动中位绝对偏差 median(|x - median(x)|)（同窗）。
+- `ts_iqr(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动四分位距 q75-q25。
+- `ts_range(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动极差 ts_max - ts_min。
+- `ts_cv(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 变异系数 ts_std / |ts_mean|。
+- `ts_demean(x: 'pd.Series', window: 'int') -> 'pd.Series'` — x - ts_mean(x,w)。
+- `ts_product(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 滚动乘积（用 logsumexp 风格：对 log1p 不通用，直接 prod）。
+- `ts_cumsum(x: 'pd.Series') -> 'pd.Series'` — 累计和（因果）。
+- `ts_cummax(x: 'pd.Series') -> 'pd.Series'` — 累计最大。
+- `ts_cummin(x: 'pd.Series') -> 'pd.Series'` — 累计最小。
+- `ts_drawdown(x: 'pd.Series') -> 'pd.Series'` — 相对峰值回撤：(x / cummax(x) - 1)。价格或净值序列。
+- `ts_upside_deviation(x: 'pd.Series', window: 'int', threshold: 'float' = 0.0) -> 'pd.Series'` — 上行偏差：sqrt(mean(max(x-thr,0)^2))。
+- `ts_downside_deviation(x: 'pd.Series', window: 'int', threshold: 'float' = 0.0) -> 'pd.Series'` — 下行偏差：sqrt(mean(min(x-thr,0)^2))。
+- `ts_positive_ratio(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 窗口内 x>0 的比例。
+- `ts_negative_ratio(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 窗口内 x<0 的比例。
+- `ts_vol_of_vol(x: 'pd.Series', vol_window: 'int' = 20, meta_window: 'int' = 20) -> 'pd.Series'` — 波动的波动：ts_std(ts_std(x, vol_w), meta_w)。
+- `ts_trimmed_mean(x: 'pd.Series', window: 'int', trim_frac: 'float' = 0.1) -> 'pd.Series'` — 滚动截尾均值（两端各去掉 trim_frac）。
+- `ts_decay_exp(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 指数衰减加权和（近端权重大），再按权重归一：≈ 因果 ewma-sum / sum(w)。
+- `ts_true_streak(cond: 'pd.Series') -> 'pd.Series'` — 连续满足条件的当前 streak 长度（平台手册曾拒同名；因子侧很常用）。
+- `ts_time_since_change(x: 'pd.Series') -> 'pd.Series'` — 距上次取值变化的 bar 数（含当前为 0 当发生变化）。
+- `NATR(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — 归一化 ATR：100 * ATR / close。
+- `CCI(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 20) -> 'pd.Series'` — Commodity Channel Index。
+- `WILLR(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — Williams %R：-100 * (hh - close) / (hh - ll)。
+- `STOCH_K(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — Stochastic %K。
+- `STOCH_D(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', k_window: 'int' = 14, d_window: 'int' = 3) -> 'pd.Series'` — Stochastic %D = SMA(%K)。
+- `OBV(close: 'pd.Series', volume: 'pd.Series') -> 'pd.Series'` — On-Balance Volume（累计）。
+- `MACD_line(x: 'pd.Series', fast: 'int' = 12, slow: 'int' = 26) -> 'pd.Series'` — MACD 线 = ema(fast) - ema(slow)。
+- `MACD_signal(x: 'pd.Series', fast: 'int' = 12, slow: 'int' = 26, signal: 'int' = 9) -> 'pd.Series'` — MACD 信号线 = ema(MACD_line, signal)。
+- `MACD_hist(x: 'pd.Series', fast: 'int' = 12, slow: 'int' = 26, signal: 'int' = 9) -> 'pd.Series'` — MACD 柱 = MACD_line - MACD_signal。
+- `BB_percent_b(x: 'pd.Series', window: 'int' = 20, n_std: 'float' = 2.0) -> 'pd.Series'` — 布林 %B：(x - lower) / (upper - lower)。
+- `BB_bandwidth(x: 'pd.Series', window: 'int' = 20, n_std: 'float' = 2.0) -> 'pd.Series'` — 布林带宽：(upper - lower) / mid。
+- `KAMA(x: 'pd.Series', window: 'int' = 10, fast: 'int' = 2, slow: 'int' = 30) -> 'pd.Series'` — Kaufman Adaptive Moving Average（因果递推）。
+- `floor(x: 'pd.Series') -> 'pd.Series'` — 向下取整。
+- `ceil(x: 'pd.Series') -> 'pd.Series'` — 向上取整。
+- `frac(x: 'pd.Series') -> 'pd.Series'` — 小数部分 x - floor(x)。
+- `square(x: 'pd.Series') -> 'pd.Series'` — x^2。
+- `cube(x: 'pd.Series') -> 'pd.Series'` — x^3。
+- `inv(x: 'pd.Series') -> 'pd.Series'` — 1/x，零→NaN。
+- `clip01(x: 'pd.Series') -> 'pd.Series'` — 截断到 [0,1]。
+- `logistic(x: 'pd.Series', scale: 'float' = 1.0) -> 'pd.Series'` — 1/(1+exp(-x/scale))；与 sigmoid 同族，带可调 scale。
+- `log_return(x: 'pd.Series', window: 'int' = 1) -> 'pd.Series'` — 对数收益 log(x / delay(x,n))。
+- `simple_return(x: 'pd.Series', window: 'int' = 1) -> 'pd.Series'` — 简单收益 x/delay(x,n)-1。
+- `overnight_ret(close: 'pd.Series', open_price: 'pd.Series') -> 'pd.Series'` — 隔夜收益 open/delay(close,1)-1（单返回版）。
+- `intraday_ret(close: 'pd.Series', open_price: 'pd.Series') -> 'pd.Series'` — 日内收益 close/open-1（单返回版）。
+- `gap_pct(close: 'pd.Series', open_price: 'pd.Series') -> 'pd.Series'` — 跳空百分比，同 overnight_ret。
+- `realized_vol(x: 'pd.Series', window: 'int' = 20, annualize: 'float' = 252.0) -> 'pd.Series'` — 已实现波动：std(r) * sqrt(annualize)；x 为收益序列。
+- `parkinson_vol(high: 'pd.Series', low: 'pd.Series', window: 'int' = 20, annualize: 'float' = 252.0) -> 'pd.Series'` — Parkinson 波动估计（高低价）。
+- `ts_ewm_std(x: 'pd.Series', span: 'int') -> 'pd.Series'` — EWM 标准差。
+- `ts_autocorr(x: 'pd.Series', window: 'int', lag: 'int' = 1) -> 'pd.Series'` — 滚动自相关 corr(x, delay(x,lag))。
+- `ts_zero_ratio(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 窗口内 x==0 的比例。
+- `ts_sign_persistence(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 符号持续性：mean(sign(x_t)==sign(x_{t-1}))。
+- `ts_quantile_range(x: 'pd.Series', window: 'int', q_low: 'float' = 0.1, q_high: 'float' = 0.9) -> 'pd.Series'` — 滚动分位距 q_high - q_low。
+- `ts_winsorize(x: 'pd.Series', window: 'int', q_low: 'float' = 0.05, q_high: 'float' = 0.95) -> 'pd.Series'` — 时序滚动截尾：用同窗分位上下限 clip。
+- `ts_count(x: 'pd.Series', window: 'int') -> 'pd.Series'` — 窗口内非 NaN 计数。
+- `BB_mid(x: 'pd.Series', window: 'int' = 20) -> 'pd.Series'` — 布林中轨 = SMA。
+- `BB_upper(x: 'pd.Series', window: 'int' = 20, n_std: 'float' = 2.0) -> 'pd.Series'` — 布林上轨。
+- `BB_lower(x: 'pd.Series', window: 'int' = 20, n_std: 'float' = 2.0) -> 'pd.Series'` — 布林下轨。
+- `AROON_UP(high: 'pd.Series', window: 'int' = 25) -> 'pd.Series'` — Aroon Up：100 * (n - bars_since_hh) / n。
+- `AROON_DOWN(low: 'pd.Series', window: 'int' = 25) -> 'pd.Series'` — Aroon Down：100 * (n - bars_since_ll) / n。
+- `AD_line(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', volume: 'pd.Series') -> 'pd.Series'` — Accumulation/Distribution Line（累计）。
+- `VPT(close: 'pd.Series', volume: 'pd.Series') -> 'pd.Series'` — Volume Price Trend：cumsum(volume * pct_change(close))。
+- `force_index(close: 'pd.Series', volume: 'pd.Series', window: 'int' = 13) -> 'pd.Series'` — Force Index = ema( (close-delay(close,1))*volume , window)。
+- `PPO(x: 'pd.Series', fast: 'int' = 12, slow: 'int' = 26) -> 'pd.Series'` — Percentage Price Oscillator：100*(ema_fast-ema_slow)/ema_slow。
+- `TRIX(x: 'pd.Series', window: 'int' = 15) -> 'pd.Series'` — 三重 EMA 的变动率。
+- `MFI(high: 'pd.Series', low: 'pd.Series', close: 'pd.Series', volume: 'pd.Series', window: 'int' = 14) -> 'pd.Series'` — Money Flow Index。
+- `rolling_sharpe(x: 'pd.Series', window: 'int' = 60, annualize: 'float' = 252.0) -> 'pd.Series'` — 滚动 Sharpe：mean/std * sqrt(ann)；x 为收益。非模型回归。
+- `rolling_sortino(x: 'pd.Series', window: 'int' = 60, annualize: 'float' = 252.0) -> 'pd.Series'` — 滚动 Sortino：mean / downside_dev * sqrt(ann)。
+
+## ALIAS（平台已有等价，可选）
+
+- `protected_div(a: 'ArrayLike', b: 'ArrayLike') -> 'pd.Series'` — ≡ safe_div。
+- `clip(x: 'pd.Series', lower: 'float', upper: 'float') -> 'pd.Series'` — ≡ cap(x, lo, hi)。is_lqtp_native 黑名单名。
+- `ts_delay(x: 'pd.Series', n: 'int') -> 'pd.Series'` — ≡ delay(x,n)。

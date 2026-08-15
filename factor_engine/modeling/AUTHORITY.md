@@ -23,16 +23,16 @@
 
 ---
 
-## Standalone `modeling/` Package
+## Standalone `modeling_adapters` Package
 
-The standalone package at `/home/shw/quant_projects/modeling/` is:
+The standalone distribution at `/home/shw/quant_projects/modeling/` installs the unique import namespace `modeling_adapters` and is:
 
 - **Scope**: Minimal contracts for `factor_preprocess` adapters
 - **Not Responsible For**: Model training, enforcement, walk-forward
 - **Use Case**: Bridging factor selection (FactorAssets) to factor_preprocess
-- **Migration Path**: Use `factor_engine.modeling` for all production code
+- **Migration Path**: Use FactorEngine's top-level `modeling` package for all production code
 
-**This package defines contracts but delegates enforcement to factor_engine.**
+**This package defines contracts but delegates enforcement to FactorEngine. It must not provide or claim the top-level `modeling` namespace.**
 
 ---
 
@@ -46,13 +46,13 @@ Historical reason: The standalone package was created as a minimal interface lay
 
 ## Migration Guide
 
-### If you're using standalone `modeling/`:
+### If you're using standalone `modeling_adapters/`:
 
 #### Walk-Forward Splitting
 
-**Before** (standalone):
+**Before** (standalone adapter):
 ```python
-from modeling.contracts import SplitSpec
+from modeling_adapters.contracts import SplitSpec
 
 split = SplitSpec(
     split_id="fold1",
@@ -82,9 +82,9 @@ folds = make_walk_forward_splits(panel_dataset, spec)
 
 #### Fitted Transforms
 
-**Before** (standalone, bypass possible):
+**Before** (standalone adapter, bypass possible):
 ```python
-from modeling.preprocess.fitted import CrossSectionalScaler
+from modeling_adapters.preprocess.fitted import CrossSectionalScaler
 
 scaler = CrossSectionalScaler()
 scaler.fit(X_train, fit_window)
@@ -194,7 +194,7 @@ FITTED_TRANSFORM_REQUIRES_APPLICATION_PERIOD = PASS  # transform() requires appl
 - Purge and embargo
 - Temporal safety enforcement
 
-**Exception**: Only use standalone `modeling` for:
+**Exception**: Only use standalone `modeling_adapters` for:
 - Writing adapters to `factor_preprocess`
 - Defining minimal contracts for non-factor_engine consumers
 

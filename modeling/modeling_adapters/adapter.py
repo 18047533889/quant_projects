@@ -7,13 +7,13 @@ contracts, allowing reuse of validated implementations without copying code.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from modeling.contracts import (
+from modeling_adapters.contracts import (
     PreprocessContract,
     FitWindow,
     ModelReadyData,
     TransformMode,
 )
-from modeling.errors import AdapterError, FutureLeakageError
+from modeling_adapters.errors import AdapterError, FutureLeakageError
 
 try:
     from factor_preprocess import (
@@ -238,7 +238,7 @@ class FactorPreprocessAdapter:
             missing_indicators=missing_indicators,
             exposure_residuals=exposure_residuals,
             created_at=data_end,
-            producer="modeling.adapter.factor_preprocess",
+            producer="modeling_adapters.adapter.factor_preprocess",
         )
 
 

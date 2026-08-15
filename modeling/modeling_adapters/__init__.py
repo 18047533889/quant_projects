@@ -1,28 +1,20 @@
 """
-Modeling: Model input preparation layer (ADAPTERS ONLY).
+Modeling Adapters: model input contracts and adapters only.
 
-**SCOPE DECLARATION (MODEL2-P0-006)**:
-This package provides MINIMAL CONTRACTS for adapting factor_preprocess to
-factor_engine. It does NOT implement model training, walk-forward, or enforcement.
-
-For actual model training with temporal leakage prevention, use
-``factor_engine.modeling`` (the authoritative package at
-``/home/shw/quant_projects/factor_engine/modeling/``).
-
-This package defines the interface between factor selection (FactorAssets) and
-actual model training. It reuses factor_preprocess implementations where possible.
+The authoritative FactorEngine production package remains top-level ``modeling``.
+This standalone distribution intentionally owns only ``modeling_adapters``.
 """
 
 __version__ = "0.1.0"
 
-from modeling.contracts import (
+from modeling_adapters.contracts import (
     PreprocessContract,
     FitWindow,
     SplitSpec,
     OutOfFoldSpec,
     ModelReadyData,
 )
-from modeling.errors import (
+from modeling_adapters.errors import (
     ModelingError,
     FutureLeakageError,
     FitWindowError,
@@ -49,7 +41,7 @@ __all__ = [
 def package_info():
     """Return package metadata."""
     return {
-        "name": "modeling",
+        "name": "modeling-adapters",
         "version": __version__,
         "scope": "Model input preparation - NOT model training",
         "capabilities": {

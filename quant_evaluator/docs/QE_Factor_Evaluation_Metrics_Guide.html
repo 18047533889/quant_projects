@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>QuantEvaluator 因子评估指标全说明书</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"/>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[
+    {left:'$$',right:'$$',display:true},
+    {left:'$',right:'$',display:false},
+    {left:'\\\\(',right:'\\\\)',display:false},
+    {left:'\\\\[',right:'\\\\]',display:true}
+  ],throwOnError:false});"></script>
+<style>
+  :root {
+    --ink: #13212e;
+    --muted: #5a6a78;
+    --line: #d7dee6;
+    --bg: #f7f5f0;
+    --card: #ffffff;
+    --accent: #0e6b5c;
+    --accent-soft: #e6f3ef;
+    --warn: #8a4b12;
+    --code-bg: #eef2f5;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "IBM Plex Sans", "Source Han Sans SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 500px at 10% -10%, #e8f2ef 0%, transparent 55%),
+      radial-gradient(900px 400px at 100% 0%, #efe8dc 0%, transparent 50%),
+      var(--bg);
+    line-height: 1.65;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+  header.hero {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 1.75rem;
+    margin-bottom: 2rem;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.78rem;
+    margin: 0 0 0.6rem;
+  }
+  h1 {
+    font-family: "IBM Plex Serif", "Source Han Serif SC", Georgia, serif;
+    font-size: clamp(1.8rem, 3.5vw, 2.5rem);
+    line-height: 1.2;
+    margin: 0 0 0.75rem;
+    font-weight: 650;
+  }
+  .sub { color: var(--muted); font-size: 1.02rem; max-width: 46rem; margin: 0; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem;
+    margin-top: 1.1rem; color: var(--muted); font-size: 0.92rem;
+  }
+  .pill {
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 0.15rem 0.7rem; font-size: 0.82rem; font-weight: 600;
+  }
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem 1.25rem;
+    margin: 1.5rem 0 2.2rem;
+  }
+  nav.toc h2 { font-size: 1rem; margin: 0 0 0.7rem; }
+  nav.toc ol { margin: 0; padding-left: 1.2rem; columns: 2; gap: 2rem; }
+  nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  @media (max-width: 720px) { nav.toc ol { columns: 1; } }
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 1.55rem;
+    margin: 2.4rem 0 0.9rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.15rem; margin: 1.6rem 0 0.55rem; color: var(--ink); }
+  h4 { font-size: 1.02rem; margin: 1.15rem 0 0.4rem; color: #243746; }
+  p { margin: 0.55rem 0; }
+  ul, ol { margin: 0.4rem 0 0.8rem; padding-left: 1.3rem; }
+  li { margin: 0.25rem 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    margin: 0.9rem 0 1.1rem;
+  }
+  .note {
+    background: #fff8e8;
+    border-left: 4px solid var(--warn);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .ok {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .formula {
+    background: #fbfcfa;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin: 0.7rem 0 1rem;
+    overflow-x: auto;
+  }
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 0.92rem;
+    margin: 0.8rem 0 1.2rem;
+  }
+  th, td {
+    border-bottom: 1px solid var(--line);
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f0f4f7; font-weight: 650; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+    background: #e8eef3;
+    color: #355064;
+    margin-right: 0.35rem;
+  }
+  .tag.core { background: #e6f3ef; color: var(--accent); }
+  .tag.ext { background: #eef0ff; color: #3a3f8f; }
+  .tag.risk { background: #fdecec; color: #8a3030; }
+  footer {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 0.88rem;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <p class="eyebrow">quant_evaluator · Factor Evaluation Metrics</p>
+  <h1>因子评估指标库全说明书</h1>
+  <p class="sub">面向对接与审阅：完整说明 <code>quant_evaluator</code> 中已实现的因子评估指标定义、公式、约定与 API 入口。本库只产出证据与指标，不做准入裁决，也不负责取数/造因子。</p>
+  <div class="meta">
+    <span class="pill">v0.0.1a1</span>
+    <span>包路径：<code>quant_projects/quant_evaluator</code></span>
+    <span>文档日期：2026-08-16</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">设计原则与边界</a></li>
+    <li><a href="#s2">核心合约（输入）</a></li>
+    <li><a href="#s3">IC / RankIC 与预测力</a></li>
+    <li><a href="#s4">IC 汇总、衰减与半衰期</a></li>
+    <li><a href="#s5">覆盖率与分布质量</a></li>
+    <li><a href="#s6">分位收益与多空探针</a></li>
+    <li><a href="#s7">换手率</a></li>
+    <li><a href="#s8">暴露 / 残差 / 集中度</a></li>
+    <li><a href="#s9">时序稳定性与稳健推断</a></li>
+    <li><a href="#s10">组合统计（Sharpe 等）</a></li>
+    <li><a href="#s11">多重检验</a></li>
+    <li><a href="#s12">因子交互与条件 IC</a></li>
+    <li><a href="#s13">风险指标（VaR / 尾部 / 回撤）</a></li>
+    <li><a href="#s14">进阶统计检验</a></li>
+    <li><a href="#s15">API 速查表</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h2>1. 设计原则与边界</h2>
+  <div class="ok">
+    <strong>库定位：</strong>纯证据 / 指标 / 诊断引擎（Evidence &amp; Metric Engine）。调用方显式提供 <code>FactorBatch</code> 与 <code>LabelBundle</code>；QE <strong>不推断标签、不自动 shift、不填缺失、不做 admission reject</strong>。
+  </div>
+  <ul>
+    <li><strong>Batch-first：</strong>因子值形状为 $(T,N,F)$（时间 × 资产 × 因子）。</li>
+    <li><strong>Pairwise-finite：</strong>IC 等截面相关只在因子与标签同时有限的样本上计算。</li>
+    <li><strong>Timing contract：</strong>标签必须满足决策时点早于标签区间，禁止前视。</li>
+    <li><strong>RankIC 并列：</strong>Spearman 使用平均秩（average ties）。</li>
+    <li><strong>分位编码约定（QE2-P0-001）：</strong>分位 $0$ = 因子值最低组；分位 $N-1$ = 最高组。Top−Bottom Spread 默认 = 高组收益 − 低组收益。</li>
+  </ul>
+  <div class="note">
+    <strong>说明：</strong>行业/市值「中性 RankIC」若在生产筛选流水线中使用，属于上游对齐（如 LQTP / cogalpha SQL）范畴；QE 内对应能力主要通过截面 OLS 残差、Partial / Incremental IC 提供。
+  </div>
+</section>
+
+<section id="s2">
+  <h2>2. 核心合约（输入）</h2>
+  <div class="grid2">
+    <div class="card">
+      <h4>FactorBatch</h4>
+      <p>因子面板容器。</p>
+      <ul>
+        <li><code>values</code>: $(T,N,F)$</li>
+        <li><code>validity</code>: 可选布尔掩码，同形</li>
+        <li><code>factor_ids</code>, <code>time_axis</code>, <code>asset_axis</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>LabelBundle</h4>
+      <p>前向标签（收益等）。</p>
+      <ul>
+        <li><code>values</code>: $(T,N)$</li>
+        <li><code>horizon &gt; 0</code></li>
+        <li>要求：决策时点 &lt; 标签起点 &lt; 标签终点</li>
+      </ul>
+    </div>
+  </div>
+  <pre><code>from quant_evaluator import FactorBatch, LabelBundle, AxisRef
+from quant_evaluator.metrics import compute_daily_ic, compute_coverage
+
+ic, n = compute_daily_ic(batch, labels, method="spearman")  # RankIC
+cov, n_valid, n_total = compute_coverage(batch, labels)</code></pre>
+</section>
+
+<section id="s3">
+  <h2>3. IC / RankIC 与预测力</h2>
+  <p><span class="tag core">core</span>模块：<code>quant_evaluator.metrics.ic</code></p>
+
+  <h3>3.1 日度 IC / RankIC — <code>compute_daily_ic</code></h3>
+  <p>对每个交易日 $t$、每个因子 $f$，在截面有效样本上计算相关：</p>
+  <div class="formula">
+  $$
+  \mathrm{IC}_{t,f}^{\text{Pearson}}
+  =
+  \mathrm{Corr}\big(f_{t,\cdot},\, y_{t,\cdot}\big)
+  =
+  \frac{\sum_i (f_{t,i}-\bar f_t)(y_{t,i}-\bar y_t)}
+       {\sqrt{\sum_i (f_{t,i}-\bar f_t)^2}\,\sqrt{\sum_i (y_{t,i}-\bar y_t)^2}}
+  $$
+  </div>
+  <div class="formula">
+  $$
+  \mathrm{RankIC}_{t,f}
+  =
+  \mathrm{Corr}\big(R(f_{t,\cdot}),\, R(y_{t,\cdot})\big)
+  \quad\text{（Spearman；并列取平均秩）}
+  $$
+  </div>
+  <ul>
+    <li>仅保留 pairwise finite 观测；若有效资产数 &lt; <code>min_assets</code>（默认 10）→ NaN。</li>
+    <li>任一方截面近似常数（标准差为 0）→ NaN。</li>
+    <li>输出：<code>ic_series</code> 形状 $(T,F)$，<code>valid_counts</code> 形状 $(T,F)$。</li>
+  </ul>
+
+  <h3>3.2 均值 IC — <code>compute_mean_ic</code></h3>
+  <div class="formula">
+  $$
+  \overline{\mathrm{IC}}_f
+  =
+  \frac{1}{|T_f|}\sum_{t\in T_f}\mathrm{IC}_{t,f},
+  \qquad
+  \sigma_f
+  =
+  \mathrm{Std}_{t}(\mathrm{IC}_{t,f})
+  $$
+  </div>
+  <p>若有效期数 &lt; <code>min_periods</code>（默认 20）则返回 NaN。</p>
+</section>
+
+<section id="s4">
+  <h2>4. IC 汇总、衰减与半衰期</h2>
+  <p><span class="tag core">core</span>模块：<code>metrics.ic_summary</code> / <code>metrics.temporal</code></p>
+
+  <h3>4.1 ICIR — <code>compute_icir</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{ICIR}_f
+  =
+  \frac{\overline{\mathrm{IC}}_f}{\sigma_f}
+  =
+  \frac{\mathrm{mean}_t(\mathrm{IC}_{t,f})}{\mathrm{std}_t(\mathrm{IC}_{t,f})}
+  $$
+  </div>
+  <p>衡量 IC 稳定性：均值相对波动越大，信号越一致。</p>
+
+  <h3>4.2 IC $t$ 统计量 — <code>compute_ic_tstat</code></h3>
+  <p>检验 $H_0:\ \mathbb{E}[\mathrm{IC}]=0$（单样本 $t$ 检验）：</p>
+  <div class="formula">
+  $$
+  t_f
+  =
+  \frac{\overline{\mathrm{IC}}_f}{\sigma_f / \sqrt{n_f}}
+  $$
+  </div>
+
+  <h3>4.3 IC 衰减 — <code>compute_ic_decay</code></h3>
+  <p>对多个前瞻 horizon 的 <code>LabelBundle</code> 分别算均值 IC，得到衰减曲线矩阵 $(H,F)$。</p>
+  <div class="formula">
+  $$
+  \mathrm{Decay}(h,f)=\overline{\mathrm{IC}}_f^{(h)}
+  $$
+  </div>
+
+  <h3>4.4 IC 半衰期 — <code>compute_half_life</code></h3>
+  <p>对 IC 序列拟合 AR(1)：</p>
+  <div class="formula">
+  $$
+  \mathrm{IC}_t = \phi\,\mathrm{IC}_{t-1}+\varepsilon_t,
+  \qquad
+  \mathrm{Half\text{-}life}
+  =
+  -\frac{\ln 2}{\ln|\phi|}
+  \quad (0 < |\phi| < 1)
+  $$
+  </div>
+  <p>含义：预测力自相关衰减到一半所需的期数。</p>
+
+  <h3>4.5 秩稳定性 — <code>compute_rank_stability</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{RankStab}_{t,f}
+  =
+  \mathrm{Corr}\big(R(f_{t,\cdot}),\, R(f_{t+\ell,\cdot})\big)
+  $$
+  </div>
+</section>
+
+<section id="s5">
+  <h2>5. 覆盖率与分布质量</h2>
+  <p><span class="tag core">core</span><code>metrics.quality</code> · <span class="tag ext">extended</span><code>metrics.distribution</code></p>
+
+  <h3>5.1 覆盖率 — <code>compute_coverage</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{Coverage}
+  =
+  \frac{\#\{(t,i,f):\ \text{factor \& label both valid}\}}{\#\text{all candidate pairs}}
+  $$
+  </div>
+
+  <h3>5.2 偏度 / 峰度</h3>
+  <div class="formula">
+  $$
+  \mathrm{Skew}
+  =
+  \frac{\mathbb{E}[(x-\mu)^3]}{\sigma^3},
+  \qquad
+  \mathrm{Kurtosis}_{\text{excess}}
+  =
+  \frac{\mathbb{E}[(x-\mu)^4]}{\sigma^4}-3
+  $$
+  </div>
+
+  <h3>5.3 异常值（IQR）</h3>
+  <div class="formula">
+  $$
+  \text{outlier if } x \notin [Q_1 - k\cdot\mathrm{IQR},\ Q_3 + k\cdot\mathrm{IQR}],
+  \quad \mathrm{IQR}=Q_3-Q_1,\ k=1.5\text{（默认）}
+  $$
+  </div>
+</section>
+
+<section id="s6">
+  <h2>6. 分位收益与多空探针</h2>
+  <p><span class="tag core">core</span><code>metrics.quantile</code> · <code>metrics.portfolio_stats</code> · <code>metrics.probe_portfolio</code></p>
+
+  <h3>6.1 分位收益 — <code>compute_quantile_returns</code></h3>
+  <p>将截面因子值分到 $Q$ 组，第 $q$ 组在日 $t$ 的平均前瞻收益：</p>
+  <div class="formula">
+  $$
+  R_{t,q,f}
+  =
+  \frac{1}{|G_{t,q,f}|}\sum_{i\in G_{t,q,f}} y_{t,i}
+  $$
+  </div>
+  <p>输出形状 $(T,Q,F)$。组内资产数不足 <code>min_assets</code> 时该格为 NaN。</p>
+
+  <h3>6.2 Top−Bottom Spread — <code>compute_top_bottom_spread</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{Spread}_{t,f}
+  =
+  R_{t,q_{\text{top}},f}-R_{t,q_{\text{bottom}},f}
+  $$
+  </div>
+  <div class="ok">
+    默认：$q_{\text{top}}=Q-1$（最高因子组），$q_{\text{bottom}}=0$（最低因子组）。正向因子期望 Spread &gt; 0。
+  </div>
+
+  <h3>6.3 多空收益 — <code>compute_long_short_returns</code></h3>
+  <p>按分位阈值做多高分位、做空低分位，收益为两边均值之差（探针组合，非真实成交撮合）。</p>
+</section>
+
+<section id="s7">
+  <h2>7. 换手率</h2>
+  <p><span class="tag core">core</span><code>metrics.turnover</code></p>
+
+  <h3>7.1 标准换手 — <code>compute_turnover</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{Turnover}
+  =
+  \tfrac12\sum_{i}\lvert w_{t+1,i}-w_{t,i}\rvert
+  $$
+  </div>
+  <p>默认方法名 <code>half_sum_abs</code>。对多空/归一化权重，该量通常落在 $[0,1]$ 量级语义下。</p>
+
+  <h3>7.2 秩换手代理 — <code>estimate_turnover_from_ranks</code></h3>
+  <div class="formula">
+  $$
+  \widehat{\mathrm{TO}}_{t,f}
+  =
+  1-\big|\mathrm{Spearman}\big(R(f_{t}),R(f_{t-\ell})\big)\big|
+  $$
+  </div>
+  <p>不依赖真实权重，用于因子层换手粗估。</p>
+
+  <h3>7.3 分位成员换手 — <code>compute_factor_turnover_rate</code></h3>
+  <p>统计顶部/底部分位集合在相邻期的成员变动比例。</p>
+</section>
+
+<section id="s8">
+  <h2>8. 暴露 / 残差 / 集中度</h2>
+  <p><span class="tag ext">extended</span><code>metrics.exposure</code></p>
+
+  <h3>8.1 截面 OLS 载荷 — <code>compute_factor_loadings</code></h3>
+  <div class="formula">
+  $$
+  f_{t,i}
+  =
+  \alpha_t + \sum_{k=1}^{K}\beta_{t,k}\, r_{t,i,k} + \varepsilon_{t,i}
+  $$
+  </div>
+  <p>返回载荷 $\beta$、截面 $R^2$、以及残差 $\varepsilon$（可用于“风格中性化后”的下游分析）。</p>
+
+  <h3>8.2 HHI 集中度 — <code>compute_concentration_hhi</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{HHI}_t
+  =
+  \sum_i
+  \left(
+    \frac{w_{t,i}\, f_{t,i}}{\sum_j w_{t,j}\, f_{t,j}}
+  \right)^2
+  $$
+  </div>
+  <p>取值约在 $[1/N,\ 1]$：越接近 1 越集中。</p>
+</section>
+
+<section id="s9">
+  <h2>9. 时序稳定性与稳健推断</h2>
+  <p><span class="tag ext">extended</span><code>metrics.robustness</code> · <code>metrics.temporal</code></p>
+
+  <h3>9.1 自相关 ACF</h3>
+  <div class="formula">
+  $$
+  \rho(\ell)
+  =
+  \frac{\mathrm{Cov}(x_t,x_{t-\ell})}{\mathrm{Var}(x_t)}
+  $$
+  </div>
+
+  <h3>9.2 HAC / Newey–West $t$ — <code>compute_hac_tstat</code></h3>
+  <p>在 IC 序列存在异方差与自相关时，用核加权估计均值的稳健标准误，再构造 $t$：</p>
+  <div class="formula">
+  $$
+  t^{\mathrm{HAC}}
+  =
+  \frac{\overline{\mathrm{IC}}}{\widehat{\mathrm{SE}}_{\mathrm{HAC}}}
+  $$
+  </div>
+  <p>默认 Bartlett 核，<code>max_lag</code> 默认 5。</p>
+
+  <h3>9.3 子样本 / 块自助法</h3>
+  <ul>
+    <li><code>compute_subsample_ic_std</code>：对时间子样本重算均值 IC，看离散程度。</li>
+    <li><code>compute_block_bootstrap_ci</code>：块自助法给出 $\overline{\mathrm{IC}}$ 的置信区间。</li>
+  </ul>
+</section>
+
+<section id="s10">
+  <h2>10. 组合统计（Sharpe 等）</h2>
+  <p><span class="tag core">core</span><code>metrics.portfolio_stats</code></p>
+
+  <h3>10.1 Sharpe — <code>compute_sharpe_ratio</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{Sharpe}
+  =
+  \frac{\overline{r}-r_f}{\sigma_r}\sqrt{P}
+  $$
+  </div>
+  <p>其中 $P=$ <code>periods_per_year</code>（默认 252）。</p>
+
+  <h3>10.2 最大回撤 — <code>compute_maximum_drawdown</code></h3>
+  <div class="formula">
+  $$
+  W_t=\prod_{s\le t}(1+r_s),\quad
+  \mathrm{DD}_t=\frac{W_t}{\max_{s\le t}W_s}-1,\quad
+  \mathrm{MDD}=\min_t \mathrm{DD}_t
+  $$
+  </div>
+  <p>实现返回回撤幅度的正值语义（见函数文档）。</p>
+
+  <h3>10.3 Calmar / Sortino / 胜率</h3>
+  <div class="formula">
+  $$
+  \mathrm{Calmar}=\frac{\text{Ann.Return}}{|\mathrm{MDD}|},
+  \qquad
+  \mathrm{Sortino}
+  =
+  \frac{\overline{r}-r_f}{\sigma_{\text{down}}}\sqrt{P}
+  $$
+  </div>
+  <div class="formula">
+  $$
+  \sigma_{\text{down}}
+  =
+  \sqrt{\mathbb{E}\big[\min(r-r_f,0)^2\big]},
+  \qquad
+  \mathrm{WinRate}=\Pr(r>0)
+  $$
+  </div>
+</section>
+
+<section id="s11">
+  <h2>11. 多重检验</h2>
+  <p><span class="tag ext">extended</span><code>metrics.multiple_testing</code></p>
+  <p>批量挖因子时控制假阳性：</p>
+  <table>
+    <thead><tr><th>方法</th><th>函数</th><th>要点</th></tr></thead>
+    <tbody>
+      <tr><td>Bonferroni</td><td><code>bonferroni_correction</code></td><td>$\alpha'=\alpha/m$，最保守</td></tr>
+      <tr><td>Holm–Bonferroni</td><td><code>holm_bonferroni_correction</code></td><td>逐步更强，仍控制 FWER</td></tr>
+      <tr><td>Šidák</td><td><code>sidak_correction</code></td><td>$1-(1-\alpha)^{1/m}$</td></tr>
+      <tr><td>Benjamini–Hochberg</td><td><code>benjamini_hochberg_correction</code></td><td>控制 FDR</td></tr>
+      <tr><td>经验 FDR</td><td><code>compute_fdr</code></td><td>假发现比例估计</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s12">
+  <h2>12. 因子交互与条件 IC</h2>
+  <p><span class="tag ext">extended</span><code>metrics.interactions</code></p>
+
+  <h3>12.1 条件 IC — <code>compute_conditional_ic</code></h3>
+  <p>在条件因子分位桶内分别计算目标因子与标签的 IC。</p>
+
+  <h3>12.2 偏相关 IC — <code>compute_partial_ic</code></h3>
+  <p>先对控制变量做线性剔除，再相关：</p>
+  <div class="formula">
+  $$
+  \mathrm{PartialIC}
+  =
+  \mathrm{Corr}\big(f-\hat f(Z),\; y-\hat y(Z)\big)
+  $$
+  </div>
+
+  <h3>12.3 增量 IC — <code>compute_incremental_ic</code></h3>
+  <p>在已有基础因子集合之后，衡量测试因子新增的解释/相关贡献。</p>
+
+  <h3>12.4 相关、替代、互补</h3>
+  <ul>
+    <li><code>compute_pairwise_correlation</code> / rolling / matrix</li>
+    <li><code>compute_substitution_effect</code>、<code>detect_substitutable_factors</code></li>
+    <li><code>compute_complementarity_score</code>、<code>compute_interaction_strength</code></li>
+    <li><code>compute_marginal_contribution</code></li>
+  </ul>
+</section>
+
+<section id="s13">
+  <h2>13. 风险指标（VaR / 尾部 / 回撤）</h2>
+  <p><span class="tag risk">risk</span><code>quant_evaluator.metrics.risk</code></p>
+
+  <h3>13.1 VaR</h3>
+  <ul>
+    <li><strong>Historical：</strong>经验分位损失。</li>
+    <li><strong>Parametric：</strong>正态假设下的分位。</li>
+    <li><strong>Cornish–Fisher：</strong>用偏度/峰度修正正态分位。</li>
+  </ul>
+  <div class="formula">
+  $$
+  \mathrm{VaR}_{\alpha}
+  =
+  -\mathrm{Quantile}_{1-\alpha}(r)
+  \quad\text{（实现返回正损失语义）}
+  $$
+  </div>
+
+  <h3>13.2 CVaR / Expected Shortfall — <code>compute_cvar</code></h3>
+  <div class="formula">
+  $$
+  \mathrm{CVaR}_{\alpha}
+  =
+  -\mathbb{E}\big[r \mid r \le -{\mathrm{VaR}}_{\alpha}\big]
+  $$
+  </div>
+
+  <h3>13.3 尾部比率族</h3>
+  <div class="formula">
+  $$
+  \mathrm{TailRatio}
+  =
+  \frac{|q_{0.95}(r)|}{|q_{0.05}(r)|},
+  \qquad
+  \mathrm{Gain/Loss}
+  =
+  \frac{\mathbb{E}[r\mid r>0]}{\mathbb{E}[|r|\mid r<0]}
+  $$
+  </div>
+  <div class="formula">
+  $$
+  \Omega(\theta)
+  =
+  \frac{\int_{\theta}^{\infty}(1-F(r))\,dr}{\int_{-\infty}^{\theta}F(r)\,dr}
+  $$
+  </div>
+  <p>另有 UPR、ES Ratio、尾部相依 <code>compute_tail_dependence</code>。</p>
+
+  <h3>13.4 回撤分析</h3>
+  <ul>
+    <li><code>compute_drawdown_series</code> / <code>compute_drawdown_statistics</code></li>
+    <li><code>compute_ulcer_index</code>：$\sqrt{\mathrm{mean}(\mathrm{DD}^2)}$</li>
+    <li><code>compute_pain_index</code>：平均绝对回撤</li>
+  </ul>
+
+  <h3>13.5 压力测试</h3>
+  <p><code>apply_historical_scenario</code>、<code>apply_hypothetical_scenario</code>、<code>compute_worst_case_scenarios</code>、<code>compute_correlation_breakdown</code> 等。</p>
+</section>
+
+<section id="s14">
+  <h2>14. 进阶统计检验</h2>
+  <p><span class="tag ext">research</span><code>quant_evaluator.metrics.stats</code></p>
+  <table>
+    <thead><tr><th>主题</th><th>函数</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>Granger 因果</td><td><code>granger_causality_test</code>, <code>pairwise_granger_causality</code></td><td>预测关系检验</td></tr>
+      <tr><td>协整</td><td><code>johansen_test</code>, <code>engle_granger_test</code></td><td>共同随机趋势 / 配对</td></tr>
+      <tr><td>机制识别</td><td><code>detect_regimes</code>（Gaussian HMM）</td><td>市场状态</td></tr>
+      <tr><td>结构突变</td><td><code>chow_test</code>, <code>cusum_test</code>, <code>cusum_of_squares_test</code>, <code>sup_wald_test</code>, <code>bai_perron_test</code></td><td>参数/方差稳定性</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s15">
+  <h2>15. API 速查表</h2>
+  <p>导入示例：</p>
+  <pre><code>from quant_evaluator.metrics import (
+    compute_daily_ic, compute_mean_ic, compute_icir, compute_ic_tstat,
+    compute_coverage, compute_quantile_returns, compute_top_bottom_spread,
+    compute_turnover, compute_sharpe_ratio, compute_half_life,
+)
+from quant_evaluator.metrics.risk import compute_var_historical, compute_cvar, compute_omega_ratio
+from quant_evaluator.metrics.stats import granger_causality_test, johansen_test</code></pre>
+
+  <table>
+    <thead><tr><th>类别</th><th>关键函数</th><th>典型输出</th></tr></thead>
+    <tbody>
+      <tr><td>IC</td><td><code>compute_daily_ic</code>, <code>compute_mean_ic</code></td><td>$(T,F)$ / $(F,)$</td></tr>
+      <tr><td>IC 汇总</td><td><code>compute_icir</code>, <code>compute_ic_tstat</code>, <code>compute_ic_decay</code></td><td>$(F,)$ / $(H,F)$</td></tr>
+      <tr><td>质量</td><td><code>compute_coverage</code>, skew/kurt/outlier</td><td>标量或面板</td></tr>
+      <tr><td>分位</td><td><code>assign_quantiles</code>, <code>compute_quantile_returns</code>, <code>compute_top_bottom_spread</code></td><td>$(T,Q,F)$ / $(T,F)$</td></tr>
+      <tr><td>换手</td><td><code>compute_turnover</code>, <code>estimate_turnover_from_ranks</code></td><td>标量 / $(T,F)$</td></tr>
+      <tr><td>暴露</td><td><code>compute_factor_loadings</code>, <code>compute_concentration_hhi</code></td><td>载荷/残差/HHI</td></tr>
+      <tr><td>时序</td><td><code>compute_rank_stability</code>, <code>compute_half_life</code>, ACF</td><td>序列/标量</td></tr>
+      <tr><td>稳健</td><td><code>compute_hac_tstat</code>, bootstrap CI, subsample</td><td>$t$/区间</td></tr>
+      <tr><td>组合</td><td>Sharpe / MDD / Sortino / Calmar / win rate</td><td>标量</td></tr>
+      <tr><td>多重检验</td><td>Bonferroni / BH / Holm / Šidák / FDR</td><td>校正 $p$</td></tr>
+      <tr><td>交互</td><td>conditional / partial / incremental IC, corr</td><td>矩阵/序列</td></tr>
+      <tr><td>风险</td><td>VaR/CVaR, Omega, Ulcer, stress</td><td>风险标量</td></tr>
+      <tr><td>统计</td><td>Granger / 协整 / HMM / 结构突变</td><td>检验结果</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card">
+    <h4>推荐阅读路径（给外部同事）</h4>
+    <ol>
+      <li>先看第 1–3 节：合约 + IC/RankIC 定义</li>
+      <li>再看第 6–7、10 节：经济含义（分位、换手、Sharpe）</li>
+      <li>研究向再看第 9、11–14 节：稳健推断、交互、风险与检验</li>
+      <li>代码：<code>quant_evaluator/metrics/</code>；API 长文：<code>docs/API_REFERENCE.md</code></li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  本文档由 <code>quant_evaluator</code>（Quant Evaluator）指标实现整理生成，公式按库内参考实现与 API 文档对齐。
+  若实现与文档冲突，以源码 docstring 与回归测试（如 QE2-P0-001 分位方向）为准。
+</footer>
+</div>
+</body>
+</html>

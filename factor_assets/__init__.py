@@ -22,6 +22,16 @@ from factor_assets.registry.repository import (
     AssetRepository,
     DuplicateIdentityError,
     AssetNotFoundError,
+    RepositoryStats,
+    LifecycleRepository,
+    CommittedTransition,
+)
+from factor_assets.registry.factory import create_repository
+from factor_assets.registry.sqlite_repository import SQLiteLifecycleRepository
+from factor_assets.registry.lifecycle import (
+    LifecycleOrchestrator,
+    TransitionRequest,
+    TransitionResult,
 )
 from factor_assets.identity.canonical import (
     FactorIdentityProvider,
@@ -78,6 +88,14 @@ __all__ = [
     "AssetRepository",
     "DuplicateIdentityError",
     "AssetNotFoundError",
+    "LifecycleRepository",
+    "CommittedTransition",
+    "RepositoryStats",
+    "create_repository",
+    "SQLiteLifecycleRepository",
+    "LifecycleOrchestrator",
+    "TransitionRequest",
+    "TransitionResult",
     # Identity
     "FactorIdentityProvider",
     "FactorIdentity",

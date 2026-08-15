@@ -79,3 +79,15 @@ class EvidenceBundleRef:
     def has_warnings(self) -> bool:
         """Check if bundle has warnings."""
         return len(self.warnings) > 0
+
+
+def evidence_bundle_event_id(ref: EvidenceBundleRef) -> str:
+    """Return the validated, namespaced event identifier for a bundle reference.
+
+    Lifecycle policy keys such as ``evaluation_bundle_ref`` describe a required
+    evidence kind; they are not bundle identities.  Only a typed bundle reference
+    can be adapted to the identifier persisted in a lifecycle event.
+    """
+    if not isinstance(ref, EvidenceBundleRef):
+        raise TypeError("ref must be an EvidenceBundleRef")
+    return f"qe-bundle:{ref.bundle_id}"

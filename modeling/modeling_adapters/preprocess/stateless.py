@@ -1,5 +1,5 @@
 """
-Stateless transforms for modeling.
+Stateless transforms for modeling_adapters.
 
 These transforms do not require fitting and can be applied independently
 to each cross-section or time period.
@@ -7,7 +7,7 @@ to each cross-section or time period.
 from typing import Optional
 import numpy as np
 
-from modeling.errors import InsufficientDataError
+from modeling_adapters.errors import InsufficientDataError
 
 
 def rank_transform(

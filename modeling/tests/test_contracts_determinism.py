@@ -1,5 +1,5 @@
 from datetime import datetime
-from modeling.contracts import ModelReadyData
+from modeling_adapters.contracts import ModelReadyData
 
 
 def test_model_ready_data_deterministic():

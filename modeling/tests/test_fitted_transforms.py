@@ -5,9 +5,9 @@ import pytest
 from datetime import datetime
 import numpy as np
 
-from modeling.preprocess.fitted import FittedTransform, CrossSectionalScaler, create_fitted_scaler
-from modeling.contracts import FitWindow
-from modeling.errors import FitWindowError, FutureLeakageError, InsufficientDataError
+from modeling_adapters.preprocess.fitted import FittedTransform, CrossSectionalScaler, create_fitted_scaler
+from modeling_adapters.contracts import FitWindow
+from modeling_adapters.errors import FitWindowError, FutureLeakageError, InsufficientDataError
 
 
 class TestCrossSectionalScaler:
@@ -16,8 +16,7 @@ class TestCrossSectionalScaler:
         X_train = np.random.randn(100, 5) * 2 + 5
         fit_window = FitWindow(fit_start=datetime(2020, 1, 1), fit_end=datetime(2020, 12, 31))
         scaler = CrossSectionalScaler(method="zscore")
-        scaler.fit(X_train, fit_window)
-        X_transformed = scaler.transform(X_train)
+        X_transformed = scaler.fit_transform(X_train, fit_window)
         assert np.allclose(np.nanmean(X_transformed, axis=0), 0, atol=1e-10)
 
     def test_fit_records_fit_window(self):
@@ -31,7 +30,7 @@ class TestCrossSectionalScaler:
         scaler = CrossSectionalScaler()
         X = np.random.randn(50, 5)
         with pytest.raises(FitWindowError):
-            scaler.transform(X)
+            scaler.transform(X, apply_start_time=datetime(2021, 1, 1))
 
     def test_no_future_leakage_validation(self):
         X_train = np.random.randn(100, 5)

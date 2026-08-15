@@ -12,6 +12,13 @@ It coordinates FE/QE through adapter protocols only.
 
 __version__ = "0.1.0"
 
+from factor_optimizer.capabilities import (
+    CapabilityStatus,
+    ExecutionMode,
+    PRODUCTION_CAPABILITY,
+    ProductionCapability,
+    require_production_capability,
+)
 from factor_optimizer.errors import (
     FactorOptimizerError,
     ContractError,
@@ -46,6 +53,7 @@ def package_info():
     return {
         "name": "factor-optimizer",
         "version": __version__,
+        "production_capability": PRODUCTION_CAPABILITY.as_dict(),
         "capabilities": [
             "mutation_grammar",
             "legality_validation",
@@ -61,6 +69,11 @@ def package_info():
 
 __all__ = [
     "package_info",
+    "CapabilityStatus",
+    "ExecutionMode",
+    "PRODUCTION_CAPABILITY",
+    "ProductionCapability",
+    "require_production_capability",
     # Errors
     "FactorOptimizerError",
     "ContractError",

@@ -651,7 +651,25 @@
 - Focused authority evidence currently reports `42 passed`; final independent validator remains active. At most this can close the authority/schema scope locally, not the q backend overall.
 - q backend remains open for compiler dispatch/defaults, package exports, PhysicalBackendRegion enforcement, process lifecycle/type semantics, and live q integration.
 
-### OOS matrix update
+### q PhysicalBackendRegion handoff audit
+- Independent read-only audit confirms production q handoff is `NOT_IMPLEMENTED` but correctly fail-closed.
+- `QBackend.execute` accepts logical `PlanNode`; active hybrid planner emits only pandas/Polars/DuckDB. Existing `BackendRegion`/`PhysicalRegionPlan` contracts are not adapted to internal `QRegionPlan`.
+- Current capability boundary: 80 executable lowerings, 110 declared targets, 0 production-certified operators. q is research/experimental only; no end-to-end ping-pong gate claim.
+- Research/production backend instances are configuration-isolated; no live q runtime/dataset evidence exists. Minimal future writer scope is q backend + one planner authority + focused handoff tests, without touching closed compiler/executor authority scopes initially.
+
+- Production cache policy now fails closed for requested L2 disk or L3 Redis; default production is L1-only. Research/test retain explicit durable opt-in.
+- Typed `CacheConfigurationError`/`DurableCacheCapabilityError` and explicit `CacheV2Config`/`create_cache` policy are implemented.
+- Independent validation: cache suite `36 passed`; compile/AST/diff checks passed; TTL/dependency promotion and Redis corrupt scan remain validated.
+- Scope verdict: `CLOSED_LOCAL` for safety gating only. Durable envelope, torn publication, pickle, codec identity/authentication, fsync/locking, and authenticated atomic record remain open and are not production-safe.
+
+- EVALUATED evidence projection, typed EvidenceBundleRef separation, guarded/idempotent EVALUATED self-transition, and root facade exports implemented locally.
+- Independent validation: lifecycle orchestration `17/17`, repository `20/20`, combined `37/37`; compileall passed.
+- Scope verdict: `CLOSED_LOCAL` for these lifecycle authority/projection follow-ups. SQLite durable repository remains deferred; wider FA optional ANN/runtime and other package gates remain separate.
+
+- Main-tree manual repair added complete `timing_vectors` to `_InternalChunkDescriptor`, accumulates full public vectors across unequal chunks, compares invariant row-wise offset rules, and emits complete immutable provenance.
+- Focused streaming suite: `41 passed`; `py_compile` and `git diff --check` passed.
+- Added unequal-length equal-rule and unequal-length timing-drift regressions. Independent validation still required before upgrading from `PARTIAL`.
+
 - Independent post-repair validation: factor_engine modeling collection `363` and standalone modeling collection `130` are unblocked.
 - Evidence/negative-control focus: `60 passed`; artifact/cache focus `21 passed, 2 stale`; orchestration `24 passed, 1 stale`; math evidence `27 passed, 3 stale`; extra UTC/as-of probes `37 passed, 3 stale`.
 - Confirmed: aware UTC normalization, before/equal/after as-of resolution, mandatory PredictionContext, numeric/bool rejection, cache identity stability, schema/diagnostics and negative controls.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Clean wheel installation smoke test for modeling.
+Clean wheel installation smoke test for modeling_adapters.
 
 Validates package installation and basic functionality in isolation.
 """
@@ -21,7 +21,7 @@ def run_command(cmd, cwd=None, check=True):
 
 def main():
     print("=" * 70)
-    print("modeling: Clean Wheel Installation Smoke Test")
+    print("modeling_adapters: Clean Wheel Installation Smoke Test")
     print("=" * 70)
 
     package_root = Path(__file__).resolve().parent.parent
@@ -76,12 +76,12 @@ def main():
 import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
-import modeling
-from modeling import __version__
-from modeling.contracts import FitWindow, SplitSpec
-from modeling.errors import FutureLeakageError
+import modeling_adapters
+from modeling_adapters import __version__
+from modeling_adapters.contracts import FitWindow, SplitSpec
+from modeling_adapters.errors import FutureLeakageError
 
-print(f'modeling version: {__version__}')
+print(f'modeling_adapters version: {__version__}')
 print('✓ Imports OK')
 """)
         code, stdout, stderr = run_command(f"{python_exe} {import_script}", check=False)
@@ -96,8 +96,8 @@ print('✓ Imports OK')
         smoke_script.write_text("""
 import numpy as np
 
-from modeling.contracts import FitWindow
-from modeling.preprocess import rank_transform
+from modeling_adapters.contracts import FitWindow
+from modeling_adapters.preprocess import rank_transform
 from datetime import datetime
 
 window = FitWindow(

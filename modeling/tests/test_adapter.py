@@ -4,9 +4,9 @@ Tests for adapter to factor_preprocess.
 import pytest
 from datetime import datetime
 
-from modeling.adapter import FactorPreprocessAdapter, is_factor_preprocess_available
-from modeling.contracts import PreprocessContract, FitWindow, TransformMode
-from modeling.errors import AdapterError, FutureLeakageError
+from modeling_adapters.adapter import FactorPreprocessAdapter, is_factor_preprocess_available
+from modeling_adapters.contracts import PreprocessContract, FitWindow, TransformMode
+from modeling_adapters.errors import AdapterError, FutureLeakageError
 
 pytestmark = pytest.mark.skipif(
     not is_factor_preprocess_available(),

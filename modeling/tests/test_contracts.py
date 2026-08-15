@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime, timedelta
 import numpy as np
 
-from modeling.contracts import (
+from modeling_adapters.contracts import (
     FitWindow,
     SplitSpec,
     OutOfFoldSpec,
@@ -13,7 +13,7 @@ from modeling.contracts import (
     ModelReadyData,
     TransformMode,
 )
-from modeling.errors import (
+from modeling_adapters.errors import (
     FitWindowError,
     SplitError,
     ContractViolation,
@@ -278,7 +278,7 @@ class TestModelReadyData:
 
         assert data.features.shape == (100, 10)
         assert len(data.feature_names) == 10
-        assert data.producer == "modeling"
+        assert data.producer == "modeling_adapters"
 
     def test_invalid_data_period(self):
         """Test that data_start >= data_end raises error."""

@@ -6,8 +6,8 @@ Tests that SplitSpec.__post_init__ actually enforces gap_days (not just document
 import pytest
 from datetime import datetime
 
-from modeling.contracts import SplitSpec
-from modeling.errors import SplitError
+from modeling_adapters.contracts import SplitSpec
+from modeling_adapters.errors import SplitError
 
 
 class TestGapDaysEnforcement:

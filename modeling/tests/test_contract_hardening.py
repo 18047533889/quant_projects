@@ -3,9 +3,9 @@ from datetime import datetime
 import numpy as np
 import pytest
 
-from modeling.adapter import FactorPreprocessAdapter
-from modeling.contracts import FitWindow, OutOfFoldSpec, PreprocessContract, SplitSpec, TransformMode
-from modeling.errors import AdapterError, ContractViolation
+from modeling_adapters.adapter import FactorPreprocessAdapter
+from modeling_adapters.contracts import FitWindow, OutOfFoldSpec, PreprocessContract, SplitSpec, TransformMode
+from modeling_adapters.errors import AdapterError, ContractViolation
 
 
 def _folds():

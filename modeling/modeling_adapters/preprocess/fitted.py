@@ -1,5 +1,5 @@
 """
-Fitted transforms for modeling.
+Fitted transforms for modeling_adapters.
 
 These transforms require a fit() step on training data before they can
 be applied to validation/test data. Critical for preventing leakage.
@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 import numpy as np
 
-from modeling.contracts import FitWindow
-from modeling.errors import FitWindowError, FutureLeakageError, InsufficientDataError
+from modeling_adapters.contracts import FitWindow
+from modeling_adapters.errors import FitWindowError, FutureLeakageError, InsufficientDataError
 
 
 class FittedTransform(ABC):

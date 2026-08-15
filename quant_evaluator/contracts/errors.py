@@ -55,6 +55,11 @@ class OptionalDependencyMissing(CapabilityError):
     pass
 
 
+class DurableCacheCapabilityError(CapabilityError):
+    """Requested cache persistence is unavailable or unsafe for the runtime mode."""
+    pass
+
+
 class DataError(QuantEvaluatorError):
     """Data or evidence quality issue."""
     pass

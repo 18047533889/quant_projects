@@ -627,6 +627,75 @@ class TestStreamingEvaluator:
         with pytest.raises(InvalidContractError, match="overlapping|duplicate|replayed"):
             evaluator.evaluate_stream(iter([make(0), make(1)]), specs)
 
+    def test_public_timing_rule_allows_unequal_chunk_lengths_and_accumulates_vectors(self):
+        evaluator, specs = self._boundary_evaluator()
+
+        def make_chunk(times):
+            values = np.ones((len(times), 1, 1))
+            batch = FactorBatch(
+                factor_ids=("f",),
+                time_axis=AxisRef("time", "int64", len(times), np.asarray(times)),
+                asset_axis=AxisRef("asset", "int64", 1, np.array(["a"])),
+                values=values,
+                context_refs={"snapshot": "s1"},
+            )
+            labels = LabelBundle(
+                target_id="target", values=np.ones((len(times), 1)), horizon=1,
+                decision_time=tuple(times), execution_time=tuple(t + 1 for t in times),
+                label_start_time=tuple(t + 2 for t in times),
+                label_end_time=tuple(t + 3 for t in times),
+                source_ref="labels", calendar_ref="cal",
+            )
+            return batch, labels
+
+        chunks = [make_chunk([0]), make_chunk([1, 2])]
+        result = evaluator.evaluate_stream(iter(chunks), specs)
+        full_batch = FactorBatch(
+            factor_ids=("f",),
+            time_axis=AxisRef("time", "int64", 3, np.array([0, 1, 2])),
+            asset_axis=AxisRef("asset", "int64", 1, np.array(["a"])),
+            values=np.ones((3, 1, 1)),
+            context_refs={"snapshot": "s1"},
+        )
+        full_labels = LabelBundle(
+            target_id="target", values=np.ones((3, 1)), horizon=1,
+            decision_time=(0, 1, 2), execution_time=(1, 2, 3),
+            label_start_time=(2, 3, 4), label_end_time=(3, 4, 5),
+            source_ref="labels", calendar_ref="cal",
+        )
+        large_result = evaluator.evaluate_large_batch(full_batch, full_labels, specs)
+
+        assert result.provenance == large_result.provenance
+        assert result.provenance["timing_vectors"] == (
+            (0, 1, 2), (1, 2, 3), (2, 3, 4), (3, 4, 5)
+        )
+
+    def test_public_timing_rule_drift_rejected_with_unequal_chunks(self):
+        evaluator, specs = self._boundary_evaluator()
+
+        def make_chunk(times, end_delta=3):
+            values = np.ones((len(times), 1, 1))
+            batch = FactorBatch(
+                factor_ids=("f",),
+                time_axis=AxisRef("time", "int64", len(times), np.asarray(times)),
+                asset_axis=AxisRef("asset", "int64", 1, np.array(["a"])),
+                values=values,
+                context_refs={"snapshot": "s1"},
+            )
+            labels = LabelBundle(
+                target_id="target", values=np.ones((len(times), 1)), horizon=1,
+                decision_time=tuple(times), execution_time=tuple(t + 1 for t in times),
+                label_start_time=tuple(t + 2 for t in times),
+                label_end_time=tuple(t + end_delta for t in times),
+                source_ref="labels", calendar_ref="cal",
+            )
+            return batch, labels
+
+        with pytest.raises(SnapshotMismatchError, match="timing"):
+            evaluator.evaluate_stream(
+                iter([make_chunk([0]), make_chunk([1, 2], end_delta=4)]), specs
+            )
+
     def test_get_budget_report(self):
         budget = ComputationBudget(max_memory_mb=1024.0)
         evaluator = StreamingEvaluator(budget=budget)

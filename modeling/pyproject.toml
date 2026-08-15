@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "modeling"
+name = "modeling-adapters"
 version = "0.1.0"
-description = "Model input preparation layer - preprocessing interface for predictive modeling"
+description = "Standalone model input contracts and factor-preprocess adapters"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Proprietary"}
@@ -32,7 +32,7 @@ preprocess = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["modeling*"]
+include = ["modeling_adapters*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

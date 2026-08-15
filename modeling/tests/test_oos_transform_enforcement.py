@@ -7,9 +7,9 @@ import pytest
 from datetime import datetime
 import numpy as np
 
-from modeling.contracts import FitWindow
-from modeling.preprocess.fitted import CrossSectionalScaler
-from modeling.errors import FitWindowError, FutureLeakageError
+from modeling_adapters.contracts import FitWindow
+from modeling_adapters.preprocess.fitted import CrossSectionalScaler
+from modeling_adapters.errors import FitWindowError, FutureLeakageError
 
 
 class TestOOSTransformEnforcement:

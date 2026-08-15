@@ -3,6 +3,9 @@
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 
+from factor_optimizer.capabilities import ExecutionMode, require_production_capability
+
+
 @runtime_checkable
 class QuantEvaluatorAdapter(Protocol):
     """
@@ -82,20 +85,19 @@ class OptionalDependencyMissing(Exception):
     pass
 
 
-def create_qe_adapter() -> QuantEvaluatorAdapter:
-    """
-    Create QE adapter if quant-evaluator is installed.
-
-    Returns:
-        QuantEvaluatorAdapter implementation
-
-    Raises:
-        OptionalDependencyMissing: If quant-evaluator not installed
-    """
+def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY) -> QuantEvaluatorAdapter:
+    """Create a real QE adapter; production remains fail-closed until implemented."""
+    if isinstance(execution_mode, str):
+        execution_mode = ExecutionMode(execution_mode)
+    if execution_mode is ExecutionMode.PRODUCTION:
+        require_production_capability()
     try:
         # Try to import QE - this will fail if not installed
         # Note: QE doesn't exist yet, so this is a forward-looking stub
         import quant_evaluator as qe
+
+        if not hasattr(qe, "Evaluator"):
+            raise ImportError("quant_evaluator.Evaluator is not available")
 
         # Concrete adapter implementation
         class ConcreteQEAdapter:
@@ -152,13 +154,12 @@ def create_qe_adapter() -> QuantEvaluatorAdapter:
         ) from e
 
 
-def create_mock_qe_adapter() -> QuantEvaluatorAdapter:
-    """
-    Create a mock QE adapter for testing without QE dependency.
-
-    Returns:
-        Mock QuantEvaluatorAdapter implementation
-    """
+def create_mock_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY) -> QuantEvaluatorAdapter:
+    """Create the mock adapter only for explicit research use."""
+    if isinstance(execution_mode, str):
+        execution_mode = ExecutionMode(execution_mode)
+    if execution_mode is not ExecutionMode.RESEARCH_ONLY:
+        raise ValueError("mock QE adapters are research_only and cannot run in production")
     import uuid
     from datetime import datetime
 

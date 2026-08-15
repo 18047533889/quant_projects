@@ -5,6 +5,7 @@ from datetime import datetime
 from math import isfinite
 from typing import Any, Callable, Dict, List, Optional
 
+from factor_optimizer.capabilities import ExecutionMode, require_production_capability
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 
@@ -19,8 +20,16 @@ class SearchConfig:
     enable_multifidelity: bool = True
     max_concurrency: int = 4
     evaluation_cost_units: Optional[float] = None
+    execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY
 
     def __post_init__(self):
+        if isinstance(self.execution_mode, str):
+            try:
+                self.execution_mode = ExecutionMode(self.execution_mode)
+            except ValueError as exc:
+                raise ValueError(f"unsupported execution_mode: {self.execution_mode}") from exc
+        if self.execution_mode is ExecutionMode.PRODUCTION:
+            require_production_capability()
         if self.plateau_window < 1:
             raise ValueError("plateau_window must be >= 1")
         if self.plateau_threshold < 0:
@@ -88,6 +97,8 @@ class SearchRunner:
         evaluation_fn: Callable[[Trial, int], Dict[str, Any]],
         plateau_detector: Optional[Callable[[List[float]], bool]] = None,
     ):
+        if config.execution_mode is ExecutionMode.PRODUCTION:
+            require_production_capability()
         self.config = config
         self.proposal_fn = proposal_fn
         self.evaluation_fn = evaluation_fn

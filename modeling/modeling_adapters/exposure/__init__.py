@@ -1,5 +1,5 @@
 """
-Exposure decomposition and soft neutralization for modeling.
+Exposure decomposition and soft neutralization for modeling_adapters.
 
 Provides interfaces for exposure-based transformations that can be
 implemented directly or delegated to factor_preprocess.
@@ -8,7 +8,7 @@ from typing import Optional, List
 import logging
 import numpy as np
 
-from modeling.errors import InsufficientDataError, ContractViolation
+from modeling_adapters.errors import InsufficientDataError, ContractViolation
 
 logger = logging.getLogger(__name__)
 

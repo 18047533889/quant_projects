@@ -77,6 +77,26 @@ class SearchEvaluationResult:
 
 
 @dataclass
+class SealedTestHandle:
+    """
+    Opaque authorization handle for post-freeze test evaluation.
+
+    The upstream search-session/QE integration does not exist yet, so no public
+    factory can issue this handle. Its constructor fails closed rather than
+    allowing caller-supplied test metrics to look sealed.
+    """
+
+    search_session_id: str
+    trial_id: str
+    frozen_at: datetime
+
+    def __post_init__(self):
+        raise NotImplementedError(
+            "SealedTestHandle cannot be issued until search freeze and QE contracts exist."
+        )
+
+
+@dataclass
 class SealedTestResult:
     """
     Test evaluation result - only accessible after search frozen.
@@ -108,11 +128,9 @@ class SealedTestResult:
         )
 
     def __post_init__(self):
-        # Allow construction with warning
-        import warnings
-        warnings.warn(
-            "SealedTestResult is a stub. Real implementation needed for production.",
-            FutureWarning
+        raise NotImplementedError(
+            "SealedTestResult cannot be constructed directly. A real sealed-test "
+            "factory must verify a SealedTestHandle and execute QE on the test split."
         )
 
 
@@ -148,6 +166,7 @@ __all__ = [
     "SplitType",
     "SplitPlan",
     "SearchEvaluationResult",
+    "SealedTestHandle",
     "SealedTestResult",
     "validate_split_plan",
     "create_split_aware_evaluation_fn",

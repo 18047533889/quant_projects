@@ -6,7 +6,7 @@ instead of silently returning un-neutralized values.
 """
 import numpy as np
 import pytest
-from modeling.exposure import _cross_sectional_residual, compute_exposure_residual
+from modeling_adapters.exposure import _cross_sectional_residual, compute_exposure_residual
 
 
 def test_ols_singular_matrix_returns_nan():

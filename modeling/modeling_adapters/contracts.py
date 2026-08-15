@@ -22,7 +22,7 @@ def _deep_freeze(value: Any) -> Any:
         return tuple(_deep_freeze(item) for item in value)
     return value
 
-from modeling.errors import FitWindowError, SplitError, ContractViolation
+from modeling_adapters.errors import FitWindowError, SplitError, ContractViolation
 
 
 @dataclass(frozen=True)
@@ -256,7 +256,7 @@ class ModelReadyData:
 
     # Provenance
     created_at: Optional[datetime] = None
-    producer: str = "modeling"
+    producer: str = "modeling_adapters"
     producer_version: str = "0.1.0"
 
     def __post_init__(self):

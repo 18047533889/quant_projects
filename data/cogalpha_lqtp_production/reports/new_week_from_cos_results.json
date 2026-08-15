@@ -1,0 +1,10 @@
+{
+  "n_crawled": 3,
+  "n_ok": 3,
+  "n_selected": 3,
+  "selected_names": [
+    "cand_fusion_upcap_volregime",
+    "cand_crash_vol_spike_volregime_boost",
+    "cand_gap_reversal_intensity"
+  ]
+}

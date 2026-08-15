@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from factor_assets.contracts.evidence_ref import EvidenceBundleRef
+from factor_assets.errors import LifecycleConflictError
+
 
 class LifecycleState(Enum):
     """
@@ -103,11 +106,6 @@ _LEGAL_TRANSITIONS = [
         description="Re-evaluation with new evidence"
     ),
 ]
-
-
-class LifecycleConflictError(Exception):
-    """Raised when an illegal state transition is attempted."""
-    pass
 
 
 def is_legal_transition(from_state: LifecycleState, to_state: LifecycleState) -> bool:

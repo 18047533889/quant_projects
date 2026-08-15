@@ -1,13 +1,13 @@
 """
-Leakage detection tests - the most critical tests for modeling.
+Leakage detection tests - the most critical tests for modeling_adapters.
 """
 import pytest
 from datetime import datetime
 import numpy as np
 
-from modeling.contracts import FitWindow, SplitSpec, OutOfFoldSpec
-from modeling.preprocess.fitted import CrossSectionalScaler
-from modeling.errors import FutureLeakageError, SplitError
+from modeling_adapters.contracts import FitWindow, SplitSpec, OutOfFoldSpec
+from modeling_adapters.preprocess.fitted import CrossSectionalScaler
+from modeling_adapters.errors import FutureLeakageError, SplitError
 
 
 @pytest.mark.leakage
