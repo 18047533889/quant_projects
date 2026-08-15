@@ -107,12 +107,12 @@ def test_hill_upper_lower_negation_mirror():
     lo_x = _hill_series(x, window=x.size, side="lower", tail_fraction=0.2, min_tail_count=10)[-1]
     assert np.isfinite(up_x)
     assert np.isfinite(up_nx)
-    assert abs(float(up_x) - float(up_nx) < 0.1
+    assert abs(float(up_x) - float(up_nx)) < 0.1
     # The direct invariant the Master-Audit item requires: HillLower(x) equals
     # HillUpper(-x) exactly (finite for a centred signed series — the raw
     # side='lower' call is no longer NaN'd by a negative quantile threshold).
     assert np.isfinite(lo_x)
-    assert abs(float(lo_x) - float(up_nx) < 1e-9
+    assert abs(float(lo_x) - float(up_nx)) < 1e-9
     # R26-060..062: a strictly-POSITIVE magnitude / level has a left tail BOUNDED
     # below by 0 — classic Hill (the ``z = -x`` mirror) does not apply to it and
     # would produce a misleading negative ξ.  The positive-level lower tail is
@@ -137,7 +137,7 @@ def test_mean_excess_lower_mirror_equals_upper_on_negated():
     up_neg = _mean_excess_slope_series(-x, window=600, side="upper", min_tail_count=20)[-1]
     assert np.isfinite(lo)
     assert np.isfinite(up_neg)
-    assert abs(float(lo) - float(up_neg) < 1e-9
+    assert abs(float(lo) - float(up_neg)) < 1e-9
 
 
 def test_mean_excess_slope_positive_on_heavy_tail_both_sides():

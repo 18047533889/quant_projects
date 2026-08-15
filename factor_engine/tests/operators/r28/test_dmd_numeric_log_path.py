@@ -42,7 +42,7 @@ def test_dmd_growing_mode_no_overflow():
     assert len(finite) > 0, "growing mode produced no finite output"
     assert np.all(np.isfinite(finite)), "growing mode produced inf"
     # a growing mode has positive log growth rate
-    assert float(np.nanmedian(out) > 0.0
+    assert float(np.nanmedian(out)) > 0.0
 
 
 def test_dmd_decaying_mode_negative_growth():
@@ -53,7 +53,7 @@ def test_dmd_decaying_mode_negative_growth():
     out = _growth(x)
     finite = out[np.isfinite(out)]
     assert len(finite) > 0
-    assert float(np.nanmedian(out) < 0.0
+    assert float(np.nanmedian(out)) < 0.0
 
 
 def test_dmd_zero_amplitude_no_fabricated_energy():
@@ -74,7 +74,7 @@ def test_dmd_zero_amplitude_no_fabricated_energy():
     out2 = _growth(x2)
     finite = out2[np.isfinite(out2)]
     assert np.all(np.isfinite(finite)), "DMD produced non-finite value"
-    assert float(np.nanmedian(out2) < 0.0  # trailing decay drags growth negative
+    assert float(np.nanmedian(out2)) < 0.0  # trailing decay drags growth negative
 
 
 def test_dmd_all_zero_fails_closed():

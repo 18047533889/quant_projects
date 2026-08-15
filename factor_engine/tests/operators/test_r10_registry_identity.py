@@ -209,7 +209,7 @@ def test_impl_hash_distinguishes_kernels_after_identity_change():
         def _calculate_series(self, x, **kwargs):
             return 3 * x + 2
 
-    assert _impl_source_hash(_SwapA() != _impl_source_hash(_SwapB())
+    assert _impl_source_hash(_SwapA()) != _impl_source_hash(_SwapB())
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ def test_freeze_value_object_ndarray_is_canonical_not_pointer():
     h1 = _freeze_value(arr)
     h2 = _freeze_value(np.array(["x", "y", "z"], dtype=object))
     assert h1 == h2  # deterministic, not address-derived
-    assert _freeze_value(np.array(["x", "z", "y"], dtype=object) != h1
+    assert _freeze_value(np.array(["x", "z", "y"], dtype=object)) != h1
 
 
 def test_freeze_value_object_ndarray_unfreezeable_raises_typeerror():

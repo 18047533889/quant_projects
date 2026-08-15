@@ -86,7 +86,7 @@ def test_corr_eigenvalues_conserve_trace_no_silent_clip():
     c = _canonical_corr(z)
     assert w is not None and c is not None
     # Pre-R11, clipping negative eigenvalues to 0 broke sum(λ) == trace(C).
-    assert abs(float(w.sum()) - float(np.trace(c)) < 1e-9
+    assert abs(float(w.sum()) - float(np.trace(c))) < 1e-9
 
 
 def test_dominant_direction_shares_eigenvalue_matrix():
@@ -105,8 +105,7 @@ def test_dominant_direction_shares_eigenvalue_matrix():
     if v1_ref[k] < 0:
         v1_ref = -v1_ref
     np.testing.assert_allclose(v1, v1_ref, atol=1e-12)
-    assert abs(float(w[-1]) - float(np.linalg.eigvalsh(c)[-1]) < 1e-12
-
+    assert abs(float(w[-1]) - float(np.linalg.eigvalsh(c)[-1])) < 1e-12
 
 def test_adversarial_non_psd_pairwise_corr_projected():
     """(d) 0.9/0.9/-0.9 triangle is genuinely indefinite; the projection makes it
@@ -118,7 +117,7 @@ def test_adversarial_non_psd_pairwise_corr_projected():
             [0.9, -0.9, 1.0],
         ]
     )
-    assert np.min(np.linalg.eigvalsh(c_raw) < -1e-6  # genuinely indefinite
+    assert np.min(np.linalg.eigvalsh(c_raw)) < -1e-6  # genuinely indefinite
     c_proj = _nearest_psd_correlation(c_raw)
     np.testing.assert_allclose(np.diag(c_proj), 1.0, atol=1e-12)
     assert np.allclose(c_proj, c_proj.T, atol=1e-12)
