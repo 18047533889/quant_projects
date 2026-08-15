@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 
 from cleaned_operators.base import ParamRole
-from cleaned_operators.common.time_series import TSZScore
+from cleaned_operators.common.time_series import TSZScore, TSZScorePolars
 
 
 def _load_module(monkeypatch):
@@ -107,9 +107,9 @@ def _pandas_zscore(values: np.ndarray, window: int) -> np.ndarray:
     return TSZScore()._calculate_series(frame, window=window)["x"].to_numpy()
 
 
-def test_ts_zscore_native_matches_pandas_reference_for_nonfinite_values(stats_module):
+def test_active_ts_zscore_polars_matches_pandas_reference_for_nonfinite_values():
     values = np.asarray([1.0, 2.0, np.nan, 4.0, np.inf, -np.inf, 4.0, 4.0, 5.0])
-    result = stats_module.TSZScoreNative().calculate(
+    result = TSZScorePolars().calculate(
         pl.DataFrame({"x": values}), window=5
     )["x"].to_numpy()
     expected = _pandas_zscore(values, 5)
@@ -120,9 +120,9 @@ def test_ts_zscore_native_matches_pandas_reference_for_nonfinite_values(stats_mo
     assert result[6] == 0.0
 
 
-def test_ts_zscore_native_matches_pandas_warmup_and_zero_std(stats_module):
+def test_active_ts_zscore_polars_matches_pandas_warmup_and_zero_std():
     values = np.asarray([7.0, 7.0, 7.0, 8.0])
-    result = stats_module.TSZScoreNative().calculate(
+    result = TSZScorePolars().calculate(
         pl.DataFrame({"x": values}), window=3
     )["x"].to_numpy()
     expected = _pandas_zscore(values, 3)
@@ -132,10 +132,10 @@ def test_ts_zscore_native_matches_pandas_warmup_and_zero_std(stats_module):
     assert result[2] == 0.0
 
 
-def test_ts_zscore_native_public_api_matches_pandas_reference(stats_module):
-    assert stats_module.TSZScoreNative.metadata.param_names == ["x", "window"]
+def test_active_ts_zscore_polars_public_api_matches_pandas_reference():
+    assert TSZScorePolars.metadata.param_names == ["x", "window"]
     with pytest.raises(Exception, match="unknown|unexpected|min_periods"):
-        stats_module.TSZScoreNative().calculate(
+        TSZScorePolars().calculate(
             pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=2
         )
 

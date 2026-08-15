@@ -2566,13 +2566,30 @@ class TSZScorePolars(SeriesOperator):
         tags=["time_series", "ts_", "zscore"]
     )
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        w = max(1, int(window))
+        from cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=1)
+        if "min_periods" in kwargs:
+            raise TypeError("ts_zscore does not expose min_periods")
+
+        def zscore_fn(values: pl.Series) -> float:
+            raw = np.asarray(values.to_numpy(), dtype=float)
+            finite = raw[np.isfinite(raw)]
+            if finite.size < 2:
+                return np.nan
+            current = raw[-1]
+            if np.isnan(current):
+                return np.nan
+            mean = float(np.mean(finite))
+            std = float(np.std(finite, ddof=1))
+            if std == 0.0:
+                return 0.0
+            return float((current - mean) / std)
+
+        numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
         return x.with_columns([
-            ((pl.col(c) - pl.col(c).rolling_mean(window_size=w, min_samples=1)) /
-             pl.when(pl.col(c).rolling_std(window_size=w, min_samples=1, ddof=1) == 0)
-             .then(1)
-             .otherwise(pl.col(c).rolling_std(window_size=w, min_samples=1, ddof=1))
+            pl.col(c).rolling_map(
+                zscore_fn, window_size=w, min_samples=1
             ).alias(c)
             for c in numeric_cols
         ])
