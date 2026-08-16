@@ -2882,21 +2882,31 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = _window_int(node)
+        w = _window_int(node, default=20)
+        if w < 4:
+            raise ValueError("ts_kurt window must be >= 4")
 
         def _kurt(arr: np.ndarray) -> float:
-            # Match pandas ``Series.rolling(...).kurt()``: ±Inf in the window
-            # poisons the statistic (returns NaN); NaN alone is skipped.
-            s = pd.Series(np.asarray(arr, dtype=np.float64))
-            if np.isinf(s.to_numpy(dtype=float, na_value=np.nan)).any():
+            # Match the active StableTsKurt authority: full finite windows,
+            # unbiased Fisher excess kurtosis, and NaN for zero variance.
+            values = np.asarray(arr, dtype=np.float64)
+            if len(values) < w or not np.isfinite(values).all():
                 return np.nan
-            if s.count() == 0:
+            count = len(values)
+            centered = values - float(np.mean(values))
+            second = float(np.sum(centered * centered))
+            if second <= 0.0:
                 return np.nan
-            val = s.kurt()
-            return np.nan if val is None or (isinstance(val, float) and np.isnan(val)) else float(val)
+            fourth = float(np.sum(centered ** 4))
+            biased_excess = count * fourth / (second * second) - 3.0
+            return float(
+                (count - 1)
+                / ((count - 2) * (count - 3))
+                * ((count + 1) * biased_excess + 6.0)
+            )
 
         return inner.with_columns(
-            pl.col(_VAL).rolling_map(_kurt, window_size=w, min_samples=1).over(_INST, order_by=_TS).alias(_VAL)
+            pl.col(_VAL).rolling_map(_kurt, window_size=w, min_samples=w).over(_INST, order_by=_TS).alias(_VAL)
         )
 
     if op == "ts_moment":
