@@ -295,6 +295,14 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     time_varying = bool(getattr(req, "time_varying_universe", True))
     if req.universe and not time_varying:
         insts = store._resolve_universe_instruments(req.universe, plan.time_range, insts)
+    if plan.snapshot_policy in {"pin", "verified_fail_if_changed"}:
+        from data_access.core.exceptions import SnapshotBuildError
+
+        raise SnapshotBuildError(
+            f"snapshot_policy={plan.snapshot_policy} 的 composed aggregation 尚不能把"
+            "已核验 publisher/physical scope 贯穿到 aggregation terminal scan；"
+            "为避免 verify→scan TOCTOU 已 fail closed。"
+        )
     agg_handle = aggregate_minute_bundle(
         store,
         anchor,
@@ -415,18 +423,47 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
                 params=req.dataset_params(ds),
                 instrument_filter=insts,
             )
+            files = store._files_for_snapshot(dsobj, ds, paths)
+            publisher = plan.plan_publisher_snapshots.get(ds)
+            resolved = store._pipeline.resolve_snapshot(
+                ds,
+                files=files,
+                paths=paths,
+                policy=plan.snapshot_policy,
+                pin_snapshot_id=(
+                    str(publisher["content_digest"])
+                    if publisher is not None
+                    else None
+                ),
+            )
+            if publisher is not None and (
+                resolved.source_generation != publisher.get("source_generation")
+                or resolved.content_digest != publisher.get("content_digest")
+            ):
+                from data_access.core.exceptions import ValidationError
+
+                raise ValidationError(
+                    f"dataset={ds!r} publisher source_generation/content_digest "
+                    "在 plan 后变化；拒绝执行 composed read。"
+                )
             snapshots.append(
                 store._build_snapshot(
-                    dataset=ds, ds=dsobj, paths=paths, params=req.dataset_params(ds)
+                    dataset=ds,
+                    ds=dsobj,
+                    paths=paths,
+                    params=req.dataset_params(ds),
+                    files=files,
                 )
             )
-        except Exception:
+        except Exception as exc:
+            if plan.snapshot_policy in {"verified_fail_if_changed", "pin"}:
+                raise
             if _strict_mode():
                 from data_access.core.exceptions import SnapshotBuildError
 
                 raise SnapshotBuildError(
                     f"组合读参与数据集 '{ds}' snapshot 构建失败"
-                ) from None
+                ) from exc
     snapshot = (
         merge_sql_data_snapshots(snapshots, registry_hash=store.registry_fingerprint())
         if snapshots

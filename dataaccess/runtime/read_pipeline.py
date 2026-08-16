@@ -153,6 +153,8 @@ class ReadPipeline:
         files: Sequence[Any] | None = None,
         paths: Sequence[str] | None = None,
         strict: bool | None = None,
+        policy: str = "latest",
+        pin_snapshot_id: str | None = None,
     ) -> ResolvedSourceSnapshot:
         """resolve exact source snapshot（P0-004）。优先 injected resolver。
 
@@ -162,7 +164,13 @@ class ReadPipeline:
         """
         self.counters.snapshot += 1
         if self._resolver is not None:
-            snap = self._resolver.resolve(dataset, paths=paths, files=files)
+            snap = self._resolver.resolve(
+                dataset,
+                paths=paths,
+                files=files,
+                policy=policy,
+                pin_snapshot_id=pin_snapshot_id,
+            )
             if snap is not None:
                 return snap
         if files is not None:

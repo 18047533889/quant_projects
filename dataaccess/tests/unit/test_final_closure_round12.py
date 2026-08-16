@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import json
 from pathlib import Path
 from types import MappingProxyType
 
@@ -25,9 +26,19 @@ import pyarrow.parquet as pq
 import pytest
 
 from data_access.core.engine import DuckDBEngine
-from data_access.core.exceptions import ValidationError
+from data_access.core.exceptions import (
+    SnapshotBuildError,
+    SourceSnapshotUnavailable,
+    ValidationError,
+)
 from data_access.read.data_request import DataRequest, compile_data_request
+from data_access.read.read_contract import FileVersion
 from data_access.registry import load_registry
+from data_access.snapshot.resolver import SourceSnapshotResolver
+from data_access.snapshot.source_snapshot import (
+    ResolvedObject,
+    content_digest_of_objects,
+)
 from data_access.store import DataAccessStore
 
 _PKG = "/home/shw/quant_projects/dataaccess"
@@ -74,6 +85,70 @@ ds:
     return DataAccessStore(registry=load_registry(cfg), engine=DuckDBEngine(threads=2))
 
 
+def _write_authoritative_manifest_token(
+    tmp_path, *, file_count: int, source_epoch: str = "v1"
+):
+    (tmp_path / "d" / "_manifest.json").write_text(
+        json.dumps(
+            {
+                "source_epoch": source_epoch,
+                "manifest_built_epoch": source_epoch,
+                "manifest_generation_id": "g1",
+                "file_count": file_count,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _publisher_manifest(
+    tmp_path,
+    *,
+    generation: str = "publisher-g1",
+    objects: list[dict] | None = None,
+    content_digest: str | None = None,
+):
+    if objects is None:
+        part = tmp_path / "d" / "part.parquet"
+        stat = part.stat()
+        objects = [
+            {
+                "key": str(part),
+                "size": stat.st_size,
+                "etag": "local-publisher-v1",
+            }
+        ]
+    resolved = tuple(
+        ResolvedObject(
+            uri=str(entry["key"]),
+            content_length=entry.get("size", entry.get("content_length")),
+            etag=entry.get("etag"),
+            version_id=entry.get("version_id"),
+        )
+        for entry in objects
+    )
+    return {
+        "manifest_version": "1",
+        "dataset": "ds",
+        "source_generation": generation,
+        "complete": True,
+        "objects": objects,
+        "object_count": len(objects),
+        "content_digest": (
+            content_digest
+            if content_digest is not None
+            else content_digest_of_objects(resolved)
+        ),
+        "prefix": str(tmp_path / "d"),
+        "published_at": "2026-08-16T00:00:00Z",
+    }
+
+
+def _install_publisher_manifest(monkeypatch, store, manifest):
+    monkeypatch.setattr(store, "_source_manifest_fn", lambda _dataset: manifest)
+    store._pipeline._resolver._source_manifest_fn = store._source_manifest_fn
+
+
 # ---------------------------------------------------------------------------
 # A. ReadPlan / CompiledDataRequest 真正 immutable
 # ---------------------------------------------------------------------------
@@ -106,7 +181,9 @@ def test_plan_compiled_source_params_immutable(tmp_path):
 
 def test_plan_state_immutable(tmp_path):
     store = _static_store(tmp_path)
-    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="fail_if_changed"))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="best_effort_fail_if_changed")
+    )
     assert plan.datasets == ("ds",)
     assert plan.per_dataset_columns["ds"] == ("v",)
     # 顶层赋值 → frozen dataclass
@@ -239,6 +316,482 @@ def test_data_request_enum_rejects_and_normalizes():
     # 大小写不敏感：normalize 成小写规范值
     r = DataRequest(fields=["a"], engine="DuckDB", result="Arrow")
     assert r.engine == "duckdb" and r.result == "arrow"
+
+
+def test_snapshot_policy_taxonomy_is_explicit():
+    for policy in (
+        "latest",
+        "best_effort_fail_if_changed",
+        "verified_fail_if_changed",
+        "fail_if_changed",
+        "pin",
+    ):
+        assert DataRequest(fields=["a"], snapshot_policy=policy).snapshot_policy == policy
+
+
+def test_verified_snapshot_policy_rejects_missing_plan_manifest(tmp_path):
+    store = _static_store(tmp_path)
+    with pytest.raises(ValidationError, match="权威 manifest"):
+        store.plan(
+            DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+        )
+
+
+def test_verified_snapshot_policy_rejects_manifest_without_version_identity(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    monkeypatch.setattr(
+        store, "manifest_version", lambda *_args, **_kwargs: {"has_manifest": True}
+    )
+    with pytest.raises(ValidationError, match="版本 token"):
+        store.plan(
+            DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+        )
+
+
+def test_best_effort_snapshot_policy_allows_missing_manifest(tmp_path):
+    store = _static_store(tmp_path)
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="best_effort_fail_if_changed")
+    )
+    assert plan.execute().to_arrow().num_rows == 3
+
+
+def test_verified_snapshot_policy_rejects_execution_manifest_lookup_failure(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, _publisher_manifest(tmp_path))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+
+    def _fail_manifest(*_args, **_kwargs):
+        raise RuntimeError("metadata unavailable")
+
+    monkeypatch.setattr(store, "manifest_version", _fail_manifest)
+    with pytest.raises(SnapshotBuildError, match="无法证明"):
+        plan.execute()
+
+
+def test_verified_snapshot_policy_rejects_execution_manifest_disappearance(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, _publisher_manifest(tmp_path))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    monkeypatch.setattr(
+        store, "manifest_version", lambda *_args, **_kwargs: {"has_manifest": False}
+    )
+    with pytest.raises(SnapshotBuildError, match="无法证明"):
+        plan.execute()
+
+
+def test_verified_snapshot_policy_rejects_execution_version_change(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    planned = {
+        "has_manifest": True,
+        "fresh": True,
+        "dataset_version": "v1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(planned))
+    _install_publisher_manifest(monkeypatch, store, _publisher_manifest(tmp_path))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    monkeypatch.setattr(
+        store,
+        "manifest_version",
+        lambda *_args, **_kwargs: {
+            "has_manifest": True,
+            "fresh": True,
+            "dataset_version": "v2",
+        },
+    )
+    with pytest.raises(SnapshotBuildError, match="版本已变化"):
+        plan.execute()
+
+
+def test_pin_rejects_unprovable_plan_file_identity(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    monkeypatch.setattr(
+        "data_access.read.read_contract.build_file_manifest",
+        lambda _paths: (FileVersion(path="/unstatable/file.parquet"),),
+    )
+    with pytest.raises(ValidationError, match="精确物理文件身份"):
+        store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
+
+
+def test_pin_rejects_unprovable_execution_file_identity(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
+    monkeypatch.setattr(
+        "data_access.read.read_contract.build_file_manifest",
+        lambda _paths: (FileVersion(path="/unstatable/file.parquet"),),
+    )
+    with pytest.raises(SnapshotBuildError, match="物理文件身份不完整"):
+        plan.execute()
+
+
+def test_legacy_fail_if_changed_remains_best_effort(tmp_path):
+    store = _static_store(tmp_path)
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="fail_if_changed"))
+    assert plan.execute().to_arrow().num_rows == 3
+
+
+def test_pin_accepts_authoritative_empty_physical_set(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    _write_authoritative_manifest_token(tmp_path, file_count=0)
+    token = store.manifest_version("ds")
+    assert token["file_count"] == 0
+    assert token["fresh"] is True
+    monkeypatch.setattr(
+        "data_access.read.read_contract.build_file_manifest", lambda _paths: ()
+    )
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
+    assert plan.plan_snapshot_tokens["ds"]["file_count"] == 0
+    assert plan.plan_pinned_files["ds"] == ()
+    assert plan.execute().to_arrow().num_rows == 0
+
+
+def test_pin_rejects_file_appearing_before_prepare_for_authoritative_empty(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    _write_authoritative_manifest_token(tmp_path, file_count=0)
+    monkeypatch.setattr(
+        "data_access.read.read_contract.build_file_manifest", lambda _paths: ()
+    )
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
+    monkeypatch.undo()
+    monkeypatch.setattr(type(plan), "_verify_snapshot_pin", lambda _self, _store: None)
+    original_prepare = store.prepare_read
+
+    def _appear_then_prepare(*args, **kwargs):
+        scope = kwargs["physical_scope"]
+        object.__setattr__(
+            scope,
+            "exact_objects",
+            (str(tmp_path / "d" / "part.parquet"),),
+        )
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(store, "prepare_read", _appear_then_prepare)
+    with pytest.raises(ValidationError, match="terminal snapshot"):
+        plan.execute()
+
+
+def test_pin_rejects_replacement_between_plan_verification_and_prepare(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "file_count": 1,
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
+    original_prepare = store.prepare_read
+
+    def _replace_then_prepare(*args, **kwargs):
+        pq.write_table(
+            pa.Table.from_pylist(
+                [
+                    {"d": _dt.date(2024, 1, 2), "s": "AAA", "v": 99.0},
+                    {"d": _dt.date(2024, 1, 4), "s": "CCC", "v": 100.0},
+                ]
+            ),
+            str(tmp_path / "d" / "part.parquet"),
+        )
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(store, "prepare_read", _replace_then_prepare)
+    with pytest.raises(ValidationError, match="terminal snapshot"):
+        plan.execute()
+
+
+def test_pin_rejects_unbound_aggregation_execution(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    plan = store.plan(
+        DataRequest(
+            fields=["v"],
+            snapshot_policy="pin",
+            aggregations=[{"field": "v", "spec": "sum"}],
+        )
+    )
+    with pytest.raises(SnapshotBuildError, match="aggregation"):
+        plan.execute()
+
+
+def test_pin_rejects_unbound_multi_dataset_execution(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    plan = store.plan(DataRequest(fields=["v"], snapshot_policy="latest"))
+    object.__setattr__(plan, "snapshot_policy", "pin")
+    object.__setattr__(plan, "datasets", ("ds", "other"))
+    object.__setattr__(
+        plan,
+        "plan_pinned_files",
+        MappingProxyType({"ds": (), "other": ()}),
+    )
+    monkeypatch.setattr(type(plan), "_verify_snapshot_pin", lambda _self, _store: None)
+    with pytest.raises(SnapshotBuildError, match="多数据集 join"):
+        plan.execute()
+
+
+def test_pin_rejects_unbound_time_varying_universe_execution(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    plan = store.plan(
+        DataRequest(
+            fields=["v"],
+            snapshot_policy="pin",
+            universe="ds",
+            time_varying_universe=True,
+        )
+    )
+    with pytest.raises(SnapshotBuildError, match="时变 universe"):
+        plan.execute()
+
+
+def test_direct_verified_resolver_requires_publisher_manifest():
+    resolver = SourceSnapshotResolver(
+        list_objects_fn=lambda _prefix: (),
+        fallback_fn=lambda *_args: None,
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match="publisher source manifest"):
+        resolver.resolve(
+            "ds",
+            policy="verified_fail_if_changed",
+            paths=["s3://bucket/ds/*.parquet"],
+        )
+
+
+def test_direct_verified_resolver_rejects_identityless_manifest():
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: {"source_generation": "g1"},
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match="source manifest 解析失败"):
+        resolver.resolve("ds", policy="verified_fail_if_changed")
+
+
+def test_direct_verified_resolver_preserves_authoritative_empty_digest(tmp_path):
+    manifest = _publisher_manifest(tmp_path, objects=[])
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: manifest,
+        strict=False,
+    )
+    snapshot = resolver.resolve("ds", policy="verified_fail_if_changed")
+    assert snapshot.source_generation == "publisher-g1"
+    assert snapshot.objects == ()
+    assert snapshot.content_digest == content_digest_of_objects(())
+    assert snapshot.content_digest
+
+
+def test_direct_verified_resolver_rejects_bad_empty_digest(tmp_path):
+    manifest = _publisher_manifest(tmp_path, objects=[], content_digest="bad-digest")
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: manifest,
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match="content_digest"):
+        resolver.resolve("ds", policy="verified_fail_if_changed")
+
+
+def test_verified_snapshot_policy_freezes_publisher_identity(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    manifest = _publisher_manifest(tmp_path)
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, manifest)
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    assert dict(plan.plan_publisher_snapshots["ds"]) == {
+        "source_generation": manifest["source_generation"],
+        "content_digest": manifest["content_digest"],
+    }
+
+
+@pytest.mark.parametrize("changed_field", ["source_generation", "content_digest"])
+def test_verified_snapshot_policy_rejects_publisher_identity_change(
+    tmp_path, monkeypatch, changed_field
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    manifest = _publisher_manifest(tmp_path)
+    current = {"value": manifest}
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, current["value"])
+    store._pipeline._resolver._source_manifest_fn = lambda _dataset: current["value"]
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    if changed_field == "source_generation":
+        current["value"] = _publisher_manifest(tmp_path, generation="publisher-g2")
+    else:
+        part = tmp_path / "d" / "part.parquet"
+        current["value"] = _publisher_manifest(
+            tmp_path,
+            objects=[
+                {
+                    "key": str(part),
+                    "size": part.stat().st_size,
+                    "etag": "local-publisher-v2",
+                }
+            ],
+        )
+    with pytest.raises(SnapshotBuildError, match="publisher|版本已变化"):
+        plan.execute()
+
+
+def test_verified_snapshot_policy_terminal_rejects_same_generation_digest_change(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    current = {"value": _publisher_manifest(tmp_path)}
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    store._pipeline._resolver._source_manifest_fn = lambda _dataset: current["value"]
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    part = tmp_path / "d" / "part.parquet"
+    current["value"] = _publisher_manifest(
+        tmp_path,
+        generation="publisher-g1",
+        objects=[
+            {
+                "key": str(part),
+                "size": part.stat().st_size,
+                "etag": "local-publisher-v2",
+            }
+        ],
+    )
+    monkeypatch.setattr(type(plan), "_verify_snapshot_pin", lambda _self, _store: None)
+    with pytest.raises(ValidationError, match="digest"):
+        plan.execute()
+
+
+def test_verified_snapshot_policy_detects_independent_manifest_epoch_change(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    current = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_epoch": "m1",
+        "manifest_generation_id": "g1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(current))
+    _install_publisher_manifest(monkeypatch, store, _publisher_manifest(tmp_path))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    current["manifest_epoch"] = "m2"
+    with pytest.raises(SnapshotBuildError, match="版本已变化"):
+        plan.execute()
+
+
+def test_verified_snapshot_policy_detects_missing_and_falsy_identity(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    current = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "",
+        "manifest_generation_id": "g1",
+    }
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(current))
+    _install_publisher_manifest(monkeypatch, store, _publisher_manifest(tmp_path))
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    current.pop("source_epoch")
+    with pytest.raises(SnapshotBuildError, match="版本已变化"):
+        plan.execute()
+
+
+def test_pin_rejects_contradictory_empty_counts(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    monkeypatch.setattr(
+        store,
+        "manifest_version",
+        lambda *_args, **_kwargs: {
+            "has_manifest": True,
+            "fresh": True,
+            "source_epoch": "v1",
+            "file_count": 0,
+            "object_count": 1,
+        },
+    )
+    monkeypatch.setattr(
+        "data_access.read.read_contract.build_file_manifest", lambda _paths: ()
+    )
+    with pytest.raises(ValidationError, match="精确物理文件身份"):
+        store.plan(DataRequest(fields=["v"], snapshot_policy="pin"))
 
 
 # ---------------------------------------------------------------------------

@@ -1535,6 +1535,8 @@ class DataAccessStore:
         request_identity: str | None = None,
         principal_id: str | None = None,
         run_mode: str | None = None,
+        snapshot_policy: str = "latest",
+        publisher_snapshot: Mapping[str, Any] | None = None,
     ) -> PreparedRead:
         """R26-P0-003/004：构建 immutable executable plan。
 
@@ -1593,6 +1595,8 @@ class DataAccessStore:
                 principal_id=principal_id,
                 budget=budget,
                 deadline_ctx=deadline_ctx,
+                snapshot_policy=snapshot_policy,
+                publisher_snapshot=publisher_snapshot,
             )
         finally:
             reset_deadline_context(_deadline_token)
@@ -1621,6 +1625,8 @@ class DataAccessStore:
         principal_id: str | None,
         budget: QueryBudget,
         deadline_ctx: Any,
+        snapshot_policy: str,
+        publisher_snapshot: Mapping[str, Any] | None,
     ) -> PreparedRead:
         """R26-P0-003/004 的实体（R39 P0 #32：共享最外层 DeadlineContext）。
 
@@ -1662,6 +1668,7 @@ class DataAccessStore:
         # R38 P0-050：权威缓存来自 ContextVar（request-scoped），不再改 Store 全局。
         _cache = self._current_resolution_cache()
         _hit = None
+        expected_file_versions: tuple[Any, ...] | None = None
         if physical_scope is not None:
             if isinstance(physical_scope, VerifiedPhysicalScope):
                 # R27-D：只有内部构造的 VerifiedPhysicalScope 才能绑定物理范围
@@ -1682,7 +1689,23 @@ class DataAccessStore:
                             f"{physical_scope.contract_digest}，dataset '{dataset}' 当前契约 "
                             f"{current_digest}。contract 更新后旧物理 scope 禁止执行（R28-6）。"
                         )
-                paths = list(physical_scope.exact_objects)
+                if physical_scope.use_exact_objects:
+                    paths = list(physical_scope.exact_objects)
+                    expected_file_versions = (
+                        tuple(physical_scope.expected_file_versions)
+                        if physical_scope.expected_file_versions is not None
+                        else None
+                    )
+                else:
+                    paths = self._prepare_dataset_read(
+                        ds,
+                        time_range=time_range,
+                        params=params,
+                        instrument_filter=instrument_filter,
+                    )
+                    paths = self._expand_glob_paths(paths)
+                snapshot_policy = physical_scope.snapshot_policy
+                publisher_snapshot = physical_scope.publisher_snapshot
                 # R28-6：Verified 分支同样强制 dataset-specific 物理边界——authorize
                 # 的是 dataset，路径必须落在 dataset 自己授权根内（不能借 verified
                 # scope 顺带读其它数据集的根）。
@@ -1738,13 +1761,37 @@ class DataAccessStore:
         if not (_cache is not None and _hit is not None):
             # VerifiedPhysicalScope / 无缓存路径：files 由 paths 构建（幂等）。
             files = build_file_manifest(paths)
+        if expected_file_versions is not None:
+            from data_access.read.data_request import _physical_manifest_changed
+
+            if _physical_manifest_changed(expected_file_versions, files):
+                raise ValidationError(
+                    "VerifiedPhysicalScope 物理文件身份在 prepare_read 前后变化；"
+                    "拒绝以替换后的文件建立 terminal snapshot。"
+                )
         if deadline_ctx is not None:
             deadline_ctx.check(context="prepare_read(physical scope)")
         self._enforce_scan_files(budget, paths, files=files)
         # ---- source snapshot resolve + budget enforce（P0-004/010/017）----
         src_snapshot = self._pipeline.resolve_snapshot(
-            dataset, files=files, paths=paths
+            dataset,
+            files=files,
+            paths=paths,
+            policy=snapshot_policy,
+            pin_snapshot_id=(
+                str(publisher_snapshot["content_digest"])
+                if publisher_snapshot is not None
+                else None
+            ),
         )
+        if publisher_snapshot is not None and (
+            src_snapshot.source_generation != publisher_snapshot.get("source_generation")
+            or src_snapshot.content_digest != publisher_snapshot.get("content_digest")
+        ):
+            raise ValidationError(
+                f"dataset={dataset!r} publisher source_generation/content_digest 在 plan 后变化；"
+                "拒绝建立 terminal snapshot。"
+            )
         self._pipeline.enforce_budget(budget, snapshot=src_snapshot, paths=paths)
         if deadline_ctx is not None:
             deadline_ctx.check(context="prepare_read(snapshot/schema)")
@@ -3257,6 +3304,8 @@ class DataAccessStore:
         params: Mapping[str, Any] | None = None,
         params_by_dataset: Mapping[str, Mapping[str, Any]] | None = None,
         order_by: Sequence[str] | None = None,
+        snapshot_policy: str = "latest",
+        publisher_snapshots: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> ReadHandle:
         """多数据集批量 join：每张物理表只扫一次，DuckDB 内 exact / PIT-asof join。
 
@@ -3383,6 +3432,26 @@ class DataAccessStore:
                 paths = per_ds_paths.get(ds) or []
                 files = self._files_for_snapshot(dsobj, ds, paths)
                 self._enforce_scan_files(merged, paths, files=files)
+                publisher = (publisher_snapshots or {}).get(ds)
+                resolved = self._pipeline.resolve_snapshot(
+                    ds,
+                    files=files,
+                    paths=paths,
+                    policy=snapshot_policy,
+                    pin_snapshot_id=(
+                        str(publisher["content_digest"])
+                        if publisher is not None
+                        else None
+                    ),
+                )
+                if publisher is not None and (
+                    resolved.source_generation != publisher.get("source_generation")
+                    or resolved.content_digest != publisher.get("content_digest")
+                ):
+                    raise ValidationError(
+                        f"dataset={ds!r} publisher source_generation/content_digest 在 plan 后变化；"
+                        "拒绝执行 joined read。"
+                    )
                 snapshots.append(
                     self._build_snapshot(
                         dataset=ds,
@@ -3393,6 +3462,8 @@ class DataAccessStore:
                     )
                 )
             except Exception as exc:
+                if snapshot_policy in {"verified_fail_if_changed", "pin"}:
+                    raise
                 missing_snapshot.append(ds)
                 if is_strict_semantics():
                     # #14 fail-closed：参与数据集 snapshot 必须完整，否则 lineage/
@@ -3424,7 +3495,15 @@ class DataAccessStore:
             dsobj = self._registry.get(ds)
             all_files.extend(self._files_for_snapshot(dsobj, ds, per_ds_paths.get(ds) or []))
         join_snapshot = self._pipeline.resolve_snapshot(
-            anchor, files=all_files, paths=per_ds_paths.get(anchor)
+            anchor,
+            files=all_files,
+            paths=per_ds_paths.get(anchor),
+            policy=snapshot_policy,
+            pin_snapshot_id=(
+                str((publisher_snapshots or {}).get(anchor)["content_digest"])
+                if (publisher_snapshots or {}).get(anchor) is not None
+                else None
+            ),
         )
         self._pipeline.enforce_budget(merged, snapshot=join_snapshot)
         rid = f"joined:{anchor}:{uuid.uuid4().hex[:12]}"
@@ -3863,10 +3942,11 @@ class DataAccessStore:
         storage: dict[str, str] = {}
         snapshot_info: dict[str, dict[str, Any]] = {}
         plan_snapshot_tokens: dict[str, dict[str, Any]] = {}
-        # #P1-final closure 3：snapshot_policy=pin 时冻结每数据集的物理文件清单
-        # （path + size + mtime_ns / etag / version_id），execute 前逐文件核对。
+        # verified_fail_if_changed/pin 遵循「无法证明 == FAIL」：plan 必须能取得
+        # 权威 manifest；pin 另需冻结每数据集的物理文件清单。
         pin_policy = str(getattr(request, "snapshot_policy", "latest") or "latest")
         plan_pinned_files: dict[str, Any] = {}
+        plan_publisher_snapshots: dict[str, dict[str, Any]] = {}
         for ds in datasets:
             dsobj = self._registry.get(ds)
             # #27 plan() 按每 dataset 传 source_params：factor lake / model output
@@ -3889,9 +3969,51 @@ class DataAccessStore:
                 token = self.manifest_version(ds, **ds_params)
                 snapshot_info[ds] = token
                 plan_snapshot_tokens[ds] = dict(token)
-            except Exception:
+            except Exception as exc:
+                if pin_policy in {"verified_fail_if_changed", "pin"}:
+                    raise ValidationError(
+                        f"snapshot_policy={pin_policy} 需要权威 manifest，"
+                        f"无法为 {ds!r} 建立版本证明：{type(exc).__name__}"
+                    ) from exc
                 snapshot_info[ds] = {"has_manifest": False}
                 plan_snapshot_tokens[ds] = {"has_manifest": False}
+            if (
+                pin_policy in {"verified_fail_if_changed", "pin"}
+                and (
+                    not plan_snapshot_tokens[ds].get("has_manifest")
+                    or plan_snapshot_tokens[ds].get("fresh") is not True
+                    or not any(
+                        plan_snapshot_tokens[ds].get(key)
+                        for key in (
+                            "source_epoch",
+                            "manifest_epoch",
+                            "manifest_generation_id",
+                            "dataset_version",
+                            "partition_version",
+                        )
+                    )
+                )
+            ):
+                raise ValidationError(
+                    f"snapshot_policy={pin_policy} 需要权威 manifest，"
+                    f"但 {ds!r} 没有可验证的版本 token。"
+                )
+            if pin_policy == "verified_fail_if_changed":
+                try:
+                    publisher = self._pipeline.resolve_snapshot(
+                        ds,
+                        policy="verified_fail_if_changed",
+                    )
+                except Exception as exc:
+                    raise ValidationError(
+                        f"snapshot_policy=verified_fail_if_changed 需要 publisher "
+                        f"SourceManifest，无法为 {ds!r} 建立权威版本证明："
+                        f"{type(exc).__name__}"
+                    ) from exc
+                plan_publisher_snapshots[ds] = {
+                    "source_generation": publisher.source_generation,
+                    "content_digest": publisher.content_digest,
+                }
             if pin_policy == "pin" and plan_snapshot_tokens.get(ds, {}).get("has_manifest"):
                 # pin 需要精确物理快照：resolve 数据集路径 → 逐文件 stat 当前真实
                 # size/mtime（不能复用 manifest——pin 要防的正是「外部系统直接替换
@@ -3905,9 +4027,27 @@ class DataAccessStore:
                     )
                     from data_access.read.read_contract import build_file_manifest
 
-                    plan_pinned_files[ds] = build_file_manifest(paths)
-                except Exception:
-                    plan_pinned_files[ds] = ()
+                    pinned_files = build_file_manifest(paths)
+                    from data_access.read.data_request import (
+                        _manifest_proves_empty,
+                        _physical_manifest_is_provable,
+                    )
+
+                    if not _physical_manifest_is_provable(
+                        pinned_files,
+                        allow_empty=_manifest_proves_empty(plan_snapshot_tokens[ds]),
+                    ):
+                        raise ValidationError(
+                            f"snapshot_policy=pin 无法为 {ds!r} 建立精确物理文件身份。"
+                        )
+                    plan_pinned_files[ds] = pinned_files
+                except ValidationError:
+                    raise
+                except Exception as exc:
+                    raise ValidationError(
+                        f"snapshot_policy=pin 无法为 {ds!r} 枚举物理文件身份："
+                        f"{type(exc).__name__}"
+                    ) from exc
 
         engine, result = request.engine, request.result
         if len(datasets) > 1:
@@ -3946,11 +4086,14 @@ class DataAccessStore:
         snapshot_policy = compiled.snapshot_policy
         if snapshot_policy not in {
             "latest",
+            "best_effort_fail_if_changed",
+            "verified_fail_if_changed",
             "fail_if_changed",
             "pin",
         }:
             raise ValidationError(
-                f"snapshot_policy 必须是 latest|fail_if_changed|pin，收到 {snapshot_policy!r}"
+                "snapshot_policy 必须是 latest|best_effort_fail_if_changed|"
+                f"verified_fail_if_changed|fail_if_changed|pin，收到 {snapshot_policy!r}"
             )
 
         return ReadPlan(
@@ -3973,6 +4116,7 @@ class DataAccessStore:
             snapshot_policy=snapshot_policy,
             plan_snapshot_tokens=plan_snapshot_tokens,
             plan_pinned_files=plan_pinned_files,
+            plan_publisher_snapshots=plan_publisher_snapshots,
             derived_fields=tuple(derived_fields),
             _store=self,
         )

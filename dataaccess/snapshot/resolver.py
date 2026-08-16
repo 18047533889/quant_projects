@@ -1,7 +1,8 @@
 """R25 P0-012/013/030 —— SourceSnapshotResolver。
 
 把「读某个 dataset 的 snapshot」统一成一条解析链：
-    - policy：``latest`` / ``pin(snapshot_id)`` / ``fail_if_changed``
+    - policy：``latest`` / ``pin(snapshot_id)`` / ``best_effort_fail_if_changed`` /
+      ``verified_fail_if_changed``
     - 优先 publisher source manifest（generation + exact object set）；
     - 次选 exact object list + etag（COS LIST/HEAD）；
     - 禁止 wildcard-only（production 下 unresolved wildcard → fail-closed）。
@@ -35,8 +36,15 @@ from data_access.snapshot.cloud_error import CloudErrorClassifier
 logger = logging.getLogger("data_access.source_snapshot")
 
 
-# R26-P0-015：合法 snapshot policy；未知 policy 必须 reject。
-_SNAPSHOT_POLICIES = frozenset({"latest", "pin", "fail_if_changed"})
+# ReadPlan owns manifest verification. Resolver only resolves object identity, so both
+# fail-if-changed variants become a digest pin after a successful resolution.
+_SNAPSHOT_POLICIES = frozenset({
+    "latest",
+    "pin",
+    "best_effort_fail_if_changed",
+    "verified_fail_if_changed",
+    "fail_if_changed",
+})
 
 # R32-P0-033: Supported manifest versions
 _SUPPORTED_MANIFEST_VERSIONS = frozenset({"1.0", "1.1", "1"})
@@ -370,13 +378,13 @@ def parse_source_manifest(
                         f"manifest object {o.uri} 越出 prefix {declared_prefix!r}"
                         "（R28-5 bucket+segment 边界）"
                     )
-        if strict and declared_digest:
-            recomputed = content_digest_of_objects(objs)
-            if recomputed != declared_digest:
-                problems.append(
-                    f"manifest content_digest={declared_digest} != 重算 {recomputed}"
-                    "（R28-5：对象身份被修改/声明 digest 过期）"
-                )
+    if strict and declared_digest:
+        recomputed = content_digest_of_objects(objs)
+        if recomputed != declared_digest:
+            problems.append(
+                f"manifest content_digest={declared_digest} != 重算 {recomputed}"
+                "（R28-5：对象身份被修改/声明 digest 过期）"
+            )
     if strict and problems:
         raise SourceSnapshotUnavailable(
             "source manifest 验证失败（R26-P0-015 fail-closed）："
@@ -482,11 +490,11 @@ class SourceSnapshotResolver:
             try:
                 manifest = parse_source_manifest(
                     raw_manifest,
-                    strict=strict,
+                    strict=(strict or policy == "verified_fail_if_changed"),
                     expected_dataset=dataset,
                 )
             except Exception as exc:
-                if strict:
+                if strict or policy == "verified_fail_if_changed":
                     raise SourceSnapshotUnavailable(
                         f"source manifest 解析失败（{dataset}）：{exc}"
                     ) from exc
@@ -496,6 +504,11 @@ class SourceSnapshotResolver:
         # manifest 已拥有完整 object set（空集）——**不得**继续向下 LIST/HEAD/
         # fallback（那会越过权威声明、把旧对象「复活」）。
         manifest_present = manifest is not None
+        if policy == "verified_fail_if_changed" and not manifest_present:
+            raise SourceSnapshotUnavailable(
+                f"dataset={dataset!r} snapshot_policy=verified_fail_if_changed "
+                "需要 publisher source manifest；LIST/HEAD/FileVersion 不能替代权威版本证明。"
+            )
 
         objects: tuple[ResolvedObject, ...] = ()
         generation = None
@@ -589,11 +602,25 @@ class SourceSnapshotResolver:
                     "manifest、无 exact object list、无 HEAD 结果、无 FileVersion 兜底）。"
                     "production fail-closed：wildcard URI 不构成可证明 snapshot。"
                 )
+            digest = content_digest_of_objects(())
+            if policy in {
+                "best_effort_fail_if_changed",
+                "verified_fail_if_changed",
+                "fail_if_changed",
+            }:
+                if pin_snapshot_id is None:
+                    pin_snapshot_id = digest
+                policy = "pin"
+            if policy == "pin" and pin_snapshot_id and pin_snapshot_id != digest:
+                raise ValidationError(
+                    f"dataset={dataset!r} 当前 snapshot digest={digest} != pinned "
+                    f"{pin_snapshot_id}（policy=pin）——拒绝读取不一致版本。"
+                )
             return ResolvedSourceSnapshot(
                 dataset=dataset,
                 source_generation=generation,
                 objects=(),
-                content_digest="",
+                content_digest=digest,
                 # 权威空 manifest → PUBLISHER_MANIFEST（合法空集）；否则 FALLBACK。
                 fidelity=(SnapshotFidelity.PUBLISHER_MANIFEST if manifest_present
                           else SnapshotFidelity.FALLBACK),
@@ -634,9 +661,15 @@ class SourceSnapshotResolver:
             fidelity=(fidelity if fidelity != SnapshotFidelity.UNKNOWN
                       else SnapshotFidelity.CONTENT_HASH),
         )
-        if policy == "fail_if_changed":
-            # R26-P0-015：fail_if_changed = 固定到当前 digest，执行期变化 → 拒绝。
-            pin_snapshot_id = digest
+        if policy in {
+            "best_effort_fail_if_changed",
+            "verified_fail_if_changed",
+            "fail_if_changed",
+        }:
+            # ReadPlan determines whether manifest proof was sufficient. Once this
+            # resolver has an object digest, all fail-if-changed policies pin it.
+            if pin_snapshot_id is None:
+                pin_snapshot_id = digest
             policy = "pin"
         if policy == "pin" and pin_snapshot_id and pin_snapshot_id != digest:
             raise ValidationError(

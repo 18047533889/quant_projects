@@ -510,6 +510,7 @@ def test_resolver_authoritative_empty_manifest_short_circuits(tmp_path):
     """R29-12：publisher 明确发布 complete=true、object_count=0 的权威空 manifest →
     resolver 不再继续 LIST（防旧对象复活）。"""
     from data_access.snapshot.resolver import SourceSnapshotResolver
+    from data_access.snapshot.source_snapshot import content_digest_of_objects
 
     called = {"list": False}
 
@@ -517,7 +518,7 @@ def test_resolver_authoritative_empty_manifest_short_circuits(tmp_path):
         return {
             "manifest_version": "1", "dataset": "ds", "source_generation": "g-empty",
             "complete": True, "objects": [], "object_count": 0,
-            "content_digest": "d41d8cd98f00b204e9800998ecf8427e",  # sha256("")[:32]
+            "content_digest": content_digest_of_objects(()),
             "prefix": "s3://bucket/ds/", "published_at": "2026-08-11T00:00:00Z",
         }
 
@@ -532,7 +533,7 @@ def test_resolver_authoritative_empty_manifest_short_circuits(tmp_path):
     assert not called["list"]  # 权威空 manifest 短路，不 LIST
     assert snap.source_generation == "g-empty"
     assert snap.objects == ()
-    assert snap.content_digest == ""
+    assert snap.content_digest == content_digest_of_objects(())
 
 
 def test_store_read_goes_through_resolver(tmp_path):

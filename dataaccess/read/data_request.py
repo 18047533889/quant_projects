@@ -42,7 +42,13 @@ if TYPE_CHECKING:
     from data_access.read.semantic_catalog import SemanticField
 
 _VALID_JOIN_POLICIES = {"exact", "asof", "pit_asof"}
-_VALID_SNAPSHOT_POLICIES = {"latest", "fail_if_changed", "pin"}
+_VALID_SNAPSHOT_POLICIES = {
+    "latest",
+    "best_effort_fail_if_changed",
+    "verified_fail_if_changed",
+    "fail_if_changed",
+    "pin",
+}
 # #P1-final closure：engine/result 是 strict enum——``engine="polarr"`` 不能静默
 # 落到 duckdb（调用方以为指定了 backend 实际执行另一个），未知值直接拒绝。
 _VALID_ENGINES = {"auto", "duckdb", "polars", "pyarrow"}
@@ -331,11 +337,13 @@ class DataRequest:
     # 时显式声明 order_by=[time, instrument]，SQL 端加 ORDER BY；ordering 进
     # cache key / lineage / plan，保证同一请求稳定复现。
     order_by: Sequence[str] | None = None
-    # #5 snapshot_policy：latest（默认）/ fail_if_changed / pin
-    #   - latest          ：execute 时读取当时最新文件（现状）
-    #   - fail_if_changed ：plan 生成后底层数据版本变化 → execute 拒绝
-    #   - pin             ：同 fail_if_changed，且要求有权威 manifest 才可 pin
-    # 回测/训练/production 建议 fail_if_changed 或 pin，保证「计划即执行」。
+    # #5 snapshot_policy：latest（默认）/ best_effort_fail_if_changed /
+    # verified_fail_if_changed / pin。遗留 fail_if_changed 保留为 best_effort
+    # 兼容别名；production correctness 只能使用 verified_fail_if_changed 或 pin。
+    #   - latest                    ：execute 时读取当时最新文件（现状）
+    #   - best_effort_fail_if_changed：有 manifest 时拒绝版本变化；无证明则继续
+    #   - verified_fail_if_changed  ：plan/execute 均须有可比 manifest，否则拒绝
+    #   - pin                       ：verified，且逐文件核对物理身份
     snapshot_policy: str = "latest"
 
     def __post_init__(self) -> None:
@@ -430,7 +438,8 @@ class ReadPlan:
     physical: Any = field(default=None, repr=False)
     # #4 不可变编译请求：execute() 只消费它，不读活的 request（防 plan 后篡改）
     compiled: Any = field(default=None, repr=False)
-    # #5 snapshot pin：latest / fail_if_changed / pin
+    # #5 snapshot policy：latest / best_effort_fail_if_changed /
+    # verified_fail_if_changed / fail_if_changed（兼容别名）/ pin
     snapshot_policy: str = "latest"
     # #5 plan 时刻每数据集的 manifest token（execute 前对比，变化即拒绝）
     plan_snapshot_tokens: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
@@ -439,6 +448,10 @@ class ReadPlan:
     # 逐文件核对——不只看 source_epoch（外部系统直接替换 parquet、没走
     # DataAccess epoch 时不变化，只有物理 pin 能证明）。
     plan_pinned_files: Mapping[str, tuple[Any, ...]] = field(default_factory=dict)
+    # R2-P0-037：verified_fail_if_changed 另行冻结 publisher SourceManifest
+    # generation + canonical object digest。local _manifest.json token 只能作为附加
+    # 版本门，不能替代 publisher authority。
+    plan_publisher_snapshots: Mapping[str, Any] = field(default_factory=dict)
     # R39 #67：derived 字段（derived_expression）——execute 阶段对结果表追加计算列。
     # 依赖的物理列已由 store.plan() 展开进 fields / per_dataset_columns。
     derived_fields: tuple = field(default_factory=tuple)
@@ -480,6 +493,16 @@ class ReadPlan:
             self,
             "plan_pinned_files",
             MappingProxyType({str(k): tuple(v) if v is not None else () for k, v in dict(self.plan_pinned_files).items()}),
+        )
+        object.__setattr__(
+            self,
+            "plan_publisher_snapshots",
+            MappingProxyType(
+                {
+                    str(k): _freeze_token(v)
+                    for k, v in dict(self.plan_publisher_snapshots).items()
+                }
+            ),
         )
         object.__setattr__(self, "derived_fields", tuple(self.derived_fields))
 
@@ -562,53 +585,97 @@ class ReadPlan:
         return "\n".join(lines)
 
     def _verify_snapshot_pin(self, store: Any) -> None:
-        """#5 snapshot_policy=fail_if_changed/pin：execute 前校验数据版本未变。
+        """校验 snapshot policy 的计划时与执行时数据版本证明。
 
         plan 生成后数据可能被改写（上午计划、下午执行）。对比每数据集
         source_epoch / manifest_generation 与 plan 时刻 token；``pin`` 额外
         逐文件核对物理身份（path+size+mtime_ns / etag / version_id）——外部
         系统直接替换 parquet、没走 DataAccess epoch 时也能证明变化。
 
-        #P1-final closure 3 fail-closed：
-          - plan 时有 manifest、execute 时 manifest 消失 → 一律视为「已变」，
-            不再把「无法证明有没有变化」当成「没变化」（旧逻辑 fail_if_changed
-            直接 continue）。
-          - pin 必须有权威 manifest 且文件清单与 plan 时刻逐文件一致。
+        ``verified_fail_if_changed`` 与 ``pin`` 均遵循「无法证明 == FAIL」：
+        plan 或 execute 缺失/无法读取 manifest 都不能继续执行。遗留
+        ``fail_if_changed`` 与显式 ``best_effort_fail_if_changed`` 则保留旧的
+        无 manifest 继续行为，供非 production 兼容调用方迁移。
         """
         if self.snapshot_policy == "latest":
             return
         req = self.compiled if self.compiled is not None else self.request
         changed: list[str] = []
+        unverifiable: list[str] = []
         unpinnable: list[str] = []
+        requires_verified_manifest = self.snapshot_policy in {
+            "verified_fail_if_changed",
+            "pin",
+        }
         for ds in self.datasets:
+            manifest_lookup_failed = False
             try:
                 token = store.manifest_version(ds, **req.dataset_params(ds))
-            except Exception:
+            except Exception as exc:
+                manifest_lookup_failed = True
+                if requires_verified_manifest:
+                    unverifiable.append(f"{ds}（manifest 查询失败：{type(exc).__name__}）")
                 token = {"has_manifest": False}
             plan_tok = self.plan_snapshot_tokens.get(ds, {}) or {}
             had_manifest = bool(plan_tok.get("has_manifest"))
             if not token.get("has_manifest"):
                 if self.snapshot_policy == "pin":
                     unpinnable.append(ds)
+                elif requires_verified_manifest and not manifest_lookup_failed:
+                    unverifiable.append(f"{ds}（缺少权威 manifest）")
                 elif had_manifest:
-                    # fail_if_changed：plan 时 manifest 存在、现在消失了 →
+                    # best-effort：plan 时 manifest 存在、现在消失了 →
                     # 数据已被替换/删除，不能当作未变。
                     changed.append(f"{ds}（manifest 消失）")
-                # 两者都无 manifest → 无法判断，不误伤。
+                # best-effort 的两端都无 manifest 无法判断，保留兼容行为。
                 continue
-            cur_src = token.get("source_epoch") or token.get("manifest_epoch")
-            prev_src = plan_tok.get("source_epoch") or plan_tok.get("manifest_epoch")
-            cur_gen = token.get("manifest_generation_id")
-            prev_gen = plan_tok.get("manifest_generation_id")
-            if cur_src != prev_src or cur_gen != prev_gen:
+            if requires_verified_manifest and (
+                token.get("fresh") is not True
+                or not any(
+                    token.get(key)
+                    for key in (
+                        "source_epoch",
+                        "manifest_epoch",
+                        "manifest_generation_id",
+                        "dataset_version",
+                        "partition_version",
+                    )
+                )
+            ):
+                unverifiable.append(f"{ds}（manifest 不新鲜或缺少版本身份）")
+                continue
+            if _manifest_identity_changed(plan_tok, token):
                 changed.append(ds)
                 continue
+            if self.snapshot_policy == "verified_fail_if_changed":
+                planned_publisher = self.plan_publisher_snapshots.get(ds)
+                if not planned_publisher:
+                    unverifiable.append(f"{ds}（plan 缺少 publisher SourceManifest 身份）")
+                    continue
+                try:
+                    current_publisher = store._pipeline.resolve_snapshot(
+                        ds,
+                        policy="verified_fail_if_changed",
+                        pin_snapshot_id=str(planned_publisher["content_digest"]),
+                    )
+                except Exception as exc:
+                    changed.append(
+                        f"{ds}（publisher snapshot 无法复证：{type(exc).__name__}）"
+                    )
+                    continue
+                if current_publisher.source_generation != planned_publisher.get(
+                    "source_generation"
+                ):
+                    changed.append(f"{ds}（publisher source_generation 变化）")
+                    continue
             if self.snapshot_policy == "pin":
-                # 物理 pin：逐文件对比 plan 冻结的文件清单。大小/mtime（本地）
                 # 或 etag/version_id（远程）任一变化 → 数据已变。
                 pinned = self.plan_pinned_files.get(ds)
-                if pinned is None:
-                    unpinnable.append(ds)
+                allow_empty_pin = _manifest_proves_empty(plan_tok)
+                if not _physical_manifest_is_provable(
+                    pinned, allow_empty=allow_empty_pin
+                ):
+                    unpinnable.append(f"{ds}（plan 物理文件身份不完整）")
                     continue
                 try:
                     paths = store._prepare_dataset_read(
@@ -626,6 +693,11 @@ class ReadPlan:
                     current = build_file_manifest(paths)
                 except Exception:
                     changed.append(f"{ds}（无法重新枚举物理文件）")
+                    continue
+                if not _physical_manifest_is_provable(
+                    current, allow_empty=allow_empty_pin
+                ):
+                    unpinnable.append(f"{ds}（execute 物理文件身份不完整）")
                     continue
                 # R40 #54：pin 只核对实际 time_range / instrument scope 覆盖到的
                 # partition 文件——不在读取范围内的 partition 被外部改写不构成
@@ -645,6 +717,13 @@ class ReadPlan:
                 f"snapshot_policy=pin 需要权威 manifest：{', '.join(unpinnable)} "
                 "没有 manifest 或没有 plan 时冻结的物理文件清单，无法 pin 数据版本。"
                 "请用 fail_if_changed 或去掉 snapshot_policy=pin。"
+            )
+        if unverifiable:
+            from data_access.core.exceptions import SnapshotBuildError
+
+            raise SnapshotBuildError(
+                f"snapshot_policy={self.snapshot_policy} 需要可验证的权威 manifest；"
+                f"以下数据集无法证明计划与执行版本一致：{', '.join(unverifiable)}。"
             )
         if changed:
             from data_access.core.exceptions import SnapshotBuildError
@@ -668,8 +747,25 @@ class ReadPlan:
         # AggregationItem（aggregation bundle 执行）；不支持 → typed
         # ``UnsupportedFeatureError``。frequency 单独设置时对返回帧 resample。
         effective_aggregations = _effective_aggregations(req)
-        # #5 snapshot pin：fail_if_changed / pin 在 execute 前校验数据版本未变
+        # #5 snapshot policy：非 latest 模式在 execute 前校验数据版本证明
         self._verify_snapshot_pin(store)
+        # ``pin`` 目前只有单数据集、无 aggregation、无时变 universe 的普通 read
+        # 能把已核验 exact object 集贯穿到 terminal scan。其余执行器没有 typed
+        # per-dataset physical scope 参数；继续执行会在 verify 后重新解析 live paths，
+        # 产生 TOCTOU，因此明确 fail closed。
+        time_varying = bool(getattr(req, "time_varying_universe", True))
+        if self.snapshot_policy in {"pin", "verified_fail_if_changed"} and (
+            effective_aggregations
+            or len(self.datasets) != 1
+            or (req.universe and time_varying)
+        ):
+            from data_access.core.exceptions import SnapshotBuildError
+
+            raise SnapshotBuildError(
+                "snapshot_policy=pin 当前仅支持单数据集普通读取；aggregation、"
+                "多数据集 join 与时变 universe 尚不能把已核验物理 scope 贯穿到"
+                "terminal scan，已 fail closed。"
+            )
         # #11 节点式执行：聚合+join 组合先交给 PhysicalPlanExecutor；
         # 非组合场景返回 None，走下方现有 read/read_joined/aggregate 路径。
         if self.physical is not None:
@@ -735,7 +831,6 @@ class ReadPlan:
             )
         # 时变 universe：把成员过滤下沉到 join（(date, instrument) 精确成员），
         # 否则退化为窗口内静态集合求交（旧行为）。
-        time_varying = bool(getattr(req, "time_varying_universe", True))
         if req.universe and not time_varying:
             insts = store._resolve_universe_instruments(req.universe, tr, insts)
 
@@ -762,20 +857,26 @@ class ReadPlan:
             # 构造 ``VerifiedPhysicalScope`` 绑定 dataset_id + contract_digest——
             # 与 read_uri 一致，物理范围与授权数据集不可再分离。
             pinned_scope: Any = None
-            if self.snapshot_policy == "pin":
-                pinned = self.plan_pinned_files.get(ds)
-                if pinned:
-                    paths = [str(getattr(fv, "path", "")) for fv in pinned]
-                    if paths:
-                        from data_access.runtime.prepared_read import (
-                            VerifiedPhysicalScope,
-                        )
+            if self.snapshot_policy in {"pin", "verified_fail_if_changed"}:
+                from data_access.runtime.prepared_read import VerifiedPhysicalScope
 
-                        pinned_scope = VerifiedPhysicalScope(
-                            dataset_id=ds,
-                            exact_objects=tuple(paths),
-                            contract_digest=store._contract_digest_for(ds),
-                        )
+                pinned = self.plan_pinned_files.get(ds)
+                paths = (
+                    tuple(str(getattr(fv, "path", "")) for fv in pinned)
+                    if pinned is not None
+                    else ()
+                )
+                pinned_scope = VerifiedPhysicalScope(
+                    dataset_id=ds,
+                    exact_objects=paths,
+                    contract_digest=store._contract_digest_for(ds),
+                    expected_file_versions=(
+                        tuple(pinned) if self.snapshot_policy == "pin" else None
+                    ),
+                    snapshot_policy=self.snapshot_policy,
+                    publisher_snapshot=self.plan_publisher_snapshots.get(ds),
+                    use_exact_objects=self.snapshot_policy == "pin",
+                )
             return self._finalize_handle(
                 store.read(
                     ds,
@@ -816,6 +917,8 @@ class ReadPlan:
                 universe=(req.universe if time_varying else None),
                 time_varying_universe=time_varying,
                 order_by=req.order_by,
+                snapshot_policy=self.snapshot_policy,
+                publisher_snapshots=self.plan_publisher_snapshots,
             )
         )
 
@@ -999,7 +1102,63 @@ def _effective_aggregations(req: Any) -> list[Any] | None:
     return items
 
 
-def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any]:
+def _manifest_identity_changed(
+    plan_token: Mapping[str, Any], current_token: Mapping[str, Any]
+) -> bool:
+    """Compare every advertised identity independently, including falsy values."""
+    identity_keys = (
+        "source_epoch",
+        "manifest_epoch",
+        "manifest_generation_id",
+        "dataset_version",
+        "partition_version",
+    )
+    for key in identity_keys:
+        before_present = key in plan_token
+        after_present = key in current_token
+        if before_present != after_present:
+            return True
+        if before_present and plan_token[key] != current_token[key]:
+            return True
+    return False
+
+
+def _manifest_proves_empty(token: Mapping[str, Any]) -> bool:
+    """Return true only when every advertised object count is an integer zero."""
+    advertised = [token[key] for key in ("file_count", "object_count") if key in token]
+    if not advertised:
+        return False
+    return all(
+        isinstance(value, int) and not isinstance(value, bool) and value == 0
+        for value in advertised
+    )
+
+
+def _physical_manifest_is_provable(
+    files: Sequence[Any] | None, *, allow_empty: bool = False
+) -> bool:
+    """A physical pin needs an exact identity for every enumerated file."""
+    if files is None:
+        return False
+    if not files:
+        return allow_empty
+    for file_version in files:
+        path = str(getattr(file_version, "path", ""))
+        local_identity = (
+            getattr(file_version, "size", None) is not None
+            and getattr(file_version, "mtime_ns", None) is not None
+        )
+        remote_identity = bool(getattr(file_version, "version_id", None)) or (
+            bool(getattr(file_version, "etag", None))
+            and getattr(file_version, "content_length", None) is not None
+        )
+        checksum_identity = bool(getattr(file_version, "checksum", None))
+        if not path or not (local_identity or remote_identity or checksum_identity):
+            return False
+    return True
+
+
+def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any, Any, Any]:
     """FileVersion → 物理身份键 (path, size, mtime_ns, etag, version_id)。
 
     本地文件用 size/mtime_ns；远程对象用 etag/version_id（size/mtime 不可靠）。
@@ -1010,8 +1169,10 @@ def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any]:
         str(getattr(fv, "path", "")),
         getattr(fv, "size", None),
         getattr(fv, "mtime_ns", None),
+        getattr(fv, "checksum", None),
         getattr(fv, "etag", None),
         getattr(fv, "version_id", None),
+        getattr(fv, "content_length", None),
     )
 
 

@@ -204,6 +204,16 @@ class VerifiedPhysicalScope:
     exact_objects: tuple[str, ...]
     contract_digest: str
     source_snapshot_id: str | None = None
+    # ReadPlan pin carries the exact identities already checked at plan/execute
+    # verification; prepare_read must compare freshly observed identities against
+    # these facts before constructing the terminal snapshot. None means that this
+    # scope has no pin identity contract; () is an authoritative expected-empty set.
+    expected_file_versions: tuple[Any, ...] | None = None
+    snapshot_policy: str = "latest"
+    publisher_snapshot: Mapping[str, Any] | None = None
+    # verified_fail_if_changed carries authority without replacing normal path
+    # resolution; pin alone consumes exact_objects as the terminal scan scope.
+    use_exact_objects: bool = True
 
     @property
     def paths(self) -> list[str]:
@@ -215,6 +225,12 @@ class VerifiedPhysicalScope:
             "object_count": len(self.exact_objects),
             "contract_digest": self.contract_digest,
             "source_snapshot_id": self.source_snapshot_id,
+            "snapshot_policy": self.snapshot_policy,
+            "expected_identity_count": (
+                len(self.expected_file_versions)
+                if self.expected_file_versions is not None
+                else None
+            ),
         }
 
 
