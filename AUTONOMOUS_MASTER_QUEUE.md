@@ -1,7 +1,7 @@
 # R2 Local Autonomous Master Queue
 
 **Updated:** 2026-08-17
-**Authority:** Local source at HEAD `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d` plus explicitly identified working-tree evidence/status deltas
+**Authority:** Local source at HEAD `7795c41b670998447e26631a83198dabfcb3320d` plus explicitly identified working-tree evidence/status deltas
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
 **Remote/GitHub:** out of scope and forbidden
 
@@ -17,7 +17,7 @@ No task closes from a report, hard-coded constant, or documentation claim.
 |---|---:|---|---|---|---|
 | R2-P0-032/033 | P0 | REGRESSION_TESTED | local identity writer + independent reviewer | `dataaccess/read/query_cache.py`, focused identity tests | strict full SHA-256 correctness/security identities committed at `040a2f54`; 25 serial tests + import smoke passed post-commit; independent review found no delta defect; manifest at `evidence/r2/R2-P0-032-033-query-cache-identity.yaml` |
 | OPT2-P0-001 | P0 | REGRESSION_TESTED | local planner authority writer + independent reviewer | `factor_engine/runtime/engine.py`, `factor_engine/runtime/batch_service.py`, planner/runtime tests | production batch admission now calls `optimize_batch_global()` and consumes only production-ready single-region, zero-transfer plans with all roots on one fixed concrete backend; commit `105e1fd8`; 16 focused tests passed; independent review found no delta defect; manifest at `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml` |
-| R2-P0-036-residual | P0 | REGRESSION_TESTED | local DataAccess writer + independent reviewer | Store-to-SnapshotVerifier typed remote metadata failures and focused tests | request-local `RemoteMetadataError` now survives production Store HEAD and becomes `SourceSnapshotUnavailable.cloud_error` with original cause and retry metadata; commit `e6f8a6f2`; 34 focused tests passed; independent review passed after five findings were fixed; credential-generation rotation remains open; manifest at `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml` |
+| R2-P0-036-residual | P0 | REGRESSION_TESTED | local DataAccess writer + independent reviewer | typed remote failures plus credential-generation cache identity | request-local `RemoteMetadataError` propagation is committed at `e6f8a6f2`; structured credential material and provider generation jointly namespace remote metadata at `7795c41b`; 34 snapshot tests and 4 credential tests passed; both independent reviews passed; manifests at `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml` and `evidence/r2/R2-P0-036-credential-generation-material-identity.yaml` |
 
 ## Independent Review Required
 
@@ -41,7 +41,7 @@ No task closes from a report, hard-coded constant, or documentation claim.
 9. `OP2-P0-001`: recalculate real production surface from Registry + MiningRole + Evidence; discard unproven 678 claim.
 10. `DA2-P0-001`: build identity has divergent versions and runtime git dependence.
 11. `DA2-P0-002`: correctness identity still has repr/str and 64-bit truncation paths.
-12. `R2-P0-036`: typed Store-to-verifier remote failure propagation is regression-tested at `e6f8a6f2`; credential-generation rotation integration remains open.
+12. `R2-P0-036`: typed Store-to-verifier propagation and credential-generation material identity are regression-tested at `e6f8a6f2` and `7795c41b`; broad DataAccess gates remain `NOT_RUN`.
 13. `OPT2-P0-001`: narrow production planner authority is implemented and regression-tested: one production-ready physical region, zero transfer edges, all roots covered, and one fixed concrete backend; multi-region execution remains unsupported. Adjacent `test_run_many_production.py` failures were independently reproduced on the clean base and remain pre-existing.
 14. `CI2-P0-001`: root local gates not enforced.
 

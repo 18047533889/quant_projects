@@ -1,6 +1,6 @@
 # R2 Findings Ledger
 
-**Local HEAD reviewed:** `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d` (remote snapshot implementation commit) plus identified working-tree evidence/status deltas
+**Local HEAD reviewed:** `7795c41b670998447e26631a83198dabfcb3320d` (credential-generation material identity fix) plus identified working-tree evidence/status deltas
 **Updated:** 2026-08-17
 **Remote/GitHub evidence:** not used
 
@@ -37,8 +37,19 @@
 - Verification: 34 focused snapshot tests passed; four files syntax-compiled; three imports and scoped diff checks passed; independent review passed after five findings were fixed.
 - Adjacent suite: 17 passed, 1 `CalendarUnavailableError` failure outside the owned files; it was not reproduced against the base, so no pre-existing attribution is claimed.
 - Manifest: `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml`.
-- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, root CI, and credential-generation rotation integration.
-- `CLOSED_VERIFIED` is not claimed; credential-generation rotation remains open under `R2-P0-036`.
+- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI.
+- `CLOSED_VERIFIED` is not claimed because the broad gates remain unrun.
+
+### R2-P0-036 residual — credential-generation material identity
+
+- Status: `REGRESSION_TESTED` at commit `7795c41b670998447e26631a83198dabfcb3320d`.
+- Remote metadata cache identity now binds explicit provider generation and strictly encoded resolved credential material; rotation cannot reuse stale entries even when provider generation is stale.
+- Structured identity encoding prevents delimiter aliases while keeping credential material out of plaintext cache keys.
+- Verification: 4 focused credential tests passed; two files syntax-compiled; import smoke and scoped diff checks passed; independent review found zero residual defects.
+- Adjacent snapshot verification: 34 passed. The broader adjacent closure suite retains one unrelated `CalendarUnavailableError`; no pre-existing attribution is claimed.
+- Manifest: `evidence/r2/R2-P0-036-credential-generation-material-identity.yaml`.
+- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI.
+- `CLOSED_VERIFIED` is not claimed because the broad gates remain unrun.
 
 ## Confirmed P0
 
