@@ -123,24 +123,41 @@ class SnapshotVerifier:
                                 "production fail-closed。"
                             )
                         continue
-                    # R26-P0-016：逐身份字段比较（etag / version_id / content_length）。
+                    # R2-P1：strict 身份验证不能把 HEAD 中缺失的已记录字段
+                    # 当作相等。缺失 ETag/VersionId/size 无法证明对象没有变化。
                     meta_etag = meta.get("etag")
-                    if obj.etag and meta_etag and obj.etag != meta_etag:
+                    meta_version = meta.get("version_id")
+                    meta_len = meta.get("content_length")
+                    missing_identity = (
+                        meta_version is None
+                        if obj.version_id is not None
+                        else (
+                            (obj.etag is not None and meta_etag is None)
+                            or (
+                                obj.content_length is not None
+                                and meta_len is None
+                            )
+                        )
+                    )
+                    if strict and missing_identity:
+                        raise SourceSnapshotUnavailable(
+                            f"remote 对象 HEAD 身份不完整（{uri}）：无法验证快照中"
+                            "记录的 ETag/VersionId/content_length，production fail-closed。"
+                        )
+                    if obj.etag is not None and meta_etag is not None and obj.etag != meta_etag:
                         raise SourceSnapshotChanged(
                             f"remote 对象 ETag 变化（{uri}）：快照 {obj.etag} → "
                             f"{meta_etag}，source snapshot 已过期。"
                         )
-                    meta_version = meta.get("version_id")
                     if (
-                        obj.version_id
-                        and meta_version
+                        obj.version_id is not None
+                        and meta_version is not None
                         and obj.version_id != meta_version
                     ):
                         raise SourceSnapshotChanged(
                             f"remote 对象 VersionId 变化（{uri}）：快照 {obj.version_id} → "
                             f"{meta_version}，source snapshot 已过期。"
                         )
-                    meta_len = meta.get("content_length")
                     if (
                         obj.content_length is not None
                         and meta_len is not None
@@ -209,17 +226,37 @@ class SnapshotVerifier:
                         f"执行后 remote 对象 HEAD 失败（{uri}）"
                     )
                 meta_etag = meta.get("etag")
-                if obj.etag and meta_etag and obj.etag != meta_etag:
+                meta_version = meta.get("version_id")
+                meta_len = meta.get("content_length")
+                missing_identity = (
+                    meta_version is None
+                    if obj.version_id is not None
+                    else (
+                        (obj.etag is not None and meta_etag is None)
+                        or (
+                            obj.content_length is not None
+                            and meta_len is None
+                        )
+                    )
+                )
+                if missing_identity:
+                    raise SourceSnapshotUnavailable(
+                        f"执行后 remote 对象 HEAD 身份不完整（{uri}）：无法验证快照中"
+                        "记录的 ETag/VersionId/content_length。"
+                    )
+                if obj.etag is not None and meta_etag is not None and obj.etag != meta_etag:
                     raise SourceSnapshotChanged(
                         f"执行后 remote 对象 ETag 变化（{uri}）：{obj.etag} → {meta_etag}"
                     )
-                meta_version = meta.get("version_id")
-                if obj.version_id and meta_version and obj.version_id != meta_version:
+                if (
+                    obj.version_id is not None
+                    and meta_version is not None
+                    and obj.version_id != meta_version
+                ):
                     raise SourceSnapshotChanged(
                         f"执行后 remote 对象 VersionId 变化（{uri}）："
                         f"{obj.version_id} → {meta_version}"
                     )
-                meta_len = meta.get("content_length")
                 if (
                     obj.content_length is not None
                     and meta_len is not None

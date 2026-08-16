@@ -69,6 +69,45 @@ def test_tsnap003b_verifier_detects_etag_change():
         v.verify_before_execute(snap)
 
 
+@pytest.mark.parametrize(
+    ("snapshot_object", "meta"),
+    [
+        (_obj("s3://b/t/f.parquet", etag=None, size=None, vid="v1"), {"etag": "e1"}),
+        (
+            _obj("s3://b/t/f.parquet", etag="e1", size=100, vid=None),
+            {"content_length": 100},
+        ),
+        (
+            _obj("s3://b/t/f.parquet", etag="e1", size=100, vid=None),
+            {"etag": "e1"},
+        ),
+    ],
+)
+def test_tsnap003c_verifier_rejects_incomplete_remote_head(snapshot_object, meta):
+    """Strict verification cannot accept HEAD responses missing required identity."""
+    snap = ResolvedSourceSnapshot(dataset="t", objects=(snapshot_object,))
+    verifier = SnapshotVerifier(remote_meta_fn=lambda uri: meta, strict=True)
+    with pytest.raises(SourceSnapshotUnavailable, match="身份不完整"):
+        verifier.verify_before_execute(snap)
+    with pytest.raises(SourceSnapshotUnavailable, match="身份不完整"):
+        verifier.verify_after_execute(snap)
+
+
+def test_tsnap003d_version_id_is_independently_sufficient():
+    snap = ResolvedSourceSnapshot(
+        dataset="t",
+        objects=(
+            _obj("s3://b/t/f.parquet", etag="e1", size=100, vid="v1"),
+        ),
+    )
+    verifier = SnapshotVerifier(
+        remote_meta_fn=lambda uri: {"version_id": "v1"},
+        strict=True,
+    )
+    verifier.verify_before_execute(snap)
+    verifier.verify_after_execute(snap)
+
+
 def _patch_remote_s3_auth():
     return patch("data_access.cos.remote.authorize_s3_path", return_value=None)
 
