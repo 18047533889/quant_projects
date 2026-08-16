@@ -322,8 +322,6 @@ def _credential_generation(provider: Any, creds: Any) -> tuple[str, bool]:
     namespace was established.
     """
     generation = getattr(provider, "generation", None) if provider is not None else None
-    if generation is not None and str(generation).strip():
-        return str(generation), True
     material = (
         getattr(creds, "access_key_id", None),
         getattr(creds, "secret_access_key", None),
@@ -333,8 +331,21 @@ def _credential_generation(provider: Any, creds: Any) -> tuple[str, bool]:
     )
     if not material[0] or not material[1]:
         return "", False
-    payload = "|".join("" if value is None else str(value) for value in material)
-    return _sha256_text("dataaccess-credential-rotation\0" + payload), True
+    # Provider generation alone is not an identity: a legacy/custom provider may
+    # rotate returned material without incrementing it, or rotation may race with
+    # the separate generation read.  Bind both signals so neither case can reuse
+    # metadata obtained under different credential material.
+    material_digest = _identity_digest(
+        {"namespace": "dataaccess-credential-rotation", "material": material}
+    )
+    if generation is not None and str(generation).strip():
+        return _sha256_text(
+            "dataaccess-credential-generation\0"
+            + str(generation)
+            + "\0"
+            + material_digest
+        ), True
+    return material_digest, True
 
 
 def _remote_error_kind(exc: BaseException) -> str:

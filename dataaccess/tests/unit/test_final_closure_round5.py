@@ -377,7 +377,77 @@ def test_remote_meta_credential_rotation_does_not_reuse_stale(monkeypatch):
     provider.generation = 2
     assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-2"
     assert calls["head"] == 2
-    assert {key.credential_generation for key in rc._remote_meta_cache} == {"1", "2"}
+    assert len({key.credential_generation for key in rc._remote_meta_cache}) == 2
+
+
+def test_remote_meta_material_rotation_with_stale_generation_does_not_reuse_stale(
+    monkeypatch,
+):
+    """Credential material remains part of identity even if generation is stale."""
+    import data_access.cos.remote as crm
+    import data_access.read.read_contract as rc
+
+    rc._remote_meta_cache.clear()
+    calls = {"head": 0}
+
+    class Provider:
+        generation = 1
+
+    provider = Provider()
+
+    class Creds:
+        use_ssl = False
+        endpoint = None
+        region = "us-east-1"
+        access_key_id = "key-1"
+        secret_access_key = "secret-1"
+        session_token = None
+        expires_at = None
+        credential_scope_id = "same-scope"
+
+    creds = Creds()
+
+    class Client:
+        def head_object(self, **kwargs):
+            calls["head"] += 1
+            return {"ETag": f'"etag-{creds.access_key_id}"', "ContentLength": 5}
+
+    _install_fake_boto3(monkeypatch, lambda **kwargs: Client())
+    monkeypatch.setattr(crm, "resolve_s3_credentials", lambda: creds)
+    import data_access.security.execution_context as context
+    monkeypatch.setattr(context, "current_credential_provider", lambda: provider)
+
+    assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-key-1"
+    creds.access_key_id = "key-2"
+    creds.secret_access_key = "secret-2"
+    assert rc._remote_object_meta("s3://b/x.parquet")["etag"] == "etag-key-2"
+    assert calls["head"] == 2
+    assert len({key.credential_generation for key in rc._remote_meta_cache}) == 2
+
+
+def test_credential_generation_has_unambiguous_structured_material_identity():
+    import data_access.read.read_contract as rc
+
+    class Provider:
+        generation = 1
+
+    class Creds:
+        session_token = None
+        expires_at = None
+        credential_scope_id = "same-scope"
+
+    left = Creds()
+    left.access_key_id = "a|b"
+    left.secret_access_key = "c"
+    right = Creds()
+    right.access_key_id = "a"
+    right.secret_access_key = "b|c"
+
+    left_generation, left_known = rc._credential_generation(Provider(), left)
+    right_generation, right_known = rc._credential_generation(Provider(), right)
+    assert left_known is True
+    assert right_known is True
+    assert left_generation != right_generation
 
 
 # ---------------------------------------------------------------------------
