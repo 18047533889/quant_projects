@@ -45,22 +45,37 @@ def _remote_identity_changed(fv: Any, meta: dict[str, Any]) -> bool:
     → fail-closed；research 下视为未变（宽容放行）。
     """
     etag = meta.get("etag")
+    length = meta.get("content_length")
+    version = meta.get("version_id")
+    strict = is_strict_semantics()
+
+    # A successful but partial HEAD cannot prove that the recorded identity
+    # remains unchanged. VersionId is independently sufficient; otherwise
+    # every recorded ETag/length field must be present in strict mode.
+    missing_identity = (
+        version is None
+        if fv.version_id is not None
+        else (
+            (fv.etag is not None and etag is None)
+            or (fv.content_length is not None and length is None)
+        )
+    )
+    if strict and (
+        missing_identity
+        or (fv.etag is None and fv.content_length is None and fv.version_id is None)
+    ):
+        return True  # 无法证明未变 → fail-closed
+
     if fv.etag is not None and etag is not None and fv.etag != etag:
         return True
-    length = meta.get("content_length")
     if (
         fv.content_length is not None
         and length is not None
         and int(fv.content_length) != int(length)
     ):
         return True
-    version = meta.get("version_id")
     if fv.version_id is not None and version is not None and fv.version_id != version:
         return True
-    if is_strict_semantics() and (
-        fv.etag is None and fv.content_length is None and fv.version_id is None
-    ):
-        return True  # 无法证明未变 → fail-closed
     return False
 
 

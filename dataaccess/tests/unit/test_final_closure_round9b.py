@@ -169,6 +169,72 @@ def test_scan_remote_revalidate_strict_unverifiable_fail_closed(monkeypatch):
         del os.environ["DATA_ACCESS_STRICT_READ"]
 
 
+@pytest.mark.parametrize(
+    ("file_version", "meta"),
+    [
+        (
+            {"etag": "old", "content_length": 100},
+            {"content_length": 100},
+        ),
+        (
+            {"etag": "old", "content_length": 100},
+            {"etag": "old"},
+        ),
+        (
+            {"version_id": "v1"},
+            {"etag": "old"},
+        ),
+    ],
+)
+def test_scan_remote_revalidate_strict_rejects_partial_head(
+    monkeypatch, file_version, meta
+):
+    from data_access.read.read_contract import FileVersion, build_data_snapshot
+    import data_access.read.scan_handle as scan_mod
+
+    snap = build_data_snapshot(
+        dataset="d", registry_hash="r", schema=None,
+        paths=["s3://b/k.parquet"],
+        files=[FileVersion(path="s3://b/k.parquet", **file_version)],
+    )
+    monkeypatch.setattr(scan_mod, "_remote_snapshot_meta_enabled", lambda: True)
+    monkeypatch.setattr(
+        scan_mod, "_remote_object_meta", lambda uri, fresh=False: meta
+    )
+    monkeypatch.setenv("DATA_ACCESS_STRICT_READ", "1")
+
+    scan = _scan_handle_with_remote(snap)
+    with pytest.raises(ValidationError, match="已失效"):
+        scan._revalidate_snapshot()
+
+
+def test_scan_remote_revalidate_version_id_is_sufficient(monkeypatch):
+    from data_access.read.read_contract import FileVersion, build_data_snapshot
+    import data_access.read.scan_handle as scan_mod
+
+    snap = build_data_snapshot(
+        dataset="d", registry_hash="r", schema=None,
+        paths=["s3://b/k.parquet"],
+        files=[
+            FileVersion(
+                path="s3://b/k.parquet",
+                etag="old",
+                content_length=100,
+                version_id="v1",
+            )
+        ],
+    )
+    monkeypatch.setattr(scan_mod, "_remote_snapshot_meta_enabled", lambda: True)
+    monkeypatch.setattr(
+        scan_mod, "_remote_object_meta",
+        lambda uri, fresh=False: {"version_id": "v1"},
+    )
+    monkeypatch.setenv("DATA_ACCESS_STRICT_READ", "1")
+
+    scan = _scan_handle_with_remote(snap)
+    assert scan._revalidate_snapshot() is snap
+
+
 def test_scan_remote_revalidate_unchanged_ok(monkeypatch):
     from data_access.read.read_contract import FileVersion, build_data_snapshot
     import data_access.read.scan_handle as scan_mod
