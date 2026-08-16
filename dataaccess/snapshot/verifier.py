@@ -26,6 +26,7 @@ from data_access.core.exceptions import (
 )
 
 from .source_snapshot import ResolvedObject, ResolvedSourceSnapshot
+from .cloud_error import CloudErrorClassifier, CloudErrorCode, CloudErrorKind
 
 logger = logging.getLogger("data_access.snapshot_verifier")
 
@@ -291,12 +292,40 @@ class SnapshotVerifier:
     def _safe_remote_meta(self, uri: str) -> Mapping[str, Any] | None:
         try:
             meta = self.remote_meta_fn(uri)
-            return dict(meta or {}) or None
+            if meta is None:
+                return None
+            return dict(meta) or None
         except Exception as exc:
             if self._effective_strict():
-                raise SourceSnapshotUnavailable(
-                    f"remote HEAD 失败（{uri}）：{exc}"
-                ) from exc
+                classification_error = getattr(exc, "original", None) or exc
+                classified = CloudErrorClassifier.classify(classification_error)
+                if getattr(exc, "kind", None):
+                    try:
+                        kind = CloudErrorKind(str(exc.kind))
+                        classified = CloudErrorCode(
+                            kind=kind,
+                            retryable=kind in {
+                                CloudErrorKind.DEADLINE_EXCEEDED,
+                                CloudErrorKind.NETWORK_ERROR,
+                                CloudErrorKind.SERVER_ERROR,
+                                CloudErrorKind.THROTTLED,
+                            },
+                            retry_after=classified.retry_after,
+                            security_sensitive=kind in {
+                                CloudErrorKind.AUTH_FAILED,
+                                CloudErrorKind.CREDENTIALS_INVALID,
+                            },
+                            original_code=classified.original_code,
+                        )
+                    except ValueError:
+                        pass
+                unavailable = SourceSnapshotUnavailable(
+                    f"remote HEAD 失败（{uri}）：kind={classified.kind.value}, "
+                    f"retryable={str(classified.retryable).lower()}, "
+                    f"original_code={classified.original_code or type(exc).__name__}"
+                )
+                unavailable.cloud_error = classified
+                raise unavailable from exc
             return None
 
     def _safe_local_stat(self, path: str) -> LocalFileStat | None:

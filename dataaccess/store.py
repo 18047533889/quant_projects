@@ -4089,14 +4089,13 @@ class DataAccessStore:
         strict/production 下 ``_remote_snapshot_meta_enabled`` 默认开启；research
         关闭时返回 None（verifier 在非 strict 下跳过 remote HEAD）。
         """
-        from data_access.read.read_contract import (
-            _remote_object_meta,
-            _remote_snapshot_meta_enabled,
-        )
+        from data_access.read import read_contract
 
-        if not _remote_snapshot_meta_enabled():
+        if not read_contract._remote_snapshot_meta_enabled():
             return None
-        return _remote_object_meta(str(uri), fresh=True)
+        return read_contract._remote_object_meta(
+            str(uri), fresh=True, raise_on_error=True
+        )
 
     def _source_manifest_fn(self, dataset: str) -> Any:
         """R29-P0 #199：publisher source manifest 钩子（默认未接线 → None）。

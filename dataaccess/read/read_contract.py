@@ -347,7 +347,12 @@ def _remote_error_kind(exc: BaseException) -> str:
         return type(exc).__name__.upper()
 
 
-def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | None:
+def _remote_object_meta(
+    uri: str,
+    *,
+    fresh: bool = False,
+    raise_on_error: bool = False,
+) -> dict[str, Any] | None:
     """s3:// / cos:// 对象头元数据（best-effort，带 TTL memo）。
 
     需要已配置 S3 凭证（``cos.remote.resolve_s3_credentials``）与 boto3。
@@ -382,6 +387,8 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
             _remote_error_kind(exc), "remote credential resolution failed", original=exc
         )
         globals()['_remote_meta_last_error'] = _remote_meta_last_error
+        if raise_on_error:
+            raise _remote_meta_last_error
         return None
 
     # R32-P0-047: Check credential expires_at before queries
@@ -391,9 +398,12 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
         required_valid_duration = 90
         expiry = creds.expires_at.timestamp() if hasattr(creds.expires_at, "timestamp") else creds.expires_at
         if expiry <= now_utc.timestamp() + required_valid_duration:
-            globals()['_remote_meta_last_error'] = RemoteMetadataError(
+            error = RemoteMetadataError(
                 "credentials_invalid", "remote credentials expired or expiring soon"
             )
+            globals()['_remote_meta_last_error'] = error
+            if raise_on_error:
+                raise error
             return None
 
     # R32-P0-045: Build cache key with provider/material generation.  An
@@ -411,9 +421,12 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
         import boto3
         from botocore.config import Config
     except Exception as exc:
-        globals()['_remote_meta_last_error'] = RemoteMetadataError(
-            "network", "boto3 remote metadata client unavailable", original=exc
+        error = RemoteMetadataError(
+            "network_error", "boto3 remote metadata client unavailable", original=exc
         )
+        globals()['_remote_meta_last_error'] = error
+        if raise_on_error:
+            raise error
         return None
 
     # Check cache unless fresh=True or credential identity is unavailable.
@@ -436,9 +449,12 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
         path = s3_uri[len("s3://") :]
         bucket, sep, obj = path.partition("/")
         if not sep or not obj:
-            globals()['_remote_meta_last_error'] = RemoteMetadataError(
+            error = RemoteMetadataError(
                 "malformed_response", "invalid remote object URI"
             )
+            globals()['_remote_meta_last_error'] = error
+            if raise_on_error:
+                raise error
             return None
 
         # R32-P0-044: Pass aws_session_token for STS credentials
@@ -475,11 +491,17 @@ def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | No
             _remote_meta_cache[cache_key] = entry
         globals()['_remote_meta_last_error'] = None
         return meta
+    except RemoteMetadataError:
+        raise
     except Exception as e:
         # Keep failures typed for diagnostics, but never memoize failures: a
         # transient auth/network problem must not become a stale correctness hit.
-        error = RemoteMetadataError(_remote_error_kind(e), "remote metadata HEAD failed", original=e)
+        error = RemoteMetadataError(
+            _remote_error_kind(e), "remote metadata HEAD failed", original=e
+        )
         globals()['_remote_meta_last_error'] = error
+        if raise_on_error:
+            raise error
         return None
 
 
