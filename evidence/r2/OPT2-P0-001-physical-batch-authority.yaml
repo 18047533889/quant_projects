@@ -1,0 +1,76 @@
+task_id: OPT2-P0-001-physical-batch-authority
+generation_timestamp: 2026-08-17T00:31:59+08:00
+state: REGRESSION_TESTED
+base_sha: d6919db5936ccf26816549546946249e85c5d8df
+current_sha: 105e1fd83a5da716f76e7219e8cbf7b2b3770a04
+commit_sha: 105e1fd83a5da716f76e7219e8cbf7b2b3770a04
+owned_files:
+  - factor_engine/runtime/engine.py
+  - factor_engine/runtime/batch_service.py
+  - factor_engine/tests/runtime/test_physical_region_execution.py
+modified_files:
+  - factor_engine/runtime/engine.py
+  - factor_engine/runtime/batch_service.py
+  - factor_engine/tests/runtime/test_physical_region_execution.py
+canonicals_touched: []
+backends_touched:
+  - pandas_numpy
+  - polars_panel
+  - polars_long
+  - duckdb_sql
+changes:
+  - production batch execution calls optimize_batch_global and admits only production-ready single-region zero-transfer plans containing every root
+  - admitted production execution resolves one fixed concrete backend for shared CSE and root tasks without HybridBackend runtime routing
+  - plan_batch_route and record_batch_route remain non-production only; production path does not call choose_plan_route
+  - unsupported backends, malformed topology, missing roots, transfer edges, and multi-region plans fail closed
+  - physical per-root provenance includes plan ID/hash, planned and actual backend, region ID, backend switches, materialization count, resident reuse, and Python-to-q bytes
+  - shared materialization telemetry counts only actual eager execution, excluding lazy literal and compile-only paths
+verification:
+  syntax_compile:
+    status: PASS
+    files: 3
+  focused_tests:
+    status: PASS
+    passed: 16
+    failed: 0
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q tests/runtime/test_physical_region_execution.py
+  adjacent_tests:
+    status: FAIL_PRE_EXISTING
+    passed: 1
+    failed: 2
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q tests/runtime/test_run_many_production.py
+    failures:
+      - missing out[input_dq] in test_run_many_input_dq_uses_batch_path_and_cse
+      - parallel input DQ source load count is 2 rather than expected 1
+    attribution: independently reproduced against clean base by read-only reviewer; outside owned files and unchanged by this patch
+  import_smoke:
+    status: PASS
+    modules:
+      - runtime.engine
+      - runtime.batch_service
+      - backend.path_summary
+      - planner.batch_global_optimizer
+  independent_review:
+    status: PASS
+    findings: 0
+    reviewer_tests_passed: 16
+    prior_findings_fixed:
+      - HybridLongBackend could bypass fixed physical backend authority
+      - lazy/compile-only shared tasks were counted as eager materializations
+  diff_check:
+    status: PASS
+  dirty_tree_note: repository contains unrelated concurrent working-tree changes; only owned files were staged and committed
+not_run:
+  - full repository compile
+  - full DataAccess test suite
+  - registry bootstrap
+  - backend parity
+  - PIT poison suite
+  - root CI
+  - multi-region physical execution
+  - transfer-edge execution
+known_limitations:
+  - executable boundary is intentionally limited to one physical region and zero transfer edges
+  - concrete backend resolution uses existing backend class/delegate contracts and fails closed when no fixed executor is available
+  - full batch production integration beyond focused scheduler oracles was not claimed
+remote_evidence_used: false

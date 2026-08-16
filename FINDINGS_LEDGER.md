@@ -1,7 +1,7 @@
 # R2 Findings Ledger
 
-**Local HEAD reviewed:** `040a2f541d4637fddacf83846d758ed73d615fb5` plus identified working-tree evidence/status deltas
-**Updated:** 2026-08-16
+**Local HEAD reviewed:** `105e1fd83a5da716f76e7219e8cbf7b2b3770a04` (planner implementation commit) plus identified working-tree evidence/status deltas
+**Updated:** 2026-08-17
 **Remote/GitHub evidence:** not used
 
 ## Current R2 Delta
@@ -17,11 +17,16 @@
 
 ### OPT2-P0-001 — planner is not production runtime authority
 
-- Status: `REPRODUCED`.
-- `BatchGlobalOptimizer` produces typed regions and transfer edges, but no production caller consumes its `PhysicalRegionPlan`.
-- `runtime/batch_service.py` records per-root heuristic `plan_batch_route()` metadata and executes logical scheduler roots.
-- `HybridBackend.execute()` reroutes logical plans at runtime and therefore cannot execute an admitted physical plan without violating planner authority.
-- The narrow executable boundary is one admitted region with no transfers, resolved to one fixed concrete backend; multi-region execution remains unsupported until explicit subplan and transfer machinery exists.
+- Status: `REGRESSION_TESTED` at commit `105e1fd83a5da716f76e7219e8cbf7b2b3770a04`.
+- Production batch admission now calls `optimize_batch_global()` and consumes its `PhysicalRegionPlan`.
+- Admission is intentionally narrow and fail-closed: production-ready, exactly one region, zero transfer edges, valid topology, every logical batch root covered, and one fixed concrete backend.
+- Shared CSE tasks and roots execute through that same fixed backend; production does not invoke `plan_batch_route()`, `record_batch_route()`, or `choose_plan_route()` after physical admission.
+- Physical provenance records plan identity, planned/actual backend, region, switch count, materialization count, resident reuse, and Python-to-q bytes.
+- Verification: 16 focused physical-region tests passed; syntax compilation, import smoke, and scoped diff checks passed; independent review found no delta defect.
+- Adjacent `test_run_many_production.py`: 1 passed, 2 failed; failures were independently reproduced against the clean base, are pre-existing, and are outside the owned files.
+- Manifest: `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml`.
+- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, root CI, multi-region physical execution, and transfer-edge execution.
+- `CLOSED_VERIFIED` is not claimed; multi-region and transfer execution remain unsupported.
 
 ## Confirmed P0
 

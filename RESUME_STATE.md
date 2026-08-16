@@ -1,9 +1,9 @@
 # R2 Local Loop Engineering Resume State
 
-**Updated:** 2026-08-16
+**Updated:** 2026-08-17
 **Mode:** ACTIVE, local-only
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
-**Current HEAD:** `040a2f541d4637fddacf83846d758ed73d615fb5`
+**Current HEAD:** `105e1fd83a5da716f76e7219e8cbf7b2b3770a04` (planner implementation; status/evidence records are working-tree deltas)
 
 ## Non-Negotiable Constraints
 
@@ -26,32 +26,32 @@
 3. Serial verification passed: 25 focused/legacy tests plus DataAccess/FactorEngine import smoke.
 4. Independent read-only review found no defect in the narrow identity delta; broad gates remain `NOT_RUN`.
 5. Machine-readable evidence is at `evidence/r2/R2-P0-032-033-query-cache-identity.yaml`; implementation and oracle tests are committed at `040a2f541d4637fddacf83846d758ed73d615fb5`.
+6. `OPT2-P0-001` production batch authority is implemented at `105e1fd83a5da716f76e7219e8cbf7b2b3770a04`: admission consumes `PhysicalRegionPlan` and executes only a single production-ready, zero-transfer region on one fixed concrete backend.
+7. Planner-focused verification passed: 16 tests, syntax compilation, import smoke, scoped diff checks, and independent review with zero findings; evidence is at `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml`.
 
-### Reproduced P0
+### Completed Narrow Boundary
 
-1. `OPT2-P0-001`: production batch execution never calls `optimize_batch_global()` and never consumes `PhysicalRegionPlan`.
-2. `runtime/batch_service.py` records per-root heuristic routes, then executes logical scheduler roots.
-3. `HybridBackend.execute()` performs runtime rerouting and cannot be used as a physical-plan executor.
-4. The first honest executable scope is one admitted region, zero transfer edges, and one fixed concrete backend; unsupported multi-region plans must fail closed.
+- `OPT2-P0-001` is `REGRESSION_TESTED`, not `CLOSED_VERIFIED`.
+- Multi-region physical execution and transfer-edge execution remain unsupported and fail closed.
+- Adjacent `test_run_many_production.py` has two pre-existing failures reproduced against the clean base; they are outside the planner-owned files.
 
 ### Active Work
 
-- Query-cache identity manifest is bound to local commit `040a2f541d4637fddacf83846d758ed73d615fb5`; evidence/status records remain working-tree deltas.
-- Next writer scope: add production admission and fixed-backend single-region physical execution oracles without claiming multi-region support.
-- Independent reviewer: required after the runtime authority implementation passes focused serial tests.
+- Status/evidence bookkeeping for the planner commit is being finalized in a narrow local commit.
+- Next dispatch is DataAccess remote snapshot and PIT correctness/evidence.
+- Full repository compile, registry bootstrap, backend parity, PIT poison, and root CI remain `NOT_RUN`.
 
 ## Next Priority Queue
 
-1. Wire `BatchGlobalOptimizer` into production batch admission and execute only admitted single-region/no-transfer plans on a fixed backend.
-2. Add fail-closed runtime oracles for non-ready plans, transfers, unsupported backends, and any attempt to reroute.
-3. Independently review and locally integrate the Engine authority delta.
-4. Continue DataAccess remote snapshot and PIT evidence.
-5. Fix and certify remaining selectable Polars mathematics.
-6. Continue Q PlanNode ABI, lowering, null semantics, fan-in, workspace, and resident-handle evidence.
-7. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
-8. Repair FactorAssets DataAccess adapter against the local public API.
-9. Recalculate actual operator production surface from Registry + MiningRole + Evidence; do not reuse the unproven 678 count.
-10. Wire local root gates; no remote/GitHub work.
+1. Continue DataAccess remote snapshot and PIT correctness/evidence.
+2. Fix and certify remaining selectable Polars mathematics.
+3. Continue Q PlanNode ABI, lowering, null semantics, fan-in, workspace, and resident-handle evidence.
+4. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
+5. Repair FactorAssets DataAccess adapter against the local public API.
+6. Recalculate actual operator production surface from Registry + MiningRole + Evidence; do not reuse the unproven 678 count.
+7. Wire local root gates; no remote/GitHub work.
+
+Planner authority follow-up is limited to future multi-region/transfer execution and the pre-existing adjacent batch-production failures; no claim is made that those gates are closed.
 
 ## Scheduling
 

@@ -1,19 +1,18 @@
 # R2 Agent Status
 
-**Updated:** 2026-08-16
+**Updated:** 2026-08-17
 **Mode:** local-only, 15 GiB total ceiling, max two low-memory workers
 
 ## Active
 
-| Role | Task | Write Scope | Status |
-|---|---|---|---|
-| Local-Planner-Authority | Wire admitted physical planning into production runtime without rerouting | planner/runtime focused files and tests | RUNNING |
+No writer or reviewer is currently active.
 
 ## Completed Reviews
 
 | Role | Result |
 |---|---|
 | Independent query-cache identity reviewer | PASS on narrow delta; 8 focused tests passed; zero findings |
+| Independent physical-plan authority reviewer | PASS on revised delta; 16 focused tests passed; zero findings |
 | Physical-plan consumer auditor | CONFIRMED no production consumer; single-region fixed-backend execution is the narrow supported boundary |
 | Independent latest-commit reviewer | Historical `d78ed761` overall REJECT; retained as prior context only |
 
@@ -25,6 +24,6 @@
 
 ## Next Dispatch
 
-1. Planner runtime-authority writer for production admission and single-region fixed-backend execution.
-2. Independent read-only reviewer after planner tests pass.
-3. DataAccess remote/PIT work after planner authority integration.
+1. DataAccess remote snapshot and PIT correctness/evidence.
+2. Selectable Polars mathematics repair and parity evidence.
+3. Q lowering/residency evidence, Ridge repairs, then FactorAssets adapter.
