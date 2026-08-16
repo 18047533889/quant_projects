@@ -13,6 +13,7 @@ No writer or reviewer is currently active.
 |---|---|
 | Independent query-cache identity reviewer | PASS on narrow delta; 8 focused tests passed; zero findings |
 | Independent physical-plan authority reviewer | PASS on revised delta; 16 focused tests passed; zero findings |
+| Independent remote-snapshot typed-failure reviewer | PASS after five findings were fixed; 34 focused tests passed; zero residual findings |
 | Physical-plan consumer auditor | CONFIRMED no production consumer; single-region fixed-backend execution is the narrow supported boundary |
 | Independent latest-commit reviewer | Historical `d78ed761` overall REJECT; retained as prior context only |
 
@@ -24,6 +25,6 @@ No writer or reviewer is currently active.
 
 ## Next Dispatch
 
-1. DataAccess remote snapshot and PIT correctness/evidence.
+1. DataAccess R2-P0-036 credential-generation rotation integration, then fail_if_changed/PIT correctness.
 2. Selectable Polars mathematics repair and parity evidence.
 3. Q lowering/residency evidence, Ridge repairs, then FactorAssets adapter.

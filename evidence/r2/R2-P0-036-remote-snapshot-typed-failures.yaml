@@ -1,0 +1,72 @@
+task_id: R2-P0-036-remote-snapshot-typed-failures
+generation_timestamp: 2026-08-17T01:44:23+08:00
+state: REGRESSION_TESTED
+base_sha: eb41fd356751c2305e4d0e11155d0bcef4be9807
+current_sha: e6f8a6f2e834deb6a038f8b3c03177c58f560c1d
+commit_sha: e6f8a6f2e834deb6a038f8b3c03177c58f560c1d
+owned_files:
+  - dataaccess/read/read_contract.py
+  - dataaccess/store.py
+  - dataaccess/snapshot/verifier.py
+  - dataaccess/tests/unit/test_snapshot_cloud_error.py
+modified_files:
+  - dataaccess/read/read_contract.py
+  - dataaccess/store.py
+  - dataaccess/snapshot/verifier.py
+  - dataaccess/tests/unit/test_snapshot_cloud_error.py
+canonicals_touched: []
+backends_touched:
+  - dataaccess_remote_metadata
+changes:
+  - remote metadata lookup supports request-local typed failure propagation while retaining best-effort default behavior
+  - production Store remote HEAD requests typed failure propagation from the same operation instead of recovering from a process-global diagnostic slot
+  - SnapshotVerifier attaches machine-readable CloudErrorCode to SourceSnapshotUnavailable and preserves the RemoteMetadataError as its cause
+  - throttling retryability and Retry-After metadata survive Store-to-verifier propagation
+  - strict mode remains fail-closed and non-strict mode remains suppressive
+verification:
+  syntax_compile:
+    status: PASS
+    files: 4
+  focused_tests:
+    status: PASS
+    passed: 34
+    failed: 0
+    command: PYTHONPATH=/home/shw/quant_projects OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q dataaccess/tests/unit/test_snapshot_cloud_error.py dataaccess/tests/unit/test_r25_snapshot_2026_08.py -x
+  adjacent_tests:
+    status: FAIL_UNATTRIBUTED
+    passed: 17
+    failed: 1
+    command: PYTHONPATH=/home/shw/quant_projects OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q dataaccess/tests/unit/test_final_closure_round5.py dataaccess/tests/unit/test_r28_concurrency_snapshot_2026_08.py dataaccess/tests/unit/test_r32_p0_041_060.py -x
+    failure: test_cos_events_asof_column_conflict_two_level raised CalendarUnavailableError because strict availability=next_session_open lacked a calendar
+    attribution: outside the owned files and unrelated by code path; not independently reproduced against the base, so no pre-existing claim is made
+  import_smoke:
+    status: PASS
+    modules:
+      - data_access.store
+      - data_access.snapshot.verifier
+      - data_access.read.read_contract
+  independent_review:
+    status: PASS
+    findings: 0
+    prior_findings_fixed:
+      - retry_after was lost while reconstructing CloudErrorCode
+      - Store associated failures through a process-global diagnostic slot
+      - non-strict suppression and throttling lacked focused oracles
+      - deliberately raised malformed-URI RemoteMetadataError could be rewrapped
+      - boto3-unavailable used an invalid network taxonomy value
+  diff_check:
+    status: PASS
+  dirty_tree_note: repository contains unrelated concurrent working-tree changes; only owned implementation files were committed
+not_run:
+  - full repository compile
+  - full DataAccess regression
+  - registry bootstrap
+  - backend parity
+  - PIT poison suite
+  - root CI
+  - credential_generation rotation integration
+known_limitations:
+  - this residual closes typed Store-to-SnapshotVerifier failure propagation only; credential_generation namespace work remains open under R2-P0-036
+  - the legacy process-global remote metadata diagnostic slot remains for compatibility, but Store no longer uses it to identify its own failure
+  - adjacent CalendarUnavailableError was not independently attributed against the base
+remote_evidence_used: false

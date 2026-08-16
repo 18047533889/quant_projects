@@ -1,6 +1,6 @@
 # R2 Findings Ledger
 
-**Local HEAD reviewed:** `105e1fd83a5da716f76e7219e8cbf7b2b3770a04` (planner implementation commit) plus identified working-tree evidence/status deltas
+**Local HEAD reviewed:** `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d` (remote snapshot implementation commit) plus identified working-tree evidence/status deltas
 **Updated:** 2026-08-17
 **Remote/GitHub evidence:** not used
 
@@ -27,6 +27,18 @@
 - Manifest: `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml`.
 - Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, root CI, multi-region physical execution, and transfer-edge execution.
 - `CLOSED_VERIFIED` is not claimed; multi-region and transfer execution remain unsupported.
+
+### R2-P0-036 residual — typed remote snapshot failures
+
+- Status: `REGRESSION_TESTED` at commit `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d`.
+- Production Store remote HEAD now propagates the `RemoteMetadataError` raised by the same operation; it no longer associates the request with a process-global last-error slot.
+- `SnapshotVerifier` attaches a machine-readable `CloudErrorCode` to `SourceSnapshotUnavailable`, preserves the typed exception as `__cause__`, and retains retryability and `Retry-After` metadata.
+- Strict absent/error metadata remains fail-closed; non-strict mode remains suppressive.
+- Verification: 34 focused snapshot tests passed; four files syntax-compiled; three imports and scoped diff checks passed; independent review passed after five findings were fixed.
+- Adjacent suite: 17 passed, 1 `CalendarUnavailableError` failure outside the owned files; it was not reproduced against the base, so no pre-existing attribution is claimed.
+- Manifest: `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml`.
+- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, root CI, and credential-generation rotation integration.
+- `CLOSED_VERIFIED` is not claimed; credential-generation rotation remains open under `R2-P0-036`.
 
 ## Confirmed P0
 

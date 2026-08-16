@@ -3,7 +3,7 @@
 **Updated:** 2026-08-17
 **Mode:** ACTIVE, local-only
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
-**Current HEAD:** `105e1fd83a5da716f76e7219e8cbf7b2b3770a04` (planner implementation; status/evidence records are working-tree deltas)
+**Current HEAD:** `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d` (remote snapshot implementation; status/evidence records are working-tree deltas)
 
 ## Non-Negotiable Constraints
 
@@ -28,6 +28,8 @@
 5. Machine-readable evidence is at `evidence/r2/R2-P0-032-033-query-cache-identity.yaml`; implementation and oracle tests are committed at `040a2f541d4637fddacf83846d758ed73d615fb5`.
 6. `OPT2-P0-001` production batch authority is implemented at `105e1fd83a5da716f76e7219e8cbf7b2b3770a04`: admission consumes `PhysicalRegionPlan` and executes only a single production-ready, zero-transfer region on one fixed concrete backend.
 7. Planner-focused verification passed: 16 tests, syntax compilation, import smoke, scoped diff checks, and independent review with zero findings; evidence is at `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml`.
+8. `R2-P0-036` typed remote failure propagation is implemented at `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d`: Store surfaces the same-operation `RemoteMetadataError`, and `SnapshotVerifier` preserves typed cloud classification, cause, and retry metadata.
+9. Remote-snapshot verification passed: 34 focused tests, four-file syntax compilation, three-module import smoke, scoped diff check, and independent review after five findings were fixed; evidence is at `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml`.
 
 ### Completed Narrow Boundary
 
@@ -37,13 +39,13 @@
 
 ### Active Work
 
-- Status/evidence bookkeeping for the planner commit is being finalized in a narrow local commit.
-- Next dispatch is DataAccess remote snapshot and PIT correctness/evidence.
-- Full repository compile, registry bootstrap, backend parity, PIT poison, and root CI remain `NOT_RUN`.
+- `R2-P0-036` typed remote failure residual is regression-tested at `e6f8a6f2`; evidence/status bookkeeping is being finalized in a narrow local commit.
+- Credential-generation rotation remains open under `R2-P0-036`; then continue `fail_if_changed` and PIT correctness/evidence.
+- Full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI remain `NOT_RUN`.
 
 ## Next Priority Queue
 
-1. Continue DataAccess remote snapshot and PIT correctness/evidence.
+1. Complete `R2-P0-036` credential-generation rotation integration, then `R2-P0-037` fail-if-changed verification and PIT correctness/evidence.
 2. Fix and certify remaining selectable Polars mathematics.
 3. Continue Q PlanNode ABI, lowering, null semantics, fan-in, workspace, and resident-handle evidence.
 4. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
