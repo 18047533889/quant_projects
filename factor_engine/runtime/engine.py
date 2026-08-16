@@ -82,6 +82,131 @@ def _assert_backend_plan_authority(backend: Any, plan: Any | None = None) -> Non
         )
 
 
+def _admit_ready_single_region_batch(
+    optimization: Any,
+    logical_root_ids: tuple[str, ...],
+) -> Any:
+    """Admit the only physical-plan boundary currently executable in batch mode."""
+    from planner.backend_region import PhysicalRegionPlan
+
+    physical_plan = getattr(optimization, "physical_plan", None)
+    if not isinstance(physical_plan, PhysicalRegionPlan):
+        raise PhysicalPlanRequiredError("production batch requires a PhysicalRegionPlan")
+    if not bool(getattr(optimization, "production_ready", False)):
+        reason = str(getattr(optimization, "readiness_reason", "") or "unspecified")
+        raise PhysicalPlanRequiredError(
+            f"PhysicalRegionPlan is not production-ready: {reason}"
+        )
+    if physical_plan.edges:
+        raise PhysicalPlanRequiredError(
+            "production batch rejects TransferEdge plans"
+        )
+    if len(physical_plan.regions) != 1:
+        raise PhysicalPlanRequiredError(
+            "production batch requires exactly one BackendRegion"
+        )
+    region = physical_plan.regions[0]
+    if physical_plan.topological_order != (region.region_id,):
+        raise PhysicalPlanRequiredError("single-region batch has invalid topology")
+    if physical_plan.root_region_ids != (region.region_id,):
+        raise PhysicalPlanRequiredError("single-region batch must identify its root region")
+    missing = set(logical_root_ids).difference(region.node_ids)
+    if missing:
+        raise PhysicalPlanRequiredError(
+            f"physical region does not contain batch roots: {sorted(missing)!r}"
+        )
+    return optimization
+
+
+def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
+    from planner.backend_region import PhysicalBackend
+
+    if backend.__class__.__name__ == "HybridBackend":
+        if region_backend == PhysicalBackend.PANDAS_NUMPY:
+            return backend._pandas
+        if region_backend == PhysicalBackend.POLARS_PANEL:
+            return backend._polars
+        if region_backend == PhysicalBackend.POLARS_LONG:
+            long_backend = backend._long_backend()
+            if long_backend.__class__.__name__ == "PolarsLongBackend":
+                return long_backend
+            concrete = getattr(long_backend, "_polars_long", None)
+            if concrete is not None and concrete.__class__.__name__ == "PolarsLongBackend":
+                return concrete
+            raise PhysicalPlanRequiredError(
+                "HybridBackend has no fixed PolarsLongBackend executor"
+            )
+        if region_backend == PhysicalBackend.DUCKDB_SQL:
+            return backend._sql
+        raise PhysicalPlanRequiredError(
+            f"unsupported physical backend {getattr(region_backend, 'value', region_backend)!r}"
+        )
+
+    expected_names = {
+        PhysicalBackend.PANDAS_NUMPY: {"PandasBackend"},
+        PhysicalBackend.POLARS_PANEL: {"PolarsBackend"},
+        PhysicalBackend.POLARS_LONG: {"PolarsLongBackend"},
+        PhysicalBackend.DUCKDB_SQL: {
+            "DuckDBPushdownBackend",
+            "SqlBackend",
+        },
+    }
+    allowed = expected_names.get(region_backend)
+    if allowed is None or backend.__class__.__name__ not in allowed:
+        raise PhysicalPlanRequiredError(
+            f"configured backend {backend.__class__.__name__!r} does not match "
+            f"physical backend {getattr(region_backend, 'value', region_backend)!r}"
+        )
+    return backend
+
+
+def _physical_plan_telemetry(
+    optimization: Any,
+    *,
+    actual_backend: str | None = None,
+    materialization_count: int = 0,
+) -> dict[str, Any]:
+    physical_plan = optimization.physical_plan
+    region = physical_plan.regions[0]
+    planned = region.backend.value
+    return {
+        "plan_id": physical_plan.plan_id,
+        "plan_hash": physical_plan.plan_hash,
+        "planned_backend": planned,
+        "actual_backend": actual_backend or planned,
+        "region_id": region.region_id,
+        "backend_switch_count": 0,
+        "materialization_count": materialization_count,
+        "resident_reuse_count": 0,
+        "python_to_q_bytes": 0,
+    }
+
+
+def _execute_ready_single_region_plan(
+    optimization: Any,
+    logical_root: PlanNode,
+    backend: Any,
+    ctx: ExecutionContext,
+    *,
+    logical_root_id: str,
+) -> Any:
+    """Execute an original logical root on the planner-fixed concrete backend."""
+    _admit_ready_single_region_batch(optimization, (logical_root_id,))
+    physical_plan = optimization.physical_plan
+    region = physical_plan.regions[0]
+    selected = _physical_backend_for_region(backend, region.backend)
+
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["physical_plan"] = _physical_plan_telemetry(
+        optimization,
+        actual_backend=str(getattr(selected, "runtime_backend_label", "") or region.backend.value),
+    )
+    ctx.runtime_stats = runtime
+
+    # Calling HybridBackend.execute here would re-run routing.
+    return selected.execute(logical_root, ctx)
+
+
 def _validate_run_mode(mode: str) -> None:
     """严格校验 run_mode：非法值启动即失败。"""
     if mode not in VALID_RUN_MODES:

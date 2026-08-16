@@ -114,20 +114,20 @@ def _materialize_shared_subplan(
     sub: Any,
     ctx: Any,
     sid: str,
-) -> None:
-    """CSE 共享子树：优先 lazy-only 编译，否则 eager execute 写入 ``shared_result_cache``。"""
+) -> bool:
+    """Materialize shared CSE state and report whether eager execution occurred."""
     if (
         getattr(sub, "op", None) == "literal"
         and getattr(backend, "supports_lazy_shared", False)
     ):
-        return
+        return False
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime["polars_long_shared_sid"] = sid
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
     if getattr(backend, "supports_lazy_shared", False):
         compile_lazy = getattr(backend, "compile_lazy_shared", None)
         if callable(compile_lazy) and compile_lazy(sub, ctx, sid=str(sid)):
-            return
+            return False
     if ctx.shared_result_cache is not None:
         value = backend.execute(sub, ctx)
         # R36 P0-021（§104/106）：经 GovernedBufferStore 写入（byte 预算 + 记账 +
@@ -171,7 +171,7 @@ def _materialize_shared_subplan(
                 future_consumers=future_cons,
             )
             if res.status in ("MEMORY", "SPILLED"):
-                return
+                return True
             # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref
             # KeyError —— production 必须 fail-closed，不能 return 成功。
             from runtime.production_policy import is_production_mode
@@ -189,7 +189,7 @@ def _materialize_shared_subplan(
         cache = getattr(ctx, "expression_cache", None)
         if cache is not None and getattr(cache, "set", None) is not None:
             cache.set(sid, value)
-            return
+            return True
         # R37-P0-035：raw dict 写入只在 research 降级路径允许；production 下
         # store/ExpressionCache 都不可用 = 治理缺失，必须 fail-closed（§31.3：
         # 不允许 raw dict 绕过资源账本）。
@@ -203,6 +203,8 @@ def _materialize_shared_subplan(
             )
         # research 降级：显式 warning 语义的 raw 写入（telemetry 已在上面累计）。
         ctx.shared_result_cache[sid] = value
+        return True
+    return False
 
 
 def _release_consumed_sids(ctx: Any, root: Any) -> None:
@@ -446,6 +448,8 @@ def _execute_root_with_path(
     *,
     run_mode: str | None = None,
     factor_name: str = "",
+    physical_optimization: Any = None,
+    physical_root_id: str | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """执行单个因子根计划并快照 backend 路径摘要。
 
@@ -490,8 +494,34 @@ def _execute_root_with_path(
         runtime_stats=local_runtime,
         **overlays,
     )
-    result = backend.execute(plan, local_ctx)
+    if physical_optimization is None:
+        result = backend.execute(plan, local_ctx)
+    else:
+        # Local import avoids the engine -> batch_service execution-time cycle.
+        from runtime.engine import _execute_ready_single_region_plan
+
+        result = _execute_ready_single_region_plan(
+            physical_optimization,
+            plan,
+            backend,
+            local_ctx,
+            logical_root_id=(
+                physical_root_id
+                if physical_root_id is not None
+                else str(getattr(plan, "node_id", ""))
+            ),
+        )
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
+    physical_meta = dict(
+        (getattr(local_ctx, "runtime_stats", None) or {}).get("physical_plan") or {}
+    )
+    if physical_meta:
+        path["physical_plan"] = physical_meta
+        path.update(
+            planned_backend=physical_meta["planned_backend"],
+            actual_backend=physical_meta["actual_backend"],
+            physical_region_id=physical_meta["region_id"],
+        )
     audit_ctx = f"run_many:{factor_name}" if factor_name else "run_many"
     assert_production_fastpath_runtime(local_ctx, mode=run_mode, context=audit_ctx)
     _assert_no_native_certified_fallback(
@@ -934,25 +964,73 @@ def _execute_run_many_scheduler(
         ctx=ctx,
     )
     batch_request_meta = batch_request.to_dict()
-    # R33-P0-061/§31：batch-global physical route（batch 级成本 = time-to-durable-
-    # commit，不是 operator 数）。记录进 runtime_stats（runtime evidence）。
-    try:
-        from backend.plan_cost_router import plan_batch_route, record_batch_route
+    if run_mode == "production":
+        try:
+            from planner.batch_global_optimizer import optimize_batch_global
 
-        root_plans = {
-            fp.factor_name: fp.root for fp in dag.roots
-        }
-        batch_route = plan_batch_route(
-            root_plans,
-            ctx,
-            scan_cost_map=batch_request.scan_cost_map,
-            shared_roots=len(dag.shared_nodes or {}),
-            factor_count=len(factors),
-        )
-        record_batch_route(ctx, batch_route)
-        batch_route_meta = batch_route.to_dict()
-    except Exception:
+            root_plans = {fp.factor_name: fp.root for fp in dag.roots}
+            from runtime.engine import _admit_ready_single_region_batch
+
+            physical_optimization = optimize_batch_global(
+                root_plans,
+                dict(dag.shared_nodes or {}),
+                {},
+                ctx,
+            )
+            physical_optimization = _admit_ready_single_region_batch(
+                physical_optimization,
+                tuple(root_plans),
+            )
+            physical_by_factor = {
+                name: physical_optimization for name in root_plans
+            }
+            from runtime.engine import (
+                _physical_backend_for_region,
+                _physical_plan_telemetry,
+            )
+
+            admitted_region = physical_optimization.physical_plan.regions[0]
+            execution_backend = _physical_backend_for_region(
+                engine_to_use.backend, admitted_region.backend
+            )
+            physical_plan_meta = _physical_plan_telemetry(
+                physical_optimization,
+                actual_backend=str(
+                    getattr(execution_backend, "runtime_backend_label", "")
+                    or admitted_region.backend.value
+                ),
+            )
+            runtime = dict(ctx.runtime_stats or {})
+            runtime["physical_plan"] = physical_plan_meta
+            ctx.runtime_stats = runtime
+        except ImportError:
+            raise
+    else:
+        physical_optimization = None
+        physical_by_factor = {}
+        physical_plan_meta = {}
+        execution_backend = engine_to_use.backend
+
+    if run_mode == "production":
         batch_route_meta = {}
+    else:
+        try:
+            from backend.plan_cost_router import plan_batch_route, record_batch_route
+
+            root_plans = {
+                fp.factor_name: fp.root for fp in dag.roots
+            }
+            batch_route = plan_batch_route(
+                root_plans,
+                ctx,
+                scan_cost_map=batch_request.scan_cost_map,
+                shared_roots=len(dag.shared_nodes or {}),
+                factor_count=len(factors),
+            )
+            record_batch_route(ctx, batch_route)
+            batch_route_meta = batch_route.to_dict()
+        except Exception:
+            batch_route_meta = {}
     out: dict[str, Any] = {}
     backend_paths: dict[str, dict[str, Any]] = {}
     paths_lock = threading.Lock()
@@ -960,11 +1038,13 @@ def _execute_run_many_scheduler(
 
     def _execute_root(task) -> Any:
         result, path = _execute_root_with_path(
-            engine_to_use.backend,
+            execution_backend,
             task.node_ref.root if getattr(task.node_ref, "root", None) is not None else task.node_ref,
             ctx,
             run_mode=run_mode,
             factor_name=task.factor_name,
+            physical_optimization=physical_by_factor.get(task.factor_name),
+            physical_root_id=task.factor_name,
         )
         if per_windows and task.factor_name in per_windows:
             result = _trim_batch_result(
@@ -981,12 +1061,25 @@ def _execute_run_many_scheduler(
                 backend_paths.get(name, {}), backend_paths,
             )
 
+    materialized_shared_sids: set[str] = set()
+    materialized_shared_lock = threading.Lock()
+
+    def _materialize_shared(sid: str, node: Any) -> bool:
+        eagerly_materialized = _materialize_shared_subplan(
+            execution_backend, node, ctx, sid
+        )
+        if eagerly_materialized:
+            with materialized_shared_lock:
+                materialized_shared_sids.add(str(sid))
+        return eagerly_materialized
+
     # R36 P0-029：run 级专用峰值采样器（start→stop 只统计本 run 窗口的
     # process family PSS/RSS，不混入 lifetime peak）。
     from runtime.run_peak_sampler import RunPeakSampler
 
     run_peak_sampler = RunPeakSampler(interval_s=0.5)
     run_peak_sampler.start()
+    run_stats: dict[str, Any] = {}
     try:
         with routing_execution_scope(perf):
             if ctx.shared_result_cache is not None:
@@ -998,17 +1091,19 @@ def _execute_run_many_scheduler(
             if mode == "DIRECT_VECTOR":
                 run_stats = scheduler.run_serial_fused(
                     plan,
-                    backend=engine_to_use.backend,
+                    backend=execution_backend,
                     ctx=ctx,
                     execute_root=_execute_root,
+                    materialize_shared=_materialize_shared,
                     result_handler=_handle,
                 )
             else:
                 run_stats = scheduler.run(
                     plan,
-                    backend=engine_to_use.backend,
+                    backend=execution_backend,
                     ctx=ctx,
                     execute_root=_execute_root,
+                    materialize_shared=_materialize_shared,
                     result_handler=_handle,
                     input_dq_check=input_dq_check,
                     input_dq_strict=input_dq_strict,
@@ -1025,6 +1120,15 @@ def _execute_run_many_scheduler(
             ctx.runtime_stats, finalize=True, run_peak=peak
         )
         run_stats["run_peak"] = peak
+    if physical_plan_meta:
+        physical_plan_meta["materialization_count"] = len(materialized_shared_sids)
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["physical_plan"] = physical_plan_meta
+        ctx.runtime_stats = runtime
+        for path in backend_paths.values():
+            path_physical = path.get("physical_plan")
+            if isinstance(path_physical, dict):
+                path_physical["materialization_count"] = len(materialized_shared_sids)
     batch_out: dict[str, Any] = {
         "results": out,
         "dag": dag,
@@ -1033,6 +1137,7 @@ def _execute_run_many_scheduler(
         "scheduler_stats": run_stats,
         "batch_data_request": batch_request_meta,
         "batch_physical_route": batch_route_meta,
+        "physical_plan": physical_plan_meta,
     }
     _attach_batch_backend_paths(batch_out, backend_paths)
     # R31-104/103：backend transition + conversion 是第一等 telemetry。
