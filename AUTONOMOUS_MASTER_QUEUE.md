@@ -1,7 +1,7 @@
 # R2 Local Autonomous Master Queue
 
-**Updated:** 2026-08-14
-**Authority:** Local source at HEAD `d78ed761b7d098d27e3acf916f3961d75096b3b3`
+**Updated:** 2026-08-16
+**Authority:** Local source at HEAD `040a2f541d4637fddacf83846d758ed73d615fb5` plus explicitly identified working-tree evidence/status deltas
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
 **Remote/GitHub:** out of scope and forbidden
 
@@ -15,8 +15,8 @@ No task closes from a report, hard-coded constant, or documentation claim.
 
 | ID | Priority | Status | Owner | Scope | Reproduction |
 |---|---:|---|---|---|---|
-| R2-REC-001 | P0 | FIXING | Q executor writer | `q_executor.py`, `q_backend.py`, q tests | importing `backend.q_backend.q_backend` raises missing `QExecutor`; executor 51 lines vs 372 preimage |
-| QE2-P0-003 | P0 | FIXING | QE shape writer | quantile NumPy/Numba paths | `(T,N,F)=(1,1,1)` collapses to scalar through `.squeeze()` |
+| R2-P0-032/033 | P0 | REGRESSION_TESTED | local identity writer + independent reviewer | `dataaccess/read/query_cache.py`, focused identity tests | strict full SHA-256 correctness/security identities committed at `040a2f54`; 25 serial tests + import smoke passed post-commit; independent review found no delta defect; manifest at `evidence/r2/R2-P0-032-033-query-cache-identity.yaml` |
+| OPT2-P0-001 | P0 | REPRODUCED | local planner authority writer | `factor_engine/runtime/batch_service.py`, planner/runtime tests | production batch path records per-root `plan_batch_route()` metadata and executes scheduler roots; it never calls `optimize_batch_global()` or consumes `PhysicalRegionPlan` |
 
 ## Independent Review Required
 
@@ -40,12 +40,12 @@ No task closes from a report, hard-coded constant, or documentation claim.
 9. `OP2-P0-001`: recalculate real production surface from Registry + MiningRole + Evidence; discard unproven 678 claim.
 10. `DA2-P0-001`: build identity has divergent versions and runtime git dependence.
 11. `DA2-P0-002`: correctness identity still has repr/str and 64-bit truncation paths.
-12. `OPT2-P0-001`: BatchGlobalOptimizer is scaffolded with empty transfers and fake estimates.
+12. `OPT2-P0-001`: planner implementation now builds typed regions/transfers and passes its focused tests, but production Engine authority still bypasses it in favor of per-root heuristic routing metadata.
 13. `CI2-P0-001`: root local gates not enforced.
 
 ## Closed Verified From Current Evidence
 
-None for the R2 delta yet. Earlier focused fixes remain historical context but require current-HEAD regression evidence before R2 closure.
+None for the current working-tree R2 delta. `R2-P0-032/033` is committed and `REGRESSION_TESTED`, but full DataAccess regression and root gates are `NOT_RUN`.
 
 ## Truth Matrix
 

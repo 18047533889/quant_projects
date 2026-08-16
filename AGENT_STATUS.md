@@ -1,30 +1,30 @@
 # R2 Agent Status
 
-**Updated:** 2026-08-14
+**Updated:** 2026-08-16
 **Mode:** local-only, 15 GiB total ceiling, max two low-memory workers
 
 ## Active
 
 | Role | Task | Write Scope | Status |
 |---|---|---|---|
-| Writer-Q-Recovery | Restore q executor/API integrity | q executor/backend/errors + focused tests | RUNNING |
-| Writer-QE-Shape | Preserve T/N axes in quantile batch/Numba paths | quantile modules + focused tests | RUNNING |
+| Local-Planner-Authority | Wire admitted physical planning into production runtime without rerouting | planner/runtime focused files and tests | RUNNING |
 
 ## Completed Reviews
 
 | Role | Result |
 |---|---|
-| Independent latest-commit reviewer | Overall `d78ed761` REJECT; QE orientation narrow approve; Modeling OOS narrow approve |
+| Independent query-cache identity reviewer | PASS on narrow delta; 8 focused tests passed; zero findings |
+| Physical-plan consumer auditor | CONFIRMED no production consumer; single-region fixed-backend execution is the narrow supported boundary |
+| Independent latest-commit reviewer | Historical `d78ed761` overall REJECT; retained as prior context only |
 
 ## Deliberately Not Running
 
-- Additional Writer agents: withheld to stay within the two-worker memory policy.
-- Heavy/full tests: withheld until both writers finish; focused tests only.
+- Additional Writer agents: withheld to stay within the memory policy and avoid overlapping files.
+- Heavy/full tests: `NOT_RUN`; focused serial tests only until the current narrow integration is complete.
 - GitHub/remote/CI agents: forbidden and not applicable.
 
 ## Next Dispatch
 
-1. Reviewer for Q recovery after writer completion.
-2. Reviewer for QE shape after writer completion.
-3. One Writer for Q capability honesty after Q import recovery merges.
-4. One read-only oracle for Polars rolling formula sites.
+1. Planner runtime-authority writer for production admission and single-region fixed-backend execution.
+2. Independent read-only reviewer after planner tests pass.
+3. DataAccess remote/PIT work after planner authority integration.

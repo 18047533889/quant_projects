@@ -1,9 +1,9 @@
 # R2 Local Loop Engineering Resume State
 
-**Updated:** 2026-08-14
+**Updated:** 2026-08-16
 **Mode:** ACTIVE, local-only
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
-**Base HEAD:** `d78ed761b7d098d27e3acf916f3961d75096b3b3`
+**Current HEAD:** `040a2f541d4637fddacf83846d758ed73d615fb5`
 
 ## Non-Negotiable Constraints
 
@@ -17,41 +17,46 @@
 - Do not edit `operator_catalog.py` or `operator_policy.py` concurrently.
 - Never claim PASS or production-ready for an unrun gate.
 
-## Current Wave: Repository Recovery
+## Current Wave: Identity Integration and Planner Authority
+
+### Completed and Committed
+
+1. `R2-P0-032/033` query-cache correctness and security identities use strict full SHA-256 digests.
+2. Query parameters are canonicalized through the DataAccess read contract; unsupported values fail closed.
+3. Serial verification passed: 25 focused/legacy tests plus DataAccess/FactorEngine import smoke.
+4. Independent read-only review found no defect in the narrow identity delta; broad gates remain `NOT_RUN`.
+5. Machine-readable evidence is at `evidence/r2/R2-P0-032-033-query-cache-identity.yaml`; implementation and oracle tests are committed at `040a2f541d4637fddacf83846d758ed73d615fb5`.
 
 ### Reproduced P0
 
-1. `factor_engine/backend/q_backend/q_executor.py` has 51 lines at HEAD; its local preimage at `HEAD^` has 372 lines.
-2. `factor_engine/backend/q_backend/q_backend.py` imports `QExecutionFallbackPolicy` and `get_q_executor`, which do not exist in the current executor.
-3. Importing `backend.q_backend.q_backend` raises `ImportError` because `QExecutor` is missing.
-4. The current executor contains hard-coded `PASS` constants but no executor implementation; these constants are not evidence.
-5. Read-only audit confirmed additional source patterns: q backend assumes a nonexistent PlanNode API, and registered Polars rolling statistics include formulas based on time-varying historical means.
+1. `OPT2-P0-001`: production batch execution never calls `optimize_batch_global()` and never consumes `PhysicalRegionPlan`.
+2. `runtime/batch_service.py` records per-root heuristic routes, then executes logical scheduler roots.
+3. `HybridBackend.execute()` performs runtime rerouting and cannot be used as a physical-plan executor.
+4. The first honest executable scope is one admitted region, zero transfer edges, and one fixed concrete backend; unsupported multi-region plans must fail closed.
 
 ### Active Work
 
-- Writer: recover Q executor/API integrity in isolated worktree.
-- Reviewer slots are intentionally idle while Writer runs to stay inside memory budget; resume one reviewer after Writer finishes.
+- Query-cache identity manifest is bound to local commit `040a2f541d4637fddacf83846d758ed73d615fb5`; evidence/status records remain working-tree deltas.
+- Next writer scope: add production admission and fixed-backend single-region physical execution oracles without claiming multi-region support.
+- Independent reviewer: required after the runtime authority implementation passes focused serial tests.
 
 ## Next Priority Queue
 
-1. Independently review and integrate Q executor recovery.
-2. Make Q production-safe/readiness use one evidence definition; no fake readiness messages.
-3. Fix Q PlanNode ABI and reachable lowering registry.
-4. Fix Q fan-in/workspace/resident handle lifecycle.
-5. Fix registered Polars `ts_corr`, `ts_cov`, rolling regression, `ts_moment`, and `ts_kurt` formulas.
-6. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
-7. Repair FactorAssets DataAccess adapter against the local public API.
-8. Fix QuantEvaluator batch/Numba bare `.squeeze()` for `T=1` and `N=1`.
+1. Wire `BatchGlobalOptimizer` into production batch admission and execute only admitted single-region/no-transfer plans on a fixed backend.
+2. Add fail-closed runtime oracles for non-ready plans, transfers, unsupported backends, and any attempt to reroute.
+3. Independently review and locally integrate the Engine authority delta.
+4. Continue DataAccess remote snapshot and PIT evidence.
+5. Fix and certify remaining selectable Polars mathematics.
+6. Continue Q PlanNode ABI, lowering, null semantics, fan-in, workspace, and resident-handle evidence.
+7. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.
+8. Repair FactorAssets DataAccess adapter against the local public API.
 9. Recalculate actual operator production surface from Registry + MiningRole + Evidence; do not reuse the unproven 678 count.
-10. Remove DataAccess/FactorEngine correctness identity `repr`, `default=str`, and 64-bit truncation paths.
-11. Replace BatchGlobalOptimizer scaffold constants and empty transfer edges with honest unsupported/fail-closed behavior or real planning.
-12. Wire local root gates; no remote/GitHub work.
+10. Wire local root gates; no remote/GitHub work.
 
 ## Scheduling
 
-- Durable local continuation job: `c0d3c644`, every 17 minutes.
-- Durable one-shot final report job: `1f71defb`.
-- Recurring tasks auto-expire after 7 days; the one-shot finalizer should stop new task assignment at the configured end.
+- No scheduling claim is made from stale task IDs in this file.
+- Recurring work, if present in the active session scheduler, expires after 7 days by scheduler policy.
 
 ## Truth Status
 

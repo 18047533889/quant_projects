@@ -1,0 +1,60 @@
+task_id: R2-P0-032-033-query-cache-identity
+generation_timestamp: 2026-08-16T22:41:03+08:00
+state: REGRESSION_TESTED
+base_sha: 8ffa5298b3becefabe25372415954b258a0efd34
+current_sha: 040a2f541d4637fddacf83846d758ed73d615fb5
+commit_sha: 040a2f541d4637fddacf83846d758ed73d615fb5
+owned_files:
+  - dataaccess/read/query_cache.py
+  - dataaccess/tests/unit/test_r2_query_cache_identity.py
+modified_files:
+  - dataaccess/read/query_cache.py
+  - dataaccess/tests/unit/test_r2_query_cache_identity.py
+canonicals_touched: []
+backends_touched:
+  - dataaccess
+changes:
+  - query correctness keys use strict full SHA-256 correctness identities
+  - query security scope uses strict full SHA-256 security identities
+  - query params use read_contract.canonicalize_params before hashing
+  - unsupported params and extra payload objects fail closed
+verification:
+  syntax_compile:
+    status: PASS
+    files: 3
+  focused_tests:
+    status: PASS
+    passed: 25
+    failed: 0
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 pytest -q dataaccess/tests/unit/test_r2_query_cache_identity.py dataaccess/tests/unit/test_read_contract.py dataaccess/tests/unit/test_final_closure_dod.py::test_cache_key_column_order dataaccess/tests/unit/test_r27_cache_write_atomic_2026_08.py::test_r27_a_cache_key_differs_by_principal dataaccess/tests/unit/test_final_closure_round5.py::test_cache_key_distinguishes_empty_pool_from_all_market
+  import_smoke:
+    status: PASS
+    note: first symbol-level probe requested nonexistent DataStore; corrected module-level smoke passed
+    modules:
+      - data_access.read.query_cache
+      - data_access.store
+      - planner.batch_global_optimizer
+      - runtime.batch_service
+      - runtime.engine
+  independent_review:
+    status: PASS
+    findings: 0
+    reviewer_tests_passed: 8
+not_run:
+  - full repository compile
+  - full DataAccess test suite
+  - registry bootstrap
+  - backend parity
+  - PIT poison suite
+  - root CI
+known_limitations:
+  - time_range and instruments retain pre-existing string coercion in cache identity
+  - falsey manifest version fields remain omitted
+  - filter identity retains the pre-existing 96-bit canonical_filter_hash
+  - evidence and status bookkeeping remain working-tree deltas outside the implementation commit
+review_residual_test_gaps:
+  - access policy and entitlement mutation
+  - nested supported parameter values
+  - special floats NaN and negative zero
+  - non-parameter query-cache fields
+remote_evidence_used: false

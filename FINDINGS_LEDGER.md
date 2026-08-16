@@ -1,7 +1,27 @@
 # R2 Findings Ledger
 
-**Local HEAD reviewed:** `d78ed761b7d098d27e3acf916f3961d75096b3b3`
+**Local HEAD reviewed:** `040a2f541d4637fddacf83846d758ed73d615fb5` plus identified working-tree evidence/status deltas
+**Updated:** 2026-08-16
 **Remote/GitHub evidence:** not used
+
+## Current R2 Delta
+
+### R2-P0-032/033 — query-cache identity hardening
+
+- Status: `REGRESSION_TESTED`, committed at `040a2f541d4637fddacf83846d758ed73d615fb5`.
+- Correctness and security identities now use strict full SHA-256 digests.
+- Query parameters use the authoritative DataAccess read-contract canonicalizer; unsupported values and opaque `extra` values fail closed.
+- Verification: 25 serial focused/legacy tests passed; import smoke passed; independent review ran 8 focused tests and found no delta defect.
+- Manifest: `evidence/r2/R2-P0-032-033-query-cache-identity.yaml`.
+- Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, root CI.
+
+### OPT2-P0-001 — planner is not production runtime authority
+
+- Status: `REPRODUCED`.
+- `BatchGlobalOptimizer` produces typed regions and transfer edges, but no production caller consumes its `PhysicalRegionPlan`.
+- `runtime/batch_service.py` records per-root heuristic `plan_batch_route()` metadata and executes logical scheduler roots.
+- `HybridBackend.execute()` reroutes logical plans at runtime and therefore cannot execute an admitted physical plan without violating planner authority.
+- The narrow executable boundary is one admitted region with no transfers, resolved to one fixed concrete backend; multi-region execution remains unsupported until explicit subplan and transfer machinery exists.
 
 ## Confirmed P0
 
