@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from data_access.core.exceptions import ValidationError
+from data_access.core.exceptions import AvailabilityLatencyError, ValidationError
 
 # #7 唯一 Market canonicalizer：明确 alias → canonical market。未知值直接报错，
 # 绝不能 ``else → us``。
@@ -520,17 +520,36 @@ def _session_next_segment_start(
 def _apply_latency(base: Any, latency: int | None, bar_interval_minutes: int) -> Any:
     """#P1-final closure 5 availability_latency：在编译出的 available_from 上
     叠加额外可见性延迟（latency 以 bar 计，默认 1 分钟/bar）。date 结果先转
-    当日 00:00 datetime 再叠加——延迟必须落在时刻上。"""
-    if not latency:
-        return base
-    minutes = int(latency) * max(1, int(bar_interval_minutes))
-    if isinstance(base, _dt.datetime):
+    当日 00:00 datetime 再叠加——延迟必须落在时刻上。
+
+    非零 latency 无法解析或无法应用时抛 typed error；禁止把未延迟的
+    ``available_from`` 当成成功结果返回，否则会提前暴露 PIT 数据。
+    """
+    try:
+        if latency is None:
+            return base
+        if isinstance(latency, bool) or not isinstance(latency, int) or latency < 0:
+            raise TypeError("latency must be a non-negative integer or None")
+        if latency == 0:
+            return base
+        if (
+            isinstance(bar_interval_minutes, bool)
+            or not isinstance(bar_interval_minutes, int)
+            or bar_interval_minutes <= 0
+        ):
+            raise TypeError("bar_interval_minutes must be a positive integer")
+        minutes = latency * bar_interval_minutes
+        if isinstance(base, _dt.datetime):
+            return base + _dt.timedelta(minutes=minutes)
+        if isinstance(base, _dt.date):
+            return _dt.datetime(base.year, base.month, base.day, 0, 0) + _dt.timedelta(
+                minutes=minutes
+            )
         return base + _dt.timedelta(minutes=minutes)
-    if isinstance(base, _dt.date):
-        return _dt.datetime(base.year, base.month, base.day, 0, 0) + _dt.timedelta(
-            minutes=minutes
-        )
-    return base
+    except Exception as exc:
+        raise AvailabilityLatencyError(
+            f"availability_latency={latency!r} 无法应用到 available_from={base!r}"
+        ) from exc
 
 
 def _raise_right_boundary(availability: str, kdate: _dt.date) -> None:

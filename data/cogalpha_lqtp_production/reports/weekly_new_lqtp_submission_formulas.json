@@ -1,0 +1,345 @@
+{
+  "generated_at": "2026-08-15T21:21:04.664748+00:00",
+  "n": 8,
+  "factors": [
+    {
+      "factor_name": "cand_vol_surge_regime_gated",
+      "display_name": "cand_vol_surge_regime_gated",
+      "candidate_id": "factor_vol_surge_regime_gated_v1",
+      "dsl": "-(ts_ema((((close / open - 1.0) * (volume / ts_max(volume, 20))) * ((high - low) > (ts_median((high - low), 20)))), 20))",
+      "lqtp_formula": "-(ema((((close / open - 1.0) * (volume / ts_max(volume, 20))) * ((high - low) > (ts_quantile((high - low), 20, 0.5)))), 20))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.05269718957674367,
+      "local_long_short_sharpe": 3.0693055478365245
+    },
+    {
+      "factor_name": "cand_tanh_thrust_dynamic_smooth",
+      "display_name": "cand_tanh_thrust_dynamic_smooth",
+      "candidate_id": "factor_tanh_thrust_dynamic_smooth_v1",
+      "dsl": "-( sigmoid(2 * (safe_div(volume, ts_ema(volume, 20)) - 1)) * ts_ema(tanh(ts_pct(close, 5)) * tanh(ts_pct(volume, 5)), 5) + (1 - sigmoid(2 * (safe_div(volume, ts_ema(volume, 20)) - 1))) * ts_ema(tanh(ts_pct(close, 5)) * tanh(ts_pct(volume, 5)), 20) )",
+      "lqtp_formula": "-( sigmoid(2 * (safe_div(volume, ema(volume, 20)) - 1)) * ema((2 * sigmoid(2 * (ts_pct(close, 5))) - 1) * (2 * sigmoid(2 * (ts_pct(volume, 5))) - 1), 5) + (1 - sigmoid(2 * (safe_div(volume, ema(volume, 20)) - 1))) * ema((2 * sigmoid(2 * (ts_pct(close, 5))) - 1) * (2 * sigmoid(2 * (ts_pct(volume, 5))) - 1), 20) )",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.05019319643843465,
+      "local_long_short_sharpe": 2.9777496886018797
+    },
+    {
+      "factor_name": "cand_vol_regime_trend_smoothed",
+      "display_name": "cand_vol_regime_trend_smoothed",
+      "candidate_id": "factor_vol_regime_trend_smoothed_v1",
+      "dsl": "-( ts_ema( (safe_div(close, ts_mean(close, 20)) - 1) * safe_div(volume, ts_mean(volume, 20)) * (safe_div((high - low), ts_median((high - low), 20)) - 1), 5) )",
+      "lqtp_formula": "-( ema( (safe_div(close, ts_mean(close, 20)) - 1) * safe_div(volume, ts_mean(volume, 20)) * (safe_div((high - low), ts_quantile((high - low), 20, 0.5)) - 1), 5) )",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.045660385012385986,
+      "local_long_short_sharpe": 3.168583133332169
+    },
+    {
+      "factor_name": "cand_herding_momentum_stress",
+      "display_name": "cand_herding_momentum_stress",
+      "candidate_id": "factor_herding_momentum_stress_v1",
+      "dsl": "-(cap((ts_ema((ts_pct(close, 1) * (volume / ts_mean(volume, 5)) * ((high - low) / close)), 5)), -3, 3))",
+      "lqtp_formula": "-(cap((ema((ts_pct(close, 1) * (volume / ts_mean(volume, 5)) * ((high - low) / close)), 5)), -3, 3))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.04374919025426342,
+      "local_long_short_sharpe": 2.4503776035823317
+    },
+    {
+      "factor_name": "cand_volume_surge_persistence",
+      "display_name": "cand_volume_surge_persistence",
+      "candidate_id": "factor_volume_surge_persistence_v1",
+      "dsl": "-( ts_ema(where(volume > 2 * ts_median(volume, 20), 1, 0), 10) )",
+      "lqtp_formula": "-( ema(where(volume > 2 * ts_quantile(volume, 20, 0.5), 1, 0), 10) )",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0355476634847992,
+      "local_long_short_sharpe": 2.983158794955864
+    },
+    {
+      "factor_name": "cand_crash_vol_spike_volregime_boost",
+      "display_name": "cand_crash_vol_spike_volregime_boost",
+      "candidate_id": "factor_crash_vol_spike_volregime_boost_v1",
+      "dsl": "-( safe_div(ts_mean(log(safe_div(high, low)), 5), ts_mean(log(safe_div(high, low)), 50) + 1e-8) * (1 + where(safe_div(volume, ts_ema(volume, 20)) > 1.5, 1, 0) * 0.8) )",
+      "lqtp_formula": "-( safe_div(ts_mean(log(safe_div(high, low)), 5), ts_mean(log(safe_div(high, low)), 50) + 1e-8) * (1 + where(safe_div(volume, ema(volume, 20)) > 1.5, 1, 0) * 0.8) )",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.034733327446522626,
+      "local_long_short_sharpe": 2.1263859811682257
+    },
+    {
+      "factor_name": "cand_pressure_tanh",
+      "display_name": "cand_pressure_tanh",
+      "candidate_id": "factor_pressure_tanh_v1",
+      "dsl": "-((tanh((((close - low) / (high - low) * volume) - (ts_mean(((close - low) / (high - low) * volume), 20))) / (ts_std(((close - low) / (high - low) * volume), 20)))))",
+      "lqtp_formula": "-((2 * sigmoid(2 * ((((close - low) / (high - low) * volume) - (ts_mean(((close - low) / (high - low) * volume), 20))) / (ts_std(((close - low) / (high - low) * volume), 20)))) - 1))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.02676537763291806,
+      "local_long_short_sharpe": 2.253012649102123
+    },
+    {
+      "factor_name": "cand_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+      "display_name": "cand_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
+      "candidate_id": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5_v1",
+      "dsl": "(ts_ema((-1.0 * ((ts_median((where((close > open) == 1, (high - low), 0)), 20)) / (ts_median((where((close <= open) == 1, (high - low), 0)), 20))) * (volume / ts_median(volume, 6))), 5))",
+      "lqtp_formula": "(ema((-1.0 * ((ts_quantile((where((close > open) == 1, (high - low), 0)), 20, 0.5)) / (ts_quantile((where((close <= open) == 1, (high - low), 0)), 20, 0.5))) * (volume / ts_quantile(volume, 6, 0.5))), 5))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0006698179086140714,
+      "local_long_short_sharpe": -0.7490118603316016
+    }
+  ],
+  "skipped": [
+    {
+      "display_name": "ext_38cd4f77",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_90298bd1",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_a313f83b",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_cc3b5fb0",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_2b3d9cff",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_vw_ew_spread_responsive",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "cand_overnight_intraday_divergence_simplified",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_1ef16bdf",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_73a60264",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_7cd58c86",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_fusion_upcap_volregime",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_287712d7",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_d6c071a1",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_volume_confirmed_intraday_momentum",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_b52617c5",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_cc11c428",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_d53e006f",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_909472af",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_7f827abe",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_131e5281",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_8d6b4d53",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_vol_asymmetry_diff_blend",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "cand_liquidity_spread_vol_continuous_median",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "cand_gap_reversal_intensity",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_50b318f3",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_herding_pv_sync_sma",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "cand_gpdev_volregime_ema10",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_e1d40349",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_bdd0fb42",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_gap_vol_cluster_adaptive_w30",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "cand_vol_persistence_momentum",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_b512e792",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_52c6c08d",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_760efb3b",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_reversal_volregime_overnight_csz",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_62f1f060",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_vol_expansion_atr_ratio",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_70b9e66b",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_981562e9",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_1490f2fe",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_773ab168",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_b67c0953",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "cand_geometric_deviation_vol_asym_tilt",
+      "action": "skipped_no_formula",
+      "source": "pool_cg_neu"
+    },
+    {
+      "display_name": "ext_39e7b7a6",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    },
+    {
+      "display_name": "ext_2fffdf67",
+      "action": "skipped_no_formula",
+      "source": "pool_fm_qa"
+    }
+  ]
+}

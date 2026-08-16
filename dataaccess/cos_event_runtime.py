@@ -155,10 +155,14 @@ def _normalize(events: pd.DataFrame, contract: COSDatasetContract, clock: str) -
 
 def _apply_latency_minutes(avail: Any, latency: int | None) -> Any:
     """Apply a declared minute latency, failing closed on unsupported values."""
-    if not latency:
-        return avail
     try:
-        minutes = int(latency)
+        if latency is None:
+            return avail
+        if isinstance(latency, bool) or not isinstance(latency, int) or latency < 0:
+            raise TypeError("availability_latency must be a non-negative integer")
+        if latency == 0:
+            return avail
+        minutes = latency
         if isinstance(avail, _dt.datetime):
             return avail + _dt.timedelta(minutes=minutes)
         if isinstance(avail, _dt.date):

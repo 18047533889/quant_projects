@@ -7,7 +7,7 @@ for large factor universes.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, Iterable, List, Set, Tuple, Optional
 from collections import defaultdict
 
 
@@ -46,27 +46,41 @@ class SparseCorrelationGraph:
     Thread-safe after construction (immutable).
     """
 
-    def __init__(self, edges: List[CorrelationEdge]):
+    def __init__(
+        self,
+        edges: Iterable[CorrelationEdge],
+        nodes: Optional[Iterable[str]] = None,
+    ):
         """
-        Build graph from edge list.
+        Build graph from edges and an optional explicit node universe.
 
         Args:
-            edges: List of correlation edges
+            edges: Correlation edges
+            nodes: Factor IDs to retain even when they have no edges
 
-        Deduplicates edges and stores canonical undirected form.
+        Exact duplicate edges are deduplicated. Duplicate canonical edges with
+        different correlation values are rejected as contradictory input.
         """
         self._adjacency: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
-        self._nodes: Set[str] = set()
+        self._nodes: Set[str] = set(nodes or ())
         self._edge_count = 0
 
-        # Deduplicate edges using canonical form
-        seen_edges: Set[Tuple[str, str]] = set()
+        seen_edges: Dict[Tuple[str, str], Tuple[float, Tuple[str, str]]] = {}
 
         for edge in edges:
             canonical = edge.canonical_form()
-            if canonical in seen_edges:
+            orientation = (edge.factor_a, edge.factor_b)
+            existing = seen_edges.get(canonical)
+            if existing is not None:
+                existing_correlation, existing_orientation = existing
+                if existing_correlation != edge.correlation:
+                    raise ValueError(
+                        "Conflicting duplicate edge "
+                        f"{canonical}: correlations {existing_correlation} "
+                        f"and {edge.correlation}"
+                    )
                 continue
-            seen_edges.add(canonical)
+            seen_edges[canonical] = (edge.correlation, orientation)
 
             # Add to adjacency list (both directions for undirected)
             self._adjacency[edge.factor_a].append((edge.factor_b, edge.correlation))
@@ -155,7 +169,8 @@ class SparseCorrelationGraph:
                 seen_pairs.add(canonical)
                 subgraph_edges.append(CorrelationEdge(node, neighbor, corr))
 
-        return SparseCorrelationGraph(subgraph_edges)
+        retained_nodes = self._nodes.intersection(node_subset)
+        return SparseCorrelationGraph(subgraph_edges, nodes=retained_nodes)
 
     def to_edge_list(self) -> List[CorrelationEdge]:
         """Export as edge list."""

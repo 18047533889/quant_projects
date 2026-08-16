@@ -17,6 +17,11 @@ from data_access.cos_event_runtime import (
     _select,
 )
 from data_access.cos_contract import COSDatasetContract
+from data_access.read.session_calendar import (
+    MarketCalendar,
+    build_us_session,
+    compile_available_from,
+)
 
 
 def _contract() -> COSDatasetContract:
@@ -81,6 +86,50 @@ def test_nonzero_latency_failure_is_typed_and_preserves_cause() -> None:
     with pytest.raises(AvailabilityLatencyError) as caught:
         _apply_latency_minutes(_BrokenAvailableFrom(), 5)
     assert isinstance(caught.value.__cause__, TypeError)
+
+
+@pytest.mark.parametrize(
+    "latency", ["not-a-number", object(), -1, True, False, 1.9, 0.0, ""]
+)
+def test_authoritative_compiler_malformed_latency_is_typed(latency: object) -> None:
+    calendar = MarketCalendar(
+        "us",
+        trading_days=[dt.date(2024, 5, 10), dt.date(2024, 5, 13)],
+        timezone="America/New_York",
+        session=build_us_session(),
+        source="explicit",
+    )
+    knowledge = dt.datetime(2024, 5, 10, 20, 0, tzinfo=dt.timezone.utc)
+
+    with pytest.raises(AvailabilityLatencyError) as caught:
+        compile_available_from(
+            knowledge,
+            "next_trading_day",
+            calendar=calendar,
+            latency=latency,
+            strict=True,
+        )
+    assert isinstance(caught.value.__cause__, (TypeError, ValueError))
+
+
+def test_timezone_aware_calendar_requirement_fails_closed_before_comparison() -> None:
+    decisions, events = _frames()
+    events.loc[0, "knowledge"] = pd.Timestamp(
+        "2024-01-02 09:00", tz="America/New_York"
+    )
+
+    with pytest.raises(CalendarUnavailableError, match="日历不可用"):
+        _select(
+            decisions,
+            events,
+            _contract(),
+            "decision_timestamp",
+            "instrument",
+            "knowledge",
+            "latest_available",
+            availability="next_session_open",
+            calendar=None,
+        )
 
 
 def test_calendar_path_latency_failure_is_typed_and_preserves_cause(monkeypatch) -> None:

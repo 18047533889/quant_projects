@@ -314,6 +314,8 @@ def materialize_factor(
     data_source_cfg: dict[str, Any],
     lake_root: Path,
     allowed_symbols: set[str] | None = None,
+    universe: str = "A_SHARE_ALL_A_EX_ST",
+    use_subplan_cache: bool = True,
 ) -> Path:
     fe_dsl, surface = _pick_fe_dsl_and_surface(dsl, factor_name=factor_id)
     ok, msg = validate_factor_engine_dsl(fe_dsl, surface=surface)
@@ -324,13 +326,14 @@ def materialize_factor(
     engine = FactorEngine(
         backend=build_materialize_backend(),
         data_source=data_source,
-        cache=CacheManager(),
+        # Low-mem chart/FE fills: skip subplan cache so RAM returns between chunks.
+        cache=CacheManager() if use_subplan_cache else None,
     )
     factor = parse_factor(
         fe_dsl,
         name=factor_id,
         freq="1d",
-        universe="A_SHARE_ALL_A_EX_ST",
+        universe=universe or "A_SHARE_ALL_A_EX_ST",
         surface=surface,
     )
     out = engine.run(factor)

@@ -69,19 +69,16 @@ class PlateauDetector:
         if len(score_list) < self.config.window_size:
             return False
 
-        # Take most recent window
+        # Validate the most recent window as two non-empty halves.  An odd
+        # window gives the extra observation to the current half.
         window = score_list[-self.config.window_size:]
-
-        # Compute baseline (best so far before last element)
-        if self.config.use_median:
-            baseline = statistics.median(window[:-1]) if len(window) > 1 else window[0]
-        else:
-            # Use best score in first half of window as baseline
-            mid = len(window) // 2
-            baseline = max(window[:mid]) if mid > 0 else window[0]
-
-        # Current best in the window
-        current_best = max(window)
+        mid = len(window) // 2
+        baseline = (
+            statistics.median(window[:mid])
+            if self.config.use_median
+            else max(window[:mid])
+        )
+        current_best = max(window[mid:])
 
         # Check relative improvement
         relative_ok = True
@@ -131,10 +128,23 @@ class PlateauDetector:
 
         for score in self.score_history[1:]:
             improvement = score - best_so_far
-            relative_imp = improvement / abs(best_so_far) if best_so_far != 0 else float('inf')
+            if best_so_far != 0:
+                relative_imp = improvement / abs(best_so_far)
+                relative_ok = relative_imp >= threshold
+            else:
+                relative_ok = improvement > 0 and threshold <= 0
 
-            if relative_imp >= threshold or improvement >= abs_threshold:
-                # Significant improvement
+            absolute_ok = (
+                improvement >= abs_threshold
+                if self.config.min_absolute_improvement is not None
+                else None
+            )
+            significant = (
+                relative_ok
+                if absolute_ok is None
+                else (relative_ok and absolute_ok if self.config.require_both else relative_ok or absolute_ok)
+            )
+            if significant and improvement > 0:
                 best_so_far = score
                 plateau_count = 0
             else:

@@ -32,6 +32,7 @@ from quant_evaluator.api.requests import (
     MetricValue,
     FactorDiagnosis,
 )
+from quant_evaluator.runtime.evaluator import Evaluator, evaluate
 
 __all__ = [
     "__version__",
@@ -42,6 +43,8 @@ __all__ = [
     "EvaluationBundle",
     "MetricValue",
     "FactorDiagnosis",
+    "Evaluator",
+    "evaluate",
     "QuantEvaluatorError",
     "ContractError",
     "DataError",

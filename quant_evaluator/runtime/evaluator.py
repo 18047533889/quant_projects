@@ -15,7 +15,12 @@ import time
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
-from quant_evaluator.contracts.errors import InvalidContractError, InsufficientObservations
+from quant_evaluator.contracts.errors import (
+    InvalidContractError,
+    QuantEvaluatorError,
+    UnsupportedMetricError,
+)
+from quant_evaluator.api.requests import EvaluationRequest
 
 from quant_evaluator.planner.batch_plan import BatchPlan, ChunkDescriptor, create_batch_plan
 from quant_evaluator.planner.dependency_plan import (
@@ -397,6 +402,8 @@ class Evaluator:
         # Call metric function
         try:
             return metric_fn(**args)
+        except QuantEvaluatorError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Error computing metric {metric_id}: {e}") from e
 
@@ -661,3 +668,159 @@ class Evaluator:
     def get_budget_report(self) -> str:
         """Get formatted budget usage report."""
         return self.budget_tracker.format_usage_report()
+
+
+def evaluate(
+    factors,
+    labels=None,
+    *,
+    context=None,
+    metrics=None,
+    where=None,
+    evaluator=None,
+):
+    """Evaluate explicit factor and label contracts through the runtime.
+
+    This is the public batch facade.  It delegates computation to ``Evaluator``
+    and adapts only scalar values produced by existing metric kernels into the
+    canonical :class:`EvaluationBundle` contract.  Unsupported requests fail
+    closed rather than fabricating metric metadata.
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from quant_evaluator.api.requests import EvaluationBundle, MetricValue
+    from quant_evaluator.diagnosis.factor import diagnose_all_factors
+    from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
+
+    request_metadata = {}
+    request_fields = {}
+    if isinstance(factors, EvaluationRequest):
+        request = factors
+        factor_batch = request.batch_or_factor_ids
+        label_bundle = request.label_bundle
+        metric_ids = request.metric_ids
+        context = request.context
+        if request.slices is not None:
+            raise UnsupportedMetricError("EvaluationRequest.slices are not supported by public evaluate")
+        request_metadata = dict(request.metadata)
+        request_fields = {"tier": request.tier, "cost_budget": request.cost_budget}
+    else:
+        factor_batch = factors
+        label_bundle = labels
+        metric_ids = tuple(metrics or ("coverage",))
+
+    if where is not None:
+        raise UnsupportedMetricError("where slicing is not supported by public evaluate")
+    if not isinstance(factor_batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
+        raise TypeError("evaluate requires a FactorBatch and LabelBundle")
+    if label_bundle.values.ndim == 2 and label_bundle.values.shape[1] != factor_batch.num_assets:
+        raise InvalidContractError(
+            f"Label asset axis ({label_bundle.values.shape[1]}) does not match "
+            f"factor asset axis ({factor_batch.num_assets})"
+        )
+    if (
+        label_bundle.validity is not None
+        and label_bundle.validity.ndim == 2
+        and label_bundle.validity.shape[1] != factor_batch.num_assets
+    ):
+        raise InvalidContractError(
+            f"Label validity asset axis ({label_bundle.validity.shape[1]}) does not match "
+            f"factor asset axis ({factor_batch.num_assets})"
+        )
+
+    metric_ids = tuple(metric_ids)
+    runtime = evaluator or Evaluator()
+    metric_specs = []
+
+    def coverage_metric(factor_batch, label_bundle, **kwargs):
+        labels_array = label_bundle.values
+        if labels_array.ndim == 1:
+            labels_array = np.broadcast_to(
+                labels_array[:, np.newaxis],
+                (factor_batch.num_times, factor_batch.num_assets),
+            )
+        valid = np.isfinite(factor_batch.values) & np.isfinite(labels_array)[:, :, np.newaxis]
+        if factor_batch.validity is not None:
+            valid &= factor_batch.validity
+        if label_bundle.validity is not None:
+            valid &= label_bundle.validity[:, :, np.newaxis]
+        counts = np.sum(valid, axis=(0, 1))
+        totals = np.full(factor_batch.num_factors, factor_batch.num_times * factor_batch.num_assets)
+        return {
+            factor_id: (float(count / total) if total else np.nan, int(count))
+            for factor_id, count, total in zip(factor_batch.factor_ids, counts, totals)
+        }
+
+    def ic_metric(method):
+        def compute(factor_batch, label_bundle, **kwargs):
+            series, counts = compute_daily_ic(factor_batch, label_bundle, method=method)
+            mean, _ = compute_mean_ic(series, counts, min_periods=1)
+            return {
+                factor_id: (float(mean[index]), int(np.sum(counts[:, index][np.isfinite(series[:, index])])))
+                for index, factor_id in enumerate(factor_batch.factor_ids)
+            }
+        return compute
+
+    supported = {
+        "coverage": coverage_metric,
+        "pearson_ic": ic_metric("pearson"),
+        "rank_ic": ic_metric("spearman"),
+    }
+    for metric_id in metric_ids:
+        if metric_id not in supported:
+            raise UnsupportedMetricError(
+                f"Public evaluate does not support metric '{metric_id}'"
+            )
+        runtime.register_metric(metric_id, supported[metric_id])
+        metric_specs.append({"metric_id": metric_id, "metric_kind": "custom"})
+
+    result = runtime.evaluate(factor_batch, label_bundle, metric_specs, use_chunking=False)
+    grouped_metrics = {factor_id: {} for factor_id in factor_batch.factor_ids}
+    for metric_id in metric_ids:
+        values = result.get_metric(metric_id)
+        if not isinstance(values, dict) or set(values) != set(factor_batch.factor_ids):
+            raise UnsupportedMetricError(
+                f"Metric '{metric_id}' did not return per-factor scalar values"
+            )
+        for factor_id, payload in values.items():
+            if not isinstance(payload, tuple) or len(payload) != 2:
+                raise UnsupportedMetricError(
+                    f"Metric '{metric_id}' returned unsupported per-factor metadata"
+                )
+            value, observation_count = payload
+            if not isinstance(value, (bool, int, float, np.number)):
+                raise UnsupportedMetricError(
+                    f"Metric '{metric_id}' returned a non-scalar value for '{factor_id}'"
+                )
+            numeric = float(value)
+            grouped_metrics[factor_id][metric_id] = MetricValue(
+                metric_id=metric_id,
+                value=None if not np.isfinite(numeric) else numeric,
+                valid=bool(np.isfinite(numeric)),
+                observation_count=int(observation_count),
+                warnings=() if np.isfinite(numeric) else ("non-finite result",),
+            )
+
+    metric_values = (
+        dict(grouped_metrics[factor_batch.factor_ids[0]])
+        if factor_batch.num_factors == 1
+        else {}
+    )
+    bundle_metadata = dict(request_metadata)
+    bundle_metadata.update(request_fields)
+    bundle_metadata.update({"context": context, "where": None, "runtime": result.metadata})
+    request_id = str(bundle_metadata.pop("request_id", uuid4()))
+
+    return EvaluationBundle(
+        request_id=request_id,
+        factor_ids=tuple(factor_batch.factor_ids),
+        label_id=label_bundle.target_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        metric_values=metric_values,
+        diagnostics=diagnose_all_factors(factor_batch),
+        grouped_metrics=grouped_metrics,
+        metric_versions={metric_id: "0.1" for metric_id in metric_ids},
+        metadata=bundle_metadata,
+        warnings=tuple(result.metadata.get("warnings", ())),
+    )

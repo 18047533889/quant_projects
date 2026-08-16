@@ -54,17 +54,24 @@ def test_sparse_graph_construction():
 
 
 def test_graph_deduplication():
-    """Graph deduplicates edges."""
-    edges = [
-        CorrelationEdge("A", "B", 0.8),
-        CorrelationEdge("B", "A", 0.8),  # Duplicate
-        CorrelationEdge("A", "B", 0.9),  # Another duplicate
-    ]
-
-    graph = SparseCorrelationGraph(edges)
+    """Graph deduplicates exact edges and rejects conflicting values."""
+    graph = SparseCorrelationGraph(
+        [
+            CorrelationEdge("A", "B", 0.8),
+            CorrelationEdge("B", "A", 0.8),
+        ]
+    )
 
     assert graph.edge_count == 1
     assert graph.node_count == 2
+
+    with pytest.raises(ValueError, match="Conflicting duplicate edge"):
+        SparseCorrelationGraph(
+            [
+                CorrelationEdge("A", "B", 0.8),
+                CorrelationEdge("A", "B", 0.9),
+            ]
+        )
 
 
 def test_neighbors():

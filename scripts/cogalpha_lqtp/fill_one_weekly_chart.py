@@ -27,7 +27,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "cogalpha_lqtp")]
 
 from scripts.cogalpha_lqtp.backtest_weekly_dug_panels import _materialize_long  # noqa: E402
-from scripts.cogalpha_lqtp.crawl_candidate_pool_neutral_rankic import display_factor_name  # noqa: E402
 from scripts.cogalpha_lqtp.eval_lake_fast import analyze_factor_parquet_duckdb  # noqa: E402
 from scripts.cogalpha_lqtp.memory_utils import (  # noqa: E402
     ensure_memory_floor,
@@ -39,6 +38,15 @@ from scripts.cogalpha_lqtp.report_html import render_factor_report  # noqa: E402
 
 WORK = ROOT / "data/cogalpha_lqtp_production"
 CHUNK_SCRIPT = ROOT / "scripts/cogalpha_lqtp/materialize_halfyear_chunk.py"
+
+
+def display_factor_name(row: dict[str, Any]) -> str:
+    """Strip dig-date prefixes from display names."""
+    raw = str(row.get("display_name") or row.get("factor_id") or row.get("name") or "").strip()
+    m = re.match(r"^(alpha|ext|cand|alphasage)_(?:\d{8,14}_)?(.+)$", raw, re.I)
+    if m:
+        return f"{m.group(1).lower()}_{m.group(2)}"
+    return raw
 
 
 def _has_charts(html: str) -> bool:
@@ -101,11 +109,29 @@ def _has_cs_rank(dsl: str) -> bool:
 
 
 def _year_windows() -> list[tuple[str, str, str]]:
-    """Calendar-year windows (proven ~0.5GB for no-cs-rank formulas)."""
+    """Calendar-year windows snapped to local trading days (avoid holiday COS holes)."""
+    bar = ROOT / "data/a_share/lqtp_data/StockDailyBar"
+    by_year: dict[int, list[str]] = {}
+    if bar.is_dir():
+        for p in bar.glob("*.parquet"):
+            if p.name.endswith(".manifest.json"):
+                continue
+            try:
+                y = int(p.stem[:4])
+            except ValueError:
+                continue
+            by_year.setdefault(y, []).append(p.stem)
     out: list[tuple[str, str, str]] = []
     for y in range(2019, 2027):
-        end = f"{y}-12-31" if y < 2026 else "2026-06-30"
-        out.append((f"{y}", f"{y}-01-01", end))
+        days = sorted(by_year.get(y) or [])
+        if days:
+            start, end = days[0], days[-1]
+            if y == 2026:
+                end = min(end, "2026-06-30")
+            out.append((f"{y}", start, end))
+        else:
+            end = f"{y}-12-31" if y < 2026 else "2026-06-30"
+            out.append((f"{y}", f"{y}-01-02", end))
     return out
 
 
@@ -125,8 +151,10 @@ def materialize_dsl_by_halfyear(work: Path, dname: str, dsl: str, *, min_avail_g
     env.setdefault("FACTOR_ENGINE_MAX_WORKERS", "1")
     env.setdefault("FACTOR_ENGINE_DISABLE_CSE", "1")
     env.setdefault("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "1")
-    env.setdefault("FACTOR_ENGINE_RESERVE_GB", "10")
+    env.setdefault("FACTOR_ENGINE_RESERVE_GB", "8")
     env.setdefault("FACTOR_ENGINE_MAX_MEMORY_MB", "12000")
+    env.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    env.setdefault("FACTOR_ENGINE_OPERATOR_BACKEND", "polars")
     env.setdefault(
         "FACTOR_ENGINE_SPILL_DIR",
         str(work / "_fe_spill"),

@@ -23,11 +23,15 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+# Use local StockDailyBar mirror; avoid COS fail-closed on calendar holidays.
+os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+# auto → HybridBackend needs physical plan; pin polars for materialize fills.
+os.environ.setdefault("FACTOR_ENGINE_OPERATOR_BACKEND", "polars")
 # FactorEngine low-mem defaults for ~32G / no-swap chart fills.
 os.environ.setdefault("FACTOR_ENGINE_MAX_WORKERS", "1")
 os.environ.setdefault("FACTOR_ENGINE_DISABLE_CSE", "1")
 os.environ.setdefault("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "1")
-os.environ.setdefault("FACTOR_ENGINE_RESERVE_GB", "10")
+os.environ.setdefault("FACTOR_ENGINE_RESERVE_GB", "8")
 os.environ.setdefault("FACTOR_ENGINE_MAX_MEMORY_MB", "12000")
 os.environ.setdefault(
     "FACTOR_ENGINE_SPILL_DIR",
