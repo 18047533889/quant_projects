@@ -24,7 +24,6 @@ data_access.read.query_cache —— 查询结果缓存（LRU + TTL，默认关�
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -33,6 +32,11 @@ import threading
 import time
 from collections import OrderedDict
 from typing import Any, Callable, Mapping, Sequence
+
+from data_access.core.identity_encoder import (
+    hash_correctness_identity,
+    hash_security_identity,
+)
 
 logger = logging.getLogger("data_access.query_cache")
 
@@ -265,8 +269,7 @@ def _security_scope_digest(*, principal: Any, access_policy: Any) -> str:
             else None
         ),
     }
-    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+    return hash_security_identity(payload).digest
 
 
 def classification_cache_blocked(classification: str | None) -> bool:
@@ -305,10 +308,11 @@ def query_cache_key(
     不同）得到同一 key；缺 filters/limit 会造成错误命中，因此必须进 key。
     """
     from data_access.read.predicate_ast import canonical_filter_hash
+    from data_access.read.read_contract import canonicalize_params
 
     payload: dict[str, Any] = {
         "dataset": dataset,
-        "params": dict(params or {}),
+        "params": canonicalize_params(params),
         "time_range": tuple(map(str, time_range)) if time_range else None,
         # #P0-C1 严格区分 instrument_filter=[]（空股票池）与 None（全市场）：
         # None → null；[] → 空数组；["A","B"] → 排序后数组。旧写法
@@ -343,8 +347,8 @@ def query_cache_key(
         },
     }
     if extra:
-        payload["extra"] = _stable(extra)
-    return hashlib.sha256(_stable(payload).encode("utf-8")).hexdigest()[:24]
+        payload["extra"] = dict(extra)
+    return hash_correctness_identity(payload).digest
 
 
 _cache_enabled = None
