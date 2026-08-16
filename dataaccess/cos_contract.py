@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import hashlib
-import json
 import logging
 from typing import Any, Mapping
 
@@ -12,6 +10,7 @@ import numpy as np
 import pyarrow as pa
 
 from data_access.core.exceptions import ValidationError
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
 
 logger = logging.getLogger("data_access.cos_contract")
 
@@ -384,8 +383,11 @@ def market_scoped_instrument(market: str | None, instrument: str) -> str:
 
 
 def semantic_contract_fingerprint() -> str:
-    payload = {name: asdict(contract) for name, contract in sorted(COS_DATASET_CONTRACTS.items())}
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()[:16]
+    payload = {
+        name: asdict(contract)
+        for name, contract in sorted(COS_DATASET_CONTRACTS.items())
+    }
+    return CanonicalIdentityEncoder(strict=True).hash_identity(payload, bits=256)
 
 
 __all__ = ["COSDatasetContract", "COS_DATASET_CONTRACTS", "get_cos_contract", "require_cos_contract", "validate_panel_request", "resolve_event_clock", "validate_event_filters", "normalize_return_values", "semantic_contract_fingerprint"]

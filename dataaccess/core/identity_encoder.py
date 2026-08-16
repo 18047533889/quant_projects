@@ -15,7 +15,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, fields, is_dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -152,6 +152,10 @@ class CanonicalIdentityEncoder:
                 value = value.replace(tzinfo=timezone.utc)
             return {"__datetime__": value.isoformat()}
 
+        # Date - preserve type separately from an ISO-formatted string
+        if isinstance(value, date):
+            return {"__date__": value.isoformat()}
+
         # Enum - type + value
         if isinstance(value, Enum):
             return {
@@ -246,7 +250,7 @@ class CanonicalIdentityEncoder:
             raise ValidationError(
                 f"DA-P0-011: Cannot encode {type(value).__name__} in strict mode. "
                 f"Correctness identity禁止repr fallback. "
-                f"Supported types: None, bool, int, float, str, bytes, datetime, "
+                f"Supported types: None, bool, int, float, str, bytes, date, datetime, "
                 f"Enum, list, tuple, set, frozenset, dict, dataclass."
             )
 

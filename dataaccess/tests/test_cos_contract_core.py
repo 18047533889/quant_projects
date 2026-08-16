@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import date
+
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -22,6 +25,27 @@ def test_contract_surface_and_market_units():
     u = normalize_return_values(pa.array([0.01, -0.025]), "us_stock_daily")
     assert a.to_pylist() == pytest.approx([0.01, -0.025])
     assert u.to_pylist() == pytest.approx([0.01, -0.025])
+
+
+def test_semantic_contract_fingerprint_preserves_date_type(monkeypatch):
+    dataset, original = next(iter(COS_DATASET_CONTRACTS.items()))
+    date_contract = replace(
+        original,
+        allowed_filter_values=(("probe", (date(2024, 1, 2),)),),
+    )
+    string_contract = replace(
+        original,
+        allowed_filter_values=(("probe", ("2024-01-02",)),),
+    )
+
+    monkeypatch.setitem(COS_DATASET_CONTRACTS, dataset, date_contract)
+    date_digest = semantic_contract_fingerprint()
+    monkeypatch.setitem(COS_DATASET_CONTRACTS, dataset, string_contract)
+    string_digest = semantic_contract_fingerprint()
+
+    assert len(date_digest) == 64
+    assert len(string_digest) == 64
+    assert date_digest != string_digest
 
 
 def test_panel_contracts_fail_closed():
