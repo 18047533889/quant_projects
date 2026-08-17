@@ -2052,77 +2052,12 @@ class TSDecayLinearPolars(SeriesOperator):
 
 
 
-# canonical=ts_corr backend=polars selected=ts_corr source=time_series/ts_ops_polars.py
-
-# helper for ts_corr
-class TSCorrelation(SeriesOperator):
-    """滚动相关系数 (与m_cor相同)"""
-    metadata = OperatorMetadata(
-        name="ts_correlation", category="time_series",
-        description="滚动相关系数 (与m_cor相同)",
-        examples=["ts_correlation(close, volume, 20)"],
-        param_names=["x", "y", "window", "min_periods"], return_type="series",
-        tags=["time_series", "ts_", "correlation"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
-                                param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
-                                     param_role=ParamRole.SUPPORT_POLICY),
-        },
-    )
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20, min_periods: int = 2, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.common.strict_params import strict_int
-
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        w = strict_int(window, "window", minimum=2)
-        mp = strict_int(min_periods, "min_periods", minimum=2)
-        if mp > w:
-            from backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError("min_periods must be <= window")
-        merged = x
-        y_cols: list[str] = []
-        for col in numeric_cols:
-            if col in y.columns:
-                yname = f"__y_{col}"
-                y_cols.append(yname)
-                merged = merged.with_columns(y[col].alias(yname))
-        # R19-030: NaN -> null so the rolling corr skips missing pairs and can
-        # exist at a row whose CURRENT pair is missing (>= min_periods finite
-        # pairs required) — same current-row policy as the pandas/Numba paths.
-        exprs = [
-            pl.rolling_corr(
-                pl.col(col).fill_nan(None),
-                pl.col(f"__y_{col}").fill_nan(None),
-                window_size=w,
-                min_periods=mp,
-            ).alias(col)
-            for col in numeric_cols
-            if col in y.columns
-        ]
-        if not exprs:
-            return x
-        return merged.with_columns(exprs).drop(y_cols)
-
-@register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
-class TSCorrPolars(TSCorrelation):
-    """Polars 滚动相关系数。"""
-
-    metadata = OperatorMetadata(
-        name="ts_corr", category="time_series",
-        description="滚动相关系数 (ts_correlation的别名)",
-        examples=["ts_corr(close, volume, 20)"],
-        param_names=["x", "y", "window", "min_periods"], return_type="series",
-        tags=["time_series", "ts_", "corr"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
-                                param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
-                                     param_role=ParamRole.SUPPORT_POLICY),
-        },
-    )
+# Legacy Polars ts_corr registration intentionally removed (R2-P0-018).
+# The repaired centered finite-pair implementation in polars_ts_rolling.py is
+# the sole normal-bootstrap Polars authority; the pandas TSCorr above remains
+# the reference/shared surface.
 
 # aliases: TS_CORR, correlation, m_cor, ts_correlation
-
 
 
 # Legacy Polars ts_cov registration intentionally removed (R2-P0-019).
