@@ -1,0 +1,89 @@
+task_id: R2-P0-037-verified-fail-if-changed
+generation_timestamp: 2026-08-17T09:46:05+08:00
+state: REGRESSION_TESTED
+base_sha: 4e49446e3af189ee34f4d82cd38a5d412a5b0d28
+implementation_sha: 2520532b755c6c80096877d137e45f62c5702030
+commit_sha: 2520532b755c6c80096877d137e45f62c5702030
+owned_files:
+  - dataaccess/read/formats.py
+  - dataaccess/read/scan_handle.py
+  - dataaccess/runtime/prepared_read.py
+  - dataaccess/runtime/read_pipeline.py
+  - dataaccess/snapshot/verifier.py
+  - dataaccess/store.py
+  - dataaccess/tests/unit/test_final_closure_round12.py
+modified_files:
+  - dataaccess/read/formats.py
+  - dataaccess/read/scan_handle.py
+  - dataaccess/runtime/prepared_read.py
+  - dataaccess/runtime/read_pipeline.py
+  - dataaccess/snapshot/verifier.py
+  - dataaccess/store.py
+  - dataaccess/tests/unit/test_final_closure_round12.py
+canonicals_touched: []
+backends_touched:
+  - duckdb
+  - polars
+  - pyarrow
+  - streaming
+changes:
+  - explicit latest, best_effort_fail_if_changed, verified_fail_if_changed, legacy fail_if_changed alias, and pin policies
+  - verified_fail_if_changed requires strict publisher SourceManifest authority and fails closed when stability cannot be proven
+  - publisher identity and local manifest identity dimensions are compared independently
+  - authoritative empty publisher object sets retain their canonical nonempty digest
+  - snapshot policy and identity propagate through planning, terminal preparation, verification, joins, composed reads, aggregations, and supported backends
+  - terminal execution freezes and scans the publisher exact object set
+  - explicit verified policy forces strict pre-execution and post-execution verification even when the ambient verifier is non-strict
+  - strict remote verification rejects a missing HEAD provider, failed HEAD, or incomplete identity metadata
+  - PyArrow terminal execution enforces pin identity and reconstructs authoritative-empty declared schemas including timestamp_ms_UTC
+  - local physical identity uses exact path, size, and mtime_ns or a verified checksum
+verification:
+  closure_and_adjacent_snapshot_tests:
+    status: PASS
+    passed: 148
+    failed: 0
+    command: PYTHONPATH=/home/shw/quant_projects OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q dataaccess/tests/unit/test_final_closure_round12.py dataaccess/tests/unit/test_snapshot_resolver.py dataaccess/tests/unit/test_snapshot_verifier.py dataaccess/tests/unit/test_snapshot_source_manifest.py
+  closure_file_independent_review_rerun:
+    status: PASS
+    passed: 58
+    failed: 0
+    command: PYTHONPATH=/home/shw/quant_projects OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q dataaccess/tests/unit/test_final_closure_round12.py
+  runtime_regression_subset:
+    status: FAIL_WITH_UNRELATED_WORKTREE_FAILURES
+    passed: 69
+    failed: 2
+    failures:
+      - test_tr26_clean004_no_ignored_source observed 241 unrelated ignored entries, predominantly .claude/worktrees plus factor_engine/runtime/multibackend/concurrent_token_manager.py
+      - test_build_sha_in_version_and_snapshot observed data_access.__build_sha__ is None
+    counted_as_passing_evidence: false
+  syntax_compile:
+    status: PASS
+    files: 7
+  import_smoke:
+    status: PASS
+    result: DATAACCESS_IMPORT_SMOKE_OK
+  diff_check:
+    status: PASS
+  independent_review:
+    status: CLEAN
+    finding_count: 0
+    statement: No concrete correctness defect remains in the original R2-P0-037 scope after the missing remote HEAD provider finding was fixed.
+not_run:
+  - full repository compile
+  - full DataAccess regression
+  - full FactorEngine regression
+  - registry bootstrap
+  - duplicate-authority checks
+  - backend parity
+  - live remote COS/S3 publisher integration
+  - concurrent terminal stress
+  - real dataset validation
+  - root CI
+  - remote CI
+  - production certification
+  - R2-P0-039 PIT poison suite
+known_limitations:
+  - remote behavior is covered with injected synthetic HEAD providers rather than live COS/S3 integration
+  - two unrelated runtime regression failures are retained and are not counted as passing evidence
+  - broad gates are unrun, so CLOSED_VERIFIED and production certification are not claimed
+remote_evidence_used: false

@@ -3,7 +3,7 @@
 **Updated:** 2026-08-17
 **Mode:** ACTIVE, local-only
 **Taskbook:** `FactorEngine_DataAccess_LoopEngineering_8H_Enterprise_Master_Taskbook_20260814_R2.md`
-**Current HEAD:** `7795c41b670998447e26631a83198dabfcb3320d` (credential-generation material identity fix; status/evidence records are working-tree deltas)
+**Current implementation HEAD:** `2520532b755c6c80096877d137e45f62c5702030` (reviewed R2-P0-037 verified snapshot policy; evidence/status records are bookkeeping deltas)
 
 ## Non-Negotiable Constraints
 
@@ -29,8 +29,10 @@
 6. `OPT2-P0-001` production batch authority is implemented at `105e1fd83a5da716f76e7219e8cbf7b2b3770a04`: admission consumes `PhysicalRegionPlan` and executes only a single production-ready, zero-transfer region on one fixed concrete backend.
 7. Planner-focused verification passed: 16 tests, syntax compilation, import smoke, scoped diff checks, and independent review with zero findings; evidence is at `evidence/r2/OPT2-P0-001-physical-batch-authority.yaml`.
 8. `R2-P0-036` typed remote failure propagation is implemented at `e6f8a6f2e834deb6a038f8b3c03177c58f560c1d`: Store surfaces the same-operation `RemoteMetadataError`, and `SnapshotVerifier` preserves typed cloud classification, cause, and retry metadata.
-9. Remote-snapshot verification passed: 34 focused tests, four-file syntax compilation, three-module import smoke, scoped diff check, and independent review after five findings were fixed; evidence is at `evidence/r2/R2-P0-036-remote-snapshot-typed-failures.yaml`.
-10. Credential-generation cache namespace binds provider generation and structured resolved material at `7795c41b670998447e26631a83198dabfcb3320d`; stale-generation rotation and delimiter-collision oracles pass; evidence is at `evidence/r2/R2-P0-036-credential-generation-material-identity.yaml`.
+9. Remote-snapshot verification passed: 34 focused tests, four-file syntax compilation, three-module import smoke, scoped diff check, and independent review after five findings were fixed; credential-generation cache identity is committed at `7795c41b`; both manifests are under `evidence/r2/`.
+10. `R2-P0-037` verified snapshot policy is implemented and reviewed at `2520532b755c6c80096877d137e45f62c5702030`: strict publisher-manifest authority, independent publisher/local identity checks, exact-object terminal execution, forced strict pre/post verification, PyArrow pin enforcement, and typed authoritative-empty schemas.
+11. R2-P0-037 verification passed: 148 closure/adjacent snapshot tests, reviewer rerun of all 58 closure tests, seven-file syntax compilation, DataAccess import smoke, scoped diff check, and CLEAN independent review with zero residual findings.
+12. Machine-readable R2-P0-037 evidence is at `evidence/r2/R2-P0-037-verified-fail-if-changed.yaml`; broad gates and live COS/S3 integration remain `NOT_RUN`.
 
 ### Completed Narrow Boundary
 
@@ -40,13 +42,13 @@
 
 ### Active Work
 
-- `R2-P0-036` typed remote failure and credential-generation residuals are regression-tested at `e6f8a6f2` and `7795c41b`; evidence/status bookkeeping is being finalized in a narrow local commit.
-- Next dispatch is `R2-P0-037` fail-if-changed verification and PIT correctness/evidence.
+- `R2-P0-037` implementation and independent review are complete at `2520532b`; evidence/status bookkeeping is being finalized in a separate local commit.
+- `R2-P0-039` remains `NOT_RUN` and must not begin before R2-P0-037 bookkeeping and final local integration are complete.
 - Full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI remain `NOT_RUN`.
 
 ## Next Priority Queue
 
-1. Continue with `R2-P0-037` fail-if-changed verification, then PIT correctness/evidence.
+1. Finalize the separate R2-P0-037 bookkeeping commit and verify final local integration; keep `R2-P0-039` `NOT_RUN`.
 2. Fix and certify remaining selectable Polars mathematics.
 3. Continue Q PlanNode ABI, lowering, null semantics, fan-in, workspace, and resident-handle evidence.
 4. Repair `ridge` dual-input path, positional alpha, and exception-to-all-NaN behavior.

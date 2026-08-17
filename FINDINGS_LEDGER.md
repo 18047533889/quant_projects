@@ -1,6 +1,6 @@
 # R2 Findings Ledger
 
-**Local HEAD reviewed:** `7795c41b670998447e26631a83198dabfcb3320d` (credential-generation material identity fix) plus identified working-tree evidence/status deltas
+**Local implementation reviewed:** `2520532b755c6c80096877d137e45f62c5702030` (R2-P0-037 verified snapshot policy) plus identified bookkeeping deltas
 **Updated:** 2026-08-17
 **Remote/GitHub evidence:** not used
 
@@ -50,6 +50,18 @@
 - Manifest: `evidence/r2/R2-P0-036-credential-generation-material-identity.yaml`.
 - Not run: full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI.
 - `CLOSED_VERIFIED` is not claimed because the broad gates remain unrun.
+
+### R2-P0-037 — verified fail-if-changed snapshot authority
+
+- Status: `REGRESSION_TESTED` at commit `2520532b755c6c80096877d137e45f62c5702030`.
+- Explicit `verified_fail_if_changed` requires publisher `SourceManifest` authority, preserves publisher and local identity dimensions independently, and freezes the exact object set through terminal execution.
+- Explicit verified policy forces strict pre/post verification even with a non-strict ambient verifier; missing or failed remote HEAD providers and incomplete identity metadata fail closed.
+- PyArrow pin enforcement and authoritative-empty declared schemas, including `timestamp[ms, tz=UTC]`, are covered by real terminal-path oracles.
+- Verification: 148 serial closure/adjacent snapshot tests passed; independent reviewer reran all 58 closure tests and returned CLEAN with zero residual findings; seven files syntax-compiled; DataAccess import smoke and scoped diff check passed.
+- Runtime regression subset: 69 passed, 2 failed from unrelated dirty-tree/build-metadata conditions; neither failure is counted as passing evidence.
+- Manifest: `evidence/r2/R2-P0-037-verified-fail-if-changed.yaml`.
+- Not run: full repository compile, full DataAccess/FactorEngine regression, registry/duplicate-authority gates, backend parity, live COS/S3 integration, concurrent terminal stress, PIT poison, root/remote CI, and production certification.
+- `CLOSED_VERIFIED` is not claimed because broad gates and live remote integration remain unrun; `R2-P0-039` remains `NOT_RUN`.
 
 ## Confirmed P0
 
