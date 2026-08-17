@@ -1,0 +1,54 @@
+task_id: R2-POL-SELECTED-STATISTICS-AUTHORITY
+generation_timestamp: 2026-08-17T18:54:50+08:00
+state: REGRESSION_TESTED
+base_sha: 54618c90b4f369a262037c1532a64d7432a8577e
+implementation_sha: d84f5f8abe330d246bbc4b768cbdcb2f0df1e6b2
+owned_files:
+  - factor_engine/tests/backend_parity/test_active_polars_statistics_authority.py
+modified_files:
+  - factor_engine/tests/backend_parity/test_active_polars_statistics_authority.py
+canonicals_touched:
+  - ts_moment
+  - ts_kurt
+  - ts_skew
+  - ts_cov_if
+backends_touched:
+  - polars
+production_source_changed: false
+verification:
+  focused_selected_authority_suite:
+    status: PASS
+    passed: 3
+    failed: 0
+    warnings: 2
+    duration_seconds: 71.68
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONPATH=/home/shw/quant_projects/factor_engine pytest -q factor_engine/tests/backend_parity/test_active_polars_statistics_authority.py
+  syntax_compile:
+    status: PASS
+  import_bootstrap_smoke:
+    status: PASS
+    exact_class_identity_checked: true
+  diff_check:
+    status: PASS
+  independent_review:
+    status: CLEAN
+    finding_count: 0
+    residual_coverage_debt:
+      - dynamically reused _PolarsOp class name is not globally unique, but lookup is canonical-specific and behavioral
+      - moment and conditional-covariance fixtures intentionally cover narrow positive contracts
+warnings:
+  - missing explicit PhysicalImplementationSpec; production classification remains UNSUPPORTED
+not_run:
+  - full repository compile
+  - broad backend parity
+  - PIT poison suite
+  - Q runtime and residency gates
+  - live remote snapshot integration
+  - root CI/local root gates
+known_limitations:
+  - selected-path numerical parity does not certify native-expression execution, absence of pandas delegation, or production eligibility
+  - suspicious duplicate formulas were not proven selected and were not edited
+remote_evidence_used: false
+evidence_generated:
+  - /tmp/r2_polars_selected_statistics_authority_report.md
+  - /tmp/r2_polars_selected_statistics_authority_manifest.yaml
