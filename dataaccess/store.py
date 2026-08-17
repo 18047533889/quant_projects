@@ -54,6 +54,7 @@ from data_access.core.exceptions import (
     SchemaContractError,
     ValidationError,
 )
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
 from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
 from data_access._build_meta import build_sha as _build_sha  # R29-P0 #207：lineage build 身份
 __build_sha__ = _build_sha()
@@ -497,7 +498,7 @@ class DataAccessStore:
         return self._calendars_locked
 
     def calendar_snapshot_id(self) -> str:
-        """R27-I：当前注入日历的内容指纹（market + timezone + trading_days 范围）。
+        """R27-I：当前注入日历完整内容的 canonical SHA-256 指纹。
 
         进查询缓存 key 与 ExecutionEnvironmentIdentity——日历变更生成新 runtime
         generation，旧缓存不可命中。首次读后 calendar 冻结，快照只算一次。
@@ -507,17 +508,47 @@ class DataAccessStore:
         return self._calendar_snapshot
 
     def _compute_calendar_snapshot(self) -> str:
-        import hashlib
-
-        parts: list[str] = []
+        calendars = []
         for market in sorted(self._calendars):
-            cal = self._calendars[market]
-            days = sorted(str(d) for d in getattr(cal, "trading_days", ()) or ())
-            tz = str(getattr(cal, "timezone", "") or "")
-            head = days[0] if days else "-"
-            tail = days[-1] if days else "-"
-            parts.append(f"{market}:{tz}:{len(days)}:{head}:{tail}")
-        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+            calendar = self._calendars[market]
+            session = getattr(calendar, "session", None)
+            segments = [
+                {
+                    "name": segment.name,
+                    "start": segment.start.isoformat(),
+                    "end": segment.end.isoformat(),
+                    "offset_min": segment.offset_min,
+                }
+                for segment in getattr(session, "segments", ()) or ()
+            ]
+            calendars.append(
+                {
+                    "market": market,
+                    "calendar_market": getattr(calendar, "market", market),
+                    "timezone": getattr(calendar, "timezone", "") or "",
+                    "source": getattr(calendar, "source", "") or "",
+                    "trading_days": sorted(
+                        getattr(calendar, "trading_days", ()) or ()
+                    ),
+                    "session": None
+                    if session is None
+                    else {
+                        "market": session.market,
+                        "timezone": session.timezone,
+                        "segments": segments,
+                        "early_close_dates": sorted(session.early_close_dates),
+                        "early_close_time": (
+                            session.early_close_time.isoformat()
+                            if session.early_close_time is not None
+                            else None
+                        ),
+                    },
+                }
+            )
+        return CanonicalIdentityEncoder(strict=True).hash_identity(
+            calendars,
+            bits=256,
+        )
 
     def get_calendar(self, market: str | None) -> Any | None:
         """取某市场的交易日历：显式注入优先，否则从 registry 日历数据集惰性加载。"""

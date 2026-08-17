@@ -434,6 +434,84 @@ def test_r27_i_calendar_frozen_after_first_read(tmp_path):
     assert store.calendar_snapshot_id()
 
 
+def test_r27_i_calendar_snapshot_binds_middle_trading_days(tmp_path):
+    """R27-I：相同首尾/数量但不同中间交易日必须属于不同 PIT 世界。"""
+    from data_access.read.session_calendar import MarketCalendar
+
+    store_a, _ = _static_store(tmp_path / "a")
+    store_b, _ = _static_store(tmp_path / "b")
+    store_a.set_calendar(
+        "us",
+        MarketCalendar(
+            "us",
+            trading_days=[
+                dt.date(2024, 1, 2),
+                dt.date(2024, 1, 3),
+                dt.date(2024, 1, 5),
+            ],
+            timezone="America/New_York",
+        ),
+    )
+    store_b.set_calendar(
+        "us",
+        MarketCalendar(
+            "us",
+            trading_days=[
+                dt.date(2024, 1, 2),
+                dt.date(2024, 1, 4),
+                dt.date(2024, 1, 5),
+            ],
+            timezone="America/New_York",
+        ),
+    )
+
+    snapshot_a = store_a.calendar_snapshot_id()
+    snapshot_b = store_b.calendar_snapshot_id()
+    assert snapshot_a != snapshot_b
+    assert len(snapshot_a) == len(snapshot_b) == 64
+
+
+def test_r27_i_calendar_snapshot_binds_session_semantics(tmp_path):
+    """R27-I：session 时段或 early-close 变化必须生成新的 PIT identity。"""
+    from data_access.read.session_calendar import (
+        MarketCalendar,
+        MarketSession,
+        SessionSegment,
+    )
+
+    days = [dt.date(2024, 7, 2), dt.date(2024, 7, 3)]
+    regular = MarketSession(
+        market="us",
+        timezone="America/New_York",
+        segments=(
+            SessionSegment("continuous", dt.time(9, 30), dt.time(16), 0),
+        ),
+    )
+    early_close = MarketSession(
+        market="us",
+        timezone="America/New_York",
+        segments=regular.segments,
+        early_close_dates=frozenset({dt.date(2024, 7, 3)}),
+        early_close_time=dt.time(13),
+    )
+    store_a, _ = _static_store(tmp_path / "a")
+    store_b, _ = _static_store(tmp_path / "b")
+    store_a.set_calendar(
+        "us",
+        MarketCalendar(
+            "us", trading_days=days, source="explicit", session=regular
+        ),
+    )
+    store_b.set_calendar(
+        "us",
+        MarketCalendar(
+            "us", trading_days=days, source="explicit", session=early_close
+        ),
+    )
+
+    assert store_a.calendar_snapshot_id() != store_b.calendar_snapshot_id()
+
+
 # ---------------------------------------------------------------------------
 # J —— scan_polars strict 旁路
 # ---------------------------------------------------------------------------
