@@ -19,6 +19,7 @@ import time
 import pyarrow as pa
 import pytest
 
+from data_access.core.exceptions import ValidationError
 from data_access.r30.session import (
     CostModel,
     R30ReadSession,
@@ -39,6 +40,15 @@ from data_access.r30.execution_lease import DEFAULT_ENVELOPE, ExecutionLease
 class _FakeSnapshot:
     snapshot_id = "snap-1"
     content_digest = "digest-1"
+
+
+class _UnsupportedSnapshot:
+    pass
+
+
+class _TypedSnapshot:
+    def __init__(self, snapshot_id):
+        self.snapshot_id = snapshot_id
 
 
 class _FakePrepared:
@@ -180,7 +190,7 @@ def test_source_block_key_stable_and_scoped():
     k1 = source_block_key(**base)
     k2 = source_block_key(**base)
     assert k1 == k2
-    assert isinstance(k1, str) and len(k1) == 16
+    assert isinstance(k1, str) and len(k1) == 64
     # 不同 security_digest → 不同 key
     k3 = source_block_key(**{**base, "security_digest": "sec-B"})
     assert k1 != k3
@@ -192,7 +202,44 @@ def test_source_block_key_stable_and_scoped():
     assert k1 == k5
 
 
-# ---- CostModel ----
+def test_source_block_key_uses_strict_canonical_identity_and_fails_closed():
+    base = dict(
+        dataset="ds",
+        snapshot="snap-1",
+        time_range=("2024-01-01", "2024-01-02"),
+        universe=["A", "B"],
+        canonical_fields=["open", "close"],
+        filters={"a": 1},
+        pit_contract="pit-c",
+        security_digest="sec-A",
+        price_basis="close",
+    )
+    assert source_block_key(**base) == source_block_key(**base)
+    assert source_block_key(**base) != source_block_key(**{**base, "snapshot": "snap-2"})
+    # CanonicalIdentityEncoder currently preserves sequence order but does not tag
+    # list versus tuple; this test follows that authority's actual semantics.
+    assert source_block_key(**base) == source_block_key(
+        **{**base, "universe": ("A", "B")}
+    )
+    assert source_block_key(**base) != source_block_key(
+        **{**base, "universe": ["B", "A"]}
+    )
+    assert source_block_key(**base) == source_block_key(
+        **{**base, "snapshot": _TypedSnapshot("snap-1")}
+    )
+    assert source_block_key(**base) != source_block_key(
+        **{**base, "snapshot": _TypedSnapshot(1)}
+    )
+    assert source_block_key(**{**base, "snapshot": _TypedSnapshot(1)}) != source_block_key(
+        **{**base, "snapshot": _TypedSnapshot("1")}
+    )
+    assert source_block_key(**base) != source_block_key(
+        **{**base, "filters": {"a": True}}
+    )
+    with pytest.raises(ValidationError, match="repr fallback"):
+        source_block_key(**{**base, "snapshot": _UnsupportedSnapshot()})
+
+
 
 def test_cost_model_decisions():
     cm = CostModel()

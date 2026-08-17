@@ -23,6 +23,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
 from data_access.r30._shared import security_scope, stable_digest
 from data_access.security.execution_context import (
     _execution_ctx_var,
@@ -49,42 +50,23 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-def _canonical(value: Any) -> str:
-    """把任意值折叠成确定性字符串。
-
-    规避 ``_shared.stable_digest`` 的 tuple/list 分支运算符优先级 bug
-    （``"]".encode()`` 先于 ``+`` 求值 → bytes 拼接 TypeError）：所有嵌套结构
-    先 canonically 字符串化，再作为**标量**传入 ``stable_digest``。
-    """
-    if value is None:
-        return "null"
-    if isinstance(value, Mapping):
-        inner = ",".join(
-            f"{_canonical(k)}={_canonical(v)}"
-            for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))
-        )
-        return "{" + inner + "}"
-    if isinstance(value, (list, tuple, set, frozenset)):
-        inner = ",".join(
-            _canonical(v) for v in sorted(value, key=lambda v: _canonical(v))
-        )
-        return "[" + inner + "]"
-    if isinstance(value, bytes):
-        return "b:" + value.hex()
-    return repr(value)
+_IDENTITY_ENCODER = CanonicalIdentityEncoder(strict=True)
 
 
-def _snapshot_identity(snapshot: Any) -> str | None:
-    """从 snapshot 对象/字符串提取稳定身份（snapshot_id → content_digest → repr）。"""
-    if snapshot is None:
-        return None
-    if isinstance(snapshot, str):
+def _identity_digest(value: Any) -> str:
+    """Encode correctness identity through the strict canonical authority."""
+    return stable_digest(_IDENTITY_ENCODER.encode(value))
+
+
+def _snapshot_identity(snapshot: Any) -> Any:
+    """Extract an explicit snapshot identity; unsupported values fail closed later."""
+    if snapshot is None or isinstance(snapshot, str):
         return snapshot
     for attr in ("snapshot_id", "content_digest", "identity"):
-        v = getattr(snapshot, attr, None)
-        if v is not None:
-            return str(v)
-    return stable_digest(repr(snapshot))
+        value = getattr(snapshot, attr, None)
+        if value is not None:
+            return value
+    return snapshot
 
 
 def _materialize_to_arrow(result: Any):
@@ -304,17 +286,18 @@ def source_block_key(
     不同 principal/policy 的 security_digest 不同 → 不同 key（绝不跨 scope 共享）。
     snapshot 身份由 ``_snapshot_identity`` 提取（对象优先 snapshot_id）。
     """
-    return stable_digest(
-        _canonical(dataset),
-        _canonical(_snapshot_identity(snapshot)),
-        _canonical(time_range),
-        _canonical(universe),
-        _canonical(canonical_fields),
-        _canonical(filters),
-        _canonical(pit_contract),
-        _canonical(security_digest),
-        _canonical(price_basis),
-    )
+    identity = {
+        "dataset": dataset,
+        "snapshot": _snapshot_identity(snapshot),
+        "time_range": time_range,
+        "universe": universe,
+        "canonical_fields": canonical_fields,
+        "filters": filters,
+        "pit_contract": pit_contract,
+        "security_digest": security_digest,
+        "price_basis": price_basis,
+    }
+    return _identity_digest(identity)
 
 
 class CostModel:
@@ -492,11 +475,7 @@ class R30ReadSession:
         key 含 security_scope —— 不同 principal/policy 绝不共享 PreparedRead。
         """
         scope = security_digest or self._scope_digest
-        params_fp = (
-            stable_digest(_canonical(params))
-            if params is not None
-            else stable_digest("null")
-        )
+        params_fp = _identity_digest(params)
         key = (
             dataset,
             params_fp,
