@@ -200,10 +200,25 @@ class PhysicalInventoryRecord:
     admission: PhysicalInventoryAdmission
 
 
-def _declared_physical_spec(operator: Any) -> PhysicalImplementationSpec | None:
-    """Read only an explicit declaration; never infer from implementation code."""
+def _declared_physical_spec(
+    operator: Any,
+    backend: str,
+) -> PhysicalImplementationSpec | None:
+    """Read an explicit backend-specific declaration; never infer from code."""
     if operator is None:
         return None
+    for attribute in ("_physical_specs", "physical_specs"):
+        specs = getattr(operator, attribute, None)
+        if isinstance(specs, dict):
+            spec = specs.get(backend)
+            return spec if isinstance(spec, PhysicalImplementationSpec) else None
+    factory = getattr(operator, "physical_spec_for_backend", None)
+    if callable(factory):
+        try:
+            spec = factory(backend)
+        except Exception:
+            return None
+        return spec if isinstance(spec, PhysicalImplementationSpec) else None
     spec = getattr(operator, "_physical_spec", None)
     if isinstance(spec, PhysicalImplementationSpec):
         return spec
@@ -260,9 +275,7 @@ def enumerate_physical_inventory(
         registry = OperatorRegistry
     surface_query = production_surface or _default_production_surface
     policy_query = policy_admission or _default_policy_admission
-    evidence_query = evidence_admission or (
-        lambda canonical, backend: backend_status(canonical, backend) == "production_safe"
-    )
+    evidence_query = evidence_admission
 
     rows: list[PhysicalInventoryRecord] = []
     for canonical in sorted(set(registry.list_canonical())):
@@ -280,11 +293,17 @@ def enumerate_physical_inventory(
                 ("duckdb_sql", "clickhouse_sql") if slot == "sql" else (slot,)
             )
             try:
-                operator = registry.get(canonical, slot)
+                operator = registry.get(canonical, slot, mode="any")
+            except TypeError:
+                # Narrow compatibility for injected/legacy registries without mode.
+                try:
+                    operator = registry.get(canonical, slot)
+                except Exception:
+                    operator = None
             except Exception:
                 operator = None
             for backend in physical_backends:
-                spec = _declared_physical_spec(operator)
+                spec = _declared_physical_spec(operator, backend)
                 reasons: list[str] = []
                 if operator is None:
                     reasons.append("selectable registry slot has no implementation")
@@ -292,12 +311,6 @@ def enumerate_physical_inventory(
                     reasons.append("not on DirectUse production surface")
                 if not policy_ok:
                     reasons.append("operator spec/policy denies production")
-                try:
-                    evidence_ok = bool(evidence_query(canonical, backend))
-                except Exception:
-                    evidence_ok = False
-                if not evidence_ok:
-                    reasons.append("physical backend lacks production evidence")
                 if spec is None:
                     spec_complete = False
                     implementation_id = None
@@ -313,6 +326,20 @@ def enumerate_physical_inventory(
                     spec_complete = not errors
                     implementation_id = spec.physical_implementation_id if spec_complete else None
                     reasons.extend(errors)
+                # Production evidence must name the exact immutable physical ID.
+                # Legacy canonical/backend evidence remains descriptive elsewhere
+                # but cannot admit an inventory row.
+                if evidence_query is None or implementation_id is None:
+                    evidence_ok = False
+                else:
+                    try:
+                        evidence_ok = bool(
+                            evidence_query(canonical, backend, implementation_id)
+                        )
+                    except Exception:
+                        evidence_ok = False
+                if not evidence_ok:
+                    reasons.append("physical ID lacks matching production evidence")
                 admitted = bool(
                     operator is not None
                     and on_surface

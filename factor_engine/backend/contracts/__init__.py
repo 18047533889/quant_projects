@@ -192,13 +192,7 @@ class PhysicalImplementationSpec:
         Returns False if execution_kind is UNSUPPORTED or any delegate type,
         or if critical capabilities are missing.
         """
-        if not self._nonblank(self.canonical):
-            return False
-        if not self._nonblank(self.backend):
-            return False
-        if self.backend not in {member.value for member in BackendKind}:
-            return False
-        if not isinstance(self.execution_kind, ExecutionKind):
+        if self.validation_errors():
             return False
         if self.execution_kind == ExecutionKind.UNSUPPORTED:
             return False
