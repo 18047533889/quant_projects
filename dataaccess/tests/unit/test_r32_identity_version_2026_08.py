@@ -17,6 +17,10 @@ from data_access.r30._shared import (
     stable_digest_full,
     version_gate,
 )
+from data_access.r30.versioning import (
+    assert_version_compat,
+    data_access_version_manifest,
+)
 
 
 def test_r32_p0_107_list_preserves_order():
@@ -104,6 +108,15 @@ def test_da2_p0_002_identity_format_has_explicit_migration_gate():
     assert stable_digest(*parts) != unversioned
     assert version_gate()["identity_schema"] == "2"
     assert version_gate()["storage_format"] == "2"
+
+
+def test_da2_p0_002_identity_schema_is_publicly_enforced():
+    """The public manifest and compatibility gate enforce identity schema v2."""
+    manifest = data_access_version_manifest()
+
+    assert manifest["identity_schema"] == "2"
+    assert assert_version_compat({"identity_schema": "2"}) == []
+    assert assert_version_compat({"identity_schema": "1"}) == ["identity_schema"]
 
 
 @pytest.mark.parametrize("helper", [stable_digest, stable_digest_full])
