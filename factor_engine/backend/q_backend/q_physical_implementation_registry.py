@@ -17,6 +17,7 @@ from packaging.version import InvalidVersion, Version
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_MAX_PARITY_TOLERANCE = 1e-8
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,8 @@ def _stage_evidence_errors(
             errors.append(f"{label}: result.max_abs_error must be finite and nonnegative")
         if not _finite_nonnegative(tolerance):
             errors.append(f"{label}: result.tolerance must be finite and nonnegative")
+        elif float(tolerance) > _MAX_PARITY_TOLERANCE:
+            errors.append(f"{label}: result.tolerance exceeds policy maximum")
         if (
             _finite_nonnegative(max_abs_error)
             and _finite_nonnegative(tolerance)

@@ -469,13 +469,13 @@ class TestQPhysicalImplementationRegistry:
             (
                 "parity",
                 {
-                    "type": "q_parity_result/v1",
+                    "reference_backend": "pandas",
                     "compared_cases": 3,
                     "mismatch_count": 0,
-                    "max_abs_error": 0.1,
-                    "tolerance": 0.01,
+                    "max_abs_error": 0.0,
+                    "tolerance": 1.0,
                 },
-                "parity_evidence: result.max_abs_error exceeds tolerance",
+                "parity_evidence: result.tolerance exceeds policy maximum",
             ),
             (
                 "null_semantics",
