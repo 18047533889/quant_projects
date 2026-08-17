@@ -27,7 +27,7 @@ No task closes from a report, hard-coded constant, or documentation claim.
 | QE2-P0-001 | P0 | LOCAL_TESTED | verify orientation plus singleton shape and all callers |
 | MODEL2-P0-006 | P0 | PARTIALLY_FIXED | runtime enforcement tests pass; authority routing still contradicted by imports |
 | ABI2-P0-001 | P0 | REJECTED | one test has mathematically wrong 15.5% expectation; fix test oracle, not production formula |
-| Q2-P0-001..005 | P0 | REJECTED | Q gates contain hard-coded/unconditional PASS and disconnected empty registry |
+| Q2-P0-001..005 | P0 | INDEPENDENT_REVIEW | exact-HEAD typed compile/runtime/parity artifact admission implemented locally; 72 focused evidence/compatibility/executor tests pass; current authority remains honestly failed at 110 declarations / 80 lowerings / 30 gaps / zero production-safe operators; legacy Q suite remains 18 passed / 12 stale-or-unsafe failures; broad gates `NOT_RUN` |
 
 ## Reproduced Queue
 

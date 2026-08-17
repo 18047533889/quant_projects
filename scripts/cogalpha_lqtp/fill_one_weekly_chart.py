@@ -151,7 +151,7 @@ def materialize_dsl_by_halfyear(work: Path, dname: str, dsl: str, *, min_avail_g
     env.setdefault("FACTOR_ENGINE_MAX_WORKERS", "1")
     env.setdefault("FACTOR_ENGINE_DISABLE_CSE", "1")
     env.setdefault("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "1")
-    env.setdefault("FACTOR_ENGINE_RESERVE_GB", "8")
+    env.setdefault("FACTOR_ENGINE_RESERVE_GB", "2")
     env.setdefault("FACTOR_ENGINE_MAX_MEMORY_MB", "12000")
     env.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
     env.setdefault("FACTOR_ENGINE_OPERATOR_BACKEND", "polars")
@@ -182,8 +182,8 @@ def materialize_dsl_by_halfyear(work: Path, dname: str, dsl: str, *, min_avail_g
             str(CHUNK_SCRIPT),
             "--name",
             dname,
-            "--dsl",
-            dsl,
+            # Must be --dsl=EXPR so leading '-' in negated formulas is not parsed as a flag.
+            f"--dsl={dsl}",
             "--start",
             start,
             "--end",
@@ -208,8 +208,8 @@ def materialize_dsl_by_halfyear(work: Path, dname: str, dsl: str, *, min_avail_g
         assert proc.stdout is not None
         for line in proc.stdout:
             print(f"    {line.rstrip()}", flush=True)
-            # soft guard: if free RAM tanked, stop this factor (leave parts for resume)
-            if read_mem_available_gb() < 10.0:
+            # soft guard: only trip near OOM (user OK with lower avail)
+            if read_mem_available_gb() < 2.5:
                 print(f"  ABORT_MEM_GUARD avail={read_mem_available_gb():.1f}G kill child", flush=True)
                 proc.kill()
                 proc.wait(timeout=30)
@@ -229,7 +229,7 @@ def materialize_dsl_by_halfyear(work: Path, dname: str, dsl: str, *, min_avail_g
     import duckdb
 
     lake = lake_dir / "values.parquet"
-    wait_for_memory(required_gb=12.0, reserve_gb=0.0, timeout_sec=600)
+    wait_for_memory(required_gb=max(4.0, min_avail_gb), reserve_gb=0.0, timeout_sec=600)
     glob = (parts_dir / "*.parquet").as_posix()
     con = duckdb.connect()
     try:

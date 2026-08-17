@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<title>本周因子释义 · 53</title>
+<style>
+body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;line-height:1.55;color:#111}
+h1{font-size:1.4rem} h2{font-size:1.05rem;margin:0 0 6px}
+.f{border-top:1px solid #e5e7eb;padding:18px 0}
+.meta{color:#6b7280;font-size:.9rem;margin:0 0 8px}
+.dir{background:#f8fafc;padding:10px 12px;border-radius:6px}
+code{font-size:.92em}
+ol{margin:8px 0 8px 1.2em}
+</style></head><body>
+<h1>本周新挖因子 · 怎么算 / 啥意思（53）</h1>
+<p>每条详情页「因子说明」已同步；也可在索引点进单因子页查看公式与图表。</p>
+<article class="f">
+  <h2>1. <code>cand_vol_surge_regime_gated</code></h2>
+  <p class="meta">RankIC=0.05269718957674366 · 多空Sharpe=3.0693055478365245</p>
+  <p><b>放量 + 高振幅日的日内收益（取负平滑）</b></p>
+  <p>只在「振幅高于近20日中位」的日子，用日内涨跌幅×相对放量强度做信号，再取负并做20日EMA。本质是压制「放量冲高振幅」的短线冲动，偏向反向。</p>
+  <ol><li>日内收益 = close/open − 1</li><li>量强度 = volume / 近20日成交量最大值</li><li>振幅门控：仅当 (high−low) &gt; 近20日振幅中位数时保留信号，否则为0</li><li>三者相乘后做20日EMA，整体取负输出</li></ol>
+  <p class="dir">因子值高：近期较少出现「放量+大振幅」的冲高日，或冲高已被压低；因子值低：频繁放量冲高。</p>
+</article>
+<article class="f">
+  <h2>2. <code>ext_38cd4f77</code></h2>
+  <p class="meta">RankIC=0.051234088406713355 · 多空Sharpe=2.348206352869052</p>
+  <p><b>振幅–成交量相关 × 收益波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。看近20日「振幅与成交量是否同向变动」，再乘以同期收益波动率，截面排序。</p>
+  <ol><li>算 high−low 与 volume 的20日时序相关</li><li>再乘 close 日收益的20日标准差</li><li>全市场截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示振幅–成交量相关偏弱或波动不突出；因子值低表示量价振幅同向且波动大。</p>
+</article>
+<article class="f">
+  <h2>3. <code>cand_tanh_thrust_dynamic_smooth</code></h2>
+  <p class="meta">RankIC=0.05019319643843471 · 多空Sharpe=2.9777496886018793</p>
+  <p><b>价量推力（sigmoid压缩）+ 放量自适应平滑</b></p>
+  <p>把5日价格变化与5日量变化各自压到(−1,1)，相乘得「价量同向推力」；放量时用短EMA、缩量时用长EMA，最后再乘放量权重并取负。</p>
+  <ol><li>价推力 = 2·sigmoid(2·ts_pct(close,5)) − 1；量推力同理</li><li>推力 = 价推力 × 量推力</li><li>放量权重 w = sigmoid(2·(volume/EMA20 − 1))</li><li>输出 −[ w·EMA5(推力) + (1−w)·EMA20(推力) ]</li></ol>
+  <p class="dir">因子值高：价量同向推力弱或被取负后偏空侧；解读时务必结合页面 RankIC 符号。</p>
+</article>
+<article class="f">
+  <h2>4. <code>ext_90298bd1</code></h2>
+  <p class="meta">RankIC=0.050099929970150406 · 多空Sharpe=1.9401771668708412</p>
+  <p><b>收盘相对VWAP偏离的波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。用近10日 (close−vwap)/vwap 的标准差衡量「收盘相对成交均价」的抖动程度，再截面排序。</p>
+  <ol><li>日偏离 = (close − vwap) / vwap</li><li>取10日标准差</li><li>截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示收盘相对 VWAP 更贴近、抖动小；因子值低表示偏离波动大。</p>
+</article>
+<article class="f">
+  <h2>5. <code>cand_vol_regime_trend_smoothed</code></h2>
+  <p class="meta">RankIC=0.045660385012386014 · 多空Sharpe=3.1685831333321683</p>
+  <p><b>价趋势 × 量比 × 振幅扩张（取负平滑）</b></p>
+  <p>把「相对20日均价偏离 × 相对均量 × 相对中位振幅扩张」合成趋势强度，5日EMA后取负，偏反向处理过热放量扩张。</p>
+  <ol><li>价项 = close/ts_mean(close,20) − 1</li><li>量项 = volume/ts_mean(volume,20)</li><li>振幅项 = (high−low)/中位振幅 − 1</li><li>三者相乘 → EMA5 → 取负</li></ol>
+  <p class="dir">因子值高：价量振幅扩张偏弱；因子值低：价格相对均线偏高且放量、振幅放大。</p>
+</article>
+<article class="f">
+  <h2>6. <code>cand_herding_momentum_stress</code></h2>
+  <p class="meta">RankIC=0.04374919025426347 · 多空Sharpe=2.4503776035823313</p>
+  <p><b>羊群压力：日收益 × 短量比 × 振幅率</b></p>
+  <p>把日涨跌、5日相对放量、振幅/收盘叠乘，短EMA后截断到[−3,3]再取负，刻画「拥挤追涨杀跌」压力。</p>
+  <ol><li>日收益 × (volume/5日均量) × ((high−low)/close)</li><li>5日EMA，cap 到 [−3,3]</li><li>整体取负</li></ol>
+  <p class="dir">因子值高：近期羊群冲量偏弱；因子值低：价量振幅共振的追涨压力大。</p>
+</article>
+<article class="f">
+  <h2>7. <code>cand_vw_ew_spread_responsive</code></h2>
+  <p class="meta">RankIC=0.04220401632349957 · 多空Sharpe=3.342075645222849</p>
+  <p><b>成交量加权收益 vs 等权收益差 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。比较「按成交量加权的收益」与「等权收益」的差（均用约19日EMA近似原 ewm）。差大说明大成交日子主导方向。</p>
+  <ol><li>量加权收益 ≈ EMA(日收益×volume) / EMA(volume)</li><li>等权收益 ≈ EMA(日收益)</li><li>输出二者之差</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示量加权收益相对等权并不占优；因子值低表示放量日主导更强。</p>
+</article>
+<article class="f">
+  <h2>8. <code>ext_2b3d9cff</code></h2>
+  <p class="meta">RankIC=0.04192850904167106 · 多空Sharpe=1.052930118857391</p>
+  <p><b>50日区间位置 / (高点 + 波动) · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。收盘相对50日最低的抬升幅度，除以「50日最高 + 50日收益波动」，再rank。既看位置，又用波动抬高分母防虚高。</p>
+  <ol><li>分子 = close − ts_min(low,50)</li><li>分母 = ts_max(high,50) + 日收益50日标准差</li><li>比值截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高偏向区间相对偏弱/分母风险项更大；因子值低表示相对低点抬升更明显。</p>
+</article>
+<article class="f">
+  <h2>9. <code>ext_a313f83b</code></h2>
+  <p class="meta">RankIC=0.04084658613637805 · 多空Sharpe=1.9471083405375185</p>
+  <p><b>短窗口随机指标 × 成交量波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。10日 %K 式位置（收盘在高低区间中的位置）乘以成交量10日标准差，强调「短线位置 + 量不稳定」。</p>
+  <ol><li>位置 = (close−min_low10) / (max_high10−min_low10)</li><li>乘 ts_std(volume,10)</li><li>截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高偏向短线低位或量波动小；因子值低表示短线偏高位且量不稳。</p>
+</article>
+<article class="f">
+  <h2>10. <code>cand_overnight_intraday_divergence_simplified</code></h2>
+  <p class="meta">RankIC=0.03902104652470826 · 多空Sharpe=3.9245779619003422</p>
+  <p><b>日内收益 vs 隔夜收益的平滑差 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。比较平滑后的「日内(close/open)」与「隔夜(open/昨收)」：日内强、隔夜弱则因子偏正，刻画日内/隔夜资金分歧。</p>
+  <ol><li>日内 = EMA5(close/open − 1)</li><li>隔夜 = EMA5(open/delay(close,1) − 1)</li><li>输出 日内 − 隔夜</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示隔夜相对日内更强；因子值低表示日内相对隔夜更强。</p>
+</article>
+<article class="f">
+  <h2>11. <code>ext_cc3b5fb0</code></h2>
+  <p class="meta">RankIC=0.03700887673264548 · 多空Sharpe=3.263552113910287</p>
+  <p><b>隔夜–日内差的波动标准化 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。用 EMA5(日内) − SMA10(隔夜) 得到分歧，再除以该差的20日波动，得到类似z-score的稳定信号。</p>
+  <ol><li>diff = EMA5(close/open−1) − SMA10(open/昨收−1)</li><li>除以 ts_std(diff,20)（加微小常数防除零）</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示日内相对隔夜并不占优（经波动标准化后）；负向/低值则日内更强。</p>
+</article>
+<article class="f">
+  <h2>12. <code>ext_7cd58c86</code></h2>
+  <p class="meta">RankIC=0.03612565609163665 · 多空Sharpe=3.280961093466047</p>
+  <p><b>价量20日相关 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。直接取 close 与 volume 近20日相关系数，衡量价格与成交量同向程度。</p>
+  <ol><li>计算 ts_corr(close, volume, 20)</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示价量相关偏弱或背离；因子值低表示价量同向相关更强。</p>
+</article>
+<article class="f">
+  <h2>13. <code>ext_287712d7</code></h2>
+  <p class="meta">RankIC=0.03612385746798292 · 多空Sharpe=1.5336130750144727</p>
+  <p><b>平滑动量 / 长波动（风险调整） · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。20日EMA日收益除以60日收益波动，类似信息比率式动量，再截面rank。</p>
+  <ol><li>分子 = EMA20(日收益)</li><li>分母 = 日收益60日标准差</li><li>比值 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示风险调整后的平滑上涨偏弱；因子值低表示单位风险动量更强。</p>
+</article>
+<article class="f">
+  <h2>14. <code>ext_62f1f060</code></h2>
+  <p class="meta">RankIC=0.035722121853425985 · 多空Sharpe=2.22222699935555</p>
+  <p><b>价格与成交量算术均值（占位/弱信号） · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。公式仅为 (close+volume)/2，几乎无经济结构，更像探矿残留或对照项；解读以实证RankIC为准，不宜强行讲故事。</p>
+  <ol><li>对每个交易日计算 (close + volume) / 2</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：对 (close+volume)/2 整体取负后截面排序；经济含义仍弱，以实证 IC 为准。</p>
+</article>
+<article class="f">
+  <h2>15. <code>cand_volume_surge_persistence</code></h2>
+  <p class="meta">RankIC=0.03554766348479922 · 多空Sharpe=2.983158794955865</p>
+  <p><b>极端放量日占比（取负）</b></p>
+  <p>标记「成交量 &gt; 2×近20日量中位」的日子，对标记做10日EMA，再取负——惩罚持续极端放量。</p>
+  <ol><li>若 volume &gt; 2×ts_quantile(volume,20,0.5) 记1，否则0</li><li>对标记做EMA10，整体取负</li></ol>
+  <p class="dir">因子值高：近期很少极端放量；因子值低：放量日频繁出现。</p>
+</article>
+<article class="f">
+  <h2>16. <code>cand_gap_reversal_intensity</code></h2>
+  <p class="meta">RankIC=0.03505175718654191 · 多空Sharpe=3.425732037610273</p>
+  <p><b>低开高走（缺口反转）强度 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。隔夜下跌幅度与当日收阳幅度相乘（只保留低开+收阳组合），近5日求和，衡量「跳空低开后收回」的强度。</p>
+  <ol><li>隔夜收益 = open/昨收 − 1；仅保留负值部分的绝对值贡献</li><li>日内收益 = close/open − 1；仅保留正值</li><li>日得分 = (−隔夜负收益) × 日内正收益</li><li>近5日求和</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示近期缺口反转（低开收回）并不强；因子值低表示反转强度大。</p>
+</article>
+<article class="f">
+  <h2>17. <code>cand_crash_vol_spike_volregime_boost</code></h2>
+  <p class="meta">RankIC=0.034733327446522605 · 多空Sharpe=2.1263859811682257</p>
+  <p><b>短长振幅比 × 放量加码（取负）</b></p>
+  <p>用 log(高/低) 的5日均 / 50日均 衡量振幅骤升；若量比&gt;1.5再放大约80%，整体取负，偏「恐慌放量扩张」的反向。</p>
+  <ol><li>短振幅 = 均值5(log(high/low))；长振幅 = 均值50</li><li>比值 × (1 + 0.8×放量指示)</li><li>整体取负</li></ol>
+  <p class="dir">因子值高：近期振幅相对平静；因子值低：短窗振幅相对长窗飙升且可能放量。</p>
+</article>
+<article class="f">
+  <h2>18. <code>ext_cc11c428</code></h2>
+  <p class="meta">RankIC=0.034119864360512515 · 多空Sharpe=1.4679962695103916</p>
+  <p><b>中短动量 / 中长波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。EMA12(日收益)/Std50(日收益) 的风险调整动量，再rank。</p>
+  <ol><li>分子 EMA12 日收益；分母 50日收益标准差；截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示中短风险调整动量偏弱；因子值低表示偏强。</p>
+</article>
+<article class="f">
+  <h2>19. <code>ext_73a60264</code></h2>
+  <p class="meta">RankIC=0.03364580232421844 · 多空Sharpe=2.9260243804729056</p>
+  <p><b>5日涨跌 × 短长量比 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。5日价格变化率乘以「5日均量/20日均量」，再截面RANK，经典放量动量。</p>
+  <ol><li>ts_pct(close,5) × (均量5 / 均量20)</li><li>截面 RANK</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示 5 日涨跌×短长量比 的原始动量偏弱；因子值低表示放量动量更强。</p>
+</article>
+<article class="f">
+  <h2>20. <code>ext_b52617c5</code></h2>
+  <p class="meta">RankIC=0.033343281782096446 · 多空Sharpe=1.3603566223985943</p>
+  <p><b>40日均价偏离 / 区间宽度 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。收盘相对40日均价的偏离，除以同期高低区间宽度，类似标准化位置。</p>
+  <ol><li>(close − mean40) / (max_high40 − min_low40)</li><li>截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 40 日均价偏弱；因子值低表示相对均价偏高。</p>
+</article>
+<article class="f">
+  <h2>21. <code>cand_fusion_upcap_volregime</code></h2>
+  <p class="meta">RankIC=0.032569425646723854 · 多空Sharpe=1.8155118591551285</p>
+  <p><b>上涨日成交占比 × 量状态加码 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。近20日「上涨日成交量之和 / 总成交量」衡量资金偏向上涨日；再按相对EMA20量比做轻度加码。</p>
+  <ol><li>上涨日量占比 = Σ(volume|涨) / Σ(volume)，窗口20</li><li>乘以 (1 + 0.5×(volume/EMA20volume − 1))</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示上涨日成交占比/放量加码并不突出；因子值低表示上涨日吸量更强。</p>
+</article>
+<article class="f">
+  <h2>22. <code>ext_131e5281</code></h2>
+  <p class="meta">RankIC=0.03206412531675066 · 多空Sharpe=1.4162194099243903</p>
+  <p><b>相对EMA50的价格z分 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。(close − EMA50) / Std20(close)，中期趋势相对短期价格波动的标准化。</p>
+  <ol><li>偏离 = close − ema(close,50)</li><li>除以 ts_std(close,20)，再 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 EMA50 的 z 分偏低；因子值低表示显著高于中期均线。</p>
+</article>
+<article class="f">
+  <h2>23. <code>ext_d6c071a1</code></h2>
+  <p class="meta">RankIC=0.03182765198864425 · 多空Sharpe=3.604674539966308</p>
+  <p><b>实体波动 + 当日实体（取负rank）</b></p>
+  <p>近10日 |close−open| 的标准差加上当日 (close−open)，截面rank后取负。高实体波动+收阳会被压低。</p>
+  <ol><li>ts_std(|close−open|,10) + (close−open)</li><li>截面 rank，再乘 −1</li></ol>
+  <p class="dir">因子值高：实体波动小或当日偏阴；因子值低：实体抖动大且偏阳。注意：含截面rank，FE默认拒跑。</p>
+</article>
+<article class="f">
+  <h2>24. <code>ext_d53e006f</code></h2>
+  <p class="meta">RankIC=0.03159983125633867 · 多空Sharpe=1.4758969112397102</p>
+  <p><b>20日价格z-score · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。经典 (close−mean20)/std20，衡量相对近期均值的标准化偏离。</p>
+  <ol><li>(close − ts_mean(close,20)) / ts_std(close,20)</li><li>截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 20 日均价偏低；因子值低表示偏高（经典 z-score 取反）。</p>
+</article>
+<article class="f">
+  <h2>25. <code>cand_volume_confirmed_intraday_momentum</code></h2>
+  <p class="meta">RankIC=0.031477520025662266 · 多空Sharpe=3.746666251790443</p>
+  <p><b>放量确认的日内动量</b></p>
+  <p>日内收益 × 成交量相对20日的z分，再10日滚动均值。只有「放量的日内方向」会被强化。</p>
+  <ol><li>日内收益 = (close−open)/open</li><li>量z = (volume − 均量20) / 量标准差20</li><li>乘积做10日滚动均值</li></ol>
+  <p class="dir">因子值高：放量配合的日内上涨持续；因子值低/负：放量下跌或缩量日内涨。</p>
+</article>
+<article class="f">
+  <h2>26. <code>ext_909472af</code></h2>
+  <p class="meta">RankIC=0.031019364517005488 · 多空Sharpe=1.466988437394059</p>
+  <p><b>30日区间位置 × 量比 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。收盘在30日高低区间中的位置，乘以 volume/均量30，再rank。</p>
+  <ol><li>位置 = (close−min_low30)/(max_high30−min_low30)</li><li>× volume/ts_mean(volume,30)，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高偏向 30 日低位或缩量；因子值低表示偏高位且放量。</p>
+</article>
+<article class="f">
+  <h2>27. <code>cand_gpdev_volregime_ema10</code></h2>
+  <p class="meta">RankIC=0.030188328285415584 · 多空Sharpe=3.1247265302140956</p>
+  <p><b>几何中枢偏离 × 量状态 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。收盘相对 √(high·low) 的偏离，乘以 (量比−1)，再EMA10。价格偏离几何中枢且放量时信号更强。</p>
+  <ol><li>偏离 = close/√(high·low) − 1</li><li>× (volume/EMA20volume − 1)</li><li>EMA10 平滑</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示收盘相对几何中枢偏弱或缩量；因子值低表示偏高且放量。</p>
+</article>
+<article class="f">
+  <h2>28. <code>ext_1ef16bdf</code></h2>
+  <p class="meta">RankIC=0.028458908951047523 · 多空Sharpe=3.59928069400415</p>
+  <p><b>隔夜 vs 日内的相对差（归一）</b></p>
+  <p>(隔夜收益 − 日内收益) / (|隔夜|+|日内|)，衡量两者谁主导且做幅度归一。</p>
+  <ol><li>隔夜 = open/昨收 − 1；日内 = close/open − 1</li><li>分子 = 隔夜 − 日内；分母 = |隔夜|+|日内|+ε</li></ol>
+  <p class="dir">因子值高：隔夜相对日内更强；因子值低：日内主导或隔夜弱。</p>
+</article>
+<article class="f">
+  <h2>29. <code>ext_8d6b4d53</code></h2>
+  <p class="meta">RankIC=0.02840603380983669 · 多空Sharpe=1.4181747636931152</p>
+  <p><b>20日区间位置 × 量比 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。与909472af同结构，窗口改为20日。</p>
+  <ol><li>位置 = (close−min20)/(max20−min20)</li><li>× volume/均量20，截面 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高偏向 20 日低位或缩量；因子值低表示偏高位且放量。</p>
+</article>
+<article class="f">
+  <h2>30. <code>ext_7f827abe</code></h2>
+  <p class="meta">RankIC=0.02830344237478744 · 多空Sharpe=2.3834344903727964</p>
+  <p><b>相对WMA20的价格z分 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。(close − WMA20) / Std20(close)，加权均线版均值回归/趋势位置。</p>
+  <ol><li>偏离 = close − WMA(close,20)</li><li>除以 ts_std(close,20)，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 WMA20 偏弱；因子值低表示显著高于加权均线。</p>
+</article>
+<article class="f">
+  <h2>31. <code>ext_b512e792</code></h2>
+  <p class="meta">RankIC=0.027764104417653146 · 多空Sharpe=2.1377264573802965</p>
+  <p><b>5日涨跌 / 长波动（取负）</b></p>
+  <p>−Δclose_5 / Std60(日收益)，把中期波动标准化后的短动量取反，偏反转。</p>
+  <ol><li>ts_delta(close,5) / 日收益60日标准差</li><li>取负后截面 rank</li></ol>
+  <p class="dir">因子值高：近5日偏弱（反转视角看好）；因子值低：近5日偏强。</p>
+</article>
+<article class="f">
+  <h2>32. <code>ext_50b318f3</code></h2>
+  <p class="meta">RankIC=0.02774245468509158 · 多空Sharpe=1.0298322558755058</p>
+  <p><b>极短平滑动量 / 短波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。EMA5(日收益)/Std20(日收益)，超短风险调整动量。</p>
+  <ol><li>EMA5 日收益 ÷ 20日收益标准差，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示极短风险调整动量偏弱；因子值低表示偏强。</p>
+</article>
+<article class="f">
+  <h2>33. <code>ext_760efb3b</code></h2>
+  <p class="meta">RankIC=0.027728095662237703 · 多空Sharpe=2.131579073820459</p>
+  <p><b>5日涨跌 / 20日收益波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。Δclose_5 经20日收益波动标准化后的动量rank。</p>
+  <ol><li>ts_delta(close,5) / ts_std(日收益,20)，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示近 5 日风险调整上涨偏弱；因子值低表示偏强。</p>
+</article>
+<article class="f">
+  <h2>34. <code>cand_vol_asymmetry_diff_blend</code></h2>
+  <p class="meta">RankIC=0.027392571859379433 · 多空Sharpe=3.062412018520467</p>
+  <p><b>涨跌波动不对称：短长窗按波动状态混合</b></p>
+  <p>分别算5日/20日「下跌波动−上涨波动」；用ATR/close的63日分位决定更信短窗还是长窗，高波动时更信短不对称。</p>
+  <ol><li>上涨日/下跌日分别估滚动波动，得 down_std − up_std（5日与20日）</li><li>vol_rank = ATR14/close 在63日窗口的百分位</li><li>输出 vol_rank×短不对称 + (1−vol_rank)×长不对称</li></ol>
+  <p class="dir">因子值高：下跌波动相对上涨更大（跌更乱）；低波动时更看长窗。</p>
+</article>
+<article class="f">
+  <h2>35. <code>cand_liquidity_spread_vol_continuous_median</code></h2>
+  <p class="meta">RankIC=0.02717649410118174 · 多空Sharpe=4.5101461965702105</p>
+  <p><b>日内−隔夜价差（中位平滑）× 量比</b></p>
+  <p>先做日内收益减隔夜收益，5日滚动中位数平滑，再乘截断到[0.5,2]的量比，连续调节流动性状态。</p>
+  <ol><li>spread = 日内收益 − 隔夜收益</li><li>5日滚动中位数平滑</li><li>× clip(volume/均量相关量比, 0.5, 2)</li></ol>
+  <p class="dir">因子值高：日内强于隔夜且有一定放量配合；因子值低：隔夜主导或缩量。</p>
+</article>
+<article class="f">
+  <h2>36. <code>ext_e1d40349</code></h2>
+  <p class="meta">RankIC=0.02692301751736872 · 多空Sharpe=1.5778513857925647</p>
+  <p><b>5日涨跌 / 振幅波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。Δclose_5 除以 high−low 的20日标准差，用振幅波动做风险调整。</p>
+  <ol><li>ts_delta(close,5) / ts_std(high−low,20)，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示近 5 日相对振幅波动的上涨偏弱；因子值低表示偏强。</p>
+</article>
+<article class="f">
+  <h2>37. <code>cand_gap_vol_cluster_adaptive_w30</code></h2>
+  <p class="meta">RankIC=0.026878025596237677 · 多空Sharpe=2.634804710259795</p>
+  <p><b>隔夜–日内差×量比，叠加波动聚集惩罚 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。核心是 (日内−隔夜)×量比 经sigmoid压缩；再乘一项与「平方收益自相关」相关的聚集调节（约30日），波动聚集时调节信号强度。</p>
+  <ol><li>core = (close/open−1) − (open/昨收−1)，再×量比并压缩到(−1,1)</li><li>波动聚集项：−corr(平方收益, 滞后平方收益, 30) 经sigmoid</li><li>输出 core × (1 + 0.5×聚集项)</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示日内相对隔夜的量价差信号偏弱；因子值低表示该分歧信号更强。</p>
+</article>
+<article class="f">
+  <h2>38. <code>cand_pressure_tanh</code></h2>
+  <p class="meta">RankIC=0.02676537763291808 · 多空Sharpe=2.253012649102122</p>
+  <p><b>尾盘压力偏离（取负）</b></p>
+  <p>用 (close−low)/(high−low)×volume 近似「收在相对高位的成交压力」，对20日均值做z分，再sigmoid压到(−1,1)后取负。</p>
+  <ol><li>压力 = 收盘在当日区间位置 × volume</li><li>z = (压力 − mean20) / std20</li><li>输出 −(2·sigmoid(2z)−1)</li></ol>
+  <p class="dir">因子值高：相对历史，收高位放量压力并不极端；因子值低：收高位放量显著高于常态。</p>
+</article>
+<article class="f">
+  <h2>39. <code>cand_herding_pv_sync_sma</code></h2>
+  <p class="meta">RankIC=0.02628169778502785 · 多空Sharpe=3.046306588013796</p>
+  <p><b>价量同号同步率（羊群）</b></p>
+  <p>若日收益符号与成交量变化符号相同记+1、相反记−1、任一方为0记0，再20日简单平均。衡量价量方向是否「齐步走」。</p>
+  <ol><li>sign(日收益) 与 sign(量变化)</li><li>同号=+1，异号=−1，否则0</li><li>20日滚动均值</li></ol>
+  <p class="dir">因子值高：近20日价涨量增/价跌量缩更常见；因子值低：价量经常背离。</p>
+</article>
+<article class="f">
+  <h2>40. <code>cand_geometric_deviation_vol_asym_tilt</code></h2>
+  <p class="meta">RankIC=0.025899301773532873 · 多空Sharpe=2.786977042586254</p>
+  <p><b>几何偏离能量 × 上涨波动倾斜 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。用 (2logC−logH−logL)/3 的几何偏离及其绝对值相乘得「偏离能量」，EMA5后，仅当上涨波动&gt;下跌波动时再乘倾斜系数。</p>
+  <ol><li>g = (2·log(close)−log(high)−log(low))/3</li><li>能量 = EMA5(g · |g|)</li><li>若上涨日波动 &gt; 下跌日波动：乘 (1+倾斜比)，否则保持</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示几何偏离能量/上涨波动倾斜并不强；因子值低表示偏离能量更大。</p>
+</article>
+<article class="f">
+  <h2>41. <code>ext_70b9e66b</code></h2>
+  <p class="meta">RankIC=0.02563573081827752 · 多空Sharpe=1.832620494351456</p>
+  <p><b>5日涨跌 / √量波动（取负）</b></p>
+  <p>−Δclose_5 / √Std20(volume)，用成交量波动开方做分母，取负偏反转。</p>
+  <ol><li>ts_delta(close,5) / sqrt(ts_std(volume,20))</li><li>取负后 rank</li></ol>
+  <p class="dir">因子值高：近5日偏弱（反转视角）；因子值低：近5日偏强。</p>
+</article>
+<article class="f">
+  <h2>42. <code>ext_bdd0fb42</code></h2>
+  <p class="meta">RankIC=0.025240466471884784 · 多空Sharpe=0.33980413856407915</p>
+  <p><b>对数空间的50日区间位置 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。在log价格上算 (logC−logLmin)/(logHmax−logLmin)，长窗口相对位置，减轻价格水平差异。</p>
+  <ol><li>分子 log(close)−log(ts_min(low,50))</li><li>分母 log(ts_max(high,50))−log(ts_min(low,50))</li><li>比值 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示对数尺度上更靠近 50 日低区；因子值低表示靠近高区。</p>
+</article>
+<article class="f">
+  <h2>43. <code>cand_reversal_volregime_overnight_csz</code></h2>
+  <p class="meta">RankIC=0.023921155533712147 · 多空Sharpe=1.572848903218265</p>
+  <p><b>波动扩张下的反转，隔夜跳空衰减</b></p>
+  <p>−3日涨跌 × (短ATR/长ATR)；隔夜跳空相对自身波动越大，信号衰减越强，避免大缺口日误用反转。</p>
+  <ol><li>raw = −ts_pct(close,3) × (均振幅5/均振幅20)</li><li>隔夜z = |open/昨收−1| / 隔夜收益20日标准差</li><li>输出 raw / (1+隔夜z)</li></ol>
+  <p class="dir">因子值高：近3日偏弱且振幅扩张、隔夜不过分夸张；大跳空日信号被压低。</p>
+</article>
+<article class="f">
+  <h2>44. <code>cand_vol_persistence_momentum</code></h2>
+  <p class="meta">RankIC=0.02363178765395599 · 多空Sharpe=2.815936926118584</p>
+  <p><b>5日动量 × 波动持续性</b></p>
+  <p>5日收益乘以（平方收益20日自相关 − 0.5）。波动聚集强时放大动量符号，聚集弱时削弱甚至反号。</p>
+  <ol><li>ret_5d = 5日涨跌幅</li><li>vol_ac = corr(平方收益, 滞后1日平方收益, 20)</li><li>输出 ret_5d × (vol_ac − 0.5)</li></ol>
+  <p class="dir">因子值高：上涨且波动持续性强；波动不持续时动量被打折。</p>
+</article>
+<article class="f">
+  <h2>45. <code>ext_b67c0953</code></h2>
+  <p class="meta">RankIC=0.023628123827010083 · 多空Sharpe=2.177510513553047</p>
+  <p><b>开收差 / 短收益波动</b></p>
+  <p>(open−close)/Std10(日收益)，开盘相对收盘的日内回吐强度经短波动标准化。</p>
+  <ol><li>(open − close) / ts_std(日收益,10)，rank</li></ol>
+  <p class="dir">因子值高：相对波动而言收盘弱于开盘（偏阴实体）；因子值低：收盘强于开盘。</p>
+</article>
+<article class="f">
+  <h2>46. <code>ext_52c6c08d</code></h2>
+  <p class="meta">RankIC=0.023591881901189438 · 多空Sharpe=2.8386542373668773</p>
+  <p><b>风险调整5日动量（取负rank）</b></p>
+  <p>−rank( Δclose_5 / (Std20(日收益)+0.001) )，标准化动量取反。含截面rank，FE默认拒跑。</p>
+  <ol><li>Δclose_5 / (日收益20日标准差 + 0.001)</li><li>截面 rank 后取负</li></ol>
+  <p class="dir">因子值高：近5日风险调整动量偏弱；因子值低：偏强。</p>
+</article>
+<article class="f">
+  <h2>47. <code>ext_981562e9</code></h2>
+  <p class="meta">RankIC=0.02342546630160445 · 多空Sharpe=0.5409412930528867</p>
+  <p><b>40日位置 / (区间宽 + 波动) · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。相对40日低点的抬升，除以「区间宽度 + 收益波动」，再rank，防纯区间虚高。</p>
+  <ol><li>分子 close−min_low40</li><li>分母 (max_high−min_low) + Std40(日收益)</li><li>比值 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 40 日低点抬升偏弱或风险项大；因子值低表示抬升更明显。</p>
+</article>
+<article class="f">
+  <h2>48. <code>ext_773ab168</code></h2>
+  <p class="meta">RankIC=0.022321685217341104 · 多空Sharpe=1.5580910749938803</p>
+  <p><b>当日实体 / 实体波动 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。(close−open)/Std10(close−open)，当日阳阴实体相对自身历史波动的标准化。</p>
+  <ol><li>(close − open) / ts_std(close−open, 10)，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示当日阳线实体相对自身波动并不突出（偏阴/弱阳）；因子值低表示偏强阳。</p>
+</article>
+<article class="f">
+  <h2>49. <code>ext_39e7b7a6</code></h2>
+  <p class="meta">RankIC=0.02194125887753222 · 多空Sharpe=1.5340153899867293</p>
+  <p><b>负实体 / 长价格波动</b></p>
+  <p>−(close−open)/Std60(close)，收阴偏正、收阳偏负，经长波动标准化后rank。</p>
+  <ol><li>−(close−open) / ts_std(close,60)，rank</li></ol>
+  <p class="dir">因子值高：相对长波动，当日偏收阴；因子值低：偏收阳。</p>
+</article>
+<article class="f">
+  <h2>50. <code>ext_1490f2fe</code></h2>
+  <p class="meta">RankIC=0.021570303524906423 · 多空Sharpe=0.6637569771553201</p>
+  <p><b>相对30日低点 / (高低波动和) · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。(close−min_low30)/(Std30(high)+Std30(low))，抬升幅度用高低各自波动之和做分母。</p>
+  <ol><li>分子 close − ts_min(low,30)</li><li>分母 ts_std(high,30)+ts_std(low,30)</li><li>比值 rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 30 日低点抬升偏弱；因子值低表示抬升更明显。</p>
+</article>
+<article class="f">
+  <h2>51. <code>cand_vol_expansion_atr_ratio</code></h2>
+  <p class="meta">RankIC=0.02136444513144052 · 多空Sharpe=2.2074143901889514</p>
+  <p><b>阴阳方向 × 短长振幅扩张 · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。用 sign(close−open) 定方向，乘 sigmoid压缩后的「5日均振幅/60日均振幅 − 1」，振幅扩张时强化阴阳信号。</p>
+  <ol><li>扩张 = 均振幅5 / 均振幅60 − 1，经 sigmoid(5·扩张)</li><li>乘 sign(close−open)</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示阴阳方向×振幅扩张信号偏弱；因子值低表示扩张配合的方向信号更强。</p>
+</article>
+<article class="f">
+  <h2>52. <code>ext_2fffdf67</code></h2>
+  <p class="meta">RankIC=0.0210767669147657 · 多空Sharpe=0.5414726160853339</p>
+  <p><b>20日位置 / (区间宽 + 波动) · 已取负调正</b></p>
+  <p>【公式已取负】原始信号与收益负相关，已在最外层加 -(…)。与981562e9同结构，窗口20日。</p>
+  <ol><li>(close−min_low20) / ((max−min) + Std20(日收益))，rank</li><li>最后整体取负：输出 = -(上述信号)，使因子与前瞻收益同向（RankIC&gt;0）</li></ol>
+  <p class="dir">取负后：因子值高表示相对 20 日低点抬升偏弱；因子值低表示抬升更明显。</p>
+</article>
+<article class="f">
+  <h2>53. <code>cand_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5</code></h2>
+  <p class="meta">RankIC=0.0006698179086140558 · 多空Sharpe=-0.7490118603316017</p>
+  <p><b>阳阴振幅中位比 × 短量比（取负平滑）</b></p>
+  <p>用20日中位数分别估「收阳日振幅」与「收阴日振幅」之比，再乘 volume/近6日量中位，EMA5后取负。</p>
+  <ol><li>阳振幅中位 / 阴振幅中位（窗口20，where 分流）</li><li>× volume / ts_quantile(volume,6,0.5)</li><li>整体取负后 EMA5</li></ol>
+  <p class="dir">因子值高：阴线振幅相对更突出或量不强；因子值低：阳线振幅中位显著大于阴线且放量。</p>
+</article>
+</body></html>

@@ -172,10 +172,19 @@ def main() -> int:
             if mean_ic == mean_ic and mean_ic < 0 and not row.get("sign_flipped"):
                 # don't flip here — lakes already aligned for FE/COS paths
                 pass
-            dsl = str(row.get("dsl") or row.get("lqtp_formula") or "")
+            dsl = str(row.get("dsl") or row.get("lqtp_formula") or "").strip()
+            is_panel = not dsl
             meta = {
-                "engine": "factor_engine" if row.get("materialize") == "fe_data_access_yearly" else "local_panel",
-                "eval_route": row.get("materialize") or "cos_panel",
+                "engine": (
+                    "factor_engine"
+                    if row.get("materialize") == "fe_data_access_yearly" and dsl
+                    else "local_panel"
+                ),
+                "eval_route": (
+                    row.get("materialize")
+                    if row.get("materialize") == "fe_data_access_yearly" and dsl
+                    else "cos_panel"
+                ),
                 "values_path": str(lake),
                 "date_range": ["2019-01-01", "2026-06-30"],
                 "formula": dsl,
@@ -183,8 +192,12 @@ def main() -> int:
                 "return_kind": "vwap_to_vwap",
                 "source_label": row.get("label") or "本周新挖",
                 "ic_sign_flipped": bool(row.get("sign_flipped")),
-                "platform_submit": row.get("platform_submit") or "skipped_no_formula",
-                "data_source": "data_access" if row.get("materialize") == "fe_data_access_yearly" else "cos_panel",
+                "platform_submit": row.get("platform_submit") or (
+                    "skipped_no_formula" if is_panel else "submitted"
+                ),
+                "data_source": "data_access"
+                if row.get("materialize") == "fe_data_access_yearly" and dsl
+                else "cos_panel",
                 "extended_eval": True,
             }
             out = out_dir / f"{name}.html"
@@ -204,7 +217,12 @@ def main() -> int:
                     "factor_id": name,
                     "function_name": name,
                     "source": "本周新挖",
-                    "note": "扩展评估：行业/市值中性、滚动IC、半衰期、分层/多空诊断",
+                    "note": (
+                        "扩展评估：行业/市值中性、滚动IC、半衰期、分层/多空诊断"
+                        if dsl
+                        else "扩展评估基于中性化面板；源侧未提供可回收公式"
+                    ),
+                    "theme": "量价因子",
                 },
             )
             text = out.read_text(encoding="utf-8", errors="ignore")

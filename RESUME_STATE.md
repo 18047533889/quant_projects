@@ -42,8 +42,9 @@
 
 ### Active Work
 
-- `R2-P0-037` implementation and independent review are complete at `2520532b`; evidence/status bookkeeping is being finalized in a separate local commit.
-- `R2-P0-039` remains `NOT_RUN` and must not begin before R2-P0-037 bookkeeping and final local integration are complete.
+- Q evidence admission is under independent review: typed artifacts now bind compile/runtime/parity bytes to exact current Git SHA, timezone-aware generation time, implementation/parameter-domain hash, and applicable q/PyKX versions; 72 focused tests pass.
+- Q authority remains fail closed: 110 declarations, 80 lowerings, 30 disagreements, and zero production-certified operators. Legacy `test_q_backend.py` remains 18 passed / 12 stale-or-unsafe failures and is not passing evidence.
+- `R2-P0-039` remains `NOT_RUN` and must not begin before the current Q evidence-admission integration is committed and reviewed.
 - Full repository compile, full DataAccess regression, registry bootstrap, backend parity, PIT poison, and root CI remain `NOT_RUN`.
 
 ## Next Priority Queue

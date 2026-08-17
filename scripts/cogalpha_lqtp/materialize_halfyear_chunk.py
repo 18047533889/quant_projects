@@ -31,7 +31,7 @@ os.environ.setdefault("FACTOR_ENGINE_OPERATOR_BACKEND", "polars")
 os.environ.setdefault("FACTOR_ENGINE_MAX_WORKERS", "1")
 os.environ.setdefault("FACTOR_ENGINE_DISABLE_CSE", "1")
 os.environ.setdefault("FACTOR_ENGINE_DISABLE_PANEL_NATIVE", "1")
-os.environ.setdefault("FACTOR_ENGINE_RESERVE_GB", "8")
+os.environ.setdefault("FACTOR_ENGINE_RESERVE_GB", "2")
 os.environ.setdefault("FACTOR_ENGINE_MAX_MEMORY_MB", "12000")
 os.environ.setdefault(
     "FACTOR_ENGINE_SPILL_DIR",

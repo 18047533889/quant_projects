@@ -861,11 +861,15 @@ class ReadPlan:
                 from data_access.runtime.prepared_read import VerifiedPhysicalScope
 
                 pinned = self.plan_pinned_files.get(ds)
-                paths = (
-                    tuple(str(getattr(fv, "path", "")) for fv in pinned)
-                    if pinned is not None
-                    else ()
-                )
+                publisher = self.plan_publisher_snapshots.get(ds)
+                if self.snapshot_policy == "pin":
+                    paths = (
+                        tuple(str(getattr(fv, "path", "")) for fv in pinned)
+                        if pinned is not None
+                        else ()
+                    )
+                else:
+                    paths = tuple((publisher or {}).get("exact_objects", ()))
                 pinned_scope = VerifiedPhysicalScope(
                     dataset_id=ds,
                     exact_objects=paths,
@@ -874,8 +878,8 @@ class ReadPlan:
                         tuple(pinned) if self.snapshot_policy == "pin" else None
                     ),
                     snapshot_policy=self.snapshot_policy,
-                    publisher_snapshot=self.plan_publisher_snapshots.get(ds),
-                    use_exact_objects=self.snapshot_policy == "pin",
+                    publisher_snapshot=publisher,
+                    use_exact_objects=True,
                 )
             return self._finalize_handle(
                 store.read(

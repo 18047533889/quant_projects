@@ -8,6 +8,9 @@ Tests verify:
 5. Hard gates enforce single authority
 """
 
+import hashlib
+from dataclasses import replace
+
 import pytest
 
 from backend.q_backend.q_capability_evidence import (
@@ -22,8 +25,11 @@ from backend.q_backend.q_capability_evidence import (
 )
 from backend.q_backend.q_compiler import get_q_compiler
 from backend.q_backend.q_physical_implementation_registry import (
+    QEvidenceArtifact,
+    QEvidenceValidationContext,
     QPhysicalImplementation,
     QPhysicalImplementationRegistry,
+    compute_q_implementation_hash,
 )
 
 
@@ -77,8 +83,12 @@ class TestQ2P0001ProductionSafeSingleDefinition:
             implementation_hash_pass=True,
             q_version_range_pass=True,
             pykx_version_range_pass=True,
+            certification_pass=True,
         )
-        assert ev4.production_safe is True
+        assert ev4.production_safe is False
+
+        ev5 = replace(ev4, null_semantics_pass=True)
+        assert ev5.production_safe is True
 
     def test_get_q_production_safe_uses_ev_property(self):
         """get_q_production_safe_ops must use ev.production_safe exclusively."""
@@ -263,112 +273,198 @@ class TestQPhysicalImplementationRegistry:
             lowerings={"rogue": "q_rogue"}, declared_targets=frozenset({"declared"})
         )
         missing = registry.get_missing_evidence()
-        assert set(missing["rogue"]) == {
-            "compile", "runtime", "parity", "parameter_domain",
-            "implementation_hash", "q_version_range", "pykx_version_range",
-        }
+        assert missing["rogue"] == ["validation_context: missing"]
         assert registry.get_production_ready() == frozenset()
         assert registry.is_production_certified("rogue") is False
         assert registry.gate_all_lowerings_have_evidence()[0] is False
 
-    def test_register_implementation(self):
-        """Should register implementation."""
-        registry = QPhysicalImplementationRegistry()
+    @staticmethod
+    def _certified_registry(tmp_path):
+        import json
 
+        sha = "a" * 40
+        lowering_source = "+"
+        implementation_hash = compute_q_implementation_hash(
+            "add", "q_add_v1", lowering_source, "param_domain_add"
+        )
+        payload = {
+            "canonical": "add",
+            "git_sha": sha,
+            "implementation_hash": implementation_hash,
+            "parameter_domain_id": "param_domain_add",
+            "q_version": "4.1",
+            "pykx_version": "2.6",
+            "status": "PASS",
+            "executed_cases": 3,
+        }
+        artifacts = {}
+        for name in ("compile", "runtime", "parity", "null_semantics"):
+            path = tmp_path / f"{name}.json"
+            path.write_text(json.dumps({**payload, "stage": name}), encoding="utf-8")
+            artifacts[name] = QEvidenceArtifact(
+                path=path.name,
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+        context = QEvidenceValidationContext(
+            artifact_root=tmp_path,
+            q_version="4.1",
+            pykx_version="2.6",
+            current_git_sha_provider=lambda: sha,
+        )
         impl = QPhysicalImplementation(
             canonical="add",
             lowering_id="q_add_v1",
-            compile_evidence="test_compile_add_001",
-            runtime_evidence="test_runtime_add_001",
-            parity_evidence="test_parity_add_001",
+            lowering_source=lowering_source,
+            compile_evidence=artifacts["compile"],
+            runtime_evidence=artifacts["runtime"],
+            parity_evidence=artifacts["parity"],
+            null_semantics_evidence=artifacts["null_semantics"],
             parameter_domain_id="param_domain_add",
-            implementation_hash="sha256:add",
+            git_sha=sha,
+            generation_timestamp="2026-08-17T10:00:00+00:00",
+            implementation_hash=implementation_hash,
             q_version_range=">=4,<5",
             pykx_version_range=">=2,<3",
         )
-
-        registry.register(impl)
-        retrieved = registry.get("add")
-
-        assert retrieved is not None
-        assert retrieved.canonical == "add"
-        assert retrieved.production_ready is True
-
-    def test_production_ready_requires_full_evidence(self):
-        """Production ready requires all evidence + parameter domain."""
-        # Missing parity
-        impl1 = QPhysicalImplementation(
-            canonical="op1",
-            lowering_id="q_op1",
-            compile_evidence="c1",
-            runtime_evidence="r1",
-            parity_evidence=None,
-            parameter_domain_id="p1",
-        )
-        assert impl1.production_ready is False
-
-        # Missing parameter domain
-        impl2 = QPhysicalImplementation(
-            canonical="op2",
-            lowering_id="q_op2",
-            compile_evidence="c2",
-            runtime_evidence="r2",
-            parity_evidence="par2",
-            parameter_domain_id=None,
-        )
-        assert impl2.production_ready is False
-
-        # Full
-        impl3 = QPhysicalImplementation(
-            canonical="op3",
-            lowering_id="q_op3",
-            compile_evidence="c3",
-            runtime_evidence="r3",
-            parity_evidence="par3",
-            parameter_domain_id="p3",
-            implementation_hash="sha256:op3",
-            q_version_range=">=4,<5",
-            pykx_version_range=">=2,<3",
-        )
-        assert impl3.production_ready is True
-
-    def test_get_missing_evidence(self):
-        """Should identify operators with missing evidence."""
-        registry = QPhysicalImplementationRegistry()
-
-        # Partial evidence
-        impl = QPhysicalImplementation(
-            canonical="partial_op",
-            lowering_id="q_partial",
-            compile_evidence="c1",
-            runtime_evidence=None,
-            parity_evidence=None,
-            parameter_domain_id=None,
+        registry = QPhysicalImplementationRegistry(
+            declared_targets=frozenset({"add"}),
+            validation_context=context,
         )
         registry.register(impl)
+        return registry, impl
 
-        missing = registry.get_missing_evidence()
-        assert "partial_op" in missing
-        assert set(missing["partial_op"]) == {
-            "runtime", "parity", "parameter_domain",
-            "implementation_hash", "q_version_range", "pykx_version_range",
-        }
+    def test_register_implementation_with_validated_artifacts(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        assert registry.get("add") is impl
+        assert registry.evidence_errors("add") == ()
+        assert registry.is_production_certified("add") is True
+        assert registry.get_production_ready() == frozenset({"add"})
 
-    def test_gate_all_lowerings_have_evidence(self):
-        """Gate should fail if any lowering lacks evidence."""
-        registry = QPhysicalImplementationRegistry()
+    @pytest.mark.parametrize(
+        ("field", "value", "expected"),
+        [
+            ("git_sha", "b" * 40, "git_sha: evidence is stale"),
+            ("generation_timestamp", "2026-08-17T10:00:00", "generation_timestamp: timezone is required"),
+            ("implementation_hash", "0" * 64, "implementation_hash: lowering or parameter domain changed"),
+            ("q_version_range", "not-a-range", "q_version: invalid version or range"),
+            ("pykx_version_range", ">=3", "pykx_version: outside certified range"),
+        ],
+    )
+    def test_certification_rejects_invalid_metadata(self, tmp_path, field, value, expected):
+        registry, impl = self._certified_registry(tmp_path)
+        registry.register(replace(impl, **{field: value}))
+        assert expected in registry.evidence_errors("add")
+        assert registry.is_production_certified("add") is False
 
-        # Add partial implementation
-        impl = QPhysicalImplementation(
-            canonical="incomplete",
-            lowering_id="q_incomplete",
-            compile_evidence="c1",
+    def test_certification_rejects_tampered_and_duplicate_artifacts(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        (tmp_path / impl.compile_evidence.path).write_bytes(b"tampered")
+        assert "compile_evidence: artifact sha256 mismatch" in registry.evidence_errors("add")
+
+        registry, impl = self._certified_registry(tmp_path)
+        registry.register(replace(impl, runtime_evidence=impl.compile_evidence))
+        errors = registry.evidence_errors("add")
+        assert "evidence_artifacts: required artifacts must be independent" in errors
+
+    def test_certification_rejects_malformed_and_nonpassing_payloads(self, tmp_path):
+        import json
+
+        registry, impl = self._certified_registry(tmp_path)
+        compile_path = tmp_path / impl.compile_evidence.path
+        compile_path.write_bytes(b"not-json")
+        malformed = replace(
+            impl,
+            compile_evidence=replace(
+                impl.compile_evidence,
+                sha256=hashlib.sha256(compile_path.read_bytes()).hexdigest(),
+            ),
         )
-        registry.register(impl)
+        registry.register(malformed)
+        assert "compile_evidence: invalid JSON payload" in registry.evidence_errors("add")
 
+        for field, value, expected in (
+            ("status", "FAIL", "compile_evidence: status is not PASS"),
+            ("executed_cases", 0, "compile_evidence: executed_cases must be positive"),
+            ("canonical", "subtract", "compile_evidence: canonical mismatch"),
+            ("stage", "runtime", "compile_evidence: stage mismatch"),
+        ):
+            registry, impl = self._certified_registry(tmp_path)
+            compile_path = tmp_path / impl.compile_evidence.path
+            payload = json.loads(compile_path.read_text(encoding="utf-8"))
+            payload[field] = value
+            compile_path.write_text(json.dumps(payload), encoding="utf-8")
+            changed = replace(
+                impl,
+                compile_evidence=replace(
+                    impl.compile_evidence,
+                    sha256=hashlib.sha256(compile_path.read_bytes()).hexdigest(),
+                ),
+            )
+            registry.register(changed)
+            assert expected in registry.evidence_errors("add")
+
+    def test_certification_requires_null_evidence_and_live_head(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        registry.register(replace(impl, null_semantics_evidence=None))
+        assert "null_semantics_evidence: missing" in registry.evidence_errors("add")
+
+        for provider, expected in (
+            (lambda: None, "current_git_sha: unavailable or malformed"),
+            (lambda: "b" * 40, "git_sha: evidence is stale"),
+        ):
+            registry, impl = self._certified_registry(tmp_path)
+            context = replace(registry._validation_context, current_git_sha_provider=provider)
+            denied = QPhysicalImplementationRegistry(
+                declared_targets=frozenset({"add"}), validation_context=context
+            )
+            denied.register(impl)
+            assert expected in denied.evidence_errors("add")
+            assert denied.is_production_certified("add") is False
+
+    def test_certification_binds_executable_lowering_source(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        registry.register(replace(impl, lowering_source="neg"))
+        errors = registry.evidence_errors("add")
+        assert "implementation_hash: lowering or parameter domain changed" in errors
+        assert registry.is_production_certified("add") is False
+
+    def test_capability_evidence_does_not_hide_global_validation_failure(self, tmp_path, monkeypatch):
+        import backend.q_backend.q_capability_evidence as evidence_module
+
+        registry, impl = self._certified_registry(tmp_path)
+        stale = replace(impl, git_sha="b" * 40)
+        registry.register(stale)
+        monkeypatch.setattr(evidence_module, "_get_authority", lambda: registry)
+
+        evidence = evidence_module.compute_q_capability_evidence()["add"]
+        assert evidence.compile_pass is False
+        assert evidence.runtime_pass is False
+        assert evidence.parity_pass is False
+        assert evidence.null_semantics_pass is False
+        assert evidence.certification_pass is False
+        assert evidence.production_safe is False
+        assert "git_sha: evidence is stale" in evidence.notes
+        assert "compile_evidence: git_sha mismatch" in evidence.notes
+
+    def test_certification_rejects_path_escape_and_unavailable_runtime(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        escaped = QEvidenceArtifact(path="../outside", sha256="0" * 64)
+        registry.register(replace(impl, parity_evidence=escaped))
+        assert "parity_evidence: path escapes artifact root" in registry.evidence_errors("add")
+
+        context = replace(registry._validation_context, q_version=None)
+        unavailable = QPhysicalImplementationRegistry(
+            declared_targets=frozenset({"add"}), validation_context=context
+        )
+        unavailable.register(impl)
+        assert "q_version: unavailable" in unavailable.evidence_errors("add")
+        assert unavailable.get_production_ready() == frozenset()
+
+    def test_gate_all_lowerings_have_evidence(self, tmp_path):
+        registry, _ = self._certified_registry(tmp_path)
         passed, message = registry.gate_all_lowerings_have_evidence()
-        assert passed is False
-        assert "incomplete" in message
+        assert passed is True
+        assert "current, validated evidence" in message
 
 
 if __name__ == "__main__":

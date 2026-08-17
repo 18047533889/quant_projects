@@ -222,19 +222,50 @@ def main() -> int:
             )
             mean_ic = float(analysis.get("mean_rank_ic", float("nan")))
             if mean_ic == mean_ic and mean_ic < 0:
-                _flip_lake(lake)
+                from scripts.cogalpha_lqtp.permanent_flip_weekly_signs import (
+                    already_outer_negated,
+                    prep_fe_dsl,
+                    wipe_lake,
+                )
+                from scripts.cogalpha_lqtp.run_production_batch import (
+                    _negate_formula,
+                    _negate_python_code,
+                )
+
+                show = str(row.get("lqtp_formula") or row.get("dsl") or dsl).strip()
+                if show and not already_outer_negated(show):
+                    row["dsl_before_flip"] = show
+                    negated = _negate_formula(show)
+                    row["dsl"] = negated
+                    row["lqtp_formula"] = negated
+                    dsl = prep_fe_dsl(negated)
+                py = str(row.get("python_code") or "")
+                if py.strip() and "IC_SIGN_FLIPPED" not in py:
+                    row["python_code"] = _negate_python_code(py)
+                row["formula_sign_flipped"] = True
+                row["ic_sign_flipped"] = True
+                row["sign_flipped"] = False
+                wipe_lake(work, name)
+                lake = materialize_dsl_by_halfyear(
+                    work, name, dsl, min_avail_gb=float(args.min_avail_gb)
+                )
                 release_memory(analysis)
                 analysis = analyze_factor_parquet_duckdb(
                     factor_path=lake, fwd_returns_path=fwd, return_kind="vwap_to_vwap"
                 )
                 mean_ic = float(analysis.get("mean_rank_ic", float("nan")))
-                row["sign_flipped"] = True
-            href = _render(work, name, dsl, lake, analysis, row)
+                if mean_ic == mean_ic and mean_ic < 0:
+                    _flip_lake(lake)
+                    analysis = analyze_factor_parquet_duckdb(
+                        factor_path=lake, fwd_returns_path=fwd, return_kind="vwap_to_vwap"
+                    )
+                    mean_ic = float(analysis.get("mean_rank_ic", float("nan")))
+            href = _render(work, name, str(row.get("lqtp_formula") or dsl), lake, analysis, row)
             row.update(
                 {
                     "mean_rank_ic": mean_ic,
                     "abs_mean_rank_ic": abs(mean_ic) if mean_ic == mean_ic else float("nan"),
-                    "display_rank_ic": abs(mean_ic) if mean_ic == mean_ic else float("nan"),
+                    "display_rank_ic": mean_ic if mean_ic == mean_ic else float("nan"),
                     "rank_icir": float(analysis.get("rank_icir", float("nan"))),
                     "display_rank_icir": abs(float(analysis.get("rank_icir") or 0.0)),
                     "mean_daily_coverage": float(analysis.get("mean_daily_coverage", float("nan"))),
@@ -245,6 +276,7 @@ def main() -> int:
                     "report_href": href,
                     "fe_status": "ok",
                     "fe_elapsed_sec": round(time.time() - t0, 2),
+                    "sign_flipped": False,
                 }
             )
             done += 1

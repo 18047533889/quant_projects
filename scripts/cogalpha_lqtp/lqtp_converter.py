@@ -110,6 +110,153 @@ MANUAL_LQTP_OVERRIDES: dict[str, tuple[str, str]] = {
         "rank(ts_true_streak(volume > 2 * ts_quantile(volume, 50, 0.5)))",
         "手写近似：原 Python 对超阈强度累加；此处用连续高量长度",
     ),
+    # --- weekly python-9 (requested_factors_dsl_dump) ---
+    "cand_vw_ew_spread_responsive": (
+        "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)",
+        "手写：ewm(alpha=0.1)→ema(span=19)；VW−EW return spread",
+    ),
+    "factor_vw_ew_spread_responsive": (
+        "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)",
+        "手写：ewm(alpha=0.1)→ema(span=19)；VW−EW return spread",
+    ),
+    "cand_overnight_intraday_divergence_simplified": (
+        "ema(safe_div(close,open)-1,5)-ema(safe_div(open,delay(close,1))-1,5)",
+        "手写：intraday−overnight ema(5) divergence",
+    ),
+    "factor_overnight_intraday_divergence_simplified": (
+        "ema(safe_div(close,open)-1,5)-ema(safe_div(open,delay(close,1))-1,5)",
+        "手写：intraday−overnight ema(5) divergence",
+    ),
+    "cand_fusion_upcap_volregime": (
+        "safe_div(ts_sum(volume*where(ts_pct(close,1)>0,1,0),20),ts_sum(volume,20))"
+        "*(1+(safe_div(volume,ema(volume,20))-1)*0.5)",
+        "手写：up-volume capture × vol_regime",
+    ),
+    "factor_fusion_upcap_volregime": (
+        "safe_div(ts_sum(volume*where(ts_pct(close,1)>0,1,0),20),ts_sum(volume,20))"
+        "*(1+(safe_div(volume,ema(volume,20))-1)*0.5)",
+        "手写：up-volume capture × vol_regime",
+    ),
+    "cand_gap_reversal_intensity": (
+        "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))"
+        "*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)",
+        "手写：min/max→where；5d gap-reversal intensity",
+    ),
+    "factor_gap_reversal_intensity": (
+        "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))"
+        "*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)",
+        "手写：min/max→where；5d gap-reversal intensity",
+    ),
+    "cand_gpdev_volregime_ema10": (
+        "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)",
+        "手写：geo-mean deviation × vol_strength, ema10",
+    ),
+    "factor_gpdev_volregime_ema10": (
+        "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)",
+        "手写：geo-mean deviation × vol_strength, ema10",
+    ),
+    "cand_gap_vol_cluster_adaptive_w30": (
+        "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))"
+        "*safe_div(volume,ema(volume,20))*10))-1)"
+        "*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),"
+        "delay(power(ts_pct(close,1),2),1),30))*2))-1))",
+        "手写：tanh→sigmoid 恒等；sq_ret→power；cluster weight",
+    ),
+    "factor_gap_vol_cluster_adaptive_w30": (
+        "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))"
+        "*safe_div(volume,ema(volume,20))*10))-1)"
+        "*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),"
+        "delay(power(ts_pct(close,1),2),1),30))*2))-1))",
+        "手写：tanh→sigmoid 恒等；sq_ret→power；cluster weight",
+    ),
+    "cand_reversal_volregime_overnight_csz": (
+        "(-ts_pct(close,3)*safe_div("
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),5),"
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),20)))"
+        "*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),"
+        "ts_std(safe_div(open,delay(close,1))-1,20))))",
+        "手写：TR where-max；atr_ratio×−ret3d×overnight attenuation",
+    ),
+    "factor_reversal_volregime_overnight_csz": (
+        "(-ts_pct(close,3)*safe_div("
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),5),"
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),20)))"
+        "*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),"
+        "ts_std(safe_div(open,delay(close,1))-1,20))))",
+        "手写：TR where-max；atr_ratio×−ret3d×overnight attenuation",
+    ),
+    "cand_vol_expansion_atr_ratio": (
+        "sign(close-open)*sigmoid(5*(safe_div("
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),5),"
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),60))-1))",
+        "手写近似：talib ATR→ts_mean(TR)；sigmoid expansion × direction",
+    ),
+    "factor_vol_expansion_atr_ratio": (
+        "sign(close-open)*sigmoid(5*(safe_div("
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),5),"
+        "ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),"
+        "abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,"
+        "where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),"
+        "abs(low-delay(close,1)))),60))-1))",
+        "手写近似：talib ATR→ts_mean(TR)；sigmoid expansion × direction",
+    ),
+    "cand_geometric_deviation_vol_asym_tilt": (
+        "ema(sign(((2*log(cap(close,1.0e-12,1.0e18))-log(cap(high,1.0e-12,1.0e18))"
+        "-log(cap(low,1.0e-12,1.0e18)))/3))"
+        "*power(((2*log(cap(close,1.0e-12,1.0e18))-log(cap(high,1.0e-12,1.0e18))"
+        "-log(cap(low,1.0e-12,1.0e18)))/3),2),5)"
+        "*(1+where(safe_div("
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),"
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)"
+        ")>0,safe_div("
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),"
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)"
+        "),0))",
+        "手写：geo log-dev^2 ema5 × upside vol-asym tilt",
+    ),
+    "factor_geometric_deviation_vol_asym_tilt": (
+        "ema(sign(((2*log(cap(close,1.0e-12,1.0e18))-log(cap(high,1.0e-12,1.0e18))"
+        "-log(cap(low,1.0e-12,1.0e18)))/3))"
+        "*power(((2*log(cap(close,1.0e-12,1.0e18))-log(cap(high,1.0e-12,1.0e18))"
+        "-log(cap(low,1.0e-12,1.0e18)))/3),2),5)"
+        "*(1+where(safe_div("
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),"
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)"
+        ")>0,safe_div("
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),"
+        "ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)"
+        "+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)"
+        "),0))",
+        "手写：geo log-dev^2 ema5 × upside vol-asym tilt",
+    ),
 }
 
 
@@ -157,8 +304,8 @@ def sanitize_lqtp_clickhouse_literals(formula: str) -> str:
     """Avoid ClickHouse ``NO_COMMON_TYPE`` (Float64 vs UInt64) inside ``cap``/``greatest``.
 
     Bare integers like ``1000000000000`` become UInt64; mixed with float bounds
-    (``1e-12``) fails. Rewrite large integer literals to scientific floats.
-    Also normalize long decimal epsilons to ``1e-12`` style.
+    (``1.0e-12``) fails. Rewrite large integer literals to scientific floats.
+    Also normalize long decimal epsilons to ``1.0e-12`` style.
     """
     text = formula or ""
     if not text:
@@ -288,6 +435,19 @@ def convert_dsl(
             fe_formula="",
             lqtp_formula="",
             notes=["空公式"],
+            factor_key=factor_key,
+            factor_name=factor_name,
+        )
+
+    manual = _lookup_manual(factor_key, factor_name)
+    if manual is not None:
+        lqtp, note = manual
+        return _finalize(
+            original=original,
+            source_kind="dsl",
+            fe_formula=sanitize_dsl(lqtp_to_fe_dsl(lqtp)),
+            lqtp_formula=sanitize_lqtp_clickhouse_literals(lqtp),
+            notes=[note, "来源: MANUAL_LQTP_OVERRIDES"],
             factor_key=factor_key,
             factor_name=factor_name,
         )

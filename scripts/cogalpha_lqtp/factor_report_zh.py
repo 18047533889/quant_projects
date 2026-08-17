@@ -30,6 +30,11 @@ OPERATOR_ZH: dict[str, str] = {
     "high-low": "当日振幅 = 最高价 − 最低价",
 }
 
+try:
+    from scripts.cogalpha_lqtp.weekly_dug_factor_guides import WEEKLY_DUG_FACTOR_GUIDES
+except ImportError:  # script-dir import
+    from weekly_dug_factor_guides import WEEKLY_DUG_FACTOR_GUIDES  # type: ignore
+
 WEEK3_FACTOR_GUIDES: dict[str, dict[str, Any]] = {
     "factor_persistence_ewma": {
         "theme": "收益路径平滑度（指数加权）",
@@ -310,28 +315,40 @@ def get_factor_guide(
     dsl: str = "",
     python_code: str = "",
 ) -> dict[str, Any]:
-    """Return structured Chinese guide; week3 factors use curated copy, others get fallback."""
+    """Return structured Chinese guide; curated week/dug factors first, else fallback."""
     if factor_name in WEEK3_FACTOR_GUIDES:
         g = dict(WEEK3_FACTOR_GUIDES[factor_name])
+        g.setdefault("formula_display", (ann or {}).get("formula_display") or dsl.strip())
+        return g
+    if factor_name in WEEKLY_DUG_FACTOR_GUIDES:
+        g = dict(WEEKLY_DUG_FACTOR_GUIDES[factor_name])
         g.setdefault("formula_display", (ann or {}).get("formula_display") or dsl.strip())
         return g
 
     ann = ann or {}
     primary = (ann.get("formula_display") or dsl or "").strip()
+    py = (python_code or "").strip()
     theme = ann.get("theme") or "量价因子"
-    ops = _detect_operators_from_dsl(primary or python_code)
+    ops = _detect_operators_from_dsl(primary or py)
     steps = []
     if primary and len(primary) < 200:
         steps.append(f"按公式计算：{primary}")
     elif primary:
         steps.append(f"按公式计算（见下方代码）：{primary[:120]}…")
-    else:
+    elif py:
         steps.append("见下方 Python 源码逐步计算")
+    else:
+        steps.append("源侧仅交付中性化面板数值，无可展示公式/代码；评估直接使用面板落值")
     steps.append("每个交易日 T 仅使用 T 日及以前的 OHLCV，不使用未来数据")
+
+    if primary or py:
+        summary = f"属于{theme}，具体逻辑见公式与代码。"
+    else:
+        summary = f"属于{theme}；源侧未公开公式，仅有中性化面板可供评估。"
 
     return {
         "theme": theme,
-        "summary": f"属于{theme}，具体逻辑见公式与代码。",
+        "summary": summary,
         "steps": steps,
         "direction": "因子值越高/越低的经济含义需结合公式方向与 RankIC 符号判断（本页 RankIC 为正向检验）。",
         "operators": ops[:8],

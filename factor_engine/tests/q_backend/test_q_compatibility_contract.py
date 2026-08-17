@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 import backend.q_backend as q_backend
@@ -7,8 +9,11 @@ from backend.q_backend.q_backend import get_q_backend
 from backend.q_backend.q_compiler import QCompiler, get_q_compiler
 from backend.q_backend.q_capability import QBackendCapability
 from backend.q_backend.q_physical_implementation_registry import (
+    QEvidenceArtifact,
+    QEvidenceValidationContext,
     QPhysicalImplementation,
     QPhysicalImplementationRegistry,
+    compute_q_implementation_hash,
     get_q_physical_implementation_registry,
     install_q_physical_implementation_registry,
 )
@@ -140,21 +145,56 @@ def test_registry_replacement_after_compiler_bootstrap_is_rejected(monkeypatch) 
     assert compiler.capability.registry is not replacement
 
 
-def test_operator_certification_is_independent_of_unrelated_declaration_gaps() -> None:
+def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp_path) -> None:
+    import json
+
+    sha = "a" * 40
+    lowering_source = "q_certified"
+    implementation_hash = compute_q_implementation_hash(
+        "certified", "q_certified", lowering_source, "domain"
+    )
+    payload = {
+        "canonical": "certified",
+        "git_sha": sha,
+        "implementation_hash": implementation_hash,
+        "parameter_domain_id": "domain",
+        "q_version": "4.1",
+        "pykx_version": "2.6",
+        "status": "PASS",
+        "executed_cases": 1,
+    }
+    artifacts = {}
+    for name in ("compile", "runtime", "parity", "null_semantics"):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps({**payload, "stage": name}), encoding="utf-8")
+        artifacts[name] = QEvidenceArtifact(
+            path=path.name,
+            sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        )
     certified = QPhysicalImplementation(
         canonical="certified",
         lowering_id="q_certified",
-        compile_evidence="compile",
-        runtime_evidence="runtime",
-        parity_evidence="parity",
+        lowering_source=lowering_source,
+        compile_evidence=artifacts["compile"],
+        runtime_evidence=artifacts["runtime"],
+        parity_evidence=artifacts["parity"],
+        null_semantics_evidence=artifacts["null_semantics"],
         parameter_domain_id="domain",
-        implementation_hash="sha256:certified",
+        git_sha=sha,
+        generation_timestamp="2026-08-17T10:00:00+00:00",
+        implementation_hash=implementation_hash,
         q_version_range=">=4",
         pykx_version_range=">=2",
     )
     registry = QPhysicalImplementationRegistry(
-        lowerings={"certified": "q_certified"},
+        lowerings={"certified": lowering_source},
         declared_targets=frozenset({"certified", "unrelated_gap"}),
+        validation_context=QEvidenceValidationContext(
+            artifact_root=tmp_path,
+            q_version="4.1",
+            pykx_version="2.6",
+            current_git_sha_provider=lambda: sha,
+        ),
     )
     registry.register(certified)
 

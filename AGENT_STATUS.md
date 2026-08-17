@@ -5,7 +5,9 @@
 
 ## Active
 
-No writer or reviewer is currently active.
+| Role | Scope |
+|---|---|
+| Independent Q evidence-admission reviewer | Read-only review of exact-HEAD artifact validation, fail-closed authority, and focused oracle tests |
 
 ## Completed Reviews
 

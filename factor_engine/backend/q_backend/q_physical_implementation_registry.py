@@ -1,8 +1,137 @@
 """Evidence-backed registry for executable q physical implementations."""
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import subprocess
 from dataclasses import dataclass
-from typing import Mapping
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Mapping
+
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+
+
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+@dataclass(frozen=True)
+class QEvidenceArtifact:
+    """One immutable JSON evidence artifact, addressed relative to an approved root."""
+
+    path: str
+    sha256: str
+
+
+@dataclass(frozen=True)
+class QEvidenceValidationContext:
+    """Runtime environment against which q production evidence is validated."""
+
+    artifact_root: Path
+    q_version: str | None
+    pykx_version: str | None
+    current_git_sha_provider: Callable[[], str | None]
+
+
+def current_q_git_sha() -> str | None:
+    """Read the live repository HEAD; inability to do so denies certification."""
+
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(Path(__file__).resolve().parents[3]),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def compute_q_implementation_hash(
+    canonical: str,
+    lowering_id: str,
+    lowering_source: str,
+    parameter_domain_id: str | None,
+) -> str:
+    """Bind certification to the actual executable lowering and parameter domain."""
+
+    payload = json.dumps(
+        {
+            "canonical": canonical,
+            "lowering_id": lowering_id,
+            "lowering_source": lowering_source,
+            "parameter_domain_id": parameter_domain_id,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _artifact_errors(
+    label: str,
+    artifact: QEvidenceArtifact | None,
+    root: Path,
+    expected: Mapping[str, str],
+) -> list[str]:
+    if artifact is None:
+        return [f"{label}: missing"]
+    if not isinstance(artifact, QEvidenceArtifact):
+        return [f"{label}: expected QEvidenceArtifact"]
+    if not _SHA256_RE.fullmatch(artifact.sha256):
+        return [f"{label}: invalid sha256"]
+    relative = Path(artifact.path)
+    if relative.is_absolute():
+        return [f"{label}: path must be relative"]
+    root = root.resolve()
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return [f"{label}: path escapes artifact root"]
+    try:
+        if not path.is_file():
+            return [f"{label}: artifact is missing or not a file"]
+        raw = path.read_bytes()
+    except OSError as exc:
+        return [f"{label}: artifact read failed: {type(exc).__name__}"]
+    if hashlib.sha256(raw).hexdigest() != artifact.sha256:
+        return [f"{label}: artifact sha256 mismatch"]
+    try:
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return [f"{label}: invalid JSON payload"]
+    if not isinstance(payload, dict):
+        return [f"{label}: payload must be an object"]
+    errors = []
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            errors.append(f"{label}: {key} mismatch")
+    if payload.get("status") != "PASS":
+        errors.append(f"{label}: status is not PASS")
+    executed_cases = payload.get("executed_cases")
+    if not isinstance(executed_cases, int) or isinstance(executed_cases, bool) or executed_cases <= 0:
+        errors.append(f"{label}: executed_cases must be positive")
+    return errors
+
+
+def _version_errors(label: str, actual: str | None, specifier: str | None) -> list[str]:
+    if not specifier:
+        return [f"{label}_version_range: missing"]
+    if not actual:
+        return [f"{label}_version: unavailable"]
+    try:
+        allowed = SpecifierSet(specifier)
+        version = Version(actual)
+    except (InvalidSpecifier, InvalidVersion):
+        return [f"{label}_version: invalid version or range"]
+    if version not in allowed:
+        return [f"{label}_version: outside certified range"]
+    return []
 
 
 @dataclass(frozen=True)
@@ -10,44 +139,90 @@ class QPhysicalImplementation:
     canonical: str
     lowering_id: str
     parameter_domain_id: str | None = None
-    compile_evidence: str | None = None
-    runtime_evidence: str | None = None
-    parity_evidence: str | None = None
-    null_semantics_evidence: str | None = None
-    performance_evidence: str | None = None
+    lowering_source: str = ""
+    compile_evidence: QEvidenceArtifact | None = None
+    runtime_evidence: QEvidenceArtifact | None = None
+    parity_evidence: QEvidenceArtifact | None = None
+    null_semantics_evidence: QEvidenceArtifact | None = None
+    performance_evidence: QEvidenceArtifact | None = None
+    git_sha: str | None = None
+    generation_timestamp: str | None = None
     implementation_hash: str | None = None
     q_version_range: str | None = None
     pykx_version_range: str | None = None
     notes: str = ""
 
     @property
-    def has_full_evidence(self) -> bool:
-        return all((
-            self.compile_evidence,
-            self.runtime_evidence,
-            self.parity_evidence,
-            self.parameter_domain_id,
-            self.implementation_hash,
-            self.q_version_range,
-            self.pykx_version_range,
-        ))
-
-    @property
     def research_ready(self) -> bool:
         """Executable lowering is available for research use only."""
         return bool(self.lowering_id)
 
-    @property
-    def production_ready(self) -> bool:
-        # Compile, runtime, and parity references must be independent artifacts.
-        return bool(
-            self.lowering_id
-            and self.has_full_evidence
-            and self.parameter_domain_id
-            and self.implementation_hash
-            and self.q_version_range
-            and self.pykx_version_range
+    def validation_errors(self, context: QEvidenceValidationContext) -> tuple[str, ...]:
+        errors: list[str] = []
+        if not _GIT_SHA_RE.fullmatch(self.git_sha or ""):
+            errors.append("git_sha: missing or malformed")
+        try:
+            current_git_sha = context.current_git_sha_provider()
+        except Exception:
+            current_git_sha = None
+        if not _GIT_SHA_RE.fullmatch(current_git_sha or ""):
+            errors.append("current_git_sha: unavailable or malformed")
+        elif self.git_sha != current_git_sha:
+            errors.append("git_sha: evidence is stale")
+
+        try:
+            generated = datetime.fromisoformat(self.generation_timestamp or "")
+            if generated.tzinfo is None or generated.utcoffset() is None:
+                errors.append("generation_timestamp: timezone is required")
+        except (TypeError, ValueError):
+            errors.append("generation_timestamp: missing or malformed")
+
+        evidence = {
+            "compile_evidence": self.compile_evidence,
+            "runtime_evidence": self.runtime_evidence,
+            "parity_evidence": self.parity_evidence,
+            "null_semantics_evidence": self.null_semantics_evidence,
+        }
+        paths = [artifact.path for artifact in evidence.values() if isinstance(artifact, QEvidenceArtifact)]
+        if len(paths) != len(set(paths)):
+            errors.append("evidence_artifacts: required artifacts must be independent")
+        expected_artifact = {
+            "canonical": self.canonical,
+            "git_sha": self.git_sha or "",
+            "implementation_hash": self.implementation_hash or "",
+            "parameter_domain_id": self.parameter_domain_id or "",
+            "q_version": context.q_version or "",
+            "pykx_version": context.pykx_version or "",
+        }
+        for label, artifact in evidence.items():
+            stage = label.removesuffix("_evidence")
+            errors.extend(
+                _artifact_errors(
+                    label,
+                    artifact,
+                    context.artifact_root,
+                    {**expected_artifact, "stage": stage},
+                )
+            )
+
+        expected_hash = compute_q_implementation_hash(
+            self.canonical,
+            self.lowering_id,
+            self.lowering_source,
+            self.parameter_domain_id,
         )
+        if not _SHA256_RE.fullmatch(self.implementation_hash or ""):
+            errors.append("implementation_hash: missing or malformed")
+        elif self.implementation_hash != expected_hash:
+            errors.append("implementation_hash: lowering or parameter domain changed")
+        if not self.lowering_source:
+            errors.append("lowering_source: missing")
+        if not self.parameter_domain_id:
+            errors.append("parameter_domain: missing")
+
+        errors.extend(_version_errors("q", context.q_version, self.q_version_range))
+        errors.extend(_version_errors("pykx", context.pykx_version, self.pykx_version_range))
+        return tuple(errors)
 
 
 class QPhysicalImplementationRegistry:
@@ -69,16 +244,19 @@ class QPhysicalImplementationRegistry:
         *,
         lowerings: Mapping[str, str] | None = None,
         declared_targets: frozenset[str] | None = None,
+        validation_context: QEvidenceValidationContext | None = None,
     ) -> None:
         self._implementations: dict[str, QPhysicalImplementation] = {}
-        # An explicitly-created registry is an empty fixture unless its caller
-        # supplies declarations. Production bootstrap supplies declarations
-        # from the compiler through ``build_q_physical_implementation_registry``.
         self._declared_targets = frozenset(
             frozenset() if declared_targets is None else declared_targets
         )
+        self._validation_context = validation_context
         for canonical, lowering_id in (lowerings or {}).items():
-            self.register(QPhysicalImplementation(canonical=canonical, lowering_id=lowering_id))
+            self.register(QPhysicalImplementation(
+                canonical=canonical,
+                lowering_id=lowering_id,
+                lowering_source=lowering_id,
+            ))
 
     def declared_targets(self) -> frozenset[str]:
         return self._declared_targets
@@ -95,6 +273,14 @@ class QPhysicalImplementationRegistry:
     def get(self, canonical: str) -> QPhysicalImplementation | None:
         return self._implementations.get(canonical)
 
+    def evidence_errors(self, canonical: str) -> tuple[str, ...]:
+        impl = self.get(canonical)
+        if impl is None:
+            return ("implementation: missing",)
+        if self._validation_context is None:
+            return ("validation_context: missing",)
+        return impl.validation_errors(self._validation_context)
+
     def get_research_ready(self) -> frozenset[str]:
         if self.has_disagreement():
             return frozenset()
@@ -103,7 +289,10 @@ class QPhysicalImplementationRegistry:
     def get_production_ready(self) -> frozenset[str]:
         if self.has_disagreement():
             return frozenset()
-        return frozenset(name for name, impl in self._implementations.items() if impl.production_ready)
+        return frozenset(
+            name for name in self._implementations
+            if self.is_production_certified(name)
+        )
 
     def get_with_lowering(self) -> frozenset[str]:
         return frozenset(name for name, impl in self._implementations.items() if impl.lowering_id)
@@ -112,14 +301,11 @@ class QPhysicalImplementationRegistry:
         return bool((impl := self.get(canonical)) and impl.lowering_id)
 
     def is_production_certified(self, canonical: str) -> bool:
-        """Return this operator's certification independently of other gaps.
-
-        A declaration/lowering disagreement is a backend-wide readiness failure,
-        but it must not hide an otherwise independently certified operator.
-        Callers checking global readiness use ``get_production_ready`` or
-        ``has_disagreement`` in addition to this per-operator query.
-        """
-        return bool((impl := self.get(canonical)) and impl.production_ready)
+        return (
+            canonical in self._declared_targets
+            and bool(self.get(canonical))
+            and not self.evidence_errors(canonical)
+        )
 
     def admission_disagreements(self) -> dict[str, list[str]]:
         declared = set(self.declared_targets())
@@ -134,22 +320,8 @@ class QPhysicalImplementationRegistry:
 
     def get_missing_evidence(self) -> dict[str, list[str]]:
         missing: dict[str, list[str]] = {}
-        for name, impl in self._implementations.items():
-            gaps = []
-            if not impl.compile_evidence:
-                gaps.append("compile")
-            if not impl.runtime_evidence:
-                gaps.append("runtime")
-            if not impl.parity_evidence:
-                gaps.append("parity")
-            if not impl.parameter_domain_id:
-                gaps.append("parameter_domain")
-            if not impl.implementation_hash:
-                gaps.append("implementation_hash")
-            if not impl.q_version_range:
-                gaps.append("q_version_range")
-            if not impl.pykx_version_range:
-                gaps.append("pykx_version_range")
+        for name in self._implementations:
+            gaps = list(self.evidence_errors(name))
             if gaps:
                 missing[name] = gaps
         return missing
@@ -158,7 +330,7 @@ class QPhysicalImplementationRegistry:
         missing = self.get_missing_evidence()
         disagreements = self.admission_disagreements()
         if self._implementations and not missing and not any(disagreements.values()):
-            return True, "PASS: all lowerings have independent evidence"
+            return True, "PASS: all lowerings have current, validated evidence"
         return False, f"FAIL: missing={list(missing)[:5]}, disagreements={disagreements}"
 
 
@@ -186,21 +358,13 @@ def install_q_physical_implementation_registry(
 ) -> QPhysicalImplementationRegistry:
     global _REGISTRY
     if _REGISTRY is not None and _REGISTRY is not registry:
-        # An explicit evidence registry is authoritative for the process.  A
-        # later lazy getter/compiler bootstrap must never replace it.
         return _REGISTRY
     _REGISTRY = registry
     return registry
 
 
 def get_q_physical_implementation_registry() -> QPhysicalImplementationRegistry:
-    """Return compiler-derived authority, or fail closed when unavailable.
-
-    The lazy dependency points from registry data to the compiler lowering
-    source only after module initialization, so the compiler never imports a
-    partially initialized registry.  Isolated fixtures can still install an
-    explicit registry; an unpopulated explicit registry admits nothing.
-    """
+    """Return compiler-derived authority, or fail closed when unavailable."""
     global _REGISTRY
     if _REGISTRY is None:
         from backend.q_backend.q_compiler import get_q_compiler

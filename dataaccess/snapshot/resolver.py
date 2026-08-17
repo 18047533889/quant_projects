@@ -336,6 +336,9 @@ def parse_source_manifest(
                     etag=entry.get("etag"),
                     version_id=entry.get("version_id"),
                     content_length=size,
+                    mtime_ns=entry.get("mtime_ns"),
+                    checksum=entry.get("checksum"),
+                    checksum_algorithm=entry.get("checksum_algorithm"),
                     source="source_manifest",
                 )
             )
@@ -591,6 +594,21 @@ class SourceSnapshotResolver:
                         dataset, len(objs),
                     )
 
+        # verified mode binds the publisher's exact object set to the terminal scan
+        # scope, including the authoritative-empty case.
+        if (
+            policy == "verified_fail_if_changed"
+            and manifest_present
+            and paths is not None
+        ):
+            publisher_paths = tuple(sorted(str(o.uri) for o in objects))
+            terminal_paths = tuple(sorted(str(path) for path in paths))
+            if publisher_paths != terminal_paths:
+                raise SourceSnapshotUnavailable(
+                    f"dataset={dataset!r} publisher object set 与 terminal scan object set "
+                    "不一致；verified_fail_if_changed 拒绝扫描未由 publisher 授权的对象。"
+                )
+
         # 5) 仍无法得到 exact object set。
         #     - manifest 权威存在（含空集）→ 合法空 snapshot；
         #     - fallback 无 exact objects（本地空 dataset）→ 合法空 snapshot；
@@ -638,11 +656,12 @@ class SourceSnapshotResolver:
                             f"manifest object {o.uri} 越出 dataset registered boundary "
                             f"{boundary!r}（R26-P0-015，production fail-closed）"
                         )
-        # R26-P0-015：strict 下 exact object 必须携带可证明身份
-        # （version_id OR etag+content_length OR checksum）。
-        if strict and objects:
+        # verified_fail_if_changed always requires independently provable object
+        # identity, even when the surrounding runtime is not in strict mode.
+        if (strict or policy == "verified_fail_if_changed") and objects:
             for o in objects:
-                if str(o.uri).startswith(("s3://", "cos://")):
+                uri = str(o.uri)
+                if uri.startswith(("s3://", "cos://")):
                     if not (
                         o.version_id or (o.etag and o.content_length is not None)
                     ):
@@ -650,6 +669,14 @@ class SourceSnapshotResolver:
                             f"manifest object {o.uri} 无 etag/version_id/content_length"
                             "（R26-P0-015，URI 不是 content identity，production deny）"
                         )
+                elif not (
+                    (o.content_length is not None and o.mtime_ns is not None)
+                    or (o.checksum and o.checksum_algorithm)
+                ):
+                    raise SourceSnapshotUnavailable(
+                        f"本地 manifest object {o.uri} 无 size+mtime_ns 或强 checksum"
+                        "（verified local identity 无法证明，production deny）"
+                    )
 
         digest = content_digest_of_objects(objects)
         snap = ResolvedSourceSnapshot(

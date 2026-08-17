@@ -1,0 +1,71 @@
+task_id: Q2-P0-001-005-evidence-admission
+base_sha: 6cdc97437d341f12c2de6483f49bd3345e14899a
+commit_sha: PENDING
+owned_files:
+  - factor_engine/backend/q_backend/q_physical_implementation_registry.py
+  - factor_engine/backend/q_backend/q_capability_evidence.py
+  - factor_engine/pyproject.toml
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+  - factor_engine/tests/q_backend/test_q_capability_evidence.py
+  - factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - evidence/r2/Q2-P0-001-005-q-evidence-admission.yaml
+  - AGENT_STATUS.md
+  - AUTONOMOUS_MASTER_QUEUE.md
+  - FINDINGS_LEDGER.md
+  - RESUME_STATE.md
+modified_files:
+  - factor_engine/backend/q_backend/q_physical_implementation_registry.py
+  - factor_engine/backend/q_backend/q_capability_evidence.py
+  - factor_engine/pyproject.toml
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+  - factor_engine/tests/q_backend/test_q_capability_evidence.py
+  - factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - evidence/r2/Q2-P0-001-005-q-evidence-admission.yaml
+  - AGENT_STATUS.md
+  - AUTONOMOUS_MASTER_QUEUE.md
+  - FINDINGS_LEDGER.md
+  - RESUME_STATE.md
+canonicals_touched: []
+backends_touched:
+  - q
+tests_run: 102
+tests_passed: 90
+tests_failed: 12
+test_results:
+  - command: focused evidence, compatibility, and executor recovery suite
+    result: 72 passed
+  - command: legacy tests/q_backend/test_q_backend.py
+    result: 18 passed, 12 failed
+    classification: stale or unsafe legacy expectations; not counted as passing evidence
+  - command: modified-file syntax compilation
+    result: PASS
+  - command: FactorEngine Q and DataAccess import smoke
+    result: PASS
+hard_gates:
+  Q_NATIVE_WITHOUT_LOWERING: FAIL
+  Q_MANUAL_AUTHORITY_REMOVED: PASS
+  Q_PRODUCTION_SAFE_SINGLE_DEFINITION: PASS
+  Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY: PASS
+  Q_CAPABILITY_SINGLE_AUTHORITY: FAIL
+current_authority:
+  declared_targets: 110
+  executable_lowerings: 80
+  declaration_lowering_disagreements: 30
+  production_safe_operators: 0
+not_run:
+  - full repository compile
+  - full FactorEngine regression
+  - full DataAccess regression
+  - q runtime parity and null-semantics certification
+  - PIT poison gates
+  - live q/PyKX integration
+  - root CI
+known_limitations:
+  - Q backend remains NOT_PRODUCTION_CERTIFIED.
+  - cs_rank lowering remains semantically uncertified.
+  - executor telemetry lacks backend_switch_count and materialization_count.
+  - registry bootstrap has a separately reproduced inactive-static-canonicals failure.
+evidence_generated:
+  - evidence/r2/Q2-P0-001-005-q-evidence-admission.yaml
+independent_review:
+  status: IN_PROGRESS

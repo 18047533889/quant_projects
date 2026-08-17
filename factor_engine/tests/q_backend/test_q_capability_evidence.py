@@ -231,10 +231,12 @@ class TestQCapabilityEvidenceRecord:
             compile_pass=True,
             runtime_pass=True,
             parity_pass=True,
+            null_semantics_pass=True,
             parameter_domain_pass=True,
             implementation_hash_pass=True,
             q_version_range_pass=True,
             pykx_version_range_pass=True,
+            certification_pass=True,
         )
         assert ev2.production_safe is True
 

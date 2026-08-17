@@ -493,7 +493,7 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
         ic = float(r.get("display_rank_ic") or r.get("abs_mean_rank_ic") or 0.0)
         icir = r.get("display_rank_icir")
         icir_s = f"{float(icir):.4f}" if icir is not None else "—"
-        flip = "是" if r.get("sign_flipped") else "否"
+        flip = "公式已取负" if r.get("formula_sign_flipped") else ("是" if r.get("sign_flipped") else "否")
         cov = r.get("mean_daily_coverage")
         cov_s = f"{float(cov):.1%}" if isinstance(cov, (int, float)) and cov == cov else "—"
         sh = r.get("long_short_sharpe")
@@ -507,23 +507,32 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
             if href
             else f"<code>{fid}</code>"
         )
+        dsl = str(r.get("lqtp_formula") or r.get("dsl") or "").strip()
+        if dsl.startswith("(python)"):
+            dsl = ""
+        if dsl and len(dsl) > 110:
+            dsl_shown = dsl[:110].rstrip() + "…"
+            dsl_cell = (
+                f"<code style='font-size:12px;word-break:break-all' "
+                f"title=\"{html_lib.escape(dsl)}\">{html_lib.escape(dsl_shown)}</code>"
+            )
+        elif dsl:
+            dsl_cell = (
+                f"<code style='font-size:12px;word-break:break-all'>{html_lib.escape(dsl)}</code>"
+            )
+        else:
+            dsl_cell = "<span class='muted'>—</span>"
         plat_raw = str(r.get("platform_submit") or "")
         if plat_raw in {"submitted", "already_registered", "platform"}:
             plat = "平台"
-        elif r.get("lqtp_native"):
+        elif r.get("lqtp_submit_eligible") or r.get("lqtp_native"):
             plat = "可转平台"
-        elif r.get("has_formula") or r.get("dsl"):
+        elif r.get("has_formula") or dsl:
             plat = "本地(有DSL)"
         elif plat_raw.startswith("skipped"):
             plat = "本地(无公式)"
         else:
             plat = "本地"
-        dsl = str(r.get("lqtp_formula") or r.get("dsl") or "").strip()
-        dsl_cell = (
-            f"<code style='font-size:12px;word-break:break-all'>{html_lib.escape(dsl)}</code>"
-            if dsl
-            else "<span class='muted'>—</span>"
-        )
         rows.append(
             "<tr>"
             f"<td>{i}</td>"
@@ -552,7 +561,7 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
   <h2>本周新挖 · 中性化候选</h2>
   <div class="notice">
     <p><b>来源</b>：外部中性化候选池（面板已中性化落盘）。抽样核对截面均值≈0，且与未中性化副本数值不同。</p>
-    <p><b>筛选</b>：VWAP→VWAP Mean |RankIC| &gt; {threshold:.0%}；表中 RankIC 取绝对值（负向已标注「取负」）。
+    <p><b>筛选</b>：VWAP→VWAP Mean |RankIC| &gt; {threshold:.0%}；负向因子已把 <code>-</code> 写入公式并重测调正（「取负显示」列：公式已取负 / 否）。
     与上方历史精选表<strong>分开列出</strong>。</p>
     <p><b>回测</b>：{plat}</p>
     <p class="muted">生成 {gen} · 爬取 {payload.get('n_crawled')} · 成功评估 {payload.get('n_ok')} ·
@@ -575,6 +584,74 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
   </table>
 </section>
 """
+
+
+def _count_index_factor_blocks(text: str) -> dict[str, int]:
+    """Count factors on the screening index: 本周 / 以前(主表+上周存档) / 全部."""
+
+    def _section(sid: str) -> str:
+        m = re.search(rf'<section[^>]*id="{re.escape(sid)}"[^>]*>[\s\S]*?</section>', text)
+        return m.group(0) if m else ""
+
+    def _nrows(block: str) -> int:
+        return len(re.findall(r"<tr><td>\d+</td><td><a ", block))
+
+    main_block = (
+        text.split('id="factor-corr"', 1)[0]
+        if 'id="factor-corr"' in text
+        else text.split('id="weekly-dug-neutral"', 1)[0]
+    )
+    main_n = len(
+        re.findall(
+            r'<tr><td>\d+</td><td><a href="[^"]+">[^<]+</a></td><td class="lqtp">',
+            main_block,
+        )
+    )
+    new_n = _nrows(_section("weekly-dug-neutral"))
+    prev_n = _nrows(_section("weekly-dug-prev"))
+    return {
+        "main": main_n,
+        "weekly_new": new_n,
+        "weekly_prev": prev_n,
+        "prior": main_n + prev_n,
+        "total": main_n + new_n + prev_n,
+    }
+
+
+def refresh_index_hero_totals(text: str) -> str:
+    """Rewrite hero metric cards so totals include all sections, split 本周/以前."""
+    c = _count_index_factor_blocks(text)
+    cards = (
+        '    <div class="cards">\n'
+        f'      <div class="metric"><b>{c["total"]}</b><span>页面因子总数</span></div>\n'
+        f'      <div class="metric"><b>{c["weekly_new"]}</b><span>本周新挖</span></div>\n'
+        f'      <div class="metric"><b>{c["prior"]}</b>'
+        f'<span>以前入库（主表 {c["main"]} + 上周存档 {c["weekly_prev"]}）</span></div>\n'
+        '      <div class="metric"><b>2%</b><span>RankIC 阈值</span></div>\n'
+        "    </div>"
+    )
+    text2, n = re.subn(
+        r'<div class="cards">\s*<div class="metric">[\s\S]*?</div>\s*</div>',
+        cards,
+        text,
+        count=1,
+    )
+    if n != 1:
+        return text
+    # keep quick-dir jumps in sync when present
+    text2 = re.sub(
+        r'(<h2>快速目录</h2>\s*)<p class="muted">[\s\S]*?</p>',
+        (
+            r"\1<p class=\"muted\">"
+            f'<a href="#weekly-dug-neutral">↓ 本周新挖（{c["weekly_new"]}）</a>'
+            f' · <a href="#weekly-dug-prev">↓ 以前·上周存档（{c["weekly_prev"]}）</a>'
+            f' · <a href="#factor-list-history">↓ 历史精选主表（{c["main"]}）</a>'
+            "</p>"
+        ),
+        text2,
+        count=1,
+    )
+    return text2
 
 
 def patch_screening_html(args: argparse.Namespace, payload: dict[str, Any] | None = None) -> Path:
@@ -609,6 +686,7 @@ def patch_screening_html(args: argparse.Namespace, payload: dict[str, Any] | Non
             '<h2>快速目录</h2>\n    <p class="muted"><a href="#weekly-dug-neutral">↓ 跳到本周新挖（中性化候选）</a></p>',
             1,
         )
+    text = refresh_index_hero_totals(text)
     bak = html_path.with_suffix(html_path.suffix + f".bak_weekly_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     bak.write_text(html_path.read_text(encoding="utf-8"), encoding="utf-8")
     html_path.write_text(text, encoding="utf-8")

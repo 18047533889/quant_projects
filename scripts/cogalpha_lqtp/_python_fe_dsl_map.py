@@ -360,4 +360,59 @@ EXTRA_PYTHON_FE_DSL: dict[str, str] = {
         "+ 2 * pow(ts_mean(ts_pct(close, 1), 20), 3), "
         "pow(ts_std(ts_pct(close, 1), 20), 3) + 1e-8), 252))"
     ),
+    # --- weekly python-9 hand DSL ---
+    "cand_vw_ew_spread_responsive": (
+        "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)"
+    ),
+    "cand_overnight_intraday_divergence_simplified": (
+        "ema(safe_div(close,open)-1,5)-ema(safe_div(open,delay(close,1))-1,5)"
+    ),
+    "cand_fusion_upcap_volregime": (
+        "safe_div(ts_sum(volume*where(ts_pct(close,1)>0,1,0),20),ts_sum(volume,20))*(1+(safe_div(volume,ema(volume,20))-1)*0.5)"
+    ),
+    "cand_gap_reversal_intensity": (
+        "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)"
+    ),
+    "cand_gpdev_volregime_ema10": (
+        "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)"
+    ),
+    "cand_gap_vol_cluster_adaptive_w30": (
+        "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))*safe_div(volume,ema(volume,20))*10))-1)*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),delay(power(ts_pct(close,1),2),1),30))*2))-1))"
+    ),
+    "cand_reversal_volregime_overnight_csz": (
+        "(-ts_pct(close,3)*safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),20)))*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),ts_std(safe_div(open,delay(close,1))-1,20))))"
+    ),
+    "cand_vol_expansion_atr_ratio": (
+        "sign(close-open)*sigmoid(5*(safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),60))-1))"
+    ),
+    "cand_geometric_deviation_vol_asym_tilt": (
+        "ema(sign(((2*log(clip(close,1e-12,1e18))-log(clip(high,1e-12,1e18))-log(clip(low,1e-12,1e18)))/3))*power(((2*log(clip(close,1e-12,1e18))-log(clip(high,1e-12,1e18))-log(clip(low,1e-12,1e18)))/3),2),5)*(1+where(safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20))>0,safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)),0))"
+    ),
+    "factor_vw_ew_spread_responsive": (
+        "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)"
+    ),
+    "factor_overnight_intraday_divergence_simplified": (
+        "ema(safe_div(close,open)-1,5)-ema(safe_div(open,delay(close,1))-1,5)"
+    ),
+    "factor_fusion_upcap_volregime": (
+        "safe_div(ts_sum(volume*where(ts_pct(close,1)>0,1,0),20),ts_sum(volume,20))*(1+(safe_div(volume,ema(volume,20))-1)*0.5)"
+    ),
+    "factor_gap_reversal_intensity": (
+        "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)"
+    ),
+    "factor_gpdev_volregime_ema10": (
+        "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)"
+    ),
+    "factor_gap_vol_cluster_adaptive_w30": (
+        "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))*safe_div(volume,ema(volume,20))*10))-1)*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),delay(power(ts_pct(close,1),2),1),30))*2))-1))"
+    ),
+    "factor_reversal_volregime_overnight_csz": (
+        "(-ts_pct(close,3)*safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),20)))*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),ts_std(safe_div(open,delay(close,1))-1,20))))"
+    ),
+    "factor_vol_expansion_atr_ratio": (
+        "sign(close-open)*sigmoid(5*(safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),60))-1))"
+    ),
+    "factor_geometric_deviation_vol_asym_tilt": (
+        "ema(sign(((2*log(clip(close,1e-12,1e18))-log(clip(high,1e-12,1e18))-log(clip(low,1e-12,1e18)))/3))*power(((2*log(clip(close,1e-12,1e18))-log(clip(high,1e-12,1e18))-log(clip(low,1e-12,1e18)))/3),2),5)*(1+where(safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20))>0,safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)),0))"
+    ),
 }

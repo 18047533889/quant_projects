@@ -512,6 +512,12 @@ _COMPUTE_PATH: dict[str, tuple[str, str, str]] = {
         "#a16207",
         "未转换成可执行 DSL（或仅有阅读用公式），直接跑 Python 因子函数落值。",
     ),
+    "local_panel": (
+        "中性化面板落值（源侧未提供公式）",
+        "#64748b",
+        "候选池只交付了已中性化的因子面板数值；源侧未公开可回收 DSL/Python。"
+        "本页 RankIC/分层/多空基于该面板本地 DuckDB 评估，不是平台公式直算。",
+    ),
 }
 
 
@@ -528,8 +534,21 @@ def resolve_compute_path(
         str(eval_route or meta.get("eval_route") or "").strip()
         or str(engine or meta.get("engine") or "").strip()
     )
-    if route in {"factor_engine", "local_dsl"}:
+    eng = str(engine or meta.get("engine") or "").strip()
+    has_formula = bool(str(meta.get("formula") or "").strip())
+    if route in {
+        "local_panel",
+        "local_panel_values",
+        "cos_panel",
+        "panel",
+    } or eng in {"local_panel", "cos_panel", "panel"}:
+        key = "local_panel"
+    elif route in {"factor_engine", "local_dsl", "fe_data_access_yearly"} and (
+        has_formula or route == "fe_data_access_yearly"
+    ):
         key = "local_dsl"
+    elif route in {"factor_engine", "local_dsl"} and not has_formula:
+        key = "local_panel"
     elif route in {"lqtp_dsl", "lqtp"}:
         key = "lqtp_dsl"
     elif route in {"python", "local_python"}:
@@ -538,15 +557,21 @@ def resolve_compute_path(
         key = "lqtp_dsl"
     elif "duckdb" in str(eval_mode) or "local_values" in str(eval_mode):
         # Prefer engine when mode is ambiguous
-        eng = str(engine or meta.get("engine") or "")
         if eng == "lqtp_dsl":
             key = "lqtp_dsl"
         elif eng == "python":
             key = "local_python"
+        elif eng in {"local_panel", "cos_panel", "panel"} or not has_formula:
+            key = "local_panel"
         else:
             key = "local_dsl"
     else:
-        key = "local_python" if route else "local_dsl"
+        if eng in {"local_panel", "cos_panel", "panel"} or (
+            not has_formula and not str(meta.get("formula") or "").strip()
+        ):
+            key = "local_panel"
+        else:
+            key = "local_python" if route else "local_dsl"
     label, color, detail = _COMPUTE_PATH[key]
     return key, label, color, detail
 
@@ -748,8 +773,18 @@ def render_factor_report(
         dsl_heading = "DSL（LQTP 平台直算）"
     elif path_key == "local_dsl":
         dsl_heading = "DSL（自研 factor_engine）"
+    elif path_key == "local_panel":
+        dsl_heading = "公式（源侧未提供）"
     else:
         dsl_heading = "DSL（阅读用 / 未用于落值）"
+    empty_formula_note = (
+        "<p class='note'><b>源侧未公开公式</b>：候选池只交付了中性化面板数值"
+        "（COS parquet），本地无法回收 DSL / Python。"
+        "评估基于面板落值；详情页图表仍可用。</p>"
+        "<pre>面板回测 · 无可展示公式/代码</pre>"
+        if path_key == "local_panel"
+        else "<pre>（无公式/代码）</pre>"
+    )
     if formula_display or has_dsl or (python_code or "").strip():
         primary = formula_display if formula_display else dsl_clean
         src_note = ""
@@ -759,20 +794,24 @@ def render_factor_report(
             src_note = "（来自 formula_text 文档）"
         elif ann.get("is_python_only") and formula_display:
             src_note = "（Python-only 因子 · 公式化表示）"
-        show_fe_dsl = has_dsl and (
-            path_key == "local_dsl"
-            or (formula_display and formula_display.strip() != dsl_clean.strip())
-            or path_key == "lqtp_dsl"
-        )
+        # Always surface executable DSL when present (even if Python source is also shown).
+        # Previously hidden for cos_panel / fe_retest routes → detail pages looked Python-only.
+        show_fe_dsl = has_dsl and not dsl_clean.startswith("(python)")
         formula_block = f"""
   <div class="card">
     <h2>公式 / 代码</h2>
     <p class="note">下方为可读公式与可执行代码。若同时出现「公式化表示」与 DSL，以 DSL 为准用于落值。</p>
     {f'<p class="note">{_lookahead_badge(lookahead_risk)} {html_lib.escape(formula_note or src_note)}</p>' if (lookahead_risk or formula_note or src_note) else ""}
-    {f'<h3>公式化表示{html_lib.escape(src_note)}</h3><pre>{html_lib.escape(primary.strip())}</pre>' if primary.strip() and primary.strip() != dsl_clean else ""}
     {f'<h3>{html_lib.escape(dsl_heading)}</h3><pre>{html_lib.escape(dsl_clean)}</pre>' if show_fe_dsl else ""}
+    {f'<h3>公式化表示{html_lib.escape(src_note)}</h3><pre>{html_lib.escape(primary.strip())}</pre>' if primary.strip() and primary.strip() != dsl_clean and not show_fe_dsl else ""}
     {f'<h3>Python 源码</h3><pre>{html_lib.escape((python_code or "").strip())}</pre>' if (python_code or "").strip() else ""}
-    {"" if (primary.strip() or has_dsl or (python_code or "").strip()) else "<pre>（无公式/代码）</pre>"}
+    {"" if (primary.strip() or has_dsl or (python_code or "").strip()) else empty_formula_note}
+  </div>"""
+    elif path_key == "local_panel":
+        formula_block = f"""
+  <div class="card">
+    <h2>公式 / 代码</h2>
+    {empty_formula_note}
   </div>"""
 
     ls_bt_section = ""
@@ -824,7 +863,7 @@ def render_factor_report(
     <h2>公式 / 代码</h2>
     {f'<h3>Python 源码</h3><pre>{html_lib.escape((python_code or "").strip())}</pre>' if (python_code or "").strip() else ""}
     {f'<h3>{html_lib.escape(dsl_heading)}</h3><pre>{html_lib.escape((dsl or "").strip())}</pre>' if (dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}} else ""}
-    {"" if ((python_code or "").strip() or ((dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}})) else "<pre>（无公式/代码）</pre>"}
+    {"" if ((python_code or "").strip() or ((dsl or "").strip() and (dsl or "").strip() not in {{"(python only)", ""}})) else empty_formula_note}
   </div>'''}
   {interpretation_block}
   {meta_block}

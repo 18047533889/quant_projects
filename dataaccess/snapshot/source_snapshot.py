@@ -201,7 +201,8 @@ class ResolvedSourceSnapshot:
 def content_digest_of_objects(objects: Sequence[ResolvedObject]) -> str:
     """R25 §31 + R32-P0-031/038: content_set_digest with proper identity.
 
-    ``hash(sorted(object_key, etag/version_id, content_length, mtime_ns))``
+    ``hash(sorted(object_key, etag/version_id, content_length, mtime_ns,
+    checksum_algorithm, checksum))``
 
     - Local immutable generation uses path+checksum (or size+mtime_ns)
     - Remote uses etag/versionId+length
@@ -218,8 +219,10 @@ def content_digest_of_objects(objects: Sequence[ResolvedObject]) -> str:
             str(o.uri),
             str(o.etag or ""),
             str(o.version_id or ""),
-            str(int(o.content_length or 0)),
-            str(int(o.mtime_ns or 0)),
+            "" if o.content_length is None else str(int(o.content_length)),
+            "" if o.mtime_ns is None else str(int(o.mtime_ns)),
+            str(o.checksum_algorithm or "").lower(),
+            str(o.checksum or "").lower(),
         )
         entries.append("|".join(ident))
     # R32-P0-031: Empty set has canonical digest, not magic empty string

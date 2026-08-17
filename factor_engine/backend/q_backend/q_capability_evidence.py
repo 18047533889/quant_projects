@@ -27,10 +27,12 @@ class QCapabilityEvidence:
     compile_pass: bool = False
     runtime_pass: bool = False
     parity_pass: bool = False
+    null_semantics_pass: bool = False
     parameter_domain_pass: bool = False
     implementation_hash_pass: bool = False
     q_version_range_pass: bool = False
     pykx_version_range_pass: bool = False
+    certification_pass: bool = False
     notes: str = ""
     @property
     def production_safe(self) -> bool:
@@ -40,10 +42,12 @@ class QCapabilityEvidence:
             self.compile_pass,
             self.runtime_pass,
             self.parity_pass,
+            self.null_semantics_pass,
             self.parameter_domain_pass,
             self.implementation_hash_pass,
             self.q_version_range_pass,
             self.pykx_version_range_pass,
+            self.certification_pass,
         ))
     @property
     def native_without_lowering(self) -> bool:
@@ -60,18 +64,37 @@ def compute_q_capability_evidence() -> dict[str, QCapabilityEvidence]:
     result = {}
     for op in sorted(set(registry.declared_targets()) | set(registry.get_with_lowering())):
         impl = registry.get(op)
+        errors = registry.evidence_errors(op)
         result[op] = QCapabilityEvidence(
             canonical=op,
             declared_native=op in registry.declared_targets(),
             lowering_exists=bool(impl and impl.lowering_id),
-            compile_pass=bool(impl and impl.compile_evidence),
-            runtime_pass=bool(impl and impl.runtime_evidence),
-            parity_pass=bool(impl and impl.parity_evidence),
-            parameter_domain_pass=bool(impl and impl.parameter_domain_id),
-            implementation_hash_pass=bool(impl and impl.implementation_hash),
-            q_version_range_pass=bool(impl and impl.q_version_range),
-            pykx_version_range_pass=bool(impl and impl.pykx_version_range),
-            notes="registry evidence",
+            compile_pass=not any(
+                error.startswith("compile_evidence") for error in errors
+            ),
+            runtime_pass=not any(
+                error.startswith("runtime_evidence") for error in errors
+            ),
+            parity_pass=not any(
+                error.startswith("parity_evidence") for error in errors
+            ),
+            null_semantics_pass=not any(
+                error.startswith("null_semantics_evidence") for error in errors
+            ),
+            parameter_domain_pass=not any(
+                error.startswith("parameter_domain") for error in errors
+            ),
+            implementation_hash_pass=not any(
+                error.startswith("implementation_hash") for error in errors
+            ),
+            q_version_range_pass=not any(
+                error.startswith("q_version") for error in errors
+            ),
+            pykx_version_range_pass=not any(
+                error.startswith("pykx_version") for error in errors
+            ),
+            certification_pass=not errors,
+            notes="; ".join(errors) or "validated registry evidence",
         )
     return result
 
@@ -79,7 +102,8 @@ def get_q_native_without_lowering() -> frozenset[str]:
     return frozenset(get_declared_native_ops() - get_lowering_exists_ops())
 
 def get_q_production_safe_ops() -> frozenset[str]:
-    return _get_authority().get_production_ready()
+    evidence = compute_q_capability_evidence()
+    return frozenset(op for op, record in evidence.items() if record.production_safe)
 
 def generate_capability_report() -> dict[str, Any]:
     registry = _get_authority()
@@ -115,15 +139,44 @@ class QCapabilityGate:
         return (ok, "PASS: declarations are not admission authority" if ok else "FAIL: legacy declaration used in admission")
     @staticmethod
     def gate_q_production_safe_single_definition():
-        expected = frozenset(op for op, impl in get_q_physical_implementation_registry()._implementations.items() if impl.production_ready)
-        actual = get_q_production_safe_ops()
-        return (actual == expected, "PASS: registry production_ready is authoritative" if actual == expected else "FAIL: production admission disagreement")
+        registry = _get_authority()
+        evidence_safe = frozenset(
+            op for op, record in compute_q_capability_evidence().items()
+            if record.production_safe
+        )
+        registry_safe = registry.get_production_ready()
+        capability_safe = frozenset(
+            op for op in registry.declared_targets() | registry.get_with_lowering()
+            if registry.is_production_certified(op)
+        )
+        ok = evidence_safe == registry_safe == capability_safe
+        return (
+            ok,
+            "PASS: evidence, registry, and capability admission agree"
+            if ok else
+            "FAIL: evidence, registry, and capability admission disagree",
+        )
     @staticmethod
     def gate_q_compiler_admission_uses_evidence():
         from backend.q_backend.q_compiler import get_q_compiler
         compiler = get_q_compiler()
-        ok = all(compiler.has_lowering(op) == (op in get_lowering_exists_ops()) for op in set(get_lowering_exists_ops()) | set(get_declared_native_ops()))
-        return (ok, "PASS: compiler lowering admission uses registry" if ok else "FAIL: compiler/registry disagreement")
+        operators = set(get_lowering_exists_ops()) | set(get_declared_native_ops())
+        lowering_agrees = all(
+            compiler.has_lowering(op) == (op in get_lowering_exists_ops())
+            for op in operators
+        )
+        production_agrees = all(
+            compiler.is_production_certified(op)
+            == (op in get_q_production_safe_ops())
+            for op in operators
+        )
+        ok = lowering_agrees and production_agrees
+        return (
+            ok,
+            "PASS: compiler research and production admission use registry evidence"
+            if ok else
+            "FAIL: compiler/registry research or production admission disagreement",
+        )
     @staticmethod
     def gate_q_capability_single_authority():
         disagreements = _get_authority().admission_disagreements()

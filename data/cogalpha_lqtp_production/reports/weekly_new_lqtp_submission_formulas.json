@@ -1,345 +1,434 @@
 {
-  "generated_at": "2026-08-15T21:21:04.664748+00:00",
-  "n": 8,
+  "generated_at": "2026-08-16T13:27:29.523670+00:00",
+  "n": 29,
   "factors": [
     {
-      "factor_name": "cand_vol_surge_regime_gated",
-      "display_name": "cand_vol_surge_regime_gated",
-      "candidate_id": "factor_vol_surge_regime_gated_v1",
-      "dsl": "-(ts_ema((((close / open - 1.0) * (volume / ts_max(volume, 20))) * ((high - low) > (ts_median((high - low), 20)))), 20))",
-      "lqtp_formula": "-(ema((((close / open - 1.0) * (volume / ts_max(volume, 20))) * ((high - low) > (ts_quantile((high - low), 20, 0.5)))), 20))",
+      "factor_name": "cand_vw_ew_spread_responsive",
+      "display_name": "cand_vw_ew_spread_responsive",
+      "candidate_id": "factor_vw_ew_spread_responsive_v1",
+      "dsl": "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)",
+      "lqtp_formula": "safe_div(ema(ts_pct(close,1)*volume,19),ema(volume,19))-ema(ts_pct(close,1),19)",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
-      "notes": [],
-      "local_display_rank_ic": 0.05269718957674367,
-      "local_long_short_sharpe": 3.0693055478365245
+      "notes": [
+        "手写：ewm(alpha=0.1)→ema(span=19)；VW−EW return spread",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0384,
+      "local_long_short_sharpe": 4.075
     },
     {
-      "factor_name": "cand_tanh_thrust_dynamic_smooth",
-      "display_name": "cand_tanh_thrust_dynamic_smooth",
-      "candidate_id": "factor_tanh_thrust_dynamic_smooth_v1",
-      "dsl": "-( sigmoid(2 * (safe_div(volume, ts_ema(volume, 20)) - 1)) * ts_ema(tanh(ts_pct(close, 5)) * tanh(ts_pct(volume, 5)), 5) + (1 - sigmoid(2 * (safe_div(volume, ts_ema(volume, 20)) - 1))) * ts_ema(tanh(ts_pct(close, 5)) * tanh(ts_pct(volume, 5)), 20) )",
-      "lqtp_formula": "-( sigmoid(2 * (safe_div(volume, ema(volume, 20)) - 1)) * ema((2 * sigmoid(2 * (ts_pct(close, 5))) - 1) * (2 * sigmoid(2 * (ts_pct(volume, 5))) - 1), 5) + (1 - sigmoid(2 * (safe_div(volume, ema(volume, 20)) - 1))) * ema((2 * sigmoid(2 * (ts_pct(close, 5))) - 1) * (2 * sigmoid(2 * (ts_pct(volume, 5))) - 1), 20) )",
+      "factor_name": "ext_287712d7",
+      "display_name": "ext_287712d7",
+      "candidate_id": "287712d7d7a5bc94",
+      "dsl": "rank(ema((close/delay(close,1)-1), 20) / ts_std((close/delay(close,1)-1), 60))",
+      "lqtp_formula": "rank(ema((close/delay(close,1)-1), 20) / ts_std((close/delay(close,1)-1), 60))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.05019319643843465,
-      "local_long_short_sharpe": 2.9777496886018797
+      "local_display_rank_ic": 0.0318,
+      "local_long_short_sharpe": 2.398
     },
     {
-      "factor_name": "cand_vol_regime_trend_smoothed",
-      "display_name": "cand_vol_regime_trend_smoothed",
-      "candidate_id": "factor_vol_regime_trend_smoothed_v1",
-      "dsl": "-( ts_ema( (safe_div(close, ts_mean(close, 20)) - 1) * safe_div(volume, ts_mean(volume, 20)) * (safe_div((high - low), ts_median((high - low), 20)) - 1), 5) )",
-      "lqtp_formula": "-( ema( (safe_div(close, ts_mean(close, 20)) - 1) * safe_div(volume, ts_mean(volume, 20)) * (safe_div((high - low), ts_quantile((high - low), 20, 0.5)) - 1), 5) )",
+      "factor_name": "ext_d6c071a1",
+      "display_name": "ext_d6c071a1",
+      "candidate_id": "d6c071a1a8d0fff7",
+      "dsl": "-1 * rank(ts_std(abs(close - open), 10) + (close - open))",
+      "lqtp_formula": "-1 * rank(ts_std(abs(close - open), 10) + (close - open))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.045660385012385986,
-      "local_long_short_sharpe": 3.168583133332169
+      "local_display_rank_ic": 0.0318,
+      "local_long_short_sharpe": 3.605
     },
     {
-      "factor_name": "cand_herding_momentum_stress",
-      "display_name": "cand_herding_momentum_stress",
-      "candidate_id": "factor_herding_momentum_stress_v1",
-      "dsl": "-(cap((ts_ema((ts_pct(close, 1) * (volume / ts_mean(volume, 5)) * ((high - low) / close)), 5)), -3, 3))",
-      "lqtp_formula": "-(cap((ema((ts_pct(close, 1) * (volume / ts_mean(volume, 5)) * ((high - low) / close)), 5)), -3, 3))",
+      "factor_name": "ext_b52617c5",
+      "display_name": "ext_b52617c5",
+      "candidate_id": "b52617c554fd4f78",
+      "dsl": "rank((close - ts_mean(close, 40)) / (ts_max(high, 40) - ts_min(low, 40)))",
+      "lqtp_formula": "rank((close - ts_mean(close, 40)) / (ts_max(high, 40) - ts_min(low, 40)))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.04374919025426342,
-      "local_long_short_sharpe": 2.4503776035823317
+      "local_display_rank_ic": 0.0313,
+      "local_long_short_sharpe": 2.245
     },
     {
-      "factor_name": "cand_volume_surge_persistence",
-      "display_name": "cand_volume_surge_persistence",
-      "candidate_id": "factor_volume_surge_persistence_v1",
-      "dsl": "-( ts_ema(where(volume > 2 * ts_median(volume, 20), 1, 0), 10) )",
-      "lqtp_formula": "-( ema(where(volume > 2 * ts_quantile(volume, 20, 0.5), 1, 0), 10) )",
+      "factor_name": "ext_cc11c428",
+      "display_name": "ext_cc11c428",
+      "candidate_id": "cc11c42818516d6a",
+      "dsl": "rank(ema((close/delay(close,1)-1), 12) / ts_std((close/delay(close,1)-1), 50))",
+      "lqtp_formula": "rank(ema((close/delay(close,1)-1), 12) / ts_std((close/delay(close,1)-1), 50))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.0355476634847992,
-      "local_long_short_sharpe": 2.983158794955864
+      "local_display_rank_ic": 0.0306,
+      "local_long_short_sharpe": 2.464
     },
     {
-      "factor_name": "cand_crash_vol_spike_volregime_boost",
-      "display_name": "cand_crash_vol_spike_volregime_boost",
-      "candidate_id": "factor_crash_vol_spike_volregime_boost_v1",
-      "dsl": "-( safe_div(ts_mean(log(safe_div(high, low)), 5), ts_mean(log(safe_div(high, low)), 50) + 1e-8) * (1 + where(safe_div(volume, ts_ema(volume, 20)) > 1.5, 1, 0) * 0.8) )",
-      "lqtp_formula": "-( safe_div(ts_mean(log(safe_div(high, low)), 5), ts_mean(log(safe_div(high, low)), 50) + 1e-8) * (1 + where(safe_div(volume, ema(volume, 20)) > 1.5, 1, 0) * 0.8) )",
+      "factor_name": "ext_d53e006f",
+      "display_name": "ext_d53e006f",
+      "candidate_id": "d53e006f07eb6b5f",
+      "dsl": "rank((close - ts_mean(close, 20)) / ts_std(close, 20))",
+      "lqtp_formula": "rank((close - ts_mean(close, 20)) / ts_std(close, 20))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.034733327446522626,
-      "local_long_short_sharpe": 2.1263859811682257
+      "local_display_rank_ic": 0.0303,
+      "local_long_short_sharpe": 2.693
     },
     {
-      "factor_name": "cand_pressure_tanh",
-      "display_name": "cand_pressure_tanh",
-      "candidate_id": "factor_pressure_tanh_v1",
-      "dsl": "-((tanh((((close - low) / (high - low) * volume) - (ts_mean(((close - low) / (high - low) * volume), 20))) / (ts_std(((close - low) / (high - low) * volume), 20)))))",
-      "lqtp_formula": "-((2 * sigmoid(2 * ((((close - low) / (high - low) * volume) - (ts_mean(((close - low) / (high - low) * volume), 20))) / (ts_std(((close - low) / (high - low) * volume), 20)))) - 1))",
+      "factor_name": "ext_909472af",
+      "display_name": "ext_909472af",
+      "candidate_id": "909472afa0a8458e",
+      "dsl": "rank(((close - ts_min(low, 30)) / (ts_max(high, 30) - ts_min(low, 30))) * (volume / ts_mean(volume, 30)))",
+      "lqtp_formula": "rank(((close - ts_min(low, 30)) / (ts_max(high, 30) - ts_min(low, 30))) * (volume / ts_mean(volume, 30)))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.02676537763291806,
-      "local_long_short_sharpe": 2.253012649102123
+      "local_display_rank_ic": 0.0297,
+      "local_long_short_sharpe": 2.463
     },
     {
-      "factor_name": "cand_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
-      "display_name": "cand_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5",
-      "candidate_id": "factor_mut_cro_asym_vol_ratio_med_20_minp3_vol6_ema5_v1",
-      "dsl": "(ts_ema((-1.0 * ((ts_median((where((close > open) == 1, (high - low), 0)), 20)) / (ts_median((where((close <= open) == 1, (high - low), 0)), 20))) * (volume / ts_median(volume, 6))), 5))",
-      "lqtp_formula": "(ema((-1.0 * ((ts_quantile((where((close > open) == 1, (high - low), 0)), 20, 0.5)) / (ts_quantile((where((close <= open) == 1, (high - low), 0)), 20, 0.5))) * (volume / ts_quantile(volume, 6, 0.5))), 5))",
+      "factor_name": "ext_131e5281",
+      "display_name": "ext_131e5281",
+      "candidate_id": "131e5281fdc7692f",
+      "dsl": "rank((close - ema(close, 50)) / ts_std(close, 20))",
+      "lqtp_formula": "rank((close - ema(close, 50)) / ts_std(close, 20))",
       "status": "ready",
       "lqtp_native": true,
       "fe_only_ops": [],
       "unknown_ops": [],
       "notes": [],
-      "local_display_rank_ic": 0.0006698179086140714,
-      "local_long_short_sharpe": -0.7490118603316016
+      "local_display_rank_ic": 0.0283,
+      "local_long_short_sharpe": 2.288
+    },
+    {
+      "factor_name": "ext_8d6b4d53",
+      "display_name": "ext_8d6b4d53",
+      "candidate_id": "8d6b4d5359b20259",
+      "dsl": "rank(((close - ts_min(low, 20)) / (ts_max(high, 20) - ts_min(low, 20))) * (volume / ts_mean(volume, 20)))",
+      "lqtp_formula": "rank(((close - ts_min(low, 20)) / (ts_max(high, 20) - ts_min(low, 20))) * (volume / ts_mean(volume, 20)))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0275,
+      "local_long_short_sharpe": 2.618
+    },
+    {
+      "factor_name": "cand_gap_reversal_intensity",
+      "display_name": "cand_gap_reversal_intensity",
+      "candidate_id": "factor_gap_reversal_intensity_v1",
+      "dsl": "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)",
+      "lqtp_formula": "ts_sum((-where(safe_div(open,delay(close,1))-1<0,safe_div(open,delay(close,1))-1,0))*where(safe_div(close,open)-1>0,safe_div(close,open)-1,0),5)",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写：min/max→where；5d gap-reversal intensity",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0269,
+      "local_long_short_sharpe": 4.549
+    },
+    {
+      "factor_name": "ext_50b318f3",
+      "display_name": "ext_50b318f3",
+      "candidate_id": "50b318f30ed7f2c2",
+      "dsl": "rank(ema((close/delay(close,1)-1), 5) / ts_std((close/delay(close,1)-1), 20))",
+      "lqtp_formula": "rank(ema((close/delay(close,1)-1), 5) / ts_std((close/delay(close,1)-1), 20))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0269,
+      "local_long_short_sharpe": 2.662
+    },
+    {
+      "factor_name": "cand_gpdev_volregime_ema10",
+      "display_name": "cand_gpdev_volregime_ema10",
+      "candidate_id": "factor_gpdev_volregime_ema10_v1",
+      "dsl": "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)",
+      "lqtp_formula": "ema((safe_div(close,sqrt(high*low))-1)*(safe_div(volume,ema(volume,20))-1),10)",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写：geo-mean deviation × vol_strength, ema10",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.026,
+      "local_long_short_sharpe": 4.417
+    },
+    {
+      "factor_name": "ext_e1d40349",
+      "display_name": "ext_e1d40349",
+      "candidate_id": "e1d40349635d0f18",
+      "dsl": "rank(ts_delta(close, 5) / ts_std(high - low, 20))",
+      "lqtp_formula": "rank(ts_delta(close, 5) / ts_std(high - low, 20))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.025,
+      "local_long_short_sharpe": 2.883
+    },
+    {
+      "factor_name": "ext_bdd0fb42",
+      "display_name": "ext_bdd0fb42",
+      "candidate_id": "bdd0fb4267edaec2",
+      "dsl": "rank((log(close) - log(ts_min(low, 50))) / (log(ts_max(high, 50)) - log(ts_min(low, 50))))",
+      "lqtp_formula": "rank((logclose - log(ts_min(low, 50))) / (log(ts_max(high, 50)) - log(ts_min(low, 50))))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0242,
+      "local_long_short_sharpe": 0.929
+    },
+    {
+      "factor_name": "cand_gap_vol_cluster_adaptive_w30",
+      "display_name": "cand_gap_vol_cluster_adaptive_w30",
+      "candidate_id": "factor_gap_vol_cluster_adaptive_w30_v1",
+      "dsl": "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))*safe_div(volume,ema(volume,20))*10))-1)*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),delay(power(ts_pct(close,1),2),1),30))*2))-1))",
+      "lqtp_formula": "(2*sigmoid(2*(((safe_div(close,open)-1)-(safe_div(open,delay(close,1))-1))*safe_div(volume,ema(volume,20))*10))-1)*(1+0.5*(2*sigmoid(2*((-ts_corr(power(ts_pct(close,1),2),delay(power(ts_pct(close,1),2),1),30))*2))-1))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写：tanh→sigmoid 恒等；sq_ret→power；cluster weight",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0238,
+      "local_long_short_sharpe": 3.296
+    },
+    {
+      "factor_name": "ext_b512e792",
+      "display_name": "ext_b512e792",
+      "candidate_id": "b512e79289a878af",
+      "dsl": "rank(-(ts_delta(close, 5) / ts_std((close/delay(close,1)-1), 60)))",
+      "lqtp_formula": "rank(-(ts_delta(close, 5) / ts_std((close/delay(close,1)-1), 60)))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0236,
+      "local_long_short_sharpe": 2.899
+    },
+    {
+      "factor_name": "ext_52c6c08d",
+      "display_name": "ext_52c6c08d",
+      "candidate_id": "52c6c08da79a1c58",
+      "dsl": "-rank(ts_delta(close, 5) / (ts_std((close/delay(close,1)-1), 20) + 0.001))",
+      "lqtp_formula": "-rank(ts_delta(close, 5) / (ts_std((close/delay(close,1)-1), 20) + 0.001))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0236,
+      "local_long_short_sharpe": 2.839
+    },
+    {
+      "factor_name": "ext_760efb3b",
+      "display_name": "ext_760efb3b",
+      "candidate_id": "760efb3bed62cf5b",
+      "dsl": "rank(ts_delta(close, 5) / ts_std((close/delay(close,1)-1), 20))",
+      "lqtp_formula": "rank(ts_delta(close, 5) / ts_std((close/delay(close,1)-1), 20))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0234,
+      "local_long_short_sharpe": 2.812
+    },
+    {
+      "factor_name": "cand_reversal_volregime_overnight_csz",
+      "display_name": "cand_reversal_volregime_overnight_csz",
+      "candidate_id": "factor_reversal_volregime_overnight_csz_v1",
+      "dsl": "(-ts_pct(close,3)*safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),20)))*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),ts_std(safe_div(open,delay(close,1))-1,20))))",
+      "lqtp_formula": "(-ts_pct(close,3)*safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),20)))*(1/(1+safe_div(abs(safe_div(open,delay(close,1))-1),ts_std(safe_div(open,delay(close,1))-1,20))))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写：TR where-max；atr_ratio×−ret3d×overnight attenuation",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0224,
+      "local_long_short_sharpe": 2.543
+    },
+    {
+      "factor_name": "ext_62f1f060",
+      "display_name": "ext_62f1f060",
+      "candidate_id": "62f1f0609a60dd87",
+      "dsl": "(close + volume) / 2",
+      "lqtp_formula": "(close + volume) / 2",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0223,
+      "local_long_short_sharpe": 2.495
+    },
+    {
+      "factor_name": "cand_vol_expansion_atr_ratio",
+      "display_name": "cand_vol_expansion_atr_ratio",
+      "candidate_id": "factor_vol_expansion_atr_ratio_v1",
+      "dsl": "sign(close-open)*sigmoid(5*(safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),60))-1))",
+      "lqtp_formula": "sign(close-open)*sigmoid(5*(safe_div(ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),5),ts_mean(where(high-low>where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1))),high-low,where(abs(high-delay(close,1))>abs(low-delay(close,1)),abs(high-delay(close,1)),abs(low-delay(close,1)))),60))-1))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写近似：talib ATR→ts_mean(TR)；sigmoid expansion × direction",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0223,
+      "local_long_short_sharpe": 3.266
+    },
+    {
+      "factor_name": "ext_70b9e66b",
+      "display_name": "ext_70b9e66b",
+      "candidate_id": "70b9e66b9f92acd6",
+      "dsl": "rank(-(ts_delta(close, 5) / sqrt(ts_std(volume, 20))))",
+      "lqtp_formula": "rank(-(ts_delta(close, 5) / sqrt(ts_std(volume, 20))))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0222,
+      "local_long_short_sharpe": 2.72
+    },
+    {
+      "factor_name": "ext_981562e9",
+      "display_name": "ext_981562e9",
+      "candidate_id": "981562e9e0e7d712",
+      "dsl": "rank((close - ts_min(low, 40)) / ((ts_max(high, 40) - ts_min(low, 40)) + ts_std((close/delay(close,1)-1), 40)))",
+      "lqtp_formula": "rank((close - ts_min(low, 40)) / ((ts_max(high, 40) - ts_min(low, 40)) + ts_std((close/delay(close,1)-1), 40)))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0217,
+      "local_long_short_sharpe": 1.028
+    },
+    {
+      "factor_name": "ext_1490f2fe",
+      "display_name": "ext_1490f2fe",
+      "candidate_id": "1490f2fef2419d80",
+      "dsl": "rank((close - ts_min(low, 30)) / (ts_std(high, 30) + ts_std(low, 30)))",
+      "lqtp_formula": "rank((close - ts_min(low, 30)) / (ts_std(high, 30) + ts_std(low, 30)))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0216,
+      "local_long_short_sharpe": 1.643
+    },
+    {
+      "factor_name": "ext_773ab168",
+      "display_name": "ext_773ab168",
+      "candidate_id": "773ab1682d536bb0",
+      "dsl": "rank((close - open) / ts_std(close - open, 10))",
+      "lqtp_formula": "rank((close - open) / ts_std(close - open, 10))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0214,
+      "local_long_short_sharpe": 3.249
+    },
+    {
+      "factor_name": "ext_b67c0953",
+      "display_name": "ext_b67c0953",
+      "candidate_id": "b67c0953fc581983",
+      "dsl": "rank((open - close) / ts_std((close/delay(close,1)-1), 10))",
+      "lqtp_formula": "rank((open - close) / ts_std((close/delay(close,1)-1), 10))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.021,
+      "local_long_short_sharpe": 3.18
+    },
+    {
+      "factor_name": "cand_geometric_deviation_vol_asym_tilt",
+      "display_name": "cand_geometric_deviation_vol_asym_tilt",
+      "candidate_id": "factor_geometric_deviation_vol_asym_tilt_v1",
+      "dsl": "ema(sign(((2*log(cap(close,1e-12,1e18))-log(cap(high,1e-12,1e18))-log(cap(low,1e-12,1e18)))/3))*power(((2*log(cap(close,1e-12,1e18))-log(cap(high,1e-12,1e18))-log(cap(low,1e-12,1e18)))/3),2),5)*(1+where(safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20))>0,safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)),0))",
+      "lqtp_formula": "ema(sign(((2*log(cap(close,1e-12,1e18))-log(cap(high,1e-12,1e18))-log(cap(low,1e-12,1e18)))/3))*power(((2*log(cap(close,1e-12,1e18))-log(cap(high,1e-12,1e18))-log(cap(low,1e-12,1e18)))/3),2),5)*(1+where(safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20))>0,safe_div(ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)-ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20),ts_std(where(ts_pct(close,1)>0,ts_pct(close,1),0),20)+ts_std(where(ts_pct(close,1)<0,ts_pct(close,1),0),20)),0))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [
+        "手写：geo log-dev^2 ema5 × upside vol-asym tilt",
+        "来源: MANUAL_LQTP_OVERRIDES"
+      ],
+      "local_display_rank_ic": 0.0206,
+      "local_long_short_sharpe": 4.545
+    },
+    {
+      "factor_name": "ext_39e7b7a6",
+      "display_name": "ext_39e7b7a6",
+      "candidate_id": "39e7b7a65fd0b7cb",
+      "dsl": "rank((-(close - open)) / ts_std(close, 60))",
+      "lqtp_formula": "rank((-(close - open)) / ts_std(close, 60))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0204,
+      "local_long_short_sharpe": 3.03
+    },
+    {
+      "factor_name": "ext_2fffdf67",
+      "display_name": "ext_2fffdf67",
+      "candidate_id": "2fffdf676ed5628e",
+      "dsl": "rank((close - ts_min(low, 20)) / ((ts_max(high, 20) - ts_min(low, 20)) + ts_std((close/delay(close,1)-1), 20)))",
+      "lqtp_formula": "rank((close - ts_min(low, 20)) / ((ts_max(high, 20) - ts_min(low, 20)) + ts_std((close/delay(close,1)-1), 20)))",
+      "status": "ready",
+      "lqtp_native": true,
+      "fe_only_ops": [],
+      "unknown_ops": [],
+      "notes": [],
+      "local_display_rank_ic": 0.0201,
+      "local_long_short_sharpe": 1.534
     }
   ],
-  "skipped": [
-    {
-      "display_name": "ext_38cd4f77",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_90298bd1",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_a313f83b",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_cc3b5fb0",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_2b3d9cff",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_vw_ew_spread_responsive",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "cand_overnight_intraday_divergence_simplified",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_1ef16bdf",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_73a60264",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_7cd58c86",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_fusion_upcap_volregime",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_287712d7",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_d6c071a1",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_volume_confirmed_intraday_momentum",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_b52617c5",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_cc11c428",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_d53e006f",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_909472af",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_7f827abe",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_131e5281",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_8d6b4d53",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_vol_asymmetry_diff_blend",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "cand_liquidity_spread_vol_continuous_median",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "cand_gap_reversal_intensity",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_50b318f3",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_herding_pv_sync_sma",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "cand_gpdev_volregime_ema10",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_e1d40349",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_bdd0fb42",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_gap_vol_cluster_adaptive_w30",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "cand_vol_persistence_momentum",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_b512e792",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_52c6c08d",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_760efb3b",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_reversal_volregime_overnight_csz",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_62f1f060",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_vol_expansion_atr_ratio",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_70b9e66b",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_981562e9",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_1490f2fe",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_773ab168",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_b67c0953",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "cand_geometric_deviation_vol_asym_tilt",
-      "action": "skipped_no_formula",
-      "source": "pool_cg_neu"
-    },
-    {
-      "display_name": "ext_39e7b7a6",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    },
-    {
-      "display_name": "ext_2fffdf67",
-      "action": "skipped_no_formula",
-      "source": "pool_fm_qa"
-    }
-  ]
+  "skipped": []
 }

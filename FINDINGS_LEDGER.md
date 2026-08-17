@@ -65,22 +65,21 @@
 
 ## Confirmed P0
 
-### R2-REC-001 — Q executor deleted while consumers remain
+### R2-REC-001 — Q executor recovery verified at current HEAD
 
-- Status: `FIXING`
-- Evidence: `q_executor.py` is 51 lines at HEAD vs 372 at `HEAD^`.
-- Reproduction: `PYTHONPATH=factor_engine python3 -c 'import backend.q_backend.q_backend'` raises missing `QExecutor`.
-- Consumers still import `QExecutor`, `QExecutionFallbackPolicy`, and `get_q_executor`.
-- Hard-coded PASS strings at lines 48-51 are not executable evidence.
+- Status: `REGRESSION_TESTED`.
+- The prior 51-line/truncation finding is stale: current `q_executor.py` exports `QExecutor`, `QExecutionFallbackPolicy`, and `get_q_executor` and imports successfully.
+- Focused executor recovery tests pass; no executor source change was required in this wave.
+- Remaining executor work is separate: telemetry still lacks `backend_switch_count` and `materialization_count`.
 
-### Q2-P0-001..005 — Q capability authority and gates are fake/disconnected
+### Q2-P0-001..005 — Q capability evidence admission hardened
 
-- Status: `REPRODUCED`
-- `compute_q_capability_evidence()` sets compile/runtime/parity false/TODO.
-- `QPhysicalImplementationRegistry` starts empty and is not populated.
-- Empty registry makes missing-evidence gate vacuous.
-- `gate_q_capability_single_authority` contains a literal `pass` and returns success.
-- Compiler admission still uses `_operator_map`, not evidence authority.
+- Status: `INDEPENDENT_REVIEW`.
+- Compiler lowerings populate the registry, but production admission now remains closed unless typed compile/runtime/parity artifacts validate against exact bytes, exact current Git SHA, timezone-aware generation time, implementation and parameter-domain hash, and applicable q/PyKX versions.
+- Default compiler bootstrap has no validation context or evidence artifacts, so it certifies zero production operators.
+- Current authority truth remains FAIL: 110 declared targets, 80 executable lowerings, 30 declaration/lowering disagreements, zero production-safe operators.
+- Focused evidence, compatibility, and executor recovery verification: 72 passed. Legacy `test_q_backend.py`: 18 passed, 12 failed from stale or unsafe expectations and is not counted as passing evidence.
+- Broad repository compile, q runtime parity/null semantics, PIT poison, and root CI remain `NOT_RUN`.
 
 ### MODEL2-P0-006 — Modeling split-brain not closed
 
