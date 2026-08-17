@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import hashlib
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,6 +23,7 @@ __all__ = [
     "BackendKind",
     "ExecutionKind",
     "CapabilityLevel",
+    "PhysicalImplementationID",
     "PhysicalImplementationSpec",
 ]
 
@@ -75,6 +78,16 @@ class CapabilityLevel(str, Enum):
 
 
 @dataclass(frozen=True)
+class PhysicalImplementationID:
+    """Deterministic identity of one selectable physical implementation."""
+
+    value: str
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass(frozen=True)
 class PhysicalImplementationSpec:
     """Explicit declaration of how an operator implementation executes.
 
@@ -119,12 +132,74 @@ class PhysicalImplementationSpec:
     # Documentation
     notes: str = ""
 
+    # R2-P0-017 identity/evidence bindings. Defaults preserve constructor ABI,
+    # but an omitted binding is deliberately ineligible for production.
+    implementation_source_hash: str = ""
+    emitter_identity: str = ""
+    kernel_identity: str = ""
+    parameter_domain_hash: str = ""
+    semantic_contract_hash: str = ""
+
+    @staticmethod
+    def _nonblank(value: object) -> bool:
+        return isinstance(value, str) and bool(value.strip())
+
+    def validation_errors(self) -> tuple[str, ...]:
+        """Return deterministic, fail-closed validation failures."""
+        errors: list[str] = []
+        if not self._nonblank(self.canonical):
+            errors.append("blank canonical")
+        if not self._nonblank(self.backend):
+            errors.append("blank backend")
+        elif self.backend not in {member.value for member in BackendKind}:
+            errors.append("unknown backend")
+        if not isinstance(self.execution_kind, ExecutionKind):
+            errors.append("invalid execution_kind")
+        for field_name in (
+            "implementation_source_hash",
+            "parameter_domain_hash",
+            "semantic_contract_hash",
+        ):
+            if not self._nonblank(getattr(self, field_name)):
+                errors.append(f"blank {field_name}")
+        if not (self._nonblank(self.emitter_identity) or self._nonblank(self.kernel_identity)):
+            errors.append("blank emitter/kernel identity")
+        return tuple(errors)
+
+    @property
+    def physical_implementation_id(self) -> PhysicalImplementationID | None:
+        """Return the bound ID, or ``None`` for an incomplete declaration."""
+        if self.validation_errors():
+            return None
+        payload = {
+            "backend": self.backend.strip(),
+            "canonical": self.canonical.strip(),
+            "emitter_identity": self.emitter_identity.strip(),
+            "execution_kind": self.execution_kind.value,
+            "implementation_source_hash": self.implementation_source_hash.strip(),
+            "kernel_identity": self.kernel_identity.strip(),
+            "parameter_domain_hash": self.parameter_domain_hash.strip(),
+            "semantic_contract_hash": self.semantic_contract_hash.strip(),
+        }
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return PhysicalImplementationID(f"pi:v1:{digest}")
+
     def is_production_eligible(self) -> bool:
         """Check if this spec allows production eligibility.
 
         Returns False if execution_kind is UNSUPPORTED or any delegate type,
         or if critical capabilities are missing.
         """
+        if not self._nonblank(self.canonical):
+            return False
+        if not self._nonblank(self.backend):
+            return False
+        if self.backend not in {member.value for member in BackendKind}:
+            return False
+        if not isinstance(self.execution_kind, ExecutionKind):
+            return False
         if self.execution_kind == ExecutionKind.UNSUPPORTED:
             return False
 

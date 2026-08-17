@@ -25,6 +25,7 @@ from backend.contracts import (
     BackendKind,
     CapabilityLevel,
     ExecutionKind,
+    PhysicalImplementationID,
     PhysicalImplementationSpec,
 )
 
@@ -173,6 +174,171 @@ class CapabilityDecision:
     production_safe: bool
     reason: str
     estimated_cost: float = 1.0
+
+
+@dataclass(frozen=True)
+class PhysicalInventoryAdmission:
+    """Fail-closed admission truth for one planner-selectable implementation."""
+
+    production_surface: bool
+    policy_allows_production: bool
+    evidence_production_safe: bool
+    spec_complete: bool
+    admitted: bool
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PhysicalInventoryRecord:
+    """Immutable canonical×physical-path inventory row."""
+
+    canonical: str
+    registry_slot: str
+    backend: str
+    implementation_id: PhysicalImplementationID | None
+    spec: PhysicalImplementationSpec | None
+    admission: PhysicalInventoryAdmission
+
+
+def _declared_physical_spec(operator: Any) -> PhysicalImplementationSpec | None:
+    """Read only an explicit declaration; never infer from implementation code."""
+    if operator is None:
+        return None
+    spec = getattr(operator, "_physical_spec", None)
+    if isinstance(spec, PhysicalImplementationSpec):
+        return spec
+    factory = getattr(operator, "physical_spec", None)
+    if callable(factory):
+        try:
+            spec = factory()
+        except Exception:
+            return None
+        if isinstance(spec, PhysicalImplementationSpec):
+            return spec
+    return None
+
+
+def _default_production_surface(canonical: str, catalog: dict[str, Any]) -> bool:
+    """Query DirectUse rather than treating registry presence as production."""
+    try:
+        from mining.direct_use import PublicMiningDisposition, public_mining_disposition, resolve_direct_use
+
+        contract = resolve_direct_use(canonical, catalog)
+        return public_mining_disposition(contract.status) == PublicMiningDisposition.DIRECT_VISIBLE
+    except Exception:
+        return False
+
+
+def _default_policy_admission(canonical: str) -> bool:
+    """Query the canonical spec/policy authority, failing closed on any error."""
+    try:
+        from cleaned_operators.operator_spec import build_operator_spec
+
+        spec = build_operator_spec(canonical)
+        return bool(spec is not None and spec.allow_in_production)
+    except Exception:
+        return False
+
+
+def enumerate_physical_inventory(
+    *,
+    registry: Any | None = None,
+    production_surface: Any | None = None,
+    policy_admission: Any | None = None,
+    evidence_admission: Any | None = None,
+) -> tuple[PhysicalInventoryRecord, ...]:
+    """Enumerate every selectable registry slot with fail-closed admission truth.
+
+    Injectable authorities keep the oracle focused in tests. Production defaults
+    query OperatorRegistry, DirectUse/mining role, OperatorSpec/policy, and backend
+    evidence. Missing, incomplete, or identity-mismatched declarations remain
+    visible inventory rows but are never admitted.
+    """
+    if registry is None:
+        from cleaned_operators.registry import OperatorRegistry
+
+        registry = OperatorRegistry
+    surface_query = production_surface or _default_production_surface
+    policy_query = policy_admission or _default_policy_admission
+    evidence_query = evidence_admission or (
+        lambda canonical, backend: backend_status(canonical, backend) == "production_safe"
+    )
+
+    rows: list[PhysicalInventoryRecord] = []
+    for canonical in sorted(set(registry.list_canonical())):
+        catalog = dict(getattr(registry, "_catalog", {}).get(canonical, {}) or {})
+        try:
+            on_surface = bool(surface_query(canonical, catalog))
+        except Exception:
+            on_surface = False
+        try:
+            policy_ok = bool(policy_query(canonical))
+        except Exception:
+            policy_ok = False
+        for slot in sorted(set(registry.backends_for(canonical))):
+            physical_backends = (
+                ("duckdb_sql", "clickhouse_sql") if slot == "sql" else (slot,)
+            )
+            try:
+                operator = registry.get(canonical, slot)
+            except Exception:
+                operator = None
+            for backend in physical_backends:
+                spec = _declared_physical_spec(operator)
+                reasons: list[str] = []
+                if operator is None:
+                    reasons.append("selectable registry slot has no implementation")
+                if not on_surface:
+                    reasons.append("not on DirectUse production surface")
+                if not policy_ok:
+                    reasons.append("operator spec/policy denies production")
+                try:
+                    evidence_ok = bool(evidence_query(canonical, backend))
+                except Exception:
+                    evidence_ok = False
+                if not evidence_ok:
+                    reasons.append("physical backend lacks production evidence")
+                if spec is None:
+                    spec_complete = False
+                    implementation_id = None
+                    reasons.append("missing explicit PhysicalImplementationSpec")
+                else:
+                    errors = list(spec.validation_errors())
+                    if spec.canonical != canonical:
+                        errors.append("canonical identity mismatch")
+                    if spec.backend != backend:
+                        errors.append("backend identity mismatch")
+                    if not spec.is_production_eligible():
+                        errors.append("spec is not production eligible")
+                    spec_complete = not errors
+                    implementation_id = spec.physical_implementation_id if spec_complete else None
+                    reasons.extend(errors)
+                admitted = bool(
+                    operator is not None
+                    and on_surface
+                    and policy_ok
+                    and evidence_ok
+                    and spec_complete
+                    and implementation_id is not None
+                )
+                rows.append(
+                    PhysicalInventoryRecord(
+                        canonical=canonical,
+                        registry_slot=slot,
+                        backend=backend,
+                        implementation_id=implementation_id,
+                        spec=spec,
+                        admission=PhysicalInventoryAdmission(
+                            production_surface=on_surface,
+                            policy_allows_production=policy_ok,
+                            evidence_production_safe=evidence_ok,
+                            spec_complete=spec_complete,
+                            admitted=admitted,
+                            reasons=tuple(dict.fromkeys(reasons)),
+                        ),
+                    )
+                )
+    return tuple(rows)
 
 
 # FE-BE-P0-002: BackendCapabilityRecord is now an alias for BackendCapability
