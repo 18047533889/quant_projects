@@ -335,92 +335,10 @@ class TSRankIfPolarsNative(SeriesOperator):
 # Correlation & Covariance
 # ============================================================================
 
-@register_operator(name="ts_corr", canonical="ts_corr", backend="polars")
-class TSCorrPolarsNative(SeriesOperator):
-    """Rolling correlation between two series"""
-    metadata = OperatorMetadata(
-        name="ts_corr",
-        category="time_series",
-        description="Rolling correlation between two series",
-        param_names=['x', 'y', 'window', 'min_periods'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "min_periods": ParamSpec(dtype=int, min=2, default=2, param_role=ParamRole.SUPPORT_POLICY),
-    }
-
-    def _calculate_series(self, x, y, window, min_periods=2, **kwargs):
-        # Compute every moment from the same pairwise-complete trailing window.
-        df = pl.DataFrame({"x": x, "y": y}).with_columns(
-            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
-            .then(pl.col("x"))
-            .otherwise(None)
-            .alias("x_pair"),
-            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
-            .then(pl.col("y"))
-            .otherwise(None)
-            .alias("y_pair"),
-        )
-        n = pl.col("x_pair").is_not_null().cast(pl.UInt64).rolling_sum(window, min_samples=1)
-        sx = pl.col("x_pair").rolling_sum(window, min_samples=1)
-        sy = pl.col("y_pair").rolling_sum(window, min_samples=1)
-        sxx = (pl.col("x_pair") * pl.col("x_pair")).rolling_sum(window, min_samples=1)
-        syy = (pl.col("y_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
-        sxy = (pl.col("x_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
-        covariance_numerator = sxy - (sx * sy / n)
-        x_variance_numerator = sxx - (sx * sx / n)
-        y_variance_numerator = syy - (sy * sy / n)
-        result = pl.when(
-            (n >= min_periods)
-            & (x_variance_numerator > 0)
-            & (y_variance_numerator > 0)
-        ).then(
-            covariance_numerator / (x_variance_numerator * y_variance_numerator).sqrt()
-        ).otherwise(None).alias("result")
-        return df.lazy().select(result).collect()["result"]
-
-
-@register_operator(name="ts_cov", canonical="ts_cov", backend="polars")
-class TSCovPolarsNative(SeriesOperator):
-    """Rolling covariance between two series"""
-    metadata = OperatorMetadata(
-        name="ts_cov",
-        category="time_series",
-        description="Rolling covariance between two series",
-        param_names=['x', 'y', 'window'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, x, y, window, **kwargs):
-        min_periods = kwargs.get("min_periods", 2)
-        ddof = kwargs.get("ddof", 1)
-        df = pl.DataFrame({"x": x, "y": y}).with_columns(
-            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
-            .then(pl.col("x"))
-            .otherwise(None)
-            .alias("x_pair"),
-            pl.when(pl.col("x").is_finite() & pl.col("y").is_finite())
-            .then(pl.col("y"))
-            .otherwise(None)
-            .alias("y_pair"),
-        )
-        n = pl.col("x_pair").is_not_null().cast(pl.UInt64).rolling_sum(window, min_samples=1)
-        sx = pl.col("x_pair").rolling_sum(window, min_samples=1)
-        sy = pl.col("y_pair").rolling_sum(window, min_samples=1)
-        sxy = (pl.col("x_pair") * pl.col("y_pair")).rolling_sum(window, min_samples=1)
-        denominator = n - ddof
-        result = pl.when(
-            (n >= min_periods) & (denominator > 0)
-        ).then(
-            (sxy - (sx * sy / n)) / denominator
-        ).otherwise(None).alias("result")
-        return df.lazy().select(result).collect()["result"]
+# Correlation/covariance authority lives in
+# ``cleaned_operators.common.polars_ts_rolling``.  Do not register a second
+# implementation here: the former raw-moment path was numerically unstable for
+# large-offset inputs and could replace the centered production authority.
 
 
 @register_operator(name="ts_corr_if", canonical="ts_corr_if", backend="polars")
