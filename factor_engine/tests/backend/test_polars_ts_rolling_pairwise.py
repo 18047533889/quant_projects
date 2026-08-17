@@ -152,6 +152,26 @@ def test_missing_matching_column_returns_null_instead_of_dtype_error():
     assert _values(TSRegressionSlopeNative()._calculate_series(left, missing, window=3)) == [None] * 3
 
 
+def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():
+    import cleaned_operators
+    from cleaned_operators import load_all
+    from cleaned_operators.common.polars_ts_rolling import TSCovNative as ExpectedTSCovNative
+    from cleaned_operators.registry import OperatorRegistry
+
+    assert "cleaned_operators.common.polars_ts_rolling" in cleaned_operators._LOAD_MODULES
+    load_all()
+    operator = OperatorRegistry.get("ts_cov", backend="polars")
+    assert type(operator) is ExpectedTSCovNative
+    assert type(operator).__module__ == "cleaned_operators.common.polars_ts_rolling"
+    assert type(operator).__name__ == "TSCovNative"
+    assert not any(
+        entry.get("canonical") == "ts_cov"
+        and entry.get("backend") == "polars"
+        and entry.get("old_source") == "factor_dsl_np"
+        for entry in OperatorRegistry.overwrite_log()
+    )
+
+
 def test_bootstrap_module_list_activates_repaired_native_module():
     import cleaned_operators
     from cleaned_operators import load_all

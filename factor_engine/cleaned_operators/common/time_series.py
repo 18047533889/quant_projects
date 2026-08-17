@@ -2122,64 +2122,10 @@ class TSCorrPolars(TSCorrelation):
 
 
 
-# canonical=ts_cov backend=polars selected=ts_cov source=time_series/ts_ops_polars.py
-@register_operator(name="ts_cov", category="time_series", business_category="time_series", canonical="ts_cov", source="factor_dsl_np")
-class TSCovPolars(SeriesOperator):
-    """Polars 滚动协方差。"""
-
-    metadata = OperatorMetadata(
-        name="ts_cov", category="time_series",
-        description="滚动协方差 (与m_cov相同)",
-        examples=["ts_cov(returns, market, 20)"],
-        param_names=["x", "y", "window", "ddof", "min_periods"], return_type="series",
-        tags=["time_series", "ts_", "cov"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
-                                param_role=ParamRole.HORIZON),
-            "ddof": ParamSpec(dtype=int, min=0, default=1),
-            "min_periods": ParamSpec(dtype=int, min=1, default=None),
-        },
-    )
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, window: int = 20,
-                         ddof: int = 1, min_periods: int | None = None, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.common.strict_params import strict_int
-
-        numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        w = strict_int(window, "window", minimum=2)
-        ddof_val = strict_int(ddof, "ddof", minimum=0)
-
-        # Default min_periods to 2 if not specified (need at least 2 pairs)
-        if min_periods is None:
-            min_p = 2
-        else:
-            min_p = strict_int(min_periods, "min_periods", minimum=1)
-
-        merged = x
-        y_cols: list[str] = []
-        for col in numeric_cols:
-            if col in y.columns:
-                yname = f"__y_{col}"
-                y_cols.append(yname)
-                merged = merged.with_columns(y[col].alias(yname))
-        # R19-030: NaN -> null so the rolling cov skips missing pairs (same
-        # current-row policy as the pandas/Numba paths).
-        exprs = [
-            pl.rolling_cov(
-                pl.col(f"__y_{col}").fill_nan(None),
-                pl.col(col).fill_nan(None),
-                window_size=w,
-                min_samples=min_p,
-                ddof=ddof_val,
-            ).alias(col)
-            for col in numeric_cols
-            if col in y.columns
-        ]
-        if not exprs:
-            return x
-        return merged.with_columns(exprs).drop(y_cols)
-
-# aliases: TS_COV, m_cov, ts_covariance
-
+# Legacy Polars ts_cov registration intentionally removed (R2-P0-019).
+# The repaired centered finite-pair implementation in polars_ts_rolling.py is
+# the sole normal-bootstrap Polars authority; the pandas TSCov above remains
+# the reference/shared surface.
 
 
 # canonical=ts_decay backend=polars selected=ts_decay source=time_series/ts_ops_polars.py
