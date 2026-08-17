@@ -1,0 +1,48 @@
+task_id: R2-Q-EMPTY-AUTHORITY-GATES
+base_sha: 5b59475103a225fd593a4e1fa4f67512a7ff39b4
+implementation_sha: e100602d05fef0a50bba1bfcc7642b3193e30e37
+commit_sha: e100602d05fef0a50bba1bfcc7642b3193e30e37
+owned_files:
+  - factor_engine/backend/q_backend/q_capability_evidence.py
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+modified_files:
+  - factor_engine/backend/q_backend/q_capability_evidence.py
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+canonicals_touched: []
+backends_touched:
+  - q
+changes:
+  - empty Q capability authority fails Q_NATIVE_WITHOUT_LOWERING
+  - empty Q capability authority fails production-safe authority comparison
+  - empty Q capability authority fails compiler-admission agreement before compiler bootstrap
+  - empty Q capability authority fails single-authority gate
+verification:
+  focused_q_capability_suite:
+    status: PASS
+    passed: 63
+    failed: 0
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONPATH=/home/shw/quant_projects/factor_engine pytest -q factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py factor_engine/tests/q_backend/test_q_capability_evidence.py factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  syntax_compile:
+    status: PASS
+    files: 2
+  import_smoke:
+    status: PASS
+  diff_check:
+    status: PASS
+  independent_review:
+    status: CLEAN
+    finding_count: 0
+not_run:
+  - full repository compile
+  - full FactorEngine regression
+  - full DataAccess regression
+  - q/PyKX runtime parity
+  - Q residency and ping-pong verification
+  - root CI
+known_limitations:
+  - 30 declared q targets still lack executable lowerings
+  - no q operator has current complete production evidence
+  - Q backend remains NOT_PRODUCTION_CERTIFIED
+remote_evidence_used: false
+evidence_generated:
+  - /tmp/q_empty_authority_gate_repair_report.md
