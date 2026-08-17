@@ -47,10 +47,9 @@ class TSVarPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, ddof: int = 1, min_periods: int = 1, **kwargs) -> pl.DataFrame:
-        w = int(kwargs.get("d", window))
-        # Extract ddof from kwargs for backwards compatibility
-        ddof_val = int(kwargs.get("ddof", ddof))
-        min_samples = int(kwargs.get("min_periods", min_periods))
+        w = int(window)
+        ddof_val = int(ddof)
+        min_samples = int(min_periods)
 
         return _rolling_window(
             x, w,
