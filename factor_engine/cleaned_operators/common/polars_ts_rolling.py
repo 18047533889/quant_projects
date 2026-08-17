@@ -54,19 +54,26 @@ def _pairwise_rolling_moments(
     valid = x_col.is_finite().fill_null(False) & y_col.is_finite().fill_null(False)
     x_valid = pl.when(valid).then(x_col).otherwise(None)
     y_valid = pl.when(valid).then(y_col).otherwise(None)
-    count = valid.cast(pl.Float64).rolling_sum(window_size=window, min_samples=1)
-    # Translation does not change centered moments.  Subtract one finite global
-    # anchor before rolling arithmetic so large common offsets cannot erase the
-    # within-window variation in sum-of-squares identities.
-    x_anchor = x_valid.forward_fill().backward_fill().first()
-    y_anchor = y_valid.forward_fill().backward_fill().first()
-    x_centered = x_valid - x_anchor
-    y_centered = y_valid - y_anchor
-    sum_x = x_centered.rolling_sum(window_size=window, min_samples=1)
-    sum_y = y_centered.rolling_sum(window_size=window, min_samples=1)
-    sum_xx = (x_centered * x_centered).rolling_sum(window_size=window, min_samples=1)
-    sum_yy = (y_centered * y_centered).rolling_sum(window_size=window, min_samples=1)
-    sum_xy = (x_centered * y_centered).rolling_sum(window_size=window, min_samples=1)
+    # Build each active window horizontally and center it on that window's first
+    # finite pair.  A fixed dataset-wide anchor can become numerically useless
+    # after it rolls out; the per-window translation keeps all moment arithmetic
+    # on the scale of the observations currently being compared.
+    x_window = [x_valid.shift(lag) for lag in range(window)]
+    y_window = [y_valid.shift(lag) for lag in range(window)]
+    x_anchor = pl.coalesce(x_window)
+    y_anchor = pl.coalesce(y_window)
+    x_centered = [value - x_anchor for value in x_window]
+    y_centered = [value - y_anchor for value in y_window]
+    count = pl.sum_horizontal(
+        [value.is_not_null().cast(pl.Float64) for value in x_window]
+    )
+    sum_x = pl.sum_horizontal(x_centered)
+    sum_y = pl.sum_horizontal(y_centered)
+    sum_xx = pl.sum_horizontal([value * value for value in x_centered])
+    sum_yy = pl.sum_horizontal([value * value for value in y_centered])
+    sum_xy = pl.sum_horizontal(
+        [left * right for left, right in zip(x_centered, y_centered)]
+    )
     ready = count >= min_periods
 
     return {

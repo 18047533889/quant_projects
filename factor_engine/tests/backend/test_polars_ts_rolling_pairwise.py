@@ -133,6 +133,17 @@ def test_large_offset_values_keep_centered_moments_stable():
     _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=4)), expected["r2"])
 
 
+def test_large_offset_anchor_rollout_keeps_final_correlation():
+    x_values = [0.0, 10_000_000_001.0, 10_000_000_002.0, 10_000_000_004.0, 10_000_000_008.0]
+    y_values = [0.0, 10_000_000_003.0, 10_000_000_007.0, 10_000_000_006.0, 10_000_000_011.0]
+    expected = _oracle(x_values, y_values, window=4)
+
+    actual = _values(TSCorrNative()._calculate_series(
+        pl.DataFrame({"a": x_values}), pl.DataFrame({"a": y_values}), window=4
+    ))
+    _assert_series(actual, expected["corr"])
+
+
 def test_missing_matching_column_returns_null_instead_of_dtype_error():
     left = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
     missing = pl.DataFrame({"b": [2.0, 3.0, 4.0]})
