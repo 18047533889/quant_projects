@@ -325,6 +325,7 @@ class AdaptiveBatchScheduler:
         self._wave_executor: Any | None = None
         self._wave_refs: dict[int, Any] = {}
         self._wave_summary: dict[str, Any] = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        self._input_dq_reports: list[Any] = []
         # R33-P0-009：SOURCE_SCAN task 的 BufferRef 输出（独立命名空间，不污染
         # 因子结果 ``self._results``）。
         self._buffer_results: dict[str, Any] = {}
@@ -880,7 +881,11 @@ class AdaptiveBatchScheduler:
             wid = wave.wave_id
             if wid in refs:
                 continue
-            tids = [t for t in wave.task_ids if t in dag.tasks]
+            tids = [
+                t
+                for t in (getattr(wave, "source_tasks", ()) or wave.task_ids)
+                if t in dag.tasks
+            ]
             if not tids:
                 continue
             if any(
@@ -904,12 +909,13 @@ class AdaptiveBatchScheduler:
                     thresholds = adjust_input_dq_thresholds_from_stats(
                         input_dq_thresholds, stats, list(wave.columns)
                     )
-                    assert_input_dq(
+                    report = assert_input_dq(
                         source,
                         list(wave.columns),
                         raise_on_fail=input_dq_strict,
                         thresholds=thresholds,
                     )
+                    self._input_dq_reports.append(report)
                 except Exception:
                     if input_dq_strict:
                         raise
@@ -1054,6 +1060,7 @@ class AdaptiveBatchScheduler:
         materialize_shared = materialize_shared or (
             lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
         )
+        self._input_dq_reports = []
         sink = sink or self.sink
         # 接受 SchedulerPlan（含 physical_dag）或裸 PhysicalFactorDAG。
         dag = getattr(plan, "physical_dag", plan)
@@ -1655,6 +1662,9 @@ class AdaptiveBatchScheduler:
         materialize_shared: Callable[[str, Any], Any] | None = None,
         sink: StreamingResultSink | None = None,
         result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
     ) -> dict[str, Any]:
         """R33 §22/§39：small-batch AUTO bypass——serial fused。
 
@@ -1677,12 +1687,22 @@ class AdaptiveBatchScheduler:
         materialize_shared = materialize_shared or (
             lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
         )
+        self._input_dq_reports = []
         sink = sink or self.sink
         dag = getattr(plan, "physical_dag", plan)
         committed: set[str] = set()
         remaining = set(dag.topological_order())
         # 1) read waves（真实 scan 一次）。
-        self._execute_read_waves(plan, dag, committed, remaining, ctx)
+        self._execute_read_waves(
+            plan,
+            dag,
+            committed,
+            remaining,
+            ctx,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
         # 2) 串行按拓扑序执行（shared 先物化，root 后执行）。
         for tid in dag.topological_order():
             if tid in committed:

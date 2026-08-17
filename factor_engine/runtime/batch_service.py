@@ -963,6 +963,25 @@ def _execute_run_many_scheduler(
         scope_scan_cost_map=batch_request.scan_cost_map,
         ctx=ctx,
     )
+    # Some in-memory/reference sources lower directly to ROOT tasks and therefore
+    # produce no SOURCE_SCAN read wave. Keep the scheduler as the control plane,
+    # but coalesce that batch's declared fields into one read-session load so
+    # DIRECT_VECTOR roots do not reload each dependency independently. This also
+    # preserves input-DQ output for the no-wave scheduler path.
+    if (
+        input_dq_check
+        and batch_request.fields
+        and not any(getattr(wave, "columns", ()) for wave in plan.read_waves.waves)
+    ):
+        input_report = engine_to_use._prepare_batch_data(
+            engine_to_use.data_source,
+            set(batch_request.fields),
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+        )
+    else:
+        input_report = None
     batch_request_meta = batch_request.to_dict()
     if run_mode == "production":
         try:
@@ -1096,6 +1115,9 @@ def _execute_run_many_scheduler(
                     execute_root=_execute_root,
                     materialize_shared=_materialize_shared,
                     result_handler=_handle,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
                 )
             else:
                 run_stats = scheduler.run(
@@ -1114,6 +1136,16 @@ def _execute_run_many_scheduler(
             else:
                 run_stats["scheduler_stats"] = {"auto_execution_mode": mode}
             run_stats["auto_execution_mode"] = mode
+            if input_report is None and scheduler._input_dq_reports:
+                from runtime.input_dq import InputDQReport
+
+                input_report = InputDQReport(
+                    columns=[
+                        column
+                        for report in scheduler._input_dq_reports
+                        for column in report.columns
+                    ]
+                )
     finally:
         peak = run_peak_sampler.stop()
         ctx.runtime_stats = record_resource_telemetry(
