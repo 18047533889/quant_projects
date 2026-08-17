@@ -47,15 +47,31 @@ def _one(frame: pl.DataFrame, column: str, expr: pl.Expr) -> pl.Series:
 
 def _ema(expr: pl.Expr, span: int) -> pl.Expr:
     span = _pi(span, "span")
-    # pandas ewm：NaN 输入不更新状态、该行输出延续前值；warmup 未达 min_periods
-    # 时全 NaN。polars ewm 忽略 null 但 null 行输出 null、NaN 会传播，故先把 NaN
-    # 归一为 null，再用前向填充让 null 行延续前值，等价于 pandas 语义。
-    return expr.fill_nan(None).ewm_mean(span=span, adjust=False, min_samples=span).fill_null(strategy="forward")
+    # Normalize NaN to null, then preserve pandas ignore_na=False weighting.
+    return (
+        expr.fill_nan(None)
+        .ewm_mean(
+            span=span,
+            adjust=False,
+            min_samples=span,
+            ignore_nulls=False,
+        )
+        .fill_null(strategy="forward")
+    )
 
 
 def _wilder(expr: pl.Expr, window: int) -> pl.Expr:
     window = _pi(window, "window")
-    return expr.fill_nan(None).ewm_mean(alpha=1.0 / window, adjust=False, min_samples=window).fill_null(strategy="forward")
+    return (
+        expr.fill_nan(None)
+        .ewm_mean(
+            alpha=1.0 / window,
+            adjust=False,
+            min_samples=window,
+            ignore_nulls=False,
+        )
+        .fill_null(strategy="forward")
+    )
 
 
 def _tr_expr() -> pl.Expr:
