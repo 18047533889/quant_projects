@@ -4,6 +4,7 @@ Policy presets for transform pipelines.
 Named policy configurations that encode common preprocessing workflows
 with explicit causal safety and production readiness guarantees.
 """
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
@@ -63,17 +64,24 @@ class PolicyPreset:
         if not self.steps:
             errors.append("Policy must contain at least one step")
 
-        if self.level == PolicyLevel.PRODUCTION:
-            if not self.causal_safe:
-                errors.append("Production policies must be causal_safe=True")
-            if transform_registry is None:
-                from factor_preprocess.registry.transforms import get_default_registry
-                transform_registry = get_default_registry()
-            for step in self.steps:
-                try:
-                    transform_registry.validate_production(step.name)
-                except ValueError as exc:
-                    errors.append(str(exc))
+        if transform_registry is None:
+            from factor_preprocess.registry.transforms import get_default_registry
+            transform_registry = get_default_registry()
+
+        for step in self.steps:
+            try:
+                if self.level == PolicyLevel.PRODUCTION:
+                    metadata = transform_registry.validate_production(step.name)
+                else:
+                    metadata = transform_registry.get(step.name)
+                    if metadata is None:
+                        raise ValueError(f"Transform '{step.name}' is not registered")
+                metadata.bind_parameters(step.parameters)
+            except (TypeError, ValueError) as exc:
+                errors.append(str(exc))
+
+        if self.level == PolicyLevel.PRODUCTION and not self.causal_safe:
+            errors.append("Production policies must be causal_safe=True")
 
         # Check for duplicate step names
         step_names = [step.name for step in self.steps]
@@ -115,29 +123,30 @@ class PolicyRegistry:
         if policy.name in self._policies:
             raise ValueError(f"Policy '{policy.name}' already registered")
 
-        self._policies[policy.name] = policy
+        self._policies[policy.name] = deepcopy(policy)
 
     def get(self, name: str) -> Optional[PolicyPreset]:
-        """Get policy by name."""
-        return self._policies.get(name)
+        """Get an isolated policy snapshot by name."""
+        policy = self._policies.get(name)
+        return deepcopy(policy) if policy is not None else None
 
     def list_by_level(self, level: PolicyLevel) -> List[PolicyPreset]:
-        """List policies at a given strictness level."""
+        """List isolated policy snapshots at a given strictness level."""
         return [
-            policy for policy in self._policies.values()
+            deepcopy(policy) for policy in self._policies.values()
             if policy.level == level
         ]
 
     def list_causal_safe(self) -> List[PolicyPreset]:
-        """List all causal-safe policies."""
+        """List isolated snapshots of all causal-safe policies."""
         return [
-            policy for policy in self._policies.values()
+            deepcopy(policy) for policy in self._policies.values()
             if policy.causal_safe
         ]
 
     def all_policies(self) -> List[PolicyPreset]:
-        """Get all registered policies."""
-        return list(self._policies.values())
+        """Get isolated snapshots of all registered policies."""
+        return [deepcopy(policy) for policy in self._policies.values()]
 
 
 def create_default_policies() -> PolicyRegistry:

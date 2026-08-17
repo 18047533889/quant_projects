@@ -1,12 +1,22 @@
 """Tests for QuantEvaluatorAdapter."""
 
+import sys
+from types import SimpleNamespace
+
+import numpy as np
+
+from quant_evaluator import AxisRef, FactorBatch, LabelBundle
+
 import pytest
 from factor_optimizer.adapters import (
+    EvidenceStore,
+    InMemoryEvidenceStore,
     QuantEvaluatorAdapter,
     QEOptionalDependencyMissing,
     create_qe_adapter,
     create_mock_qe_adapter,
 )
+from factor_optimizer.errors import EvidenceUnavailableError
 
 
 def test_mock_qe_adapter_protocol():
@@ -76,13 +86,14 @@ def test_mock_qe_adapter_get_evidence():
     result = adapter.evaluate("mock_batch", "mock_labels")
     eval_id = result["evaluation_id"]
 
-    # Get evidence
-    evidence = adapter.get_evidence(eval_id)
+    # Get evidence through the published reference
+    evidence = adapter.get_evidence(result["evidence_ref"])
 
-    # Check structure
+    # Check structure and identity consistency
     assert isinstance(evidence, dict)
+    assert result["evidence_ref"] == eval_id
     assert evidence["evaluation_id"] == eval_id
-    assert "metrics" in evidence
+    assert evidence["metrics"] == result["metrics"]
     assert "diagnostics" in evidence
     assert "timeseries" in evidence
 
@@ -175,10 +186,141 @@ def test_mock_qe_adapter_metric_ranges():
         assert 0 <= coverage <= 1.0
 
 
-def test_create_qe_adapter_missing_dependency():
-    """Test that missing QE raises appropriate error."""
-    # QE doesn't exist yet, so this should always raise
-    with pytest.raises(QEOptionalDependencyMissing):
+def _current_qe_fixture():
+    times = np.arange(3)
+    assets = np.arange(2)
+    return (
+        FactorBatch(
+            factor_ids=("f1",),
+            time_axis=AxisRef("time", "int64", 3, times),
+            asset_axis=AxisRef("asset", "int64", 2, assets),
+            values=np.ones((3, 2, 1), dtype=float),
+        ),
+        LabelBundle(
+            target_id="y",
+            values=np.ones((3, 2), dtype=float),
+            horizon=1,
+            decision_time=tuple(times),
+            label_start_time=tuple(times),
+            label_end_time=tuple(times),
+        ),
+    )
+
+
+def test_current_qe_public_facade_adapter_uses_explicit_shared_evidence_store():
+    """Evidence references resolve across adapters sharing the same store."""
+    factor_batch, labels = _current_qe_fixture()
+    store = InMemoryEvidenceStore()
+    writer = create_qe_adapter(evidence_store=store)
+    reader = create_qe_adapter(evidence_store=store)
+
+    result = writer.evaluate(factor_batch, labels, metrics=["coverage"])
+
+    assert isinstance(store, EvidenceStore)
+    assert result["evaluation_id"] == result["evidence_ref"]
+    assert result["evidence_scope"] == "process_local_shared_store"
+    assert isinstance(result["metrics"]["coverage"], (int, float))
+    assert "coverage" in result["metrics"]
+    assert isinstance(result["diagnostics"]["f1"]["is_constant"], bool)
+    assert isinstance(result["diagnostics"]["f1"]["has_nans"], bool)
+    assert isinstance(result["diagnostics"]["f1"]["has_infs"], bool)
+
+    evidence = reader.get_evidence(result["evaluation_id"])
+    assert evidence["evidence_scope"] == "process_local_shared_store"
+    assert evidence["metrics"] == result["metrics"]
+
+
+def test_current_qe_adapter_requires_store_before_evaluation():
+    factor_batch, labels = _current_qe_fixture()
+    adapter = create_qe_adapter()
+
+    with pytest.raises(EvidenceUnavailableError, match="required before evaluation"):
+        adapter.evaluate(factor_batch, labels, metrics=["coverage"])
+
+
+def test_current_qe_adapter_missing_evidence_fails_closed():
+    store = InMemoryEvidenceStore()
+    adapter = create_qe_adapter(evidence_store=store)
+
+    with pytest.raises(EvidenceUnavailableError, match="evidence not found"):
+        adapter.get_evidence("missing")
+
+
+def test_in_memory_evidence_store_isolates_stored_and_retrieved_values():
+    store = InMemoryEvidenceStore()
+    source = {"metrics": {"coverage": 1.0}}
+    store.put("evaluation", source)
+    source["metrics"]["coverage"] = 0.0
+
+    first = store.get("evaluation")
+    assert first == {"metrics": {"coverage": 1.0}}
+    first["metrics"]["coverage"] = -1.0
+
+    assert store.get("evaluation") == {"metrics": {"coverage": 1.0}}
+
+
+def test_current_qe_metric_catalog_does_not_invent_direction():
+    """QE registry metadata lacks higher_is_better and the adapter preserves that fact."""
+    adapter = create_qe_adapter()
+    metrics = adapter.list_metrics(tier="core")
+
+    assert metrics
+    assert all(item["tier"] == "core" for item in metrics)
+    assert all("higher_is_better" not in item for item in metrics)
+
+
+def test_create_qe_adapter_rejects_incompatible_public_facade(monkeypatch):
+    """An API-incompatible QE facade must be rejected at construction."""
+    fake_qe = SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "quant_evaluator", fake_qe)
+    with pytest.raises(QEOptionalDependencyMissing, match="unavailable or incompatible"):
+        create_qe_adapter()
+
+
+def test_create_qe_adapter_rejects_partial_historical_contract(monkeypatch):
+    """A matching evaluate signature alone must not pass compatibility checks."""
+
+    class PartialEvaluator:
+        def evaluate(self, factors, labels, metrics, context):
+            raise AssertionError("evaluation must not start during construction")
+
+    fake_qe = SimpleNamespace(
+        Evaluator=PartialEvaluator,
+        DEFAULT_METRICS=("rank_ic",),
+        MetricCatalog=type(
+            "MetricCatalog",
+            (),
+            {"list": lambda self, tier=None: []},
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "quant_evaluator", fake_qe)
+
+    with pytest.raises(QEOptionalDependencyMissing, match="unavailable or incompatible"):
+        create_qe_adapter()
+
+
+def test_create_qe_adapter_rejects_positional_only_historical_contract(monkeypatch):
+    """Methods called by keyword must accept the required keyword arguments."""
+
+    class PositionalOnlyEvaluator:
+        def evaluate(self, factors, labels, metrics, context, /):
+            raise AssertionError("evaluation must not start during construction")
+
+        def get_evidence(self, evaluation_id, /):
+            raise AssertionError("evidence retrieval must not start during construction")
+
+    fake_qe = SimpleNamespace(
+        Evaluator=PositionalOnlyEvaluator,
+        DEFAULT_METRICS=("rank_ic",),
+        MetricCatalog=type(
+            "MetricCatalog",
+            (),
+            {"list": lambda self, tier=None, /: []},
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "quant_evaluator", fake_qe)
+
+    with pytest.raises(QEOptionalDependencyMissing, match="unavailable or incompatible"):
         create_qe_adapter()
 
 

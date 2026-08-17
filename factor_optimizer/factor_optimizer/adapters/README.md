@@ -92,19 +92,21 @@ except FEOptionalDependencyMissing:
     fe_adapter = None
 ```
 
-**QuantEvaluator adapter (mock for now, real when QE exists):**
+**QuantEvaluator adapter (typed facade, explicit evidence store):**
 
 ```python
 from factor_optimizer.adapters import (
+    InMemoryEvidenceStore,
     create_qe_adapter,
     create_mock_qe_adapter,
     QEOptionalDependencyMissing,
 )
 
 try:
-    qe_adapter = create_qe_adapter()
+    # Real adapter requires an explicitly supplied evidence store.
+    qe_adapter = create_qe_adapter(evidence_store=InMemoryEvidenceStore())
 except QEOptionalDependencyMissing:
-    # QE doesn't exist yet, use mock
+    # Use the mock only for explicit research and test flows.
     qe_adapter = create_mock_qe_adapter()
 ```
 
@@ -291,7 +293,7 @@ except FEOptionalDependencyMissing as e:
 **Error messages:**
 
 - **FE missing:** `"factor-engine not installed or not in Python path. Ensure factor_engine is available in the parent directory."`
-- **QE missing:** `"quant-evaluator not installed. This is a future package; for now, use mock adapters in tests."`
+- **QE missing/incompatible:** The installed `quant_evaluator` package does not expose the required typed public facade; use the explicit research-only mock adapter for tests and development.
 
 ## Testing
 
@@ -336,10 +338,6 @@ tests/adapters/
 └── test_integration.py      # Integration tests with FO core
 ```
 
-## Future Work
+## Current Scope
 
-- [ ] QE real adapter when QuantEvaluator package exists
-- [ ] Performance optimization for batch hash computation
-- [ ] Caching layer for operator metadata
-- [ ] Async evaluation support in QE adapter
-- [ ] More sophisticated complexity estimation (data source analysis)
+The real QE adapter is validated only for the installed typed public facade, process-local shared evidence through an injected store, plain-value evidence normalization, and fail-closed missing-store or unknown-evidence behavior. Restart-durable evidence, score/cost mapping, sealed-test workflows, and production execution remain outside this adapter's current capability.

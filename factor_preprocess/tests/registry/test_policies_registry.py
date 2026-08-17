@@ -156,6 +156,70 @@ class TestPolicyPreset:
         assert valid is False
         assert any("missing_step" in error and "not registered" in error for error in errors)
 
+    @pytest.mark.parametrize(
+        "transform_name, parameters, invalid_name, valid_name",
+        [
+            ("forward_fill", {"limit": 1}, "limit", "max_lag"),
+            ("ewma", {"span": 20}, "span", "halflife"),
+        ],
+    )
+    def test_production_rejects_parameters_not_accepted_by_callable(
+        self, transform_name, parameters, invalid_name, valid_name
+    ):
+        policy = PolicyPreset(
+            name="invalid_parameters",
+            description="invalid callable parameters",
+            level=PolicyLevel.PRODUCTION,
+            steps=[TransformStep(transform_name, parameters)],
+        )
+
+        valid, errors = policy.validate()
+
+        assert valid is False
+        assert any(
+            transform_name in error and invalid_name in error
+            for error in errors
+        )
+
+        policy.steps[0].parameters = {valid_name: next(iter(parameters.values()))}
+        valid, errors = policy.validate()
+        assert valid is True
+        assert errors == []
+
+    @pytest.mark.parametrize("level", [PolicyLevel.RESEARCH, PolicyLevel.STAGING])
+    def test_nonproduction_rejects_unregistered_transform(self, level):
+        policy = PolicyPreset(
+            name="unknown_step",
+            description="unknown",
+            level=level,
+            steps=[TransformStep("unregistered_transform", {})],
+        )
+
+        valid, errors = policy.validate(transform_registry=TransformRegistry())
+
+        assert valid is False
+        assert any("not registered" in error for error in errors)
+
+    @pytest.mark.parametrize("level", [PolicyLevel.RESEARCH, PolicyLevel.STAGING])
+    def test_nonproduction_rejects_parameters_not_accepted_by_callable(self, level):
+        registry = TransformRegistry()
+        registry.register(
+            "safe_step",
+            lambda values, scale=1: values,
+            TransformCategory.TEMPORAL,
+        )
+        policy = PolicyPreset(
+            name="invalid_parameters",
+            description="invalid callable parameters",
+            level=level,
+            steps=[TransformStep("safe_step", {"not_a_kwarg": 1})],
+        )
+
+        valid, errors = policy.validate(transform_registry=registry)
+
+        assert valid is False
+        assert any("safe_step" in error and "not_a_kwarg" in error for error in errors)
+
     def test_policy_validation_duplicate_steps(self):
         """Test validation fails on duplicate step names."""
         policy = PolicyPreset(
@@ -192,7 +256,55 @@ class TestPolicyRegistry:
         retrieved = registry.get("test")
         assert retrieved is not None
         assert retrieved.name == "test"
-        assert retrieved is policy
+        assert retrieved is not policy
+
+    def test_registered_policy_is_isolated_from_caller_mutation(self):
+        registry = PolicyRegistry()
+        policy = PolicyPreset(
+            name="production",
+            description="Production",
+            level=PolicyLevel.PRODUCTION,
+            steps=[TransformStep("cs_rank", {"pct": True})],
+        )
+        registry.register(policy)
+
+        policy.steps[0].name = "bandpass_filter"
+        policy.steps[0].parameters["unknown_parameter"] = 1
+
+        retrieved = registry.get("production")
+        assert retrieved is not None
+        assert retrieved.steps == [TransformStep("cs_rank", {"pct": True})]
+
+    @pytest.mark.parametrize(
+        "retrieve",
+        [
+            lambda registry: registry.get("production"),
+            lambda registry: registry.list_by_level(PolicyLevel.PRODUCTION)[0],
+            lambda registry: registry.list_causal_safe()[0],
+            lambda registry: registry.all_policies()[0],
+        ],
+    )
+    def test_retrieved_policy_mutation_does_not_change_registry(self, retrieve):
+        registry = PolicyRegistry()
+        registry.register(
+            PolicyPreset(
+                name="production",
+                description="Production",
+                level=PolicyLevel.PRODUCTION,
+                steps=[TransformStep("cs_rank", {"pct": True})],
+            )
+        )
+
+        exposed = retrieve(registry)
+        assert exposed is not None
+        exposed.steps[0].name = "bandpass_filter"
+        exposed.steps[0].parameters["unknown_parameter"] = 1
+        exposed.tags.append("mutated")
+
+        retained = registry.get("production")
+        assert retained is not None
+        assert retained.steps == [TransformStep("cs_rank", {"pct": True})]
+        assert retained.tags == []
 
     def test_register_invalid_policy_raises(self):
         """Test registering invalid policy raises."""

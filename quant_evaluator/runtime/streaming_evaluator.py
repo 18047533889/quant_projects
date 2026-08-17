@@ -168,7 +168,7 @@ class StreamingEvaluationResult:
         return metric_id in self.metrics
 
     def to_dict(self) -> Dict:
-        """Convert result to dictionary."""
+        """Convert result to a serialization-friendly dictionary."""
         result = {
             "metrics": self.metrics,
             "diagnostics": self.diagnostics,
@@ -182,7 +182,7 @@ class StreamingEvaluationResult:
         if self.metadata:
             result["metadata"] = self.metadata
         if self.provenance:
-            result["provenance"] = self.provenance
+            result["provenance"] = dict(self.provenance)
         return result
 
 
@@ -333,17 +333,15 @@ class StreamingEvaluator:
         if len(times) != factor_batch.num_times:
             raise InvalidContractError("time coordinates do not match factor time axis")
         previous = stream_state.get("last_time")
-        seen = stream_state.setdefault("seen_times", set())
         try:
             if any(times[i] >= times[i + 1] for i in range(len(times) - 1)):
                 raise InvalidContractError("stream time coordinates must be strictly increasing")
-            if any(t in seen for t in times):
-                raise InvalidContractError("duplicate or replayed stream time coordinates")
             if previous is not None and times[0] <= previous:
-                raise InvalidContractError("stream chunks must be monotonic and non-overlapping")
+                raise InvalidContractError(
+                    "stream time coordinates are not monotonic: duplicate, replayed, or overlapping"
+                )
         except TypeError as exc:
             raise InvalidContractError("stream time coordinates must be orderable") from exc
-        seen.update(times)
         if times:
             stream_state["last_time"] = times[-1]
 
@@ -439,9 +437,14 @@ class StreamingEvaluator:
             chunks_processed += 1
             total_obs += factor_batch.num_times * factor_batch.num_assets
 
-            # Track memory
-            chunk_memory_mb = self._estimate_chunk_memory(factor_batch, label_bundle)
-            self._peak_memory_mb = max(self._peak_memory_mb, chunk_memory_mb)
+            # Track live input and persistent metric-state memory.  IC accumulators
+            # grow across public time-partitioned streams and must not be hidden by
+            # reporting only the current input chunk.
+            live_memory_mb = (
+                self._estimate_chunk_memory(factor_batch, label_bundle)
+                + self._estimate_metric_states_memory(metric_states)
+            )
+            self._peak_memory_mb = max(self._peak_memory_mb, live_memory_mb)
 
             self.budget_tracker.record_operation()
 
@@ -493,6 +496,7 @@ class StreamingEvaluator:
         Returns:
             StreamingEvaluationResult with finalized metrics
         """
+        self._validate_chunk(factor_batch, label_bundle)
         generator = self._batch_to_generator(factor_batch, label_bundle, include_descriptors=True)
         return self.evaluate_stream(generator, metric_specs, _internal_splitter=True)
 
@@ -653,6 +657,14 @@ class StreamingEvaluator:
                 f"Factor time axis ({factor_batch.num_times}) "
                 f"does not match label length ({len(label_bundle.values)})"
             )
+        if (
+            label_bundle.values.ndim == 2
+            and label_bundle.values.shape[1] != factor_batch.values.shape[1]
+        ):
+            raise InvalidContractError(
+                f"Factor asset axis ({factor_batch.values.shape[1]}) does not match "
+                f"label asset dimension ({label_bundle.values.shape[1]})"
+            )
 
     def _estimate_chunk_memory(
         self,
@@ -669,6 +681,31 @@ class StreamingEvaluator:
             label_bytes += label_bundle.validity.nbytes
 
         total_bytes = factor_bytes + label_bytes
+        return total_bytes / (1024 * 1024)
+
+    @staticmethod
+    def _estimate_metric_states_memory(
+        metric_states: Dict[str, StreamingMetricState],
+    ) -> float:
+        """Estimate bytes retained by NumPy arrays in metric accumulator state."""
+        seen: set[int] = set()
+
+        def array_bytes(value: Any) -> int:
+            if isinstance(value, np.ndarray):
+                identity = id(value)
+                if identity in seen:
+                    return 0
+                seen.add(identity)
+                return value.nbytes
+            if isinstance(value, dict):
+                return sum(array_bytes(key) + array_bytes(item) for key, item in value.items())
+            if isinstance(value, (list, tuple, set)):
+                return sum(array_bytes(item) for item in value)
+            return 0
+
+        total_bytes = 0
+        for state in metric_states.values():
+            total_bytes += sum(array_bytes(value) for value in vars(state).values())
         return total_bytes / (1024 * 1024)
 
     def get_budget_report(self) -> str:

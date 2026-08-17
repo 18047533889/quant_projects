@@ -1,9 +1,40 @@
 """QuantEvaluatorAdapter: protocol for QE integration (optional dependency)."""
 
+from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
+
+
+@runtime_checkable
+class EvidenceStore(Protocol):
+    """Storage boundary for evidence bundles shared across adapter instances."""
+
+    evidence_scope: str
+
+    def put(self, evidence_id: str, evidence: Dict[str, Any]) -> None:
+        ...
+
+    def get(self, evidence_id: str) -> Optional[Dict[str, Any]]:
+        ...
+
+
+class InMemoryEvidenceStore:
+    """Process-local shared store useful for research and tests."""
+
+    evidence_scope = "process_local_shared_store"
+
+    def __init__(self):
+        self._values: Dict[str, Dict[str, Any]] = {}
+
+    def put(self, evidence_id: str, evidence: Dict[str, Any]) -> None:
+        self._values[evidence_id] = deepcopy(evidence)
+
+    def get(self, evidence_id: str) -> Optional[Dict[str, Any]]:
+        value = self._values.get(evidence_id)
+        return deepcopy(value) if value is not None else None
 
 
 @runtime_checkable
@@ -69,12 +100,14 @@ class QuantEvaluatorAdapter(Protocol):
             tier: Optional tier filter (e.g., "core", "advanced", "research")
 
         Returns:
-            List of metric specifications with:
+            List of metric specifications with registry-authoritative fields:
                 - metric_id (str): Unique metric identifier
                 - name (str): Display name
                 - description (str): Metric description
                 - tier (str): Metric tier/category
-                - higher_is_better (bool): Optimization direction
+
+            Direction metadata is included only when the backing QE registry exposes it;
+            callers must not assume ``higher_is_better`` is available.
         """
         ...
 
@@ -85,27 +118,39 @@ class OptionalDependencyMissing(Exception):
     pass
 
 
-def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY) -> QuantEvaluatorAdapter:
+def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY, evidence_store: Optional[EvidenceStore] = None) -> QuantEvaluatorAdapter:
     """Create a real QE adapter; production remains fail-closed until implemented."""
     if isinstance(execution_mode, str):
         execution_mode = ExecutionMode(execution_mode)
     if execution_mode is ExecutionMode.PRODUCTION:
         require_production_capability()
     try:
-        # Try to import QE - this will fail if not installed
-        # Note: QE doesn't exist yet, so this is a forward-looking stub
+        import inspect
+        import uuid
+        import numpy as np
         import quant_evaluator as qe
+        from quant_evaluator.registry import metrics as metric_registry
 
-        if not hasattr(qe, "Evaluator"):
-            raise ImportError("quant_evaluator.Evaluator is not available")
+        evaluate = getattr(qe, "evaluate", None)
+        if evaluate is None:
+            raise ImportError("quant_evaluator.evaluate is not available")
+        parameters = inspect.signature(evaluate).parameters
+        required = {"factors", "labels", "context", "metrics"}
+        if not required.issubset(parameters):
+            raise ImportError(
+                "installed quant_evaluator does not expose the current public evaluate API"
+            )
+        if any(
+            parameters[name].kind is inspect.Parameter.POSITIONAL_ONLY
+            for name in required
+        ):
+            raise ImportError("quant_evaluator.evaluate cannot accept the adapter keywords")
 
-        # Concrete adapter implementation
         class ConcreteQEAdapter:
-            """Concrete QE adapter implementation."""
+            """Adapter for QE's typed public facade and an explicit evidence store."""
 
             def __init__(self):
-                """Initialize with QE evaluator."""
-                self.evaluator = qe.Evaluator()
+                self._evidence_store = evidence_store
 
             def evaluate(
                 self,
@@ -114,43 +159,104 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                 metrics: Optional[List[str]] = None,
                 context: Optional[Dict[str, Any]] = None,
             ) -> Dict[str, Any]:
-                """Submit evaluation to QE."""
-                # Real implementation would call QE API
-                result = self.evaluator.evaluate(
-                    factors=factor_batch,
-                    labels=labels,
-                    metrics=metrics or qe.DEFAULT_METRICS,
-                    context=context or {},
+                """Evaluate through QE and persist a plain evidence snapshot."""
+                if self._evidence_store is None:
+                    from factor_optimizer.errors import EvidenceUnavailableError
+                    raise EvidenceUnavailableError(
+                        "an evidence store is required before evaluation"
+                    )
+                metric_ids = tuple(metrics) if metrics is not None else ("coverage",)
+                bundle = evaluate(
+                    factor_batch,
+                    labels,
+                    context=context,
+                    metrics=metric_ids,
                 )
+                evaluation_id = f"qe_adapter_{uuid.uuid4().hex}"
+                from dataclasses import asdict, is_dataclass
 
+                def plain(value: Any) -> Any:
+                    if is_dataclass(value):
+                        return {key: plain(item) for key, item in asdict(value).items()}
+                    if isinstance(value, Mapping):
+                        return {key: plain(item) for key, item in value.items()}
+                    if isinstance(value, (list, tuple)):
+                        return [plain(item) for item in value]
+                    if isinstance(value, np.ndarray):
+                        return value.tolist()
+                    if isinstance(value, np.generic):
+                        return value.item()
+                    return value
+
+                metric_values = {
+                    metric_id: plain(metric.value)
+                    for metric_id, metric in bundle.metric_values.items()
+                }
+                diagnostics = {
+                    factor_id: plain(diagnosis)
+                    for factor_id, diagnosis in bundle.diagnostics.items()
+                }
+                evidence = {
+                    "evaluation_id": evaluation_id,
+                    "evidence_scope": self._evidence_store.evidence_scope,
+                    "metrics": metric_values,
+                    "grouped_metrics": plain(bundle.grouped_metrics),
+                    "diagnostics": diagnostics,
+                    "metadata": plain(bundle.metadata),
+                }
+                self._evidence_store.put(evaluation_id, evidence)
                 return {
-                    "evaluation_id": result.evaluation_id,
-                    "metrics": result.metrics,
-                    "diagnostics": result.diagnostics,
-                    "evidence_ref": result.evidence_ref,
+                    "evaluation_id": evaluation_id,
+                    "metrics": evidence["metrics"],
+                    "diagnostics": evidence["diagnostics"],
+                    "evidence_ref": evaluation_id,
+                    "evidence_scope": self._evidence_store.evidence_scope,
                 }
 
             def get_evidence(self, evaluation_id: str) -> Dict[str, Any]:
-                """Retrieve evidence bundle."""
-                evidence = self.evaluator.get_evidence(evaluation_id)
-                return {
-                    "evaluation_id": evaluation_id,
-                    "metrics": evidence.metrics,
-                    "diagnostics": evidence.diagnostics,
-                    "timeseries": evidence.timeseries,
-                }
+                """Retrieve evidence from the configured shared store."""
+                if self._evidence_store is None:
+                    from factor_optimizer.errors import EvidenceUnavailableError
+                    raise EvidenceUnavailableError(
+                        "durable evidence store is required for evidence lookup"
+                    )
+                evidence = self._evidence_store.get(evaluation_id)
+                if evidence is None:
+                    from factor_optimizer.errors import EvidenceUnavailableError
+                    raise EvidenceUnavailableError(
+                        f"evidence not found for evaluation '{evaluation_id}'"
+                    )
+                return evidence
 
             def list_metrics(self, tier: Optional[str] = None) -> List[Dict[str, Any]]:
-                """List available metrics."""
-                catalog = qe.MetricCatalog()
-                return catalog.list(tier=tier)
+                """List QE registry metadata without inventing optimization direction."""
+                selected = metric_registry.list_metrics()
+                if tier is not None:
+                    try:
+                        selected = metric_registry.list_metrics_by_tier(
+                            metric_registry.MetricTier(tier)
+                        )
+                    except ValueError as exc:
+                        raise ValueError(f"unknown metric tier: {tier}") from exc
+                return [
+                    {
+                        "metric_id": spec.name,
+                        "name": spec.display_name,
+                        "description": spec.description,
+                        "tier": spec.tier.value,
+                        "status": spec.status.value,
+                    }
+                    for name in selected
+                    for spec in (metric_registry.get_metric(name),)
+                ]
 
         return ConcreteQEAdapter()
 
     except ImportError as e:
         raise OptionalDependencyMissing(
-            "quant-evaluator not installed. "
-            "This is a future package; for now, use mock adapters in tests."
+            "quant-evaluator is unavailable or incompatible with the current "
+            "FactorOptimizer adapter contract; use the explicit research-only "
+            "mock adapter only for tests and development."
         ) from e
 
 
@@ -205,7 +311,7 @@ def create_mock_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESE
                     "warnings": [],
                     "evaluated_at": datetime.now().isoformat(),
                 },
-                "evidence_ref": f"mock_evidence_{eval_id}",
+                "evidence_ref": eval_id,
             }
 
             # Store for get_evidence

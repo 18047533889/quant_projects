@@ -6,6 +6,8 @@ from .factor_engine import (
     create_fe_adapter,
 )
 from .quant_evaluator import (
+    EvidenceStore,
+    InMemoryEvidenceStore,
     QuantEvaluatorAdapter,
     OptionalDependencyMissing as QEOptionalDependencyMissing,
     create_qe_adapter,
@@ -14,6 +16,8 @@ from .quant_evaluator import (
 
 __all__ = [
     "FactorEngineAdapter",
+    "EvidenceStore",
+    "InMemoryEvidenceStore",
     "QuantEvaluatorAdapter",
     "FEOptionalDependencyMissing",
     "QEOptionalDependencyMissing",

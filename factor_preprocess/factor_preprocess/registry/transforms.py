@@ -4,6 +4,7 @@ Transform registry with versioning and discovery.
 Provides a central catalog of all preprocessing transforms with metadata,
 versioning, and category-based organization.
 """
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Set, Any
 from enum import Enum
@@ -46,6 +47,16 @@ class TransformMetadata:
         sig = inspect.signature(self.func)
         sig_str = f"{self.name}:{str(sig)}"
         return hashlib.sha256(sig_str.encode()).hexdigest()[:16]
+
+    def bind_parameters(self, parameters: Dict[str, Any]) -> None:
+        """Validate configured keyword parameters against the callable signature."""
+        signature = inspect.signature(self.func)
+        try:
+            signature.bind_partial(**parameters)
+        except TypeError as exc:
+            raise ValueError(
+                f"Transform '{self.name}' has invalid parameters: {exc}"
+            ) from exc
 
 
 class TransformRegistry:
@@ -103,15 +114,6 @@ class TransformRegistry:
         admission : str
             Production admission class
         """
-        if name in self._transforms:
-            existing = self._transforms[name]
-            if existing.version != version:
-                raise ValueError(
-                    f"Transform '{name}' already registered with version "
-                    f"{existing.version}, cannot register version {version}"
-                )
-            return
-
         # Existing callers omit admission for ordinary causal transforms;
         # make that omission explicit rather than treating it as unknown.
         admission = admission or "PRODUCTION"
@@ -126,11 +128,35 @@ class TransformRegistry:
             category=category,
             version=version,
             description=description,
-            parameters=parameters or {},
-            tags=tags or set(),
+            parameters=deepcopy(parameters or {}),
+            tags=deepcopy(tags or set()),
             causal_safe=causal_safe,
             admission=admission,
         )
+
+        if name in self._transforms:
+            existing = self._transforms[name]
+            if existing.version != version:
+                raise ValueError(
+                    f"Transform '{name}' already registered with version "
+                    f"{existing.version}, cannot register version {version}"
+                )
+            same_registration = (
+                existing.func is metadata.func
+                and existing.category == metadata.category
+                and existing.description == metadata.description
+                and existing.parameters == metadata.parameters
+                and existing.tags == metadata.tags
+                and existing.causal_safe == metadata.causal_safe
+                and existing.admission == metadata.admission
+                and existing.signature_hash == metadata.signature_hash
+            )
+            if not same_registration:
+                raise ValueError(
+                    f"Transform '{name}' version {version} is already registered "
+                    "with conflicting metadata or implementation"
+                )
+            return
 
         self._transforms[name] = metadata
         self._by_category[category].append(name)
@@ -141,50 +167,51 @@ class TransformRegistry:
             self._by_tag[tag].append(name)
 
     def get(self, name: str) -> Optional[TransformMetadata]:
-        """Get transform metadata by name."""
-        return self._transforms.get(name)
+        """Get an isolated transform metadata snapshot by name."""
+        metadata = self._transforms.get(name)
+        return deepcopy(metadata) if metadata is not None else None
 
     def validate_production(self, name: str) -> TransformMetadata:
         """Resolve registry metadata and fail closed for production admission."""
-        metadata = self.get(name)
+        metadata = self._transforms.get(name)
         if metadata is None:
             raise ValueError(f"Transform '{name}' is not registered")
         if metadata.admission != "PRODUCTION":
             raise ValueError(f"Transform '{name}' is {metadata.admission}")
         if not metadata.causal_safe:
             raise ValueError(f"Transform '{name}' is not production-causal-safe")
-        return metadata
+        return deepcopy(metadata)
 
     def get_function(self, name: str) -> Optional[Callable]:
         """Get transform function by name."""
-        meta = self.get(name)
-        return meta.func if meta else None
+        metadata = self._transforms.get(name)
+        return metadata.func if metadata else None
 
     def list_by_category(self, category: TransformCategory) -> List[TransformMetadata]:
-        """List all transforms in a category."""
+        """List isolated transform metadata snapshots in a category."""
         names = self._by_category.get(category, [])
-        return [self._transforms[name] for name in names]
+        return [deepcopy(self._transforms[name]) for name in names]
 
     def list_by_tag(self, tag: str) -> List[TransformMetadata]:
-        """List all transforms with a given tag."""
+        """List isolated transform metadata snapshots with a given tag."""
         names = self._by_tag.get(tag, [])
-        return [self._transforms[name] for name in names]
+        return [deepcopy(self._transforms[name]) for name in names]
 
     def list_causal_safe(self) -> List[TransformMetadata]:
-        """List all causal-safe transforms."""
+        """List isolated snapshots of all causal-safe transforms."""
         return [
-            meta for meta in self._transforms.values()
+            deepcopy(meta) for meta in self._transforms.values()
             if meta.causal_safe
         ]
 
     def all_transforms(self) -> List[TransformMetadata]:
-        """Get all registered transforms."""
-        return list(self._transforms.values())
+        """Get isolated snapshots of all registered transforms."""
+        return [deepcopy(meta) for meta in self._transforms.values()]
 
     def get_signature_hash(self, name: str) -> Optional[str]:
         """Get signature hash for reproducibility tracking."""
-        meta = self.get(name)
-        return meta.signature_hash if meta else None
+        metadata = self._transforms.get(name)
+        return metadata.signature_hash if metadata else None
 
 
 def create_default_registry() -> TransformRegistry:

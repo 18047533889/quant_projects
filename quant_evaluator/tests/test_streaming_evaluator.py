@@ -5,6 +5,8 @@ Validates constant memory usage, incremental computation correctness,
 and performance on 100k+ factor scenarios.
 """
 
+import json
+
 import pytest
 import numpy as np
 from typing import Iterator, Tuple
@@ -141,9 +143,9 @@ class TestStreamingEvaluationResult:
 
         data = result.to_dict()
 
-        assert data["provenance"] is provenance
-        with pytest.raises(TypeError):
-            data["provenance"]["factor_ids"] = ("changed",)
+        assert data["provenance"] == dict(provenance)
+        assert data["provenance"] is not provenance
+        json.dumps(data)
 
 
 class TestStreamingEvaluator:
@@ -289,7 +291,7 @@ class TestStreamingEvaluator:
         assert result.provenance["factor_ids"] == ("f0", "f1")
         assert result.provenance["asset_coords"] == ("a", "b")
         assert result.provenance["timing_offsets"] == ((1, 1), (2, 2), (4, 4))
-        assert result.to_dict()["provenance"] is result.provenance
+        assert result.to_dict()["provenance"] == dict(result.provenance)
 
     def test_evaluate_large_batch_summary(self):
         evaluator = StreamingEvaluator(chunk_size_time=50, chunk_size_factors=2)
@@ -358,6 +360,107 @@ class TestStreamingEvaluator:
         assert result.has_metric("coverage")
         assert result.chunks_processed == 5
         assert result.execution_time_seconds > 0
+
+    @pytest.mark.parametrize("label_assets", [99, 101])
+    def test_rejects_mismatched_two_dimensional_label_asset_axis(self, label_assets):
+        evaluator = StreamingEvaluator()
+        updater_calls = []
+
+        def recording_updater(state, factor_batch, label_bundle):
+            updater_calls.append((factor_batch, label_bundle))
+            return state
+
+        evaluator.register_streaming_metric(
+            "coverage", recording_updater, MetricKind.COVERAGE
+        )
+        batch = self.create_test_batch(T=20, N=100, F=2)
+        labels = LabelBundle(
+            target_id="forward_return_1d",
+            values=np.random.randn(20, label_assets),
+            horizon=1,
+            decision_time=tuple(range(20)),
+            label_start_time=tuple(range(20)),
+            label_end_time=tuple(range(1, 21)),
+        )
+
+        with pytest.raises(InvalidContractError, match="label asset dimension"):
+            evaluator.evaluate_stream(
+                iter(((batch, labels),)),
+                ({"metric_id": "coverage", "metric_kind": "coverage"},),
+            )
+
+        assert updater_calls == []
+
+    def test_stream_allows_one_dimensional_labels(self):
+        evaluator = StreamingEvaluator()
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+        batch = self.create_test_batch(T=20, N=100, F=2)
+        labels = LabelBundle(
+            target_id="forward_return_1d",
+            values=np.random.randn(20),
+            horizon=1,
+            decision_time=tuple(range(20)),
+            label_start_time=tuple(range(20)),
+            label_end_time=tuple(range(1, 21)),
+        )
+
+        result = evaluator.evaluate_stream(
+            iter(((batch, labels),)),
+            ({"metric_id": "coverage", "metric_kind": "coverage"},),
+        )
+
+        assert result.get_metric("coverage") == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("label_assets", [99, 101])
+    def test_large_batch_rejects_parent_label_asset_mismatch_before_updater(
+        self, label_assets
+    ):
+        evaluator = StreamingEvaluator(chunk_size_time=10, chunk_size_factors=1)
+        updater_calls = []
+
+        def recording_updater(state, factor_batch, label_bundle):
+            updater_calls.append((factor_batch, label_bundle))
+            return state
+
+        evaluator.register_streaming_metric(
+            "coverage", recording_updater, MetricKind.COVERAGE
+        )
+        batch = self.create_test_batch(T=20, N=100, F=2)
+        labels = self.create_test_labels(T=20, N=label_assets)
+
+        with pytest.raises(InvalidContractError, match="label asset dimension"):
+            evaluator.evaluate_large_batch(
+                batch,
+                labels,
+                ({"metric_id": "coverage", "metric_kind": "coverage"},),
+            )
+
+        assert updater_calls == []
+
+    def test_large_batch_allows_one_dimensional_labels(self):
+        evaluator = StreamingEvaluator(chunk_size_time=10, chunk_size_factors=1)
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+        batch = self.create_test_batch(T=20, N=100, F=2)
+        labels = LabelBundle(
+            target_id="forward_return_1d",
+            values=np.random.randn(20),
+            horizon=1,
+            decision_time=tuple(range(20)),
+            label_start_time=tuple(range(20)),
+            label_end_time=tuple(range(1, 21)),
+        )
+
+        result = evaluator.evaluate_large_batch(
+            batch,
+            labels,
+            ({"metric_id": "coverage", "metric_kind": "coverage"},),
+        )
+
+        assert result.get_metric("coverage") == pytest.approx(1.0)
 
     def test_streaming_ic_correctness(self):
         """Test that streaming IC matches batch IC computation."""
@@ -483,6 +586,51 @@ class TestStreamingEvaluator:
         # Peak should be close to single chunk size, not sum of all chunks
         expected_chunk_mb = (20 * N * 100 * 8) / (1024 * 1024)
         assert result.peak_memory_mb < expected_chunk_mb * 3  # Allow some overhead
+
+    def test_streaming_ic_peak_memory_includes_growing_accumulators(self):
+        """Peak accounting includes persistent IC state, not only the last chunk."""
+        evaluator = StreamingEvaluator()
+        evaluator.register_streaming_metric(
+            "ic", streaming_ic_updater, MetricKind.IC
+        )
+        num_chunks, num_assets, num_factors = 20, 10, 100
+
+        def chunks():
+            for time_value in range(num_chunks):
+                factor_values = np.arange(
+                    num_assets * num_factors, dtype=np.float64
+                ).reshape(1, num_assets, num_factors)
+                batch = FactorBatch(
+                    factor_ids=tuple(f"f{i}" for i in range(num_factors)),
+                    time_axis=AxisRef(
+                        "time", "int64", 1, np.array([time_value])
+                    ),
+                    asset_axis=AxisRef(
+                        "asset", "int64", num_assets, np.arange(num_assets)
+                    ),
+                    values=factor_values,
+                )
+                labels = LabelBundle(
+                    target_id="target",
+                    values=np.arange(num_assets, dtype=np.float64).reshape(1, -1),
+                    horizon=1,
+                    decision_time=(time_value,),
+                    label_start_time=(time_value,),
+                    label_end_time=(time_value + 1,),
+                )
+                yield batch, labels
+
+        result = evaluator.evaluate_stream(
+            chunks(), [{"metric_id": "ic", "metric_kind": "ic"}]
+        )
+
+        accumulator_mb = (
+            num_chunks * num_factors * (5 * np.dtype(np.float64).itemsize
+                                        + np.dtype(np.int32).itemsize)
+            / (1024 * 1024)
+        )
+        assert result.metrics["ic"].shape == (num_chunks, num_factors)
+        assert result.peak_memory_mb >= accumulator_mb
 
     def test_invalid_chunk_raises(self):
         evaluator = StreamingEvaluator()
@@ -626,6 +774,39 @@ class TestStreamingEvaluator:
         make = self._boundary_chunks(); evaluator, specs = self._boundary_evaluator()
         with pytest.raises(InvalidContractError, match="overlapping|duplicate|replayed"):
             evaluator.evaluate_stream(iter([make(0), make(1)]), specs)
+
+    def test_stream_accepts_orderable_unhashable_time_coordinates(self):
+        class UnhashableInt(int):
+            __hash__ = None
+
+        evaluator, specs = self._boundary_evaluator()
+
+        def make_chunk(start):
+            times = np.array(
+                [UnhashableInt(start), UnhashableInt(start + 1)], dtype=object
+            )
+            batch = FactorBatch(
+                factor_ids=("f",),
+                time_axis=AxisRef("time", "object", 2, times),
+                asset_axis=AxisRef("asset", "int64", 1, np.array(["asset-1"])),
+                values=np.ones((2, 1, 1)),
+                context_refs={"snapshot": "s1"},
+            )
+            labels = LabelBundle(
+                target_id="target", values=np.ones((2, 1)), horizon=1,
+                decision_time=(start, start + 1),
+                label_start_time=(start, start + 1),
+                label_end_time=(start + 1, start + 2),
+                source_ref="labels", calendar_ref="cal",
+            )
+            return batch, labels
+
+        result = evaluator.evaluate_stream(
+            iter([make_chunk(0), make_chunk(2)]), specs
+        )
+
+        assert result.chunks_processed == 2
+        assert result.provenance["timing_vectors"][0] == (0, 1, 2, 3)
 
     def test_public_timing_rule_allows_unequal_chunk_lengths_and_accumulates_vectors(self):
         evaluator, specs = self._boundary_evaluator()

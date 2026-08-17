@@ -4,7 +4,7 @@ from factor_assets.contracts.asset import AssetMetadata
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.lifecycle import LifecycleState
-from factor_assets.errors import LifecycleConflictError
+from factor_assets.errors import LifecycleConflictError, SchemaVersionError
 from factor_assets.registry.sqlite_repository import SQLiteLifecycleRepository
 
 def _repo(tmp_path):
@@ -46,6 +46,31 @@ def test_public_factory_is_in_all_exports():
     import factor_assets.registry as registry
     assert "create_repository" in factor_assets.__all__
     assert "create_repository" in registry.__all__
+
+def test_reopen_rejects_tampered_physical_schema(tmp_path):
+    path = tmp_path / "registry.db"
+    SQLiteLifecycleRepository(path)
+    import sqlite3
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("DROP TABLE assets")
+
+    with pytest.raises(SchemaVersionError, match="schema table assets"):
+        SQLiteLifecycleRepository(path)
+
+
+def test_reopen_rejects_malformed_schema_meta(tmp_path):
+    path = tmp_path / "registry.db"
+    SQLiteLifecycleRepository(path)
+    import sqlite3
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("DROP TABLE schema_meta")
+        conn.execute("CREATE TABLE schema_meta (key INTEGER PRIMARY KEY, value TEXT NOT NULL)")
+
+    with pytest.raises(SchemaVersionError, match="schema table schema_meta"):
+        SQLiteLifecycleRepository(path)
+
 
 def test_reopen_preserves_projection_and_events(tmp_path):
     repo = _repo(tmp_path); _register(repo)

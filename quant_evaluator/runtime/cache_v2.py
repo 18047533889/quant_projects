@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import pickle
 import threading
@@ -41,6 +42,16 @@ except ImportError:
     HAS_LZ4 = False
 
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_ttl(ttl_seconds: Optional[float]) -> bool:
+    """Return whether a TTL is absent or a finite positive duration."""
+    if ttl_seconds is None:
+        return True
+    try:
+        return math.isfinite(ttl_seconds) and ttl_seconds > 0
+    except TypeError:
+        return False
 
 
 class CacheConfigurationError(DurableCacheCapabilityError, ValueError):
@@ -190,7 +201,16 @@ class CacheMetadata:
         """Check if entry has expired based on TTL."""
         if self.ttl_seconds is None:
             return False
-        return (now - self.created_at) > self.ttl_seconds
+        if not _is_valid_ttl(self.ttl_seconds):
+            return True
+        try:
+            if not math.isfinite(self.created_at) or not math.isfinite(now):
+                return True
+        except TypeError:
+            return True
+        if self.created_at > now:
+            return True
+        return (now - self.created_at) >= self.ttl_seconds
 
     def to_dict(self) -> Dict:
         """Serialize to dictionary."""
@@ -317,6 +337,8 @@ class MemoryCacheLayer:
             True if stored successfully
         """
         with self._lock:
+            if not _is_valid_ttl(ttl_seconds):
+                return False
             try:
                 # Serialize
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
@@ -542,6 +564,8 @@ class DiskCacheLayer:
         """
         lock = self._get_lock(key)
         with lock:
+            if not _is_valid_ttl(ttl_seconds):
+                return False
             try:
                 # Serialize and compress
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
@@ -739,7 +763,6 @@ class RedisCacheLayer:
             True if stored successfully
         """
         prefixed = self._prefixed_key(key)
-        ttl = int(ttl_seconds) if ttl_seconds else self.default_ttl
 
         try:
             # Serialize and compress
@@ -749,6 +772,15 @@ class RedisCacheLayer:
             # Preserve the original creation time when writing a promoted entry.
             now = time.time()
             entry_created_at = now if created_at is None else created_at
+            if ttl_seconds is None:
+                redis_ttl = None
+            else:
+                remaining_ttl = ttl_seconds - max(0.0, now - entry_created_at)
+                if not math.isfinite(remaining_ttl) or remaining_ttl <= 0:
+                    return False
+                # Redis' second-granularity expiry must not truncate a live
+                # fractional TTL to zero or expire before the metadata does.
+                redis_ttl = math.ceil(remaining_ttl)
             metadata = CacheMetadata(
                 key=key,
                 created_at=entry_created_at,
@@ -763,12 +795,16 @@ class RedisCacheLayer:
 
             # Store with pipeline
             pipe = self.client.pipeline()
-            pipe.setex(prefixed, ttl, compressed)
+            if redis_ttl is None:
+                pipe.set(prefixed, compressed)
+            else:
+                pipe.setex(prefixed, redis_ttl, compressed)
             pipe.hset(
                 f"{prefixed}:meta",
                 mapping={"data": json.dumps(metadata.to_dict())}
             )
-            pipe.expire(f"{prefixed}:meta", ttl)
+            if redis_ttl is not None:
+                pipe.expire(f"{prefixed}:meta", redis_ttl)
             pipe.execute()
 
             return True
@@ -1009,8 +1045,14 @@ class MultiLevelCache:
         # Statistics
         self.stats = CacheStats()
         self._stats_lock = threading.Lock()
+        self._coordination_lock = threading.RLock()
 
     def get(self, key: str) -> Optional[Any]:
+        """Get a value while serializing promotion with dependency invalidation."""
+        with self._coordination_lock:
+            return self._get_unlocked(key)
+
+    def _get_unlocked(self, key: str) -> Optional[Any]:
         """
         Get value from cache (checks L1 → L2 → L3).
 
@@ -1089,6 +1131,24 @@ class MultiLevelCache:
         dependencies: Optional[Set[str]] = None,
         write_through: bool = True,
     ) -> bool:
+        """Store a value while serializing writes with invalidation."""
+        with self._coordination_lock:
+            return self._put_unlocked(
+                key,
+                value,
+                ttl_seconds,
+                dependencies,
+                write_through,
+            )
+
+    def _put_unlocked(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: Optional[float] = None,
+        dependencies: Optional[Set[str]] = None,
+        write_through: bool = True,
+    ) -> bool:
         """
         Put value into cache (writes to all enabled layers).
 
@@ -1102,6 +1162,9 @@ class MultiLevelCache:
         Returns:
             True if stored in at least one layer
         """
+        if not _is_valid_ttl(ttl_seconds):
+            return False
+
         success = False
 
         # Write to L1
@@ -1123,6 +1186,11 @@ class MultiLevelCache:
         return success
 
     def invalidate(self, key: str) -> bool:
+        """Invalidate a key without racing with reads or promotion."""
+        with self._coordination_lock:
+            return self._invalidate_unlocked(key)
+
+    def _invalidate_unlocked(self, key: str) -> bool:
         """
         Invalidate key across all cache layers.
 
@@ -1148,6 +1216,11 @@ class MultiLevelCache:
         return removed
 
     def invalidate_dependency(self, dependency: str) -> int:
+        """Invalidate a dependency without racing with reads or promotion."""
+        with self._coordination_lock:
+            return self._invalidate_dependency_unlocked(dependency)
+
+    def _invalidate_dependency_unlocked(self, dependency: str) -> int:
         """
         Invalidate all entries that depend on the given dependency.
 
@@ -1172,13 +1245,14 @@ class MultiLevelCache:
         return count
 
     def clear(self):
-        """Clear all cache layers."""
-        if self.l1:
-            self.l1.clear()
-        if self.l2:
-            self.l2.clear()
-        if self.l3:
-            self.l3.clear()
+        """Clear all cache layers without racing with reads or promotion."""
+        with self._coordination_lock:
+            if self.l1:
+                self.l1.clear()
+            if self.l2:
+                self.l2.clear()
+            if self.l3:
+                self.l3.clear()
 
     def warm(
         self,
@@ -1197,10 +1271,17 @@ class MultiLevelCache:
             dependencies: Dependencies for cached values
         """
         for key in keys:
-            if self.get(key) is None:
+            with self._coordination_lock:
+                if self._get_unlocked(key) is not None:
+                    continue
                 try:
                     value = loader(key)
-                    self.put(key, value, ttl_seconds, dependencies)
+                    self._put_unlocked(
+                        key,
+                        value,
+                        ttl_seconds,
+                        dependencies,
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to warm cache for key {key}: {e}")
 

@@ -18,26 +18,24 @@ Successfully implemented the complete adapters layer for `factor_optimizer` with
 
 **QuantEvaluatorAdapter** (`factor_optimizer/adapters/quant_evaluator.py`)
 - Protocol definition with @runtime_checkable
-- Production-ready mock implementation with:
-  - Deterministic seeded randomness
-  - Realistic metric ranges (IC: -0.1 to 0.15)
-  - Full evidence lifecycle
-  - Tiered metric catalog (core/advanced/experimental)
-- Stub for future real QE integration
+- Real typed-facade integration with explicit evidence-store injection
+- Plain-value evidence normalization and registry-authoritative metric metadata
+- Production mode remains fail-closed
+- Research/test mock implementation remains available
 
-### 2. Test Suite (37 tests, 33 passed, 4 skipped)
+### 2. Test Suite (44 tests, 40 passed, 4 skipped)
 
 ```
 tests/adapters/
 ├── test_factor_engine.py      # 9 tests - FE adapter
-├── test_quant_evaluator.py    # 19 tests - QE adapter  
-├── test_integration.py        # 9 tests - FO core integration
+├── test_quant_evaluator.py    # 24 tests - QE adapter
+├── test_integration.py        # 11 tests - FO core integration
 └── verify_implementation.py   # Manual verification script
 ```
 
 **Test Results:**
 ```
-======================== 33 passed, 4 skipped in 1.12s ========================
+======================== 40 passed, 4 skipped in 1.13s ========================
 ```
 
 Skipped tests are FE integration tests that require FactorEngine to be in Python path.
@@ -97,7 +95,7 @@ profile = estimator.estimate(factor)
 ✅ **Optional dependencies** - FO core never directly imports FE/QE  
 ✅ **Fail-closed** - Missing dependencies raise explicit exceptions  
 ✅ **Real FE integration** - Canonical hash, operator catalog, complexity estimation  
-✅ **Production mock QE** - Fully functional mock for testing/development  
+✅ **Research mock QE** - Explicit mock for testing/development
 ✅ **Comprehensive tests** - Mock, integration, error handling  
 ✅ **Complete documentation** - Architecture, usage, examples  
 
@@ -119,7 +117,7 @@ profile = estimator.estimate(factor)
            ▼
 ┌──────────────┬──────────────┐
 │ FactorEngine │ QuantEval    │
-│ (optional)   │ (mock/future)│
+│ (optional)   │ (optional)   │
 └──────────────┴──────────────┘
 ```
 
@@ -130,6 +128,7 @@ profile = estimator.estimate(factor)
 ```python
 from factor_optimizer.adapters import (
     create_fe_adapter,
+    InMemoryEvidenceStore,
     create_qe_adapter,
     create_mock_qe_adapter,
     FEOptionalDependencyMissing,
@@ -142,14 +141,8 @@ try:
 except FEOptionalDependencyMissing:
     fe_adapter = None  # Handle gracefully
 
-# QE adapter (mock for now)
-qe_adapter = create_mock_qe_adapter()
-
-# Future: Real QE adapter when package exists
-try:
-    qe_adapter = create_qe_adapter()
-except QEOptionalDependencyMissing:
-    qe_adapter = create_mock_qe_adapter()
+# Real typed-facade QE adapter with process-local shared evidence
+qe_adapter = create_qe_adapter(evidence_store=InMemoryEvidenceStore())
 ```
 
 ### Using with SeenCache
@@ -205,14 +198,14 @@ for candidate in candidates:
 factor_optimizer/adapters/
 ├── __init__.py                 # Public exports
 ├── factor_engine.py            # FE adapter (277 lines)
-├── quant_evaluator.py          # QE adapter (288 lines)
+├── quant_evaluator.py          # QE adapter
 └── README.md                   # Complete documentation
 
 tests/adapters/
 ├── __init__.py
 ├── test_factor_engine.py       # 9 tests
-├── test_quant_evaluator.py     # 19 tests
-├── test_integration.py         # 9 tests
+├── test_quant_evaluator.py     # 24 tests
+├── test_integration.py         # 11 tests
 └── verify_implementation.py    # Verification script
 ```
 
@@ -243,17 +236,17 @@ tests/adapters/
 ## Next Steps
 
 1. **Integrate with FO core** - Update existing components to use adapters
-2. **Real QE integration** - Implement when QuantEvaluator package exists
+2. **Durable QE evidence** - Add a restart-durable evidence store and recovery tests
 3. **Performance optimization** - Batch operations, caching
 4. **Extended features** - Async evaluation, data source analysis
 
-## Conclusion
+### Current Capability
 
-The adapters layer is **production-ready** and provides a clean, testable boundary between FactorOptimizer and its optional dependencies (FactorEngine and QuantEvaluator). All protocols are well-defined, implementations are tested, and documentation is complete.
+The adapter layer is locally validated for the installed typed QE facade and process-local shared evidence semantics. It is not production-ready: restart-durable evidence, score/cost mapping, sealed-test contracts, and production execution remain open.
 
-**Status: ✓ COMPLETE**
+**Status: CLOSED_LOCAL for the documented adapter scope**
 
 ---
 
 Generated: 2026-08-13
-Test Results: 33 passed, 4 skipped (integration tests without FE in path)
+Test Results: 40 passed, 4 skipped (integration tests without FE in path)

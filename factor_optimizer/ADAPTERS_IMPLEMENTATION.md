@@ -38,21 +38,25 @@ Implemented the complete adapters layer for factor_optimizer, providing clean Pr
   - `list_metrics()` - Access metric catalog
 
 **Mock Implementation:**
-- `create_mock_qe_adapter()` - Fully functional mock for testing
+- `create_mock_qe_adapter()` - Explicit research/test adapter
 - Mock features:
-  - Deterministic random metrics (seeded by eval_id)
-  - Realistic metric ranges (IC: -0.1 to 0.15, turnover: 0.1 to 0.3)
-  - Evidence storage and retrieval
+  - Randomized mock metrics for development
+  - Evidence storage and retrieval within the adapter instance
   - Metric catalog with core/advanced tiers
-  - Higher-is-better flags for optimization direction
+  - Higher-is-better flags for mock optimization experiments
 
 **Real Implementation:**
-- `create_qe_adapter()` - Forward-looking stub for future QE package
-- Raises `OptionalDependencyMissing` (QE doesn't exist yet)
+- `create_qe_adapter()` - Integrates with the installed typed QE public facade
+- Requires an explicitly injected evidence store
+- Normalizes typed metric/diagnostic values into plain evidence snapshots
+- Reports registry-authoritative metric metadata without inventing direction fields
+- Production mode remains fail-closed
 
-### 3. Comprehensive Tests
+### Current Scope
 
-**Test Coverage: 37 tests, 33 passed, 4 skipped (integration)**
+The real QE adapter is validated only for the installed typed public facade, process-local shared evidence through an injected store, plain-value evidence normalization, and fail-closed missing-store or unknown-evidence behavior. Restart-durable evidence, score/cost mapping, sealed-test workflows, and production execution remain open.
+
+**Test Coverage: 44 tests, 40 passed, 4 skipped (integration)**
 
 **`test_factor_engine.py` (9 tests):**
 - Mock adapter protocol compliance
@@ -62,7 +66,7 @@ Implemented the complete adapters layer for factor_optimizer, providing clean Pr
 - Real FE integration tests (skipped if FE unavailable)
 - Missing dependency error handling
 
-**`test_quant_evaluator.py` (19 tests):**
+**`test_quant_evaluator.py` (24 tests):**
 - Mock adapter protocol compliance
 - Evaluation with/without specific metrics
 - Evidence retrieval (found/not found)
@@ -73,7 +77,7 @@ Implemented the complete adapters layer for factor_optimizer, providing clean Pr
 - Context parameter handling
 - Higher-is-better flag correctness
 
-**`test_integration.py` (9 tests):**
+**`test_integration.py` (11 tests):**
 - SeenCache integration with mock/real FE adapters
 - ComplexityEstimator integration with mock/real FE adapters
 - QE adapter in simulated search loops
@@ -112,7 +116,7 @@ Integrated with actual FE components:
 - `OperatorRegistry.catalog()` for operator metadata
 - AST traversal for complexity metrics
 
-### 4. Production-Ready Mock QE Adapter
+### 4. Research/Test Mock QE Adapter
 Created fully functional mock with:
 - Realistic metric distributions
 - Deterministic seeded randomness
@@ -151,7 +155,7 @@ Core metrics available: 4
 ### Test Results
 ```bash
 $ pytest tests/adapters/ -v
-======================== 33 passed, 4 skipped in 1.12s ========================
+======================== 40 passed, 4 skipped in 1.13s ========================
 ```
 
 ## Usage Examples
@@ -200,30 +204,30 @@ for candidate in candidates:
 factor_optimizer/adapters/
 ├── __init__.py              # Public exports
 ├── factor_engine.py         # FE adapter (Protocol + implementation)
-├── quant_evaluator.py       # QE adapter (Protocol + mock)
+├── quant_evaluator.py       # QE adapter (Protocol + real + mock)
 └── README.md                # Complete documentation
 
 tests/adapters/
 ├── __init__.py
 ├── test_factor_engine.py    # FE adapter tests (9 tests)
-├── test_quant_evaluator.py  # QE adapter tests (19 tests)
-└── test_integration.py      # Integration tests (9 tests)
+├── test_quant_evaluator.py  # QE adapter tests (24 tests)
+└── test_integration.py      # Integration tests (11 tests)
 ```
 
 ## Requirements Met
 
 ✅ **Protocol-based boundaries** - All interfaces use `typing.Protocol`  
 ✅ **Optional FE dependency** - FO core never directly imports FE  
-✅ **Optional QE dependency** - Mock adapter for testing, real when QE exists  
+✅ **Optional QE dependency** - Typed facade when installed; explicit research/test mock otherwise
 ✅ **Fail-closed on missing deps** - Explicit exceptions with clear messages  
 ✅ **Real FE integration** - Canonical hash, operator catalog, complexity  
-✅ **Comprehensive tests** - 37 tests covering protocols, mocks, and integration  
+✅ **Comprehensive tests** - 44 tests covering protocols, mocks, and integration
 ✅ **Complete documentation** - README with architecture, usage, examples  
 
 ## Next Steps
 
 1. **Use adapters in FO core** - Update SeenCache, ComplexityEstimator to use adapters
-2. **Real QE integration** - Implement `create_qe_adapter()` when QE package exists
+2. **Durable QE evidence** - Add a restart-durable evidence-store implementation and recovery tests
 3. **Performance optimization** - Batch hash computation, operator metadata caching
 4. **Extended complexity** - Data source analysis, backend selection hints
 5. **Async support** - Async evaluation for parallel candidate scoring

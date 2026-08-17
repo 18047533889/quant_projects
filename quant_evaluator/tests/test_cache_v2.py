@@ -6,6 +6,7 @@ Tests multi-level caching, compression, invalidation, and warming strategies.
 
 import json
 import tempfile
+import threading
 import time
 from pathlib import Path
 import numpy as np
@@ -112,6 +113,62 @@ class TestMemoryCacheLayer:
         # Wait for expiration
         time.sleep(0.15)
         assert cache.get("key1") is None
+
+    def test_ttl_expiration_at_exact_boundary(self, monkeypatch):
+        """An entry expires exactly when its absolute TTL is reached."""
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        cache = MemoryCacheLayer(
+            max_size_bytes=1024 * 1024,
+            compressor=create_compressor("none"),
+            enable_compression=False,
+        )
+
+        assert cache.put("key1", "value", ttl_seconds=10.0)
+        clock.now = 1009.999
+        assert cache.get("key1") is not None
+        clock.now = 1010.0
+        assert cache.get("key1") is None
+
+    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf")])
+    def test_nonpositive_or_nonfinite_ttl_is_rejected(self, ttl):
+        cache = MemoryCacheLayer(
+            max_size_bytes=1024 * 1024,
+            compressor=create_compressor("none"),
+            enable_compression=False,
+        )
+
+        assert cache.put("key1", "value", ttl_seconds=ttl) is False
+        assert cache.get("key1") is None
+
+    @pytest.mark.parametrize("created_at", [float("nan"), float("inf"), -float("inf")])
+    def test_nonfinite_creation_time_expires_fail_closed(self, created_at):
+        metadata = CacheMetadata(
+            key="key1",
+            created_at=created_at,
+            last_accessed=created_at,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=10.0,
+            dependencies=set(),
+        )
+
+        assert metadata.is_expired(1000.0) is True
+
+    def test_future_creation_time_expires_fail_closed(self):
+        metadata = CacheMetadata(
+            key="key1",
+            created_at=1001.0,
+            last_accessed=1001.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=10.0,
+            dependencies=set(),
+        )
+
+        assert metadata.is_expired(1000.0) is True
 
     def test_lru_eviction(self):
         """Test LRU eviction under memory pressure."""
@@ -366,6 +423,92 @@ class FakeRedisPipelineClient(FakeRedisClient):
         return Pipeline()
 
 
+class RecordingRedisClient:
+    def __init__(self):
+        self.commands = []
+
+    def pipeline(self):
+        client = self
+
+        class Pipeline:
+            def set(self, key, value):
+                client.commands.append(("set", key, value))
+                return self
+
+            def setex(self, key, ttl, value):
+                client.commands.append(("setex", key, ttl, value))
+                return self
+
+            def hset(self, key, mapping):
+                client.commands.append(("hset", key, mapping))
+                return self
+
+            def expire(self, key, ttl):
+                client.commands.append(("expire", key, ttl))
+                return self
+
+            def execute(self):
+                return [True] * len(client.commands)
+
+        return Pipeline()
+
+
+class TestRedisCacheLayer:
+    def _layer(self):
+        layer = object.__new__(RedisCacheLayer)
+        layer.client = RecordingRedisClient()
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        return layer
+
+    def test_no_ttl_remains_non_expiring_in_redis_metadata_and_storage(self, monkeypatch):
+        monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)
+        layer = self._layer()
+
+        assert layer.put("key", "value", ttl_seconds=None)
+        assert [command[0] for command in layer.client.commands] == ["set", "hset"]
+        metadata = json.loads(layer.client.commands[1][2]["data"])
+        assert metadata["ttl_seconds"] is None
+
+    def test_fractional_ttl_is_rounded_up_for_redis(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        layer = self._layer()
+
+        assert layer.put("key", "value", ttl_seconds=0.25)
+        assert [(command[0], command[2]) for command in layer.client.commands if command[0] in {"setex", "expire"}] == [
+            ("setex", 1),
+            ("expire", 1),
+        ]
+
+    def test_promotion_uses_remaining_absolute_ttl(self, monkeypatch):
+        clock = FrozenClock(1009.2)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        layer = self._layer()
+
+        assert layer.put("key", "value", ttl_seconds=10.0, created_at=1000.0)
+        assert layer.client.commands[0][2] == 1
+        metadata = json.loads(layer.client.commands[1][2]["data"])
+        assert metadata["created_at"] == 1000.0
+        assert metadata["ttl_seconds"] == 10.0
+
+    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf")])
+    def test_nonpositive_or_nonfinite_ttl_is_rejected(self, monkeypatch, ttl):
+        monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)
+        layer = self._layer()
+
+        assert layer.put("key", "value", ttl_seconds=ttl) is False
+        assert layer.client.commands == []
+
+    def test_expired_promotion_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1010.0).time)
+        layer = self._layer()
+
+        assert layer.put("key", "value", ttl_seconds=10.0, created_at=1000.0) is False
+        assert layer.client.commands == []
+
+
 class TestMultiLevelCache:
     """Test multi-level cache coordinator."""
 
@@ -588,6 +731,89 @@ class TestMultiLevelCache:
             assert cache.get("key1") is None
             assert cache.l1.get("key1") is None
 
+    @pytest.mark.parametrize("source_layer", ["l2", "l3"])
+    def test_dependency_invalidation_does_not_race_with_promotion(
+        self, tmp_path, source_layer
+    ):
+        """A captured lower-layer read must not survive later invalidation."""
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="zlib",
+            enable_l1=True,
+            enable_l2=source_layer == "l2",
+        )
+        if source_layer == "l3":
+            cache.l3 = FakeRedisLayer()
+        source = cache.l2 if source_layer == "l2" else cache.l3
+        source.put("key1", "stale", dependencies={"source"})
+
+        invalidator_attempted = threading.Event()
+        read_captured = threading.Event()
+        release_read = threading.Event()
+        original_lock = cache._coordination_lock
+        original_get = source.get
+
+        class ObservedCoordinationLock:
+            def __enter__(self):
+                if threading.current_thread().name == "cache-invalidator":
+                    invalidator_attempted.set()
+                original_lock.acquire()
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                original_lock.release()
+
+        def blocking_get(key):
+            result = original_get(key)
+            read_captured.set()
+            if not release_read.wait(timeout=5.0):
+                raise TimeoutError("reader was not released")
+            return result
+
+        cache._coordination_lock = ObservedCoordinationLock()
+        source.get = blocking_get
+        read_result = []
+        invalidation_result = []
+        thread_errors = []
+
+        def capture_result(operation, results):
+            try:
+                results.append(operation())
+            except BaseException as exc:
+                thread_errors.append(exc)
+
+        reader = threading.Thread(
+            name="cache-reader",
+            target=capture_result,
+            args=(lambda: cache.get("key1"), read_result),
+        )
+        invalidator = threading.Thread(
+            name="cache-invalidator",
+            target=capture_result,
+            args=(
+                lambda: cache.invalidate_dependency("source"),
+                invalidation_result,
+            ),
+        )
+
+        reader.start()
+        assert read_captured.wait(timeout=5.0)
+        invalidator.start()
+        assert invalidator_attempted.wait(timeout=5.0)
+        release_read.set()
+        reader.join(timeout=5.0)
+        invalidator.join(timeout=5.0)
+
+        assert not reader.is_alive()
+        assert not invalidator.is_alive()
+        assert thread_errors == []
+        assert read_result == ["stale"]
+        assert invalidation_result and invalidation_result[0] >= 1
+        assert cache.l1.get("key1") is None
+        assert original_get("key1") is None
+        assert cache.get("key1") is None
+
     def test_dependency_invalidation_removes_l3_only_entry(self):
         """An invalidated L3-only entry must never be promoted back."""
         cache = MultiLevelCache(
@@ -721,6 +947,47 @@ class TestMultiLevelCache:
 
             stats = cache.get_stats()
             assert stats["l1_hits"] == 3
+
+    def test_concurrent_warm_loads_each_key_once(self):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            enable_l1=True,
+            enable_l2=False,
+            enable_l3=False,
+            runtime_mode="test",
+        )
+        loader_entered = threading.Event()
+        release_loader = threading.Event()
+        loader_calls = []
+        errors = []
+
+        def loader(key):
+            loader_calls.append(key)
+            loader_entered.set()
+            if not release_loader.wait(timeout=5.0):
+                raise TimeoutError("loader was not released")
+            return "value"
+
+        def warm():
+            try:
+                cache.warm(["key"], loader)
+            except BaseException as exc:
+                errors.append(exc)
+
+        first = threading.Thread(target=warm)
+        second = threading.Thread(target=warm)
+        first.start()
+        assert loader_entered.wait(timeout=5.0)
+        second.start()
+        release_loader.set()
+        first.join(timeout=5.0)
+        second.join(timeout=5.0)
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert errors == []
+        assert loader_calls == ["key"]
+        assert cache.get("key") == "value"
 
     def test_write_through(self):
         """Test write-through to all layers."""

@@ -57,14 +57,130 @@ class TestTransformRegistry:
         np.testing.assert_array_equal(result, np.array([2, 4, 6]))
 
     def test_duplicate_registration_same_version(self):
-        """Test registering same transform twice with same version is idempotent."""
+        """Test registering the exact same transform and metadata is idempotent."""
         registry = TransformRegistry()
 
         registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL, version="1.0.0")
         registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL, version="1.0.0")
 
-        # Should not raise, just idempotent
         assert registry.get("dummy") is not None
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"func": another_transform},
+            {"category": TransformCategory.TEMPORAL},
+            {"description": "Conflicting description"},
+            {"parameters": {"scale": 2.0}},
+            {"tags": {"conflicting"}},
+            {"causal_safe": False, "admission": "OFFLINE_ONLY"},
+            {"admission": "RESEARCH_ONLY"},
+        ],
+    )
+    def test_duplicate_registration_same_version_rejects_conflicts(self, overrides):
+        registry = TransformRegistry()
+        registration = {
+            "name": "dummy",
+            "func": dummy_transform,
+            "category": TransformCategory.CROSS_SECTIONAL,
+            "version": "1.0.0",
+            "description": "Original description",
+            "parameters": {},
+            "tags": {"original"},
+            "causal_safe": True,
+            "admission": "PRODUCTION",
+        }
+        registry.register(**registration)
+
+        conflicting = {**registration, **overrides}
+        with pytest.raises(ValueError, match="conflicting metadata or implementation"):
+            registry.register(**conflicting)
+
+        metadata = registry.get("dummy")
+        assert metadata is not None
+        assert metadata.func is dummy_transform
+        assert metadata.category == TransformCategory.CROSS_SECTIONAL
+        assert metadata.admission == "PRODUCTION"
+
+    def test_registration_copies_mutable_metadata_inputs(self):
+        registry = TransformRegistry()
+        parameters = {"scale": 1.0, "nested": {"limit": 1}}
+        tags = {"original"}
+        registry.register(
+            "dummy",
+            dummy_transform,
+            TransformCategory.CROSS_SECTIONAL,
+            parameters=parameters,
+            tags=tags,
+        )
+
+        parameters["scale"] = 2.0
+        parameters["nested"]["limit"] = 9
+        tags.add("mutated")
+
+        metadata = registry.get("dummy")
+        assert metadata is not None
+        assert metadata.parameters == {"scale": 1.0, "nested": {"limit": 1}}
+        assert metadata.tags == {"original"}
+
+    @pytest.mark.parametrize(
+        "retrieve",
+        [
+            lambda registry: registry.get("dummy"),
+            lambda registry: registry.validate_production("dummy"),
+            lambda registry: registry.list_by_category(TransformCategory.CROSS_SECTIONAL)[0],
+            lambda registry: registry.list_by_tag("original")[0],
+            lambda registry: registry.list_causal_safe()[0],
+            lambda registry: registry.all_transforms()[0],
+        ],
+    )
+    def test_retrieved_metadata_mutation_does_not_change_registry(self, retrieve):
+        registry = TransformRegistry()
+        registry.register(
+            "dummy",
+            dummy_transform,
+            TransformCategory.CROSS_SECTIONAL,
+            tags={"original"},
+        )
+
+        exposed = retrieve(registry)
+        assert exposed is not None
+        exposed.category = TransformCategory.TEMPORAL
+        exposed.admission = "OFFLINE_ONLY"
+        exposed.causal_safe = False
+        exposed.parameters["mutated"] = True
+        exposed.tags.add("mutated")
+
+        retained = registry.get("dummy")
+        assert retained is not None
+        assert retained.category == TransformCategory.CROSS_SECTIONAL
+        assert retained.admission == "PRODUCTION"
+        assert retained.causal_safe is True
+        assert retained.parameters == {}
+        assert retained.tags == {"original"}
+        assert [item.name for item in registry.list_by_category(
+            TransformCategory.CROSS_SECTIONAL
+        )] == ["dummy"]
+        assert registry.list_by_category(TransformCategory.TEMPORAL) == []
+        assert registry.list_by_tag("mutated") == []
+
+    def test_offline_metadata_snapshot_cannot_bypass_production_validation(self):
+        registry = TransformRegistry()
+        registry.register(
+            "offline",
+            dummy_transform,
+            TransformCategory.TEMPORAL,
+            causal_safe=False,
+            admission="OFFLINE_ONLY",
+        )
+
+        exposed = registry.get("offline")
+        assert exposed is not None
+        exposed.admission = "PRODUCTION"
+        exposed.causal_safe = True
+
+        with pytest.raises(ValueError, match="OFFLINE_ONLY"):
+            registry.validate_production("offline")
 
     def test_duplicate_registration_different_version(self):
         """Test registering same name with different version raises."""
@@ -82,7 +198,9 @@ class TestTransformRegistry:
         metadata = registry.get("dummy")
         assert metadata is not None
         assert metadata.admission == "PRODUCTION"
-        assert registry.validate_production("dummy") is metadata
+        validated = registry.validate_production("dummy")
+        assert validated.name == metadata.name
+        assert validated is not metadata
 
     def test_invalid_admission_is_rejected(self):
         with pytest.raises(ValueError, match="admission must be"):
