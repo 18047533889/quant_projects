@@ -18,13 +18,15 @@ from data_access.core.identity_encoder import CanonicalIdentityEncoder
 
 
 _STRICT_IDENTITY_ENCODER = CanonicalIdentityEncoder(strict=True)
+IDENTITY_SCHEMA_VERSION = "2"
 
 
 def _stable_digest(*parts: Any) -> str:
-    """Encode ordered digest parts through the canonical strict identity path."""
+    """Encode ordered digest parts through the versioned strict identity path."""
+    payload = ("data_access.r30.stable_digest", IDENTITY_SCHEMA_VERSION, parts)
     try:
-        return _STRICT_IDENTITY_ENCODER.hash_identity(parts, bits=256)
-    except ValidationError as exc:
+        return _STRICT_IDENTITY_ENCODER.hash_identity(payload, bits=256)
+    except (ValidationError, TypeError) as exc:
         raise ValueError(f"unsupported type in stable digest: {exc}") from exc
 
 
@@ -68,8 +70,8 @@ REGISTRY_SCHEMA_VERSION = "3"
 SEMANTIC_SCHEMA_VERSION = "1"
 """SemanticFieldCatalog / UnitSpec / ConceptId 语义元数据版本。"""
 
-STORAGE_FORMAT_VERSION = "1"
-"""dataaccess 自有持久格式（manifest / metadata_plane / partition index）。"""
+STORAGE_FORMAT_VERSION = "2"
+"""dataaccess 自有持久格式；v2 invalidates legacy 64-bit/repr-based R30 identities."""
 
 
 def version_gate() -> dict[str, str]:
@@ -80,6 +82,7 @@ def version_gate() -> dict[str, str]:
         "registry_schema": REGISTRY_SCHEMA_VERSION,
         "semantic_schema": SEMANTIC_SCHEMA_VERSION,
         "storage_format": STORAGE_FORMAT_VERSION,
+        "identity_schema": IDENTITY_SCHEMA_VERSION,
     }
 
 
@@ -90,6 +93,7 @@ def sorted_items(mapping: Mapping[str, Any]) -> Iterable[tuple[str, Any]]:
 __all__ = [
     "API_VERSION",
     "CONTRACT_SCHEMA_VERSION",
+    "IDENTITY_SCHEMA_VERSION",
     "REGISTRY_SCHEMA_VERSION",
     "SEMANTIC_SCHEMA_VERSION",
     "STORAGE_FORMAT_VERSION",

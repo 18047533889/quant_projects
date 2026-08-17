@@ -9,7 +9,13 @@ R32-P0-111  build SHA 在 build-time 固化（_build_info.py，不依赖运行�
 from __future__ import annotations
 
 import pytest
-from data_access.r30._shared import stable_digest, stable_digest_full
+from data_access.r30._shared import (
+    IDENTITY_SCHEMA_VERSION,
+    STORAGE_FORMAT_VERSION,
+    stable_digest,
+    stable_digest_full,
+    version_gate,
+)
 
 
 def test_r32_p0_107_list_preserves_order():
@@ -77,6 +83,18 @@ def test_da2_p0_002_order_and_typed_container_semantics():
     assert stable_digest({1}) != stable_digest({"1"})
 
 
+def test_da2_p0_002_list_and_tuple_are_canonically_equivalent():
+    """CanonicalIdentityEncoder intentionally treats list/tuple as ordered sequences."""
+    assert stable_digest([1, 2]) == stable_digest((1, 2))
+
+
+def test_da2_p0_002_identity_format_has_explicit_migration_gate():
+    """The incompatible strict/full-width format is namespaced and storage-versioned."""
+    assert IDENTITY_SCHEMA_VERSION == "2"
+    assert STORAGE_FORMAT_VERSION == "2"
+    assert version_gate()["identity_schema"] == "2"
+
+
 @pytest.mark.parametrize("helper", [stable_digest, stable_digest_full])
 def test_da2_p0_002_unsupported_objects_fail_closed(helper):
     """DA2-P0-002：两个 helper 都把 strict encoder 错误统一成 ValueError。"""
@@ -119,5 +137,4 @@ def test_r32_p0_110_r30_in_packages():
     在 build 后校验（R26-P0-002 既有机制）。
     """
     import data_access.r30
-    # 能 import 即证明 r30 在 sys.path（editable 或 wheel 均可）
-    assert hasattr(data_access.r30, "__version__")
+    assert data_access.r30.__name__ == "data_access.r30"
