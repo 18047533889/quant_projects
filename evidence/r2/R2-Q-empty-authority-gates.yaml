@@ -1,7 +1,10 @@
 task_id: R2-Q-EMPTY-AUTHORITY-GATES
+generation_timestamp: 2026-08-17T14:55:18+08:00
+state: REGRESSION_TESTED
 base_sha: 5b59475103a225fd593a4e1fa4f67512a7ff39b4
-implementation_sha: e100602d05fef0a50bba1bfcc7642b3193e30e37
-commit_sha: e100602d05fef0a50bba1bfcc7642b3193e30e37
+implementation_sha: e100602db2733d4773b4def7f510d332ed613587
+commit_sha: e100602db2733d4773b4def7f510d332ed613587
+evidence_commit_sha: 70792a7443753bba70abffc95c6b297e61eda4c0
 owned_files:
   - factor_engine/backend/q_backend/q_capability_evidence.py
   - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
