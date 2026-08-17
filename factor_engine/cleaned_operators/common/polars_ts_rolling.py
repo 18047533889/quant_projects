@@ -371,9 +371,9 @@ class TSRegressionResidNative(SeriesOperator):
             slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
                 moments["cross"] / moments["ss_x"]
             )
-            intercept = moments["mean_y"] - slope * moments["mean_x"]
-            fitted = intercept + slope * moments["x_endpoint"]
-            resid = moments["y_endpoint"] - fitted
+            resid = (moments["y_endpoint"] - moments["mean_y"]) - slope * (
+                moments["x_endpoint"] - moments["mean_x"]
+            )
 
             exprs.append(resid.alias(c))
 

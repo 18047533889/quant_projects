@@ -48,7 +48,7 @@ def _oracle(x, y, window, *, ddof=1, min_periods=2):
         results["intercept"].append(intercept)
         endpoint_x, endpoint_y = x[end], y[end]
         results["resid"].append(
-            endpoint_y - (intercept + slope * endpoint_x)
+            (endpoint_y - mean_y) - slope * (endpoint_x - mean_x)
             if endpoint_x is not None
             and endpoint_y is not None
             and math.isfinite(endpoint_x)
