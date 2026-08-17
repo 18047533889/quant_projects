@@ -2238,7 +2238,11 @@ class TSDeltaPolars(SeriesOperator):
 # canonical=ts_kurt backend=polars selected=ts_kurtosis source=time_series/ts_ops_polars.py
 @register_operator(name="ts_kurtosis", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np")
 class TSKurtosisPolars(SeriesOperator):
-    """Polars 滚动峰度。"""
+    """Polars rolling kurtosis with pandas ``rolling.kurt`` semantics.
+
+    Constant full windows return ``-3.0`` to preserve the canonical pandas
+    authority's established degenerate-window behavior.
+    """
 
     metadata = OperatorMetadata(
         name="ts_kurtosis", category="time_series",

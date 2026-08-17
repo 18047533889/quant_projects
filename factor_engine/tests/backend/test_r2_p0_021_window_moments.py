@@ -114,6 +114,9 @@ def test_moments_anchor_rollout_nan_inf_and_zero_scale(operator, args, oracle, w
 
     constant = _values(operator.calculate(pl.DataFrame({"x": [7.0] * (window + 2)}), *args))
     if operator.metadata.name == "ts_kurtosis":
+        # The canonical pandas authority explicitly defines constant full
+        # windows as -3.0; this is a compatibility assertion, separate from
+        # the direct mathematical oracle above where zero scale is undefined.
         np.testing.assert_allclose(constant[window - 1 :], -3.0)
     elif operator.metadata.name == "ts_skewness":
         assert np.isnan(constant[window - 1 :]).all()
