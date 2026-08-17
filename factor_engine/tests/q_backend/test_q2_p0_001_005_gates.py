@@ -480,11 +480,11 @@ class TestQPhysicalImplementationRegistry:
             (
                 "null_semantics",
                 {
-                    "type": "q_null_semantics_result/v1",
                     "checked_cases": 3,
+                    "checks": ["placeholder"],
                     "mismatch_count": 1,
                 },
-                "null_semantics_evidence: result.mismatch_count must be zero",
+                "null_semantics_evidence: result.checks must include null-mask, warmup, and all-null-window",
             ),
         ],
     )

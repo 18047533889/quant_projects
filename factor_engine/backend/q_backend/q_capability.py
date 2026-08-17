@@ -34,7 +34,7 @@ class QBackendCapability:
 
     def get_capability(self, op_name: str, *, mode: Literal["production", "research"] = "production") -> QCapabilityLevel:
         if mode == "production":
-            return QCapabilityLevel.NATIVE if self.registry.is_production_certified(op_name) else QCapabilityLevel.UNSUPPORTED
+            return QCapabilityLevel.NATIVE if op_name in self.registry.get_production_ready() else QCapabilityLevel.UNSUPPORTED
         return QCapabilityLevel.NATIVE if self.registry.has_lowering(op_name) else QCapabilityLevel.UNSUPPORTED
 
     def supports_native(self, op_name: str) -> bool:

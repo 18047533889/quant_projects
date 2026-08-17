@@ -7,7 +7,7 @@ import pytest
 import backend.q_backend as q_backend
 from backend.q_backend.q_backend import get_q_backend
 from backend.q_backend.q_compiler import QCompiler, get_q_compiler
-from backend.q_backend.q_capability import QBackendCapability
+from backend.q_backend.q_capability import QBackendCapability, QCapabilityLevel
 from backend.q_backend.q_physical_implementation_registry import (
     QEvidenceArtifact,
     QEvidenceValidationContext,
@@ -182,7 +182,7 @@ def _certified_compiler_with_global_disagreement(tmp_path) -> QCompiler:
         },
         "null_semantics": {
             "checked_cases": 1,
-            "checks": ["null-mask"],
+            "checks": ["null-mask", "warmup", "all-null-window"],
             "mismatch_count": 0,
         },
     }
@@ -249,6 +249,7 @@ def test_compiler_production_admission_requires_global_production_membership(tmp
     nodes = [{"id": "n1", "operator": "certified", "inputs": ["x"]}]
 
     assert compiler.capability.registry.is_production_certified("certified") is True
+    assert compiler.capability.get_capability("certified", mode="production") is QCapabilityLevel.UNSUPPORTED
     assert compiler.is_production_certified("certified") is False
     assert compiler.validate_region(nodes, mode="production") == (False, ["certified"])
 

@@ -141,10 +141,16 @@ def _stage_evidence_errors(
         if not _positive_int(result.get("checked_cases")):
             errors.append(f"{label}: result.checked_cases must be positive")
         checks = result.get("checks")
-        if not isinstance(checks, list) or not checks or any(
-            not isinstance(check, str) or not check for check in checks
+        required_checks = {"null-mask", "warmup", "all-null-window"}
+        if (
+            not isinstance(checks, list)
+            or not checks
+            or any(not isinstance(check, str) or not check for check in checks)
+            or not required_checks.issubset(checks)
         ):
-            errors.append(f"{label}: result.checks must be a non-empty string list")
+            errors.append(
+                f"{label}: result.checks must include null-mask, warmup, and all-null-window"
+            )
         failure_field = "mismatch_count"
     else:
         return [*errors, f"{label}: unsupported evidence stage"]
