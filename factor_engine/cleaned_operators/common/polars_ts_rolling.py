@@ -170,6 +170,8 @@ class TSCovNative(SeriesOperator):
             min_p = 2
         else:
             min_p = strict_integer(min_periods, "min_periods", minimum=1)
+        if min_p > w:
+            raise ValueError("min_periods must be <= window")
 
         cols = _numeric_cols(x)
 
