@@ -1,0 +1,58 @@
+task_id: R2-DA-CALENDAR-CORRECTNESS-IDENTITY
+generation_timestamp: 2026-08-17T15:19:17+08:00
+state: REGRESSION_TESTED
+base_sha: 002cd176b1ba58e34a0306a7932ffde6fb6f2e1f
+implementation_sha: 0e10764ad354867613088d2ad52abe19a5919718
+commit_sha: 0e10764ad354867613088d2ad52abe19a5919718
+owned_files:
+  - dataaccess/store.py
+  - dataaccess/tests/unit/test_r27_cache_write_atomic_2026_08.py
+modified_files:
+  - dataaccess/store.py
+  - dataaccess/tests/unit/test_r27_cache_write_atomic_2026_08.py
+canonicals_touched: []
+backends_touched: []
+changes:
+  - calendar identity binds every trading day rather than only count and endpoints
+  - calendar identity binds source and calendar market/timezone
+  - calendar identity binds ordered session segments and offsets
+  - calendar identity binds early-close dates and time
+  - correctness digest expands from truncated 64-bit SHA-256 to full 256-bit SHA-256
+verification:
+  focused_calendar_and_identity_suite:
+    status: PASS
+    passed: 42
+    failed: 0
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONPATH=/home/shw/quant_projects/dataaccess pytest -q dataaccess/tests/unit/test_r27_cache_write_atomic_2026_08.py dataaccess/tests/test_da_p0_010_014_identity.py
+  syntax_compile:
+    status: PASS
+    files: 2
+  import_smoke:
+    status: PASS
+  reproduced_collision_smoke:
+    status: PASS
+  diff_check:
+    status: PASS
+  independent_review:
+    status: CLEAN
+    finding_count: 0
+additional_tests:
+  mixed_r32_identity_version_suite:
+    status: FAIL
+    passed: 31
+    failed: 2
+    classification: PRE_EXISTING_OUTSIDE_PATCH
+    failures:
+      - strict-false repr expectation mismatch
+      - missing data_access.r30.__version__
+not_run:
+  - full DataAccess regression
+  - PIT poison suite
+  - live remote snapshot integration
+  - root CI
+known_limitations:
+  - remaining DataAccess identity sites require separate classification and reproduction
+  - broad production gates remain NOT_RUN
+remote_evidence_used: false
+evidence_generated:
+  - /tmp/dataaccess_calendar_identity_repair_report.md
