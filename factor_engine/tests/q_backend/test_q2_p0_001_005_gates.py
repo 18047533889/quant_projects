@@ -258,6 +258,23 @@ class TestQPhysicalImplementationRegistry:
             "lowering_without_declaration": [],
         }
 
+    def test_empty_authority_gates_fail_closed(self, monkeypatch):
+        import backend.q_backend.q_capability_evidence as evidence_module
+
+        registry = QPhysicalImplementationRegistry()
+        monkeypatch.setattr(evidence_module, "_get_authority", lambda: registry)
+
+        gates = evidence_module.run_all_q_capability_gates()
+        for gate_name in (
+            "Q_NATIVE_WITHOUT_LOWERING",
+            "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+            "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+            "Q_CAPABILITY_SINGLE_AUTHORITY",
+        ):
+            passed, message = gates[gate_name]
+            assert passed is False, gate_name
+            assert "FAIL" in message
+
     def test_custom_declarations_are_instance_scoped(self):
         registry = QPhysicalImplementationRegistry(
             lowerings={"a": "q_a"}, declared_targets=frozenset({"a"})

@@ -127,6 +127,10 @@ def generate_capability_report() -> dict[str, Any]:
 class QCapabilityGate:
     @staticmethod
     def gate_q_native_without_lowering():
+        declared = get_declared_native_ops()
+        lowering = get_lowering_exists_ops()
+        if not declared and not lowering:
+            return False, "FAIL: q capability authority has no declarations or lowerings"
         missing = get_q_native_without_lowering()
         return (not missing, "PASS: no declared native op lacks lowering" if not missing else f"FAIL: {len(missing)} declared native ops lack lowering: {sorted(missing)}")
     @staticmethod
@@ -140,6 +144,9 @@ class QCapabilityGate:
     @staticmethod
     def gate_q_production_safe_single_definition():
         registry = _get_authority()
+        operators = registry.declared_targets() | registry.get_with_lowering()
+        if not operators:
+            return False, "FAIL: q capability authority has no operators to compare"
         evidence_safe = frozenset(
             op for op, record in compute_q_capability_evidence().items()
             if record.production_safe
@@ -158,9 +165,11 @@ class QCapabilityGate:
         )
     @staticmethod
     def gate_q_compiler_admission_uses_evidence():
+        operators = set(get_lowering_exists_ops()) | set(get_declared_native_ops())
+        if not operators:
+            return False, "FAIL: q capability authority has no operators to verify"
         from backend.q_backend.q_compiler import get_q_compiler
         compiler = get_q_compiler()
-        operators = set(get_lowering_exists_ops()) | set(get_declared_native_ops())
         lowering_agrees = all(
             compiler.has_lowering(op) == (op in get_lowering_exists_ops())
             for op in operators
@@ -179,7 +188,10 @@ class QCapabilityGate:
         )
     @staticmethod
     def gate_q_capability_single_authority():
-        disagreements = _get_authority().admission_disagreements()
+        authority = _get_authority()
+        if not authority.declared_targets() and not authority.get_with_lowering():
+            return False, "FAIL: q capability authority is empty"
+        disagreements = authority.admission_disagreements()
         declared_without_lowering = disagreements["declared_without_lowering"]
         lowering_without_declaration = disagreements["lowering_without_declaration"]
         ok = not declared_without_lowering and not lowering_without_declaration
