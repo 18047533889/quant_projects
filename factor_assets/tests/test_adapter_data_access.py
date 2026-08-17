@@ -6,6 +6,7 @@ Tests DA integration protocols and error handling.
 
 import pytest
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from factor_assets.adapters import OptionalDependencyMissing
@@ -13,6 +14,25 @@ from factor_assets.adapters import OptionalDependencyMissing
 
 class TestDAFactorValueReader:
     """Test DA factor value reader."""
+
+    def test_factor_read_uses_read_factors_and_materializes(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader
+
+        class Handle:
+            def to_arrow(self):
+                return {"rows": 1}
+
+        calls = []
+        store = SimpleNamespace(
+            read_factors=lambda *args, **kwargs: (calls.append((args, kwargs)) or Handle())
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+        assert reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2)) == {"rows": 1}
+        assert calls[0][0] == (["F1"],)
+        assert calls[0][1]["time_range"] == (date(2020, 1, 1), date(2020, 1, 2))
+
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""
@@ -52,6 +72,60 @@ class TestDAFactorValueReader:
 
 class TestDACatalogReader:
     """Test DA catalog reader."""
+
+    def test_catalog_metadata_and_filters_are_authoritative(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DACatalogReader
+
+        meta = SimpleNamespace(
+            status="active",
+            start_time="2020-01-01",
+            end_time="2020-12-31",
+            to_dict=lambda: {"factor_id": "F1", "status": "active", "universe": "US"},
+        )
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta, "F2": meta})
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DACatalogReader(store=store)
+        assert reader.get_catalog_entry("F1")["status"] == "active"
+        assert reader.get_catalog_entry("missing") is None
+        assert reader.list_available_factors({"universe": "US"}) == ("F1", "F2")
+
+    def test_list_available_factors_excludes_inactive_records(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DACatalogReader
+
+        active = SimpleNamespace(status="active", to_dict=lambda: {"factor_id": "F1", "status": "active"})
+        archived = SimpleNamespace(status="archived", to_dict=lambda: {"factor_id": "F2", "status": "archived"})
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": active, "F2": archived})
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DACatalogReader(store=store)
+        assert reader.list_available_factors() == ("F1",)
+
+    def test_availability_uses_catalog_period_without_wall_clock(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader
+
+        meta = SimpleNamespace(status="active", start_time="2020-01-01", end_time="2020-12-31")
+        store = SimpleNamespace(get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta}))
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+        assert reader.check_factor_availability("F1", date(2020, 6, 1)) is True
+        assert reader.check_factor_availability("F1", date(2021, 1, 1)) is False
+        assert reader.check_factor_availability("missing") is False
+
+    def test_universe_argument_fails_closed_until_row_filter_is_supported(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader
+
+        store = SimpleNamespace()
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+        with pytest.raises(ValueError, match="universe filtering is not supported"):
+            reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2), universe="US")
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""

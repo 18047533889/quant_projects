@@ -11,7 +11,7 @@ This is an OPTIONAL adapter — FA core does not depend on DA.
 """
 
 from typing import Protocol, Optional, Dict, Any, Tuple
-from datetime import date
+from datetime import date, datetime
 
 from factor_assets.adapters import OptionalDependencyMissing
 
@@ -29,7 +29,7 @@ def _try_import_da():
     if DA_AVAILABLE or _DataAccessStore is not None:
         return
     try:
-        from dataaccess import DataAccessStore, get_store, ReadHandle, DataRequest
+        from data_access import DataAccessStore, get_store, ReadHandle, DataRequest
         DA_AVAILABLE = True
         _DataAccessStore = DataAccessStore
         _get_store = get_store
@@ -125,6 +125,22 @@ class CatalogReader(Protocol):
         ...
 
 
+def _coerce_catalog_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        return date.fromisoformat(text[:10])
+
+
 class DAFactorValueReader:
     """
     FactorValueReader implementation for DataAccess.
@@ -156,64 +172,42 @@ class DAFactorValueReader:
         end_date: date,
         universe: Optional[str] = None,
     ) -> Any:
-        """
-        Read factor values through DataAccess.
-
-        Args:
-            factor_id: Factor identifier
-            start_date: Start date (inclusive)
-            end_date: End date (inclusive)
-            universe: Optional universe filter
-
-        Returns:
-            Factor values from DA
-
-        Raises:
-            OptionalDependencyMissing: If DA is not available
-            ValueError: If factor not found or request invalid
-        """
-        # Create read request for factor
-        request = _DataRequest(
-            source=factor_id,
-            start_date=start_date,
-            end_date=end_date,
+        """Read and terminally materialize one factor through DataAccess."""
+        if start_date > end_date:
+            raise ValueError("start_date must be <= end_date")
+        if universe is not None:
+            raise ValueError(
+                "universe filtering is not supported by the DataAccess factor-read contract"
+            )
+        handle = self._store.read_factors(
+            [factor_id],
+            time_range=(start_date, end_date),
             universe=universe,
         )
-
-        # Execute read through DA store
-        handle = self._store.read(request)
-        return handle.get_result()
+        materialize = getattr(handle, "to_arrow", None)
+        if not callable(materialize):
+            raise TypeError("DataAccess factor read did not return a materializable handle")
+        return materialize()
 
     def check_factor_availability(
         self,
         factor_id: str,
         as_of_date: Optional[date] = None,
     ) -> bool:
-        """
-        Check factor availability through DataAccess.
-
-        Args:
-            factor_id: Factor identifier
-            as_of_date: Optional as-of date
-
-        Returns:
-            True if available
-
-        Raises:
-            OptionalDependencyMissing: If DA is not available
-        """
-        try:
-            # Attempt minimal read to check availability
-            request = _DataRequest(
-                source=factor_id,
-                start_date=as_of_date or date.today(),
-                end_date=as_of_date or date.today(),
-            )
-            handle = self._store.read(request)
-            # If we can get a handle, factor is available
-            return True
-        except Exception:
+        """Check authoritative factor metadata, optionally at an explicit PIT date."""
+        catalog = self._store.get_factor_catalog()
+        meta = catalog.records.get(factor_id)
+        if meta is None:
             return False
+        status = getattr(meta, "status", None)
+        if status is not None and str(status).lower() not in {"", "active", "available", "published"}:
+            return False
+        if as_of_date is None:
+            return True
+        start = _coerce_catalog_date(getattr(meta, "start_time", None))
+        end = _coerce_catalog_date(getattr(meta, "end_time", None))
+        return (start is None or start <= as_of_date) and (end is None or as_of_date <= end)
+
 
 
 class DACatalogReader:
@@ -244,51 +238,31 @@ class DACatalogReader:
         self,
         factor_id: str,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Get catalog entry through DataAccess.
-
-        Args:
-            factor_id: Factor identifier
-
-        Returns:
-            Catalog entry or None
-
-        Raises:
-            OptionalDependencyMissing: If DA is not available
-        """
-        try:
-            # Query DA semantic catalog or registry for factor metadata
-            # For now, return basic availability info
-            request = _DataRequest(source=factor_id, start_date=date.today(), end_date=date.today())
-            handle = self._store.read(request)
-            return {
-                "factor_id": factor_id,
-                "available": True,
-                "source": factor_id,
-            }
-        except Exception:
+        """Return the authoritative DataAccess ``FactorMeta`` record."""
+        catalog = self._store.get_factor_catalog()
+        meta = catalog.records.get(factor_id)
+        if meta is None:
             return None
+        return meta.to_dict() if callable(getattr(meta, "to_dict", None)) else dict(meta)
+
 
     def list_available_factors(
         self,
         filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, ...]:
-        """
-        List available factors through DataAccess.
+        """List IDs from the authoritative catalog, applying exact filters."""
+        catalog = self._store.get_factor_catalog()
+        filters = filters or {}
+        ids = []
+        for factor_id, meta in catalog.records.items():
+            payload = meta.to_dict() if callable(getattr(meta, "to_dict", None)) else dict(meta)
+            status = str(payload.get("status") or "").lower()
+            if status and status not in {"active", "available", "published"}:
+                continue
+            if all(payload.get(key) == value for key, value in filters.items()):
+                ids.append(factor_id)
+        return tuple(sorted(ids))
 
-        Args:
-            filters: Optional filter criteria
-
-        Returns:
-            Tuple of factor IDs
-
-        Raises:
-            OptionalDependencyMissing: If DA is not available
-        """
-        # DataAccess doesn't expose a direct catalog listing API
-        # This would need to query the semantic catalog or registry
-        # For now, return empty tuple as we don't have catalog enumeration
-        return ()
 
 
 __all__ = [
