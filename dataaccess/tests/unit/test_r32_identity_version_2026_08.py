@@ -59,6 +59,34 @@ def test_r32_p0_108_full_digest_256bit():
     assert len(d) == 64, "stable_digest_full 必须返回完整 sha256（64 hex = 256 bit）"
 
 
+def test_da2_p0_002_both_helpers_are_full_sha256():
+    """DA2-P0-002：两个 correctness helper 都返回完整 SHA-256。"""
+    short_named = stable_digest("test")
+    full_named = stable_digest_full("test")
+    assert short_named == full_named
+    assert len(short_named) == len(full_named) == 64
+    assert all(char in "0123456789abcdef" for char in short_named)
+
+
+def test_da2_p0_002_order_and_typed_container_semantics():
+    """DA2-P0-002：parts/list 保序，set/map 无序，typed key/element 不碰撞。"""
+    assert stable_digest("a", "b") != stable_digest("b", "a")
+    assert stable_digest([1, 2]) != stable_digest([2, 1])
+    assert stable_digest({1, 2}) == stable_digest({2, 1})
+    assert stable_digest({1: "value"}) != stable_digest({"1": "value"})
+    assert stable_digest({1}) != stable_digest({"1"})
+
+
+@pytest.mark.parametrize("helper", [stable_digest, stable_digest_full])
+def test_da2_p0_002_unsupported_objects_fail_closed(helper):
+    """DA2-P0-002：两个 helper 都把 strict encoder 错误统一成 ValueError。"""
+    class Unsupported:
+        pass
+
+    with pytest.raises(ValueError, match="unsupported type"):
+        helper(Unsupported())
+
+
 def test_r32_p0_109_version_scm_driven():
     """R32-P0-109：版本改为 SCM/tag 驱动。
 

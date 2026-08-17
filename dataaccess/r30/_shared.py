@@ -3,7 +3,7 @@
 R30 全维度成熟度层是完全 **additive** 的：不修改既有 store/read/runtime 任何文件，
 所有新对象放在本包。本模块提供各 R30 模块共用的：
 
-    1. ``stable_digest(*parts)`` —— 确定性 sha256 摘要（列表输入先 sort/str 化）；
+    1. ``stable_digest(*parts)`` —— strict canonical identity encoder 的完整 SHA-256 摘要；
     2. ``security_scope(store)`` —— 当前执行上下文的安全范围标识（principal +
        access_policy + run_mode 折叠），进 cache / execution identity；
     3. 版本治理常量（R30-P1-028）：API / CONTRACT_SCHEMA / REGISTRY_SCHEMA /
@@ -11,68 +11,31 @@ R30 全维度成熟度层是完全 **additive** 的：不修改既有 store/read
 """
 from __future__ import annotations
 
-import hashlib
 from typing import Any, Iterable, Mapping
+
+from data_access.core.exceptions import ValidationError
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
+
+
+_STRICT_IDENTITY_ENCODER = CanonicalIdentityEncoder(strict=True)
+
+
+def _stable_digest(*parts: Any) -> str:
+    """Encode ordered digest parts through the canonical strict identity path."""
+    try:
+        return _STRICT_IDENTITY_ENCODER.hash_identity(parts, bits=256)
+    except ValidationError as exc:
+        raise ValueError(f"unsupported type in stable digest: {exc}") from exc
 
 
 def stable_digest(*parts: Any) -> str:
-    """把任意可散列部件折叠成确定性的 16 字节 sha256。
-
-    列表/dict 输入按 ``sorted(repr())`` 规范化，保证：
-      - 同一输入多次调用 → 同一 digest；
-      - 仅顺序不同的 list → 同一 digest（除非顺序有意义，请显式包 tuple）。
-    """
-    h = hashlib.sha256()
-    for part in parts:
-        if isinstance(part, Mapping):
-            text = "|".join(
-                f"{stable_digest(k)}={stable_digest(v)}"
-                for k, v in sorted(part.items(), key=lambda kv: str(kv[0]))
-            )
-            h.update(f"{{{text}}}".encode("utf-8"))
-        elif isinstance(part, (set, frozenset)):
-            # Sets/frozensets have no order - sort for stability
-            items = sorted(
-                (stable_digest(x) for x in part),
-                key=lambda d: d,
-            )
-            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
-        elif isinstance(part, (list, tuple)):
-            # Lists/tuples have meaningful order - preserve it
-            items = [stable_digest(x) for x in part]
-            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
-        elif isinstance(part, bytes):
-            h.update(part)
-        else:
-            h.update(repr(part).encode("utf-8"))
-        h.update(b"|")
-    return h.hexdigest()[:16]
+    """Return a strict canonical SHA-256 digest of the ordered parts."""
+    return _stable_digest(*parts)
 
 
 def stable_digest_full(*parts: Any) -> str:
-    """与 ``stable_digest`` 相同的折叠逻辑，但返回完整 64 字符 sha256。"""
-    h = hashlib.sha256()
-    for part in parts:
-        if isinstance(part, Mapping):
-            text = "|".join(
-                f"{stable_digest_full(k)}={stable_digest_full(v)}"
-                for k, v in sorted(part.items(), key=lambda kv: str(kv[0]))
-            )
-            h.update(f"{{{text}}}".encode("utf-8"))
-        elif isinstance(part, (set, frozenset)):
-            # Sets/frozensets have no order - sort for stability
-            items = sorted((stable_digest_full(x) for x in part), key=lambda d: d)
-            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
-        elif isinstance(part, (list, tuple)):
-            # Lists/tuples have meaningful order - preserve it
-            items = [stable_digest_full(x) for x in part]
-            h.update(("[" + ",".join(items) + "]").encode("utf-8"))
-        elif isinstance(part, bytes):
-            h.update(part)
-        else:
-            h.update(repr(part).encode("utf-8"))
-        h.update(b"|")
-    return h.hexdigest()
+    """Return a strict canonical SHA-256 digest of the ordered parts."""
+    return _stable_digest(*parts)
 
 
 def security_scope(store: Any) -> str | None:
