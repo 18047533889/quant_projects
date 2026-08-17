@@ -167,7 +167,9 @@ def _trimmed_mean_fn(chunk, mp, trim):
     ordered = np.sort(valid)
     cut = int(np.floor(trim * ordered.size))
     if cut * 2 >= ordered.size:
-        return float(np.mean(ordered))
+        # Parameter/sample infeasible: returning the plain mean would silently
+        # change a trimmed mean into an untrimmed mean.
+        return np.nan
     return float(np.mean(ordered[cut : ordered.size - cut]))
 
 
