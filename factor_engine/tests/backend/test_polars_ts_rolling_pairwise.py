@@ -79,12 +79,12 @@ def test_pairwise_direct_window_counterexample_matches_oracle():
     y = pl.DataFrame({"a": y_values})
     expected = _oracle(x_values, y_values, window=3)
 
-    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=3)), expected["corr"])
-    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=3)), expected["cov"])
-    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=3)), expected["slope"])
-    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=3)), expected["intercept"])
-    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=3)), expected["resid"])
-    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=3)), expected["r2"])
+    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=3, min_periods=2)), expected["corr"])
+    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=3, min_periods=2)), expected["cov"])
+    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=3, min_periods=2)), expected["slope"])
+    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=3, min_periods=2)), expected["intercept"])
+    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=3, min_periods=2)), expected["resid"])
+    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=3, min_periods=2)), expected["r2"])
 
 
 def test_pairwise_finite_null_and_constant_contract():
@@ -94,12 +94,12 @@ def test_pairwise_finite_null_and_constant_contract():
     y = pl.DataFrame({"a": y_values})
     expected = _oracle(x_values, y_values, window=3)
 
-    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=3)), expected["corr"])
-    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=3)), expected["cov"])
-    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=3)), expected["slope"])
-    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=3)), expected["intercept"])
-    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=3)), expected["resid"])
-    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=3)), expected["r2"])
+    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=3, min_periods=2)), expected["corr"])
+    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=3, min_periods=2)), expected["cov"])
+    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=3, min_periods=2)), expected["slope"])
+    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=3, min_periods=2)), expected["intercept"])
+    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=3, min_periods=2)), expected["resid"])
+    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=3, min_periods=2)), expected["r2"])
 
     constant_x = pl.DataFrame({"a": [2.0, 2.0, 2.0]})
     changing_y = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
@@ -125,12 +125,12 @@ def test_large_offset_values_keep_centered_moments_stable():
     y = pl.DataFrame({"a": y_values})
     expected = _oracle(x_values, y_values, window=4)
 
-    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=4)), expected["corr"])
-    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=4)), expected["cov"])
-    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=4)), expected["slope"])
-    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=4)), expected["intercept"])
-    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=4)), expected["resid"])
-    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=4)), expected["r2"])
+    _assert_series(_values(TSCorrNative()._calculate_series(x, y, window=4, min_periods=2)), expected["corr"])
+    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=4, min_periods=2)), expected["cov"])
+    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=4, min_periods=2)), expected["slope"])
+    _assert_series(_values(TSRegressionInterceptNative()._calculate_series(y, x, window=4, min_periods=2)), expected["intercept"])
+    _assert_series(_values(TSRegressionResidNative()._calculate_series(y, x, window=4, min_periods=2)), expected["resid"])
+    _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=4, min_periods=2)), expected["r2"])
 
 
 def test_large_offset_anchor_rollout_keeps_final_correlation():
