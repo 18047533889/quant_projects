@@ -188,7 +188,8 @@ class QCompiler:
         return op_name in self._operator_map
 
     def is_production_certified(self, op_name: str) -> bool:
-        return self.capability.registry.is_production_certified(op_name)
+        """Admit only operators in the registry's globally consistent production set."""
+        return op_name in self.capability.registry.get_production_ready()
 
     def can_compile_operator(self, op_name: str) -> bool:
         """Return whether an executable lowering exists; production admission is separate."""

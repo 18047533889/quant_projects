@@ -145,7 +145,7 @@ def test_registry_replacement_after_compiler_bootstrap_is_rejected(monkeypatch) 
     assert compiler.capability.registry is not replacement
 
 
-def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp_path) -> None:
+def _certified_compiler_with_global_disagreement(tmp_path) -> QCompiler:
     import json
 
     sha = "a" * 40
@@ -161,12 +161,45 @@ def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp
         "q_version": "4.1",
         "pykx_version": "2.6",
         "status": "PASS",
-        "executed_cases": 1,
+    }
+    stage_results = {
+        "compile": {
+            "compiled": True,
+            "compiled_cases": 1,
+            "failure_count": 0,
+        },
+        "runtime": {
+            "executed": True,
+            "executed_cases": 1,
+            "failure_count": 0,
+        },
+        "parity": {
+            "reference_backend": "pandas",
+            "compared_cases": 1,
+            "mismatch_count": 0,
+            "max_abs_error": 0.0,
+            "tolerance": 0.0,
+        },
+        "null_semantics": {
+            "checked_cases": 1,
+            "checks": ["null-mask"],
+            "mismatch_count": 0,
+        },
     }
     artifacts = {}
-    for name in ("compile", "runtime", "parity", "null_semantics"):
+    for name, result in stage_results.items():
         path = tmp_path / f"{name}.json"
-        path.write_text(json.dumps({**payload, "stage": name}), encoding="utf-8")
+        path.write_text(
+            json.dumps(
+                {
+                    **payload,
+                    "stage": name,
+                    "evidence_type": f"q_{name}_evidence/v1",
+                    "result": result,
+                }
+            ),
+            encoding="utf-8",
+        )
         artifacts[name] = QEvidenceArtifact(
             path=path.name,
             sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -197,10 +230,27 @@ def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp
         ),
     )
     registry.register(certified)
+    compiler = QCompiler(QBackendCapability(registry))
+    compiler._operator_map = {"certified": lowering_source}
+    return compiler
+
+
+def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp_path) -> None:
+    compiler = _certified_compiler_with_global_disagreement(tmp_path)
+    registry = compiler.capability.registry
 
     assert registry.is_production_certified("certified") is True
     assert registry.has_disagreement() is True
     assert registry.get_production_ready() == frozenset()
+
+
+def test_compiler_production_admission_requires_global_production_membership(tmp_path) -> None:
+    compiler = _certified_compiler_with_global_disagreement(tmp_path)
+    nodes = [{"id": "n1", "operator": "certified", "inputs": ["x"]}]
+
+    assert compiler.capability.registry.is_production_certified("certified") is True
+    assert compiler.is_production_certified("certified") is False
+    assert compiler.validate_region(nodes, mode="production") == (False, ["certified"])
 
 
 def test_physical_region_admission_is_fail_closed_in_production() -> None:

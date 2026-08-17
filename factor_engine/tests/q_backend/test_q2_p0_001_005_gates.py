@@ -312,12 +312,45 @@ class TestQPhysicalImplementationRegistry:
             "q_version": "4.1",
             "pykx_version": "2.6",
             "status": "PASS",
-            "executed_cases": 3,
+        }
+        stage_results = {
+            "compile": {
+                "compiled": True,
+                "compiled_cases": 3,
+                "failure_count": 0,
+            },
+            "runtime": {
+                "executed": True,
+                "executed_cases": 3,
+                "failure_count": 0,
+            },
+            "parity": {
+                "reference_backend": "pandas",
+                "compared_cases": 3,
+                "mismatch_count": 0,
+                "max_abs_error": 0.0,
+                "tolerance": 1e-12,
+            },
+            "null_semantics": {
+                "checked_cases": 3,
+                "checks": ["null-mask", "warmup", "all-null-window"],
+                "mismatch_count": 0,
+            },
         }
         artifacts = {}
         for name in ("compile", "runtime", "parity", "null_semantics"):
             path = tmp_path / f"{name}.json"
-            path.write_text(json.dumps({**payload, "stage": name}), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    {
+                        **payload,
+                        "stage": name,
+                        "evidence_type": f"q_{name}_evidence/v1",
+                        "result": stage_results[name],
+                    }
+                ),
+                encoding="utf-8",
+            )
             artifacts[name] = QEvidenceArtifact(
                 path=path.name,
                 sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -401,7 +434,6 @@ class TestQPhysicalImplementationRegistry:
 
         for field, value, expected in (
             ("status", "FAIL", "compile_evidence: status is not PASS"),
-            ("executed_cases", 0, "compile_evidence: executed_cases must be positive"),
             ("canonical", "subtract", "compile_evidence: canonical mismatch"),
             ("stage", "runtime", "compile_evidence: stage mismatch"),
         ):
@@ -419,6 +451,72 @@ class TestQPhysicalImplementationRegistry:
             )
             registry.register(changed)
             assert expected in registry.evidence_errors("add")
+
+    @pytest.mark.parametrize(
+        ("stage", "result_update", "expected"),
+        [
+            ("compile", None, "compile_evidence: result must be an object"),
+            (
+                "compile",
+                {"type": "q_runtime_result/v1", "compiled_cases": 3, "failure_count": 0},
+                "compile_evidence: result.compiled must be true",
+            ),
+            (
+                "runtime",
+                {"type": "q_runtime_result/v1", "executed_cases": 0, "failure_count": 0},
+                "runtime_evidence: result.executed_cases must be positive",
+            ),
+            (
+                "parity",
+                {
+                    "type": "q_parity_result/v1",
+                    "compared_cases": 3,
+                    "mismatch_count": 0,
+                    "max_abs_error": 0.1,
+                    "tolerance": 0.01,
+                },
+                "parity_evidence: result.max_abs_error exceeds tolerance",
+            ),
+            (
+                "null_semantics",
+                {
+                    "type": "q_null_semantics_result/v1",
+                    "checked_cases": 3,
+                    "mismatch_count": 1,
+                },
+                "null_semantics_evidence: result.mismatch_count must be zero",
+            ),
+        ],
+    )
+    def test_certification_rejects_metadata_only_and_invalid_stage_results(
+        self, tmp_path, stage, result_update, expected
+    ):
+        import json
+
+        registry, impl = self._certified_registry(tmp_path)
+        artifact = getattr(impl, f"{stage}_evidence")
+        path = tmp_path / artifact.path
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if result_update is None:
+            payload.pop("result")
+        else:
+            payload["result"] = result_update
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        registry.register(
+            replace(
+                impl,
+                **{
+                    f"{stage}_evidence": replace(
+                        artifact,
+                        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                    )
+                },
+            )
+        )
+
+        assert expected in registry.evidence_errors("add")
+        assert registry.is_production_certified("add") is False
+        assert registry.get_production_ready() == frozenset()
 
     def test_certification_requires_null_evidence_and_live_head(self, tmp_path):
         registry, impl = self._certified_registry(tmp_path)

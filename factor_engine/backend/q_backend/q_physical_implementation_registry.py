@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import subprocess
 from dataclasses import dataclass
@@ -72,6 +73,91 @@ def compute_q_implementation_hash(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _positive_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _nonnegative_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _finite_nonnegative(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) >= 0.0
+    )
+
+
+
+def _stage_evidence_errors(
+    label: str,
+    stage: str,
+    payload: Mapping[str, object],
+) -> list[str]:
+    """Validate typed executable results, not a metadata-only PASS claim."""
+
+    errors: list[str] = []
+    expected_type = f"q_{stage}_evidence/v1"
+    if payload.get("evidence_type") != expected_type:
+        errors.append(f"{label}: evidence_type must be {expected_type}")
+
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return [*errors, f"{label}: result must be an object"]
+
+    if stage == "compile":
+        if result.get("compiled") is not True:
+            errors.append(f"{label}: result.compiled must be true")
+        if not _positive_int(result.get("compiled_cases")):
+            errors.append(f"{label}: result.compiled_cases must be positive")
+        failure_field = "failure_count"
+    elif stage == "runtime":
+        if result.get("executed") is not True:
+            errors.append(f"{label}: result.executed must be true")
+        if not _positive_int(result.get("executed_cases")):
+            errors.append(f"{label}: result.executed_cases must be positive")
+        failure_field = "failure_count"
+    elif stage == "parity":
+        if result.get("reference_backend") != "pandas":
+            errors.append(f"{label}: result.reference_backend must be pandas")
+        if not _positive_int(result.get("compared_cases")):
+            errors.append(f"{label}: result.compared_cases must be positive")
+        failure_field = "mismatch_count"
+        max_abs_error = result.get("max_abs_error")
+        tolerance = result.get("tolerance")
+        if not _finite_nonnegative(max_abs_error):
+            errors.append(f"{label}: result.max_abs_error must be finite and nonnegative")
+        if not _finite_nonnegative(tolerance):
+            errors.append(f"{label}: result.tolerance must be finite and nonnegative")
+        if (
+            _finite_nonnegative(max_abs_error)
+            and _finite_nonnegative(tolerance)
+            and float(max_abs_error) > float(tolerance)
+        ):
+            errors.append(f"{label}: result.max_abs_error exceeds tolerance")
+    elif stage == "null_semantics":
+        if not _positive_int(result.get("checked_cases")):
+            errors.append(f"{label}: result.checked_cases must be positive")
+        checks = result.get("checks")
+        if not isinstance(checks, list) or not checks or any(
+            not isinstance(check, str) or not check for check in checks
+        ):
+            errors.append(f"{label}: result.checks must be a non-empty string list")
+        failure_field = "mismatch_count"
+    else:
+        return [*errors, f"{label}: unsupported evidence stage"]
+
+    failures = result.get(failure_field)
+    if not _nonnegative_int(failures):
+        errors.append(f"{label}: result.{failure_field} must be nonnegative")
+    elif failures != 0:
+        errors.append(f"{label}: result.{failure_field} must be zero")
+    return errors
+
+
+
 def _artifact_errors(
     label: str,
     artifact: QEvidenceArtifact | None,
@@ -113,9 +199,7 @@ def _artifact_errors(
             errors.append(f"{label}: {key} mismatch")
     if payload.get("status") != "PASS":
         errors.append(f"{label}: status is not PASS")
-    executed_cases = payload.get("executed_cases")
-    if not isinstance(executed_cases, int) or isinstance(executed_cases, bool) or executed_cases <= 0:
-        errors.append(f"{label}: executed_cases must be positive")
+    errors.extend(_stage_evidence_errors(label, expected.get("stage", ""), payload))
     return errors
 
 
