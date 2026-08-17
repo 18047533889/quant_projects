@@ -285,15 +285,31 @@ class ReadPipeline:
 
     # ---- verify ----
 
-    def verify_before(self, snapshot: ResolvedSourceSnapshot) -> None:
+    def verify_before(
+        self,
+        snapshot: ResolvedSourceSnapshot,
+        *,
+        snapshot_policy: str = "latest",
+    ) -> None:
         self.counters.verify_before += 1
         if snapshot is not None and snapshot.objects:
-            self._verifier.verify_before_execute(snapshot)
+            self._verifier.verify_before_execute(
+                snapshot,
+                force_strict=snapshot_policy == "verified_fail_if_changed",
+            )
 
-    def verify_after(self, snapshot: ResolvedSourceSnapshot) -> None:
+    def verify_after(
+        self,
+        snapshot: ResolvedSourceSnapshot,
+        *,
+        snapshot_policy: str = "latest",
+    ) -> None:
         self.counters.verify_after += 1
         if snapshot is not None and snapshot.objects:
-            self._verifier.verify_after_execute(snapshot)
+            self._verifier.verify_after_execute(
+                snapshot,
+                force_strict=snapshot_policy == "verified_fail_if_changed",
+            )
 
     # ---- instrumentation ----
 

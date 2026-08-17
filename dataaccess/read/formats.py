@@ -646,6 +646,38 @@ def format_adapter_for_dataset(ds: Any) -> FormatAdapter:
     return get_format_adapter(spec)
 
 
+def _pyarrow_type_from_declared(value: Any) -> Any:
+    import pyarrow as pa
+
+    if isinstance(value, pa.DataType):
+        return value
+    text = str(value).strip().lower()
+    aliases = {
+        "str": pa.string(),
+        "varchar": pa.string(),
+        "text": pa.string(),
+        "float": pa.float64(),
+        "double": pa.float64(),
+        "int": pa.int64(),
+        "date": pa.date32(),
+        "date32": pa.date32(),
+        "date64": pa.date64(),
+        "timestamp": pa.timestamp("us"),
+        "datetime": pa.timestamp("us"),
+        "timestamptz": pa.timestamp("ms", tz="UTC"),
+        "timestamp_tz": pa.timestamp("ms", tz="UTC"),
+        "timestamp_with_tz": pa.timestamp("ms", tz="UTC"),
+        "bool": pa.bool_(),
+        "boolean": pa.bool_(),
+    }
+    try:
+        return pa.type_for_alias(text)
+    except Exception:
+        if text in aliases:
+            return aliases[text]
+        raise ValidationError(f"无法解析 PyArrow schema 类型: {value!r}")
+
+
 def pyarrow_engine_read(
     paths: list[str],
     *,
@@ -653,6 +685,7 @@ def pyarrow_engine_read(
     columns: list[str] | None = None,
     filters: Any = None,
     batch_size: int = 100_000,
+    expected_schema: Any = None,
 ) -> Any:
     """PyArrow 引擎读取（parquet/arrow/feather/ipc）。返回 pyarrow.Table。
 
@@ -669,7 +702,18 @@ def pyarrow_engine_read(
 
     fmt = normalize_format_name(fmt)
     if not paths:
-        return pa.table({})
+        schema_items = dict(expected_schema or {})
+        selected = columns if columns is not None else list(schema_items)
+        arrays = {}
+        for name in selected:
+            if name not in schema_items:
+                raise ValidationError(
+                    f"authoritative-empty PyArrow 结果无法确定列 {name!r} 的类型"
+                )
+            arrays[name] = pa.array(
+                [], type=_pyarrow_type_from_declared(schema_items[name])
+            )
+        return pa.table(arrays)
     try:
         dataset = pa_ds.dataset(list(paths))
     except Exception:

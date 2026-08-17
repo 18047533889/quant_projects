@@ -93,13 +93,15 @@ class ScanHandle:
     def _pipeline_verify_before(self) -> None:
         if self._store is not None and self._prepared is not None:
             self._store._pipeline.verify_before(
-                self._prepared.resolved_source_snapshot
+                self._prepared.resolved_source_snapshot,
+                snapshot_policy=self._prepared.snapshot_policy,
             )
 
     def _pipeline_verify_after(self) -> None:
         if self._store is not None and self._prepared is not None:
             self._store._pipeline.verify_after(
-                self._prepared.resolved_source_snapshot
+                self._prepared.resolved_source_snapshot,
+                snapshot_policy=self._prepared.snapshot_policy,
             )
 
     def _release_prepared(self) -> None:

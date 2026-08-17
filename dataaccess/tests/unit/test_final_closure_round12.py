@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
+import os
 from pathlib import Path
 from types import MappingProxyType
 
@@ -28,17 +30,21 @@ import pytest
 from data_access.core.engine import DuckDBEngine
 from data_access.core.exceptions import (
     SnapshotBuildError,
+    SourceSnapshotChanged,
     SourceSnapshotUnavailable,
     ValidationError,
 )
 from data_access.read.data_request import DataRequest, compile_data_request
 from data_access.read.read_contract import FileVersion
 from data_access.registry import load_registry
+from data_access.runtime.read_pipeline import ReadPipeline
 from data_access.snapshot.resolver import SourceSnapshotResolver
 from data_access.snapshot.source_snapshot import (
     ResolvedObject,
+    ResolvedSourceSnapshot,
     content_digest_of_objects,
 )
+from data_access.snapshot.verifier import SnapshotVerifier
 from data_access.store import DataAccessStore
 
 _PKG = "/home/shw/quant_projects/dataaccess"
@@ -79,6 +85,7 @@ ds:
     d: date
     s: string
     v: double
+    t: timestamptz
 """,
         encoding="utf-8",
     )
@@ -115,7 +122,7 @@ def _publisher_manifest(
             {
                 "key": str(part),
                 "size": stat.st_size,
-                "etag": "local-publisher-v1",
+                "mtime_ns": stat.st_mtime_ns,
             }
         ]
     resolved = tuple(
@@ -124,6 +131,9 @@ def _publisher_manifest(
             content_length=entry.get("size", entry.get("content_length")),
             etag=entry.get("etag"),
             version_id=entry.get("version_id"),
+            mtime_ns=entry.get("mtime_ns"),
+            checksum=entry.get("checksum"),
+            checksum_algorithm=entry.get("checksum_algorithm"),
         )
         for entry in objects
     )
@@ -643,6 +653,100 @@ def test_direct_verified_resolver_rejects_bad_empty_digest(tmp_path):
         resolver.resolve("ds", policy="verified_fail_if_changed")
 
 
+def test_direct_verified_resolver_rejects_nonempty_terminal_for_empty_publisher(
+    tmp_path,
+):
+    manifest = _publisher_manifest(tmp_path, objects=[])
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: manifest,
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match="object set"):
+        resolver.resolve(
+            "ds",
+            policy="verified_fail_if_changed",
+            paths=[str(tmp_path / "d" / "unexpected.parquet")],
+        )
+
+
+def test_direct_verified_resolver_rejects_terminal_object_set_mismatch(tmp_path):
+    _static_store(tmp_path)
+    manifest = _publisher_manifest(tmp_path)
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: manifest,
+        strict=True,
+    )
+    part = tmp_path / "d" / "part.parquet"
+    extra = tmp_path / "d" / "extra.parquet"
+    for paths in ([str(extra)], [str(part), str(extra)], []):
+        with pytest.raises(SourceSnapshotUnavailable, match="object set"):
+            resolver.resolve(
+                "ds",
+                policy="verified_fail_if_changed",
+                paths=paths,
+            )
+
+
+def test_direct_verified_resolver_rejects_local_manifest_without_strong_identity(
+    tmp_path,
+):
+    _static_store(tmp_path)
+    part = tmp_path / "d" / "part.parquet"
+    manifest = _publisher_manifest(
+        tmp_path,
+        objects=[{"key": str(part), "size": part.stat().st_size}],
+    )
+    resolver = SourceSnapshotResolver(
+        source_manifest_fn=lambda _dataset: manifest,
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match=r"size\+mtime_ns|checksum"):
+        resolver.resolve(
+            "ds",
+            policy="verified_fail_if_changed",
+            paths=[str(part)],
+        )
+
+
+def test_verified_local_checksum_is_bound_and_checked(tmp_path):
+    part = tmp_path / "part.bin"
+    part.write_bytes(b"publisher-authorized")
+    checksum = hashlib.sha256(part.read_bytes()).hexdigest()
+    obj = ResolvedObject(
+        uri=str(part),
+        content_length=part.stat().st_size,
+        checksum=checksum,
+        checksum_algorithm="sha256",
+    )
+    snapshot = ResolvedSourceSnapshot(
+        dataset="ds",
+        objects=(obj,),
+        content_digest=content_digest_of_objects((obj,)),
+    )
+    verifier = SnapshotVerifier(strict=True)
+    verifier.verify_before_execute(snapshot)
+    part.write_bytes(b"publisher-tampered!!")
+    assert part.stat().st_size == obj.content_length
+    with pytest.raises(SourceSnapshotChanged, match="checksum"):
+        verifier.verify_after_execute(snapshot)
+
+
+def test_checksum_changes_snapshot_content_digest():
+    first = ResolvedObject(
+        uri="/tmp/checksum-object",
+        content_length=4,
+        checksum="a" * 64,
+        checksum_algorithm="sha256",
+    )
+    second = ResolvedObject(
+        uri="/tmp/checksum-object",
+        content_length=4,
+        checksum="b" * 64,
+        checksum_algorithm="sha256",
+    )
+    assert content_digest_of_objects((first,)) != content_digest_of_objects((second,))
+
+
 def test_verified_snapshot_policy_freezes_publisher_identity(tmp_path, monkeypatch):
     store = _static_store(tmp_path)
     token = {
@@ -660,7 +764,210 @@ def test_verified_snapshot_policy_freezes_publisher_identity(tmp_path, monkeypat
     assert dict(plan.plan_publisher_snapshots["ds"]) == {
         "source_generation": manifest["source_generation"],
         "content_digest": manifest["content_digest"],
+        "exact_objects": tuple(obj["key"] for obj in manifest["objects"]),
     }
+
+
+def test_verified_snapshot_policy_pyarrow_scans_frozen_publisher_objects(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    manifest = _publisher_manifest(tmp_path)
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, manifest)
+    calls = []
+    original_before = store._pipeline.verify_before
+    original_after = store._pipeline.verify_after
+
+    def _before(snapshot, **kwargs):
+        calls.append(
+            (
+                "before",
+                tuple(str(obj.uri) for obj in snapshot.objects),
+                kwargs.get("snapshot_policy"),
+            )
+        )
+        return original_before(snapshot, **kwargs)
+
+    def _after(snapshot, **kwargs):
+        calls.append(
+            (
+                "after",
+                tuple(str(obj.uri) for obj in snapshot.objects),
+                kwargs.get("snapshot_policy"),
+            )
+        )
+        return original_after(snapshot, **kwargs)
+
+    monkeypatch.setattr(store._pipeline, "verify_before", _before)
+    monkeypatch.setattr(store._pipeline, "verify_after", _after)
+    plan = store.plan(
+        DataRequest(
+            fields=["v"],
+            engine="pyarrow",
+            snapshot_policy="verified_fail_if_changed",
+        )
+    )
+    assert plan.execute().to_arrow().num_rows == 3
+    expected = tuple(obj["key"] for obj in manifest["objects"])
+    assert calls == [
+        ("before", expected, "verified_fail_if_changed"),
+        ("after", expected, "verified_fail_if_changed"),
+    ]
+
+
+def test_verified_policy_forces_final_verification_when_runtime_is_not_strict(
+    tmp_path,
+):
+    part = tmp_path / "part.bin"
+    part.write_bytes(b"publisher-authorized")
+    stat = part.stat()
+    obj = ResolvedObject(
+        uri=str(part),
+        content_length=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+    )
+    snapshot = ResolvedSourceSnapshot(
+        dataset="ds",
+        objects=(obj,),
+        content_digest=content_digest_of_objects((obj,)),
+    )
+    from data_access.runtime.read_pipeline import ReadPipeline
+
+    pipeline = ReadPipeline(verifier=SnapshotVerifier(strict=False))
+    pipeline.verify_before(
+        snapshot, snapshot_policy="verified_fail_if_changed"
+    )
+    part.write_bytes(b"publisher-tampered!!")
+    os.utime(
+        part,
+        ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000),
+    )
+    assert part.stat().st_size == obj.content_length
+    with pytest.raises(SourceSnapshotChanged, match="mtime"):
+        pipeline.verify_after(
+            snapshot, snapshot_policy="verified_fail_if_changed"
+        )
+
+
+def test_verified_policy_forces_remote_head_failure_closed_when_not_strict():
+    obj = ResolvedObject(
+        uri="s3://bucket/ds/part.parquet",
+        etag="publisher-etag",
+        content_length=10,
+    )
+    snapshot = ResolvedSourceSnapshot(
+        dataset="ds",
+        objects=(obj,),
+        content_digest=content_digest_of_objects((obj,)),
+    )
+    verifier = SnapshotVerifier(
+        remote_meta_fn=lambda _uri: (_ for _ in ()).throw(OSError("HEAD failed")),
+        strict=False,
+    )
+    with pytest.raises(SourceSnapshotUnavailable, match="remote HEAD"):
+        verifier.verify_before_execute(snapshot, force_strict=True)
+
+
+def test_verified_policy_rejects_missing_remote_head_provider_when_not_strict():
+    obj = ResolvedObject(
+        uri="s3://bucket/ds/part.parquet",
+        etag="publisher-etag",
+        content_length=10,
+    )
+    snapshot = ResolvedSourceSnapshot(
+        dataset="ds",
+        objects=(obj,),
+        content_digest=content_digest_of_objects((obj,)),
+    )
+    pipeline = ReadPipeline(verifier=SnapshotVerifier(strict=False))
+    with pytest.raises(SourceSnapshotUnavailable, match="HEAD provider"):
+        pipeline.verify_before(
+            snapshot, snapshot_policy="verified_fail_if_changed"
+        )
+    with pytest.raises(SourceSnapshotUnavailable, match="HEAD provider"):
+        pipeline.verify_after(
+            snapshot, snapshot_policy="verified_fail_if_changed"
+        )
+
+
+def test_pyarrow_pin_rejects_terminal_file_version_change(tmp_path, monkeypatch):
+    store = _static_store(tmp_path)
+    _write_authoritative_manifest_token(tmp_path, file_count=1)
+    plan = store.plan(DataRequest(fields=["v"], engine="pyarrow", snapshot_policy="pin"))
+    part = tmp_path / "d" / "part.parquet"
+    before = part.stat()
+    monkeypatch.setattr(type(plan), "_verify_snapshot_pin", lambda _self, _store: None)
+    os.utime(
+        part,
+        ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+    )
+    assert part.stat().st_size == before.st_size
+    with pytest.raises(ValidationError, match="PyArrow terminal scan"):
+        plan.execute()
+
+
+def test_verified_authoritative_empty_pyarrow_preserves_requested_schema(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+        "file_count": 0,
+    }
+    manifest = _publisher_manifest(tmp_path, objects=[])
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, manifest)
+    table = store.plan(
+        DataRequest(
+            fields=["d", "s", "v", "t"],
+            engine="pyarrow",
+            snapshot_policy="verified_fail_if_changed",
+        )
+    ).execute().to_arrow()
+    assert table.num_rows == 0
+    assert table.schema.names == ["d", "s", "v", "t"]
+    assert table.schema.field("d").type == pa.date32()
+    assert table.schema.field("s").type == pa.string()
+    assert table.schema.field("v").type == pa.float64()
+    assert table.schema.field("t").type == pa.timestamp("ms", tz="UTC")
+
+
+def test_verified_snapshot_policy_rejects_same_size_local_replacement(
+    tmp_path, monkeypatch
+):
+    store = _static_store(tmp_path)
+    token = {
+        "has_manifest": True,
+        "fresh": True,
+        "source_epoch": "v1",
+        "manifest_generation_id": "g1",
+    }
+    manifest = _publisher_manifest(tmp_path)
+    monkeypatch.setattr(store, "manifest_version", lambda *_args, **_kwargs: dict(token))
+    _install_publisher_manifest(monkeypatch, store, manifest)
+    plan = store.plan(
+        DataRequest(fields=["v"], snapshot_policy="verified_fail_if_changed")
+    )
+    part = tmp_path / "d" / "part.parquet"
+    before = part.stat()
+    os.utime(
+        part,
+        ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+    )
+    assert part.stat().st_size == before.st_size
+    assert part.stat().st_mtime_ns != before.st_mtime_ns
+    with pytest.raises(SourceSnapshotChanged, match="mtime|snapshot"):
+        plan.execute()
 
 
 @pytest.mark.parametrize("changed_field", ["source_generation", "content_digest"])
@@ -692,6 +999,7 @@ def test_verified_snapshot_policy_rejects_publisher_identity_change(
                 {
                     "key": str(part),
                     "size": part.stat().st_size,
+                    "mtime_ns": part.stat().st_mtime_ns,
                     "etag": "local-publisher-v2",
                 }
             ],
@@ -724,6 +1032,7 @@ def test_verified_snapshot_policy_terminal_rejects_same_generation_digest_change
             {
                 "key": str(part),
                 "size": part.stat().st_size,
+                "mtime_ns": part.stat().st_mtime_ns,
                 "etag": "local-publisher-v2",
             }
         ],

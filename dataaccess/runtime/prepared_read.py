@@ -211,8 +211,9 @@ class VerifiedPhysicalScope:
     expected_file_versions: tuple[Any, ...] | None = None
     snapshot_policy: str = "latest"
     publisher_snapshot: Mapping[str, Any] | None = None
-    # verified_fail_if_changed carries authority without replacing normal path
-    # resolution; pin alone consumes exact_objects as the terminal scan scope.
+    # Both pin and verified_fail_if_changed consume exact_objects as the terminal
+    # scan scope. A verified publisher object set must never be followed by live
+    # path re-resolution.
     use_exact_objects: bool = True
 
     @property
@@ -251,6 +252,7 @@ class PreparedRead:
     temporal_plan: TemporalPlan | None = None
     physical_scope: tuple[str, ...] = ()
     resolved_source_snapshot: Any = None
+    snapshot_policy: str = "latest"
     query_budget: Any = None
     resource_reservation: Any = None
     # R32-P0-061: backend_plan/lineage_seed 改为 immutable tuple of pairs
@@ -276,6 +278,7 @@ class PreparedRead:
             "request_identity": self.request_identity,
             "dataset": self.dataset,
             "physical_object_count": len(self.physical_scope),
+            "snapshot_policy": self.snapshot_policy,
             "snapshot_digest": (
                 getattr(self.resolved_source_snapshot, "content_digest", None)
                 if self.resolved_source_snapshot is not None

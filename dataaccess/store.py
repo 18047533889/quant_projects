@@ -1858,6 +1858,7 @@ class DataAccessStore:
             temporal_plan=temporal_plan,
             physical_scope=tuple(paths),
             resolved_source_snapshot=src_snapshot,
+            snapshot_policy=snapshot_policy,
             query_budget=budget,
             resource_reservation=res,
             # R29-P0：prepare 时刻固化安全身份，execute 前强制 equality。
@@ -1968,7 +1969,10 @@ class DataAccessStore:
         err_msg: str | None = None
         table: pa.Table | None = None
         try:
-            self._pipeline.verify_before(prepared.resolved_source_snapshot)
+            self._pipeline.verify_before(
+                prepared.resolved_source_snapshot,
+                snapshot_policy=prepared.snapshot_policy,
+            )
             self._pipeline.counters.execute += 1
             # R29-P0 #201：engine 内部已持 governor 同一信号量（set_governor 重链），
             # 不再显式 duckdb_slot——单一并发闸，无双份计账。
@@ -1991,7 +1995,10 @@ class DataAccessStore:
             elapsed_ms = (time.perf_counter() - start) * 1000
             enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
             if verify_after:
-                self._pipeline.verify_after(prepared.resolved_source_snapshot)
+                self._pipeline.verify_after(
+                    prepared.resolved_source_snapshot,
+                    snapshot_policy=prepared.snapshot_policy,
+                )
             ok = True
             stats = ReadStats(
                 rows=table.num_rows,
@@ -2515,7 +2522,10 @@ class DataAccessStore:
             try:
                 # R26-P0-004/016：第一批产出前 verify snapshot（文件仍在、
                 # identity 未变）。streaming 期间 governor reservation 保持。
-                self._pipeline.verify_before(snapshot)
+                self._pipeline.verify_before(
+                    snapshot,
+                    snapshot_policy=prepared.snapshot_policy,
+                )
                 self._pipeline.counters.execute += 1
                 # #P0-20 第一批产出前先查一次 elapsed（覆盖 engine watchdog
                 # 未触发的边界：预算超时优先于 deadline interrupt 的情形）。
@@ -2535,7 +2545,10 @@ class DataAccessStore:
                         elapsed_ms=(time.perf_counter() - start) * 1000,
                     )
                     yield batch
-                self._pipeline.verify_after(snapshot)
+                self._pipeline.verify_after(
+                    snapshot,
+                    snapshot_policy=prepared.snapshot_policy,
+                )
                 ok = True
             except Exception as exc:
                 err_msg = f"{type(exc).__name__}: {exc}"
@@ -4013,6 +4026,7 @@ class DataAccessStore:
                 plan_publisher_snapshots[ds] = {
                     "source_generation": publisher.source_generation,
                     "content_digest": publisher.content_digest,
+                    "exact_objects": tuple(str(obj.uri) for obj in publisher.objects),
                 }
             if pin_policy == "pin" and plan_snapshot_tokens.get(ds, {}).get("has_manifest"):
                 # pin 需要精确物理快照：resolve 数据集路径 → 逐文件 stat 当前真实
@@ -6125,6 +6139,7 @@ class DataAccessStore:
         from data_access.read.manifest import manifest_root_for_paths
         from data_access.read.predicate_ast import parse_filters
         from data_access.read.read_handle import ReadHandle
+        from data_access.runtime.prepared_read import VerifiedPhysicalScope
 
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -6133,8 +6148,6 @@ class DataAccessStore:
         if physical_scope is not None:
             # R27-D：pyarrow 引擎同样执行 physical_scope 逃生口治理（raw path
             # strict 拒绝、research 强制 dataset boundary）。
-            from data_access.runtime.prepared_read import VerifiedPhysicalScope
-
             if isinstance(physical_scope, VerifiedPhysicalScope):
                 if physical_scope.dataset_id != dataset:
                     raise ValidationError(
@@ -6176,7 +6189,44 @@ class DataAccessStore:
             # #6 冻结 glob → 精确文件列表，Scanner 与 snapshot 读到完全一致
             paths = self._expand_glob_paths(paths)
         files = build_file_manifest(paths)
+        if (
+            isinstance(physical_scope, VerifiedPhysicalScope)
+            and physical_scope.expected_file_versions is not None
+        ):
+            from data_access.read.data_request import _physical_manifest_changed
+
+            if _physical_manifest_changed(
+                physical_scope.expected_file_versions, files
+            ):
+                raise ValidationError(
+                    "VerifiedPhysicalScope 物理文件身份在 PyArrow terminal scan 前变化；"
+                    "拒绝以替换后的文件执行 pin。"
+                )
         self._enforce_scan_files(budget, paths, files=files)
+        verified_snapshot = None
+        if isinstance(physical_scope, VerifiedPhysicalScope):
+            publisher_snapshot = physical_scope.publisher_snapshot
+            verified_snapshot = self._pipeline.resolve_snapshot(
+                dataset,
+                files=files,
+                paths=paths,
+                policy=physical_scope.snapshot_policy,
+                pin_snapshot_id=(
+                    str(publisher_snapshot["content_digest"])
+                    if publisher_snapshot is not None
+                    else None
+                ),
+            )
+            if publisher_snapshot is not None and (
+                verified_snapshot.source_generation
+                != publisher_snapshot.get("source_generation")
+                or verified_snapshot.content_digest
+                != publisher_snapshot.get("content_digest")
+            ):
+                raise ValidationError(
+                    f"dataset={dataset!r} publisher source_generation/content_digest "
+                    "在 plan 后变化；拒绝 PyArrow 执行。"
+                )
 
         # #P0-22 扫描阶段下推：filter + projection 进 Scanner，不再先物化全表。
         # time_range / instrument_filter / filters 编译成 dataset expression——
@@ -6200,13 +6250,24 @@ class DataAccessStore:
         )
 
         start = time.perf_counter()
+        if verified_snapshot is not None:
+            self._pipeline.verify_before(
+                verified_snapshot,
+                snapshot_policy=physical_scope.snapshot_policy,
+            )
         table = pyarrow_engine_read(
             paths,
             fmt=str(ds.format),
             columns=list(columns) if columns else None,
             filters=combined_expr,
             batch_size=batch_size,
+            expected_schema=ds.schema,
         )
+        if verified_snapshot is not None:
+            self._pipeline.verify_after(
+                verified_snapshot,
+                snapshot_policy=physical_scope.snapshot_policy,
+            )
         if limit is not None:
             table = table.slice(0, int(limit))
 
