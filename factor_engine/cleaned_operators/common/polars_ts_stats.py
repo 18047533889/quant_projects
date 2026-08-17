@@ -77,7 +77,7 @@ class TSZScoreNative(SeriesOperator):
             if finite.size < 2:
                 return math.nan
             current = raw[-1]
-            if np.isnan(current):
+            if not np.isfinite(current):
                 return math.nan
             mean = float(np.mean(finite))
             std = float(np.std(finite, ddof=1))

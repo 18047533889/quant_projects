@@ -1663,8 +1663,11 @@ class TSZScore(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         from backend.numeric_semantics import zscore_zero_std_fill
 
-        mean = x.rolling(window=window, min_periods=1).mean()
-        std = x.rolling(window=window, min_periods=1).std()
+        # Treat infinities as missing values, matching the finite-only
+        # statistical contract used by the selectable Polars authority.
+        finite_x = x.replace([np.inf, -np.inf], np.nan)
+        mean = finite_x.rolling(window=window, min_periods=1).mean()
+        std = finite_x.rolling(window=window, min_periods=1).std()
 
         # R40 Parity Fix: When std=0 or NULL, return zero_fill (0.0) to match Polars backend
         # and numeric_semantics policy. Must avoid division by zero entirely.
@@ -1677,10 +1680,10 @@ class TSZScore(SeriesOperator):
         result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
 
         # Compute zscore only where std is valid and non-zero
-        result[valid_std_mask] = ((x - mean) / std)[valid_std_mask]
+        result[valid_std_mask] = ((finite_x - mean) / std)[valid_std_mask]
 
         # Where std is exactly zero (constant window), use zero_fill
-        zero_std_mask = (std.notna()) & (std == 0)
+        zero_std_mask = (std.notna()) & (std == 0) & finite_x.notna()
         result[zero_std_mask] = zero_fill
 
         return result
@@ -2528,7 +2531,7 @@ class TSZScorePolars(SeriesOperator):
             if finite.size < 2:
                 return np.nan
             current = raw[-1]
-            if np.isnan(current):
+            if not np.isfinite(current):
                 return np.nan
             mean = float(np.mean(finite))
             std = float(np.std(finite, ddof=1))

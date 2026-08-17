@@ -1,6 +1,7 @@
 import importlib.util
 import math
 from pathlib import Path
+import subprocess
 import sys
 
 import numpy as np
@@ -10,6 +11,7 @@ import pytest
 
 from cleaned_operators.base import ParamRole
 from cleaned_operators.common.time_series import TSZScore, TSZScorePolars
+from backend.operator_errors import OperatorParameterError
 
 
 def _load_module(monkeypatch):
@@ -29,7 +31,7 @@ def _load_module(monkeypatch):
     spec = importlib.util.spec_from_file_location("_window_local_polars_ts_stats", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    monkeypatch.setitem(sys.modules, spec.name, module)
     spec.loader.exec_module(module)
     return module
 
@@ -102,9 +104,18 @@ def _oracle_es(values: np.ndarray, window: int, alpha: float) -> np.ndarray:
     return np.asarray(out)
 
 
-def _pandas_zscore(values: np.ndarray, window: int) -> np.ndarray:
-    frame = pd.DataFrame({"x": values})
-    return TSZScore()._calculate_series(frame, window=window)["x"].to_numpy()
+def _zscore_oracle(values: np.ndarray, window: int) -> np.ndarray:
+    result = []
+    for end in range(len(values)):
+        raw = values[max(0, end - window + 1) : end + 1]
+        finite = raw[np.isfinite(raw)]
+        current = values[end]
+        if not np.isfinite(current) or finite.size < 2:
+            result.append(np.nan)
+            continue
+        std = float(np.std(finite, ddof=1))
+        result.append(0.0 if std == 0.0 else float((current - np.mean(finite)) / std))
+    return np.asarray(result)
 
 
 def test_active_ts_zscore_polars_matches_pandas_reference_for_nonfinite_values():
@@ -112,11 +123,11 @@ def test_active_ts_zscore_polars_matches_pandas_reference_for_nonfinite_values()
     result = TSZScorePolars().calculate(
         pl.DataFrame({"x": values}), window=5
     )["x"].to_numpy()
-    expected = _pandas_zscore(values, 5)
+    expected = _zscore_oracle(values, 5)
     np.testing.assert_allclose(result, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
     assert np.isnan(result[2])
-    assert np.isposinf(result[4])
-    assert np.isneginf(result[5])
+    assert np.isnan(result[4])
+    assert np.isnan(result[5])
     assert result[6] == 0.0
 
 
@@ -125,25 +136,66 @@ def test_active_ts_zscore_polars_matches_pandas_warmup_and_zero_std():
     result = TSZScorePolars().calculate(
         pl.DataFrame({"x": values}), window=3
     )["x"].to_numpy()
-    expected = _pandas_zscore(values, 3)
+    expected = _zscore_oracle(values, 3)
     np.testing.assert_allclose(result, expected, equal_nan=True)
     assert np.isnan(result[0])
     assert result[1] == 0.0
     assert result[2] == 0.0
 
 
+def test_active_ts_zscore_polars_zero_std_does_not_fill_nonfinite_current():
+    values = np.asarray([1.0, 1.0, np.inf])
+    pandas_result = TSZScore().calculate(
+        pd.DataFrame({"x": values}), window=3
+    )["x"].to_numpy()
+    polars_result = TSZScorePolars().calculate(
+        pl.DataFrame({"x": values}), window=3
+    )["x"].to_numpy()
+    assert np.isnan(pandas_result[-1])
+    assert np.isnan(polars_result[-1])
+
+
 def test_active_ts_zscore_polars_public_api_matches_pandas_reference():
     assert TSZScorePolars.metadata.param_names == ["x", "window"]
-    with pytest.raises(Exception, match="unknown|unexpected|min_periods"):
+    with pytest.raises(OperatorParameterError, match="min_periods"):
         TSZScorePolars().calculate(
             pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=2
         )
 
 
-def test_bootstrap_does_not_load_window_local_ts_zscore_native():
-    from cleaned_operators import _LOAD_MODULES
+def test_ts_zscore_prior_results_are_future_invariant():
+    values = np.asarray([1.0, 2.0, 4.0, 8.0])
+    first = TSZScorePolars().calculate(
+        pl.DataFrame({"x": values}), window=3
+    )["x"].to_numpy()
+    extended = TSZScorePolars().calculate(
+        pl.DataFrame({"x": np.r_[values, 10_000.0]}), window=3
+    )["x"].to_numpy()
+    np.testing.assert_array_equal(first, extended[: values.size])
 
-    assert "cleaned_operators.common.polars_ts_stats" not in _LOAD_MODULES
+
+def test_legacy_ts_zscore_native_rejects_infinite_current_value(monkeypatch):
+    module = _load_module(monkeypatch)
+    operator = module.TSZScoreNative()
+    result = operator.calculate(
+        pl.DataFrame({"x": [1.0, 2.0, np.inf]}), window=3
+    )["x"].to_numpy()
+    assert np.isnan(result[-1])
+
+
+def test_bootstrap_does_not_load_window_local_ts_zscore_native():
+    code = """
+from cleaned_operators import _LOAD_MODULES, load_all
+load_all()
+assert "cleaned_operators.common.polars_ts_stats" not in _LOAD_MODULES
+import sys
+assert "cleaned_operators.common.polars_ts_stats" not in sys.modules
+"""
+    subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+    )
 
 
 @pytest.fixture
@@ -201,7 +253,6 @@ def test_constants_ties_and_invalid_parameters_fail_closed(stats_module):
 
 def test_future_values_do_not_change_prior_result(stats_module):
     TSTrimmedMeanNative = stats_module.TSTrimmedMeanNative
-    prefix = np.asarray([1.0, 2.0, 3.0, 4.0])
     prefix = np.asarray([1.0, 2.0, 3.0, 4.0])
     first = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": prefix}), window=5, trim_pct=0.25)["x"].to_numpy()
     extended = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": np.r_[prefix, 10_000.0]}), window=5, trim_pct=0.25)["x"].to_numpy()
