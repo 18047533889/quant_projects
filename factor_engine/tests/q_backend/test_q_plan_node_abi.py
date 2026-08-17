@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.q_backend.q_backend import QBackend
+from backend.q_backend.q_compiler import QCompiler
 from backend.q_backend.q_errors import QPhysicalRegionNotImplemented
 from planner.logical_plan import PlanNode
 
@@ -69,6 +70,52 @@ def test_plan_to_q_region_passes_canonical_nodes_to_compile_preparation() -> Non
     assert result.region_id == "region_root"
     assert calls["validated"] == (calls["compiled"][1], "research")
     assert calls["compiled"][1][-1]["params"] == {"window": 5}
+
+
+def test_real_compiler_rejects_whole_tree_source_node() -> None:
+    leaf = PlanNode(op="column", attrs={"name": "close"}, node_id="close")
+    root = PlanNode(op="ts_mean", inputs=(leaf,), attrs={"window": 5}, node_id="mean")
+
+    backend = _backend_with_compiler(QCompiler())
+    with pytest.raises(
+        ValueError,
+        match=r"unsupported operators \['column'\]",
+    ):
+        backend._plan_to_q_region(root, None)
+
+
+def test_real_compiler_rejects_positional_literal_as_region_node() -> None:
+    leaf = PlanNode(op="column", attrs={"name": "close"}, node_id="close")
+    window = PlanNode(op="literal", attrs={"value": 5}, node_id="window")
+    root = PlanNode(op="ts_mean", inputs=(leaf, window), attrs={}, node_id="mean")
+
+    backend = _backend_with_compiler(QCompiler())
+    with pytest.raises(
+        ValueError,
+        match=r"unsupported operators \['column', 'literal'\]",
+    ):
+        backend._plan_to_q_region(root, None)
+
+
+def test_real_compiler_accepts_explicit_region_inputs_and_canonical_params() -> None:
+    region = QCompiler().compile_region(
+        "mean_region",
+        [
+            {
+                "id": "mean",
+                "operator": "ts_mean",
+                "inputs": ["input_table"],
+                "params": {"window": 5},
+            }
+        ],
+        input_tables=["input_table"],
+        output_name="result",
+        mode="research",
+    )
+
+    assert "mean: 5 mavg input_table;" in region.q_code
+    assert region.node_ids == ("mean",)
+    assert region.input_tables == ("input_table",)
 
 
 def test_production_whole_tree_execution_remains_disabled() -> None:
