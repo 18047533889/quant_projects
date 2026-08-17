@@ -5,7 +5,7 @@
 
     - ``data_access_version_manifest()``：当前进程的全部版本标识（package_version /
       build_sha / api / contract_schema / registry_schema / semantic_schema /
-      storage_format）。
+      storage_format / identity_schema）。
     - ``assert_version_compat(required)``：按 dict 逐项比对，返回不匹配的版本名
       列表（空 = 兼容）。
 
@@ -19,6 +19,7 @@ from typing import Any
 from data_access.r30._shared import (
     API_VERSION,
     CONTRACT_SCHEMA_VERSION,
+    IDENTITY_SCHEMA_VERSION,
     REGISTRY_SCHEMA_VERSION,
     SEMANTIC_SCHEMA_VERSION,
     STORAGE_FORMAT_VERSION,
@@ -28,6 +29,7 @@ from data_access.r30._shared import (
 __all__ = [
     "API_VERSION",
     "CONTRACT_SCHEMA_VERSION",
+    "IDENTITY_SCHEMA_VERSION",
     "REGISTRY_SCHEMA_VERSION",
     "SEMANTIC_SCHEMA_VERSION",
     "STORAGE_FORMAT_VERSION",
@@ -67,6 +69,7 @@ def data_access_version_manifest() -> dict[str, str | None]:
         "registry_schema": REGISTRY_SCHEMA_VERSION,
         "semantic_schema": SEMANTIC_SCHEMA_VERSION,
         "storage_format": STORAGE_FORMAT_VERSION,
+        "identity_schema": IDENTITY_SCHEMA_VERSION,
     }
 
 

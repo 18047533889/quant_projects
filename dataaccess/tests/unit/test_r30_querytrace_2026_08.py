@@ -310,6 +310,7 @@ def test_version_manifest_has_build_sha():
     assert manifest["contract_schema"] == CONTRACT_SCHEMA_VERSION
     assert "package_version" in manifest
     assert "storage_format" in manifest
+    assert manifest["identity_schema"] == "2"
 
 
 def test_assert_version_compat():
@@ -324,3 +325,5 @@ def test_assert_version_compat():
         "api",
         "storage_format",
     ]
+    assert assert_version_compat({"identity_schema": manifest["identity_schema"]}) == []
+    assert assert_version_compat({"identity_schema": "1"}) == ["identity_schema"]

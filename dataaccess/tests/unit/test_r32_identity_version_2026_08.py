@@ -9,6 +9,7 @@ R32-P0-111  build SHA 在 build-time 固化（_build_info.py，不依赖运行�
 from __future__ import annotations
 
 import pytest
+from data_access.core.identity_encoder import CanonicalIdentityEncoder
 from data_access.r30._shared import (
     IDENTITY_SCHEMA_VERSION,
     STORAGE_FORMAT_VERSION,
@@ -90,9 +91,19 @@ def test_da2_p0_002_list_and_tuple_are_canonically_equivalent():
 
 def test_da2_p0_002_identity_format_has_explicit_migration_gate():
     """The incompatible strict/full-width format is namespaced and storage-versioned."""
+    parts = ("alpha", {"typed": 7})
+    expected = CanonicalIdentityEncoder(strict=True).hash_identity(
+        ("data_access.r30.stable_digest", IDENTITY_SCHEMA_VERSION, parts),
+        bits=256,
+    )
+    unversioned = CanonicalIdentityEncoder(strict=True).hash_identity(parts, bits=256)
+
     assert IDENTITY_SCHEMA_VERSION == "2"
     assert STORAGE_FORMAT_VERSION == "2"
+    assert stable_digest(*parts) == expected
+    assert stable_digest(*parts) != unversioned
     assert version_gate()["identity_schema"] == "2"
+    assert version_gate()["storage_format"] == "2"
 
 
 @pytest.mark.parametrize("helper", [stable_digest, stable_digest_full])
