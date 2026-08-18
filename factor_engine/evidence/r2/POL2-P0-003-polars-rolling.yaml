@@ -1,0 +1,35 @@
+task_id: POL2-P0-003
+base_sha: 96e1fdd009f0bd36052c7710ea5acd5cf5fdf45f
+commit_sha: SELF_REFERENTIAL_MANIFEST_COMMIT
+commit_sha_note: The manifest is committed atomically; its final SHA cannot be embedded without changing that SHA.
+owned_files:
+  - cleaned_operators/common/polars_ts_rolling.py
+  - tests/backend/test_polars_ts_rolling_pairwise.py
+  - evidence/r2/POL2-P0-003-polars-rolling.yaml
+modified_files:
+  - cleaned_operators/common/polars_ts_rolling.py
+  - tests/backend/test_polars_ts_rolling_pairwise.py
+  - evidence/r2/POL2-P0-003-polars-rolling.yaml
+canonicals_touched:
+  - ts_ewm_corr
+  - ts_trend_slope
+backends_touched:
+  - polars
+tests_run:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 pytest -q tests/backend/test_polars_ts_rolling_pairwise.py -p no:xdist
+  result: 15 passed, 2 warnings
+syntax_compile: passed
+import_smoke: passed
+diff_check: passed
+tests_not_run:
+  - full repository compilation
+  - full registry bootstrap and duplicate-authority gates
+  - pandas/polars/duckdb/q parity
+  - PIT poison tests
+  - root CI
+  - live COS/S3 integration
+known_limitations:
+  - Polars remains PARTIALLY_VERIFIED.
+  - Q remains fail-closed and not production-certified.
+  - Broad production-readiness gates remain NOT_RUN.
+production_certification: NOT_RUN

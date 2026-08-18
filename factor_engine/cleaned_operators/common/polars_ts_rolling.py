@@ -276,16 +276,17 @@ class TSEwmCorrNative(SeriesOperator):
         from cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=2)
-        cols = _numeric_cols(x)
         alpha = 2.0 / (w + 1)
 
-        if y is None:
-            raise ValueError("ts_ewm_corr requires y")
+        cols = _require_pairwise_columns(x, y, operator="ts_ewm_corr")
 
         exprs = []
         for c in cols:
-            x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
+            x_raw = pl.col(c)
+            y_raw = y[c]
+            valid = x_raw.is_finite().fill_null(False) & y_raw.is_finite().fill_null(False)
+            x_col = pl.when(valid).then(x_raw).otherwise(None)
+            y_col = pl.when(valid).then(y_raw).otherwise(None)
 
             x_mean = x_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
             y_mean = y_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
@@ -657,27 +658,38 @@ class TSTrendSlopeNative(SeriesOperator):
         w = strict_integer(window, "window", minimum=2)
         cols = _numeric_cols(x)
 
-        # Time index: 0, 1, 2, ..., w-1
-        t_mean = (w - 1) / 2.0
-        var_t = sum((i - t_mean) ** 2 for i in range(w)) / w
-
+        # Use physical row positions, not a fixed 0..w-1 grid. This keeps
+        # missing observations from becoming adjacent after filtering and lets
+        # prefix windows use their actual number of observations.
+        row_name = "__ts_row"
+        while row_name in x.columns:
+            row_name = f"_{row_name}"
+        frame = x.with_row_index(row_name)
+        row = pl.col(row_name).cast(pl.Float64)
         exprs = []
         for c in cols:
-            y_mean = pl.col(c).rolling_mean(window_size=w, min_samples=2)
+            y = pl.col(c).cast(pl.Float64)
+            valid = y.is_finite().fill_null(False)
+            y = pl.when(valid).then(y).otherwise(None)
+            valid = valid.cast(pl.Float64)
+            n = valid.rolling_sum(window_size=w, min_samples=1)
+            sum_t = (row * valid).rolling_sum(window_size=w, min_samples=1)
+            sum_y = y.rolling_sum(window_size=w, min_samples=1)
+            sum_tt = (row * row * valid).rolling_sum(window_size=w, min_samples=1)
+            sum_ty = (row * y).rolling_sum(window_size=w, min_samples=1)
 
-            # cov(t, y) = sum((t_i - t_mean) * (y_i - y_mean)) / n
-            cov_sum = pl.lit(0.0)
-            for i in range(w):
-                t_dev = i - t_mean
-                y_dev = pl.col(c).shift(w - 1 - i) - y_mean
-                cov_sum = cov_sum + t_dev * y_dev
+            # Center independently within each trailing window and fail closed
+            # until two finite observations provide a non-zero time variance.
+            centered_tt = sum_tt - (sum_t * sum_t) / n
+            centered_ty = sum_ty - (sum_t * sum_y) / n
+            exprs.append(
+                pl.when((n >= 2) & (centered_tt > 0.0))
+                .then(centered_ty / centered_tt)
+                .otherwise(None)
+                .alias(c)
+            )
 
-            cov_t_y = cov_sum / w
-            slope = cov_t_y / var_t if var_t != 0 else np.nan
-
-            exprs.append(slope.alias(c))
-
-        return x.lazy().with_columns(exprs).collect()
+        return frame.lazy().with_columns(exprs).drop(row_name).collect()
 
 
 @_register_rolling_operator(

@@ -10,6 +10,7 @@ from cleaned_operators.common.polars_ts_rolling import (
     TSRegressionR2Native,
     TSRegressionResidNative,
     TSRegressionSlopeNative,
+    TSEwmCorrNative,
 )
 
 
@@ -61,6 +62,71 @@ def _oracle(x, y, window, *, ddof=1, min_periods=2):
 
 def _values(frame):
     return frame["a"].to_list()
+
+
+def test_trend_slope_uses_local_positions_for_prefix_and_missing_values():
+    """Trend slope matches direct trailing-window OLS on finite observations."""
+    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+
+    values = [1.0, 3.0, None, 7.0, float("nan"), 11.0]
+    window = 4
+    expected = []
+    for end in range(len(values)):
+        start = max(0, end - window + 1)
+        pairs = [
+            (index, value)
+            for index, value in enumerate(values[start : end + 1], start=start)
+            if value is not None and math.isfinite(value)
+        ]
+        if len(pairs) < 2:
+            expected.append(None)
+            continue
+        times, observations = zip(*pairs)
+        time_mean = sum(times) / len(times)
+        value_mean = sum(observations) / len(observations)
+        centered_time = [time - time_mean for time in times]
+        denominator = sum(delta * delta for delta in centered_time)
+        expected.append(
+            sum(delta * (value - value_mean) for delta, value in zip(centered_time, observations))
+            / denominator
+            if denominator
+            else None
+        )
+
+    actual = TSTrendSlopeNative()._calculate_series(
+        pl.DataFrame({"a": values}), window=window
+    )["a"].to_list()
+    for got, want in zip(actual, expected):
+        if want is None:
+            assert got is None
+        else:
+            assert got == pytest.approx(want)
+
+
+def test_trend_slope_avoids_row_index_column_collision():
+    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+
+    actual = TSTrendSlopeNative()._calculate_series(
+        pl.DataFrame({"__ts_row": [10.0, 12.0, 15.0], "a": [1.0, 3.0, 6.0]}),
+        window=3,
+    )
+
+    assert actual.columns == ["__ts_row", "a"]
+    assert actual["a"].to_list() == [None, pytest.approx(2.0), pytest.approx(2.5)]
+
+
+def test_trend_slope_excludes_positive_and_negative_infinity():
+    from cleaned_operators.common.polars_ts_rolling import TSTrendSlopeNative
+
+    actual = TSTrendSlopeNative()._calculate_series(
+        pl.DataFrame({"a": [1.0, float("inf"), 3.0, float("-inf"), 5.0]}),
+        window=5,
+    )["a"].to_list()
+
+    assert actual[:2] == [None, None]
+    assert actual[2] == pytest.approx(1.0)
+    assert actual[3] == pytest.approx(1.0)
+    assert actual[4] == pytest.approx(1.0)
 
 
 def _assert_series(actual, expected, *, abs_tol=1e-12, rel_tol=1e-12):
@@ -171,6 +237,28 @@ def test_missing_matching_column_fails_closed_for_pairwise_operators():
     ):
         with pytest.raises(ValueError, match="missing.*column"):
             operator._calculate_series(*args, window=3)
+
+
+def test_ewm_corr_missing_matching_column_fails_closed():
+    left = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
+    missing = pl.DataFrame({"b": [2.0, 3.0, 4.0]})
+
+    with pytest.raises(ValueError, match="missing.*column"):
+        TSEwmCorrNative()._calculate_series(left, missing, window=3)
+
+
+def test_ewm_corr_uses_finite_pair_observations_like_pandas():
+    """Rows missing either operand must not update the EWM pair state."""
+    x_values = [1.0, None, 3.0, 4.0]
+    y_values = [2.0, 5.0, None, 8.0]
+    expected = [None, None, None, 1.0]
+
+    actual = TSEwmCorrNative()._calculate_series(
+        pl.DataFrame({"a": x_values}),
+        pl.DataFrame({"a": y_values}),
+        window=4,
+    )["a"].to_list()
+    _assert_series(actual, expected)
 
 
 def test_pairwise_matching_columns_retain_aligned_arithmetic():
