@@ -286,6 +286,7 @@ class QBackend(Backend):
         """
         nodes = []
         visited = set()
+        node_by_id: dict[str, PlanNode] = {}
 
         def visit(node: PlanNode):
             # PlanNode.node_id is optional for generic planning, but q compiler
@@ -296,6 +297,13 @@ class QBackend(Backend):
                 raise ValueError(
                     "Q region conversion requires canonical PlanNode.node_id"
                 )
+            existing = node_by_id.get(node_id)
+            if existing is not None and existing is not node:
+                raise ValueError(
+                    "duplicate canonical PlanNode.node_id refers to distinct nodes: "
+                    f"{node_id!r}"
+                )
+            node_by_id[node_id] = node
             if node_id in visited:
                 return
             visited.add(node_id)

@@ -151,6 +151,25 @@ def test_production_whole_tree_execution_remains_disabled() -> None:
         backend.execute(plan, None)
 
 
+def test_extract_nodes_rejects_duplicate_ids_for_distinct_nodes() -> None:
+    left = PlanNode(op="column", attrs={"name": "left"}, node_id="dup")
+    right = PlanNode(op="literal", attrs={"value": 7}, node_id="dup")
+    root = PlanNode(op="add", inputs=(left, right), node_id="root")
+
+    with pytest.raises(ValueError, match="duplicate canonical PlanNode.node_id"):
+        _backend_with_compiler(object())._extract_nodes_topological(root)
+
+
+def test_extract_nodes_allows_shared_plan_node_reference() -> None:
+    leaf = PlanNode(op="column", attrs={"name": "close"}, node_id="leaf")
+    root = PlanNode(op="add", inputs=(leaf, leaf), node_id="root")
+
+    nodes = _backend_with_compiler(object())._extract_nodes_topological(root)
+
+    assert [node["node_id"] for node in nodes] == ["leaf", "root"]
+    assert nodes[-1]["inputs"] == ["leaf", "leaf"]
+
+
 def test_extract_nodes_fails_closed_without_canonical_node_id() -> None:
     root = PlanNode(op="column", attrs={"name": "close"})
 

@@ -1,0 +1,43 @@
+task_id: Q2-P0-019
+base_sha: f0dc00138b8a2fd98ba6dbd26f0366c4b87b8f92
+commit_sha: SELF_REFERENTIAL_MANIFEST_COMMIT
+commit_sha_note: The manifest is committed atomically; its final SHA cannot be embedded without changing that SHA.
+owned_files:
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_plan_node_abi.py
+  - evidence/r2/Q2-P0-019-q-plan-node-abi.yaml
+modified_files:
+  - backend/q_backend/q_backend.py
+  - tests/q_backend/test_q_plan_node_abi.py
+  - evidence/r2/Q2-P0-019-q-plan-node-abi.yaml
+canonicals_touched:
+  - PlanNode canonical extraction ABI
+backends_touched:
+  - q
+reproduction:
+  defect: Distinct PlanNode objects sharing a node_id were silently collapsed during Q extraction.
+  expected: Shared references to the same PlanNode object remain valid; distinct objects with the same canonical ID fail closed.
+fix:
+  source: backend/q_backend/q_backend.py
+  behavior: Track node_id to PlanNode object identity and reject distinct-object collisions.
+tests_run:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_plan_node_abi.py -q -p no:xdist
+  result: 11 passed, 2 warnings
+syntax_compile: passed
+import_smoke: NOT_RUN
+diff_check: passed
+independent_review: NOT_RUN
+independent_review_note: Review agent launch failed repeatedly with API prompt-length errors; manual scoped review found no additional defect.
+tests_not_run:
+  - full repository compilation
+  - full registry bootstrap and duplicate-authority gates
+  - Q lowering/null/time parity
+  - four-backend parity
+  - PIT poison tests
+  - root CI
+  - live COS/S3 integration
+known_limitations:
+  - Q remains fail-closed and not production-certified.
+  - Evidence is current-tree local evidence only.
+  - Broad production-readiness gates remain NOT_RUN.
+production_certification: NOT_RUN
