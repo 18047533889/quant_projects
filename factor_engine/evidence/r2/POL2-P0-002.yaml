@@ -1,0 +1,38 @@
+task_id: POL2-P0-002
+base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
+commit_sha: null
+owned_files:
+  - factor_engine/cleaned_operators/common/polars_ts_rolling.py
+  - factor_engine/tests/backend/test_ts_corr_parity.py
+  - factor_engine/tests/test_ts_batch1_corr_cov_direct.py
+  - factor_engine/evidence/r2/POL2-P0-002.yaml
+modified_files:
+  - factor_engine/evidence/r2/POL2-P0-002.yaml
+canonicals_touched:
+  - ts_corr
+backends_touched:
+  - polars
+  - pandas_reference
+status: MANUAL_REVIEW
+reproduction:
+  recorded_defect: selectable Polars ts_corr formula remains wrong in another implementation
+  result: NOT_REPRODUCED
+  direct_authority: cleaned_operators.common.polars_ts_rolling.TSCorrNative
+  direct_fixture: large_offset_finite_pair_with_nan_inf
+  observed: selectable native output matched centered finite-pair oracle
+  limitation: full alternate selectable bridge path was not independently exposed by current planner configuration
+implementation_change: none
+oracle_tests:
+  - factor_engine/tests/backend/test_ts_corr_parity.py
+  - factor_engine/tests/test_ts_batch1_corr_cov_direct.py
+tests_run:
+  - command: POLARS_MAX_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q factor_engine/tests/backend/test_ts_corr_parity.py factor_engine/tests/test_ts_batch1_corr_cov_direct.py
+    result: 11 passed
+  - command: python3 -m py_compile factor_engine/cleaned_operators/common/polars_ts_rolling.py factor_engine/backend/polars_expr_emitter.py factor_engine/backend/polars_registry_bridge.py
+    result: passed
+tests_not_run:
+  - full repository suite
+known_limitations:
+  - alternate auto-generated registry bridge was not selected by OperatorRegistry for ts_corr
+  - no speculative formula change made
+evidence_generated_at: 2026-08-18T13:03:43Z
