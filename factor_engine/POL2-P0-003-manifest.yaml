@@ -1,7 +1,7 @@
 task_id: POL2-P0-003
 base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
-source_code_commit_sha: <filled-after-code-commit>
-manifest_commit_sha: <filled-after-manifest-commit>
+source_code_commit_sha: 30e6a0fc62c4ec1335620f562104f8ec450863b4
+manifest_commit_sha: null
 owned_files:
   - factor_engine/cleaned_operators/common/polars_ts_rolling.py
   - factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py
@@ -34,4 +34,4 @@ known_limitations:
   - No full datasets or broad suite were run.
   - Pandas remains the backend truth; the new large-offset fixture uses an independently centered known-correct numerical oracle.
 evidence_generated: []
-commit_sha_note: source_code_commit_sha is the code-only commit; manifest_commit_sha is the final commit containing this manifest, because a manifest cannot embed its own exact commit SHA without self-reference.
+commit_sha_note: source_code_commit_sha is the exact code/test/initial-manifest commit. manifest_commit_sha is null because the final manifest-only commit cannot embed its own exact SHA without self-reference; obtain that commit from git HEAD.
