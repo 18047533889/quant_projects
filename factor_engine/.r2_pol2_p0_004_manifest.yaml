@@ -1,6 +1,6 @@
 task_id: POL2-P0-004
 base_sha: c35e7326
-commit_sha: e37fc237
+commit_sha: 8ce311879fcacd82e1ed506db36135cf9551aacf
 owned_files:
   - factor_engine/cleaned_operators/polars_native/ts_batch1.py
   - factor_engine/cleaned_operators/research_polars.py
