@@ -371,22 +371,31 @@ def MFI(high, low, close, volume, window):
         frame = pl.DataFrame(
             {"high": high[column], "low": low[column], "close": close[column], "volume": volume[column]}
         )
-        typical = pl.when(3.0 != 0).then(((pl.col("high") + pl.col("low") + pl.col("close"))) / (3.0)).otherwise(None)
+        typical = ((pl.col("high") + pl.col("low") + pl.col("close")) / 3.0)
         raw = typical * pl.col("volume")
-        # pandas: tp.diff() 的 NaN 使 raw.where(cond) 的条件为 False → 0.0，之后
-        # rolling 跳过 NaN。polars 需把 diff 的 NaN 归一为 null，when 条件才能正确走 otherwise。
         delta = typical.diff().fill_nan(None)
-        positive = (
-            pl.when(delta > 0).then(raw).otherwise(0.0).rolling_sum(window, min_samples=window)
-        )
-        negative = (
-            pl.when(delta < 0).then(raw).otherwise(0.0).rolling_sum(window, min_samples=window)
-        )
-        expression = (
-            pl.when((negative == 0) & (positive > 0)).then(100.0)
-            .when((negative == 0) & (positive == 0)).then(50.0)
-            .otherwise(100.0 - 100.0 / (1.0 + positive / negative))
-        )
+        valid = raw.is_not_null() & delta.is_not_null()
+        positive_flow = pl.when(valid).then(
+            pl.when(delta > 0).then(raw).otherwise(0.0)
+        ).otherwise(None)
+        negative_flow = pl.when(valid).then(
+            pl.when(delta < 0).then(raw).otherwise(0.0)
+        ).otherwise(None)
+        positive = positive_flow.rolling_sum(window, min_samples=window)
+        negative = negative_flow.rolling_sum(window, min_samples=window)
+        ratio = pl.when(negative != 0).then(positive / negative).otherwise(None)
+        expression = pl.when(
+            negative.is_null() | positive.is_null()
+        ).then(None)
+        expression = expression.when(
+            (negative == 0) & (positive > 0)
+        ).then(100.0)
+        expression = expression.when(
+            (negative == 0) & (positive == 0)
+        ).then(50.0)
+        expression = expression.when(negative != 0).then(
+            100.0 - 100.0 / (1.0 + ratio)
+        ).otherwise(expression)
         values[column] = _one(frame, column, expression)
     return _result(close, values)
 

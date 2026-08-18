@@ -867,15 +867,27 @@ class MFINative(SeriesOperator):
             typical = (h + l_col + c_col) / 3.0
             raw_money_flow = typical * v_col
 
-            flow_direction = (typical - typical.shift(1)).sign()
-            positive_flow = pl.when(flow_direction > 0).then(raw_money_flow).otherwise(0.0)
-            negative_flow = pl.when(flow_direction < 0).then(raw_money_flow).otherwise(0.0)
+            flow_delta = typical - typical.shift(1)
+            valid = raw_money_flow.is_not_null() & flow_delta.is_not_null()
+            positive_flow = pl.when(valid).then(
+                pl.when(flow_delta > 0).then(raw_money_flow).otherwise(0.0)
+            ).otherwise(None)
+            negative_flow = pl.when(valid).then(
+                pl.when(flow_delta < 0).then(raw_money_flow).otherwise(0.0)
+            ).otherwise(None)
 
-            pos_sum = positive_flow.rolling_sum(window_size=w, min_samples=1)
-            neg_sum = negative_flow.rolling_sum(window_size=w, min_samples=1)
+            # Match the pandas authority: missing bars are excluded from both
+            # cohorts, and a complete window is required before emitting MFI.
+            pos_sum = positive_flow.rolling_sum(window_size=w, min_samples=w)
+            neg_sum = negative_flow.rolling_sum(window_size=w, min_samples=w)
 
             money_ratio = pl.when(neg_sum != 0).then(pos_sum / neg_sum).otherwise(None)
-            mfi = pl.when(neg_sum == 0).then(100.0).otherwise(100.0 - 100.0 / (1.0 + money_ratio))
+            mfi = pl.when(neg_sum.is_null() | pos_sum.is_null()).then(None)
+            mfi = mfi.when((neg_sum == 0) & (pos_sum > 0)).then(100.0)
+            mfi = mfi.when((neg_sum == 0) & (pos_sum == 0)).then(50.0)
+            mfi = mfi.when(neg_sum != 0).then(
+                100.0 - 100.0 / (1.0 + money_ratio)
+            ).otherwise(mfi)
             exprs.append(mfi.alias(c))
 
         return high.with_columns(exprs)
