@@ -351,14 +351,31 @@ class GroupPercentilePolars(SeriesOperator):
     """Polars 组内分位数"""
     metadata = OperatorMetadata(
         name="group_percentile", category="cross_sectional", description="组内分位数",
-        param_names=["x", "group", "p"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "p", "side", "missing_group_policy"],
+        return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, p: float = 0.5, **kwargs) -> pl.DataFrame:
-        q = float(kwargs.get("quantile", p))
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        group: pl.DataFrame = None,
+        p: float = 0.5,
+        side: str = "top",
+        missing_group_policy: str = "raise",
+        **kwargs,
+    ) -> pl.DataFrame:
+        q = float(p)
+        if not 0.0 < q <= 1.0:
+            raise ValueError("p must satisfy 0 < p <= 1")
+        if side not in {"top", "bottom"}:
+            raise ValueError("side must be 'top' or 'bottom'")
+        if missing_group_policy not in {"raise", "null", "global"}:
+            raise ValueError(
+                "missing_group_policy must be 'raise', 'null', or 'global'"
+            )
 
         def _pct(row_x, row_g):
-            out = np.full_like(row_x, np.nan)
+            out = np.full_like(row_x, np.nan, dtype=float)
             mask = ~np.isnan(row_x)
             if not np.any(mask):
                 return out
@@ -366,11 +383,24 @@ class GroupPercentilePolars(SeriesOperator):
             def _indicator(vals: np.ndarray) -> np.ndarray:
                 if len(vals) == 0:
                     return np.array([], dtype=float)
-                ranks = np.argsort(np.argsort(vals, kind="mergesort"), kind="mergesort") + 1.0
-                pct = ranks / len(vals)
-                return (pct <= q).astype(float)
+                order = np.argsort(vals, kind="mergesort")
+                ranks = np.empty(len(vals), dtype=float)
+                i = 0
+                while i < len(vals):
+                    j = i
+                    while j + 1 < len(vals) and vals[order[j + 1]] == vals[order[i]]:
+                        j += 1
+                    ranks[order[i : j + 1]] = 0.5 * (i + j) + 1.0
+                    i = j + 1
+                if side == "bottom":
+                    ranks = len(vals) + 1.0 - ranks
+                return (ranks / len(vals) <= q).astype(float)
 
             if row_g is None or np.all(np.isnan(row_g)):
+                if missing_group_policy == "raise":
+                    raise ValueError("group labels are missing")
+                if missing_group_policy == "null":
+                    return out
                 out[mask] = _indicator(row_x[mask])
                 return out
             for g in np.unique(row_g[~np.isnan(row_g)]):

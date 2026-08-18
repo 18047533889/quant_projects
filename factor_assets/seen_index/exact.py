@@ -76,6 +76,17 @@ class SeenIndex:
         if canonical_hash in self._seen:
             return self._seen[canonical_hash]
 
+        # A factor ID is an immutable identity, so a different canonical hash
+        # cannot be recorded under an already-seen ID.
+        existing = next(
+            (record for record in self._seen.values() if record.factor_id == factor_id),
+            None,
+        )
+        if existing is not None:
+            raise ValueError(
+                f"factor_id already recorded with canonical_hash {existing.canonical_hash}"
+            )
+
         now = datetime.now(timezone.utc).isoformat()
 
         record = SeenRecord(

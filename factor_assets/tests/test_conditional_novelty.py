@@ -4,6 +4,7 @@ Tests for conditional novelty with result identity and reverse cache.
 
 import pytest
 from factor_assets.novelty.conditional import (
+    ConditionalNoveltyProvider,
     NoveltyResult,
     ResultIdentity,
     ResultIdentityCache,
@@ -100,7 +101,7 @@ class TestResultIdentityCache:
 
         cache.add(result_id)
 
-        equivalents = cache.find_equivalent(result_id.result_hash)
+        equivalents = cache.find_equivalent(result_id)
         assert len(equivalents) == 1
         assert equivalents[0] == "factor1"
 
@@ -131,7 +132,7 @@ class TestResultIdentityCache:
         cache.add(result_id1)
         cache.add(result_id2)
 
-        equivalents = cache.find_equivalent(result_id1.result_hash)
+        equivalents = cache.find_equivalent(result_id1)
         assert len(equivalents) == 2
         assert "factor1" in equivalents
         assert "factor2" in equivalents
@@ -149,11 +150,11 @@ class TestResultIdentityCache:
             num_observations=1000,
         )
 
-        assert not cache.has_equivalent(result_id.result_hash)
+        assert not cache.has_equivalent(result_id)
 
         cache.add(result_id)
 
-        assert cache.has_equivalent(result_id.result_hash)
+        assert cache.has_equivalent(result_id)
 
     def test_no_duplicates(self):
         """Test that adding same factor twice doesn't duplicate."""
@@ -171,7 +172,7 @@ class TestResultIdentityCache:
         cache.add(result_id)
         cache.add(result_id)  # Add again
 
-        equivalents = cache.find_equivalent(result_id.result_hash)
+        equivalents = cache.find_equivalent(result_id)
         assert len(equivalents) == 1
 
     def test_count(self):
@@ -204,6 +205,31 @@ class TestResultIdentityCache:
         cache.add(result_id2)
         assert cache.count() == 2
 
+    def test_same_hash_in_different_context_is_not_equivalent(self):
+        cache = ResultIdentityCache()
+        base = ResultIdentity.from_values(
+            factor_id="factor1",
+            values=b"same_bytes",
+            universe_ref="top3000",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+        )
+        different_context = ResultIdentity.from_values(
+            factor_id="factor2",
+            values=b"same_bytes",
+            universe_ref="top500",
+            period_start="2023-01-01",
+            period_end="2023-12-31",
+            num_observations=1000,
+        )
+
+        cache.add(base)
+
+        assert base.result_hash == different_context.result_hash
+        assert cache.find_equivalent(different_context) == ()
+        assert not cache.has_equivalent(different_context)
+
     def test_clear(self):
         """Test clearing the cache."""
         cache = ResultIdentityCache()
@@ -222,7 +248,7 @@ class TestResultIdentityCache:
 
         cache.clear()
         assert cache.count() == 0
-        assert not cache.has_equivalent(result_id.result_hash)
+        assert not cache.has_equivalent(result_id)
 
 
 class TestSimpleConditionalNoveltyAssessor:

@@ -5,6 +5,8 @@ Tests multi-level caching, compression, invalidation, and warming strategies.
 """
 
 import json
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -64,8 +66,15 @@ class TestCompression:
         assert isinstance(comp, NoCompressor)
 
 
-class TestMemoryCacheLayer:
-    """Test L1 memory cache layer."""
+    def test_no_compression_round_trip(self):
+        cache = MultiLevelCache(
+            compression="none",
+            enable_l1=True,
+            enable_l2=False,
+            enable_l3=False,
+        )
+        assert cache.put("key", "value")
+        assert cache.get("key") == "value"
 
     def test_basic_operations(self):
         """Test get, put, and invalidate."""
@@ -130,7 +139,53 @@ class TestMemoryCacheLayer:
         clock.now = 1010.0
         assert cache.get("key1") is None
 
-    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf")])
+    def test_direct_put_captures_origin_before_slow_serialization(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def slow_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 5.0
+            return payload
+
+        monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+        cache = MemoryCacheLayer(
+            max_size_bytes=1024 * 1024,
+            compressor=create_compressor("none"),
+            enable_compression=False,
+        )
+
+        assert cache.put("key", "value", ttl_seconds=10.0)
+        result = cache.get("key")
+        assert result is not None
+        assert result[1].created_at == 1000.0
+        assert result[1].is_expired(1010.0)
+
+    def test_direct_put_rejects_ttl_exhausted_during_serialization(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def slow_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 10.0
+            return payload
+
+        cache = MemoryCacheLayer(
+            max_size_bytes=1024 * 1024,
+            compressor=create_compressor("none"),
+            enable_compression=False,
+        )
+        assert cache.put("key", "old")
+
+        monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+        assert cache.put("key", "new", ttl_seconds=10.0) is False
+        result = cache.get("key")
+        assert result is not None
+        assert result[0] == "old"
+
+    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf"), True, False])
     def test_nonpositive_or_nonfinite_ttl_is_rejected(self, ttl):
         cache = MemoryCacheLayer(
             max_size_bytes=1024 * 1024,
@@ -140,7 +195,6 @@ class TestMemoryCacheLayer:
 
         assert cache.put("key1", "value", ttl_seconds=ttl) is False
         assert cache.get("key1") is None
-
     @pytest.mark.parametrize("created_at", [float("nan"), float("inf"), -float("inf")])
     def test_nonfinite_creation_time_expires_fail_closed(self, created_at):
         metadata = CacheMetadata(
@@ -212,7 +266,21 @@ class TestMemoryCacheLayer:
         assert cache.get("key3") is not None
         assert cache.get("key4") is not None
 
-    def test_compression_savings(self):
+    def test_dependency_invalidation_snapshots_caller_set(self):
+        """Caller mutation must not remove stored dependency edges."""
+        dependencies = {"source"}
+        cache = MemoryCacheLayer(
+            max_size_bytes=1024 * 1024,
+            compressor=create_compressor("none"),
+            enable_compression=False,
+        )
+
+        assert cache.put("key", "value", dependencies=dependencies)
+        dependencies.clear()
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert cache.get("key") is None
+
         """Test that compression reduces memory usage."""
         compressor = create_compressor("zlib")
 
@@ -262,6 +330,309 @@ class TestDiskCacheLayer:
             value, metadata = result
             np.testing.assert_array_equal(value, data)
 
+    def test_malformed_record_is_quarantined(self):
+        """Malformed single-file records must not remain readable."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "value")
+            cache_path = cache._key_path("key1")
+            cache_path.write_bytes(b"{not-json")
+
+            assert cache.get("key1") is None
+            assert not cache_path.exists()
+
+    def test_dependency_invalidation_uses_physical_record_when_metadata_key_is_corrupt(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "value", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            metadata, compressed = cache._decode_record(cache_path.read_bytes())
+            metadata.key = "forged-key"
+            cache_path.write_bytes(cache._encode_record(metadata, compressed))
+
+            assert cache.invalidate_dependencies("dep") == 1
+            assert not cache_path.exists()
+            assert cache.get("key1") is None
+
+    def test_dependency_invalidation_preserves_replacement_after_scan(self, monkeypatch):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "old", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            scanned = threading.Event()
+            resume = threading.Event()
+            original = cache._decode_record
+            calls = [0]
+
+            def pause_after_scan(raw):
+                decoded = original(raw)
+                if calls[0] == 0:
+                    calls[0] += 1
+                    scanned.set()
+                    assert resume.wait(timeout=2.0)
+                return decoded
+
+            monkeypatch.setattr(cache, "_decode_record", pause_after_scan)
+            results = []
+            worker = threading.Thread(target=lambda: results.append(
+                cache._invalidate_dependencies_unlocked("dep")))
+            worker.start()
+            assert scanned.wait(timeout=2.0)
+            assert cache.put("key1", "new", dependencies={"other"})
+            resume.set()
+            worker.join(timeout=2.0)
+
+            assert not worker.is_alive()
+            assert results == [0]
+            assert cache.get("key1")[0] == "new"
+
+    def test_malformed_quarantine_preserves_replacement_after_scan(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "old")
+            cache_path = cache._key_path("key1")
+            cache_path.write_bytes(b"{not-json")
+            assert cache.get("key1") is None
+            assert not cache_path.exists()
+            assert cache.put("key1", "new")
+            assert cache.get("key1")[0] == "new"
+
+    def test_dependency_invalidation_preserves_value_only_replacement(self, monkeypatch):
+        """A changed immutable record must survive cleanup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "old", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            scanned = threading.Event()
+            resume = threading.Event()
+            original = cache._decode_record
+            calls = [0]
+
+            def pause_after_scan(raw):
+                decoded = original(raw)
+                if calls[0] == 0:
+                    calls[0] += 1
+                    scanned.set()
+                    assert resume.wait(timeout=2.0)
+                return decoded
+
+            monkeypatch.setattr(cache, "_decode_record", pause_after_scan)
+            results = []
+            worker = threading.Thread(target=lambda: results.append(
+                cache._invalidate_dependencies_unlocked("dep")))
+            worker.start()
+            assert scanned.wait(timeout=2.0)
+            cache_path.write_bytes(b"replacement")
+            resume.set()
+            worker.join(timeout=2.0)
+
+            assert not worker.is_alive()
+            assert results == [0]
+            assert cache_path.read_bytes() == b"replacement"
+
+    def test_malformed_quarantine_preserves_value_only_replacement(self):
+        """Malformed immutable records must not delete a replacement."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "old", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            cache_path.write_bytes(b"{not-json")
+            assert cache.invalidate_dependencies("dep") == 0
+            cache_path.write_bytes(b"replacement")
+            assert cache_path.read_bytes() == b"replacement"
+
+
+    def test_direct_put_captures_origin_before_slow_serialization(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def slow_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 5.0
+            return payload
+
+        monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key", "value", ttl_seconds=10.0)
+            result = cache.get("key")
+            assert result is not None
+            assert result[1].created_at == 1000.0
+            assert result[1].is_expired(1010.0)
+
+    def test_direct_put_rejects_ttl_exhausted_during_serialization(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def slow_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 10.0
+            return payload
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key", "old")
+            monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+            assert cache.put("key", "new", ttl_seconds=10.0) is False
+            result = cache.get("key")
+            assert result is not None
+            assert result[0] == "old"
+
+    def test_equivalent_roots_share_entry_lock(self, tmp_path):
+        real_root = tmp_path / "cache"
+        real_root.mkdir()
+        alias_root = tmp_path / "cache-alias"
+        alias_root.symlink_to(real_root, target_is_directory=True)
+        first = DiskCacheLayer(real_root, create_compressor("none"))
+        second = DiskCacheLayer(alias_root, create_compressor("none"))
+
+        assert first._entry_lock(first._key_path("key")) is second._entry_lock(
+            second._key_path("key")
+        )
+
+    def test_clear_waits_for_same_process_writer(self, monkeypatch):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            entered = threading.Event()
+            release = threading.Event()
+            original_compress = cache.compressor.compress
+
+            def pause_compress(data):
+                entered.set()
+                assert release.wait(timeout=2.0)
+                return original_compress(data)
+
+            monkeypatch.setattr(cache.compressor, "compress", pause_compress)
+            writer_result = []
+            writer = threading.Thread(
+                target=lambda: writer_result.append(cache.put("key", "value"))
+            )
+            writer.start()
+            assert entered.wait(timeout=2.0)
+
+            clear_done = threading.Event()
+            clearer = threading.Thread(
+                target=lambda: (cache.clear(), clear_done.set())
+            )
+            clearer.start()
+            assert not clear_done.wait(timeout=0.1)
+
+            release.set()
+            writer.join(timeout=2.0)
+            clearer.join(timeout=2.0)
+
+            assert not writer.is_alive()
+            assert not clearer.is_alive()
+            assert writer_result == [True]
+            assert cache.get("key") is None
+
+    @pytest.mark.skipif(cache_v2_module.fcntl is None, reason="requires POSIX flock")
+    def test_clear_preserves_process_lock_inode_and_blocks_other_process(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cache = DiskCacheLayer(root, create_compressor("none"))
+            assert cache.put("key", "value")
+            lock_path = root / ".cache.lock"
+            before = lock_path.stat().st_ino
+            ready = root / "ready"
+            release = root / "release"
+            code = r'''
+import sys, time
+from pathlib import Path
+from quant_evaluator.runtime.cache_v2 import DiskCacheLayer, create_compressor
+root, ready, release = map(Path, sys.argv[1:])
+cache = DiskCacheLayer(root, create_compressor("none"))
+with cache._process_lock():
+    ready.write_text("ready", encoding="utf-8")
+    while not release.exists():
+        time.sleep(0.002)
+'''
+            holder = subprocess.Popen(
+                [sys.executable, "-c", code, str(root), str(ready), str(release)],
+                cwd=Path(__file__).resolve().parents[2],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            deadline = time.monotonic() + 5.0
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.002)
+            assert ready.exists(), holder.stderr.read() if holder.stderr else "lock holder failed"
+
+            clear_done = threading.Event()
+            clearer = threading.Thread(target=lambda: (cache.clear(), clear_done.set()))
+            clearer.start()
+            assert not clear_done.wait(timeout=0.1)
+            release.write_text("release", encoding="utf-8")
+            clearer.join(timeout=5.0)
+            stdout, stderr = holder.communicate(timeout=5.0)
+
+            assert holder.returncode == 0, f"{stdout}\n{stderr}"
+            assert not clearer.is_alive()
+            assert clear_done.is_set()
+            assert lock_path.stat().st_ino == before
+            assert cache.get("key") is None
+
+    @pytest.mark.skipif(cache_v2_module.fcntl is None, reason="requires POSIX flock")
+    def test_process_lock_is_reentrant_for_same_thread_and_root(self, tmp_path):
+        first = DiskCacheLayer(tmp_path, create_compressor("none"))
+        second = DiskCacheLayer(tmp_path, create_compressor("none"))
+
+        with first._process_lock():
+            with second._process_lock():
+                assert first.put("key", "value")
+
+        assert first.get("key")[0] == "value"
+
+    def test_same_root_instances_serialize_stale_cleanup_and_replacement(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            second = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert first.put("key", "old", ttl_seconds=1.0)
+            clock.now = 1002.0
+
+            reader_started = threading.Event()
+            release_reader = threading.Event()
+            original_decode = first._decode_record
+
+            def pause_decode(raw):
+                decoded = original_decode(raw)
+                if not reader_started.is_set():
+                    reader_started.set()
+                    assert release_reader.wait(timeout=2.0)
+                return decoded
+
+            monkeypatch.setattr(first, "_decode_record", pause_decode)
+            reader_result = []
+            reader = threading.Thread(target=lambda: reader_result.append(first.get("key")))
+            writer_result = []
+            writer = threading.Thread(target=lambda: writer_result.append(second.put("key", "new")))
+            reader.start()
+            assert reader_started.wait(timeout=2.0)
+            writer.start()
+            release_reader.set()
+            reader.join(timeout=2.0)
+            writer.join(timeout=2.0)
+
+            assert not reader.is_alive()
+            assert not writer.is_alive()
+            assert writer_result == [True]
+            assert first.get("key")[0] == "new"
+
+    @pytest.mark.parametrize("created_at", [989.0, 1001.0, float("nan"), True, False])
+    def test_invalid_origin_is_rejected(self, monkeypatch, created_at):
+        monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)
+        cache = DiskCacheLayer(Path(tempfile.mkdtemp()), create_compressor("none"))
+        try:
+            assert cache.put("key", "value", ttl_seconds=10.0, created_at=created_at) is False
+            assert cache.get("key") is None
+        finally:
+            cache.clear()
+
     def test_checksum_verification(self):
         """Test that corrupted cache files are rejected."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -291,13 +662,61 @@ class TestDiskCacheLayer:
                 compressor=compressor,
             )
 
-            # Simulate write failure by making directory read-only
             data = {"value": 42}
             cache.put("key1", data)
 
             # Verify no temp files left behind
             temp_files = list(Path(tmpdir).rglob(".tmp.*"))
             assert len(temp_files) == 0
+
+    def test_failed_record_replace_preserves_previous_record(self, monkeypatch, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        assert cache.put("key", "old")
+        original_replace = Path.replace
+
+        def fail_record_replace(path, target):
+            if path.name.startswith(".tmp.") and path.suffix == ".cache":
+                raise OSError("injected replace failure")
+            return original_replace(path, target)
+
+        monkeypatch.setattr(Path, "replace", fail_record_replace)
+        assert cache.put("key", "new") is False
+        assert cache.get("key")[0] == "old"
+        assert list(tmp_path.rglob(".tmp.*.cache")) == []
+
+    def test_failed_record_fsync_preserves_previous_record(self, monkeypatch, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        assert cache.put("key", "old")
+        original_fsync = cache_v2_module.os.fsync
+        calls = [0]
+
+        def fail_first_fsync(fd):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise OSError("injected file fsync failure")
+            return original_fsync(fd)
+
+        monkeypatch.setattr(cache_v2_module.os, "fsync", fail_first_fsync)
+        assert cache.put("key", "new") is False
+        assert cache.get("key")[0] == "old"
+        assert list(tmp_path.rglob(".tmp.*.cache")) == []
+
+    def test_directory_fsync_unavailable_keeps_published_record(self, monkeypatch, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        assert cache.put("key", "old")
+        original_fsync = cache_v2_module.os.fsync
+        calls = [0]
+
+        def fail_directory_fsync(fd):
+            calls[0] += 1
+            if calls[0] == 2:
+                raise OSError("injected directory fsync failure")
+            return original_fsync(fd)
+
+        monkeypatch.setattr(cache_v2_module.os, "fsync", fail_directory_fsync)
+        assert cache.put("key", "new") is True
+        assert cache.get("key")[0] == "new"
+        assert list(tmp_path.rglob(".tmp.*.cache")) == []
 
 
 class FrozenClock:
@@ -342,14 +761,14 @@ class FakeRedisLayer:
     def invalidate(self, key):
         return self.entries.pop(key, None) is not None
 
-    def invalidate_dependencies(self, dependency):
-        keys = [
+    def invalidate_dependencies(self, dependency, *, return_keys=False):
+        keys = {
             key for key, (_, metadata) in self.entries.items()
             if dependency in metadata.dependencies
-        ]
+        }
         for key in keys:
             self.invalidate(key)
-        return len(keys)
+        return keys if return_keys else len(keys)
 
     def clear(self):
         self.entries.clear()
@@ -383,6 +802,30 @@ class FakeRedisClient:
                     del self.values[variant]
                     removed += 1
         return removed
+
+    def eval(self, script, numkeys, meta_key, value_key, *args):
+        meta = self.hgetall(meta_key)
+        raw_data = meta.get(b"data")
+        if raw_data is None:
+            raw_data = meta.get("data")
+        if "generation" in script:
+            if not raw_data:
+                return 0
+            if isinstance(raw_data, bytes):
+                raw_data = raw_data.decode("utf-8")
+            current = json.loads(raw_data).get("generation", "")
+            if not args or current != args[0]:
+                return 0
+        else:
+            mode, expected = args
+            if mode == "missing":
+                if raw_data is not None:
+                    return 0
+            elif raw_data != expected and (
+                not isinstance(raw_data, bytes) or raw_data.decode("utf-8") != expected
+            ):
+                return 0
+        return self.delete(meta_key, value_key)
 
     def pipeline(self):
         self._pipeline_commands = []
@@ -482,6 +925,38 @@ class TestRedisCacheLayer:
             ("expire", 1),
         ]
 
+    def test_direct_put_captures_origin_before_slow_serialization(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def slow_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 5.0
+            return payload
+
+        monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+        layer = self._layer()
+        assert layer.put("key", "value", ttl_seconds=10.0)
+        metadata = json.loads(layer.client.commands[1][2]["data"])
+        assert metadata["created_at"] == 1000.0
+        assert [command[2] for command in layer.client.commands if command[0] == "setex"] == [5]
+
+    def test_put_rejects_when_serialization_consumes_ttl(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        original_dumps = cache_v2_module.pickle.dumps
+
+        def exhausted_dumps(value, protocol=None):
+            payload = original_dumps(value, protocol=protocol)
+            clock.now += 10.0
+            return payload
+
+        monkeypatch.setattr(cache_v2_module.pickle, "dumps", exhausted_dumps)
+        layer = self._layer()
+        assert layer.put("key", "value", ttl_seconds=10.0) is False
+        assert layer.client.commands == []
+
     def test_promotion_uses_remaining_absolute_ttl(self, monkeypatch):
         clock = FrozenClock(1009.2)
         monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
@@ -493,7 +968,7 @@ class TestRedisCacheLayer:
         assert metadata["created_at"] == 1000.0
         assert metadata["ttl_seconds"] == 10.0
 
-    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf")])
+    @pytest.mark.parametrize("ttl", [0.0, -1.0, float("nan"), float("inf"), True, False])
     def test_nonpositive_or_nonfinite_ttl_is_rejected(self, monkeypatch, ttl):
         monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)
         layer = self._layer()
@@ -686,6 +1161,34 @@ class TestMultiLevelCache:
             assert cache.l1.get("key1") is None
             assert cache.l2.get("key1") is None
 
+    def test_l2_promotion_rechecks_expiry_after_slow_promotion(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=1.0,
+                disk_root=Path(tmpdir),
+                compression="zlib",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            cache.put("key1", "value", ttl_seconds=10.0)
+            cache.l1.clear()
+            clock.now = 1009.0
+            original_put = cache.l1.put
+
+            def slow_promotion(*args, **kwargs):
+                clock.now = 1010.0
+                return original_put(*args, **kwargs)
+
+            monkeypatch.setattr(cache.l1, "put", slow_promotion)
+            assert cache.get("key1") is None
+            assert cache.l1.get("key1") is None
+            assert cache.l2.get("key1") is None
+            assert cache.get_stats()["l2_hits"] == 0
+            assert cache.get_stats()["misses"] == 1
+
     def test_l3_promotion_preserves_absolute_expiry(self, monkeypatch):
         """L3 promotion into L2/L1 must preserve the original expiry."""
         clock = FrozenClock(2000.0)
@@ -713,8 +1216,182 @@ class TestMultiLevelCache:
             assert cache.l2.get("key1") is None
             assert cache.l3.get("key1") is None
 
+    def test_l3_promotion_rechecks_expiry_after_slow_promotion(self, monkeypatch):
+        clock = FrozenClock(2000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            compression="zlib",
+            enable_l1=True,
+            enable_l2=False,
+        )
+        cache.l3 = FakeRedisLayer()
+        cache.l3.put("key1", "value", ttl_seconds=10.0)
+        clock.now = 2009.0
+        original_put = cache.l1.put
+
+        def slow_promotion(*args, **kwargs):
+            clock.now = 2010.0
+            return original_put(*args, **kwargs)
+
+        monkeypatch.setattr(cache.l1, "put", slow_promotion)
+        assert cache.get("key1") is None
+        assert cache.l1.get("key1") is None
+        assert cache.l3.get("key1") is None
+        assert cache.get_stats()["l3_hits"] == 0
+        assert cache.get_stats()["misses"] == 1
+
+    def test_dependency_invalidation_transitively_removes_derived_entries(self):
+        """Invalidating a raw key also removes dependent derived keys."""
+        cache = MultiLevelCache(
+            compression="none",
+            enable_l1=True,
+            enable_l2=False,
+            enable_l3=False,
+        )
+        assert cache.put("d1", "derived-one", dependencies={"raw"})
+        assert cache.put("d2", "derived-two", dependencies={"d1"})
+
+        assert cache.invalidate_dependency("raw") == 2
+        assert cache.get("d1") is None
+        assert cache.get("d2") is None
+
+    def test_dependency_invalidation_counts_logical_keys_once(self):
+        """The coordinator counts a key once across L1 and L2."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = MultiLevelCache(
+                memory_size_mb=1.0,
+                disk_root=Path(tmpdir),
+                compression="none",
+                enable_l1=True,
+                enable_l2=True,
+            )
+            assert cache.put("key1", "stale", dependencies={"source"})
+            assert cache.invalidate_dependency("source") == 1
+            assert cache.get_stats()["invalidations"] == 1
+
+    def test_shared_l2_invalidation_expires_other_coordinator_l1(self, tmp_path):
+        """A durable invalidation epoch prevents stale sibling L1 hits."""
+        first = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        second = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert first.put("key1", "stale", dependencies={"source"})
+        assert second.get("key1") == "stale"
+        assert second.l1.get("key1")[0] == "stale"
+
+        assert first.invalidate_dependency("source") == 1
+
+        assert second.get("key1") is None
+        assert second.l1.get("key1") is None
+
+    @pytest.mark.skipif(cache_v2_module.fcntl is None, reason="requires POSIX flock")
+    def test_shared_l2_invalidation_expires_parent_l1_across_processes(self, tmp_path):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.put("key1", "stale", dependencies={"source"})
+        assert cache.get("key1") == "stale"
+        assert cache.l1.get("key1")[0] == "stale"
+
+        code = r'''
+import sys
+from pathlib import Path
+from quant_evaluator.runtime.cache_v2 import MultiLevelCache
+cache = MultiLevelCache(
+    memory_size_mb=1.0,
+    disk_root=Path(sys.argv[1]),
+    compression="none",
+    enable_l1=True,
+    enable_l2=True,
+)
+removed = cache.invalidate_dependency("source")
+raise SystemExit(0 if removed == 1 else 2)
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(tmp_path)],
+            cwd=Path(__file__).resolve().parents[2],
+            env={**cache_v2_module.os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+            text=True,
+            capture_output=True,
+            timeout=10.0,
+        )
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+        assert cache.get("key1") is None
+        assert cache.l1.get("key1") is None
+
+    def test_forged_l2_metadata_key_cannot_redirect_dependency_walk(self, tmp_path):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.l1.put("victim", "must-survive", dependencies={"forged"})
+        assert cache.l2.put("actual", "corrupt", dependencies={"source"})
+        value_path = cache.l2._key_path("actual")
+        metadata, compressed = cache.l2._decode_record(value_path.read_bytes())
+        metadata.key = "forged"
+        value_path.write_bytes(cache.l2._encode_record(metadata, compressed))
+
+        assert cache.invalidate_dependency("source") == 0
+        assert not value_path.exists()
+        assert cache.l1.get("victim")[0] == "must-survive"
+        assert cache.get_stats()["invalidations"] == 0
+
+    def test_forged_l3_metadata_key_cannot_redirect_dependency_walk(self):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            compression="none",
+            enable_l1=True,
+            enable_l2=False,
+            enable_l3=False,
+        )
+        assert cache.l1.put("victim", "must-survive", dependencies={"forged"})
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:actual:meta"
+        metadata = CacheMetadata(
+            key="forged",
+            created_at=1000.0,
+            last_accessed=1000.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+        )
+        layer.client = FakeRedisPipelineClient(
+            hashes={physical_meta: {b"data": json.dumps(metadata.to_dict()).encode()}},
+            values={b"cache:actual": b"corrupt"},
+        )
+        cache.l3 = layer
+
+        assert cache.invalidate_dependency("source") == 0
+        assert physical_meta not in layer.client.hashes
+        assert b"cache:actual" not in layer.client.values
+        assert cache.l1.get("victim")[0] == "must-survive"
+        assert cache.get_stats()["invalidations"] == 0
+
     def test_dependency_invalidation_removes_l2_only_entry(self):
-        """A dependency invalidation must remove entries even when only L2 has them."""
+        """An L2-only entry is removed and cannot be promoted again."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = MultiLevelCache(
                 memory_size_mb=1.0,
@@ -830,7 +1507,122 @@ class TestMultiLevelCache:
         assert cache.get("key1") is None
         assert cache.l1.get("key1") is None
 
-    def test_dependency_invalidation_continues_after_corrupt_l3_metadata(self):
+    def test_dependency_invalidation_quarantines_empty_l3_metadata(self):
+        """Empty Redis metadata must quarantine its physical value pair."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        empty_meta = b"cache:empty:meta"
+        matching_meta = b"cache:matching:meta"
+        matching = CacheMetadata(
+            key="matching",
+            created_at=1000.0,
+            last_accessed=1000.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+        )
+        layer.client = FakeRedisPipelineClient(
+            hashes={
+                empty_meta: {},
+                matching_meta: {b"data": json.dumps(matching.to_dict()).encode()},
+            },
+            values={
+                b"cache:empty": b"orphan",
+                b"cache:matching": b"stale",
+            },
+        )
+
+        assert layer.invalidate_dependencies("source") == 1
+        assert empty_meta not in layer.client.hashes
+        assert b"cache:empty" not in layer.client.values
+        assert matching_meta not in layer.client.hashes
+        assert b"cache:matching" not in layer.client.values
+
+    def test_dependency_invalidation_quarantines_empty_data_field(self):
+        """An empty Redis metadata payload must quarantine its physical pair."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:empty-data:meta"
+        layer.client = FakeRedisPipelineClient(
+            hashes={physical_meta: {b"data": b""}},
+            values={b"cache:empty-data": b"orphan"},
+        )
+
+        assert layer.invalidate_dependencies("source") == 0
+        assert physical_meta not in layer.client.hashes
+        assert b"cache:empty-data" not in layer.client.values
+
+        """A replacement after scan must not be deleted by stale invalidation."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:actual:meta"
+        old = CacheMetadata(
+            key="actual", created_at=1000.0, last_accessed=1000.0,
+            access_count=0, size_bytes=1, compressed_size=1, ttl_seconds=None,
+            dependencies={"source"}, generation="old",
+        )
+        new = CacheMetadata(
+            key="actual", created_at=1001.0, last_accessed=1001.0,
+            access_count=0, size_bytes=1, compressed_size=1, ttl_seconds=None,
+            dependencies={"other"}, generation="new",
+        )
+        client = FakeRedisPipelineClient(
+            hashes={physical_meta: {b"data": json.dumps(old.to_dict()).encode()}},
+            values={b"cache:actual": b"old"},
+        )
+        layer.client = client
+        original_hgetall = client.hgetall
+
+        def hgetall_then_replace(key):
+            result = original_hgetall(key)
+            client.hashes[physical_meta] = {b"data": json.dumps(new.to_dict()).encode()}
+            client.values[b"cache:actual"] = b"new"
+            return result
+
+        client.hgetall = hgetall_then_replace
+        assert layer.invalidate_dependencies("source") == 0
+        assert physical_meta in client.hashes
+        assert client.values[b"cache:actual"] == b"new"
+
+    def test_dependency_invalidation_uses_physical_key_for_forged_redis_metadata(self):
+        """A forged logical key must not redirect physical deletion."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:actual:meta"
+        metadata = CacheMetadata(
+            key="forged",
+            created_at=1000.0,
+            last_accessed=1000.0,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+        )
+        layer.client = FakeRedisPipelineClient(
+            hashes={physical_meta: {b"data": json.dumps(metadata.to_dict()).encode()}},
+            values={
+                b"cache:actual": b"value",
+                b"cache:forged": b"must-survive",
+            },
+        )
+
+        assert layer.invalidate_dependencies("source") == 1
+        assert physical_meta not in layer.client.hashes
+        assert b"cache:actual" not in layer.client.values
+        assert b"cache:forged" in layer.client.values
+
+    def test_corrupt_redis_metadata_is_quarantined(self):
         """Corrupt Redis metadata is quarantined without blocking later matches."""
         compressor = create_compressor("zlib")
         layer = object.__new__(RedisCacheLayer)
@@ -882,7 +1674,68 @@ class TestMultiLevelCache:
         assert unrelated_meta in layer.client.hashes
         assert b"cache:unrelated" in layer.client.values
 
-    def test_cache_miss(self):
+    def test_corrupt_redis_metadata_preserves_replacement_race(self):
+        """A replacement after corrupt metadata inspection must survive quarantine."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:corrupt:meta"
+        replacement = CacheMetadata(
+            key="corrupt", created_at=1001.0, last_accessed=1001.0,
+            access_count=0, size_bytes=1, compressed_size=1, ttl_seconds=None,
+            dependencies={"other"}, generation="replacement",
+        )
+        client = FakeRedisPipelineClient(
+            hashes={physical_meta: {b"data": b"{not-json"}},
+            values={b"cache:corrupt": b"replacement"},
+        )
+        layer.client = client
+        original_hgetall = client.hgetall
+
+        def hgetall_then_replace(key):
+            result = original_hgetall(key)
+            client.hashes[physical_meta] = {
+                b"data": json.dumps(replacement.to_dict()).encode()
+            }
+            return result
+
+        client.hgetall = hgetall_then_replace
+        assert layer.invalidate_dependencies("source") == 0
+        assert physical_meta in client.hashes
+        assert client.values[b"cache:corrupt"] == b"replacement"
+
+    def test_empty_redis_metadata_preserves_replacement_race(self):
+        """A replacement after empty metadata inspection must survive quarantine."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:empty-race:meta"
+        replacement = CacheMetadata(
+            key="empty-race", created_at=1001.0, last_accessed=1001.0,
+            access_count=0, size_bytes=1, compressed_size=1, ttl_seconds=None,
+            dependencies={"other"}, generation="replacement",
+        )
+        client = FakeRedisPipelineClient(
+            hashes={physical_meta: {}},
+            values={b"cache:empty-race": b"replacement"},
+        )
+        layer.client = client
+        original_hgetall = client.hgetall
+
+        def hgetall_then_replace(key):
+            result = original_hgetall(key)
+            client.hashes[physical_meta] = {
+                b"data": json.dumps(replacement.to_dict()).encode()
+            }
+            return result
+
+        client.hgetall = hgetall_then_replace
+        assert layer.invalidate_dependencies("source") == 0
+        assert physical_meta in client.hashes
+        assert client.values[b"cache:empty-race"] == b"replacement"
+
         """Test cache miss across all layers."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = MultiLevelCache(

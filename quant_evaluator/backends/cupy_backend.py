@@ -152,6 +152,15 @@ class GPUBackend:
 
             if label_validity is not None:
                 label_validity_gpu = cp.asarray(label_validity)
+                if label_validity_gpu.ndim == 1:
+                    label_validity_gpu = cp.broadcast_to(
+                        label_validity_gpu[:, cp.newaxis], (T, N)
+                    )
+                elif label_validity_gpu.shape != (T, N):
+                    raise ValueError(
+                        f"Invalid label validity shape: {label_validity.shape}, "
+                        f"expected (T,) or (T, N)"
+                    )
                 labels_broadcast = cp.where(
                     label_validity_gpu, labels_broadcast, cp.nan
                 )

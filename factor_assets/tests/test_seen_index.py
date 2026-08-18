@@ -58,6 +58,16 @@ def test_seen_index_record():
     assert index.count() == 1
 
 
+def test_seen_index_rejects_factor_id_collision():
+    index = SeenIndex()
+    index.record(canonical_hash="abc123", factor_id="F001")
+
+    with pytest.raises(ValueError, match="factor_id already recorded"):
+        index.record(canonical_hash="def456", factor_id="F001")
+
+    assert index.count() == 1
+
+
 def test_seen_index_is_seen():
     """Test checking if a factor has been seen."""
     index = SeenIndex()

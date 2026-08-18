@@ -136,8 +136,10 @@ class TestStreamingEvaluationResult:
             "parent_identity": (("snapshot", "s1"),),
             "factor_ids": ("factor_0",),
             "asset_coords": ("asset-1",),
-            "timing_vectors": ((10, 11), (11, 12), (12, 13), (14, 15)),
-            "timing_offsets": ((), (0,), (1,)),
+            "timing_rule": ((0,), (1,), (2,)),
+            "timing_rows": 2,
+            "timing_first": ((10, 11), (11, 12), (12, 13), (14, 15)),
+            "timing_last": ((10, 11), (11, 12), (12, 13), (14, 15)),
         })
         result = StreamingEvaluationResult(provenance=provenance)
 
@@ -290,10 +292,42 @@ class TestStreamingEvaluator:
         assert result.provenance["parent_identity"] == evaluator._stream_identity(batch, labels)
         assert result.provenance["factor_ids"] == ("f0", "f1")
         assert result.provenance["asset_coords"] == ("a", "b")
-        assert result.provenance["timing_offsets"] == ((1, 1), (2, 2), (4, 4))
+        assert result.provenance["timing_rule"] == ((1,), (2,), (4,))
+        assert result.provenance["timing_rows"] == 2
+        assert result.provenance["timing_first"] == ((10, 11), (11, 12), (12, 13), (14, 15))
+        assert result.provenance["timing_last"] == ((10, 11), (11, 12), (12, 13), (14, 15))
         assert result.to_dict()["provenance"] == dict(result.provenance)
 
-    def test_evaluate_large_batch_summary(self):
+    def test_provenance_endpoint_samples_are_bounded(self):
+        evaluator, specs = self._boundary_evaluator()
+
+        def chunks():
+            for start in range(0, 40):
+                values = np.ones((1, 1, 1))
+                batch = FactorBatch(
+                    factor_ids=("f",),
+                    time_axis=AxisRef("time", "int64", 1, np.array([start])),
+                    asset_axis=AxisRef("asset", "int64", 1, np.array(["a"])),
+                    values=values,
+                    context_refs={"snapshot": "s1"},
+                )
+                labels = LabelBundle(
+                    target_id="target", values=np.ones((1, 1)), horizon=1,
+                    decision_time=(start,), execution_time=(start + 1,),
+                    label_start_time=(start + 2,), label_end_time=(start + 3,),
+                    source_ref="labels", calendar_ref="cal",
+                )
+                yield batch, labels
+
+        result = evaluator.evaluate_stream(chunks(), specs)
+        assert result.provenance["timing_rows"] == 40
+        assert all(len(values) <= evaluator._PROVENANCE_SAMPLE_ROWS
+                   for values in result.provenance["timing_first"])
+        assert all(len(values) <= evaluator._PROVENANCE_SAMPLE_ROWS
+                   for values in result.provenance["timing_last"])
+        assert result.provenance["timing_first"][0] == (0,)
+        assert result.provenance["timing_last"][0] == tuple(range(32, 40))
+
         evaluator = StreamingEvaluator(chunk_size_time=50, chunk_size_factors=2)
 
         evaluator.register_streaming_metric(
@@ -651,6 +685,34 @@ class TestStreamingEvaluator:
         with pytest.raises(InvalidContractError, match="does not match"):
             evaluator.evaluate_stream(bad_generator(), metric_specs)
 
+    def test_factor_time_coordinates_must_match_label_decision_time(self):
+        evaluator = StreamingEvaluator()
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+        batch = FactorBatch(
+            factor_ids=("f",),
+            time_axis=AxisRef("time", "int64", 2, np.array([100, 101])),
+            asset_axis=AxisRef("asset", "int64", 1, np.array(["a"])),
+            values=np.ones((2, 1, 1)),
+        )
+        labels = LabelBundle(
+            target_id="target",
+            values=np.ones((2, 1)),
+            horizon=1,
+            decision_time=(0, 1),
+            label_start_time=(0, 1),
+            label_end_time=(1, 2),
+        )
+
+        with pytest.raises(
+            InvalidContractError,
+            match="factor time coordinates do not match label decision_time",
+        ):
+            evaluator.evaluate_large_batch(
+                batch, labels, [{"metric_id": "coverage", "metric_kind": "coverage"}]
+            )
+
     def test_unregistered_metric_raises(self):
         evaluator = StreamingEvaluator()
 
@@ -806,7 +868,8 @@ class TestStreamingEvaluator:
         )
 
         assert result.chunks_processed == 2
-        assert result.provenance["timing_vectors"][0] == (0, 1, 2, 3)
+        assert result.provenance["timing_first"][0] == (0, 1)
+        assert result.provenance["timing_last"][0] == (0, 1, 2, 3)
 
     def test_public_timing_rule_allows_unequal_chunk_lengths_and_accumulates_vectors(self):
         evaluator, specs = self._boundary_evaluator()
@@ -846,10 +909,12 @@ class TestStreamingEvaluator:
         )
         large_result = evaluator.evaluate_large_batch(full_batch, full_labels, specs)
 
-        assert result.provenance == large_result.provenance
-        assert result.provenance["timing_vectors"] == (
-            (0, 1, 2), (1, 2, 3), (2, 3, 4), (3, 4, 5)
-        )
+        assert result.provenance["timing_rows"] == large_result.provenance["timing_rows"]
+        assert result.provenance["timing_rule"] == large_result.provenance["timing_rule"]
+        assert result.provenance["timing_last"] == large_result.provenance["timing_last"]
+        assert result.provenance["timing_rows"] == 3
+        assert result.provenance["timing_first"][0] == (0,)
+        assert result.provenance["timing_last"][0] == (0, 1, 2)
 
     def test_public_timing_rule_drift_rejected_with_unequal_chunks(self):
         evaluator, specs = self._boundary_evaluator()
@@ -921,7 +986,42 @@ class TestStreamingUpdaters:
             label_end_time=tuple(range(1, T + 1)),
         )
 
-    def test_streaming_coverage_updater(self):
+    def test_streaming_coverage_broadcasts_one_dimensional_label_validity(self):
+        batch = self.create_simple_batch(T=3, N=2, F=1)
+        labels = LabelBundle(
+            target_id="target",
+            values=np.array([1.0, 2.0, 3.0]),
+            validity=np.array([True, False, True]),
+            horizon=1,
+            decision_time=(0, 1, 2),
+            label_start_time=(0, 1, 2),
+            label_end_time=(1, 2, 3),
+        )
+        state = StreamingMetricState("coverage", MetricKind.COVERAGE)
+
+        result = streaming_coverage_updater(state, batch, labels).finalize()
+
+        assert state.valid_count == 4
+        assert state.total_count == 6
+        assert result == pytest.approx(2 / 3)
+
+    def test_streaming_ic_broadcasts_one_dimensional_label_validity(self):
+        batch = self.create_simple_batch(T=3, N=2, F=1)
+        labels = LabelBundle(
+            target_id="target",
+            values=np.array([1.0, 2.0, 3.0]),
+            validity=np.array([True, False, True]),
+            horizon=1,
+            decision_time=(0, 1, 2),
+            label_start_time=(0, 1, 2),
+            label_end_time=(1, 2, 3),
+        )
+        state = StreamingMetricState("ic", MetricKind.IC)
+
+        updated = streaming_ic_updater(state, batch, labels)
+
+        assert updated.valid_counts[:, 0].tolist() == [2, 0, 2]
+
         state = StreamingMetricState(
             metric_id="coverage",
             metric_kind=MetricKind.COVERAGE,

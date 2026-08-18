@@ -74,20 +74,36 @@ class TSMedianPolars(SeriesOperator):
 
 @register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_polars")
 class TSMadPolars(SeriesOperator):
-    """Polars 滚动 MAD"""
+    """Polars rolling median absolute deviation aligned with the pandas authority."""
     metadata = OperatorMetadata(
-        name="m_mad", category="time_series", description="滚动 MAD",
-        param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        name="m_mad", category="time_series", description="滚动中位绝对偏差",
+        param_names=["x", "window", "min_periods", "scale"],
+        return_type="series", tags=["time_series", "mad", "robust", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 20,
+        min_periods: int | None = None,
+        scale: float = 1.0,
+        **kwargs,
+    ) -> pl.DataFrame:
         from cleaned_operators.base_polars import panel_pandas_bridge
+        from cleaned_operators.semantic_hardening import (
+            _median_abs_deviation,
+            _validate_window,
+        )
 
-        w = int(kwargs.get("d", window))
+        w, mp = _validate_window(window, min_periods)
 
         def _mad(pdf):
-            median = pdf.rolling(window=w, min_periods=1).median()
-            return (pdf - median).abs().rolling(window=w, min_periods=1).mean()
+            return pdf.rolling(window=w, min_periods=mp).apply(
+                lambda values: _median_abs_deviation(
+                    values, scale=float(scale)
+                ),
+                raw=True,
+            )
 
         return panel_pandas_bridge(x, _mad)
 

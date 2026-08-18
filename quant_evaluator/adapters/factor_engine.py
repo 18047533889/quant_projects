@@ -100,10 +100,10 @@ class FactorEngineAdapter:
         try:
             # Import FE public API modules only
             from api import factor as fe_factor  # noqa: F401
-            from runtime import execute  # noqa: F401
+            from runtime import FactorEngine as fe_engine  # noqa: F401
 
             self._fe_factor = fe_factor
-            self._fe_execute = execute
+            self._fe_engine = fe_engine
         except ImportError as e:
             raise OptionalDependencyMissing(
                 "FactorEngine is not installed. "

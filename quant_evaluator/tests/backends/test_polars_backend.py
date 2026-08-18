@@ -234,6 +234,27 @@ class TestICParity:
         assert np.all(np.isnan(ic_numpy[numpy_mask]))
         assert np.all(np.isnan(ic_polars[polars_mask]))
 
+    def test_ic_with_one_dimensional_label_validity(self):
+        T, N, F = 3, 5, 2
+        factors = np.arange(T * N * F, dtype=float).reshape(T, N, F)
+        labels = np.arange(T, dtype=float)
+        validity = np.array([True, False, True])
+        factor_ids = ("f0", "f1")
+
+        ic_numpy, counts_numpy = fast_ic_batch(
+            factors, labels, min_obs=2, label_validity=validity
+        )
+        ic_polars, counts_polars = polars_ic_batch(
+            factors,
+            labels,
+            factor_ids,
+            min_obs=2,
+            label_validity=validity,
+        )
+
+        assert_allclose(ic_polars, ic_numpy, equal_nan=True)
+        assert_array_equal(counts_polars, counts_numpy)
+
     def test_ic_medium_batch(self, medium_batch):
         """Test IC on medium-sized batch (performance check)."""
         factors, labels, factor_ids, (T, N, F) = medium_batch

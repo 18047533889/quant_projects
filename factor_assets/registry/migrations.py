@@ -71,31 +71,39 @@ def _validate_schema_v1(conn: sqlite3.Connection) -> None:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    migration_table = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
-    ).fetchone()
-    if migration_table is None:
-        existing = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name IN "
-            "('schema_meta', 'assets', 'lifecycle_events') LIMIT 1"
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        migration_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
         ).fetchone()
-        if existing is not None:
-            raise SchemaVersionError("schema_migrations table is missing")
-        conn.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, checksum TEXT NOT NULL)")
-    try:
-        rows = conn.execute("SELECT version, checksum FROM schema_migrations ORDER BY version").fetchall()
-    except sqlite3.DatabaseError as exc:
-        raise SchemaVersionError("schema_migrations table is malformed") from exc
-    known = {v: c for v, c in rows}
-    if any(v not in _MIGRATIONS or c != migration_checksum(v) for v, c in known.items()):
-        raise SchemaVersionError("schema migration drift or unknown version")
-    if known and max(known) > SCHEMA_VERSION: raise SchemaVersionError("database schema is newer than this code")
-    for version in range(1, SCHEMA_VERSION + 1):
-        if version in known: continue
-        conn.executescript(_MIGRATIONS[version])
-        conn.execute("INSERT INTO schema_migrations VALUES (?, ?)", (version, migration_checksum(version)))
-    _validate_schema_v1(conn)
-    try:
-        conn.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES ('schema_version',?)", (str(SCHEMA_VERSION),))
-    except sqlite3.DatabaseError as exc:
-        raise SchemaVersionError("schema_meta table is malformed") from exc
+        if migration_table is None:
+            existing = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name IN "
+                "('schema_meta', 'assets', 'lifecycle_events') LIMIT 1"
+            ).fetchone()
+            if existing is not None:
+                raise SchemaVersionError("schema_migrations table is missing")
+            conn.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, checksum TEXT NOT NULL)")
+        try:
+            rows = conn.execute("SELECT version, checksum FROM schema_migrations ORDER BY version").fetchall()
+        except sqlite3.DatabaseError as exc:
+            raise SchemaVersionError("schema_migrations table is malformed") from exc
+        known = {v: c for v, c in rows}
+        if any(v not in _MIGRATIONS or c != migration_checksum(v) for v, c in known.items()):
+            raise SchemaVersionError("schema migration drift or unknown version")
+        if known and max(known) > SCHEMA_VERSION: raise SchemaVersionError("database schema is newer than this code")
+        for version in range(1, SCHEMA_VERSION + 1):
+            if version in known: continue
+            for statement in _MIGRATIONS[version].split(";"):
+                if statement.strip():
+                    conn.execute(statement)
+            conn.execute("INSERT INTO schema_migrations VALUES (?, ?)", (version, migration_checksum(version)))
+        _validate_schema_v1(conn)
+        try:
+            conn.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES ('schema_version',?)", (str(SCHEMA_VERSION),))
+        except sqlite3.DatabaseError as exc:
+            raise SchemaVersionError("schema_meta table is malformed") from exc
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise

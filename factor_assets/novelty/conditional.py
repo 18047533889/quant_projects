@@ -8,7 +8,7 @@ Provides true conditional novelty assessment that considers:
 """
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Set, Tuple
+from typing import Optional, Protocol, Set, Tuple, runtime_checkable
 import hashlib
 
 
@@ -96,7 +96,19 @@ class ResultIdentityCache:
     """
 
     def __init__(self):
-        self._cache: dict[str, list[str]] = {}  # result_hash -> [factor_ids]
+        self._cache: dict[tuple[str, str, str, str, int], list[str]] = {}
+
+    @staticmethod
+    def _identity_key(
+        result_identity: ResultIdentity,
+    ) -> tuple[str, str, str, str, int]:
+        return (
+            result_identity.result_hash,
+            result_identity.universe_ref,
+            result_identity.period_start,
+            result_identity.period_end,
+            result_identity.num_observations,
+        )
 
     def add(self, result_identity: ResultIdentity) -> None:
         """
@@ -105,26 +117,20 @@ class ResultIdentityCache:
         Args:
             result_identity: Result identity to add
         """
-        if result_identity.result_hash not in self._cache:
-            self._cache[result_identity.result_hash] = []
-        if result_identity.factor_id not in self._cache[result_identity.result_hash]:
-            self._cache[result_identity.result_hash].append(result_identity.factor_id)
+        identity_key = self._identity_key(result_identity)
+        if identity_key not in self._cache:
+            self._cache[identity_key] = []
+        if result_identity.factor_id not in self._cache[identity_key]:
+            self._cache[identity_key].append(result_identity.factor_id)
 
-    def find_equivalent(self, result_hash: str) -> tuple[str, ...]:
-        """
-        Find factors with equivalent results.
+    def find_equivalent(self, result_identity: ResultIdentity) -> tuple[str, ...]:
+        """Find factors with equivalent results in the same evaluation context."""
+        return tuple(self._cache.get(self._identity_key(result_identity), []))
 
-        Args:
-            result_hash: Result hash to look up
-
-        Returns:
-            Tuple of factor IDs with same result identity
-        """
-        return tuple(self._cache.get(result_hash, []))
-
-    def has_equivalent(self, result_hash: str) -> bool:
-        """Check if cache contains factors with this result identity."""
-        return result_hash in self._cache and len(self._cache[result_hash]) > 0
+    def has_equivalent(self, result_identity: ResultIdentity) -> bool:
+        """Check for equivalent results in the same evaluation context."""
+        identity_key = self._identity_key(result_identity)
+        return identity_key in self._cache and bool(self._cache[identity_key])
 
     def count(self) -> int:
         """Get total number of unique result identities."""
@@ -135,6 +141,7 @@ class ResultIdentityCache:
         self._cache.clear()
 
 
+@runtime_checkable
 class ConditionalNoveltyProvider(Protocol):
     """
     Protocol for conditional novelty assessment.
@@ -145,8 +152,9 @@ class ConditionalNoveltyProvider(Protocol):
     def assess_novelty(
         self,
         factor_id: str,
+        result_identity: ResultIdentity,
         pool_factor_ids: tuple[str, ...],
-        evidence_ref: Optional[str] = None,
+        pool_ref: str = "default_pool",
     ) -> NoveltyResult:
         """
         Assess whether a factor is novel relative to a pool.
@@ -198,7 +206,7 @@ class SimpleConditionalNoveltyAssessor:
             NoveltyResult
         """
         # Check cache for equivalent results
-        equivalent_ids = self.result_cache.find_equivalent(result_identity.result_hash)
+        equivalent_ids = self.result_cache.find_equivalent(result_identity)
 
         # Filter to only pool factors
         pool_equivalents = tuple(fid for fid in equivalent_ids if fid in pool_factor_ids)

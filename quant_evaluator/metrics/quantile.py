@@ -20,6 +20,7 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 from quant_evaluator.contracts.quantile_policy import (
     QuantileTiePolicy,
     validate_tie_policy,
@@ -282,10 +283,13 @@ def compute_quantile_returns(
         quantile_counts: shape (T, n_quantiles, F)
     """
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
+    if label_validity is not None:
+        labels = np.where(label_validity, labels, np.nan)
 
     T, N, F = values.shape
     quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)
@@ -348,10 +352,13 @@ def compute_quantile_returns_optimized(
         quantile_counts: shape (T, n_quantiles, F)
     """
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
+    if label_validity is not None:
+        labels = np.where(label_validity, labels, np.nan)
 
     T, N, F = values.shape
     quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)

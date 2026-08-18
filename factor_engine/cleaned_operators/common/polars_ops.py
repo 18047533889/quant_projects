@@ -378,7 +378,7 @@ class TSArgmaxPolars(SeriesOperator):
 
     metadata = OperatorMetadata(
         name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）",
-        examples=["ts_argmax(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        examples=["ts_argmax(close, 20)"], param_names=["x", "window", "min_periods"], return_type="series", tags=["time_series", "polars"],
         param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
@@ -386,14 +386,14 @@ class TSArgmaxPolars(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.overhaul.daily import pd_argmax
         from cleaned_operators.common.strict_params import strict_int
 
-        # ``d`` is a declared parser-level alias for ``window`` (param_aliases);
-        # the binder validates it against window's ParamSpec.
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return panel_pandas_bridge(x, lambda pdf: rolling_days_since_extreme(pdf, w, maximum=True))
+        return panel_pandas_bridge(
+            x, lambda pdf: pd_argmax(pdf, w, min_periods=min_periods)
+        )
 
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
@@ -406,7 +406,7 @@ class TSArgminPolars(SeriesOperator):
 
     metadata = OperatorMetadata(
         name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）",
-        examples=["ts_argmin(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        examples=["ts_argmin(close, 20)"], param_names=["x", "window", "min_periods"], return_type="series", tags=["time_series", "polars"],
         param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
@@ -414,13 +414,21 @@ class TSArgminPolars(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        window: int = 20,
+        min_periods: int = 1,
+        **kwargs,
+    ) -> pl.DataFrame:
+        from cleaned_operators.overhaul.daily import pd_argmin
         from cleaned_operators.common.strict_params import strict_int
 
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return panel_pandas_bridge(x, lambda pdf: rolling_days_since_extreme(pdf, w, maximum=False))
+        return panel_pandas_bridge(
+            x, lambda pdf: pd_argmin(pdf, w, min_periods=min_periods)
+        )
 
 
 @register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_polars")

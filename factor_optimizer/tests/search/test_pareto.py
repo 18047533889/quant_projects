@@ -20,6 +20,20 @@ def test_pareto_point_validation():
     with pytest.raises(ValueError, match="must be numeric"):
         ParetoPoint(trial_id="t1", objectives=("a", "b"))
 
+    with pytest.raises(ValueError, match="must be finite"):
+        ParetoPoint(trial_id="t1", objectives=(float("nan"), 1.0))
+    with pytest.raises(ValueError, match="must be finite"):
+        ParetoPoint(trial_id="t1", objectives=(float("inf"), 1.0))
+
+
+def test_dominated_cache_is_cleared_for_improved_trial():
+    frontier = ParetoFrontier()
+    assert frontier.add_point(ParetoPoint("t1", (2.0, 2.0)))
+    assert not frontier.add_point(ParetoPoint("t2", (1.0, 1.0)))
+    improved = ParetoPoint("t2", (3.0, 3.0))
+    assert frontier.add_point(improved)
+    assert not frontier.is_dominated(improved)
+
 
 def test_pareto_point_dominates():
     p1 = ParetoPoint(trial_id="t1", objectives=(0.8, 0.7))

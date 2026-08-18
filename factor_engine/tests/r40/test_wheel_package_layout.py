@@ -22,6 +22,10 @@ def test_packages_find_include_contains_all_packages():
     include = _packages_find_include()
     for pattern in ("api*", "backend*", "runtime*", "service*", "storage*"):
         assert pattern in include, f"missing baseline include {pattern!r}"
+    assert "modeling*" in include, "FactorEngine wheel must own the modeling namespace"
+    assert "modeling_adapters*" not in include, (
+        "the standalone adapter distribution owns modeling_adapters"
+    )
     # R40 #80: these were missing from the wheel
     for pattern in ("market*", "security*", "mining*", "semantic*"):
         assert pattern in include, f"missing include {pattern!r}"

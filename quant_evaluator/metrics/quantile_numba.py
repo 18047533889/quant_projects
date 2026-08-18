@@ -29,6 +29,7 @@ except ImportError:
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 
 
 @jit(nopython=True, cache=True)  # QE-Q-P0-004: Remove fastmath for NaN/Inf correctness
@@ -256,13 +257,14 @@ def compute_quantile_returns_numba(
     policy = validate_tie_policy(method)
 
     values = factor_batch.values
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(
-            labels[:, np.newaxis],
-            (factor_batch.num_times, factor_batch.num_assets)
-        ).copy()  # Copy needed for numba
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
+    if label_validity is not None:
+        labels = np.where(label_validity, labels, np.nan)
+    labels = np.ascontiguousarray(labels)
 
     # Assign quantiles with JIT
     quantiles = _assign_quantiles_jit(values, n_quantiles, policy.value)

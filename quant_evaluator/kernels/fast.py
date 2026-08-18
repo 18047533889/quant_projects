@@ -57,8 +57,13 @@ def fast_ic_batch(
 
     labels = labels_broadcast.copy()
     if label_validity is not None:
-        labels = np.where(label_validity[:, :, np.newaxis], labels[:, :, np.newaxis], np.nan)
-        labels = labels[:, :, 0]  # Back to (T, N)
+        if label_validity.ndim == 1:
+            label_validity = np.broadcast_to(label_validity[:, np.newaxis], (T, N))
+        elif label_validity.shape != (T, N):
+            raise ValueError(
+                f"Invalid label validity shape: {label_validity.shape}, expected (T,) or (T, N)"
+            )
+        labels = np.where(label_validity, labels, np.nan)
 
     # Expand labels for broadcasting: (T, N, 1)
     labels_expanded = labels[:, :, np.newaxis]

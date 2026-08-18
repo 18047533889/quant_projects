@@ -12,6 +12,7 @@ Provides L1 (memory) + L2 (disk) + optional L3 (Redis) caching with:
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import logging
 import math
@@ -19,11 +20,18 @@ import os
 import pickle
 import threading
 import time
+import uuid
 import zlib
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Literal, Optional, Set, Tuple
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no advisory flock
+    fcntl = None
 
 import numpy as np
 
@@ -43,14 +51,54 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+_DISK_LOCKS: Dict[str, threading.Lock] = {}
+_DISK_ROOT_LOCKS: Dict[str, threading.RLock] = {}
+_DISK_LOCKS_GUARD = threading.Lock()
+_DISK_PROCESS_LOCK_STATE = threading.local()
+
 
 def _is_valid_ttl(ttl_seconds: Optional[float]) -> bool:
     """Return whether a TTL is absent or a finite positive duration."""
     if ttl_seconds is None:
         return True
+    if isinstance(ttl_seconds, bool):
+        return False
     try:
         return math.isfinite(ttl_seconds) and ttl_seconds > 0
     except TypeError:
+        return False
+
+
+def _compression_method(compressor: Compressor) -> str:
+    """Return the codec represented by a compressor instance."""
+    if isinstance(compressor, NoCompressor):
+        return "none"
+    if isinstance(compressor, LZ4Compressor):
+        return "lz4"
+    if isinstance(compressor, ZlibCompressor):
+        return "zlib"
+    raise TypeError(f"unsupported compressor type: {type(compressor)!r}")
+
+
+def _codec_compatible(metadata_method: str, compressor: Compressor) -> bool:
+    """Reject persisted bytes whose declared codec differs from this layer."""
+    try:
+        return metadata_method == _compression_method(compressor)
+    except (TypeError, ValueError):
+        return False
+
+
+def _valid_origin(created_at: Optional[float], now: float, ttl_seconds: Optional[float]) -> bool:
+    """Reject unusable absolute origins before writing a cache entry."""
+    if created_at is None:
+        return True
+    if isinstance(created_at, bool) or isinstance(ttl_seconds, bool):
+        return False
+    try:
+        if not math.isfinite(created_at) or created_at > now:
+            return False
+        return ttl_seconds is None or now - created_at < ttl_seconds
+    except (TypeError, ValueError):
         return False
 
 
@@ -196,19 +244,20 @@ class CacheMetadata:
     dependencies: Set[str]
     version: str = "v2"
     compression_method: str = "none"
+    generation: str = ""
 
     def is_expired(self, now: float) -> bool:
         """Check if entry has expired based on TTL."""
-        if self.ttl_seconds is None:
-            return False
-        if not _is_valid_ttl(self.ttl_seconds):
-            return True
         try:
             if not math.isfinite(self.created_at) or not math.isfinite(now):
                 return True
         except TypeError:
             return True
         if self.created_at > now:
+            return True
+        if self.ttl_seconds is None:
+            return False
+        if not _is_valid_ttl(self.ttl_seconds):
             return True
         return (now - self.created_at) >= self.ttl_seconds
 
@@ -225,22 +274,58 @@ class CacheMetadata:
             "dependencies": list(self.dependencies),
             "version": self.version,
             "compression_method": self.compression_method,
+            "generation": self.generation,
         }
 
     @classmethod
     def from_dict(cls, data: Dict) -> CacheMetadata:
-        """Deserialize from dictionary."""
+        """Deserialize and validate a durable metadata record."""
+        if not isinstance(data, dict):
+            raise ValueError("cache metadata must be an object")
+        required = {
+            "key", "created_at", "last_accessed", "access_count",
+            "size_bytes", "compressed_size", "ttl_seconds", "dependencies",
+            "version", "compression_method",
+        }
+        if not required.issubset(data) or set(data) - required - {"checksum", "generation"}:
+            raise ValueError("cache metadata schema mismatch")
+        if not isinstance(data["key"], str):
+            raise ValueError("cache metadata key must be a string")
+        if data["version"] != "v2":
+            raise ValueError("unsupported cache metadata version")
+        if data["compression_method"] not in {"none", "zlib", "lz4"}:
+            raise ValueError("unsupported cache compression method")
+        for name in ("created_at", "last_accessed"):
+            if isinstance(data[name], bool) or not isinstance(data[name], (int, float)):
+                raise ValueError(f"invalid cache metadata {name}")
+            if not math.isfinite(data[name]):
+                raise ValueError(f"invalid cache metadata {name}")
+        for name in ("access_count", "size_bytes", "compressed_size"):
+            if isinstance(data[name], bool) or not isinstance(data[name], int) or data[name] < 0:
+                raise ValueError(f"invalid cache metadata {name}")
+        ttl = data["ttl_seconds"]
+        if not _is_valid_ttl(ttl):
+            raise ValueError("invalid cache metadata ttl_seconds")
+        dependencies = data["dependencies"]
+        if not isinstance(dependencies, (list, tuple, set)) or not all(
+            isinstance(item, str) for item in dependencies
+        ):
+            raise ValueError("invalid cache metadata dependencies")
+        generation = data.get("generation", "")
+        if not isinstance(generation, str):
+            raise ValueError("invalid cache metadata generation")
         return cls(
             key=data["key"],
-            created_at=data["created_at"],
-            last_accessed=data["last_accessed"],
+            created_at=float(data["created_at"]),
+            last_accessed=float(data["last_accessed"]),
             access_count=data["access_count"],
             size_bytes=data["size_bytes"],
             compressed_size=data["compressed_size"],
-            ttl_seconds=data.get("ttl_seconds"),
-            dependencies=set(data.get("dependencies", [])),
-            version=data.get("version", "v2"),
-            compression_method=data.get("compression_method", "none"),
+            ttl_seconds=ttl,
+            dependencies=set(dependencies),
+            version=data["version"],
+            compression_method=data["compression_method"],
+            generation=data.get("generation", ""),
         )
 
 
@@ -299,6 +384,10 @@ class MemoryCacheLayer:
 
             # Decompress if needed
             try:
+                if not _codec_compatible(
+                    entry.metadata.compression_method, self.compressor
+                ):
+                    raise ValueError("cache codec does not match configured compressor")
                 if entry.metadata.compression_method != "none":
                     data = self.compressor.decompress(entry.compressed_value)
                 else:
@@ -340,6 +429,13 @@ class MemoryCacheLayer:
             if not _is_valid_ttl(ttl_seconds):
                 return False
             try:
+                # Capture the origin before potentially slow serialization or
+                # compression so direct writes cannot extend absolute TTLs.
+                now = time.time()
+                entry_created_at = now if created_at is None else created_at
+                if not _valid_origin(entry_created_at, now, ttl_seconds):
+                    return False
+
                 # Serialize
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                 original_size = len(data)
@@ -348,31 +444,30 @@ class MemoryCacheLayer:
                 if self.enable_compression:
                     compressed, stats = self.compressor.compress(data)
                     self._compression_stats.append(stats)
-                    compression_method = "lz4" if HAS_LZ4 else "zlib"
+                    compression_method = _compression_method(self.compressor)
                 else:
                     compressed = data
                     compression_method = "none"
 
                 compressed_size = len(compressed)
+                publication_now = time.time()
+                if not _valid_origin(entry_created_at, publication_now, ttl_seconds):
+                    return False
 
                 # Check if value is too large
                 if compressed_size > self.max_size_bytes:
                     logger.debug(f"Value too large for cache: {compressed_size} bytes")
                     return False
 
-                # Preserve the original creation time when promoting between layers so
-                # an entry's absolute expiry is never extended by a cache hit.
-                now = time.time()
-                entry_created_at = now if created_at is None else created_at
                 metadata = CacheMetadata(
                     key=key,
                     created_at=entry_created_at,
-                    last_accessed=now,
+                    last_accessed=publication_now,
                     access_count=0,
                     size_bytes=original_size,
                     compressed_size=compressed_size,
                     ttl_seconds=ttl_seconds,
-                    dependencies=dependencies or set(),
+                    dependencies=set(dependencies) if dependencies is not None else set(),
                     compression_method=compression_method,
                 )
 
@@ -402,8 +497,12 @@ class MemoryCacheLayer:
         with self._lock:
             return self._remove_entry(key)
 
-    def invalidate_dependencies(self, dependency: str) -> int:
-        """Invalidate all entries that depend on the given dependency."""
+    def invalidate_dependencies(self, dependency: str, *, return_keys: bool = False):
+        """Invalidate entries that depend on the given dependency.
+
+        ``return_keys`` lets the coordinator count logical entries once when
+        the same key is present in multiple physical layers.
+        """
         with self._lock:
             keys_to_remove = [
                 k for k, e in self._cache.items()
@@ -411,7 +510,7 @@ class MemoryCacheLayer:
             ]
             for key in keys_to_remove:
                 self._remove_entry(key)
-            return len(keys_to_remove)
+            return set(keys_to_remove) if return_keys else len(keys_to_remove)
 
     def clear(self):
         """Clear all entries."""
@@ -482,15 +581,64 @@ class DiskCacheLayer:
         self.root_dir = Path(root_dir)
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.compressor = compressor
-        self._locks: Dict[str, threading.Lock] = {}
-        self._locks_guard = threading.Lock()
+
+    def _root_lock(self) -> threading.RLock:
+        """Get the process-wide lock that fences whole-cache operations."""
+        root = str(self.root_dir.resolve(strict=False))
+        with _DISK_LOCKS_GUARD:
+            if root not in _DISK_ROOT_LOCKS:
+                _DISK_ROOT_LOCKS[root] = threading.RLock()
+            return _DISK_ROOT_LOCKS[root]
 
     def _get_lock(self, key: str) -> threading.Lock:
-        """Get per-key lock for atomic writes."""
-        with self._locks_guard:
-            if key not in self._locks:
-                self._locks[key] = threading.Lock()
-            return self._locks[key]
+        """Get a process-wide lock for one physical cache entry."""
+        with _DISK_LOCKS_GUARD:
+            if key not in _DISK_LOCKS:
+                _DISK_LOCKS[key] = threading.Lock()
+            return _DISK_LOCKS[key]
+
+    def _entry_lock(self, cache_path: Path) -> threading.Lock:
+        """Use the canonical physical path as the shared lock identity."""
+        return self._get_lock(str(cache_path.resolve(strict=False)))
+
+    @contextmanager
+    def _process_lock(self) -> Iterator[None]:
+        """Serialize cache operations across processes sharing this root.
+
+        POSIX ``flock`` is process-scoped rather than safely recursive across
+        separately opened file descriptions. Track ownership per thread/root so
+        coordinator operations can call layer APIs under one outer disk fence.
+        """
+        if fcntl is None:
+            yield
+            return
+        root = str(self.root_dir.resolve(strict=False))
+        state = getattr(_DISK_PROCESS_LOCK_STATE, "roots", None)
+        if state is None:
+            state = {}
+            _DISK_PROCESS_LOCK_STATE.roots = state
+        held = state.get(root)
+        if held is not None:
+            held[1] += 1
+            try:
+                yield
+            finally:
+                held[1] -= 1
+            return
+
+        lock_path = self.root_dir / ".cache.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            state[root] = [handle, 1]
+            try:
+                yield
+            finally:
+                del state[root]
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
     def _key_path(self, key: str) -> Path:
         """Get file path for key."""
@@ -501,45 +649,123 @@ class DiskCacheLayer:
         """Get metadata path for cache file."""
         return cache_path.with_suffix(".meta.json")
 
+    @staticmethod
+    def _decode_record(raw: bytes) -> Tuple[CacheMetadata, bytes]:
+        """Decode one immutable JSON record containing metadata and payload."""
+        envelope = json.loads(raw.decode("utf-8"))
+        if not isinstance(envelope, dict) or envelope.get("schema") != "cache-record-v1":
+            raise ValueError("cache record schema mismatch")
+        metadata_dict = envelope.get("metadata")
+        if not isinstance(metadata_dict, dict):
+            raise ValueError("cache record metadata mismatch")
+        key_digest = envelope.get("key_digest")
+        if (
+            not isinstance(key_digest, str)
+            or hashlib.sha256(metadata_dict.get("key", "").encode("utf-8")).hexdigest()
+            != key_digest
+        ):
+            raise ValueError("cache record key mismatch")
+        compressed_data = base64.b64decode(envelope.get("compressed_data", ""), validate=True)
+        checksum = envelope.get("checksum")
+        if not isinstance(checksum, str) or hashlib.sha256(compressed_data).hexdigest() != checksum:
+            raise ValueError("cache record checksum mismatch")
+        return CacheMetadata.from_dict(metadata_dict), compressed_data
+
+    @staticmethod
+    def _encode_record(metadata: CacheMetadata, compressed_data: bytes) -> bytes:
+        """Encode metadata and payload into one publishable immutable record."""
+        return json.dumps(
+            {
+                "schema": "cache-record-v1",
+                "metadata": metadata.to_dict(),
+                "key_digest": hashlib.sha256(metadata.key.encode("utf-8")).hexdigest(),
+                "compressed_data": base64.b64encode(compressed_data).decode("ascii"),
+                "checksum": hashlib.sha256(compressed_data).hexdigest(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def _invalidation_epoch_path(self) -> Path:
+        """Return the durable namespace invalidation marker path."""
+        return self.root_dir / ".invalidation.epoch"
+
+    def _read_invalidation_epoch_unlocked(self) -> str:
+        """Read the current namespace invalidation epoch."""
+        try:
+            return self._invalidation_epoch_path().read_text(encoding="ascii")
+        except FileNotFoundError:
+            return ""
+
+    def invalidation_epoch(self) -> str:
+        """Read the namespace epoch under the shared disk-root fence."""
+        with self._process_lock(), self._root_lock():
+            return self._read_invalidation_epoch_unlocked()
+
+    def _bump_invalidation_epoch_unlocked(self) -> str:
+        """Atomically publish a new namespace invalidation epoch."""
+        epoch = uuid.uuid4().hex
+        epoch_path = self._invalidation_epoch_path()
+        temporary = self.root_dir / f".tmp.{uuid.uuid4().hex}.epoch"
+        temporary.write_text(epoch, encoding="ascii")
+        temporary.replace(epoch_path)
+        return epoch
+
     def get(self, key: str) -> Optional[Tuple[Any, CacheMetadata]]:
         """Get value from disk cache."""
         cache_path = self._key_path(key)
+        lock = self._entry_lock(cache_path)
+        with self._process_lock(), self._root_lock(), lock:
+            return self._get_unlocked(key)
+
+    def _get_unlocked(self, key: str) -> Optional[Tuple[Any, CacheMetadata]]:
+        """Read one disk record while holding its per-key lock."""
+        cache_path = self._key_path(key)
         meta_path = self._meta_path(cache_path)
 
-        if not cache_path.exists() or not meta_path.exists():
+        if cache_path.exists():
+            try:
+                metadata, compressed_data = self._decode_record(cache_path.read_bytes())
+                if metadata.key != key or not _codec_compatible(
+                    metadata.compression_method, self.compressor
+                ) or metadata.is_expired(time.time()):
+                    cache_path.unlink(missing_ok=True)
+                    return None
+                if metadata.compression_method != "none":
+                    data = self.compressor.decompress(compressed_data)
+                else:
+                    data = compressed_data
+                return pickle.loads(data), metadata
+            except Exception as e:
+                logger.warning(f"Failed to load cache record for key {key}: {e}")
+                cache_path.unlink(missing_ok=True)
+                return None
+
+        # Read legacy two-file entries only as a fail-closed compatibility path.
+        if not meta_path.exists():
             return None
-
         try:
-            # Load metadata
-            meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
-            metadata = CacheMetadata.from_dict(meta_data)
-
-            # Check expiration
-            if metadata.is_expired(time.time()):
-                self.invalidate(key)
-                return None
-
-            # Load and verify compressed data
+            metadata_text = meta_path.read_text(encoding="utf-8")
             compressed_data = cache_path.read_bytes()
-            checksum = hashlib.sha256(compressed_data).hexdigest()
-            expected_checksum = meta_data.get("checksum")
-
-            if expected_checksum and checksum != expected_checksum:
-                logger.warning(f"Checksum mismatch for cache key {key}")
-                self.invalidate(key)
+            meta_data = json.loads(metadata_text)
+            metadata = CacheMetadata.from_dict(meta_data)
+            if metadata.is_expired(time.time()) or metadata.key != key or not _codec_compatible(
+                metadata.compression_method, self.compressor
+            ):
+                self._invalidate_if_unchanged_unlocked(key, metadata_text, compressed_data)
                 return None
-
-            # Decompress and deserialize
-            if metadata.compression_method != "none":
-                data = self.compressor.decompress(compressed_data)
-            else:
-                data = compressed_data
-
-            value = pickle.loads(data)
-            return value, metadata
-
+            checksum = hashlib.sha256(compressed_data).hexdigest()
+            if checksum != meta_data.get("checksum"):
+                self._invalidate_if_unchanged_unlocked(key, metadata_text, compressed_data)
+                return None
+            data = self.compressor.decompress(compressed_data) if metadata.compression_method != "none" else compressed_data
+            return pickle.loads(data), metadata
         except Exception as e:
-            logger.warning(f"Failed to load cache from disk for key {key}: {e}")
+            logger.warning(f"Failed to load legacy cache pair for key {key}: {e}")
+            metadata_text = locals().get("metadata_text")
+            compressed_data = locals().get("compressed_data")
+            if metadata_text is not None:
+                self._invalidate_if_unchanged_unlocked(key, metadata_text, compressed_data)
             return None
 
     def put(
@@ -562,66 +788,61 @@ class DiskCacheLayer:
         Returns:
             True if stored successfully
         """
-        lock = self._get_lock(key)
-        with lock:
+        cache_path = self._key_path(key)
+        lock = self._entry_lock(cache_path)
+        with self._process_lock(), self._root_lock(), lock:
             if not _is_valid_ttl(ttl_seconds):
                 return False
             try:
+                # Capture the origin before potentially slow serialization or
+                # compression so direct writes cannot extend absolute TTLs.
+                now = time.time()
+                entry_created_at = now if created_at is None else created_at
+                if not _valid_origin(entry_created_at, now, ttl_seconds):
+                    return False
+
                 # Serialize and compress
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                 compressed, stats = self.compressor.compress(data)
+                publication_now = time.time()
+                if not _valid_origin(entry_created_at, publication_now, ttl_seconds):
+                    return False
 
-                # Preserve the original creation time when promoting between layers so
-                # an entry's absolute expiry is never extended by a cache hit.
-                now = time.time()
-                entry_created_at = now if created_at is None else created_at
                 metadata = CacheMetadata(
                     key=key,
                     created_at=entry_created_at,
-                    last_accessed=now,
+                    last_accessed=publication_now,
                     access_count=0,
                     size_bytes=len(data),
                     compressed_size=len(compressed),
                     ttl_seconds=ttl_seconds,
-                    dependencies=dependencies or set(),
-                    compression_method="lz4" if HAS_LZ4 else "zlib",
+                    dependencies=set(dependencies) if dependencies is not None else set(),
+                    compression_method=_compression_method(self.compressor),
+                    generation=uuid.uuid4().hex,
                 )
 
-                # Compute checksum
-                checksum = hashlib.sha256(compressed).hexdigest()
-
-                # Write atomically using temp file
-                cache_path = self._key_path(key)
-                meta_path = self._meta_path(cache_path)
+                # Publish one immutable record so value and metadata cannot tear.
+                record = self._encode_record(metadata, compressed)
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-                import tempfile
-                import uuid
-
                 tmp_cache = cache_path.parent / f".tmp.{uuid.uuid4().hex}.cache"
-                tmp_meta = cache_path.parent / f".tmp.{uuid.uuid4().hex}.meta.json"
-
                 try:
-                    # Open follow-ups intentionally outside this safety repair:
-                    # values still use pickle, and the data/metadata pair can be
-                    # observed between its two atomic renames (torn publish).
-                    # Write temp files
-                    tmp_cache.write_bytes(compressed)
-
-                    meta_dict = metadata.to_dict()
-                    meta_dict["checksum"] = checksum
-                    tmp_meta.write_text(json.dumps(meta_dict), encoding="utf-8")
-
-                    # Atomic rename
+                    with tmp_cache.open("wb") as handle:
+                        handle.write(record)
+                        handle.flush()
+                        os.fsync(handle.fileno())
                     tmp_cache.replace(cache_path)
-                    tmp_meta.replace(meta_path)
-
+                    try:
+                        directory_fd = os.open(cache_path.parent, os.O_RDONLY)
+                        try:
+                            os.fsync(directory_fd)
+                        finally:
+                            os.close(directory_fd)
+                    except OSError:
+                        # Directory fsync is unavailable on some filesystems.
+                        pass
                     return True
-
-                except Exception as e:
-                    # Clean up temp files
+                except Exception:
                     tmp_cache.unlink(missing_ok=True)
-                    tmp_meta.unlink(missing_ok=True)
                     raise
 
             except Exception as e:
@@ -630,6 +851,12 @@ class DiskCacheLayer:
 
     def invalidate(self, key: str) -> bool:
         """Remove entry from disk cache."""
+        cache_path = self._key_path(key)
+        with self._process_lock(), self._root_lock(), self._entry_lock(cache_path):
+            return self._invalidate_unlocked(key)
+
+    def _invalidate_unlocked(self, key: str) -> bool:
+        """Remove a disk entry while holding its per-key lock."""
         cache_path = self._key_path(key)
         meta_path = self._meta_path(cache_path)
 
@@ -643,26 +870,134 @@ class DiskCacheLayer:
 
         return removed
 
-    def invalidate_dependencies(self, dependency: str) -> int:
-        """Invalidate disk entries bound to the given dependency."""
-        keys_to_remove = []
-        for meta_path in self.root_dir.rglob("*.meta.json"):
-            try:
-                meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
-                metadata = CacheMetadata.from_dict(meta_data)
-                if dependency in metadata.dependencies:
-                    keys_to_remove.append(metadata.key)
-            except Exception as e:
-                logger.warning(f"Failed to inspect disk cache metadata {meta_path}: {e}")
+    def _invalidate_if_unchanged_unlocked(
+        self,
+        key: str,
+        expected_metadata: str,
+        expected_value: Optional[bytes],
+    ) -> bool:
+        """Remove a pair only when both physical files match the read snapshot."""
+        cache_path = self._key_path(key)
+        meta_path = self._meta_path(cache_path)
+        # Without a value snapshot, deleting the pair could remove a value
+        # published after metadata was read (for example after a missing-file
+        # read failure). Fail closed rather than treating metadata alone as a
+        # sufficient identity.
+        if expected_value is None:
+            return False
+        try:
+            if meta_path.read_text(encoding="utf-8") != expected_metadata:
+                return False
+            if cache_path.read_bytes() != expected_value:
+                return False
+        except (FileNotFoundError, OSError):
+            return False
+        return self._invalidate_unlocked(key)
 
-        return sum(1 for key in keys_to_remove if self.invalidate(key))
+    def _invalidate_scanned_pair(
+        self,
+        meta_path: Path,
+        value_path: Path,
+        expected_text: str,
+        *,
+        expected_value: Optional[bytes],
+        dependency: Optional[str] = None,
+        generation: Optional[str] = None,
+    ) -> bool:
+        """Delete a scanned pair only if both files remain unchanged."""
+        if expected_value is None:
+            return False
+        with self._root_lock(), self._entry_lock(value_path):
+            try:
+                current_text = meta_path.read_text(encoding="utf-8")
+                current_value = value_path.read_bytes()
+            except (FileNotFoundError, OSError):
+                return False
+            if current_text != expected_text or current_value != expected_value:
+                return False
+            if generation is not None:
+                try:
+                    current = CacheMetadata.from_dict(json.loads(current_text))
+                except Exception:
+                    return False
+                if current.generation != generation:
+                    return False
+                if dependency not in current.dependencies:
+                    return False
+            meta_path.unlink(missing_ok=True)
+            value_path.unlink(missing_ok=True)
+            return True
+
+    def invalidate_dependencies(self, dependency: str, *, return_keys: bool = False):
+        removed_keys = set()
+        removed_count = 0
+        with self._process_lock(), self._root_lock():
+            return self._invalidate_dependencies_unlocked(
+                dependency, return_keys=return_keys
+            )
+
+    def _invalidate_dependencies_unlocked(
+        self, dependency: str, *, return_keys: bool = False
+    ):
+        removed_keys = set()
+        removed_count = 0
+        for cache_path in self.root_dir.rglob("*.cache"):
+            if cache_path.name.startswith(".tmp."):
+                continue
+            try:
+                raw = cache_path.read_bytes()
+                metadata, _ = self._decode_record(raw)
+                if dependency not in metadata.dependencies:
+                    continue
+                with self._entry_lock(cache_path):
+                    if cache_path.read_bytes() != raw:
+                        continue
+                    cache_path.unlink(missing_ok=True)
+                    removed_count += 1
+                    if cache_path == self._key_path(metadata.key):
+                        removed_keys.add(metadata.key)
+            except Exception as e:
+                logger.warning(f"Failed to inspect disk cache record {cache_path}: {e}")
+                try:
+                    with self._entry_lock(cache_path):
+                        if cache_path.read_bytes() == raw:
+                            cache_path.unlink(missing_ok=True)
+                except (FileNotFoundError, OSError, UnboundLocalError):
+                    pass
+        for meta_path in self.root_dir.rglob("*.meta.json"):
+            value_path = meta_path.with_name(meta_path.name[:-len(".meta.json")] + ".cache")
+            scanned_text = None
+            scanned_value = None
+            try:
+                scanned_text = meta_path.read_text(encoding="utf-8")
+                scanned_value = value_path.read_bytes()
+                metadata = CacheMetadata.from_dict(json.loads(scanned_text))
+                if dependency not in metadata.dependencies:
+                    continue
+                if self._invalidate_scanned_pair(meta_path, value_path, scanned_text,
+                    expected_value=scanned_value, dependency=dependency,
+                    generation=metadata.generation):
+                    removed_count += 1
+                    removed_keys.add(metadata.key)
+            except Exception:
+                if scanned_text is not None:
+                    self._invalidate_scanned_pair(meta_path, value_path, scanned_text,
+                        expected_value=scanned_value)
+
+        return removed_keys if return_keys else removed_count
 
     def clear(self):
-        """Clear all cache files."""
+        """Clear all cache files while preserving the process-lock inode."""
         import shutil
-        if self.root_dir.exists():
-            shutil.rmtree(self.root_dir)
+        with self._process_lock(), self._root_lock():
             self.root_dir.mkdir(parents=True, exist_ok=True)
+            for child in self.root_dir.iterdir():
+                if child.name == ".cache.lock":
+                    continue
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink(missing_ok=True)
 
 
 # ============================================================================
@@ -671,6 +1006,14 @@ class DiskCacheLayer:
 
 class RedisCacheLayer:
     """L3 distributed cache using Redis."""
+
+    _COMPARE_DELETE_SCRIPT = """
+    local payload = redis.call('HGET', KEYS[1], 'data')
+    if not payload then return 0 end
+    local decoded = cjson.decode(payload)
+    if (decoded.generation or '') ~= ARGV[1] then return 0 end
+    return redis.call('DEL', KEYS[1], KEYS[2])
+    """
 
     def __init__(
         self,
@@ -700,9 +1043,113 @@ class RedisCacheLayer:
         """Add prefix to key."""
         return f"{self.key_prefix}{key}"
 
+    def _logical_key_matches_physical(self, logical_key: str, value_key: Any) -> bool:
+        """Return whether metadata identity matches the scanned Redis value key."""
+        expected = self._prefixed_key(logical_key)
+        if isinstance(value_key, bytes):
+            try:
+                value_key = value_key.decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+        return value_key == expected
+
+    def _invalidate_physical(self, value_key: Any, meta_key: Any) -> bool:
+        """Delete one Redis value/metadata pair using physical keys."""
+        try:
+            results = self.client.delete(value_key, meta_key)
+            return bool(results)
+        except Exception as e:
+            logger.warning("Failed to quarantine Redis cache pair %r/%r: %s", value_key, meta_key, e)
+            return False
+
+    _COMPARE_QUARANTINE_SCRIPT = """
+    local payload = redis.call('HGET', KEYS[1], 'data')
+    if ARGV[1] == 'missing' then
+        if payload ~= false then return 0 end
+    elseif payload ~= ARGV[2] then
+        return 0
+    end
+    return redis.call('DEL', KEYS[1], KEYS[2])
+    """
+
+    def _compare_delete_physical(
+        self, meta_key: Any, value_key: Any, generation: str
+    ) -> bool:
+        """Delete a scanned pair only while its generation is unchanged."""
+        try:
+            result = self.client.eval(
+                self._COMPARE_DELETE_SCRIPT,
+                2,
+                meta_key,
+                value_key,
+                generation,
+            )
+            return bool(result)
+        except Exception as e:
+            logger.warning(
+                "Failed generation-checked Redis invalidation for %r/%r: %s",
+                meta_key,
+                value_key,
+                e,
+            )
+            return False
+
+    def _compare_quarantine_physical(
+        self, meta_key: Any, value_key: Any, raw_data: Optional[Any]
+    ) -> bool:
+        """Quarantine a malformed pair only if its scanned payload persists."""
+        try:
+            if raw_data is None:
+                result = self.client.eval(
+                    self._COMPARE_QUARANTINE_SCRIPT,
+                    2,
+                    meta_key,
+                    value_key,
+                    "missing",
+                    "",
+                )
+            else:
+                result = self.client.eval(
+                    self._COMPARE_QUARANTINE_SCRIPT,
+                    2,
+                    meta_key,
+                    value_key,
+                    "present",
+                    raw_data,
+                )
+            return bool(result)
+        except Exception as e:
+            logger.warning(
+                "Failed generation-independent Redis quarantine for %r/%r: %s",
+                meta_key,
+                value_key,
+                e,
+            )
+            return False
+
+    def _cleanup_get_pair(
+        self, value_key: Any, meta_key: Any, meta_dict: Optional[dict]
+    ) -> None:
+        """Remove a bad read pair only if its scanned metadata still matches."""
+        raw_data = None
+        if meta_dict:
+            raw_data = meta_dict.get(b"data")
+            if raw_data is None:
+                raw_data = meta_dict.get("data")
+        if raw_data is None:
+            self._compare_quarantine_physical(meta_key, value_key, None)
+            return
+        try:
+            raw_text = raw_data.decode("utf-8") if isinstance(raw_data, bytes) else raw_data
+            generation = CacheMetadata.from_dict(json.loads(raw_text)).generation
+        except Exception:
+            self._compare_quarantine_physical(meta_key, value_key, raw_data)
+            return
+        self._compare_delete_physical(meta_key, value_key, generation)
+
     def get(self, key: str) -> Optional[Tuple[Any, CacheMetadata]]:
-        """Get value from Redis cache."""
         prefixed = self._prefixed_key(key)
+        meta_dict = None
 
         try:
             # Get value and metadata
@@ -715,6 +1162,8 @@ class RedisCacheLayer:
             meta_dict = results[1]
 
             if not compressed_data or not meta_dict:
+                if compressed_data or meta_dict:
+                    self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
                 return None
 
             # Decode metadata
@@ -726,7 +1175,12 @@ class RedisCacheLayer:
 
             # Check expiration
             if metadata.is_expired(time.time()):
-                self.invalidate(key)
+                self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
+                return None
+            if metadata.key != key or not _codec_compatible(
+                metadata.compression_method, self.compressor
+            ):
+                self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
                 return None
 
             # Decompress and deserialize
@@ -740,6 +1194,7 @@ class RedisCacheLayer:
 
         except Exception as e:
             logger.warning(f"Failed to get from Redis cache for key {key}: {e}")
+            self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
             return None
 
     def put(
@@ -765,17 +1220,25 @@ class RedisCacheLayer:
         prefixed = self._prefixed_key(key)
 
         try:
-            # Serialize and compress
-            data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
-            compressed, stats = self.compressor.compress(data)
-
-            # Preserve the original creation time when writing a promoted entry.
+            if not _is_valid_ttl(ttl_seconds):
+                return False
+            # Capture the origin before potentially slow serialization or
+            # compression so direct writes cannot extend absolute TTLs.
             now = time.time()
             entry_created_at = now if created_at is None else created_at
+            if not _valid_origin(entry_created_at, now, ttl_seconds):
+                return False
+
+            data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+            compressed, stats = self.compressor.compress(data)
+            publication_now = time.time()
+
             if ttl_seconds is None:
                 redis_ttl = None
             else:
-                remaining_ttl = ttl_seconds - max(0.0, now - entry_created_at)
+                # Physical expiry must cover only the remaining absolute TTL
+                # after preprocessing, while metadata keeps the original origin.
+                remaining_ttl = ttl_seconds - max(0.0, publication_now - entry_created_at)
                 if not math.isfinite(remaining_ttl) or remaining_ttl <= 0:
                     return False
                 # Redis' second-granularity expiry must not truncate a live
@@ -784,13 +1247,14 @@ class RedisCacheLayer:
             metadata = CacheMetadata(
                 key=key,
                 created_at=entry_created_at,
-                last_accessed=now,
+                last_accessed=publication_now,
                 access_count=0,
                 size_bytes=len(data),
                 compressed_size=len(compressed),
                 ttl_seconds=ttl_seconds,
-                dependencies=dependencies or set(),
-                compression_method="lz4" if HAS_LZ4 else "zlib",
+                dependencies=set(dependencies) if dependencies is not None else set(),
+                compression_method=_compression_method(self.compressor),
+                generation=uuid.uuid4().hex,
             )
 
             # Store with pipeline
@@ -826,25 +1290,47 @@ class RedisCacheLayer:
             logger.warning(f"Failed to invalidate Redis cache for key {key}: {e}")
             return False
 
-    def invalidate_dependencies(self, dependency: str) -> int:
+    def invalidate_dependencies(self, dependency: str, *, return_keys: bool = False):
         """Invalidate Redis entries bound to the given dependency."""
         try:
             cursor = 0
-            keys_to_remove = []
+            records_to_remove = []
+            quarantine_records = []
             pattern = f"{self.key_prefix}*:meta"
             while True:
                 cursor, meta_keys = self.client.scan(cursor, match=pattern, count=100)
                 for meta_key in meta_keys:
                     try:
                         meta_dict = self.client.hgetall(meta_key)
-                        raw_data = meta_dict.get(b"data") or meta_dict.get("data")
-                        if not raw_data:
+                        raw_data = meta_dict.get(b"data")
+                        if raw_data is None:
+                            raw_data = meta_dict.get("data")
+                        if raw_data is None:
+                            value_key = (
+                                meta_key[:-5]
+                                if meta_key.endswith(b":meta")
+                                else meta_key[:-5]
+                                if meta_key.endswith(":meta")
+                                else None
+                            )
+                            if value_key is not None:
+                                quarantine_records.append((meta_key, value_key, None))
                             continue
                         if isinstance(raw_data, bytes):
                             raw_data = raw_data.decode("utf-8")
                         metadata = CacheMetadata.from_dict(json.loads(raw_data))
                         if dependency in metadata.dependencies:
-                            keys_to_remove.append(metadata.key)
+                            value_key = (
+                                meta_key[:-5]
+                                if meta_key.endswith(b":meta")
+                                else meta_key[:-5]
+                                if meta_key.endswith(":meta")
+                                else None
+                            )
+                            if value_key is not None:
+                                records_to_remove.append(
+                                    (meta_key, value_key, metadata.key, metadata.generation)
+                                )
                     except Exception as e:
                         # One malformed record must not prevent later dependency-bound
                         # entries from being invalidated. Quarantine the unusable pair
@@ -860,15 +1346,34 @@ class RedisCacheLayer:
                             f"Failed to inspect Redis cache metadata {meta_key!r}: {e}"
                         )
                         if value_key is not None:
-                            self.client.delete(meta_key, value_key)
+                            quarantine_records.append((meta_key, value_key, raw_data))
                         else:
-                            self.client.delete(meta_key)
+                            quarantine_records.append((meta_key, meta_key, raw_data))
                 if cursor == 0:
                     break
-            return sum(1 for key in keys_to_remove if self.invalidate(key))
+            removed_keys = set()
+            removed_count = 0
+            for meta_key, value_key, raw_data in quarantine_records:
+                self._compare_quarantine_physical(meta_key, value_key, raw_data)
+            for meta_key, value_key, logical_key, generation in records_to_remove:
+                try:
+                    # Delete only if the scanned generation is still current;
+                    # replacements written after the scan must survive.
+                    if self._compare_delete_physical(meta_key, value_key, generation):
+                        removed_count += 1
+                        if self._logical_key_matches_physical(logical_key, value_key):
+                            removed_keys.add(logical_key)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to invalidate Redis pair %r/%r: %s",
+                        meta_key,
+                        value_key,
+                        e,
+                    )
+            return removed_keys if return_keys else removed_count
         except Exception as e:
             logger.warning(f"Failed to invalidate Redis dependency {dependency}: {e}")
-            return 0
+            return set() if return_keys else 0
 
     def clear(self):
         """Clear all cache entries with this prefix."""
@@ -1046,10 +1551,25 @@ class MultiLevelCache:
         self.stats = CacheStats()
         self._stats_lock = threading.Lock()
         self._coordination_lock = threading.RLock()
+        self._l1_invalidation_epoch = (
+            self.l2.invalidation_epoch() if self.l1 and self.l2 else ""
+        )
+
+    def _refresh_l1_epoch_unlocked(self) -> None:
+        """Drop local L1 entries after another coordinator invalidates L2."""
+        if not self.l1 or not self.l2:
+            return
+        current_epoch = self.l2._read_invalidation_epoch_unlocked()
+        if current_epoch != self._l1_invalidation_epoch:
+            self.l1.clear()
+            self._l1_invalidation_epoch = current_epoch
 
     def get(self, key: str) -> Optional[Any]:
         """Get a value while serializing promotion with dependency invalidation."""
         with self._coordination_lock:
+            if self.l2:
+                with self.l2._process_lock(), self.l2._root_lock():
+                    return self._get_unlocked(key)
             return self._get_unlocked(key)
 
     def _get_unlocked(self, key: str) -> Optional[Any]:
@@ -1064,6 +1584,7 @@ class MultiLevelCache:
         """
         # Try L1 (memory)
         if self.l1:
+            self._refresh_l1_epoch_unlocked()
             result = self.l1.get(key)
             if result is not None:
                 with self._stats_lock:
@@ -1075,8 +1596,6 @@ class MultiLevelCache:
             result = self.l2.get(key)
             if result is not None:
                 value, metadata = result
-                with self._stats_lock:
-                    self.stats.l2_hits += 1
 
                 # Promote to L1
                 if self.l1:
@@ -1088,6 +1607,16 @@ class MultiLevelCache:
                         created_at=metadata.created_at,
                     )
 
+                # Promotion can consume the remaining absolute TTL. Never
+                # return a value that expired while an upper layer serialized it.
+                if metadata.is_expired(time.time()):
+                    self._invalidate_unlocked(key)
+                    with self._stats_lock:
+                        self.stats.misses += 1
+                    return None
+
+                with self._stats_lock:
+                    self.stats.l2_hits += 1
                 return value
 
         # Try L3 (Redis)
@@ -1095,8 +1624,6 @@ class MultiLevelCache:
             result = self.l3.get(key)
             if result is not None:
                 value, metadata = result
-                with self._stats_lock:
-                    self.stats.l3_hits += 1
 
                 # Promote to L2 and L1
                 if self.l2:
@@ -1116,6 +1643,14 @@ class MultiLevelCache:
                         created_at=metadata.created_at,
                     )
 
+                if metadata.is_expired(time.time()):
+                    self._invalidate_unlocked(key)
+                    with self._stats_lock:
+                        self.stats.misses += 1
+                    return None
+
+                with self._stats_lock:
+                    self.stats.l3_hits += 1
                 return value
 
         # Cache miss
@@ -1166,21 +1701,28 @@ class MultiLevelCache:
             return False
 
         success = False
+        # Capture one origin for every write-through layer. Each layer's TTL is
+        # absolute from this instant, not from its individual serialization time.
+        created_at = time.time()
 
         # Write to L1
         if self.l1:
-            if self.l1.put(key, value, ttl_seconds, dependencies):
+            if self.l1.put(key, value, ttl_seconds, dependencies, created_at=created_at):
                 success = True
 
         if write_through:
             # Write to L2
             if self.l2:
-                if self.l2.put(key, value, ttl_seconds, dependencies):
+                if self.l2.put(
+                    key, value, ttl_seconds, dependencies, created_at=created_at
+                ):
                     success = True
 
             # Write to L3
             if self.l3:
-                if self.l3.put(key, value, ttl_seconds, dependencies):
+                if self.l3.put(
+                    key, value, ttl_seconds, dependencies, created_at=created_at
+                ):
                     success = True
 
         return success
@@ -1218,6 +1760,10 @@ class MultiLevelCache:
     def invalidate_dependency(self, dependency: str) -> int:
         """Invalidate a dependency without racing with reads or promotion."""
         with self._coordination_lock:
+            if self.l2:
+                with self.l2._process_lock(), self.l2._root_lock():
+                    self._l1_invalidation_epoch = self.l2._bump_invalidation_epoch_unlocked()
+                    return self._invalidate_dependency_unlocked(dependency)
             return self._invalidate_dependency_unlocked(dependency)
 
     def _invalidate_dependency_unlocked(self, dependency: str) -> int:
@@ -1230,15 +1776,44 @@ class MultiLevelCache:
         Returns:
             Number of entries invalidated
         """
-        count = 0
+        invalidated_keys = set()
+        pending_dependencies = [dependency]
+        visited_dependencies = set()
 
-        if self.l1:
-            count += self.l1.invalidate_dependencies(dependency)
-        if self.l2:
-            count += self.l2.invalidate_dependencies(dependency)
-        if self.l3:
-            count += self.l3.invalidate_dependencies(dependency)
+        # Dependency edges may point at another cache key.  Walk the resulting
+        # key graph so invalidating a raw input also removes derived entries
+        # that depend on an invalidated intermediate result.
+        while pending_dependencies:
+            current_dependency = pending_dependencies.pop()
+            if current_dependency in visited_dependencies:
+                continue
+            visited_dependencies.add(current_dependency)
 
+            removed_this_round = set()
+            if self.l1:
+                removed_this_round.update(
+                    self.l1.invalidate_dependencies(
+                        current_dependency, return_keys=True
+                    )
+                )
+            if self.l2:
+                removed_this_round.update(
+                    self.l2.invalidate_dependencies(
+                        current_dependency, return_keys=True
+                    )
+                )
+            if self.l3:
+                removed_this_round.update(
+                    self.l3.invalidate_dependencies(
+                        current_dependency, return_keys=True
+                    )
+                )
+
+            new_keys = removed_this_round - invalidated_keys
+            invalidated_keys.update(new_keys)
+            pending_dependencies.extend(new_keys)
+
+        count = len(invalidated_keys)
         with self._stats_lock:
             self.stats.invalidations += count
 

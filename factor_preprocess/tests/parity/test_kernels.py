@@ -54,108 +54,115 @@ def sample_ts_data(rng):
     return data
 
 
-# ============================================================================
-# Cross-sectional parity tests
-# ============================================================================
+@pytest.mark.parametrize("function", [fast_rolling_mean, fast_rolling_std])
+@pytest.mark.parametrize("window", [0, -1])
+def test_fast_rolling_rejects_nonpositive_window(function, window, sample_ts_data):
+    """Fast rolling entry points reject invalid window sizes."""
+    with pytest.raises(ValueError, match="window must be positive"):
+        function(sample_ts_data, window)
 
-@pytest.mark.parity
-class TestCrossSecionalParity:
-    """Test fast vs reference for cross-sectional operations."""
+@pytest.mark.parametrize("function", [numba_rolling_mean, numba_rolling_std])
+@pytest.mark.parametrize("window", [0, -1])
+def test_numba_rolling_rejects_nonpositive_window(function, window, sample_ts_data):
+    """Numba rolling entry points reject invalid window sizes."""
+    with pytest.raises(ValueError, match="window must be positive"):
+        function(sample_ts_data, window)
 
-    def test_rank_basic(self, sample_cs_data):
-        """Test rank parity on basic case."""
-        ref = reference_cs_rank(sample_cs_data, axis=-1)
-        fast = fast_cs_rank(sample_cs_data, axis=-1)
+"""Test fast vs reference for cross-sectional operations."""
 
-        # Must match exactly (rank is integer-valued)
-        np.testing.assert_array_equal(ref, fast)
+def test_rank_basic(sample_cs_data):
+    """Test rank parity on basic case."""
+    ref = reference_cs_rank(sample_cs_data, axis=-1)
+    fast = fast_cs_rank(sample_cs_data, axis=-1)
 
-    def test_rank_percentile(self, sample_cs_data):
-        """Test rank parity with percentile mode."""
-        ref = reference_cs_rank(sample_cs_data, axis=-1, pct=True)
-        fast = fast_cs_rank(sample_cs_data, axis=-1, pct=True)
+    # Must match exactly (rank is integer-valued)
+    np.testing.assert_array_equal(ref, fast)
 
-        np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
+def test_rank_percentile(sample_cs_data):
+    """Test rank parity with percentile mode."""
+    ref = reference_cs_rank(sample_cs_data, axis=-1, pct=True)
+    fast = fast_cs_rank(sample_cs_data, axis=-1, pct=True)
 
-    def test_rank_1d(self, rng):
-        """Test rank on 1D array."""
-        data = rng.randn(100)
-        data[rng.rand(100) < 0.1] = np.nan
+    np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
 
-        ref = reference_cs_rank(data)
-        fast = fast_cs_rank(data)
+def test_rank_1d(rng):
+    """Test rank on 1D array."""
+    data = rng.randn(100)
+    data[rng.rand(100) < 0.1] = np.nan
 
-        np.testing.assert_array_equal(ref, fast)
+    ref = reference_cs_rank(data)
+    fast = fast_cs_rank(data)
 
-    def test_rank_all_nan(self):
-        """Test rank with all-NaN slice."""
-        data = np.full((10, 20), np.nan)
+    np.testing.assert_array_equal(ref, fast)
 
-        ref = reference_cs_rank(data)
-        fast = fast_cs_rank(data)
+def test_rank_all_nan():
+    """Test rank with all-NaN slice."""
+    data = np.full((10, 20), np.nan)
 
-        assert np.all(np.isnan(ref))
-        assert np.all(np.isnan(fast))
+    ref = reference_cs_rank(data)
+    fast = fast_cs_rank(data)
 
-    def test_rank_constants(self):
-        """Test rank with constant slices."""
-        data = np.ones((10, 20))
-        data[0, :] = np.arange(20)  # First row varies
+    assert np.all(np.isnan(ref))
+    assert np.all(np.isnan(fast))
 
-        ref = reference_cs_rank(data, axis=-1)
-        fast = fast_cs_rank(data, axis=-1)
+def test_rank_constants():
+    """Test rank with constant slices."""
+    data = np.ones((10, 20))
+    data[0, :] = np.arange(20)  # First row varies
 
-        np.testing.assert_array_equal(ref, fast)
+    ref = reference_cs_rank(data, axis=-1)
+    fast = fast_cs_rank(data, axis=-1)
 
-    def test_zscore_basic(self, sample_cs_data):
-        """Test zscore parity."""
-        ref = reference_cs_zscore(sample_cs_data, axis=-1)
-        fast = fast_cs_zscore(sample_cs_data, axis=-1)
+    np.testing.assert_array_equal(ref, fast)
 
-        np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
+def test_zscore_basic(sample_cs_data):
+    """Test zscore parity."""
+    ref = reference_cs_zscore(sample_cs_data, axis=-1)
+    fast = fast_cs_zscore(sample_cs_data, axis=-1)
 
-    def test_zscore_constant_slice(self):
-        """Test zscore on constant slice."""
-        data = np.ones((10, 20))
-        data[0, :] = np.arange(20)
+    np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
 
-        ref = reference_cs_zscore(data, axis=-1, constant_value=0.0)
-        fast = fast_cs_zscore(data, axis=-1, constant_value=0.0)
+def test_zscore_constant_slice():
+    """Test zscore on constant slice."""
+    data = np.ones((10, 20))
+    data[0, :] = np.arange(20)
 
-        np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
+    ref = reference_cs_zscore(data, axis=-1, constant_value=0.0)
+    fast = fast_cs_zscore(data, axis=-1, constant_value=0.0)
 
-    def test_zscore_with_nans(self, sample_cs_data):
-        """Test zscore preserves NaN positions."""
-        ref = reference_cs_zscore(sample_cs_data, axis=-1)
-        fast = fast_cs_zscore(sample_cs_data, axis=-1)
+    np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
 
-        # NaN positions must match exactly
-        np.testing.assert_array_equal(np.isnan(ref), np.isnan(fast))
+def test_zscore_with_nans(sample_cs_data):
+    """Test zscore preserves NaN positions."""
+    ref = reference_cs_zscore(sample_cs_data, axis=-1)
+    fast = fast_cs_zscore(sample_cs_data, axis=-1)
 
-        # Finite values must match
-        finite_mask = np.isfinite(ref)
-        np.testing.assert_allclose(
-            ref[finite_mask],
-            fast[finite_mask],
-            rtol=1e-10,
-            atol=1e-14
-        )
+    # NaN positions must match exactly
+    np.testing.assert_array_equal(np.isnan(ref), np.isnan(fast))
 
-    def test_demean_basic(self, sample_cs_data):
-        """Test demean parity."""
-        ref = reference_cs_demean(sample_cs_data, axis=-1)
-        fast = fast_cs_demean(sample_cs_data, axis=-1)
+    # Finite values must match
+    finite_mask = np.isfinite(ref)
+    np.testing.assert_allclose(
+        ref[finite_mask],
+        fast[finite_mask],
+        rtol=1e-10,
+        atol=1e-14
+    )
 
-        np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
+def test_demean_basic(sample_cs_data):
+    """Test demean parity."""
+    ref = reference_cs_demean(sample_cs_data, axis=-1)
+    fast = fast_cs_demean(sample_cs_data, axis=-1)
 
-    def test_demean_mean_is_zero(self, sample_cs_data):
-        """Test that demeaned data has zero mean."""
-        result = fast_cs_demean(sample_cs_data, axis=-1)
+    np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-14)
 
-        # Mean should be ~0 (within floating point error)
-        mean = np.nanmean(result, axis=-1)
-        np.testing.assert_allclose(mean, 0.0, atol=1e-12)
+def test_demean_mean_is_zero(sample_cs_data):
+    """Test that demeaned data has zero mean."""
+    result = fast_cs_demean(sample_cs_data, axis=-1)
 
+    # Mean should be ~0 (within floating point error)
+    mean = np.nanmean(result, axis=-1)
+    np.testing.assert_allclose(mean, 0.0, atol=1e-12)
 
 # ============================================================================
 # Rolling window parity tests

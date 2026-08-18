@@ -142,6 +142,13 @@ def polars_ic_batch(
 
     labels_bcast = labels.copy()
     if label_validity is not None:
+        if label_validity.ndim == 1:
+            label_validity = np.broadcast_to(label_validity[:, np.newaxis], (T, N))
+        elif label_validity.shape != (T, N):
+            raise ValueError(
+                f"Invalid label validity shape: {label_validity.shape}, "
+                f"expected (T,) or (T, N)"
+            )
         labels_bcast = np.where(label_validity, labels_bcast, np.nan)
 
     # Convert to long format

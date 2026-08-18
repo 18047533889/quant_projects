@@ -76,6 +76,22 @@ def large_panel(rng):
 class TestRollingParity:
     """Test numba rolling operations match reference exactly."""
 
+    @pytest.mark.parametrize(
+        "function",
+        [
+            numba_rolling_mean,
+            numba_rolling_std,
+            numba_rolling_sum,
+            numba_rolling_min,
+            numba_rolling_max,
+        ],
+    )
+    @pytest.mark.parametrize("window", [0, -1])
+    def test_nonpositive_window_rejected(self, function, window, small_panel):
+        """All Numba rolling entry points reject invalid window sizes."""
+        with pytest.raises(ValueError, match="window must be positive"):
+            function(small_panel, window)
+
     def test_rolling_mean_small_window(self, small_panel):
         """Test rolling mean with small window."""
         window = 5

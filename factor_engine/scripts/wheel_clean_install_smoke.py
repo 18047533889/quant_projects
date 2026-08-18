@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -44,11 +45,21 @@ def main(argv: list[str] | None = None) -> int:
     _run([sys.executable, "-m", "pip", "install", "-q", "build"], cwd=REPO)
     _run([sys.executable, "-m", "build", "--wheel", "-o", str(dist)], cwd=REPO)
     wheels = sorted(dist.glob("*.whl"))
-    if not wheels:
-        print("no wheel produced", file=sys.stderr)
+    if len(wheels) != 1:
+        print(f"expected exactly one wheel, found {len(wheels)}", file=sys.stderr)
         return 1
-    wheel = wheels[-1]
-    print(f"      wheel: {wheel.name}")
+    wheel = wheels[0]
+    with zipfile.ZipFile(wheel) as wheel_zip:
+        names = set(wheel_zip.namelist())
+        metadata_path = next(
+            name for name in names if name.endswith(".dist-info/METADATA")
+        )
+        metadata = wheel_zip.read(metadata_path).decode("utf-8")
+        assert "Name: factor-engine" in metadata
+        assert "Version: 0.3.1" in metadata
+        assert any(name.startswith("modeling/") for name in names)
+        assert not any(name.startswith("modeling_adapters/") for name in names)
+    print(f"      wheel: {wheel.name} (payload checked)")
 
     print(f"[2/4] create clean venv + install wheel")
     _run([sys.executable, "-m", "venv", str(venv)], cwd=base)
@@ -68,7 +79,9 @@ assert not any('factor_engine' in p and 'site-packages' not in p for p in sys.pa
 
 from api.dsl_parser import parse_expr, parse_factor
 from runtime.engine import FactorEngine
+from modeling import __doc__ as modeling_doc
 import pandas as pd
+assert modeling_doc and 'SINGLE SOURCE OF TRUTH' in modeling_doc
 
 # parser/compiler smoke
 f = parse_factor('ts_mean(close, 3)', name='smoke')

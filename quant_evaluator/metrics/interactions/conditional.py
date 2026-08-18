@@ -10,6 +10,7 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 
 
 def compute_conditional_ic(
@@ -43,10 +44,9 @@ def compute_conditional_ic(
         raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
 
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
 
     T, N, F = values.shape
 
@@ -61,8 +61,8 @@ def compute_conditional_ic(
             conditioning_valid = factor_batch.validity[t, :, conditioning_factor_idx]
             conditioning_values = np.where(conditioning_valid, conditioning_values, np.nan)
 
-        # Filter finite conditioning values
-        valid_mask = np.isfinite(conditioning_values)
+        # Filter finite conditioning values and labels
+        valid_mask = np.isfinite(conditioning_values) & np.isfinite(labels[t])
         if np.sum(valid_mask) < min_assets:
             continue
 
@@ -99,9 +99,8 @@ def compute_conditional_ic(
                     factor_valid = factor_batch.validity[t, :, f]
                     factor_t = np.where(factor_valid, factor_t, np.nan)
 
-                if label_bundle.validity is not None:
-                    label_valid = label_bundle.validity[t, :]
-                    label_t = np.where(label_valid, label_t, np.nan)
+                if label_validity is not None:
+                    label_t = np.where(label_validity[t], label_t, np.nan)
 
                 # Filter to quantile
                 factor_q = factor_t[quantile_mask]
@@ -161,10 +160,9 @@ def compute_incremental_ic(
         raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
 
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
 
     T, N, F = values.shape
 
@@ -196,9 +194,8 @@ def compute_incremental_ic(
             test_valid = factor_batch.validity[t, :, test_factor_idx]
             test_factor = np.where(test_valid, test_factor, np.nan)
 
-        if label_bundle.validity is not None:
-            label_valid = label_bundle.validity[t, :]
-            label_t = np.where(label_valid, label_t, np.nan)
+        if label_validity is not None:
+            label_t = np.where(label_validity[t], label_t, np.nan)
 
         # Filter finite observations
         valid_mask = (

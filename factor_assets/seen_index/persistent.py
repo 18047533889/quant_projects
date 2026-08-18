@@ -70,7 +70,7 @@ class PersistentSeenIndex:
         """)
 
         self._conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_factor_id ON seen_factors(factor_id)
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_factor_id ON seen_factors(factor_id)
         """)
 
         self._conn.execute("""

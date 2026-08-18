@@ -54,6 +54,47 @@ def test_malformed_validator_response_fails_closed():
     assert "boolean is_legal" in session.trials[0].legality_check["errors"][0]
 
 
+def test_search_runner_persists_published_evidence_reference():
+    def evaluate(trial, fidelity):
+        return {
+            "evaluation_id": "eval-1",
+            "evidence_ref": "store://evidence-1",
+            "score": 1.0,
+            "cost": 1.0,
+        }
+
+    session = SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+            evaluation_cost_units=1.0,
+        ),
+        _trial,
+        evaluate,
+    ).run("evidence-reference")
+
+    assert session.trials[0].evaluation_ref == "store://evidence-1"
+
+
+def test_search_runner_rejects_evaluation_without_evidence_reference():
+    session = SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+            evaluation_cost_units=1.0,
+        ),
+        _trial,
+        lambda trial, fidelity: {"score": 1.0, "cost": 1.0},
+    ).run("missing-evidence-reference")
+
+    trial = session.trials[0]
+    assert trial.status is TrialStatus.FAILED
+    assert trial.evaluation_ref is None
+    assert "non-empty evidence_ref or evaluation_id" in trial.failure_reason
+    assert session.successful_trials() == []
+    assert session.best_trial_id is None
+
+
 def test_multifidelity_does_not_promote_on_score_alone():
     fidelities = []
 

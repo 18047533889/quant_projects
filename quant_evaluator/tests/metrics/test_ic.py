@@ -20,6 +20,31 @@ from quant_evaluator.contracts.errors import InvalidContractError
 class TestPearsonCorrelation:
     """Test Pearson correlation reference implementation."""
 
+    def test_one_dimensional_label_validity_is_broadcast(self):
+        batch = FactorBatch(
+            factor_ids=("f1",),
+            time_axis=AxisRef(name="time", dtype="int64", size=3),
+            asset_axis=AxisRef(name="asset", dtype="int64", size=2),
+            values=np.array([[[1.0], [2.0]], [[2.0], [4.0]], [[3.0], [6.0]]]),
+        )
+        bundle = LabelBundle(
+            target_id="ret",
+            values=np.array([1.0, 2.0, 3.0]),
+            validity=np.array([True, False, True]),
+            horizon=1,
+            decision_time=(1, 2, 3),
+            label_start_time=(1, 2, 3),
+            label_end_time=(2, 3, 4),
+        )
+
+        series, counts = compute_daily_ic(batch, bundle, min_assets=2)
+
+        assert np.isnan(series[0, 0])
+        assert np.isnan(series[1, 0])
+        assert np.isnan(series[2, 0])
+        assert counts[:, 0].tolist() == [2, 0, 2]
+
+
     def test_perfect_positive_correlation(self):
         """Perfect positive correlation."""
         x = np.array([1, 2, 3, 4, 5], dtype=float)

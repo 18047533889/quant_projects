@@ -13,6 +13,7 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 
 
 def assign_quantiles_vectorized_v2(
@@ -94,10 +95,13 @@ def compute_quantile_returns_ultra_fast(
         quantile_counts: shape (T, n_quantiles, F)
     """
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+    labels, label_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
+    if label_validity is not None:
+        labels = np.where(label_validity, labels, np.nan)
 
     T, N, F = values.shape
 
@@ -106,7 +110,9 @@ def compute_quantile_returns_ultra_fast(
     quantile_counts = np.zeros((T, n_quantiles, F), dtype=np.int32)
 
     # Single quantile assignment for all factors
-    q_assignments = assign_quantiles_vectorized_v2(values, n_quantiles=n_quantiles)  # (T, N, F)
+    q_assignments = assign_quantiles_vectorized_v2(values, n_quantiles=n_quantiles)
+    if q_assignments.ndim == 2:
+        q_assignments = q_assignments[:, :, np.newaxis]
 
     # Pre-compute label validity once
     label_valid_mask = np.isfinite(labels)  # (T, N)

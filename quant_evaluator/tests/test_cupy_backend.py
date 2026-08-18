@@ -126,6 +126,22 @@ class TestICBatchParity:
         assert_allclose(ic_gpu, ic_cpu, rtol=1e-6, atol=1e-8)
         assert np.array_equal(counts_gpu, counts_cpu)
 
+    def test_pearson_ic_with_one_dimensional_label_validity(self, gpu_backend):
+        T, N, F = 3, 5, 2
+        factors = np.arange(T * N * F, dtype=float).reshape(T, N, F)
+        labels = np.arange(T, dtype=float)
+        validity = np.array([True, False, True])
+
+        ic_cpu, counts_cpu = fast_ic_batch(
+            factors, labels, min_obs=2, label_validity=validity
+        )
+        ic_gpu, counts_gpu = gpu_backend.fast_ic_batch_gpu(
+            factors, labels, min_obs=2, label_validity=validity
+        )
+
+        assert_allclose(ic_gpu, ic_cpu, equal_nan=True)
+        assert np.array_equal(counts_gpu, counts_cpu)
+
     def test_spearman_ic_small_batch(self, gpu_backend):
         """Test Spearman IC on small batch."""
         np.random.seed(321)

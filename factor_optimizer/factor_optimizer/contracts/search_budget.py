@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from math import isfinite
 from threading import Lock
-from typing import Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -33,6 +33,20 @@ class SearchBudget:
             raise ValueError("max_cost_units must be finite and > 0")
         if self.max_llm_calls is not None and self.max_llm_calls < 0:
             raise ValueError("max_llm_calls must be >= 0")
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize budget limits."""
+        return {
+            "max_trials": self.max_trials,
+            "max_evaluations": self.max_evaluations,
+            "max_cost_units": self.max_cost_units,
+            "max_llm_calls": self.max_llm_calls,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SearchBudget":
+        """Deserialize budget limits."""
+        return cls(**dict(data))
 
 
 @dataclass
@@ -172,3 +186,23 @@ class BudgetTracker:
             "llm_calls": {"used": self.llm_calls_used, "max": self.budget.max_llm_calls},
             "exhausted": self.is_exhausted(),
         }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize budget consumption under the reservation lock."""
+        with self._lock:
+            return {
+                "budget": self.budget.to_dict(),
+                "trials_used": self.trials_used,
+                "evaluations_used": self.evaluations_used,
+                "cost_used": self.cost_used,
+                "llm_calls_used": self.llm_calls_used,
+                "evaluations_reserved": self.evaluations_reserved,
+                "cost_reserved": self.cost_reserved,
+            }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BudgetTracker":
+        """Deserialize budget consumption, including active reservations."""
+        values = dict(data)
+        values["budget"] = SearchBudget.from_dict(values["budget"])
+        return cls(**values)

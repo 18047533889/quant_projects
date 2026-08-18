@@ -9,6 +9,7 @@ Tests verify:
 
 import pytest
 import numpy as np
+import types
 
 from quant_evaluator.contracts.errors import OptionalDependencyMissing
 
@@ -45,6 +46,29 @@ def test_factor_engine_adapter_import_fails_without_fe():
     finally:
         # Restore original path
         sys.path = original_path
+
+
+def test_factor_engine_adapter_uses_frozen_runtime_public_surface(monkeypatch):
+    """Constructor binds the public runtime facade, not a nonexistent execute module."""
+    fake_factor = types.ModuleType("api.factor")
+    fake_api = types.ModuleType("api")
+    fake_api.factor = fake_factor
+    fake_runtime = types.ModuleType("runtime")
+
+    class FakeFactorEngine:
+        pass
+
+    fake_runtime.FactorEngine = FakeFactorEngine
+    monkeypatch.setitem(__import__("sys").modules, "api", fake_api)
+    monkeypatch.setitem(__import__("sys").modules, "api.factor", fake_factor)
+    monkeypatch.setitem(__import__("sys").modules, "runtime", fake_runtime)
+
+    from quant_evaluator.adapters.factor_engine import FactorEngineAdapter
+
+    adapter = FactorEngineAdapter()
+    assert adapter._fe_factor is fake_factor
+    assert adapter._fe_engine is FakeFactorEngine
+    assert not hasattr(adapter, "_fe_execute")
 
 
 def test_factor_engine_adapter_not_imported_by_core():

@@ -990,9 +990,30 @@ class GroupRankPolarsNative(SeriesOperator):
 class GroupPercentilePolarsNative(SeriesOperator):
     """组内百分位数."""
 
-    metadata = _metadata("group_percentile", "组内百分位数", ["x", "group", "q"])
+    metadata = _metadata(
+        "group_percentile",
+        "组内百分位数",
+        ["x", "group", "p", "side", "missing_group_policy"],
+    )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, q: float = 0.5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(
+        self,
+        x: pl.DataFrame,
+        group: pl.DataFrame,
+        p: float = 0.5,
+        side: str = "top",
+        missing_group_policy: str = "raise",
+        **kwargs,
+    ) -> pl.DataFrame:
+        if side != "top":
+            raise ValueError("polars group_percentile supports side='top' only")
+        if missing_group_policy != "raise":
+            raise ValueError(
+                "polars group_percentile supports missing_group_policy='raise' only"
+            )
+        q = float(p)
+        if not 0.0 < q <= 1.0:
+            raise ValueError("p must satisfy 0 < p <= 1")
         x_cols = [c for c in x.columns if not c.startswith("__")]
         g_col = [c for c in group.columns if not c.startswith("__")][0]
 

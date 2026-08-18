@@ -260,6 +260,8 @@ def fast_rolling_mean(
     """
     if axis != 0:
         raise NotImplementedError("Only axis=0 supported for fast kernels")
+    if window <= 0:
+        raise ValueError("window must be positive")
 
     if values.size == 0:
         return values.copy()
@@ -310,6 +312,8 @@ def fast_rolling_std(
     """
     if axis != 0:
         raise NotImplementedError("Only axis=0 supported for fast kernels")
+    if window <= 0:
+        raise ValueError("window must be positive")
 
     if values.size == 0:
         return values.copy()
@@ -334,7 +338,7 @@ def fast_rolling_std(
 # ============================================================================
 
 if HAS_NUMBA:
-    @jit(nopython=True, parallel=True, cache=True)
+    @jit(nopython=True, parallel=True, cache=False)
     def _numba_rolling_mean_2d(values: np.ndarray, window: int) -> np.ndarray:
         """
         Numba-accelerated rolling mean for 2D arrays.
@@ -370,7 +374,7 @@ if HAS_NUMBA:
 
         return result
 
-    @jit(nopython=True, parallel=True, cache=True)
+    @jit(nopython=True, parallel=True, cache=False)
     def _numba_rolling_std_2d(
         values: np.ndarray,
         window: int,
@@ -453,6 +457,9 @@ def numba_rolling_mean(
         # Fallback to stride-based version
         return fast_rolling_mean(values, window, axis)
 
+    if window <= 0:
+        raise ValueError("window must be positive")
+
     if axis != 0:
         raise NotImplementedError("Only axis=0 supported")
 
@@ -498,6 +505,9 @@ def numba_rolling_std(
     if not HAS_NUMBA:
         # Fallback to stride-based version
         return fast_rolling_std(values, window, axis, ddof)
+
+    if window <= 0:
+        raise ValueError("window must be positive")
 
     if axis != 0:
         raise NotImplementedError("Only axis=0 supported")

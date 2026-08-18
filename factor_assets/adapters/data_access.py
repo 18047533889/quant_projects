@@ -175,10 +175,6 @@ class DAFactorValueReader:
         """Read and terminally materialize one factor through DataAccess."""
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
-        if universe is not None:
-            raise ValueError(
-                "universe filtering is not supported by the DataAccess factor-read contract"
-            )
         handle = self._store.read_factors(
             [factor_id],
             time_range=(start_date, end_date),

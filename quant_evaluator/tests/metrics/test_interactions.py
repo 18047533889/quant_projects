@@ -417,7 +417,57 @@ class TestEdgeCases:
         # Should still compute correlations with masked data
         assert not np.all(np.isnan(corr_matrix))
 
-    def test_sparse_data(self):
+    def test_one_dimensional_label_validity_is_broadcast(self):
+        """Conditional IC accepts scalar-per-time label validity."""
+        T, N, F = 2, 20, 2
+        values = np.arange(T * N * F, dtype=float).reshape(T, N, F)
+        batch = FactorBatch(
+            factor_ids=("f0", "f1"),
+            time_axis=AxisRef(name="time", dtype="int64", size=T),
+            asset_axis=AxisRef(name="asset", dtype="int64", size=N),
+            values=values,
+        )
+        labels = LabelBundle(
+            target_id="returns",
+            values=np.arange(T, dtype=float),
+            validity=np.array([True, False]),
+            horizon=1,
+            decision_time=tuple(range(T)),
+            label_start_time=tuple(range(T)),
+            label_end_time=tuple(range(1, T + 1)),
+        )
+        conditional_ic, counts = compute_conditional_ic(
+            batch, labels, conditioning_factor_idx=0, quantiles=2, min_assets=2
+        )
+        assert np.all(counts[1] > 0)
+        assert np.all(np.isnan(conditional_ic[1]))
+
+    def test_incremental_ic_one_dimensional_label_validity(self):
+        """Incremental IC accepts scalar-per-time label validity."""
+        T, N, F = 2, 20, 2
+        values = np.arange(T * N * F, dtype=float).reshape(T, N, F)
+        batch = FactorBatch(
+            factor_ids=("f0", "f1"),
+            time_axis=AxisRef(name="time", dtype="int64", size=T),
+            asset_axis=AxisRef(name="asset", dtype="int64", size=N),
+            values=values,
+        )
+        labels = LabelBundle(
+            target_id="returns",
+            values=np.arange(T, dtype=float),
+            validity=np.array([True, False]),
+            horizon=1,
+            decision_time=tuple(range(T)),
+            label_start_time=tuple(range(T)),
+            label_end_time=tuple(range(1, T + 1)),
+        )
+        incremental, base, total = compute_incremental_ic(
+            batch, labels, base_factor_indices=(0,), test_factor_idx=1, min_assets=2
+        )
+        assert np.isnan(incremental[1])
+        assert np.isnan(base[1])
+        assert np.isnan(total[1])
+
         """Test with sparse data (many NaNs)."""
         T, N, F = 30, 50, 2
 

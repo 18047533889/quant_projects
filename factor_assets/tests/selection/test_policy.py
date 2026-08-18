@@ -512,6 +512,26 @@ def test_selection_decision_metadata_default():
     assert decision.metadata == {}
 
 
+def test_selection_decision_metadata_is_immutable_snapshot():
+    metadata = {"source": "gate"}
+    decision = SelectionDecision(
+        decision_id="SD_001",
+        factor_id="F001",
+        approved=True,
+        reason=SelectionReason.APPROVED,
+        timestamp="2024-01-01T00:00:00Z",
+        policy_version="1.0",
+        evidence_refs=(),
+        gate_results=(),
+        metadata=metadata,
+    )
+
+    metadata["source"] = "caller-mutated"
+    assert decision.metadata["source"] == "gate"
+    with pytest.raises(TypeError):
+        decision.metadata["source"] = "direct-mutation"
+
+
 def test_selection_policy_priority_order():
     """Test that policy checks are evaluated in correct priority order."""
     policy = SelectionPolicy(

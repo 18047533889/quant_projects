@@ -63,6 +63,53 @@ class TestPersistentSeenIndex:
         assert record1.origin == record2.origin == "manual"
         assert index.count() == 1
 
+    def test_factor_id_collision_is_rejected(self):
+        index = PersistentSeenIndex(":memory:")
+        index.record("hash1", "factor1")
+
+        with pytest.raises(sqlite3.IntegrityError):
+            index.record("hash2", "factor1")
+
+        assert index.count() == 1
+        assert index.get("hash1").factor_id == "factor1"
+        assert index.get("hash2") is None
+
+    def test_legacy_duplicate_factor_ids_fail_closed_without_data_loss(self, tmp_path):
+        db_path = tmp_path / "legacy.db"
+        with sqlite3.connect(db_path) as connection:
+            connection.execute(
+                """
+                CREATE TABLE seen_factors (
+                    canonical_hash TEXT PRIMARY KEY,
+                    factor_id TEXT NOT NULL,
+                    first_seen_at TEXT NOT NULL,
+                    origin TEXT NOT NULL,
+                    origin_ref TEXT,
+                    structural_hash TEXT
+                )
+                """
+            )
+            connection.executemany(
+                "INSERT INTO seen_factors VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    ("hash1", "factor1", "2024-01-01T00:00:00+00:00", "manual", None, None),
+                    ("hash2", "factor1", "2024-01-02T00:00:00+00:00", "manual", None, None),
+                ],
+            )
+
+        with pytest.raises(sqlite3.IntegrityError, match="seen_factors.factor_id"):
+            PersistentSeenIndex(str(db_path))
+
+        with sqlite3.connect(db_path) as connection:
+            rows = connection.execute(
+                "SELECT canonical_hash, factor_id FROM seen_factors ORDER BY canonical_hash"
+            ).fetchall()
+            unique_index = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_factor_id'"
+            ).fetchone()
+        assert rows == [("hash1", "factor1"), ("hash2", "factor1")]
+        assert unique_index is None
+
     def test_concurrent_writers_same_hash_are_idempotent(self, tmp_path):
         db_path = tmp_path / "seen.db"
         barrier = threading.Barrier(4)

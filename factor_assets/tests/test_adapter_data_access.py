@@ -117,15 +117,25 @@ class TestDACatalogReader:
         assert reader.check_factor_availability("F1", date(2021, 1, 1)) is False
         assert reader.check_factor_availability("missing") is False
 
-    def test_universe_argument_fails_closed_until_row_filter_is_supported(self):
+    def test_universe_argument_is_forwarded_to_data_access(self):
         import factor_assets.adapters.data_access as da_mod
         from factor_assets.adapters.data_access import DAFactorValueReader
 
-        store = SimpleNamespace()
+        class Handle:
+            def to_arrow(self):
+                return {"rows": 1}
+
+        calls = []
+        store = SimpleNamespace(
+            read_factors=lambda *args, **kwargs: (calls.append((args, kwargs)) or Handle())
+        )
         with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
             reader = DAFactorValueReader(store=store)
-        with pytest.raises(ValueError, match="universe filtering is not supported"):
-            reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2), universe="US")
+        result = reader.read_factor_values(
+            "F1", date(2020, 1, 1), date(2020, 1, 2), universe="US"
+        )
+        assert result == {"rows": 1}
+        assert calls[0][1]["universe"] == "US"
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""

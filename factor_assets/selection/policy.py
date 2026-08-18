@@ -6,7 +6,8 @@ Immutable records of factor selection decisions with full provenance.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from types import MappingProxyType
+from typing import Mapping, Optional
 from datetime import datetime, timezone
 import math
 
@@ -41,7 +42,7 @@ class SelectionDecision:
     similarity_refs: tuple[str, ...] = ()
     actor: Optional[str] = None
     notes: Optional[str] = None
-    metadata: dict[str, str] = None
+    metadata: Mapping[str, str] = None
 
     def __post_init__(self):
         if not self.decision_id:
@@ -52,8 +53,9 @@ class SelectionDecision:
             raise ValueError("timestamp is required")
         if not self.policy_version:
             raise ValueError("policy_version is required")
-        if self.metadata is None:
-            object.__setattr__(self, 'metadata', {})
+        # Snapshot caller-owned metadata and expose it through an immutable view.
+        metadata = {} if self.metadata is None else dict(self.metadata)
+        object.__setattr__(self, "metadata", MappingProxyType(metadata))
 
     @property
     def is_approved(self) -> bool:

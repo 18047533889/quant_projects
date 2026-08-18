@@ -17,6 +17,31 @@ from quant_evaluator.contracts.errors import InvalidContractError
 class TestCoverage:
     """Test coverage diagnostics."""
 
+    def test_one_dimensional_label_validity_is_broadcast(self):
+        time_axis = AxisRef(name="time", dtype="int64", size=3)
+        asset_axis = AxisRef(name="asset", dtype="int64", size=2)
+        batch = FactorBatch(
+            factor_ids=("f1",),
+            time_axis=time_axis,
+            asset_axis=asset_axis,
+            values=np.ones((3, 2, 1)),
+        )
+        bundle = LabelBundle(
+            target_id="ret",
+            values=np.array([1.0, 2.0, 3.0]),
+            validity=np.array([True, False, True]),
+            horizon=1,
+            decision_time=(1, 2, 3),
+            label_start_time=(1, 2, 3),
+            label_end_time=(2, 3, 4),
+        )
+
+        coverage, num_valid, num_total = compute_coverage(batch, bundle)
+
+        assert coverage == 4 / 6
+        assert num_valid == 4
+        assert num_total == 6
+
     def test_full_coverage(self):
         """All values valid."""
         time_axis = AxisRef(name="time", dtype="datetime64", size=10)

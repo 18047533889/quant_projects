@@ -1,6 +1,7 @@
 """Pareto frontier tracking for multi-objective optimization."""
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
@@ -23,6 +24,8 @@ class ParetoPoint:
             raise ValueError("objectives cannot be empty")
         if not all(isinstance(v, (int, float)) for v in self.objectives):
             raise ValueError("all objectives must be numeric")
+        if not all(math.isfinite(float(v)) for v in self.objectives):
+            raise ValueError("all objectives must be finite")
 
     def dominates(self, other: "ParetoPoint") -> bool:
         """
@@ -101,6 +104,10 @@ class ParetoFrontier:
             p for p in self.points
             if not point.dominates(p)
         ]
+
+        # A trial ID may be retried with improved objectives.  Do not let a
+        # prior dominated result poison the replacement's domination query.
+        self._dominated_cache.discard(point.trial_id)
 
         # Add new point
         self.points.append(point)

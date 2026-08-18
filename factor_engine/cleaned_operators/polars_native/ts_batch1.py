@@ -16,6 +16,7 @@ from cleaned_operators.base import (
     ParamSpec,
     ParamRole,
 )
+from cleaned_operators.base_polars import panel_pandas_bridge
 
 
 # ============================================================================
@@ -666,12 +667,12 @@ class TSZeroRatioPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_argmax", canonical="ts_argmax", backend="polars")
 class TSArgmaxPolarsNative(SeriesOperator):
-    """Index of maximum value in rolling window (0=oldest, window-1=current)"""
+    """Canonical age of the latest rolling maximum (0=current bar)."""
     metadata = OperatorMetadata(
         name="ts_argmax",
         category="time_series",
-        description="Index of maximum value in rolling window (0=oldest, window-1=current)",
-        param_names=['feature', 'window'],
+        description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）",
+        param_names=["feature", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
@@ -679,28 +680,23 @@ class TSArgmaxPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name)
-                .rolling_map(lambda s: s.arg_max() if len(s) > 0 else None, window_size=window)
-                .alias("result")
-            ])
-            .select(["result"])
-            .collect()["result"]
-        )
+    def _calculate_series(self, feature, window, min_periods=1, **kwargs):
+        from cleaned_operators.overhaul.daily import pd_argmax
+
+        return panel_pandas_bridge(
+            feature.to_frame(),
+            lambda pdf: pd_argmax(pdf, int(window), min_periods=min_periods),
+        )[feature.name]
 
 
 @register_operator(name="ts_argmin", canonical="ts_argmin", backend="polars")
 class TSArgminPolarsNative(SeriesOperator):
-    """Index of minimum value in rolling window"""
+    """Canonical age of the latest rolling minimum (0=current bar)."""
     metadata = OperatorMetadata(
         name="ts_argmin",
         category="time_series",
-        description="Index of minimum value in rolling window",
-        param_names=['feature', 'window'],
+        description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）",
+        param_names=["feature", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
@@ -708,18 +704,13 @@ class TSArgminPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name)
-                .rolling_map(lambda s: s.arg_min() if len(s) > 0 else None, window_size=window)
-                .alias("result")
-            ])
-            .select(["result"])
-            .collect()["result"]
-        )
+    def _calculate_series(self, feature, window, min_periods=1, **kwargs):
+        from cleaned_operators.overhaul.daily import pd_argmin
+
+        return panel_pandas_bridge(
+            feature.to_frame(),
+            lambda pdf: pd_argmin(pdf, int(window), min_periods=min_periods),
+        )[feature.name]
 
 
 @register_operator(name="ts_argmax_age", canonical="ts_argmax_age", backend="polars")

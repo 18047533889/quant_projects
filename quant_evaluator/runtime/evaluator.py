@@ -692,6 +692,7 @@ def evaluate(
     from quant_evaluator.api.requests import EvaluationBundle, MetricValue
     from quant_evaluator.diagnosis.factor import diagnose_all_factors
     from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
+    from quant_evaluator.metrics.label_panel import normalize_label_panel
 
     request_metadata = {}
     request_fields = {}
@@ -734,17 +735,14 @@ def evaluate(
     metric_specs = []
 
     def coverage_metric(factor_batch, label_bundle, **kwargs):
-        labels_array = label_bundle.values
-        if labels_array.ndim == 1:
-            labels_array = np.broadcast_to(
-                labels_array[:, np.newaxis],
-                (factor_batch.num_times, factor_batch.num_assets),
-            )
+        labels_array, label_validity = normalize_label_panel(
+            label_bundle, factor_batch.num_assets
+        )
         valid = np.isfinite(factor_batch.values) & np.isfinite(labels_array)[:, :, np.newaxis]
         if factor_batch.validity is not None:
             valid &= factor_batch.validity
-        if label_bundle.validity is not None:
-            valid &= label_bundle.validity[:, :, np.newaxis]
+        if label_validity is not None:
+            valid &= label_validity[:, :, np.newaxis]
         counts = np.sum(valid, axis=(0, 1))
         totals = np.full(factor_batch.num_factors, factor_batch.num_times * factor_batch.num_assets)
         return {

@@ -13,7 +13,13 @@ from quant_evaluator.metrics.quantile import (
     assign_quantiles,
     assign_quantiles_fast,
     assign_quantiles_batch,
+    compute_quantile_returns,
 )
+from quant_evaluator.metrics.quantile_optimized import (
+    compute_quantile_returns_ultra_fast,
+)
+from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
+from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.quantile_optimized import assign_quantiles_vectorized_v2
 from quant_evaluator.contracts.quantile_policy import QuantileTiePolicy
 
@@ -27,9 +33,98 @@ except ImportError:
     NUMBA_AVAILABLE = False
 
 
-# =============================================================================
-# QE-Q-P0-001: Tie policy enforcement
-# =============================================================================
+def test_quantile_returns_respect_factor_validity():
+    """Finite factors marked invalid do not define quantile observations."""
+    T, N, F = 3, 10, 1
+    values = np.arange(T * N, dtype=float).reshape(T, N, F)
+    validity = np.ones_like(values, dtype=bool)
+    validity[1, 0, 0] = False
+    batch = FactorBatch(
+        factor_ids=("factor",),
+        time_axis=AxisRef(name="time", dtype="int64", size=T),
+        asset_axis=AxisRef(name="asset", dtype="int64", size=N),
+        values=values,
+        validity=validity,
+    )
+    bundle = LabelBundle(
+        target_id="return",
+        values=np.arange(T * N, dtype=float).reshape(T, N),
+        horizon=1,
+        decision_time=tuple(range(T)),
+        label_start_time=tuple(range(T)),
+        label_end_time=tuple(range(1, T + 1)),
+    )
+
+    implementations = [
+        lambda: compute_quantile_returns(batch, bundle, n_quantiles=5, min_assets=1),
+        lambda: compute_quantile_returns_ultra_fast(batch, bundle, n_quantiles=5, min_assets=1),
+    ]
+    if NUMBA_AVAILABLE:
+        from quant_evaluator.metrics.quantile_numba import compute_quantile_returns_numba
+        implementations.append(
+            lambda: compute_quantile_returns_numba(
+                batch, bundle, n_quantiles=5, min_assets=1
+            )
+        )
+    from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
+    implementations.append(
+        lambda: compute_quantile_returns_fast(
+            batch, bundle, n_quantiles=5, min_assets=1
+        )
+    )
+
+    for implementation in implementations:
+        returns, counts = implementation()
+        assert counts[1, :, :].sum() == N - 1
+        assert np.all(np.isfinite(returns[1, :, :]))
+
+
+def test_quantile_returns_respect_one_dimensional_label_validity():
+    """Invalid scalar-label periods contribute no quantile observations."""
+    T, N, F = 3, 10, 1
+    values = np.arange(T * N, dtype=float).reshape(T, N, F)
+    batch = FactorBatch(
+        factor_ids=("factor",),
+        time_axis=AxisRef(name="time", dtype="int64", size=T),
+        asset_axis=AxisRef(name="asset", dtype="int64", size=N),
+        values=values,
+    )
+    bundle = LabelBundle(
+        target_id="return",
+        values=np.array([1.0, 2.0, 3.0]),
+        validity=np.array([True, False, True]),
+        horizon=1,
+        decision_time=tuple(range(T)),
+        label_start_time=tuple(range(T)),
+        label_end_time=tuple(range(1, T + 1)),
+    )
+
+    implementations = [
+        lambda: compute_quantile_returns(batch, bundle, n_quantiles=5, min_assets=1),
+        lambda: compute_quantile_returns_ultra_fast(batch, bundle, n_quantiles=5, min_assets=1),
+    ]
+    if NUMBA_AVAILABLE:
+        from quant_evaluator.metrics.quantile_numba import compute_quantile_returns_numba
+        implementations.append(
+            lambda: compute_quantile_returns_numba(
+                batch, bundle, n_quantiles=5, min_assets=1
+            )
+        )
+    from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
+    implementations.append(
+        lambda: compute_quantile_returns_fast(
+            batch, bundle, n_quantiles=5, min_assets=1
+        )
+    )
+
+    for implementation in implementations:
+        returns, counts = implementation()
+        assert np.all(counts[1, :, :] == 0)
+        assert np.all(np.isnan(returns[1, :, :]))
+        assert np.all(counts[[0, 2], :, :] > 0)
+        assert np.all(np.isfinite(returns[[0, 2], :, :]))
+
+
 
 def test_tie_policy_min_vs_max_different_results():
     """

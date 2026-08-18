@@ -23,6 +23,7 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=3.0.0",
+    "build>=1.0.0",
 ]
 
 # Integration with factor_preprocess (optional adapter)
@@ -32,7 +33,7 @@ preprocess = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["modeling_adapters*"]
+include = ["modeling_adapters", "modeling_adapters.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

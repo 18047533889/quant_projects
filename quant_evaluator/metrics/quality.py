@@ -10,6 +10,7 @@ import numpy as np
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.errors import InvalidContractError
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 
 
 def compute_coverage(
@@ -40,12 +41,7 @@ def compute_coverage(
     # Extract first factor for single-factor coverage
     # For multi-factor, this computes per-factor coverage
     values = factor_batch.values  # shape: (T, N, F)
-    labels = label_bundle.values  # shape: (T, N) or (T,)
-
-    # Broadcast label to match factor shape if needed
-    if labels.ndim == 1:
-        # labels is (T,) - expand to (T, N)
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    labels, label_validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
 
     # Compute pairwise finite mask
     factor_finite = np.isfinite(values)  # (T, N, F)
@@ -58,9 +54,8 @@ def compute_coverage(
     # Apply validity masks if present
     if factor_batch.validity is not None:
         valid_pairs = valid_pairs & factor_batch.validity
-    if label_bundle.validity is not None:
-        label_validity_expanded = label_bundle.validity[:, :, np.newaxis]
-        valid_pairs = valid_pairs & label_validity_expanded
+    if label_validity is not None:
+        valid_pairs = valid_pairs & label_validity[:, :, np.newaxis]
 
     num_valid = int(np.sum(valid_pairs))
     num_total = values.size
@@ -81,10 +76,7 @@ def compute_per_time_coverage(
         Array of shape (T, F) with coverage per time per factor.
     """
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    labels, label_validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
 
     factor_finite = np.isfinite(values)
     label_finite = np.isfinite(labels)[:, :, np.newaxis]
@@ -93,8 +85,8 @@ def compute_per_time_coverage(
 
     if factor_batch.validity is not None:
         valid_pairs = valid_pairs & factor_batch.validity
-    if label_bundle.validity is not None:
-        valid_pairs = valid_pairs & label_bundle.validity[:, :, np.newaxis]
+    if label_validity is not None:
+        valid_pairs = valid_pairs & label_validity[:, :, np.newaxis]
 
     # Count valid pairs per time: (T, F)
     valid_per_time = np.sum(valid_pairs, axis=1)

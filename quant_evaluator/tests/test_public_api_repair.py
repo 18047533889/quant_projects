@@ -52,6 +52,27 @@ def test_public_evaluate_returns_canonical_bundle():
     assert result.get_diagnosis("f").coverage == 1.0
 
 
+def test_public_evaluate_broadcasts_one_dimensional_label_validity():
+    from quant_evaluator import LabelBundle, evaluate
+
+    batch, labels = _contracts()
+    labels = LabelBundle(
+        target_id=labels.target_id,
+        values=np.array([1.0, 2.0, 3.0]),
+        validity=np.array([True, False, True]),
+        horizon=labels.horizon,
+        decision_time=labels.decision_time,
+        label_start_time=labels.label_start_time,
+        label_end_time=labels.label_end_time,
+    )
+
+    result = evaluate(batch, labels, metrics=["coverage", "pearson_ic", "rank_ic"])
+
+    assert result.get_metric("coverage").observation_count == 4
+    assert result.get_metric("pearson_ic").observation_count == 0
+    assert result.get_metric("rank_ic").observation_count == 0
+
+
 def test_public_evaluate_supports_multiple_factors_without_scalar_aggregation():
     from quant_evaluator import evaluate
 

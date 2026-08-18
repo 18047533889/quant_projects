@@ -72,6 +72,33 @@ def test_reopen_rejects_malformed_schema_meta(tmp_path):
         SQLiteLifecycleRepository(path)
 
 
+def test_failed_initial_migration_rolls_back_schema_and_ledger(tmp_path):
+    import sqlite3
+    from factor_assets.registry.migrations import migrate
+
+    path = tmp_path / "registry.db"
+    conn = sqlite3.connect(path, isolation_level=None)
+
+    def deny_ledger_insert(action, table, column, database, trigger):
+        if action == sqlite3.SQLITE_INSERT and table == "schema_migrations":
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    conn.set_authorizer(deny_ledger_insert)
+    with pytest.raises(sqlite3.DatabaseError, match="not authorized"):
+        migrate(conn)
+    conn.close()
+
+    with sqlite3.connect(path) as probe:
+        tables = {
+            row[0]
+            for row in probe.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    assert not tables.intersection(
+        {"schema_meta", "assets", "lifecycle_events", "schema_migrations"}
+    )
+
+
 def test_reopen_preserves_projection_and_events(tmp_path):
     repo = _repo(tmp_path); _register(repo)
     repo.commit_transition("F", LifecycleState.EVALUATED, evidence_bundle_ref=_bundle())

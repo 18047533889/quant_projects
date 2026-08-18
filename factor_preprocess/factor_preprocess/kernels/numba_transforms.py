@@ -31,7 +31,7 @@ except ImportError:
 # ============================================================================
 
 if HAS_NUMBA:
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def rolling_mean_2d(values: np.ndarray, window: int) -> np.ndarray:
         """
         Numba-accelerated rolling mean for 2D panels.
@@ -74,7 +74,7 @@ if HAS_NUMBA:
 
         return result
 
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def rolling_std_2d(values: np.ndarray, window: int, ddof: int = 1) -> np.ndarray:
         """
         Numba-accelerated rolling standard deviation for 2D panels.
@@ -127,7 +127,7 @@ if HAS_NUMBA:
 
         return result
 
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def rolling_sum_2d(values: np.ndarray, window: int) -> np.ndarray:
         """
         Numba-accelerated rolling sum for 2D panels.
@@ -162,7 +162,7 @@ if HAS_NUMBA:
 
         return result
 
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def rolling_min_2d(values: np.ndarray, window: int) -> np.ndarray:
         """
         Numba-accelerated rolling minimum for 2D panels.
@@ -198,7 +198,7 @@ if HAS_NUMBA:
 
         return result
 
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def rolling_max_2d(values: np.ndarray, window: int) -> np.ndarray:
         """
         Numba-accelerated rolling maximum for 2D panels.
@@ -240,7 +240,7 @@ if HAS_NUMBA:
 # ============================================================================
 
 if HAS_NUMBA:
-    @njit(parallel=True, cache=True)
+    @njit(parallel=True, cache=False)
     def cs_rank_2d(values: np.ndarray, pct: bool = False) -> np.ndarray:
         """
         Numba-accelerated cross-sectional rank for 2D panels.
@@ -318,7 +318,7 @@ if HAS_NUMBA:
 
         return result
 
-    @njit(parallel=True, cache=True, fastmath=False)
+    @njit(parallel=True, cache=False, fastmath=False)
     def cs_zscore_2d(values: np.ndarray, ddof: int = 1, constant_value: float = 0.0) -> np.ndarray:
         """
         Numba-accelerated cross-sectional z-score for 2D panels.
@@ -392,7 +392,7 @@ if HAS_NUMBA:
 # ============================================================================
 
 if HAS_NUMBA:
-    @njit(parallel=True, cache=True)
+    @njit(parallel=True, cache=False)
     def cs_winsorize_2d(
         values: np.ndarray,
         lower: float = 0.05,
@@ -476,32 +476,13 @@ def numba_rolling_mean(
     window: int,
     axis: int = 0,
 ) -> np.ndarray:
-    """
-    Numba-accelerated rolling mean with automatic dimension handling.
-
-    Parameters
-    ----------
-    values : np.ndarray
-        Input array. 1D or 2D.
-    window : int
-        Rolling window size
-    axis : int
-        Time axis (must be 0)
-
-    Returns
-    -------
-    np.ndarray
-        Rolling mean, same shape as input
-
-    Notes
-    -----
-    Target speedup: 20-100x vs naive Python loops for T=500, N=1000, window=20
-    """
+    """Numba-accelerated rolling mean with dimension handling."""
     if not HAS_NUMBA:
         raise ImportError("Numba not available. Install with: pip install numba")
-
     if axis != 0:
         raise ValueError("Only axis=0 supported")
+    if window <= 0:
+        raise ValueError("window must be positive")
 
     if values.size == 0:
         return values.copy()
@@ -550,6 +531,8 @@ def numba_rolling_std(
 
     if axis != 0:
         raise ValueError("Only axis=0 supported")
+    if window <= 0:
+        raise ValueError("window must be positive")
 
     if values.size == 0:
         return values.copy()
@@ -570,6 +553,8 @@ def numba_rolling_sum(values: np.ndarray, window: int, axis: int = 0) -> np.ndar
         raise ImportError("Numba not available")
     if axis != 0:
         raise ValueError("Only axis=0 supported")
+    if window <= 0:
+        raise ValueError("window must be positive")
     if values.ndim == 1:
         return rolling_sum_2d(values.reshape(-1, 1), window).ravel()
     return rolling_sum_2d(values, window)
@@ -581,6 +566,8 @@ def numba_rolling_min(values: np.ndarray, window: int, axis: int = 0) -> np.ndar
         raise ImportError("Numba not available")
     if axis != 0:
         raise ValueError("Only axis=0 supported")
+    if window <= 0:
+        raise ValueError("window must be positive")
     if values.ndim == 1:
         return rolling_min_2d(values.reshape(-1, 1), window).ravel()
     return rolling_min_2d(values, window)
@@ -592,6 +579,8 @@ def numba_rolling_max(values: np.ndarray, window: int, axis: int = 0) -> np.ndar
         raise ImportError("Numba not available")
     if axis != 0:
         raise ValueError("Only axis=0 supported")
+    if window <= 0:
+        raise ValueError("window must be positive")
     if values.ndim == 1:
         return rolling_max_2d(values.reshape(-1, 1), window).ravel()
     return rolling_max_2d(values, window)

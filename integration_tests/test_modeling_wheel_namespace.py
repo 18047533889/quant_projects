@@ -8,9 +8,12 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,15 +68,32 @@ def _payload(wheel: Path) -> set[str]:
         }
 
 
+def _required_distribution_names(wheel: Path) -> set[str]:
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_paths = [
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        ]
+        assert len(metadata_paths) == 1, (
+            f"expected one wheel METADATA entry in {wheel}, got {metadata_paths}"
+        )
+        metadata = BytesParser().parsebytes(archive.read(metadata_paths[0]))
+    return {
+        canonicalize_name(Requirement(value).name)
+        for value in metadata.get_all("Requires-Dist", [])
+    }
+
+
 def _isolated_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
+    env.pop("PYTHONUSERBASE", None)
+    env.pop("PYTHONNOUSERSITE", None)
     return env
 
 
 def _install_and_probe(first: Path, second: Path, *, root: Path, tmp: Path) -> dict[str, str]:
     venv = tmp / f"venv_{first.stem}_{second.stem}"
-    _run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)], cwd=root)
+    _run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)], cwd=root, env=_isolated_env())
     python = venv / "bin" / "python"
     _run(
         [
@@ -272,6 +292,7 @@ def test_two_wheels_have_disjoint_import_payloads_and_survive_both_orders():
         tmp = Path(raw)
         fe_wheel = _build_wheel(FE_ROOT, tmp / "fe")
         adapter_wheel = _build_wheel(ADAPTER_ROOT, tmp / "adapters")
+        assert {"numpy", "pandas", "scipy"} <= _required_distribution_names(adapter_wheel)
 
         fe_payload = _payload(fe_wheel)
         adapter_payload = _payload(adapter_wheel)
@@ -286,3 +307,25 @@ def test_two_wheels_have_disjoint_import_payloads_and_survive_both_orders():
             assert "/site-packages/modeling/__init__.py" in result["modeling"]
             assert "/site-packages/modeling_adapters/__init__.py" in result["adapters"]
             assert result["modeling"] != result["adapters"]
+
+        venv = tmp / "venv_uninstall_adapter"
+        _run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)], cwd=ROOT, env=_isolated_env())
+        python = venv / "bin" / "python"
+        _run(
+            [
+                str(python), "-m", "pip", "install", "--no-index", "--no-deps",
+                "--force-reinstall", str(fe_wheel), str(adapter_wheel),
+            ],
+            cwd=tmp,
+            env=_isolated_env(),
+        )
+        _run(
+            [str(python), "-m", "pip", "uninstall", "-y", "modeling-adapters"],
+            cwd=tmp,
+            env=_isolated_env(),
+        )
+        remaining = _probe_legacy_modules(python, cwd=tmp)
+        assert remaining["modules"]["modeling"] is True
+        assert remaining["modules"]["modeling.trainer"] is True
+        assert remaining["owners"]["modeling_adapters"] == []
+        assert _dist_installed(python, "factor-engine", cwd=tmp) is True

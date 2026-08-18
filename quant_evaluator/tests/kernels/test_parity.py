@@ -154,6 +154,26 @@ class TestICParity:
         assert result["passed"]
         assert result["max_ic_diff"] < 1e-9
 
+    def test_ic_parity_with_one_dimensional_label_validity(self):
+        """Parity accepts time-only label validity and broadcasts it across assets."""
+        T, N, F = 3, 5, 2
+        batch = make_batch(T=T, N=N, F=F, seed=321)
+        bundle = LabelBundle(
+            target_id="ret_1d",
+            values=np.arange(T, dtype=float),
+            validity=np.array([True, False, True]),
+            horizon=1,
+            decision_time=tuple(range(T)),
+            label_start_time=tuple(range(T)),
+            label_end_time=tuple(range(1, T + 1)),
+        )
+
+        result = check_ic_parity(batch, bundle, method="pearson", min_assets=2)
+
+        assert result["passed"]
+        assert result["reference_counts"][1].tolist() == [0, 0]
+        assert np.all(result["reference_counts"][[0, 2]] > 0)
+
     def test_ic_parity_min_assets_threshold(self):
         """Parity holds with min_assets threshold filtering."""
         batch = make_batch(T=20, N=30, F=3, seed=111)

@@ -6,24 +6,34 @@ Validates that the package can be installed and imported from a clean wheel
 in an isolated environment (no editable install, no monorepo dependencies).
 """
 
+import os
 import subprocess
 import sys
 import tempfile
-import shutil
 from pathlib import Path
+from zipfile import ZipFile
 
 
-def run_command(cmd, cwd=None, check=True):
-    """Run shell command and return output."""
+def run_command(cmd, cwd=None, check=True, env=None):
+    """Run a subprocess without invoking a shell."""
     result = subprocess.run(
         cmd,
-        shell=True,
         cwd=cwd,
+        env=env,
         capture_output=True,
         text=True,
         check=check,
     )
     return result.returncode, result.stdout, result.stderr
+
+
+def isolated_env():
+    """Remove ambient import and user-site configuration from child processes."""
+    env = os.environ.copy()
+    for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONUSERBASE"):
+        env.pop(name, None)
+    env["PYTHONNOUSERSITE"] = "1"
+    return env
 
 
 def main():
@@ -45,9 +55,23 @@ def main():
         dist_dir = tmpdir / "dist"
         dist_dir.mkdir()
 
+        env = isolated_env()
+        build_env = os.environ.copy()
+        for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONUSERBASE"):
+            build_env.pop(name, None)
         code, stdout, stderr = run_command(
-            f"python3 -m build --wheel --outdir {dist_dir}",
-            cwd=package_root,
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--wheel",
+                "--outdir",
+                str(dist_dir),
+                str(package_root),
+            ],
+            cwd=tmpdir,
+            check=False,
+            env=build_env,
         )
         if code != 0:
             print(f"FAILED: Wheel build failed\n{stderr}")
@@ -61,11 +85,27 @@ def main():
         wheel_path = wheels[0]
         print(f"✓ Built: {wheel_path.name}")
 
+        required_members = {
+            "quant_evaluator/backends/__init__.py",
+            "quant_evaluator/backends/selector.py",
+            "quant_evaluator/backends/registry.py",
+        }
+        with ZipFile(wheel_path) as wheel:
+            members = set(wheel.namelist())
+        missing_members = sorted(required_members - members)
+        if missing_members:
+            print(f"FAILED: Wheel is missing required files: {missing_members}")
+            return 1
+
         # Step 2: Create clean venv
         print("\n[2/5] Creating clean virtual environment...")
         venv_dir = tmpdir / "venv"
 
-        code, _, stderr = run_command(f"python3 -m venv {venv_dir}")
+        code, _, stderr = run_command(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            cwd=tmpdir,
+            env=env,
+        )
         if code != 0:
             print(f"FAILED: venv creation failed\n{stderr}")
             return 1
@@ -77,8 +117,10 @@ def main():
         # Step 3: Install wheel (wheel-only, no editable, no monorepo)
         print("\n[3/5] Installing wheel in isolated environment...")
         code, stdout, stderr = run_command(
-            f"{pip_exe} install {wheel_path}",
+            [str(python_exe), "-m", "pip", "install", str(wheel_path)],
+            cwd=tmpdir,
             check=False,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: Wheel installation failed\n{stderr}")
@@ -89,29 +131,59 @@ def main():
         print("\n[4/5] Importing public API...")
         import_script = tmpdir / "test_imports.py"
         import_script.write_text("""
+import os
 import sys
+from pathlib import Path
+import numpy as np
+os.environ.pop('PYTHONPATH', None)
+os.environ.pop('PYTHONHOME', None)
 sys.path = [p for p in sys.path if 'quant_projects' not in p]  # Ensure no monorepo leakage
 
 # Import public API
 import quant_evaluator
+assert 'site-packages' in str(Path(quant_evaluator.__file__).resolve())
 from quant_evaluator import __version__
 from quant_evaluator.contracts import FactorBatch, LabelBundle, AxisRef
 from quant_evaluator.metrics import ic, quality, turnover
 from quant_evaluator.planner import create_batch_plan
 from quant_evaluator.registry import get_metric, list_metrics
+from quant_evaluator.backends import get_available_backends, get_default_backend
+from quant_evaluator.backends.selector import get_backend_capabilities
 
 # Verify nested packages
 from quant_evaluator.metrics import interactions, risk, stats
+from quant_evaluator.metrics.stats import (
+    GaussianHMM,
+    detect_regimes,
+    granger_causality_test,
+    johansen_test,
+    engle_granger_test,
+    chow_test,
+)
 
-print(f'quant_evaluator version: {__version__}')
+# Exercise representative modeling APIs, not only namespace imports.
+series = np.linspace(-1.0, 1.0, 40)
+assert callable(GaussianHMM)
+assert callable(detect_regimes)
+assert callable(granger_causality_test)
+assert callable(johansen_test)
+assert callable(engle_granger_test)
+assert callable(chow_test)
+model = GaussianHMM(n_states=2, n_iter=2, random_state=0)
+model.fit(series.reshape(-1, 1))
+assert model.predict(series.reshape(-1, 1)).shape == (40,)
 print(f'FactorBatch: {FactorBatch}')
 print(f'Metrics available: {len(list_metrics())}')
+print(f'Backends available: {get_available_backends()} (default={get_default_backend()})')
+print(f'Backend capabilities: {len(get_backend_capabilities())}')
 print('✓ All imports successful')
 """)
 
         code, stdout, stderr = run_command(
-            f'{python_exe} {import_script}',
+            [str(python_exe), str(import_script)],
+            cwd=tmpdir,
             check=False,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: Import test failed\n{stderr}")
@@ -122,7 +194,14 @@ print('✓ All imports successful')
         print("\n[5/5] Running smoke evaluation...")
         smoke_script = tmpdir / "test_smoke.py"
         smoke_script.write_text("""
+import os
+import sys
+from pathlib import Path
 import numpy as np
+os.environ.pop('PYTHONPATH', None)
+os.environ.pop('PYTHONHOME', None)
+sys.path = [p for p in sys.path if 'quant_projects' not in p]  # Ensure no monorepo leakage
+
 from quant_evaluator.contracts import FactorBatch, LabelBundle, AxisRef
 from quant_evaluator.metrics.ic import compute_daily_ic
 
@@ -159,8 +238,10 @@ print("✓ Smoke evaluation passed")
 """)
 
         code, stdout, stderr = run_command(
-            f'{python_exe} {smoke_script}',
+            [str(python_exe), str(smoke_script)],
+            cwd=tmpdir,
             check=False,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: Smoke evaluation failed\n{stderr}")

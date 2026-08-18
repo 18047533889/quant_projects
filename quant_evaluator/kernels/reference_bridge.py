@@ -11,6 +11,7 @@ import numpy as np
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.ic import compute_daily_ic
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 from quant_evaluator.metrics.quantile import assign_quantiles, compute_quantile_returns
 from quant_evaluator.metrics.turnover import estimate_turnover_from_ranks
 from quant_evaluator.kernels.fast import (
@@ -57,14 +58,16 @@ def check_ic_parity(
         factor_batch, label_bundle, method=method, min_assets=min_assets
     )
 
-    # Fast implementation
+    normalized_labels, normalized_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
     ic_fast, counts_fast = fast_ic_batch(
         factor_values=factor_batch.values,
-        label_values=label_bundle.values,
+        label_values=normalized_labels,
         method=method,
         min_obs=min_assets,
         factor_validity=factor_batch.validity,
-        label_validity=label_bundle.validity,
+        label_validity=normalized_validity,
     )
 
     # Compare IC values (NaN-aware)
@@ -186,10 +189,16 @@ def check_quantile_returns_parity(
         factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets
     )
 
-    # Fast implementation
+    normalized_labels, normalized_validity = normalize_label_panel(
+        label_bundle, factor_batch.num_assets
+    )
+    if normalized_validity is not None:
+        normalized_labels = np.where(
+            normalized_validity, normalized_labels, np.nan
+        )
     qret_fast, qcounts_fast = compute_quantile_returns_fast(
         factor_values=factor_batch.values,
-        label_values=label_bundle.values,
+        label_values=normalized_labels,
         n_quantiles=n_quantiles,
         min_assets=min_assets,
     )

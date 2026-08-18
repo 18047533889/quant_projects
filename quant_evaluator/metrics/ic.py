@@ -12,6 +12,7 @@ from scipy import stats
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.errors import InsufficientObservations, InvalidContractError
+from quant_evaluator.metrics.label_panel import normalize_label_panel
 
 
 def _pairwise_finite_mask(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -124,11 +125,7 @@ def compute_daily_ic(
     corr_fn = _pearson_correlation if method == "pearson" else _spearman_rank_correlation
 
     values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    # Broadcast labels if needed
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+    labels, label_validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
 
     T, N, F = values.shape
     ic_series = np.full((T, F), np.nan, dtype=np.float64)
@@ -145,9 +142,8 @@ def compute_daily_ic(
                 factor_valid = factor_batch.validity[t, :, f]
                 factor_t = np.where(factor_valid, factor_t, np.nan)
 
-            if label_bundle.validity is not None:
-                label_valid = label_bundle.validity[t, :]
-                label_t = np.where(label_valid, label_t, np.nan)
+            if label_validity is not None:
+                label_t = np.where(label_validity[t], label_t, np.nan)
 
             # Compute correlation
             ic = corr_fn(factor_t, label_t, min_obs=min_assets)

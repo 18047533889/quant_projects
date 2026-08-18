@@ -77,10 +77,16 @@ import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_preprocess
+import factor_preprocess.kernels.fast as fast_kernels
+import factor_preprocess.kernels.numba_transforms as numba_transforms
 from factor_preprocess import __version__
 from factor_preprocess.transforms import cs_rank, cs_zscore, rolling_mean
+from factor_preprocess.transforms.decomposition import stl_decompose
 from factor_preprocess.neutralization import ols_neutralize
 
+assert fast_kernels.__file__
+assert numba_transforms.__file__
+assert stl_decompose.__module__.startswith("factor_preprocess")
 print(f"factor_preprocess version: {__version__}")
 print("✓ Imports OK")
 """)
