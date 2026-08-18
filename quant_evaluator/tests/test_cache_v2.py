@@ -5,6 +5,7 @@ Tests multi-level caching, compression, invalidation, and warming strategies.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -223,6 +224,27 @@ class TestCompression:
         )
 
         assert metadata.is_expired(1000.0) is True
+
+    def test_from_dict_rejects_retrograde_last_accessed(self):
+        data = CacheMetadata(
+            key="key1", created_at=100.0, last_accessed=100.0,
+            access_count=0, size_bytes=1, compressed_size=1,
+            ttl_seconds=10.0, dependencies=set(),
+        ).to_dict()
+        data["last_accessed"] = 99.0
+
+        with pytest.raises(ValueError, match="last_accessed precedes created_at"):
+            CacheMetadata.from_dict(data)
+
+    def test_from_dict_accepts_equal_timestamps(self):
+        data = CacheMetadata(
+            key="key1", created_at=100.0, last_accessed=100.0,
+            access_count=0, size_bytes=1, compressed_size=1,
+            ttl_seconds=10.0, dependencies=set(),
+        ).to_dict()
+
+        metadata = CacheMetadata.from_dict(data)
+        assert metadata.created_at == metadata.last_accessed == 100.0
 
     def test_lru_eviction(self):
         """Test LRU eviction under memory pressure."""
@@ -668,6 +690,40 @@ with cache._process_lock():
             # Verify no temp files left behind
             temp_files = list(Path(tmpdir).rglob(".tmp.*"))
             assert len(temp_files) == 0
+
+    def test_restart_removes_record_temp_orphan(self, tmp_path):
+        code = r"""
+import os
+import sys
+from pathlib import Path
+from quant_evaluator.runtime.cache_v2 import DiskCacheLayer, create_compressor
+
+root = Path(sys.argv[1])
+cache = DiskCacheLayer(root, create_compressor("none"))
+original_replace = Path.replace
+
+def crash_before_publish(path, target):
+    if path.name.startswith(".tmp.") and path.suffix == ".cache":
+        os._exit(17)
+    return original_replace(path, target)
+
+Path.replace = crash_before_publish
+cache.put("key", "value")
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(tmp_path)],
+            check=False,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+            },
+        )
+        assert result.returncode == 17
+        assert len(list(tmp_path.rglob(".tmp.*.cache"))) == 1
+
+        DiskCacheLayer(tmp_path, create_compressor("none"))
+
+        assert list(tmp_path.rglob(".tmp.*.cache")) == []
 
     def test_failed_record_replace_preserves_previous_record(self, monkeypatch, tmp_path):
         cache = DiskCacheLayer(tmp_path, create_compressor("none"))
@@ -1270,6 +1326,159 @@ class TestMultiLevelCache:
             assert cache.invalidate_dependency("source") == 1
             assert cache.get_stats()["invalidations"] == 1
 
+    def test_shared_l3_invalidation_expires_other_coordinator_l1(self):
+        """A shared Redis epoch prevents stale sibling L1 hits without L2."""
+        class SharedRedis:
+            def __init__(self):
+                self.entries = {}
+                self.epoch = ""
+
+        class Layer:
+            def __init__(self, shared):
+                self.shared = shared
+
+            def invalidation_epoch(self):
+                return self.shared.epoch
+
+            def bump_invalidation_epoch(self):
+                self.shared.epoch = f"epoch-{len(self.shared.epoch) + 1}"
+                return self.shared.epoch
+
+            def put(self, key, value, ttl_seconds=None, dependencies=None, created_at=None):
+                self.shared.entries[key] = (value, set(dependencies or ()))
+                return True
+
+            def get(self, key):
+                entry = self.shared.entries.get(key)
+                if entry is None:
+                    return None
+                value, dependencies = entry
+                return value, CacheMetadata(
+                    key=key,
+                    created_at=0.0,
+                    last_accessed=0.0,
+                    access_count=0,
+                    size_bytes=0,
+                    compressed_size=0,
+                    ttl_seconds=None,
+                    dependencies=dependencies,
+                )
+
+            def invalidate_dependencies(self, dependency, *, return_keys=False):
+                keys = {
+                    key for key, (_, dependencies) in self.shared.entries.items()
+                    if dependency in dependencies
+                }
+                for key in keys:
+                    self.shared.entries.pop(key, None)
+                return keys if return_keys else len(keys)
+
+        shared = SharedRedis()
+        first = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        second = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        first.l3 = Layer(shared)
+        second.l3 = Layer(shared)
+        first._l1_invalidation_epoch = first.l3.invalidation_epoch()
+        second._l1_invalidation_epoch = second.l3.invalidation_epoch()
+
+        assert first.put("key1", "stale", dependencies={"source"})
+        assert second.get("key1") == "stale"
+        assert second.l1.get("key1")[0] == "stale"
+
+        assert first.invalidate_dependency("source") == 1
+        assert second.get("key1") is None
+        assert second.l1.get("key1") is None
+
+    def test_l3_epoch_read_failure_bypasses_l1_with_empty_marker(self):
+        """A failed shared epoch read must not serve an L1 value."""
+        class FailingEpochLayer:
+            def invalidation_epoch(self):
+                raise RuntimeError("redis unavailable")
+
+            def get(self, key):
+                return None
+
+        cache = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        cache.l3 = FailingEpochLayer()
+        assert cache.put("key", "stale", write_through=False)
+
+        assert cache.get("key") is None
+        assert cache.l1.get("key") is None
+        assert cache._l1_invalidation_epoch is None
+
+    def test_l3_epoch_read_failure_bypasses_populated_l1(self):
+        """A failed shared epoch read must invalidate a populated marker."""
+        class FailingEpochLayer:
+            def invalidation_epoch(self):
+                raise RuntimeError("redis unavailable")
+
+            def get(self, key):
+                return None
+
+        cache = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        cache.l3 = FailingEpochLayer()
+        cache._l1_invalidation_epoch = "known-epoch"
+        assert cache.put("key", "stale", write_through=False)
+
+        assert cache.get("key") is None
+        assert cache.l1.get("key") is None
+        assert cache._l1_invalidation_epoch is None
+
+    def test_l3_epoch_write_failure_does_not_publish_local_marker(self):
+        """A failed shared epoch write must leave the local marker unknown."""
+        class FailingEpochLayer:
+            def invalidation_epoch(self):
+                return "known-epoch"
+
+            def bump_invalidation_epoch(self):
+                raise RuntimeError("redis unavailable")
+
+            def invalidate_dependencies(self, dependency, *, return_keys=False):
+                return set() if return_keys else 0
+
+        cache = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        cache.l3 = FailingEpochLayer()
+        cache._l1_invalidation_epoch = "known-epoch"
+        assert cache.put("key", "stale", write_through=False)
+
+        assert cache.invalidate_dependency("source") == 0
+        assert cache._l1_invalidation_epoch is None
+
+    def test_shared_l2_direct_invalidation_expires_sibling_l1(self, tmp_path):
+        """A shared L2 epoch prevents stale sibling L1 direct-key hits."""
+        first = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        second = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert first.put("key1", "stale")
+        assert second.get("key1") == "stale"
+        assert second.l1.get("key1")[0] == "stale"
+
+        assert first.invalidate("key1")
+
+        assert second.get("key1") is None
+        assert second.l1.get("key1") is None
+
     def test_shared_l2_invalidation_expires_other_coordinator_l1(self, tmp_path):
         """A durable invalidation epoch prevents stale sibling L1 hits."""
         first = MultiLevelCache(
@@ -1294,6 +1503,99 @@ class TestMultiLevelCache:
 
         assert second.get("key1") is None
         assert second.l1.get("key1") is None
+
+    def test_sibling_invalidation_fences_blocked_l2_read(self, tmp_path):
+        """A sibling invalidation cannot be bypassed by an already blocked L2 read."""
+        class SharedLayer:
+            def __init__(self):
+                self.entries = {}
+                self.epoch = "epoch-0"
+
+            def invalidation_epoch(self):
+                return self.epoch
+
+            def bump_invalidation_epoch(self):
+                self.epoch = f"epoch-{int(self.epoch.rsplit('-', 1)[1]) + 1}"
+                return self.epoch
+
+            def put(self, key, value, ttl_seconds=None, dependencies=None, created_at=None):
+                self.entries[key] = (value, set(dependencies or ()))
+                return True
+
+            def get(self, key):
+                entry = self.entries.get(key)
+                if entry is None:
+                    return None
+                value, dependencies = entry
+                return value, CacheMetadata(
+                    key=key, created_at=0.0, last_accessed=0.0,
+                    access_count=0, size_bytes=0, compressed_size=0,
+                    ttl_seconds=None, dependencies=dependencies,
+                )
+
+            def invalidate_dependencies(self, dependency, *, return_keys=False):
+                keys = {
+                    key for key, (_, dependencies) in self.entries.items()
+                    if dependency in dependencies
+                }
+                for key in keys:
+                    self.entries.pop(key, None)
+                return keys if return_keys else len(keys)
+
+        shared = SharedLayer()
+        first = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        second = MultiLevelCache(
+            compression="none", enable_l1=True, enable_l2=False, enable_l3=False
+        )
+        first.l3 = shared
+        second.l3 = shared
+        first._l1_invalidation_epoch = shared.invalidation_epoch()
+        second._l1_invalidation_epoch = shared.invalidation_epoch()
+        assert shared.put("key1", "stale", dependencies={"source"})
+
+        read_entered = threading.Event()
+        release_read = threading.Event()
+        original_get = shared.get
+
+        def blocking_get(key):
+            result = original_get(key)
+            read_entered.set()
+            if not release_read.wait(timeout=5.0):
+                raise TimeoutError("blocked lower-layer read was not released")
+            return result
+
+        shared.get = blocking_get
+        read_result = []
+        invalidation_result = []
+        thread_errors = []
+
+        def capture(operation, results):
+            try:
+                results.append(operation())
+            except BaseException as exc:
+                thread_errors.append(exc)
+
+        reader = threading.Thread(target=capture, args=(lambda: first.get("key1"), read_result))
+        reader.start()
+        assert read_entered.wait(timeout=5.0)
+
+        invalidator = threading.Thread(
+            target=capture,
+            args=(lambda: second.invalidate_dependency("source"), invalidation_result),
+        )
+        invalidator.start()
+        invalidator.join(timeout=5.0)
+        assert not invalidator.is_alive()
+        assert invalidation_result == [1]
+
+        release_read.set()
+        reader.join(timeout=5.0)
+        assert not reader.is_alive()
+        assert thread_errors == []
+        assert read_result == [None]
+        assert first.l1.get("key1") is None
 
     @pytest.mark.skipif(cache_v2_module.fcntl is None, reason="requires POSIX flock")
     def test_shared_l2_invalidation_expires_parent_l1_across_processes(self, tmp_path):
@@ -1354,7 +1656,32 @@ raise SystemExit(0 if removed == 1 else 2)
         assert cache.l1.get("victim")[0] == "must-survive"
         assert cache.get_stats()["invalidations"] == 0
 
-    def test_forged_l3_metadata_key_cannot_redirect_dependency_walk(self):
+    def test_legacy_metadata_key_cannot_redirect_dependency_walk(self, tmp_path):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.l1.put("victim", "must-survive", dependencies={"forged"})
+        assert cache.l2.put("actual", "value")
+        value_path = cache.l2._key_path("actual")
+        metadata, compressed = cache.l2._decode_record(value_path.read_bytes())
+        value_path.write_bytes(cache.l2._encode_record(metadata, compressed))
+        metadata.key = "victim"
+        metadata.dependencies = {"source"}
+        cache.l2._meta_path(value_path).write_text(
+            json.dumps({**metadata.to_dict(), "checksum": "unused"}),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependency("source") == 0
+        assert not value_path.exists()
+        assert not cache.l2._meta_path(value_path).exists()
+        assert cache.l1.get("victim")[0] == "must-survive"
+        assert cache.get_stats()["invalidations"] == 0
+
         cache = MultiLevelCache(
             memory_size_mb=1.0,
             compression="none",

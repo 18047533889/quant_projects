@@ -34,6 +34,8 @@ Consumes:
 """
 from __future__ import annotations
 
+import importlib
+from pathlib import Path
 from typing import Any
 
 from cleaned_operators.model_contract import (
@@ -213,13 +215,21 @@ def assign_model_lane(name: str) -> str | None:
     """
     if is_tombstoned(name):
         return "DELETE_TOMBSTONE"
+    # ``modeling.legacy`` is the sole authority for the legacy five.  Resolve it
+    # dynamically so callers cannot accidentally route through a shadow module,
+    # and fail closed if that authority is unavailable or ambiguous.
     try:
-        from modeling.legacy import classification_of as _legacy_classification_of
-
-        if _legacy_classification_of(name) is not None:
+        legacy = importlib.import_module("modeling.legacy")
+        expected = Path(__file__).resolve().parent.parent / "modeling" / "legacy.py"
+        actual = Path(getattr(legacy, "__file__", "")).resolve()
+        classification_of = getattr(legacy, "classification_of")
+        canonical_map = getattr(legacy, "LEGACY_LOCAL_PREDICTIVE_CANONICALS")
+        if actual != expected or not callable(classification_of) or not isinstance(canonical_map, dict):
+            return None
+        if classification_of(name) is not None:
             return "LEGACY_LOCAL_PREDICTIVE"
     except Exception:
-        pass
+        return None
     if name in _MODEL_LANE_EXPLICIT:
         return _MODEL_LANE_EXPLICIT[name]
     role = _resolved_role(name)

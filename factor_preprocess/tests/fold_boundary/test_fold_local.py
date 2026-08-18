@@ -92,9 +92,9 @@ class TestFoldBoundaries:
             feature_order=["f1", "f2"],
         )
 
-        # Compatible
+        # Compatible only in the fitted positional order
         assert state.is_compatible_with(["f1", "f2"])
-        assert state.is_compatible_with(["f2", "f1"])  # Order doesn't matter for set
+        assert not state.is_compatible_with(["f2", "f1"])
 
         # Incompatible
         assert not state.is_compatible_with(["f1"])

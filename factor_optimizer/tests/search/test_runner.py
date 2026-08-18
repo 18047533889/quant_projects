@@ -34,6 +34,9 @@ def test_search_config_validation():
     with pytest.raises(ValueError, match="max_concurrency"):
         SearchConfig(budget=budget, max_concurrency=0)
 
+    with pytest.raises(ValueError, match="serialized"):
+        SearchConfig(budget=budget, max_concurrency=2)
+
 
 def test_search_session_initialization(search_config):
     from factor_optimizer.contracts.search_budget import BudgetTracker

@@ -187,12 +187,13 @@ class FactorAssetsAdapter:
 
 
 def check_factor_assets_available() -> bool:
-    """Check if factor_assets package is available."""
+    """Check whether the factor_assets integration can construct its default provider."""
     try:
         import factor_assets
-        return True
+        from factor_preprocess.adapters._factor_assets_impl import DefaultFactorSetProvider
     except ImportError:
         return False
+    return True
 
 
 def create_adapter(provider: Optional[FactorSetProvider] = None) -> FactorAssetsAdapter:

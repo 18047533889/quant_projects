@@ -100,7 +100,7 @@ def main():
         print("\n[2/5] Creating venv...")
         venv_dir = tmpdir / "venv"
         code, _, stderr = run_command(
-            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)]
+            [sys.executable, "-m", "venv", str(venv_dir)]
         )
         if code != 0:
             print(f"FAILED: venv\n{stderr}")
@@ -112,7 +112,7 @@ def main():
         # Install wheel
         print("\n[3/5] Installing wheel...")
         code, _, stderr = run_command(
-            [str(pip_exe), "install", "--no-index", "--no-deps", str(wheel_path)], check=False
+            [str(pip_exe), "install", str(wheel_path)], check=False
         )
         if code != 0:
             print(f"FAILED: Install\n{stderr}")
@@ -181,7 +181,7 @@ assert np.isnan(ranked[1, 1])
 print('✓ rank_transform path executed')
 """)
         code, stdout, stderr = run_command(
-            [str(python_exe), str(smoke_script)], check=False, disable_user_site=False
+            [str(python_exe), str(smoke_script)], check=False
         )
         if code != 0:
             print(f"FAILED: Smoke\n{stderr}")

@@ -17,6 +17,7 @@ from cleaned_operators.base import (
     ParamRole,
 )
 from cleaned_operators.base_polars import panel_pandas_bridge
+from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 
 # ============================================================================
@@ -970,6 +971,15 @@ class TSBottomkStdPolarsNative(SeriesOperator):
 @register_operator(name="ts_kurt", canonical="ts_kurt", backend="polars")
 class TSKurtPolarsNative(SeriesOperator):
     """Rolling kurtosis"""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_kurt", backend="polars", execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        implementation_source_hash="cleaned_operators.polars_native.ts_batch1:TSKurtPolarsNative:v1",
+        kernel_identity="polars.rolling_map:numpy_kurtosis:v1", parameter_domain_hash="ts_kurt.feature:series,window:int:min=4:default=20",
+        semantic_contract_hash="ts_kurt:finite:unbiased_excess:v1",
+    )
     metadata = OperatorMetadata(
         name="ts_kurt",
         category="time_series",
@@ -1018,6 +1028,15 @@ class TSKurtPolarsNative(SeriesOperator):
 @register_operator(name="ts_moment", canonical="ts_moment", backend="polars")
 class TSMomentPolarsNative(SeriesOperator):
     """Rolling nth central moment"""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_moment", backend="polars", execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        implementation_source_hash="cleaned_operators.polars_native.ts_batch1:TSMomentPolarsNative:v1",
+        kernel_identity="polars.rolling_map:numpy_central_moment:v1", parameter_domain_hash="ts_moment.feature:series,window:int:min=1,n:int:min=1:default=2",
+        semantic_contract_hash="ts_moment:rolling_central:v1",
+    )
     metadata = OperatorMetadata(
         name="ts_moment",
         category="time_series",

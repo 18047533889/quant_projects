@@ -15,6 +15,14 @@ from cleaned_operators.base import ParamRole, ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
+_MOMENT_CANONICALS = frozenset({"ts_kurt", "ts_moment"})
+
+
+def _register_basic_operator(**kwargs):
+    """Keep quarantined moment classes importable without production registration."""
+    if kwargs.get("canonical") in _MOMENT_CANONICALS:
+        return lambda cls: cls
+    return register_operator(**kwargs)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -251,13 +259,14 @@ class TSQuantileNative(SeriesOperator):
         return x.lazy().with_columns([pl.col(c).rolling_quantile(quantile=quantile, window_size=w).alias(c) for c in cols]).collect()
 
 
-@register_operator(
+@_register_basic_operator(
     name="ts_kurt",
     category="time_series",
     business_category="time_series",
     canonical="ts_kurt",
     source=_SRC,
     backend="polars",
+    status="deprecated",
 )
 class TSKurtNative(SeriesOperator):
     """Rolling kurtosis (excess kurtosis)."""
@@ -293,13 +302,14 @@ class TSKurtNative(SeriesOperator):
         return x.lazy().with_columns(exprs).collect()
 
 
-@register_operator(
+@_register_basic_operator(
     name="ts_moment",
     category="time_series",
     business_category="time_series",
     canonical="ts_moment",
     source=_SRC,
     backend="polars",
+    status="deprecated",
 )
 class TSMomentNative(SeriesOperator):
     """Rolling n-th central moment."""

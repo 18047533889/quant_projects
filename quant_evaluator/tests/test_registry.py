@@ -18,6 +18,10 @@ from quant_evaluator.registry import (
     PRODUCTION_DAILY,
 )
 from quant_evaluator.registry.metrics import register_metric
+from quant_evaluator.metrics import (
+    compute_ic_std,
+    compute_mean_ic_value,
+)
 
 
 class TestMetricSpec:
@@ -123,11 +127,13 @@ class TestCoreMetrics:
         assert spec.tier == MetricTier.CORE
         assert spec.status == MetricStatus.STABLE
         assert spec.min_periods == 20
+        assert spec.compute_fn is compute_mean_ic_value
 
     def test_ic_std_spec(self):
         spec = get_metric("ic_std")
         assert spec.tier == MetricTier.CORE
         assert spec.status == MetricStatus.STABLE
+        assert spec.compute_fn is compute_ic_std
 
     def test_ic_ir_spec(self):
         spec = get_metric("ic_ir")

@@ -327,15 +327,21 @@ class QPhysicalImplementation:
 class QPhysicalImplementationRegistry:
     """Registry populated only from a compiler's executable lowering map."""
 
+    # Admission declarations are intentionally limited to operators with an
+    # executable entry in QCompiler._build_operator_map.  Unsupported names
+    # are not declared native: declaring them would make the capability gap
+    # look like a production admission problem and could certify no lowering.
     _DECLARED_TARGETS = frozenset({
-        "add", "subtract", "multiply", "divide", "negate", "abs", "power", "sqrt", "log", "exp", "log1p", "expm1", "sign", "floor", "ceil", "round",
-        "greater", "less", "greater_equal", "less_equal", "equal", "not_equal", "lag", "delta", "pct_change", "ts_returns", "ts_diff",
-        "ts_mean", "ts_sum", "ts_std", "ts_min", "ts_max", "ts_count", "ts_median", "ts_product", "ts_var", "ts_cumsum", "ts_cumprod", "ts_cummax", "ts_cummin",
-        "ts_skew", "ts_kurt", "ts_moment", "ts_argmax", "ts_argmin", "ts_argmax_age", "ts_argmin_age", "ts_days_since_high", "ts_days_since_low", "ts_new_high", "ts_new_low",
-        "ts_max_drawdown", "ts_distance_to_high", "ts_distance_to_low", "ts_decay_linear", "ts_decay_exp", "ts_sum_decay", "ts_rank", "ts_zscore", "ts_demean", "ts_normalize", "ts_quantile", "ts_percentile", "ts_corr", "ts_cov", "ts_beta",
-        "rank", "cs_rank", "cs_zscore", "cs_demean", "cs_normalize", "cs_quantile", "cs_percentile_rank", "cs_winsorize", "cs_clip", "cs_mean", "cs_std", "cs_median", "cs_var",
-        "group_mean", "group_sum", "group_std", "group_median", "group_min", "group_max", "group_count", "where", "fillna", "ffill", "bfill", "clip", "replace",
-        "vwap", "mean", "sum", "std", "min", "max", "median", "product", "var", "count_nonzero", "first", "last", "resample", "time_bucket", "true_range", "ema", "wma", "sma",
+        "abs", "add", "ceil", "cs_demean", "cs_normalize", "cs_rank", "cs_std",
+        "cs_median", "cs_mean", "cs_var", "cs_zscore", "count_nonzero", "delta",
+        "divide", "ema", "equal", "expm1", "exp", "ffill", "fillna", "first",
+        "floor", "greater", "greater_equal", "last", "lag", "less", "less_equal",
+        "log", "log1p", "max", "mean", "median", "min", "multiply", "negate",
+        "not_equal", "pct_change", "power", "product", "rank", "round", "sign",
+        "sma", "sqrt", "std", "subtract", "sum", "ts_beta", "ts_corr",
+        "ts_count", "ts_cov", "ts_cummax", "ts_cummin", "ts_cumprod", "ts_cumsum",
+        "ts_diff", "ts_max", "ts_mean", "ts_min", "ts_returns", "ts_std", "ts_sum",
+        "var", "wma", "where", "clip",
     })
 
     def __init__(

@@ -2,7 +2,11 @@
 
 Generated: 2026-08-05
 
-## Summary
+> **Data-status warning:** This document is a hand-maintained historical snapshot. Its backend totals and production-status statements are internally contradictory (including the 626/528 Pandas totals and the differing Polars/DuckDB totals), so every numeric count and status claim below is quarantined and **must not be treated as current inventory or certification evidence**. No production completeness claim follows from this document.
+>
+> For authoritative, current-head results, use the generated inventories and evidence artifacts: `docs/operator_manifest.json`, `benchmarks/operator_manifest.json`, `operator_comprehensive_inventory.csv`, `evidence/operator_upgrade_matrix.yaml`, `evidence/factor_operator_verified.json`, and `evidence/primitive_verified.json`. Check each artifact's recorded commit SHA (`generated_commit_sha`, `commit_sha`, or equivalent) against `git rev-parse HEAD`; a SHA mismatch makes the artifact stale. `evidence/scm_manifest.json` records the repository evidence binding. Do not infer or manually add replacement totals here.
+
+## Quarantined historical snapshot (not current)
 
 | Backend | Coverage | Count |
 |---------|----------|-------|

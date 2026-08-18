@@ -162,7 +162,7 @@ def compute_mean_ic(
     min_periods: int = 20,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Compute mean IC across time.
+    Compute mean IC and its standard deviation across time.
 
     Args:
         ic_series: Daily IC series (T, F)
@@ -186,3 +186,31 @@ def compute_mean_ic(
     ic_std = np.where(insufficient, np.nan, ic_std)
 
     return mean_ic, ic_std
+
+
+def compute_mean_ic_value(
+    ic_series: np.ndarray,
+    valid_counts: Optional[np.ndarray] = None,
+    min_periods: int = 20,
+) -> np.ndarray:
+    """Compute only the mean IC component for registry execution."""
+    mean_ic, _ = compute_mean_ic(
+        ic_series,
+        valid_counts=valid_counts,
+        min_periods=min_periods,
+    )
+    return mean_ic
+
+
+def compute_ic_std(
+    ic_series: np.ndarray,
+    valid_counts: Optional[np.ndarray] = None,
+    min_periods: int = 20,
+) -> np.ndarray:
+    """Compute only the IC standard-deviation component."""
+    _, ic_std = compute_mean_ic(
+        ic_series,
+        valid_counts=valid_counts,
+        min_periods=min_periods,
+    )
+    return ic_std

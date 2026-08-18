@@ -41,6 +41,7 @@ from cleaned_operators._rolling_fast import (
     rolling_top_n_sum_window,
     wma_partial_policy_digest,
 )
+from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -1395,6 +1396,21 @@ class TSMax(SeriesOperator):
 class TSMean(SeriesOperator):
     """滚动均值（支持 Numba 加速路径）。"""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="pandas_numpy",
+        execution_kind=ExecutionKind.PANDAS_REFERENCE,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.time_series:TSMean:v1",
+        emitter_identity="pandas.rolling.mean:v1",
+        parameter_domain_hash="ts_mean.window:int:min=1",
+        semantic_contract_hash="ts_mean:min_periods=1:axis=time:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_mean", category="time_series",
         description="滚动均值 (与m_avg相同)",
@@ -1589,6 +1605,21 @@ class TSStdDev(SeriesOperator):
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
 class TSStd(TSStdDev):
     """滚动标准差（``ts_std`` canonical）。"""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_std",
+        backend="pandas_numpy",
+        execution_kind=ExecutionKind.PANDAS_REFERENCE,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.time_series:TSStd:v1",
+        emitter_identity="pandas.rolling.std:v1",
+        parameter_domain_hash="ts_std.window:int:min=1",
+        semantic_contract_hash="ts_std:min_periods=1:axis=time:v1",
+    )
 
     metadata = OperatorMetadata(
         name="ts_std", category="time_series",
@@ -2230,6 +2261,24 @@ class TSMaxPolars(SeriesOperator):
 class TSMeanPolars(SeriesOperator):
     """Polars 滚动均值。"""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.time_series:TSMeanPolars:v1",
+        emitter_identity="polars.Expr.rolling_mean:v1",
+        parameter_domain_hash="ts_mean.window:int:min=1",
+        semantic_contract_hash="ts_mean:min_samples=1:axis=time:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_mean", category="time_series",
         description="滚动均值 (与m_avg相同)",
@@ -2373,6 +2422,24 @@ class TSStdDev(SeriesOperator):
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
 class TSStdPolars(TSStdDev):
     """Polars 滚动标准差。"""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_std",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.time_series:TSStdPolars:v1",
+        emitter_identity="polars.Expr.rolling_std:v1",
+        parameter_domain_hash="ts_std.window:int:min=1",
+        semantic_contract_hash="ts_std:min_samples=1:axis=time:v1",
+    )
 
     metadata = OperatorMetadata(
         name="ts_std", category="time_series",

@@ -12,6 +12,7 @@ except ImportError:  # pragma: no cover
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.base import ParamRole, ParamSpec
+from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _PAIRWISE_CANONICALS = frozenset({
     "ts_corr",
@@ -195,6 +196,17 @@ class TSCorrNative(SeriesOperator):
 class TSCovNative(SeriesOperator):
     """Rolling covariance between x and y."""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_cov", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCovNative:v1",
+        emitter_identity="polars.rolling.pairwise_moments:v1",
+        parameter_domain_hash="ts_cov.x:dataframe,y:dataframe,window:int:min=2:default=20,ddof:int:min=0:default=1,min_periods:int:min=1:nullable:default=2",
+        semantic_contract_hash="ts_cov:pairwise_finite:ddof:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_cov",
         category="time_series",
@@ -312,6 +324,17 @@ def _validate_regression_params(window: int, min_periods: int | None) -> tuple[i
 class TSRegressionSlopeNative(SeriesOperator):
     """Rolling regression slope (beta): cov(x,y) / var(x)."""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_regression_slope", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionSlopeNative:v1",
+        emitter_identity="polars.rolling.pairwise_regression:v1",
+        parameter_domain_hash="ts_regression_slope.y:dataframe,x:dataframe,window:int:min=2:default=20,lag:int:min=0:nullable,retval:enum:slope|beta|intercept|resid|residual|r2|r_squared:nullable,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
+        semantic_contract_hash="ts_regression_slope:pairwise_finite:intercept:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_regression_slope",
         category="time_series",
@@ -398,6 +421,17 @@ class TSRegressionSlopeNative(SeriesOperator):
 class TSRegressionInterceptNative(SeriesOperator):
     """Rolling regression intercept: mean(y) - slope * mean(x)."""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_regression_intercept", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionInterceptNative:v1",
+        emitter_identity="polars.rolling.pairwise_regression:v1",
+        parameter_domain_hash="ts_regression_intercept.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
+        semantic_contract_hash="ts_regression_intercept:pairwise_finite:intercept:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_regression_intercept",
         category="time_series",
@@ -442,6 +476,17 @@ class TSRegressionInterceptNative(SeriesOperator):
 )
 class TSRegressionResidNative(SeriesOperator):
     """Rolling regression residual: y - (intercept + slope * x)."""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_regression_resid", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionResidNative:v1",
+        emitter_identity="polars.rolling.pairwise_regression:v1",
+        parameter_domain_hash="ts_regression_resid.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
+        semantic_contract_hash="ts_regression_resid:pairwise_finite:intercept:v1",
+    )
 
     metadata = OperatorMetadata(
         name="ts_regression_resid",
@@ -492,6 +537,17 @@ class TSRegressionResidNative(SeriesOperator):
 )
 class TSRegressionR2Native(SeriesOperator):
     """Rolling regression R-squared."""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_regression_r2", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionR2Native:v1",
+        emitter_identity="polars.rolling.pairwise_regression:v1",
+        parameter_domain_hash="ts_regression_r2.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
+        semantic_contract_hash="ts_regression_r2:pairwise_finite:intercept:v1",
+    )
 
     metadata = OperatorMetadata(
         name="ts_regression_r2",

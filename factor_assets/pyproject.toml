@@ -18,8 +18,21 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
+# Install only the integration dependency needed by one adapter.
+quant_evaluator = [
+    "quant_evaluator>=0.0.1a1,<0.2",
+]
+factor_engine = [
+    "factor-engine>=0.3.0",
+]
+data_access = [
+    "data-access>=0.10.0",
+]
+# Install every optional integration dependency.
 adapters = [
     "quant_evaluator>=0.0.1a1,<0.2",
+    "factor-engine>=0.3.0",
+    "data-access>=0.10.0",
 ]
 
 [tool.setuptools]

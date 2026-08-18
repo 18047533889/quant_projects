@@ -8,6 +8,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional, Callable, Any
 
+from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
+from quant_evaluator.metrics.registry_adapters import (
+    compute_hac_tstat_value,
+    compute_half_life_value,
+    compute_ic_autocorr_lag1_value,
+    compute_ic_ir_value,
+    compute_rank_stability_value,
+)
+
 
 class MetricStatus(Enum):
     """Metric implementation and validation status."""
@@ -138,6 +147,7 @@ register_metric(MetricSpec(
     description="Time-averaged information coefficient",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_mean_ic_value,
     requires=["ic_series"],
     min_periods=20,
 ))
@@ -148,6 +158,7 @@ register_metric(MetricSpec(
     description="Standard deviation of IC series",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_ic_std,
     requires=["ic_series"],
     min_periods=20,
 ))
@@ -158,6 +169,7 @@ register_metric(MetricSpec(
     description="Mean IC divided by IC standard deviation",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_ic_ir_value,
     requires=["ic_series"],
     min_periods=20,
 ))
@@ -168,7 +180,7 @@ register_metric(MetricSpec(
     description="Fraction of universe with valid factor values",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
-    requires=["factor_batch"],
+    requires=["factor_batch", "label_bundle"],
     min_periods=None,
 ))
 

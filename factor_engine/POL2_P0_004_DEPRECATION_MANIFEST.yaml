@@ -1,0 +1,20 @@
+task_id: POL2-P0-004
+status: CLOSED_LOCAL
+scope:
+  - deprecated duplicate Polars implementation: ts_kurt
+  - deprecated duplicate Polars implementation: ts_moment
+canonical_authority:
+  ts_kurt: factor_engine/cleaned_operators/polars_native/ts_batch1.py
+  ts_moment: factor_engine/cleaned_operators/polars_native/ts_batch1.py
+validation:
+  focused_tests:
+    path: factor_engine/tests/backend/test_r2_p0_021_window_moments.py
+    passed: 10
+  py_compile: passed
+  diff_check: passed
+  import_smoke: BLOCKED_PRE_EXISTING_DUPLICATE_REGISTRATION
+  import_blocker: duplicate quarter_from_cumulative registration in factor_engine/cleaned_operators/polars_native/misc_final.py
+production_certification: NOT_RUN
+notes:
+  - This records deprecation of duplicate ts_kurt/ts_moment implementations only.
+  - No production-readiness or broad backend parity claim is made.

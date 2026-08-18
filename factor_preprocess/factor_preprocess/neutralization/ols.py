@@ -50,8 +50,14 @@ def ols_neutralize(
     Operates per-date (no time-series leakage).
     NaN handling: pairwise deletion per date.
     """
-    # Merge values and exposures
-    merged = values.merge(
+    # Carry a positional key through the merge because pandas resets the row
+    # index during merge; the public result must remain aligned to ``values``.
+    row_key = "__ols_row_position__"
+    while row_key in values.columns or row_key in exposures.columns:
+        row_key = f"_{row_key}"
+    values_with_key = values.copy()
+    values_with_key[row_key] = np.arange(len(values), dtype=np.intp)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
@@ -110,7 +116,7 @@ def ols_neutralize(
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
@@ -119,7 +125,10 @@ def ols_neutralize(
         return pd.Series(np.nan, index=values.index)
 
     all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    residuals = all_results["residual"].reindex(range(len(values)))
+    residuals.index = values.index
+    residuals.name = "residual"
+    return residuals
 
 
 def compute_exposures(

@@ -1512,7 +1512,8 @@ class TSLoMackinlayZPolarsNative(SeriesOperator):
 # Local Lyapunov Exponent and Tail Coexceedance
 # ============================================================================
 
-@register_operator(name="ts_local_lyapunov_exponent", canonical="ts_local_lyapunov_exponent", backend="polars")
+# QUARANTINED: explicitly research-only placeholder; it must not compete
+# with the canonical generated bridge registration in auto_polars_all.py.
 class TSLocalLyapunovExponentPolarsNative(SeriesOperator):
     """Local Lyapunov exponent (chaos measure)
 
@@ -1572,7 +1573,8 @@ class TSLowerTailCoexceedanceProbabilityPolarsNative(SeriesOperator):
 # Markov Chain Features
 # ============================================================================
 
-@register_operator(name="ts_markov_committor", canonical="ts_markov_committor", backend="polars")
+# QUARANTINED: explicitly research-only placeholder; it must not compete
+# with the canonical generated bridge registration in auto_polars_all.py.
 class TSMarkovCommittorPolarsNative(SeriesOperator):
     """Committor probability (probability of reaching state B before A)
 

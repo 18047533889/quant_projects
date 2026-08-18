@@ -26,9 +26,16 @@ class OptionalDependencyMissing(ImportError):
     def __init__(self, package_name: str, adapter_name: str):
         self.package_name = package_name
         self.adapter_name = adapter_name
+        # Extras are intentionally adapter-specific; ``adapters`` remains the
+        # aggregate install for callers that want every integration.
+        extra_name = {
+            "quant_evaluator": "quant_evaluator",
+            "factor_engine": "factor_engine",
+            "data_access": "data_access",
+        }.get(package_name, "adapters")
         super().__init__(
             f"Adapter '{adapter_name}' requires optional package '{package_name}'. "
-            f"Install with: pip install factor_assets[adapters]"
+            f"Install with: pip install factor_assets[{extra_name}]"
         )
 
 

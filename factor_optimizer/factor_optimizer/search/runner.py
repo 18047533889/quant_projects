@@ -19,7 +19,9 @@ class SearchConfig:
     plateau_window: int = 20
     plateau_threshold: float = 0.001
     enable_multifidelity: bool = True
-    max_concurrency: int = 4
+    # Search execution is currently serialized; retain the field for forward
+    # compatibility but reject settings that the runner cannot enforce.
+    max_concurrency: int = 1
     evaluation_cost_units: Optional[float] = None
     execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY
 
@@ -37,6 +39,10 @@ class SearchConfig:
             raise ValueError("plateau_threshold must be >= 0")
         if self.max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
+        if self.max_concurrency != 1:
+            raise ValueError(
+                "max_concurrency > 1 is unsupported while SearchRunner is serialized"
+            )
         if self.evaluation_cost_units is not None and (
             not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
         ):

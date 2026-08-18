@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from cleaned_operators.registry import OperatorRegistry
 from planner.logical_plan import PlanNode
 
+from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from backend.sql_tiers import (
     SQL_IMPLEMENTED_CANONICALS,
     SQL_PARITY_VERIFIED_CANONICALS,
@@ -51,6 +52,40 @@ class SqlCapableOperator:
     """
 
     canonical: str
+
+    @property
+    def _physical_specs(self) -> dict[str, PhysicalImplementationSpec]:
+        """Declare the concrete SQL implementation for each supported dialect."""
+        return {
+            "duckdb_sql": PhysicalImplementationSpec(
+                canonical=self.canonical,
+                backend="duckdb_sql",
+                execution_kind=ExecutionKind.DUCKDB_NATIVE_SQL,
+                supports_lazy=True,
+                supports_streaming=True,
+                supports_nulls=True,
+                supports_nan=True,
+                supports_inf=True,
+                implementation_source_hash="backend.sql_pushdown.sql_registry:SqlCapableOperator:v2",
+                emitter_identity="backend.sql_pushdown.emitter:duckdb:v1",
+                parameter_domain_hash="sql:parameter-domain:v1",
+                semantic_contract_hash="sql:semantic-contract:v1",
+            ),
+            "clickhouse_sql": PhysicalImplementationSpec(
+                canonical=self.canonical,
+                backend="clickhouse_sql",
+                execution_kind=ExecutionKind.NATIVE_EXPR,
+                supports_lazy=True,
+                supports_streaming=True,
+                supports_nulls=True,
+                supports_nan=True,
+                supports_inf=True,
+                implementation_source_hash="backend.sql_pushdown.sql_registry:SqlCapableOperator:v2",
+                emitter_identity="backend.sql_pushdown.emitter:clickhouse:v1",
+                parameter_domain_hash="sql:parameter-domain:v1",
+                semantic_contract_hash="sql:semantic-contract:v1",
+            ),
+        }
 
     @property
     def metadata(self):
@@ -107,7 +142,7 @@ def register_sql_backends() -> None:
         backend_meta = dict(entry.get("backend_meta") or {})
         sql_meta = dict(backend_meta.get("sql") or {})
         sql_meta.update({
-            "execution_kind": "sql_expression_native",
+            "execution_kind": "duckdb_native_sql",
             "supports_lazy": True,
             "supports_streaming": True,
             "materializes_full_panel": False,

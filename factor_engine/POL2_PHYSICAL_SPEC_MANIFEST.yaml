@@ -1,0 +1,21 @@
+task_id: POL2-PHYSICAL-SPEC
+base_sha: 4714787b7fc57499cee637eecb5d1f3c56ad2fc8
+modified_files:
+  - cleaned_operators/common/polars_ts_rolling.py
+  - cleaned_operators/polars_native/ts_batch1.py
+  - LOOP_ENGINEERING_STATUS.md
+canonicals:
+  - ts_cov
+  - ts_regression_slope
+  - ts_regression_intercept
+  - ts_regression_resid
+  - ts_regression_r2
+  - ts_moment
+  - ts_kurt
+backend: polars
+tests_run: 33
+tests_passed: 33
+py_compile: passed
+import_smoke: FAILED_PRE_EXISTING_DUPLICATE_REGISTRATION # duplicate quarter_from_cumulative registration in cleaned_operators/polars_native/misc_final.py; targeted module import was attempted
+production_certification: NOT_RUN
+known_limitation: pre-existing dirty tree and no commit

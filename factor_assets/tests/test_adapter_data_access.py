@@ -264,7 +264,7 @@ class TestAdapterIntegration:
             except OptionalDependencyMissing as e:
                 # This is expected
                 assert "data_access" in str(e)
-                assert "pip install factor_assets[adapters]" in str(e)
+                assert "pip install factor_assets[data_access]" in str(e)
 
     def test_protocol_based_design(self):
         """Test that protocols enable testing without real DA."""
@@ -326,7 +326,7 @@ class TestErrorMessages:
         message = str(error)
         assert "data_access" in message
         assert "DAFactorValueReader" in message
-        assert "pip install factor_assets[adapters]" in message
+        assert "pip install factor_assets[data_access]" in message
 
     def test_different_adapters_different_messages(self):
         """Test that different adapters have distinct error messages."""

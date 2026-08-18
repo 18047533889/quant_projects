@@ -7,7 +7,7 @@ pyproject.toml，此脚本构建 wheel 并校验：
 
     - 每个带 __init__.py 的顶层物理目录必须出现在 wheel 的 data_access.* 下
       （允许集合：core/registry/read/write/cos/service/clickhouse/quality/
-      contract/security/runtime/snapshot）；
+      contract/security/runtime/snapshot/r30/export/telemetry）；
     - 顶层 data_access/__init__.py 必须存在。
 
 用法：
@@ -40,6 +40,9 @@ ALLOWED_PKG_DIRS = {
     "security",
     "runtime",
     "snapshot",
+    "r30",
+    "export",
+    "telemetry",
 }
 
 

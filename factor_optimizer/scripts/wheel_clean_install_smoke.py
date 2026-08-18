@@ -5,16 +5,23 @@ Clean wheel installation smoke test for factor_optimizer.
 Validates package installation and basic functionality in isolation.
 """
 
+import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
-def run_command(cmd, cwd=None, check=True):
-    """Run shell command and return output."""
+def run_command(cmd, cwd=None, check=True, *, disable_user_site=True):
+    """Run an argument-vector command in an isolated import environment."""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONUSERBASE", None)
+    if disable_user_site:
+        env["PYTHONNOUSERSITE"] = "1"
     result = subprocess.run(
-        cmd, shell=True, cwd=cwd, capture_output=True, text=True, check=check
+        cmd, cwd=cwd, env=env, capture_output=True, text=True, check=check
     )
     return result.returncode, result.stdout, result.stderr
 
@@ -37,7 +44,19 @@ def main():
         dist_dir.mkdir()
 
         code, _, stderr = run_command(
-            f"python3 -m build --wheel --outdir {dist_dir}", cwd=package_root
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--no-isolation",
+                "--wheel",
+                "--outdir",
+                str(dist_dir),
+                str(package_root),
+            ],
+            cwd=tmpdir,
+            disable_user_site=False,
+            check=False,
         )
         if code != 0:
             print(f"FAILED: Wheel build\n{stderr}")
@@ -47,13 +66,41 @@ def main():
         if not wheels:
             print("FAILED: No wheel generated")
             return 1
+        if len(wheels) != 1:
+            print(f"FAILED: Expected one wheel, found {len(wheels)}")
+            return 1
         wheel_path = wheels[0]
-        print(f"✓ Built: {wheel_path.name}")
+        required_members = {
+            "factor_optimizer/capabilities.py",
+            "factor_optimizer/errors.py",
+            "factor_optimizer/complexity/budget.py",
+            "factor_optimizer/contracts/splits.py",
+            "factor_optimizer/grammar/__init__.py",
+            "factor_optimizer/contracts/__init__.py",
+            "factor_optimizer/seen/__init__.py",
+            "factor_optimizer/policy/__init__.py",
+            "factor_optimizer/search/__init__.py",
+            "factor_optimizer/llm/__init__.py",
+            "factor_optimizer/adapters/__init__.py",
+        }
+        with zipfile.ZipFile(wheel_path) as archive:
+            members = set(archive.namelist())
+        missing = sorted(required_members - members)
+        bytecode = sorted(
+            name for name in members if "__pycache__" in name or name.endswith(".pyc")
+        )
+        if missing or bytecode:
+            print(
+                "FAILED: Invalid wheel payload "
+                f"(missing={missing}, bytecode={bytecode})"
+            )
+            return 1
+        print(f"✓ Built and payload-checked: {wheel_path.name}")
 
         # Create venv
         print("\n[2/5] Creating venv...")
         venv_dir = tmpdir / "venv"
-        code, _, stderr = run_command(f"python3 -m venv {venv_dir}")
+        code, _, stderr = run_command([sys.executable, "-m", "venv", str(venv_dir)])
         if code != 0:
             print(f"FAILED: venv\n{stderr}")
             return 1
@@ -63,7 +110,10 @@ def main():
 
         # Install wheel
         print("\n[3/5] Installing wheel...")
-        code, _, stderr = run_command(f"{pip_exe} install {wheel_path}", check=False)
+        code, _, stderr = run_command(
+            [str(pip_exe), "install", "--no-index", "--no-deps", str(wheel_path)],
+            check=False,
+        )
         if code != 0:
             print(f"FAILED: Install\n{stderr}")
             return 1
@@ -77,14 +127,25 @@ import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_optimizer
-from factor_optimizer import __version__
-from factor_optimizer.search import SearchRunner, SearchConfig
-from factor_optimizer.grammar import MutationSpec, MutationRegistry
+from factor_optimizer import CapabilityError, ExecutionMode
+from factor_optimizer import adapters, contracts, grammar, llm, policy, search, seen
+from factor_optimizer.complexity import ComplexityBudget
+from factor_optimizer.contracts.splits import SealedTestResult
 
-print(f'factor_optimizer version: {__version__}')
-print('✓ Imports OK')
+assert ExecutionMode.RESEARCH_ONLY.value == 'research_only'
+assert issubclass(CapabilityError, Exception)
+assert SealedTestResult.__name__ == 'SealedTestResult'
+assert ComplexityBudget(strict=True).is_within_budget(
+    __import__('factor_optimizer.complexity.profile', fromlist=['ComplexityProfile'])
+    .ComplexityProfile()
+)
+
+print(f'factor_optimizer version: {factor_optimizer.__version__}')
+print('✓ Three public imports and current module contracts are available')
 """)
-        code, stdout, stderr = run_command(f"{python_exe} {import_script}", check=False)
+        code, stdout, stderr = run_command(
+            [str(python_exe), str(import_script)], check=False
+        )
         if code != 0:
             print(f"FAILED: Import\n{stderr}")
             return 1
@@ -101,7 +162,9 @@ budget = SearchBudget(max_trials=10, max_evaluations=50)
 config = SearchConfig(budget=budget, plateau_window=20)
 print(f"✓ Created config with budget: {budget.max_trials} trials")
 """)
-        code, stdout, stderr = run_command(f"{python_exe} {smoke_script}", check=False)
+        code, stdout, stderr = run_command(
+            [str(python_exe), str(smoke_script)], check=False
+        )
         if code != 0:
             print(f"FAILED: Smoke\n{stderr}")
             return 1

@@ -6,6 +6,118 @@ from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from backend.operator_capability import enumerate_physical_inventory
 
 
+def test_live_production_slots_have_bound_native_physical_specs():
+    """Audit a bounded set of real production-selectable registry slots."""
+    import pytest
+
+    named_slots = (
+        ("ts_mean", "pandas_numpy"),
+        ("ts_mean", "polars"),
+        ("ts_mean", "sql"),
+        ("ts_std", "pandas_numpy"),
+        ("ts_std", "polars"),
+    )
+    try:
+        from cleaned_operators import load_all
+        from cleaned_operators.registry import OperatorRegistry
+        from backend.polars_backend_kind import (
+            PolarsImplementationKind,
+            canonical_polars_kind,
+            canonical_polars_is_delegate,
+        )
+
+        load_all()
+        selectable = [
+            (canonical, backend)
+            for canonical, backend in named_slots
+            if OperatorRegistry.get(canonical, backend, mode="production") is not None
+        ]
+    except Exception as exc:
+        pytest.skip(
+            "live production backend inventory unavailable; refusing to infer "
+            f"selectability: {type(exc).__name__}: {exc}"
+        )
+
+    if not selectable:
+        pytest.skip("named registry slots are not currently production-selectable")
+
+    expected_ids = {}
+    for canonical, registry_backend in selectable:
+        operator = OperatorRegistry.get(canonical, registry_backend, mode="any")
+        assert operator is not None, f"selectable registry slot unavailable: {canonical}/{registry_backend}"
+        physical_backends = (
+            ("duckdb_sql", "clickhouse_sql")
+            if registry_backend == "sql"
+            else (registry_backend,)
+        )
+        specs = getattr(operator, "_physical_specs", {})
+        for physical_backend in physical_backends:
+            if registry_backend == "sql":
+                spec = specs.get(physical_backend) if isinstance(specs, dict) else None
+            else:
+                spec = getattr(operator, "_physical_spec", None)
+                if not isinstance(spec, PhysicalImplementationSpec):
+                    spec = specs.get(physical_backend) if isinstance(specs, dict) else None
+            assert isinstance(spec, PhysicalImplementationSpec), (
+                f"selected slot lacks inspectable explicit spec: "
+                f"{canonical}/{physical_backend}"
+            )
+            assert spec.physical_implementation_id is not None
+            expected_ids[(canonical, physical_backend)] = spec.physical_implementation_id
+
+    def exact_evidence(canonical, backend, implementation_id):
+        return implementation_id == expected_ids.get((canonical, backend))
+
+    class BoundedRegistry:
+        _catalog = {canonical: OperatorRegistry._catalog.get(canonical, {}) for canonical, _ in selectable}
+
+        @classmethod
+        def list_canonical(cls):
+            return sorted({canonical for canonical, _ in selectable})
+
+        @classmethod
+        def backends_for(cls, canonical):
+            return sorted({backend for name, backend in selectable if name == canonical})
+
+        @classmethod
+        def get(cls, canonical, backend, mode="any"):
+            return OperatorRegistry.get(canonical, backend, mode=mode)
+
+    rows = enumerate_physical_inventory(
+        registry=BoundedRegistry,
+        production_surface=lambda canonical, catalog: True,
+        policy_admission=lambda canonical: True,
+        evidence_admission=exact_evidence,
+    )
+    by_slot = {(row.canonical, row.backend): row for row in rows}
+
+    for canonical, registry_backend in selectable:
+        physical_backends = (
+            ("duckdb_sql", "clickhouse_sql")
+            if registry_backend == "sql"
+            else (registry_backend,)
+        )
+        for physical_backend in physical_backends:
+            row = by_slot[(canonical, physical_backend)]
+            assert row.spec is not None
+            assert row.spec.canonical == canonical
+            assert row.spec.backend == physical_backend
+            assert row.spec.is_production_eligible()
+            assert row.implementation_id == expected_ids[(canonical, physical_backend)]
+            assert row.admission.evidence_production_safe
+            assert row.admission.admitted
+
+            if registry_backend == "polars":
+                kind = canonical_polars_kind(canonical, production_mode=True)
+                assert not canonical_polars_is_delegate(canonical, production_mode=True)
+                assert kind is not PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
+                assert row.spec.execution_kind not in {
+                    ExecutionKind.DELEGATE_PYTHON,
+                    ExecutionKind.DELEGATE_PANDAS,
+                    ExecutionKind.POLARS_PANDAS_DELEGATE,
+                }
+
+
 def _spec(**overrides):
     values = {
         "canonical": "ts_demo",
@@ -247,7 +359,11 @@ def test_sql_inventory_uses_distinct_per_dialect_specs_and_ids():
         ),
     )
     assert len(rows) == 2
-    assert rows[0].implementation_id != rows[1].implementation_id
+    by_backend = {row.backend: row for row in rows}
+    assert set(by_backend) == {"duckdb_sql", "clickhouse_sql"}
+    assert by_backend["duckdb_sql"].implementation_id == duck.physical_implementation_id
+    assert by_backend["clickhouse_sql"].implementation_id == click.physical_implementation_id
+    assert by_backend["duckdb_sql"].implementation_id != by_backend["clickhouse_sql"].implementation_id
     assert all(row.admission.admitted for row in rows)
 
     Operator._physical_specs = {"duckdb_sql": duck}

@@ -315,6 +315,24 @@ class TestOptionalDependency:
 
             assert exc_info.value.package_name == "factor_assets"
 
+    def test_availability_requires_default_provider(self):
+        """An importable package alone must not advertise default integration."""
+        try:
+            import factor_assets  # noqa: F401
+        except ImportError:
+            pytest.skip("factor_assets is not installed")
+
+        try:
+            from factor_preprocess.adapters._factor_assets_impl import (  # noqa: F401
+                DefaultFactorSetProvider,
+            )
+        except ImportError:
+            assert not check_factor_assets_available()
+            with pytest.raises(OptionalDependencyMissing):
+                create_adapter()
+        else:
+            assert check_factor_assets_available()
+
 
 class TestProtocolCompliance:
     """Test that mock provider matches the protocol."""

@@ -13,6 +13,8 @@ from quant_evaluator.metrics.quality import (
 from quant_evaluator.metrics.ic import (
     compute_daily_ic,
     compute_mean_ic,
+    compute_mean_ic_value,
+    compute_ic_std,
 )
 from quant_evaluator.metrics.quantile import (
     assign_quantiles,
@@ -110,6 +112,8 @@ __all__ = [
     "compute_per_time_coverage",
     "compute_daily_ic",
     "compute_mean_ic",
+    "compute_mean_ic_value",
+    "compute_ic_std",
     "assign_quantiles",
     "compute_quantile_returns",
     "compute_top_bottom_spread",

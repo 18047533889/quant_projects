@@ -288,13 +288,19 @@ class TestQCapabilityIntegration:
         """Operators missing lowering should be detected."""
         missing = get_q_native_without_lowering()
 
-        # These are known to be declared but not implemented (from investigation)
-        known_missing = {"vwap", "bfill", "group_count"}
+        # Unsupported declarations are quarantined rather than admitted as
+        # native targets.  A gap here would reintroduce a false production
+        # capability claim.
+        assert missing == frozenset()
 
-        assert known_missing.issubset(missing), (
-            f"Known missing operators not detected. "
-            f"Missing: {missing}, Expected subset: {known_missing}"
-        )
+    def test_declared_targets_match_compiler_lowerings_exactly(self):
+        """Native declarations must have one executable compiler lowering."""
+        declared = get_declared_native_ops()
+        lowering = get_lowering_exists_ops()
+
+        assert len(declared) == 67
+        assert len(lowering) == 67
+        assert declared == lowering
 
     def test_evidence_framework_is_comprehensive(self):
         """Evidence framework should cover all declared and implemented ops."""

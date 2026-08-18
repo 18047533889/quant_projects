@@ -237,13 +237,92 @@ class TestFittedState:
             feature_order=["factor_1", "factor_2"],
         )
 
-        # Compatible
+        # Compatibility is positional because fitted parameters are associated
+        # with feature_order.
         assert state.is_compatible_with(["factor_1", "factor_2"])
-        assert state.is_compatible_with(["factor_2", "factor_1"])
+        assert not state.is_compatible_with(["factor_2", "factor_1"])
 
         # Incompatible
         assert not state.is_compatible_with(["factor_1"])
         assert not state.is_compatible_with(["factor_1", "factor_2", "factor_3"])
+
+    def test_mutable_inputs_cannot_change_fitted_state(self):
+        """Caller-owned containers are snapshotted at construction."""
+        feature_ids = ["factor_1", "factor_2"]
+        feature_order = ["factor_1", "factor_2"]
+        learned_params = {"weights": [1.0, 2.0]}
+        state = FittedState(
+            state_id="state_001",
+            transform_name="weighted_sum",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+            feature_ids=feature_ids,
+            feature_order=feature_order,
+            learned_params=learned_params,
+        )
+
+        feature_ids[0] = "other"
+        feature_order.reverse()
+        learned_params["weights"][0] = 99.0
+
+        assert state.feature_ids == ("factor_1", "factor_2")
+        assert state.feature_order == ("factor_1", "factor_2")
+        assert state.learned_params["weights"] == (1.0, 2.0)
+        assert state.is_compatible_with(["factor_1", "factor_2"])
+
+    def test_fitted_state_does_not_expose_mutable_contract_data(self):
+        """Frozen state fields cannot be mutated through nested containers."""
+        state = FittedState(
+            state_id="state_001",
+            transform_name="weighted_sum",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+            feature_ids=["factor_1", "factor_2"],
+            feature_order=["factor_1", "factor_2"],
+            learned_params={"weights": [1.0, 2.0]},
+        )
+
+        with pytest.raises(TypeError):
+            state.feature_ids[0] = "other"
+        with pytest.raises(TypeError):
+            state.learned_params["weights"][0] = 99.0
+        with pytest.raises(TypeError):
+            state.learned_params["weights"] = (99.0, 2.0)
+
+        assert state.is_compatible_with(["factor_1", "factor_2"])
+
+    def test_learned_params_snapshot_is_pickleable(self):
+        """Frozen parameter snapshots remain compatible with persistence."""
+        import pickle
+
+        state = FittedState(
+            state_id="state_001",
+            transform_name="weighted_sum",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+            learned_params={"weights": [1.0, 2.0]},
+        )
+
+        restored = pickle.loads(pickle.dumps(state))
+        assert restored.learned_params["weights"] == (1.0, 2.0)
+        with pytest.raises(TypeError):
+            restored.learned_params["weights"] = (3.0, 4.0)
+
+    def test_feature_order_must_match_feature_ids(self):
+        """Reject contracts whose positional order names other features."""
+        with pytest.raises(InvalidContractError, match="feature_order must contain"):
+            FittedState(
+                state_id="state_001",
+                transform_name="weighted_sum",
+                transform_version="1.0.0",
+                fit_start_time=datetime(2020, 1, 1),
+                fit_end_time=datetime(2020, 12, 31),
+                feature_ids=["factor_1", "factor_2"],
+                feature_order=["factor_1", "factor_3"],
+            )
 
 
 class TestFeatureBundle:

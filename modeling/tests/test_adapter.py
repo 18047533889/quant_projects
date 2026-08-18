@@ -8,14 +8,14 @@ from modeling_adapters.adapter import FactorPreprocessAdapter, is_factor_preproc
 from modeling_adapters.contracts import PreprocessContract, FitWindow, TransformMode
 from modeling_adapters.errors import AdapterError, FutureLeakageError
 
-pytestmark = pytest.mark.skipif(
-    not is_factor_preprocess_available(),
-    reason="factor_preprocess not installed",
-)
-
 
 class TestFactorPreprocessAdapter:
     """Tests for FactorPreprocessAdapter."""
+
+    pytestmark = pytest.mark.skipif(
+        not is_factor_preprocess_available(),
+        reason="factor_preprocess not installed",
+    )
 
     def test_adapter_creation(self):
         """Test that adapter can be created when factor_preprocess is available."""

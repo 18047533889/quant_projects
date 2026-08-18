@@ -727,6 +727,52 @@ def _cs_row_map_groups(inner: pl.LazyFrame, apply_fn) -> pl.LazyFrame:
     )
 
 
+def _rolling_corr_centered_map_groups(
+    joined: pl.LazyFrame, window: int, min_periods: int
+) -> pl.LazyFrame:
+    """Numerically stable pairwise rolling correlation using centered windows.
+
+    Polars' rolling correlation can form ``E[x*y] - E[x]E[y]`` internally,
+    which loses the signal when both series have a large common offset.  Compute
+    each trailing window's means first and then the centered dot products.  The
+    pairwise finite mask is applied per window, so a missing current row does
+    not suppress a result when the preceding valid pairs satisfy min_periods.
+    """
+    w = max(int(window), 1)
+    mp = max(int(min_periods), 1)
+    schema = joined.collect_schema()
+
+    def _apply(g: pl.DataFrame) -> pl.DataFrame:
+        g = g.sort(_TS)
+        xs = np.asarray(g[_VAL].to_numpy(), dtype=np.float64)
+        ys = np.asarray(g["_y"].to_numpy(), dtype=np.float64)
+        out = np.full(xs.shape[0], np.nan, dtype=np.float64)
+        for i in range(xs.size):
+            start = max(0, i + 1 - w)
+            xw = xs[start : i + 1]
+            yw = ys[start : i + 1]
+            valid = np.isfinite(xw) & np.isfinite(yw)
+            if int(valid.sum()) < mp:
+                continue
+            xv = xw[valid]
+            yv = yw[valid]
+            xc = xv - xv.mean()
+            yc = yv - yv.mean()
+            denom = float(np.sqrt(np.dot(xc, xc) * np.dot(yc, yc)))
+            if denom > 0.0 and np.isfinite(denom):
+                out[i] = float(np.dot(xc, yc) / denom)
+        return g.select(
+            pl.col(_TS),
+            pl.col(_INST),
+            pl.Series(_VAL, out),
+        )
+
+    return joined.group_by(_INST, maintain_order=True).map_groups(
+        _apply,
+        schema={_TS: schema[_TS], _INST: schema[_INST], _VAL: pl.Float64},
+    )
+
+
 def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl.LazyFrame:
     """二元 EWM 矩：按 inst 分组用 pandas ewm 对齐 bridge。"""
     w = max(int(span), 2)
@@ -1262,12 +1308,15 @@ def _try_ts_pair_from_base_columns(
     mp = pspec.min_periods
     ddof = pspec.ddof
     if op == "ts_corr":
-        raw = pl.rolling_corr(lcol, rcol, window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        # R38-blocker fix (R19-030 current-row policy): 去掉 ``pairwise_output_guard``
-        # —— 它强制"当前行任一侧无效 -> NULL"，但 pandas 参考 ``rolling(min_periods).corr``
-        # 在"当前行缺失但窗口有效对 >= min_periods"时仍输出有限值。rolling_corr 自身
-        # 跳过 NULL 对，与 pandas current-row policy 一致（验证：当前行 r=null 仍出值）。
-        expr = raw
+        # Use centered two-pass windows to avoid catastrophic cancellation in
+        # Polars' E[xy] - E[x]E[y] implementation for large-offset series.
+        pair_input = base.select(
+            pl.col(_TS),
+            pl.col(_INST),
+            lcol.alias(_VAL),
+            rcol.alias("_y"),
+        )
+        return _rolling_corr_centered_map_groups(pair_input, w, mp)
     elif op == "ts_cov":
         raw = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=mp, ddof=ddof).over(
             _INST, order_by=_TS
@@ -1821,17 +1870,9 @@ def _compile_polars_impl(
             .then(None)
             .otherwise(pl.col("_y"))
         )
-        corr = pl.rolling_corr(
-            lcol,
-            rcol,
-            window_size=pspec.size,
-            min_samples=pspec.min_periods,
-        ).over(_INST, order_by=_TS)
-        # R38-blocker fix (R19-030 current-row policy)：与 fusion 上层一致——去掉
-        # ``polars_pairwise_output_guard``（当前行任一侧缺失也允许出值，只要窗口
-        # 有效对 >= min_periods；rolling_corr 自身跳过 NULL 对）。
-        out = corr
-        return joined.with_columns(out.alias(_VAL)).select(_TS, _INST, _VAL)
+        # Centered two-pass computation avoids catastrophic cancellation for
+        # large-offset inputs while preserving pairwise/current-row semantics.
+        return _rolling_corr_centered_map_groups(joined, pspec.size, pspec.min_periods)
 
     if op == "ts_cov":
         if len(node.inputs) < 2:

@@ -1,11 +1,12 @@
 """
 FactorOptimizer: Evidence-guided factor mutation and search.
 
-Public API:
-    validate_mutation: Check if a mutation spec is legal
-    mutation_catalog: List available mutation operations
-    search_budget: Create budget tracking objects
+Top-level API:
+    package_info: Return package metadata and capability information
+    capability and error types: Shared package contracts and failure classes
 
+Mutation grammar, validation, registry, and search-budget contracts are exposed
+from the ``factor_optimizer.grammar`` and ``factor_optimizer.contracts`` modules.
 This package does NOT execute factors, compute metrics, or make admission decisions.
 It coordinates FE/QE through adapter protocols only.
 """

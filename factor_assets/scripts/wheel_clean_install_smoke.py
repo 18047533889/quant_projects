@@ -6,18 +6,28 @@ Validates that the package can be installed and imported from a clean wheel
 in an isolated environment.
 """
 
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
-def run_command(cmd, cwd=None, check=True):
-    """Run shell command and return output."""
+def run_command(cmd, cwd=None, check=True, *, disable_user_site=True):
+    """Run an argument-vector command in an isolated import environment."""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONUSERBASE", None)
+    if disable_user_site:
+        env["PYTHONNOUSERSITE"] = "1"
+    else:
+        env.pop("PYTHONNOUSERSITE", None)
     result = subprocess.run(
         cmd,
-        shell=True,
         cwd=cwd,
+        env=env,
         capture_output=True,
         text=True,
         check=check,
@@ -37,32 +47,71 @@ def main():
         tmpdir = Path(tmpdir)
         print(f"Test directory: {tmpdir}")
 
-        # Build wheel
+        # Build from a clean source copy so generated tree state cannot leak into
+        # the release payload.
         print("\n[1/5] Building wheel...")
+        source_dir = tmpdir / "source"
+        shutil.copytree(
+            package_root,
+            source_dir,
+            ignore=shutil.ignore_patterns(
+                "build", "dist", "*.egg-info", "__pycache__", "*.pyc"
+            ),
+        )
         dist_dir = tmpdir / "dist"
         dist_dir.mkdir()
 
-        code, stdout, stderr = run_command(
-            f"python3 -m build --wheel --outdir {dist_dir}",
-            cwd=package_root,
+        code, _, stderr = run_command(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--no-isolation",
+                "--wheel",
+                "--outdir",
+                str(dist_dir),
+            ],
+            cwd=source_dir,
+            check=False,
+            disable_user_site=False,
         )
         if code != 0:
             print(f"FAILED: Wheel build failed\n{stderr}")
             return 1
 
-        wheels = list(dist_dir.glob("*.whl"))
-        if not wheels:
-            print("FAILED: No wheel file generated")
+        wheels = sorted(dist_dir.glob("*.whl"))
+        if len(wheels) != 1:
+            print(f"FAILED: Expected one wheel, found {len(wheels)}")
             return 1
 
         wheel_path = wheels[0]
-        print(f"✓ Built: {wheel_path.name}")
+        required_members = {
+            "factor_assets/registry/factory.py",
+            "factor_assets/registry/sqlite_repository.py",
+            "factor_assets/registry/migrations.py",
+            "factor_assets/registry/serialization.py",
+        }
+        with zipfile.ZipFile(wheel_path) as archive:
+            members = set(archive.namelist())
+        missing = sorted(required_members - members)
+        bytecode = sorted(
+            name for name in members if "__pycache__" in name or name.endswith(".pyc")
+        )
+        if missing or bytecode:
+            print(
+                "FAILED: Invalid wheel payload "
+                f"(missing={missing}, bytecode={bytecode})"
+            )
+            return 1
+        print(f"✓ Built and payload-checked: {wheel_path.name}")
 
         # Create clean venv
         print("\n[2/5] Creating clean virtual environment...")
         venv_dir = tmpdir / "venv"
 
-        code, _, stderr = run_command(f"python3 -m venv {venv_dir}")
+        code, _, stderr = run_command(
+            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)]
+        )
         if code != 0:
             print(f"FAILED: venv creation failed\n{stderr}")
             return 1
@@ -73,8 +122,14 @@ def main():
 
         # Install wheel
         print("\n[3/5] Installing wheel...")
-        code, stdout, stderr = run_command(
-            f"{pip_exe} install {wheel_path}",
+        code, _, stderr = run_command(
+            [
+                str(pip_exe),
+                "install",
+                "--no-index",
+                "--no-deps",
+                str(wheel_path),
+            ],
             check=False,
         )
         if code != 0:
@@ -92,8 +147,11 @@ sys.path = [p for p in sys.path if 'quant_projects' not in p]
 import factor_assets
 import importlib
 import pkgutil
+from factor_assets import SQLiteLifecycleRepository, create_repository
 from factor_assets.contracts.asset import FactorAsset, AssetMetadata
 from factor_assets.registry import AssetRepository
+import factor_assets.registry.migrations
+import factor_assets.registry.serialization
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
 
@@ -118,12 +176,15 @@ if failures:
 print('factor_assets imported')
 print(f'FactorAsset: {FactorAsset}')
 print(f'AssetRepository: {AssetRepository}')
+print(f'SQLiteLifecycleRepository: {SQLiteLifecycleRepository}')
+print(f'create_repository: {create_repository}')
 print(f'LifecycleState: {LifecycleState}')
 print('✓ All imports successful')
 """)
 
         code, stdout, stderr = run_command(
-            f"{python_exe} {import_script}",
+            [str(python_exe), str(import_script)],
+            cwd=tmpdir,
             check=False,
         )
         if code != 0:
@@ -136,6 +197,7 @@ print('✓ All imports successful')
         smoke_script = tmpdir / "test_smoke.py"
         smoke_script.write_text("""
 from datetime import datetime
+from factor_assets import SQLiteLifecycleRepository, create_repository
 from factor_assets.contracts.asset import AssetMetadata
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
@@ -171,10 +233,32 @@ retrieved = repo.get(asset.factor_id)
 assert retrieved.factor_id == "test_factor"
 assert retrieved.lifecycle_state == LifecycleState.REGISTERED
 print(f"✓ Registered and retrieved asset: {retrieved.factor_id}")
+
+# Exercise the durable public factory from the installed wheel, then reopen the
+# database to prove migration and serialization modules are present and usable.
+sqlite_path = __import__("pathlib").Path(__file__).with_name("registry.db")
+durable = create_repository(db_path=sqlite_path)
+assert isinstance(durable, SQLiteLifecycleRepository)
+durable.register(
+    AssetMetadata(
+        factor_id="durable_factor",
+        canonical_repr="close",
+        canonical_hash="durable_hash_12345",
+        frequency="daily",
+        domains=("equity",),
+        timing="daily",
+    ),
+    LineageRef(factor_id="durable_factor", parents=()),
+)
+reopened = SQLiteLifecycleRepository(sqlite_path)
+assert reopened.get("durable_factor").lifecycle_state == LifecycleState.REGISTERED
+assert len(reopened.get_events("durable_factor")) == 1
+print("✓ Created, persisted, and reopened SQLite lifecycle repository")
 """)
 
         code, stdout, stderr = run_command(
-            f"{python_exe} {smoke_script}",
+            [str(python_exe), str(smoke_script)],
+            cwd=tmpdir,
             check=False,
         )
         if code != 0:

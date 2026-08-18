@@ -195,6 +195,33 @@ class TestOlsNeutralize:
         # Results may differ
         # (with intercept removes mean, without does not)
 
+    def test_preserves_non_default_values_index_after_merge(self):
+        """Residuals stay aligned when merge resets the input index."""
+        values_df = pd.DataFrame(
+            {
+                "date": [1, 1, 1],
+                "asset_id": ["A", "B", "C"],
+                "value": [1.0, 2.0, 4.0],
+            },
+            index=[10, 20, 30],
+        )
+        exposures_df = pd.DataFrame(
+            {
+                "date": [1, 1, 1],
+                "asset_id": ["A", "B", "C"],
+                "exposure": [1.0, 2.0, 3.0],
+            },
+            index=[100, 200, 300],
+        )
+
+        result = ols_neutralize(values_df, exposures_df, min_observations=1)
+
+        assert result.index.equals(values_df.index)
+        np.testing.assert_allclose(
+            result.to_numpy(),
+            [1.0 / 6.0, -1.0 / 3.0, 1.0 / 6.0],
+        )
+
 
 class TestComputeExposures:
     """Test exposure computation."""

@@ -8,6 +8,7 @@ Validates package installation and basic functionality in isolation.
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -50,6 +51,30 @@ def main():
         wheel_path = wheels[0]
         print(f"✓ Built: {wheel_path.name}")
 
+        source_files = {
+            path.relative_to(package_root / "factor_preprocess").as_posix()
+            for path in (package_root / "factor_preprocess").rglob("*.py")
+        }
+        with zipfile.ZipFile(wheel_path) as archive:
+            wheel_files = {
+                name.removeprefix("factor_preprocess/")
+                for name in archive.namelist()
+                if name.startswith("factor_preprocess/") and name.endswith(".py")
+            }
+            bytecode = sorted(
+                name for name in archive.namelist()
+                if "__pycache__" in name or name.endswith((".pyc", ".pyo"))
+            )
+        missing = sorted(source_files - wheel_files)
+        extra = sorted(wheel_files - source_files)
+        if missing or extra or bytecode:
+            print(
+                "FAILED: Wheel manifest mismatch "
+                f"(missing={missing}, extra={extra}, bytecode={bytecode})"
+            )
+            return 1
+        print(f"✓ Source manifest matched: {len(source_files)} Python files")
+
         # Create venv
         print("\n[2/5] Creating venv...")
         venv_dir = tmpdir / "venv"
@@ -77,12 +102,17 @@ import sys
 sys.path = [p for p in sys.path if 'quant_projects' not in p]
 
 import factor_preprocess
+import factor_preprocess.adapters
+import factor_preprocess.backends
 import factor_preprocess.kernels.fast as fast_kernels
 import factor_preprocess.kernels.numba_transforms as numba_transforms
+import factor_preprocess.regime
+import factor_preprocess.representation
 from factor_preprocess import __version__
 from factor_preprocess.transforms import cs_rank, cs_zscore, rolling_mean
 from factor_preprocess.transforms.decomposition import stl_decompose
 from factor_preprocess.neutralization import ols_neutralize
+import factor_preprocess.neutralization.advanced
 
 assert fast_kernels.__file__
 assert numba_transforms.__file__

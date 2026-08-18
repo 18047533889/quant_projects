@@ -300,6 +300,8 @@ class CacheMetadata:
                 raise ValueError(f"invalid cache metadata {name}")
             if not math.isfinite(data[name]):
                 raise ValueError(f"invalid cache metadata {name}")
+        if data["last_accessed"] < data["created_at"]:
+            raise ValueError("cache metadata last_accessed precedes created_at")
         for name in ("access_count", "size_bytes", "compressed_size"):
             if isinstance(data[name], bool) or not isinstance(data[name], int) or data[name] < 0:
                 raise ValueError(f"invalid cache metadata {name}")
@@ -581,6 +583,20 @@ class DiskCacheLayer:
         self.root_dir = Path(root_dir)
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.compressor = compressor
+        self._remove_abandoned_record_temps()
+
+    def _remove_abandoned_record_temps(self) -> None:
+        """Remove unpublished record files left by an abruptly terminated writer."""
+        with self._process_lock(), self._root_lock():
+            for temporary in self.root_dir.rglob(".tmp.*.cache"):
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning(
+                        "Failed to remove abandoned disk cache temporary %s: %s",
+                        temporary,
+                        exc,
+                    )
 
     def _root_lock(self) -> threading.RLock:
         """Get the process-wide lock that fences whole-cache operations."""
@@ -978,7 +994,8 @@ class DiskCacheLayer:
                     expected_value=scanned_value, dependency=dependency,
                     generation=metadata.generation):
                     removed_count += 1
-                    removed_keys.add(metadata.key)
+                    if value_path == self._key_path(metadata.key):
+                        removed_keys.add(metadata.key)
             except Exception:
                 if scanned_text is not None:
                     self._invalidate_scanned_pair(meta_path, value_path, scanned_text,
@@ -992,7 +1009,7 @@ class DiskCacheLayer:
         with self._process_lock(), self._root_lock():
             self.root_dir.mkdir(parents=True, exist_ok=True)
             for child in self.root_dir.iterdir():
-                if child.name == ".cache.lock":
+                if child.name in {".cache.lock", ".invalidation.epoch"}:
                     continue
                 if child.is_dir():
                     shutil.rmtree(child)
@@ -1042,6 +1059,31 @@ class RedisCacheLayer:
     def _prefixed_key(self, key: str) -> str:
         """Add prefix to key."""
         return f"{self.key_prefix}{key}"
+
+    def _invalidation_epoch_key(self) -> str:
+        """Return the shared Redis key used for L1 invalidation epochs."""
+        return f"{self.key_prefix}:invalidation_epoch"
+
+    def invalidation_epoch(self) -> Optional[str]:
+        """Read the shared Redis invalidation epoch, or None on failure."""
+        try:
+            value = self.client.get(self._invalidation_epoch_key())
+        except Exception as exc:
+            logger.warning("Failed to read Redis invalidation epoch: %s", exc)
+            return None
+        if isinstance(value, bytes):
+            return value.decode("ascii", errors="replace")
+        return str(value or "")
+
+    def bump_invalidation_epoch(self) -> Optional[str]:
+        """Publish a new shared Redis invalidation epoch, or None on failure."""
+        epoch = uuid.uuid4().hex
+        try:
+            self.client.set(self._invalidation_epoch_key(), epoch)
+        except Exception as exc:
+            logger.warning("Failed to publish Redis invalidation epoch: %s", exc)
+            return None
+        return epoch
 
     def _logical_key_matches_physical(self, logical_key: str, value_key: Any) -> bool:
         """Return whether metadata identity matches the scanned Redis value key."""
@@ -1379,11 +1421,13 @@ class RedisCacheLayer:
         """Clear all cache entries with this prefix."""
         try:
             pattern = f"{self.key_prefix}*"
+            epoch_key = self._invalidation_epoch_key()
             cursor = 0
             while True:
                 cursor, keys = self.client.scan(cursor, match=pattern, count=100)
-                if keys:
-                    self.client.delete(*keys)
+                cache_keys = [key for key in keys if key != epoch_key]
+                if cache_keys:
+                    self.client.delete(*cache_keys)
                 if cursor == 0:
                     break
         except Exception as e:
@@ -1551,18 +1595,83 @@ class MultiLevelCache:
         self.stats = CacheStats()
         self._stats_lock = threading.Lock()
         self._coordination_lock = threading.RLock()
-        self._l1_invalidation_epoch = (
-            self.l2.invalidation_epoch() if self.l1 and self.l2 else ""
+        self._l1_invalidation_epoch: Optional[str] = (
+            self.l2.invalidation_epoch()
+            if self.l1 and self.l2
+            else self.l3.invalidation_epoch()
+            if self.l1 and self.l3
+            else ""
         )
 
-    def _refresh_l1_epoch_unlocked(self) -> None:
-        """Drop local L1 entries after another coordinator invalidates L2."""
-        if not self.l1 or not self.l2:
-            return
-        current_epoch = self.l2._read_invalidation_epoch_unlocked()
+    def _shared_invalidation_epoch_unlocked(self) -> Optional[str]:
+        """Read the epoch from the configured shared backing layer."""
+        if self.l2:
+            return self.l2._read_invalidation_epoch_unlocked()
+        if self.l3:
+            read_epoch = getattr(self.l3, "invalidation_epoch", None)
+            if read_epoch is None:
+                return None
+            try:
+                return read_epoch()
+            except Exception as exc:
+                logger.warning("Failed to read shared invalidation epoch: %s", exc)
+                return None
+        return ""
+
+    def _bump_shared_invalidation_epoch_unlocked(self) -> Optional[str]:
+        """Bump the epoch in the configured shared backing layer."""
+        if self.l2:
+            return self.l2._bump_invalidation_epoch_unlocked()
+        if self.l3:
+            bump_epoch = getattr(self.l3, "bump_invalidation_epoch", None)
+            if bump_epoch is None:
+                return None
+            try:
+                return bump_epoch()
+            except Exception as exc:
+                logger.warning("Failed to publish shared invalidation epoch: %s", exc)
+                return None
+        return ""
+
+    def _record_shared_epoch_unlocked(self, epoch: Optional[str]) -> bool:
+        """Record a successful fence; mark L1 stale when publication fails."""
+        if epoch is None:
+            # Do not destroy unrelated local entries merely because a shared
+            # fence could not be published.  The unknown marker forces the
+            # next coordinated read to validate the shared epoch before L1 use.
+            self._l1_invalidation_epoch = None
+            return False
+        self._l1_invalidation_epoch = epoch
+        return True
+
+    def _refresh_l1_epoch_unlocked(self) -> bool:
+        """Refresh the L1 epoch, clearing and bypassing L1 on read failure."""
+        if not self.l1 or not (self.l2 or self.l3):
+            return True
+        current_epoch = self._shared_invalidation_epoch_unlocked()
+        if current_epoch is None:
+            self.l1.clear()
+            self._l1_invalidation_epoch = None
+            return False
         if current_epoch != self._l1_invalidation_epoch:
             self.l1.clear()
             self._l1_invalidation_epoch = current_epoch
+        return True
+
+    def _shared_epoch_unchanged_unlocked(self, expected_epoch: Optional[str]) -> bool:
+        """Reject lower-layer reads that crossed a sibling invalidation fence."""
+        if not self.l1 or not (self.l2 or self.l3):
+            return True
+        if self.l3 and not self.l2 and not callable(
+            getattr(self.l3, "invalidation_epoch", None)
+        ):
+            return True
+        current_epoch = self._shared_invalidation_epoch_unlocked()
+        if current_epoch is None or current_epoch != expected_epoch:
+            self.l1.clear()
+            self._l1_invalidation_epoch = current_epoch
+            return False
+        return True
 
     def get(self, key: str) -> Optional[Any]:
         """Get a value while serializing promotion with dependency invalidation."""
@@ -1584,18 +1693,25 @@ class MultiLevelCache:
         """
         # Try L1 (memory)
         if self.l1:
-            self._refresh_l1_epoch_unlocked()
-            result = self.l1.get(key)
-            if result is not None:
-                with self._stats_lock:
-                    self.stats.l1_hits += 1
-                return result[0]
+            l1_epoch_available = self._refresh_l1_epoch_unlocked()
+            if l1_epoch_available:
+                result = self.l1.get(key)
+                if result is not None:
+                    with self._stats_lock:
+                        self.stats.l1_hits += 1
+                    return result[0]
 
         # Try L2 (disk)
         if self.l2:
+            read_epoch = self._shared_invalidation_epoch_unlocked()
             result = self.l2.get(key)
             if result is not None:
                 value, metadata = result
+
+                if not self._shared_epoch_unchanged_unlocked(read_epoch):
+                    with self._stats_lock:
+                        self.stats.misses += 1
+                    return None
 
                 # Promote to L1
                 if self.l1:
@@ -1621,9 +1737,15 @@ class MultiLevelCache:
 
         # Try L3 (Redis)
         if self.l3:
+            read_epoch = self._shared_invalidation_epoch_unlocked()
             result = self.l3.get(key)
             if result is not None:
                 value, metadata = result
+
+                if not self._shared_epoch_unchanged_unlocked(read_epoch):
+                    with self._stats_lock:
+                        self.stats.misses += 1
+                    return None
 
                 # Promote to L2 and L1
                 if self.l2:
@@ -1730,7 +1852,18 @@ class MultiLevelCache:
     def invalidate(self, key: str) -> bool:
         """Invalidate a key without racing with reads or promotion."""
         with self._coordination_lock:
-            return self._invalidate_unlocked(key)
+            if self.l2 or self.l3:
+                self._record_shared_epoch_unlocked(
+                    self._bump_shared_invalidation_epoch_unlocked()
+                )
+            removed = self._invalidate_unlocked(key)
+            if removed and (self.l2 or self.l3):
+                # Publish a completion fence so sibling coordinators cannot
+                # retain a value promoted while physical invalidation ran.
+                self._record_shared_epoch_unlocked(
+                    self._bump_shared_invalidation_epoch_unlocked()
+                )
+            return removed
 
     def _invalidate_unlocked(self, key: str) -> bool:
         """
@@ -1762,9 +1895,26 @@ class MultiLevelCache:
         with self._coordination_lock:
             if self.l2:
                 with self.l2._process_lock(), self.l2._root_lock():
-                    self._l1_invalidation_epoch = self.l2._bump_invalidation_epoch_unlocked()
-                    return self._invalidate_dependency_unlocked(dependency)
-            return self._invalidate_dependency_unlocked(dependency)
+                    if self.l2 or self.l3:
+                        self._record_shared_epoch_unlocked(
+                            self._bump_shared_invalidation_epoch_unlocked()
+                        )
+                    invalidated = self._invalidate_dependency_unlocked(dependency)
+            else:
+                if self.l2 or self.l3:
+                    self._record_shared_epoch_unlocked(
+                        self._bump_shared_invalidation_epoch_unlocked()
+                    )
+                invalidated = self._invalidate_dependency_unlocked(dependency)
+
+            if self.l2 or self.l3:
+                # Publish a completion fence after physical removal.  A sibling
+                # may otherwise observe the start fence, promote the stale value,
+                # and retain it in L1 after this invalidation returns.
+                self._record_shared_epoch_unlocked(
+                    self._bump_shared_invalidation_epoch_unlocked()
+                )
+            return invalidated
 
     def _invalidate_dependency_unlocked(self, dependency: str) -> int:
         """
@@ -1822,12 +1972,22 @@ class MultiLevelCache:
     def clear(self):
         """Clear all cache layers without racing with reads or promotion."""
         with self._coordination_lock:
+            if self.l2 or self.l3:
+                self._record_shared_epoch_unlocked(
+                    self._bump_shared_invalidation_epoch_unlocked()
+                )
             if self.l1:
                 self.l1.clear()
             if self.l2:
                 self.l2.clear()
             if self.l3:
                 self.l3.clear()
+            if self.l2 or self.l3:
+                # Completion fence prevents a sibling from retaining a value
+                # promoted while the shared layers were being cleared.
+                self._record_shared_epoch_unlocked(
+                    self._bump_shared_invalidation_epoch_unlocked()
+                )
 
     def warm(
         self,
