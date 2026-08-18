@@ -142,7 +142,7 @@ class TSCorrNative(SeriesOperator):
             x_col = pl.col(c)
             y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
 
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_periods)
+            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_p)
             corr = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(
                 None
             ).otherwise(moments["cross"] / (moments["ss_x"] * moments["ss_y"]).sqrt())

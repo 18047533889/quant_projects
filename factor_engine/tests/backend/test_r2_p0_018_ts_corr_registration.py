@@ -28,3 +28,17 @@ def test_ts_corr_matches_direct_window_oracle_with_missing_pairs() -> None:
     ).to_numpy()
 
     np.testing.assert_allclose(actual, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
+
+
+def test_ts_corr_default_min_periods_uses_two_pairs() -> None:
+    load_all()
+    operator = OperatorRegistry.get("ts_corr", "polars", mode="research")
+    x = pl.DataFrame({"asset": [1.0, 2.0, 4.0]})
+    y = pl.DataFrame({"asset": [2.0, 5.0, 9.0]})
+
+    actual = operator.calculate(x, y, window=3)["asset"].to_numpy()
+    expected = pd.Series(x["asset"].to_numpy()).rolling(3, min_periods=2).corr(
+        pd.Series(y["asset"].to_numpy())
+    ).to_numpy()
+
+    np.testing.assert_allclose(actual, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
