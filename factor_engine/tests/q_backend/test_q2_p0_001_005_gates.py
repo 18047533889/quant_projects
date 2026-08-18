@@ -9,6 +9,7 @@ Tests verify:
 """
 
 import hashlib
+import json
 from dataclasses import replace
 
 import pytest
@@ -311,6 +312,7 @@ class TestQPhysicalImplementationRegistry:
             "parameter_domain_id": "param_domain_add",
             "q_version": "4.1",
             "pykx_version": "2.6",
+            "generation_timestamp": "2026-08-17T10:00:00+00:00",
             "status": "PASS",
         }
         stage_results = {
@@ -383,7 +385,41 @@ class TestQPhysicalImplementationRegistry:
         registry.register(impl)
         return registry, impl
 
-    def test_register_implementation_with_validated_artifacts(self, tmp_path):
+    def test_certification_rejects_missing_artifact_timestamp(self, tmp_path):
+        registry, impl = self._certified_registry(tmp_path)
+        path = tmp_path / impl.compile_evidence.path
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload.pop("generation_timestamp")
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        registry.register(replace(
+            impl,
+            compile_evidence=replace(
+                impl.compile_evidence,
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            ),
+        ))
+        assert "compile_evidence: generation_timestamp missing or malformed" in registry.evidence_errors("add")
+
+    @pytest.mark.parametrize("timestamp, expected", [
+        ("not-a-timestamp", "compile_evidence: generation_timestamp missing or malformed"),
+        ("2026-08-17T10:00:00", "compile_evidence: generation_timestamp timezone is required"),
+    ])
+    def test_certification_rejects_invalid_artifact_timestamp(self, tmp_path, timestamp, expected):
+        registry, impl = self._certified_registry(tmp_path)
+        path = tmp_path / impl.compile_evidence.path
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["generation_timestamp"] = timestamp
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        registry.register(replace(
+            impl,
+            compile_evidence=replace(
+                impl.compile_evidence,
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            ),
+        ))
+        assert expected in registry.evidence_errors("add")
+
+    def test_certification_accepts_timezone_aware_artifact_timestamp(self, tmp_path):
         registry, impl = self._certified_registry(tmp_path)
         assert registry.get("add") is impl
         assert registry.evidence_errors("add") == ()

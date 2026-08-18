@@ -203,6 +203,12 @@ def _artifact_errors(
     if not isinstance(payload, dict):
         return [f"{label}: payload must be an object"]
     errors = []
+    try:
+        generated = datetime.fromisoformat(str(payload.get("generation_timestamp", "")))
+        if generated.tzinfo is None or generated.utcoffset() is None:
+            errors.append(f"{label}: generation_timestamp timezone is required")
+    except (TypeError, ValueError):
+        errors.append(f"{label}: generation_timestamp missing or malformed")
     for key, value in expected.items():
         if payload.get(key) != value:
             errors.append(f"{label}: {key} mismatch")

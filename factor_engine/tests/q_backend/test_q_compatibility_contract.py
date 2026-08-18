@@ -251,6 +251,7 @@ def _certified_compiler_with_global_disagreement(tmp_path) -> QCompiler:
         "parameter_domain_id": "domain",
         "q_version": "4.1",
         "pykx_version": "2.6",
+        "generation_timestamp": "2026-08-17T10:00:00+00:00",
         "status": "PASS",
     }
     stage_results = {
