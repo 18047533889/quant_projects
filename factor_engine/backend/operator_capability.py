@@ -17,6 +17,7 @@ FE-P0-004: PhysicalImplementationSpec imported from unified authority.
 from __future__ import annotations
 
 import hashlib
+import inspect
 from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
@@ -292,14 +293,23 @@ def enumerate_physical_inventory(
             physical_backends = (
                 ("duckdb_sql", "clickhouse_sql") if slot == "sql" else (slot,)
             )
+            registry_get = registry.get
             try:
-                operator = registry.get(canonical, slot, mode="any")
-            except TypeError:
-                # Narrow compatibility for injected/legacy registries without mode.
-                try:
-                    operator = registry.get(canonical, slot)
-                except Exception:
-                    operator = None
+                parameters = inspect.signature(registry_get).parameters.values()
+                supports_mode = any(
+                    parameter.name == "mode"
+                    or parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                )
+            except (TypeError, ValueError):
+                supports_mode = True
+            try:
+                if supports_mode:
+                    operator = registry_get(canonical, slot, mode="any")
+                else:
+                    # Compatibility only when the callable signature proves that
+                    # the injected/legacy registry has no mode parameter.
+                    operator = registry_get(canonical, slot)
             except Exception:
                 operator = None
             for backend in physical_backends:

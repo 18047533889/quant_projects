@@ -66,6 +66,10 @@ def test_physical_implementation_spec_authority():
         supports_lazy=True,
         supports_streaming=True,
         supports_nulls=True,
+        implementation_source_hash="test-source-sha256",
+        emitter_identity="test.polars.expr:v1",
+        parameter_domain_hash="test-params-sha256",
+        semantic_contract_hash="test-contract-sha256",
     )
 
     assert spec.canonical == "test_op"

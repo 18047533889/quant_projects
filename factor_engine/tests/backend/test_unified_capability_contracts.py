@@ -145,6 +145,10 @@ def test_physical_spec_production_eligibility():
         canonical="test",
         backend="polars",
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        implementation_source_hash="test-source-sha256",
+        emitter_identity="test.polars.expr:v1",
+        parameter_domain_hash="test-params-sha256",
+        semantic_contract_hash="test-contract-sha256",
     )
     assert spec_native.is_production_eligible()
 

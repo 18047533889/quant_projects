@@ -185,6 +185,33 @@ def test_inventory_requests_any_mode_so_default_hidden_path_is_visible():
     assert row.admission.admitted
 
 
+def test_inventory_does_not_retry_default_mode_after_internal_type_error():
+    class Registry:
+        _catalog = {"ts_demo": {}}
+        modes = []
+
+        @staticmethod
+        def list_canonical(): return ["ts_demo"]
+        @staticmethod
+        def backends_for(canonical): return ["pandas_numpy"]
+        @classmethod
+        def get(cls, canonical, backend, mode="production"):
+            cls.modes.append(mode)
+            if mode == "any":
+                raise TypeError("internal registry failure")
+            raise AssertionError("default mode must not be queried")
+
+    row = enumerate_physical_inventory(
+        registry=Registry,
+        production_surface=lambda canonical, catalog: True,
+        policy_admission=lambda canonical: True,
+        evidence_admission=lambda canonical, backend, implementation_id: True,
+    )[0]
+    assert Registry.modes == ["any"]
+    assert not row.admission.admitted
+    assert "selectable registry slot has no implementation" in row.admission.reasons
+
+
 def test_sql_inventory_uses_distinct_per_dialect_specs_and_ids():
     duck = _spec(
         canonical="ts_sql",
