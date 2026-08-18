@@ -117,6 +117,17 @@ def test_cyclic_plan_ref_sid_fails_closed():
         )
 
 
+def test_direct_plan_node_input_cycle_fails_closed():
+    first = PlanNode("abs", node_id="first")
+    second = PlanNode("neg", inputs=(first,), node_id="second")
+    object.__setattr__(first, "inputs", (second,))
+
+    with pytest.raises(ValueError, match="cyclic plan dependency"):
+        BatchGlobalOptimizer().optimize_batch(
+            {"factor": first}, {}, {}, _ctx(100, complete=True)
+        )
+
+
 def test_known_rows_alone_are_not_production_ready():
     root = PlanNode("abs", inputs=(PlanNode("column"),))
 
