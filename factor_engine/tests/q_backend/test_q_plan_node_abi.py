@@ -7,7 +7,11 @@ import pytest
 from backend.q_backend.q_backend import QBackend
 from backend.q_backend.q_compiler import QCompiler
 from backend.q_backend.q_errors import QPhysicalRegionNotImplemented
+from ir.analyzer import Analyzer
+from api import ts_mean
+from api.columns import col
 from planner.logical_plan import PlanNode
+from planner.lowerer import Lowerer
 
 
 def _backend_with_compiler(compiler: object) -> QBackend:
@@ -15,6 +19,19 @@ def _backend_with_compiler(compiler: object) -> QBackend:
     backend._compiler = compiler
     backend._production_mode = False
     return backend
+
+
+def test_lowerer_assigns_deterministic_ids_accepted_by_q_extraction() -> None:
+    expr = ts_mean(col("close"), 5)
+    first = Lowerer().to_logical_plan(Analyzer().lower(expr).ir)
+    second = Lowerer().to_logical_plan(Analyzer().lower(expr).ir)
+
+    assert first.node_id is not None
+    assert first.inputs[0].node_id is not None
+    assert first.node_id == second.node_id
+    assert first.inputs[0].node_id == second.inputs[0].node_id
+    nodes = _backend_with_compiler(object())._extract_nodes_topological(first)
+    assert all(node["node_id"] for node in nodes)
 
 
 def test_extract_nodes_uses_canonical_plan_node_abi() -> None:

@@ -52,6 +52,18 @@ def test_unary_math_polars_matches_pandas(name: str):
     _assert_close(op_p.calculate(pl_x), op_n.calculate(x))
 
 
+def test_inverse_zero_and_null_match_pandas_nan_contract():
+    op_p = OperatorRegistry.get("inverse", backend="polars", mode="research")
+    op_n = OperatorRegistry.get("inverse", backend="pandas_numpy", mode="research")
+    x = pd.DataFrame({"A": [2.0, 0.0, np.nan, np.inf, -4.0]})
+    pl_x = pl.from_pandas(x)
+    _assert_close(op_p.calculate(pl_x), op_n.calculate(x))
+    got = op_p.calculate(pl_x)["A"].to_list()
+    assert got[0] == 0.5
+    assert np.isnan(got[1]) and np.isnan(got[2])
+    assert got[3] == 0.0 and got[4] == -0.25
+
+
 def test_tan_remains_fail_closed_in_production():
     assert OperatorRegistry.get("tan", backend="polars") is None
     assert OperatorRegistry.get("tan", backend="pandas_numpy") is None

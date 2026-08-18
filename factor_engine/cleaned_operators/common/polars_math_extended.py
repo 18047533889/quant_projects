@@ -153,8 +153,10 @@ class InversePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = numeric_cols(x)
         return x.with_columns([
+            # Pandas/NumPy's reciprocal uses NaN for zero and missing inputs;
+            # returning Polars null changes the backend's missing-value contract.
             pl.when(pl.col(c).is_null() | (pl.col(c) == 0))
-            .then(None)
+            .then(float("nan"))
             .otherwise(1.0 / pl.col(c))
             .alias(c)
             for c in cols

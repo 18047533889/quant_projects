@@ -21,11 +21,24 @@ class Lowerer:
         def visit(node: IRNode) -> PlanNode:
             """递归访问 IR 子树并构造对应 PlanNode。"""
             children = [visit(child) for child in node.inputs]
-            return PlanNode(
+            plan = PlanNode(
                 op=node.op,
                 inputs=children,
                 attrs=node.attrs.copy(),
                 semantic_attrs=dict(node.semantic_attrs or {}),
+            )
+            # Q extraction requires the canonical deterministic identity on every
+            # node.  Derive it from the existing structural-key authority rather
+            # than traversal order or object identity; node_id is excluded from
+            # structural_key, so this does not alter plan/cache semantics.
+            from .plan_hash import structural_key
+
+            return PlanNode(
+                op=plan.op,
+                inputs=plan.inputs,
+                attrs=plan.attrs,
+                semantic_attrs=plan.semantic_attrs,
+                node_id=structural_key(plan),
             )
 
         return visit(ir)
