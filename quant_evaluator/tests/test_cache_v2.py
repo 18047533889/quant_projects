@@ -363,6 +363,32 @@ class TestDiskCacheLayer:
             assert cache.get("key1") is None
             assert not cache_path.exists()
 
+    def test_missing_legacy_value_invalidates_unchanged_metadata(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy-missing-value"
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies=set(),
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps({**metadata.to_dict(), "checksum": "missing"}),
+            encoding="utf-8",
+        )
+
+        assert cache.get(key) is None
+        assert not meta_path.exists()
+        assert not value_path.exists()
+
     def test_dependency_invalidation_uses_physical_record_when_metadata_key_is_corrupt(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
@@ -497,6 +523,25 @@ class TestDiskCacheLayer:
             cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
             assert cache.put("key", "old")
             monkeypatch.setattr(cache_v2_module.pickle, "dumps", slow_dumps)
+            assert cache.put("key", "new", ttl_seconds=10.0) is False
+            result = cache.get("key")
+            assert result is not None
+            assert result[0] == "old"
+
+    def test_direct_put_rejects_ttl_exhausted_during_record_encoding(self, monkeypatch):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key", "old")
+            original_encode = cache._encode_record
+
+            def slow_encode(metadata, compressed_data):
+                record = original_encode(metadata, compressed_data)
+                clock.now += 10.0
+                return record
+
+            monkeypatch.setattr(cache, "_encode_record", slow_encode)
             assert cache.put("key", "new", ttl_seconds=10.0) is False
             result = cache.get("key")
             assert result is not None
@@ -837,7 +882,30 @@ class FakeRedisClient:
         self._pipeline_commands = []
 
     def scan(self, cursor, match=None, count=None):
-        return 0, list(self.hashes)
+        keys = {*self.hashes, *self.values}
+        if match is not None:
+            match_text = match.decode("utf-8") if isinstance(match, bytes) else match
+            if match_text.endswith("*:meta"):
+                keys = {
+                    key for key in keys
+                    if (key.decode("utf-8") if isinstance(key, bytes) else key).endswith(":meta")
+                }
+        return 0, list(keys)
+
+    def get(self, key):
+        if key in self.values:
+            return self.values[key]
+        if isinstance(key, bytes):
+            return self.values.get(key.decode("utf-8"))
+        return self.values.get(key.encode("utf-8"))
+
+    def exists(self, key):
+        variants = {key}
+        if isinstance(key, bytes):
+            variants.add(key.decode("utf-8"))
+        else:
+            variants.add(key.encode("utf-8"))
+        return int(any(item in self.hashes or item in self.values for item in variants))
 
     def hgetall(self, key):
         return self.hashes.get(key, {})
@@ -860,6 +928,12 @@ class FakeRedisClient:
         return removed
 
     def eval(self, script, numkeys, meta_key, value_key, *args):
+        if "EXISTS" in script:
+            raw_value = self.get(meta_key)
+            expected = args[0]
+            if raw_value != expected or self.exists(value_key):
+                return 0
+            return self.delete(meta_key)
         meta = self.hgetall(meta_key)
         raw_data = meta.get(b"data")
         if raw_data is None:
@@ -1432,6 +1506,34 @@ class TestMultiLevelCache:
         assert cache.l1.get("key") is None
         assert cache._l1_invalidation_epoch is None
 
+    def test_l2_epoch_read_oserror_fails_closed_and_clears_l1(
+        self, tmp_path, monkeypatch
+    ):
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.put("key", "stale")
+        assert cache.l1.get("key") is not None
+        assert cache.l2.get("key") is not None
+
+        epoch_path = cache.l2._invalidation_epoch_path()
+        original_read_text = Path.read_text
+
+        def fail_epoch_read(path, *args, **kwargs):
+            if path == epoch_path:
+                raise OSError("injected epoch read failure")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_epoch_read)
+
+        assert cache.get("key") is None
+        assert cache.l1.get("key") is None
+        assert cache._l1_invalidation_epoch is None
+
     def test_l3_epoch_write_failure_does_not_publish_local_marker(self):
         """A failed shared epoch write must leave the local marker unknown."""
         class FailingEpochLayer:
@@ -1478,6 +1580,136 @@ class TestMultiLevelCache:
 
         assert second.get("key1") is None
         assert second.l1.get("key1") is None
+
+    @pytest.mark.parametrize("operation", ["invalidate", "clear"])
+    def test_coordinator_l2_mutation_holds_root_lock_across_epoch_protocol(
+        self, tmp_path, monkeypatch, operation
+    ):
+        """Start epoch, physical mutation, and completion epoch share one root lock."""
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.put("key1", "stale")
+        root_lock = cache.l2._root_lock()
+        observations = []
+        original_bump = cache.l2._bump_invalidation_epoch_unlocked
+        original_invalidate = cache._invalidate_unlocked
+        original_clear = cache.l2.clear
+
+        def observe(label):
+            observations.append((label, root_lock._is_owned()))
+
+        def bump():
+            observe("epoch")
+            return original_bump()
+
+        def invalidate(key):
+            observe("mutation")
+            return original_invalidate(key)
+
+        def clear():
+            observe("mutation")
+            return original_clear()
+
+        monkeypatch.setattr(cache.l2, "_bump_invalidation_epoch_unlocked", bump)
+        if operation == "invalidate":
+            monkeypatch.setattr(cache, "_invalidate_unlocked", invalidate)
+            assert cache.invalidate("key1")
+        else:
+            monkeypatch.setattr(cache.l2, "clear", clear)
+            cache.clear()
+
+        assert observations == [
+            ("epoch", True),
+            ("mutation", True),
+            ("epoch", True),
+        ]
+
+    @pytest.mark.skipif(cache_v2_module.fcntl is None, reason="requires POSIX flock")
+    @pytest.mark.parametrize("operation", ["invalidate", "clear"])
+    def test_coordinator_l2_process_fence_covers_paused_mutation(
+        self, tmp_path, monkeypatch, operation
+    ):
+        """A sibling process stays blocked until mutation and completion epoch finish."""
+        cache = MultiLevelCache(
+            memory_size_mb=1.0,
+            disk_root=tmp_path,
+            compression="none",
+            enable_l1=True,
+            enable_l2=True,
+        )
+        assert cache.put("key1", "stale", dependencies={"source"})
+        mutation_started = threading.Event()
+        resume_mutation = threading.Event()
+        original_invalidate = cache._invalidate_unlocked
+        original_clear = cache.l2.clear
+
+        def paused_invalidate(key):
+            mutation_started.set()
+            assert resume_mutation.wait(timeout=5.0)
+            return original_invalidate(key)
+
+        def paused_clear():
+            mutation_started.set()
+            assert resume_mutation.wait(timeout=5.0)
+            return original_clear()
+
+        if operation == "invalidate":
+            monkeypatch.setattr(cache, "_invalidate_unlocked", paused_invalidate)
+        else:
+            monkeypatch.setattr(cache.l2, "clear", paused_clear)
+
+        acquired = tmp_path / "acquired"
+        code = r'''
+import sys
+from pathlib import Path
+from quant_evaluator.runtime.cache_v2 import DiskCacheLayer, create_compressor
+root, acquired = map(Path, sys.argv[1:])
+layer = DiskCacheLayer(root, create_compressor("none"))
+with layer._process_lock():
+    acquired.write_text("acquired", encoding="utf-8")
+'''
+        probe = None
+        result = []
+        worker = threading.Thread(
+            target=lambda: result.append(
+                cache.invalidate("key1") if operation == "invalidate" else cache.clear()
+            )
+        )
+        worker.start()
+        try:
+            assert mutation_started.wait(timeout=5.0)
+            probe = subprocess.Popen(
+                [sys.executable, "-c", code, str(tmp_path), str(acquired)],
+                cwd=Path(__file__).resolve().parents[2],
+                env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            time.sleep(0.1)
+            assert not acquired.exists()
+
+            resume_mutation.set()
+            worker.join(timeout=5.0)
+            assert not worker.is_alive()
+            assert result == ([True] if operation == "invalidate" else [None])
+
+            stdout, stderr = probe.communicate(timeout=5.0)
+            assert probe.returncode == 0, f"{stdout}\n{stderr}"
+            assert acquired.exists()
+            assert cache.get("key1") is None
+        finally:
+            resume_mutation.set()
+            if worker.is_alive():
+                worker.join(timeout=5.0)
+            if probe is not None and probe.poll() is None:
+                probe.kill()
+                probe.wait(timeout=5.0)
 
     def test_shared_l2_invalidation_expires_other_coordinator_l1(self, tmp_path):
         """A durable invalidation epoch prevents stale sibling L1 hits."""
@@ -1868,6 +2100,37 @@ raise SystemExit(0 if removed == 1 else 2)
         assert b"cache:empty" not in layer.client.values
         assert matching_meta not in layer.client.hashes
         assert b"cache:matching" not in layer.client.values
+
+    def test_dependency_invalidation_cleans_value_only_orphan_safely(self):
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        orphan_key = b"cache:orphan"
+        epoch_key = b"cache::invalidation_epoch"
+        client = FakeRedisPipelineClient(
+            hashes={},
+            values={orphan_key: b"stale", epoch_key: b"epoch"},
+        )
+        layer.client = client
+        original_get = client.get
+
+        def get_then_replace(key):
+            value = original_get(key)
+            if key == orphan_key:
+                client.values[orphan_key] = b"replacement"
+            return value
+
+        client.get = get_then_replace
+
+        assert layer.invalidate_dependencies("source") == 0
+        assert client.values[orphan_key] == b"replacement"
+        assert client.values[epoch_key] == b"epoch"
+
+        client.get = original_get
+        assert layer.invalidate_dependencies("source") == 0
+        assert orphan_key not in client.values
+        assert client.values[epoch_key] == b"epoch"
 
     def test_dependency_invalidation_quarantines_empty_data_field(self):
         """An empty Redis metadata payload must quarantine its physical pair."""

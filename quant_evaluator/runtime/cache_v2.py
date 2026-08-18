@@ -706,14 +706,17 @@ class DiskCacheLayer:
         """Return the durable namespace invalidation marker path."""
         return self.root_dir / ".invalidation.epoch"
 
-    def _read_invalidation_epoch_unlocked(self) -> str:
+    def _read_invalidation_epoch_unlocked(self) -> Optional[str]:
         """Read the current namespace invalidation epoch."""
         try:
             return self._invalidation_epoch_path().read_text(encoding="ascii")
         except FileNotFoundError:
             return ""
+        except OSError as exc:
+            logger.warning("Failed to read disk invalidation epoch: %s", exc)
+            return None
 
-    def invalidation_epoch(self) -> str:
+    def invalidation_epoch(self) -> Optional[str]:
         """Read the namespace epoch under the shared disk-root fence."""
         with self._process_lock(), self._root_lock():
             return self._read_invalidation_epoch_unlocked()
@@ -839,6 +842,10 @@ class DiskCacheLayer:
 
                 # Publish one immutable record so value and metadata cannot tear.
                 record = self._encode_record(metadata, compressed)
+                # Encoding can be slow too; do not publish a record whose absolute
+                # TTL expired after the earlier preprocessing validation.
+                if not _valid_origin(entry_created_at, time.time(), ttl_seconds):
+                    return False
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 tmp_cache = cache_path.parent / f".tmp.{uuid.uuid4().hex}.cache"
                 try:
@@ -895,15 +902,17 @@ class DiskCacheLayer:
         """Remove a pair only when both physical files match the read snapshot."""
         cache_path = self._key_path(key)
         meta_path = self._meta_path(cache_path)
-        # Without a value snapshot, deleting the pair could remove a value
-        # published after metadata was read (for example after a missing-file
-        # read failure). Fail closed rather than treating metadata alone as a
-        # sufficient identity.
-        if expected_value is None:
-            return False
         try:
             if meta_path.read_text(encoding="utf-8") != expected_metadata:
                 return False
+            if expected_value is None:
+                # A missing value is a stable legacy-pair identity only while
+                # the value file remains absent. Remove metadata alone so a
+                # concurrently published value cannot be deleted.
+                if cache_path.exists():
+                    return False
+                meta_path.unlink(missing_ok=True)
+                return True
             if cache_path.read_bytes() != expected_value:
                 return False
         except (FileNotFoundError, OSError):
@@ -1095,6 +1104,12 @@ class RedisCacheLayer:
                 return False
         return value_key == expected
 
+    @staticmethod
+    def _value_key_for_meta(meta_key: Any) -> Optional[Any]:
+        """Return a metadata key's value key without mixing bytes and text."""
+        suffix = b":meta" if isinstance(meta_key, bytes) else ":meta"
+        return meta_key[:-len(suffix)] if meta_key.endswith(suffix) else None
+
     def _invalidate_physical(self, value_key: Any, meta_key: Any) -> bool:
         """Delete one Redis value/metadata pair using physical keys."""
         try:
@@ -1112,6 +1127,13 @@ class RedisCacheLayer:
         return 0
     end
     return redis.call('DEL', KEYS[1], KEYS[2])
+    """
+
+    _COMPARE_DELETE_VALUE_ORPHAN_SCRIPT = """
+    local payload = redis.call('GET', KEYS[1])
+    if payload == false or payload ~= ARGV[1] then return 0 end
+    if redis.call('EXISTS', KEYS[2]) ~= 0 then return 0 end
+    return redis.call('DEL', KEYS[1])
     """
 
     def _compare_delete_physical(
@@ -1164,6 +1186,27 @@ class RedisCacheLayer:
             logger.warning(
                 "Failed generation-independent Redis quarantine for %r/%r: %s",
                 meta_key,
+                value_key,
+                e,
+            )
+            return False
+
+    def _compare_delete_value_orphan(
+        self, value_key: Any, meta_key: Any, raw_value: Any
+    ) -> bool:
+        """Delete a value-only record if no replacement pair was published."""
+        try:
+            result = self.client.eval(
+                self._COMPARE_DELETE_VALUE_ORPHAN_SCRIPT,
+                2,
+                value_key,
+                meta_key,
+                raw_value,
+            )
+            return bool(result)
+        except Exception as e:
+            logger.warning(
+                "Failed compare-checked Redis orphan cleanup for %r: %s",
                 value_key,
                 e,
             )
@@ -1338,6 +1381,7 @@ class RedisCacheLayer:
             cursor = 0
             records_to_remove = []
             quarantine_records = []
+            claimed_value_keys = set()
             pattern = f"{self.key_prefix}*:meta"
             while True:
                 cursor, meta_keys = self.client.scan(cursor, match=pattern, count=100)
@@ -1348,27 +1392,18 @@ class RedisCacheLayer:
                         if raw_data is None:
                             raw_data = meta_dict.get("data")
                         if raw_data is None:
-                            value_key = (
-                                meta_key[:-5]
-                                if meta_key.endswith(b":meta")
-                                else meta_key[:-5]
-                                if meta_key.endswith(":meta")
-                                else None
-                            )
+                            value_key = self._value_key_for_meta(meta_key)
                             if value_key is not None:
                                 quarantine_records.append((meta_key, value_key, None))
                             continue
                         if isinstance(raw_data, bytes):
                             raw_data = raw_data.decode("utf-8")
                         metadata = CacheMetadata.from_dict(json.loads(raw_data))
+                        claimed_value_keys.add(
+                            self._prefixed_key(metadata.key).encode("utf-8")
+                        )
                         if dependency in metadata.dependencies:
-                            value_key = (
-                                meta_key[:-5]
-                                if meta_key.endswith(b":meta")
-                                else meta_key[:-5]
-                                if meta_key.endswith(":meta")
-                                else None
-                            )
+                            value_key = self._value_key_for_meta(meta_key)
                             if value_key is not None:
                                 records_to_remove.append(
                                     (meta_key, value_key, metadata.key, metadata.generation)
@@ -1377,13 +1412,7 @@ class RedisCacheLayer:
                         # One malformed record must not prevent later dependency-bound
                         # entries from being invalidated. Quarantine the unusable pair
                         # so it cannot remain as a promotion candidate.
-                        value_key = (
-                            meta_key[:-5]
-                            if meta_key.endswith(b":meta")
-                            else meta_key[:-5]
-                            if meta_key.endswith(":meta")
-                            else None
-                        )
+                        value_key = self._value_key_for_meta(meta_key)
                         logger.warning(
                             f"Failed to inspect Redis cache metadata {meta_key!r}: {e}"
                         )
@@ -1393,10 +1422,40 @@ class RedisCacheLayer:
                             quarantine_records.append((meta_key, meta_key, raw_data))
                 if cursor == 0:
                     break
+
+            value_orphans = []
+            cursor = 0
+            epoch_key = self._invalidation_epoch_key()
+            pattern = f"{self.key_prefix}*"
+            while True:
+                cursor, value_keys = self.client.scan(cursor, match=pattern, count=100)
+                for value_key in value_keys:
+                    text_key = (
+                        value_key.decode("utf-8", errors="replace")
+                        if isinstance(value_key, bytes)
+                        else value_key
+                    )
+                    if text_key == epoch_key or text_key.endswith(":meta"):
+                        continue
+                    if value_key in claimed_value_keys:
+                        continue
+                    try:
+                        raw_value = self.client.get(value_key)
+                        meta_key = f"{text_key}:meta"
+                        if raw_value is not None and not self.client.exists(meta_key):
+                            value_orphans.append((value_key, meta_key, raw_value))
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to inspect Redis cache value %r: %s", value_key, e
+                        )
+                if cursor == 0:
+                    break
             removed_keys = set()
             removed_count = 0
             for meta_key, value_key, raw_data in quarantine_records:
                 self._compare_quarantine_physical(meta_key, value_key, raw_data)
+            for value_key, meta_key, raw_value in value_orphans:
+                self._compare_delete_value_orphan(value_key, meta_key, raw_value)
             for meta_key, value_key, logical_key, generation in records_to_remove:
                 try:
                     # Delete only if the scanned generation is still current;
@@ -1852,18 +1911,27 @@ class MultiLevelCache:
     def invalidate(self, key: str) -> bool:
         """Invalidate a key without racing with reads or promotion."""
         with self._coordination_lock:
-            if self.l2 or self.l3:
-                self._record_shared_epoch_unlocked(
-                    self._bump_shared_invalidation_epoch_unlocked()
-                )
-            removed = self._invalidate_unlocked(key)
-            if removed and (self.l2 or self.l3):
-                # Publish a completion fence so sibling coordinators cannot
-                # retain a value promoted while physical invalidation ran.
-                self._record_shared_epoch_unlocked(
-                    self._bump_shared_invalidation_epoch_unlocked()
-                )
-            return removed
+            if self.l2:
+                # Hold the process fence before the root lock for the entire
+                # start-epoch, mutation, and completion-epoch transaction.
+                with self.l2._process_lock(), self.l2._root_lock():
+                    return self._invalidate_with_epoch_fence_unlocked(key)
+            return self._invalidate_with_epoch_fence_unlocked(key)
+
+    def _invalidate_with_epoch_fence_unlocked(self, key: str) -> bool:
+        """Invalidate one key under the shared epoch protocol."""
+        if self.l2 or self.l3:
+            self._record_shared_epoch_unlocked(
+                self._bump_shared_invalidation_epoch_unlocked()
+            )
+        removed = self._invalidate_unlocked(key)
+        if removed and (self.l2 or self.l3):
+            # Publish a completion fence so sibling coordinators cannot
+            # retain a value promoted while physical invalidation ran.
+            self._record_shared_epoch_unlocked(
+                self._bump_shared_invalidation_epoch_unlocked()
+            )
+        return removed
 
     def _invalidate_unlocked(self, key: str) -> bool:
         """
@@ -1972,22 +2040,32 @@ class MultiLevelCache:
     def clear(self):
         """Clear all cache layers without racing with reads or promotion."""
         with self._coordination_lock:
-            if self.l2 or self.l3:
-                self._record_shared_epoch_unlocked(
-                    self._bump_shared_invalidation_epoch_unlocked()
-                )
-            if self.l1:
-                self.l1.clear()
             if self.l2:
-                self.l2.clear()
-            if self.l3:
-                self.l3.clear()
-            if self.l2 or self.l3:
-                # Completion fence prevents a sibling from retaining a value
-                # promoted while the shared layers were being cleared.
-                self._record_shared_epoch_unlocked(
-                    self._bump_shared_invalidation_epoch_unlocked()
-                )
+                # Keep both locks held from the start epoch through all layer
+                # mutations and the completion epoch, matching invalidation.
+                with self.l2._process_lock(), self.l2._root_lock():
+                    self._clear_with_epoch_fence_unlocked()
+                return
+            self._clear_with_epoch_fence_unlocked()
+
+    def _clear_with_epoch_fence_unlocked(self) -> None:
+        """Clear all layers under the shared epoch protocol."""
+        if self.l2 or self.l3:
+            self._record_shared_epoch_unlocked(
+                self._bump_shared_invalidation_epoch_unlocked()
+            )
+        if self.l1:
+            self.l1.clear()
+        if self.l2:
+            self.l2.clear()
+        if self.l3:
+            self.l3.clear()
+        if self.l2 or self.l3:
+            # Completion fence prevents a sibling from retaining a value
+            # promoted while the shared layers were being cleared.
+            self._record_shared_epoch_unlocked(
+                self._bump_shared_invalidation_epoch_unlocked()
+            )
 
     def warm(
         self,

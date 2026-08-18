@@ -33,6 +33,27 @@ class TestDAFactorValueReader:
         assert calls[0][0] == (["F1"],)
         assert calls[0][1]["time_range"] == (date(2020, 1, 1), date(2020, 1, 2))
 
+    def test_import_type_error_is_not_reported_as_missing_dependency(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader
+
+        def broken_import():
+            raise TypeError("broken DataAccess ABI")
+
+        with patch.object(da_mod, "_try_import_da", broken_import):
+            with pytest.raises(TypeError, match="broken DataAccess ABI"):
+                DAFactorValueReader()
+
+    def test_non_materializable_handle_is_typed_schema_error(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader, DataAccessSchemaError
+
+        store = SimpleNamespace(read_factors=lambda *args, **kwargs: object())
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+        with pytest.raises(DataAccessSchemaError):
+            reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2))
+
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""
@@ -92,7 +113,24 @@ class TestDACatalogReader:
         assert reader.get_catalog_entry("missing") is None
         assert reader.list_available_factors({"universe": "US"}) == ("F1", "F2")
 
-    def test_list_available_factors_excludes_inactive_records(self):
+    def test_catalog_serialization_failure_is_typed(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DACatalogReader, DataAccessAdapterError
+
+        def broken_to_dict():
+            raise RuntimeError("catalog serialization failed")
+
+        meta = SimpleNamespace(to_dict=broken_to_dict)
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta})
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DACatalogReader(store=store)
+        with pytest.raises(DataAccessAdapterError) as exc_info:
+            reader.get_catalog_entry("F1")
+        assert exc_info.value.cause is not None
+        assert str(exc_info.value.cause) == "catalog serialization failed"
+
         import factor_assets.adapters.data_access as da_mod
         from factor_assets.adapters.data_access import DACatalogReader
 

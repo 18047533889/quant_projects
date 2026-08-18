@@ -83,16 +83,21 @@ def test_source_date_epoch_is_deterministic_and_validated(monkeypatch: pytest.Mo
         generate_build_info()
 
 
-def test_runtime_declared_version_mismatch_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("importlib.metadata.version", lambda _: "0.10.1")
-    with pytest.raises(Exception, match="version mismatch"):
-        load_build_info(production=False)
+def test_runtime_uses_generated_version_without_distribution_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*args, **kwargs):
+        raise AssertionError("runtime build identity consulted distribution metadata")
+
+    monkeypatch.setattr(importlib.metadata, "version", fail)
+    assert load_build_info(production=False).version == "0.10.2"
 
 
 def test_runtime_missing_metadata_rejected_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("importlib.metadata.version", lambda _: (_ for _ in ()).throw(
-        importlib.metadata.PackageNotFoundError("data-access")
-    ))
+    monkeypatch.setattr(
+        "data_access.core.build_metadata._generated_build_info",
+        lambda: BuildInfo(None, None, None, None, None),
+    )
     with pytest.raises(Exception, match="unavailable"):
         load_build_info(production=True)
 

@@ -458,8 +458,9 @@ def run_startup_gate(
     try:
         from data_access.runtime.startup_subject import build_startup_subject_digest
         subject_digest = build_startup_subject_digest(store).to_digest()
-    except Exception:
-        pass
+    except Exception as exc:
+        if effective_production:
+            problems.append(f"startup_subject_identity: {exc}")
 
     if effective_production:
         # R32-P0-016：production 任一 critical fail → FAIL。

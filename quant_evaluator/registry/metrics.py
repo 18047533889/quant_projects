@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Callable, Any
 
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
+from quant_evaluator.metrics.quality import compute_coverage
 from quant_evaluator.metrics.registry_adapters import (
     compute_hac_tstat_value,
     compute_half_life_value,
@@ -180,6 +181,7 @@ register_metric(MetricSpec(
     description="Fraction of universe with valid factor values",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_coverage,
     requires=["factor_batch", "label_bundle"],
     min_periods=None,
 ))

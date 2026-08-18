@@ -198,6 +198,26 @@ class TestFittedState:
                 fit_end_time=datetime(2020, 1, 1),
             )
 
+    def test_application_window_must_start_after_fit_end(self):
+        """Reject overlapping boundaries and accept strictly later application."""
+        state = FittedState(
+            state_id="state_001",
+            transform_name="rolling_mean",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+        )
+
+        with pytest.raises(TimingContractError, match="start_time must be after fit_end_time"):
+            state.validate_application_window(datetime(2020, 12, 30))
+        with pytest.raises(TimingContractError, match="start_time must be after fit_end_time"):
+            state.validate_application_window(datetime(2020, 12, 31))
+
+        assert state.validate_application_window(
+            datetime(2021, 1, 1),
+            datetime(2021, 12, 31),
+        ) is None
+
     def test_feature_contract_validation(self):
         """Test that feature contract is validated."""
         # Missing feature_order when feature_ids provided

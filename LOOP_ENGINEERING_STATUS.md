@@ -1,5 +1,18 @@
 # Loop Engineering Status - Session 4
 
+## FactorOptimizer Docker packaging repair (local-only)
+
+## POL2-P0-002 Polars ts_corr authority quarantine
+
+- Removed the generated `auto_polars_all` registration for `ts_corr` and added a narrow generator exclusion; `cleaned_operators.common.polars_ts_rolling.TSCorrNative` remains the sole intended Polars authority.
+- Reproduced that importing `cleaned_operators.auto_polars_all` is currently blocked by unrelated abstract generated bridge `AcfPolars`; no broad abstract-class repair was attempted.
+- Focused validation and evidence are local-only. `production_not_proven` remains true.
+
+- Corrected `docker/factor_optimizer/Dockerfile` for the flat `factor_optimizer/` package by removing the invalid `src/` copy and replacing the nonexistent module CLI with a non-service keepalive command; no `__main__.py` or service contract exists in the package, so this avoids the compose `restart: unless-stopped` restart-loop without inventing runtime semantics.
+- Added `factor_optimizer/tests/test_docker_packaging.py` static contract coverage for package layout, command, and absent CLI entrypoint.
+- Validation: focused serial pytest (`test_docker_packaging.py`, `test_production_capability.py`) — **7 passed in 0.03s**; wheel build — **success**, `factor_optimizer-0.1.0-py3-none-any.whl`.
+- Status: **LOCAL-ONLY / NOT PRODUCTION READY**. The image is a dependency/placeholder container until an explicit FactorOptimizer worker or service contract is defined.
+
 **Start Time:** 2026-08-14
 **Mission:** 3-hour autonomous refactoring with continuous improvement loops
 
@@ -827,9 +840,10 @@ q P0-C structural scope is now `CLOSED_LOCAL` after independent `53` focused com
 - Model-lane authority repair: reproduced unqualified `modeling.legacy` resolution plus a broad exception catch; implemented authoritative-path validation and fail-closed behavior in `factor_engine/cleaned_operators/model_lane.py` with regression coverage. Independent serial validation: `29 passed, 2 warnings`. Local-only evidence; namespace uninstall, release provenance, and production readiness remain open.
 
 ### 2026-08-19 - POL2-P0-002 ts_corr repair
-- Implemented a centered finite-pair rolling helper in `backend/polars_expr_emitter.py` and routed both `ts_corr` paths through it.
-- Focused validation: `tests/test_ts_batch1_corr_cov_direct.py` — 2 passed; compile and scoped diff checks passed.
-- Independent review found no defect. Broader backend parity and production certification remain `NOT_RUN`.
+- Current HEAD: `8c326a56669965ec7afd78531fd691788e60bf23`.
+- Reproduction: the alternate auto-generated `cleaned_operators/auto_polars_all.py:TsCorrPolars` authority cannot instantiate because it inherits abstract `SeriesOperator` without `_calculate_series`; the selectable registry authority is `cleaned_operators/common/polars_ts_rolling.py:TSCorrNative`.
+- The repaired direct authority remains a centered finite-pair implementation; no additional source change was justified because the alternate bridge is not a valid selectable implementation and no safe formula can be inferred for it. Focused validation: `tests/backend/test_ts_corr_parity.py` plus `tests/test_ts_batch1_corr_cov_direct.py` — `11 passed` with 2 pre-existing `PhysicalImplementationSpec` warnings.
+- `py_compile` passed for source, bridge, and focused tests; scoped `git diff --check` passed. Import smoke of the alternate auto-generated module: `FAILED_PRE_EXISTING_ABSTRACT_REGISTRATION` (instantiation fails during module import). Full repository compile, registry bootstrap, all-backend parity, and production certification remain `NOT_RUN`; independent review is still needed for the alternate authority/quarantine decision.
 - **2026-08-19 Q alias audit:** Independent current-tree audit found no canonical-to-historical primitive alias map in the Q backend or coverage document; Q capability checks exact `op_name` membership, while compiler entries are lowerings (for example `ts_mean -> mavg`, `ts_corr -> cor`, and `sma -> mavg`). The compatibility contract passed `22` tests, but the broader legacy Q backend test had `10 failed, 20 passed` due to stale exact-name/authority expectations. No aliases were added; static inventory and intended canonical pairs remain required. This is bounded local evidence only, with no production or completeness claim.
 - **2026-08-19 QE TTL/invalidation audit:** Independent review found absolute `created_at` TTL semantics and dependency invalidation consistently implemented: inclusive expiry, fail-closed future/nonfinite timestamps, origin timestamp preservation across layers/promotions, slow-serialization expiry checks, transitive invalidation, and sibling-L1 epoch fencing. Serial cache validation passed `107 passed`; no new repair was justified. Remaining cache risks are crash consistency, authenticated persistence, hostile writers, and broader cross-process linearizability.
 - **2026-08-19 cache durability audit:** Independent review found no new absolute-TTL defect, but confirmed an unresolved crash-consistency window: invalidation epochs are published before and after physical deletion, so a process crash after the start fence can leave stale lower-layer records under a stable advanced epoch. Disk epoch replacement also lacks file/directory `fsync`; Redis value/metadata publication can partially fail, though reads fail closed on malformed pairs. No durability repair was attempted because crash injection and backend durability contracts remain unspecified. Production admission remains open.
@@ -869,3 +883,69 @@ q P0-C structural scope is now `CLOSED_LOCAL` after independent `53` focused com
 - Focused validation: `tests/operators/test_ridge_p0_001.py` — `3 passed` (73.19s), with 2 pre-existing `PhysicalImplementationSpec` warnings from the Polars backend classification path.
 - `py_compile` passed for the canonical source and focused test; scoped `git diff --check` passed. Import smoke: `NOT_RUN`. Production certification: `NOT_RUN`.
 - Limitations: current tree is dirty and this is local evidence only; no four-backend parity, release provenance, or production-readiness claim follows.
+
+### 2026-08-19 - FA2-P0-001..006 adapter repair evidence
+- Adapter repair completed for the FA2-P0-001..006 scope.
+- Focused validation: `17 tests passed`.
+- Syntax validation: `py_compile passed`.
+- Clean-wheel smoke: all `5 phases passed`.
+- Production certification: `NOT_RUN`.
+- Provenance: local current-tree evidence only; no commit and no remotes.
+
+### 2026-08-19 - Flat-package Docker and QE cache evidence
+- FactorPreprocess, QuantEvaluator, and FactorOptimizer Docker packaging now uses flat-package `COPY` paths and wheel-only runtime installation. Because these packages expose no CLI/service contract, each image uses a truthful keepalive command rather than inventing a service entrypoint. Static Docker packaging tests passed `2` per package. A combined single pytest invocation failed at collection because the three `tests.conftest` modules share a package name; serial per-package pytest runs each passed. This is local current-tree evidence only; no production-readiness claim follows.
+- QuantEvaluator cache direct `invalidate`/`clear` now holds the L2 process/root locks across start-epoch publication, physical mutation, and completion-epoch publication. Full focused validation passed `111 tests in 3.59s`; `py_compile` and scoped `git diff --check` passed. Redis durability and crash consistency remain open, as does production readiness.
+- FactorEngine manifests and four-backend evidence remain stale/unverified. No production claim follows.
+
+### 2026-08-19 - FA2-P0-001..006 catalog serialization fix
+- Latest catalog serialization fix: `get_catalog_entry` now uses `_catalog_payload`, preserving the regression cause for coverage and traceability.
+- Focused validation: `17 tests passed`.
+- Syntax validation: `py_compile passed`.
+- Clean-wheel smoke: all `5 phases passed`.
+- Production certification: `NOT_RUN`.
+
+### 2026-08-19 - OP2-P0-001 direct mining catalog checker evidence
+- Implementation present in `factor_engine/scripts/export_direct_mining_catalog.py` with focused coverage in `factor_engine/tests/test_export_direct_mining_catalog.py`; focused serial validation: `7 passed`, `py_compile: PASS`, scoped `git diff --check: PASS`.
+- Real `--check`: **FAIL_CLOSED (exit 1)** because `build/mining/direct_mining_catalog.json` and `build/mining/direct_mining_manifest.json` are missing; docs artifacts remain stale at `e0d56b06ccc2f5ceaeda0870e460949533e3edaa` versus current HEAD `8c326a56669965ec7afd78531fd691788e60bf23`, and report `dirty=false` while the tree is dirty.
+- Generated JSON was not regenerated. Production surface count, production certification, and broad gates are `NOT_PROVEN`/`NOT_RUN`. YAML validation: `PASS`.
+- Evidence manifest: `factor_engine/evidence/r2/OP2_P0_001_MANIFEST.yaml`; generation timestamp `2026-08-18T19:29:46Z`, `git_sha=8c326a56669965ec7afd78531fd691788e60bf23`, dirty tree with `22` files, local-only with no commit/remotes. No production-readiness claim follows.
+
+### 2026-08-19 - Cache epoch and package smoke evidence
+- QuantEvaluator `cache_v2` disk epoch `OSError` handling now fails closed. Focused cache validation: `112 passed in 3.80s`; `py_compile` and scoped `git diff --check` passed.
+- FactorPreprocess smoke isolation was hardened and the isolated smoke succeeded with `factor_preprocess 0.1.0`: `49` Python files, imports, and the exact `cs_rank` contract passed.
+- FactorAssets smoke remains blocked because `python3` lacks the `build` module.
+- This is local-only evidence; no production-readiness claim follows.
+
+### 2026-08-19 - FactorEngine export and FactorOptimizer smoke evidence
+- FactorEngine export importer now raises `ValueError` on unresolved `__type__` and preserves explicit `target_type`.
+- Export validation: `33 passed`, `2` PyArrow deprecation warnings, `1.15s`; `py_compile` and scoped `git diff --check` passed.
+- FactorOptimizer smoke metadata check now covers PyYAML/numpy, but validation is blocked because `hatchling.build` is unavailable during wheel build.
+- Export remains source-only/unpackaged. This is local-only evidence; no production-readiness claim follows.
+
+### 2026-08-19 - Legacy disk dependency invalidation repair
+- Repaired legacy disk dependency invalidation for metadata-only orphans with missing values while preserving concurrent publication fencing.
+- Validation: cache suite `113 passed in 3.76s`; `py_compile` and scoped `git diff --check` passed.
+- Independent review still flags Redis orphan discovery, modern sidecar cleanup, and fake-only Redis durability as open. This is local-only evidence; no production-readiness claim follows.
+
+**2026-08-19:** FactorPreprocess focused contracts/regime tests 56 passed, py_compile clean, no shared FittedState integration because regime states are separate and already enforce equivalent checks while check_staleness=False is preserved; QuantEvaluator cache suite 113 passed, cache py_compile and scoped diff-check clean, post-encode absolute-TTL regression covered. This is local-only evidence with no production-readiness claim.
+
+### FactorEngine semantic wheel package closure (local-only)
+
+- Reproduced current-tree gap: `semantic/data_knowledge_identity.py` existed while `semantic/__init__.py` was absent; the focused layout test still passed, so it did not enforce regular-package discovery.
+- Added the semantic package marker and strengthened `tests/r40/test_wheel_package_layout.py` to require both the marker and `semantic/data_knowledge_identity.py`.
+- Independent serial validation: focused layout pytest **2 passed**; `py_compile` passed; setuptools `find_packages` returned `semantic`; a fresh local wheel build succeeded and contained both `semantic/__init__.py` and `semantic/data_knowledge_identity.py`; scoped `git diff --check` passed.
+- Status: **CLOSED_LOCAL** for this package-discovery omission. Evidence is from the dirty server tree only; no release or production-readiness claim follows.
+
+### QuantEvaluator Redis value-only orphan invalidation repair (local-only)
+
+- Reproduced that `RedisCacheLayer.invalidate_dependencies` scanned only `*:meta`, so value-only Redis records were never discovered or quarantined.
+- Added value-key discovery with compare-checked deletion, preserving the invalidation epoch, concurrent replacements, and values referenced by valid metadata even when a logical metadata key is forged. Bytes/string Redis key handling is normalized.
+- Independent validation exposed and repaired two intermediate regressions (mixed bytes/string suffix handling and deletion of a forged-metadata referenced value). Final serial result: `tests/test_cache_v2.py` **115 passed in 3.65s**; `py_compile` and scoped `git diff --check` passed.
+- Status: **CLOSED_LOCAL** for FakeRedis-covered value-only orphan cleanup. Real Redis server/Lua atomicity, outage semantics, durability, and cross-process production certification remain open. No production-readiness claim.
+
+### FactorOptimizer LLM wheel smoke coverage (local-only)
+
+- Audited the clean-wheel smoke and found its hand-maintained payload list/import probe covered only `factor_optimizer.llm.__init__`, not the shipped `prompts.py`, `proposal.py`, or `records.py` modules.
+- Strengthened `scripts/wheel_clean_install_smoke.py` to require those three wheel members and exercise stable installed symbols (`PromptTemplate`, `ProposalRequest`, and `compute_hash`) in the isolated environment. Existing dependency metadata and bytecode checks remain intact.
+- Validation: `py_compile` and scoped `git diff --check` passed; full clean wheel build/install/import/smoke completed successfully with `factor_optimizer-0.1.0-py3-none-any.whl`.
+- Status: **CLOSED_LOCAL** for these LLM payload/import assertions. Dirty-tree local evidence only; no release or production-readiness claim.

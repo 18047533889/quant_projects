@@ -37,5 +37,8 @@ def test_market_security_mining_semantic_packages_exist():
     # 缺 __init__.py，属独立打包问题 —— 这里只验证目录存在 + 核心包有 __init__）。
     for pkg in ("market", "security", "mining", "semantic"):
         assert (_REPO_ROOT / pkg).is_dir(), f"{pkg} package dir missing"
-    for pkg in ("market", "security", "mining"):
+    for pkg in ("market", "security", "mining", "semantic"):
         assert (_REPO_ROOT / pkg / "__init__.py").is_file(), f"{pkg} package missing __init__.py"
+    assert (_REPO_ROOT / "semantic" / "data_knowledge_identity.py").is_file(), (
+        "semantic package missing data_knowledge_identity.py"
+    )

@@ -11320,24 +11320,6 @@ class TsCopulaCentralAsymmetryPolars(SeriesOperator):
     )
 
 @register_operator(
-    name="ts_corr",
-    canonical="ts_corr",
-    backend="polars",
-    source="auto_generated.polars_bridges",
-)
-class TsCorrPolars(SeriesOperator):
-    """Auto-generated Polars bridge for ts_corr.
-
-    Execution delegated to polars_registry_bridge (long-table map_groups).
-    """
-    metadata = OperatorMetadata(
-        name="ts_corr",
-        category="general",
-        description="Auto-generated Polars bridge",
-        tags=["auto_generated", "polars", "registry_bridge"],
-    )
-
-@register_operator(
     name="ts_corr_if",
     canonical="ts_corr_if",
     backend="polars",

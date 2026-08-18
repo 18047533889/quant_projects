@@ -1,41 +1,53 @@
 task_id: POL2-P0-002
-base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
-implementation_commit_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
-integrated_commit_sha: fe8c7e72a990a35b90975b26a42f869ae4259014
+base_sha: 8c326a56669965ec7afd78531fd691788e60bf23
+current_head_sha: 8c326a56669965ec7afd78531fd691788e60bf23
+implementation_commit_sha: null
+integrated_commit_sha: null
 owned_files:
-  - factor_engine/cleaned_operators/common/polars_ts_rolling.py
-  - factor_engine/tests/backend/test_ts_corr_parity.py
-  - factor_engine/tests/test_ts_batch1_corr_cov_direct.py
+  - factor_engine/cleaned_operators/auto_polars_all.py
+  - factor_engine/scripts/auto_generate_polars_bridges.py
+  - factor_engine/tests/backend/test_polars_operator_ownership.py
   - factor_engine/evidence/r2/POL2-P0-002.yaml
+  - LOOP_ENGINEERING_STATUS.md
 modified_files:
+  - factor_engine/cleaned_operators/auto_polars_all.py
+  - factor_engine/scripts/auto_generate_polars_bridges.py
+  - factor_engine/tests/backend/test_polars_operator_ownership.py
   - factor_engine/evidence/r2/POL2-P0-002.yaml
+  - LOOP_ENGINEERING_STATUS.md
 canonicals_touched:
   - ts_corr
 backends_touched:
   - polars
-  - pandas_reference
-status: MANUAL_REVIEW
-independent_review: APPROVE_WITH_EVIDENCE_FIXES
-production_admission: NOT_PROVEN
+status: CLOSED_LOCAL
+production_not_proven: true
+dirty_state:
+  dirty_count_at_start: 26
+  dirty_count_at_evidence: 34
+  unrelated_changes_preserved: true
+  note: Dirty count includes concurrent/unrelated existing changes and this task's files; no cleanup or destructive git operation was used.
 reproduction:
-  recorded_defect: selectable Polars ts_corr formula remains wrong in another implementation
-  result: NOT_REPRODUCED
-  direct_authority: cleaned_operators.common.polars_ts_rolling.TSCorrNative
-  direct_fixture: large_offset_finite_pair_with_nan_inf
-  observed: selectable native output matched centered finite-pair oracle
-  limitation: full alternate selectable bridge path was not independently exposed by current planner configuration
-implementation_change: none
-oracle_tests:
-  - factor_engine/tests/backend/test_ts_corr_parity.py
-  - factor_engine/tests/test_ts_batch1_corr_cov_direct.py
+  registered_ts_corr_class_module: cleaned_operators.common.polars_ts_rolling
+  registered_ts_corr_class_name: TSCorrNative
+  generated_module_import: blocked
+  generated_module_import_error: "TypeError: Can't instantiate abstract class AcfPolars with abstract method _calculate_series"
+  generated_ts_corr_registration_removed: true
+  generator_quarantine: 'POLARS_NATIVE_CANONICALS = frozenset({"ts_corr"})'
+implementation_change:
+  - Removed the generated auto_polars_all ts_corr registration.
+  - Added a narrow generator exclusion for ts_corr so regeneration cannot restore the alternate bridge.
+  - Added static ownership and exact unrelated import-blocker regression tests.
 tests_run:
-  - command: POLARS_MAX_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q factor_engine/tests/backend/test_ts_corr_parity.py factor_engine/tests/test_ts_batch1_corr_cov_direct.py
-    result: 11 passed
-  - command: python3 -m py_compile factor_engine/cleaned_operators/common/polars_ts_rolling.py factor_engine/backend/polars_expr_emitter.py factor_engine/backend/polars_registry_bridge.py
+  - command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONPATH=factor_engine pytest -q tests/backend/test_polars_operator_ownership.py tests/backend/test_r2_p0_018_ts_corr_registration.py
+    result: 7 passed, 2 warnings
+  - command: python3 compile modified Python sources with compile(text, path, 'exec')
+    result: passed for auto_polars_all.py, auto_generate_polars_bridges.py, test_polars_operator_ownership.py
+  - command: git diff --check -- factor_engine/cleaned_operators/auto_polars_all.py factor_engine/scripts/auto_generate_polars_bridges.py factor_engine/tests/backend/test_polars_operator_ownership.py
     result: passed
 tests_not_run:
   - full repository suite
+  - import of auto_polars_all beyond the expected abstract AcfPolars blocker
 known_limitations:
-  - alternate auto-generated registry bridge was not selected by OperatorRegistry for ts_corr
-  - no speculative formula change made
-evidence_generated_at: 2026-08-18T13:03:43Z
+  - auto_polars_all remains unimportable because of unrelated abstract generated bridge classes; broad repair is explicitly out of scope.
+  - No production readiness or full registry/bootstrap claim is made.
+evidence_generated_at: 2026-08-18T19:52:07Z

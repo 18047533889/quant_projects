@@ -59,6 +59,174 @@ def _fingerprint() -> dict[str, str]:
     return {"head": head, "dirty": bool(dirty)}
 
 
+def _current_head() -> str:
+    """Return the exact commit the checked artifacts must be bound to."""
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
+    ).strip()
+
+
+def _load_json_object(path: Path, errors: list[str]) -> dict[str, object] | None:
+    if not path.is_file():
+        errors.append(f"missing required artifact: {path}")
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"invalid JSON artifact {path}: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        errors.append(f"artifact root must be an object: {path}")
+        return None
+    return payload
+
+
+def _canonical_set(
+    payload: dict[str, object],
+    *,
+    path: Path,
+    collection_key: str,
+    object_rows: bool,
+    errors: list[str],
+) -> set[str] | None:
+    rows = payload.get(collection_key)
+    if not isinstance(rows, list):
+        errors.append(f"{path}: {collection_key} must be a list")
+        return None
+
+    names: list[str] = []
+    for index, row in enumerate(rows):
+        value = row.get("canonical") if object_rows and isinstance(row, dict) else row
+        if not isinstance(value, str) or not value:
+            errors.append(f"{path}: invalid canonical at {collection_key}[{index}]")
+            return None
+        names.append(value)
+
+    declared_count = payload.get("count")
+    if type(declared_count) is not int or declared_count != len(rows):
+        errors.append(
+            f"{path}: count={declared_count!r} does not match "
+            f"{collection_key} length={len(rows)}"
+        )
+    canonical_set = set(names)
+    if len(canonical_set) != len(names):
+        errors.append(f"{path}: duplicate canonicals in {collection_key}")
+    return canonical_set
+
+
+def check_direct_artifacts(*, out_dir: Path, docs_dir: Path) -> list[str]:
+    """Validate persisted direct-use artifacts without loading the registry."""
+    artifacts = {
+        "catalog": (
+            out_dir / "direct_mining_catalog.json",
+            "factor_engine.r18.direct_mining_catalog.v1",
+            "operators",
+            True,
+        ),
+        "manifest": (
+            out_dir / "direct_mining_manifest.json",
+            "factor_engine.r18.direct_mining_manifest.v1",
+            "operators",
+            False,
+        ),
+        "matrix": (
+            docs_dir / "R18_DIRECT_USE_MATRIX.json",
+            "factor_engine.r18.direct_use_matrix.v1",
+            "rows",
+            True,
+        ),
+        "recipes": (
+            docs_dir / "R18_OPERATOR_SMOKE_RECIPES.json",
+            "factor_engine.r18.operator_smoke_recipes.v1",
+            "recipes",
+            True,
+        ),
+    }
+    errors: list[str] = []
+    try:
+        head = _current_head()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return [f"unable to resolve current HEAD: {exc}"]
+    if not head:
+        return ["unable to resolve current HEAD: empty git revision"]
+
+    sets: dict[str, set[str]] = {}
+    payloads: dict[str, dict[str, object]] = {}
+    for name, (path, schema_version, collection_key, object_rows) in artifacts.items():
+        payload = _load_json_object(path, errors)
+        if payload is None:
+            continue
+        payloads[name] = payload
+        if payload.get("schema_version") != schema_version:
+            errors.append(
+                f"{path}: schema_version={payload.get('schema_version')!r} "
+                f"does not match expected {schema_version!r}"
+            )
+        fingerprint = payload.get("fingerprint")
+        artifact_head = fingerprint.get("head") if isinstance(fingerprint, dict) else None
+        if artifact_head != head:
+            errors.append(
+                f"{path}: fingerprint.head={artifact_head!r} does not match HEAD={head!r}"
+            )
+        artifact_dirty = fingerprint.get("dirty") if isinstance(fingerprint, dict) else None
+        if artifact_dirty is not False:
+            errors.append(f"{path}: fingerprint.dirty must be exactly false")
+        canonical_set = _canonical_set(
+            payload,
+            path=path,
+            collection_key=collection_key,
+            object_rows=object_rows,
+            errors=errors,
+        )
+        if canonical_set is not None:
+            sets[name] = canonical_set
+
+    if "catalog" in sets and "matrix" in sets:
+        matrix_direct_rows = {
+            row["canonical"]: row
+            for row in payloads["matrix"]["rows"]
+            if isinstance(row, dict)
+            and isinstance(row.get("canonical"), str)
+            and isinstance(row.get("direct_use_status"), str)
+            and row["direct_use_status"].startswith("direct_")
+        }
+        if sets["catalog"] != set(matrix_direct_rows):
+            errors.append("catalog canonical set does not match DIRECT_* matrix rows")
+        catalog_rows = {
+            row["canonical"]: row
+            for row in payloads["catalog"]["operators"]
+            if isinstance(row, dict) and isinstance(row.get("canonical"), str)
+        }
+        metadata_fields = (
+            "direct_use_status",
+            "directly_usable",
+            "production_certified",
+        )
+        for canonical in sorted(sets["catalog"] & set(matrix_direct_rows)):
+            for field in metadata_fields:
+                catalog_value = catalog_rows[canonical].get(field)
+                matrix_value = matrix_direct_rows[canonical].get(field)
+                if catalog_value != matrix_value:
+                    errors.append(
+                        f"catalog/matrix metadata mismatch for {canonical}.{field}: "
+                        f"catalog={catalog_value!r} matrix={matrix_value!r}"
+                    )
+    if "catalog" in sets and "recipes" in sets and sets["catalog"] != sets["recipes"]:
+        errors.append("smoke recipe canonical set does not match catalog")
+    if "catalog" in sets and "manifest" in sets:
+        catalog_rows = payloads["catalog"]["operators"]
+        eligible = {
+            row["canonical"]
+            for row in catalog_rows
+            if isinstance(row, dict)
+            and row.get("directly_usable") is True
+            and row.get("production_certified") is True
+        }
+        if sets["manifest"] != eligible:
+            errors.append("manifest canonical set does not match eligible catalog rows")
+    return errors
+
+
 def _smoke_recipe_for(row: DirectUseOperator) -> dict[str, object]:
     """One honest smoke recipe per direct row (R18-071)."""
     recipe: dict[str, object] = {
@@ -341,7 +509,24 @@ def main() -> int:
     ap.add_argument("--out", default=str(REPO / "build" / "mining"))
     ap.add_argument("--docs", default=str(REPO / "docs"))
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="validate required direct artifacts without loading the registry",
+    )
     args = ap.parse_args()
+
+    if args.check:
+        errors = check_direct_artifacts(
+            out_dir=Path(args.out),
+            docs_dir=Path(args.docs),
+        )
+        if errors:
+            for error in errors:
+                print(f"CHECK FAIL: {error}", file=sys.stderr)
+            return 1
+        print("direct mining artifacts are current and consistent")
+        return 0
 
     summary = build_all(
         out_dir=Path(args.out),

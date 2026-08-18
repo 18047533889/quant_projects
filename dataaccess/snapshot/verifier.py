@@ -345,9 +345,11 @@ class SnapshotVerifier:
             if effective_strict:
                 classification_error = getattr(exc, "original", None) or exc
                 classified = CloudErrorClassifier.classify(classification_error)
-                if getattr(exc, "kind", None):
+                raw_kind = getattr(exc, "kind", None)
+                raw_kind_value = getattr(raw_kind, "value", raw_kind)
+                if raw_kind_value:
                     try:
-                        kind = CloudErrorKind(str(exc.kind))
+                        kind = CloudErrorKind(str(raw_kind_value))
                         classified = CloudErrorCode(
                             kind=kind,
                             retryable=kind in {

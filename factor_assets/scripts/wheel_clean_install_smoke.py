@@ -15,19 +15,21 @@ import zipfile
 from pathlib import Path
 
 
-def run_command(cmd, cwd=None, check=True, *, disable_user_site=True):
-    """Run an argument-vector command in an isolated import environment."""
+def isolated_env():
+    """Remove ambient import and user-site configuration from child processes."""
     env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    env.pop("PYTHONUSERBASE", None)
-    if disable_user_site:
-        env["PYTHONNOUSERSITE"] = "1"
-    else:
-        env.pop("PYTHONNOUSERSITE", None)
+    for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONUSERBASE"):
+        env.pop(name, None)
+    env["PYTHONNOUSERSITE"] = "1"
+    return env
+
+
+def run_command(cmd, cwd=None, check=True, env=None):
+    """Run an argument-vector command in an isolated import environment."""
     result = subprocess.run(
         cmd,
         cwd=cwd,
-        env=env,
+        env=isolated_env() if env is None else env,
         capture_output=True,
         text=True,
         check=check,
@@ -61,19 +63,19 @@ def main():
         dist_dir = tmpdir / "dist"
         dist_dir.mkdir()
 
+        env = isolated_env()
         code, _, stderr = run_command(
             [
                 sys.executable,
                 "-m",
                 "build",
-                "--no-isolation",
                 "--wheel",
                 "--outdir",
                 str(dist_dir),
             ],
             cwd=source_dir,
             check=False,
-            disable_user_site=False,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: Wheel build failed\n{stderr}")
@@ -110,27 +112,30 @@ def main():
         venv_dir = tmpdir / "venv"
 
         code, _, stderr = run_command(
-            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)]
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            cwd=tmpdir,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: venv creation failed\n{stderr}")
             return 1
 
         python_exe = venv_dir / "bin" / "python3"
-        pip_exe = venv_dir / "bin" / "pip"
         print(f"✓ Created venv")
 
         # Install wheel
         print("\n[3/5] Installing wheel...")
         code, _, stderr = run_command(
             [
-                str(pip_exe),
+                str(python_exe),
+                "-m",
+                "pip",
                 "install",
-                "--no-index",
-                "--no-deps",
                 str(wheel_path),
             ],
+            cwd=tmpdir,
             check=False,
+            env=env,
         )
         if code != 0:
             print(f"FAILED: Installation failed\n{stderr}")

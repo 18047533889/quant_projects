@@ -19,6 +19,7 @@ from quant_evaluator.registry import (
 )
 from quant_evaluator.registry.metrics import register_metric
 from quant_evaluator.metrics import (
+    compute_coverage,
     compute_ic_std,
     compute_mean_ic_value,
 )
@@ -145,6 +146,7 @@ class TestCoreMetrics:
         assert spec.tier == MetricTier.CORE
         assert "factor_batch" in spec.requires
         assert spec.min_periods is None
+        assert spec.compute_fn is compute_coverage
 
     def test_turnover_spec(self):
         spec = get_metric("turnover")

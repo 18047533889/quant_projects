@@ -12,8 +12,50 @@ This is an OPTIONAL adapter — FA core does not depend on DA.
 
 from typing import Protocol, Optional, Dict, Any, Tuple
 from datetime import date, datetime
+from collections.abc import Mapping
 
 from factor_assets.adapters import OptionalDependencyMissing
+
+
+class DataAccessAdapterError(RuntimeError):
+    """Typed failure raised when DataAccess cannot satisfy an adapter contract."""
+
+    code = "INFRASTRUCTURE_ERROR"
+
+    def __init__(self, message: str, *, cause: BaseException | None = None):
+        super().__init__(message)
+        self.cause = cause
+
+
+class DataAccessNotFoundError(DataAccessAdapterError):
+    code = "NOT_FOUND"
+
+
+class DataAccessUnavailableAsOfError(DataAccessAdapterError):
+    code = "UNAVAILABLE_ASOF"
+
+
+class DataAccessPermissionError(DataAccessAdapterError):
+    code = "PERMISSION"
+
+
+class DataAccessPITRejectedError(DataAccessAdapterError):
+    code = "PIT_REJECTED"
+
+
+class DataAccessSchemaError(DataAccessAdapterError):
+    code = "SCHEMA_ERROR"
+
+
+def _raise_typed(message: str, exc: BaseException) -> None:
+    name = type(exc).__name__.lower()
+    if "permission" in name or "authoriz" in name:
+        raise DataAccessPermissionError(message, cause=exc) from exc
+    if "pit" in name or "asof" in name:
+        raise DataAccessPITRejectedError(message, cause=exc) from exc
+    if "schema" in name or "validation" in name:
+        raise DataAccessSchemaError(message, cause=exc) from exc
+    raise DataAccessAdapterError(message, cause=exc) from exc
 
 
 # Try to import DataAccess - use lazy import to avoid module conflicts
@@ -35,8 +77,7 @@ def _try_import_da():
         _get_store = get_store
         _ReadHandle = ReadHandle
         _DataRequest = DataRequest
-    except (ImportError, TypeError):
-        # TypeError can occur due to dataclass conflicts
+    except ImportError:
         DA_AVAILABLE = False
 
 
@@ -125,6 +166,32 @@ class CatalogReader(Protocol):
         ...
 
 
+def _catalog_payload(factor_id: str, meta: Any) -> dict[str, Any]:
+    to_dict = getattr(meta, "to_dict", None)
+    if not callable(to_dict):
+        raise DataAccessSchemaError(
+            f"DataAccess catalog record {factor_id!r} has no to_dict()"
+        )
+    try:
+        payload = to_dict()
+    except Exception as exc:
+        _raise_typed(f"DataAccess catalog record {factor_id!r} failed to serialize", exc)
+    if not isinstance(payload, Mapping):
+        raise DataAccessSchemaError(
+            f"DataAccess catalog record {factor_id!r} did not produce a mapping"
+        )
+    return dict(payload)
+
+
+def _catalog_records(store: Any) -> Mapping[str, Any]:
+    try:
+        catalog = store.get_factor_catalog()
+        records = getattr(catalog, "records", None)
+    except Exception as exc:
+        _raise_typed("DataAccess factor catalog lookup failed", exc)
+    if not isinstance(records, Mapping):
+        raise DataAccessSchemaError("DataAccess factor catalog has no records mapping")
+    return records
 def _coerce_catalog_date(value: Any) -> date | None:
     if value is None:
         return None
@@ -175,15 +242,23 @@ class DAFactorValueReader:
         """Read and terminally materialize one factor through DataAccess."""
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
-        handle = self._store.read_factors(
-            [factor_id],
-            time_range=(start_date, end_date),
-            universe=universe,
-        )
+        try:
+            handle = self._store.read_factors(
+                [factor_id],
+                time_range=(start_date, end_date),
+                universe=universe,
+            )
+        except Exception as exc:
+            _raise_typed(f"DataAccess factor read failed for {factor_id!r}", exc)
         materialize = getattr(handle, "to_arrow", None)
         if not callable(materialize):
-            raise TypeError("DataAccess factor read did not return a materializable handle")
-        return materialize()
+            raise DataAccessSchemaError(
+                "DataAccess factor read did not return a materializable handle"
+            )
+        try:
+            return materialize()
+        except Exception as exc:
+            _raise_typed(f"DataAccess factor materialization failed for {factor_id!r}", exc)
 
     def check_factor_availability(
         self,
@@ -191,8 +266,8 @@ class DAFactorValueReader:
         as_of_date: Optional[date] = None,
     ) -> bool:
         """Check authoritative factor metadata, optionally at an explicit PIT date."""
-        catalog = self._store.get_factor_catalog()
-        meta = catalog.records.get(factor_id)
+        records = _catalog_records(self._store)
+        meta = records.get(factor_id)
         if meta is None:
             return False
         status = getattr(meta, "status", None)
@@ -235,11 +310,11 @@ class DACatalogReader:
         factor_id: str,
     ) -> Optional[Dict[str, Any]]:
         """Return the authoritative DataAccess ``FactorMeta`` record."""
-        catalog = self._store.get_factor_catalog()
-        meta = catalog.records.get(factor_id)
+        records = _catalog_records(self._store)
+        meta = records.get(factor_id)
         if meta is None:
             return None
-        return meta.to_dict() if callable(getattr(meta, "to_dict", None)) else dict(meta)
+        return _catalog_payload(factor_id, meta)
 
 
     def list_available_factors(
@@ -247,11 +322,11 @@ class DACatalogReader:
         filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, ...]:
         """List IDs from the authoritative catalog, applying exact filters."""
-        catalog = self._store.get_factor_catalog()
+        records = _catalog_records(self._store)
         filters = filters or {}
         ids = []
-        for factor_id, meta in catalog.records.items():
-            payload = meta.to_dict() if callable(getattr(meta, "to_dict", None)) else dict(meta)
+        for factor_id, meta in records.items():
+            payload = _catalog_payload(factor_id, meta)
             status = str(payload.get("status") or "").lower()
             if status and status not in {"active", "available", "published"}:
                 continue
@@ -266,4 +341,10 @@ __all__ = [
     "CatalogReader",
     "DAFactorValueReader",
     "DACatalogReader",
+    "DataAccessAdapterError",
+    "DataAccessNotFoundError",
+    "DataAccessUnavailableAsOfError",
+    "DataAccessPermissionError",
+    "DataAccessPITRejectedError",
+    "DataAccessSchemaError",
 ]

@@ -78,21 +78,18 @@ def build_startup_subject_digest(store: Any) -> StartupSubjectDigest:
 
 def _get_build_sha() -> str:
     """Return the full SHA from the frozen runtime build authority."""
-    try:
-        from data_access.core.build_metadata import load_build_info
+    from data_access.core.build_metadata import load_build_info
 
-        return str(load_build_info().build_sha or "unknown")
-    except Exception:
-        return "unknown"
+    info = load_build_info()
+    return str(info.build_sha or "unknown")
 
 
 def _get_package_version() -> str:
-    """获取 package version。"""
-    try:
-        from data_access import __version__
-        return str(__version__)
-    except Exception:
-        return "unknown"
+    """Return package version from the same frozen build authority."""
+    from data_access.core.build_metadata import load_build_info
+
+    info = load_build_info()
+    return str(info.version or "unknown")
 
 
 def _get_registry_digest(store: Any) -> str:
@@ -103,7 +100,7 @@ def _get_registry_digest(store: Any) -> str:
             return "unknown"
         datasets = list(getattr(registry, "_datasets", {}).keys())
         payload = "\n".join(sorted(datasets))
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
     except Exception:
         return "unknown"
 
@@ -116,7 +113,8 @@ def _get_contract_digest(store: Any) -> str:
             return "unknown"
         digest_fn = getattr(ir, "digest", None)
         if callable(digest_fn):
-            return str(digest_fn())[:16]
+            digest = str(digest_fn())
+            return digest if digest else "unknown"
     except Exception:
         pass
     return "unknown"
@@ -134,8 +132,10 @@ def _get_semantic_schema_version() -> str:
 def _get_policy_digest() -> str:
     """获取 policy digest。"""
     try:
-        from data_access.security.policy import current_policy_digest
-        return current_policy_digest()[:16]
+        from data_access.security.runtime import resolve_runtime_context
+
+        digest = str(resolve_runtime_context().access_policy.digest())
+        return digest if digest else "unknown"
     except Exception:
         return "unknown"
 
@@ -162,7 +162,7 @@ def _get_credential_generation() -> str:
         if provider is not None:
             gen = getattr(provider, "generation", None)
             if gen is not None:
-                return str(gen)[:16]
+                return str(gen)
     except Exception:
         pass
     return "unknown"

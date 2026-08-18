@@ -22,6 +22,11 @@ from typing import Dict, List, Set
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+# Canonicals with a verified native Polars owner must never be regenerated as
+# fallback bridges. Keep this quarantine narrow until the generated module's
+# abstract-class family is repaired independently.
+POLARS_NATIVE_CANONICALS = frozenset({"ts_corr"})
+
 
 def scan_operator_registrations():
     """扫描所有算子注册，不调用 load_all。"""
@@ -95,6 +100,7 @@ def analyze_operators(operators):
     candidates = {
         k: v for k, v in pandas_only.items()
         if k not in intentionally_pandas_only
+        and k not in POLARS_NATIVE_CANONICALS
     }
 
     return {

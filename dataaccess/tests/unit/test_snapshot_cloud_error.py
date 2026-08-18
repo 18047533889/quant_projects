@@ -136,6 +136,29 @@ def test_store_to_verifier_preserves_typed_failure(monkeypatch):
     assert failure.__cause__ is error
 
 
+def test_snapshot_verifier_preserves_enum_valued_remote_error_kind():
+    error = RemoteMetadataError(
+        CloudErrorKind.AUTH_FAILED,
+        "remote metadata HEAD failed",
+    )
+    snapshot = ResolvedSourceSnapshot(
+        dataset="table",
+        objects=(
+            ResolvedObject(
+                "s3://bucket/table/file.parquet", etag="e1", content_length=1
+            ),
+        ),
+    )
+
+    def fail(_uri):
+        raise error
+
+    with pytest.raises(SourceSnapshotUnavailable) as raised:
+        SnapshotVerifier(remote_meta_fn=fail, strict=True).verify_before_execute(snapshot)
+
+    assert raised.value.cloud_error.kind is CloudErrorKind.AUTH_FAILED
+
+
 def test_store_to_verifier_preserves_throttle_retry_after(monkeypatch):
     from data_access.read import read_contract
 

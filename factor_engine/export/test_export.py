@@ -201,10 +201,7 @@ class TestContractImporter:
         data = {
             "__type__": "factor_engine.modeling.contracts.ModelOperatorSpec",
             "canonical": "test_op",
-            "execution_class": {
-                "__type__": "factor_engine.modeling.contracts.ModelExecutionClass",
-                "value": "local_rolling_estimator",
-            },
+            "execution_class": ModelExecutionClass.SAME_TIME_CROSS_SECTIONAL,
             "semantic_role": "model_feature",
             "cost_class": "medium",
             "timing_contract_id": "auto",
@@ -222,6 +219,30 @@ class TestContractImporter:
 
         assert obj.canonical == "test_op"
         assert obj.semantic_role == "model_feature"
+
+    def test_import_stale_model_operator_spec_metadata(self):
+        """Reject unresolved serialized type metadata instead of returning a dict."""
+        data = {
+            "__type__": "factor_engine.modeling.contracts_legacy.ModelOperatorSpec",
+            "canonical": "stale_metadata",
+        }
+
+        with pytest.raises(ValueError, match="Unable to resolve serialized type"):
+            ContractImporter.from_dict(data)
+
+    def test_import_explicit_target_type_with_stale_metadata(self):
+        """Explicit target_type remains authoritative over stale metadata."""
+        data = {
+            "__type__": "factor_engine.modeling.contracts.ModelOperatorSpec",
+            "canonical": "explicit_target",
+            "execution_class": ModelExecutionClass.SAME_TIME_CROSS_SECTIONAL,
+            "semantic_role": "diagnostic",
+        }
+
+        obj = ContractImporter.from_dict(data, target_type=ModelOperatorSpec)
+
+        assert obj.canonical == "explicit_target"
+        assert obj.semantic_role == "diagnostic"
 
     def test_import_label_contract(self):
         """Test importing LabelContract."""

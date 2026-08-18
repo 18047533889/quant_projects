@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
-COPY src/ src/
+COPY quant_evaluator/ quant_evaluator/
 
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
     python -m pip wheel --no-cache-dir --wheel-dir /wheels .
@@ -30,8 +30,8 @@ COPY --from=builder /wheels /wheels
 RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels
 
-COPY --chown=quantevaluator:quantevaluator . .
-
 USER quantevaluator
 
-CMD ["python", "-m", "quant_evaluator"]
+# This package has no service or CLI; keep the compose dependency container alive
+# without inventing runtime semantics until an explicit worker contract exists.
+CMD ["tail", "-f", "/dev/null"]

@@ -1,6 +1,6 @@
 """Canonical build-time identity for DataAccess."""
 from __future__ import annotations
-import hashlib, importlib.metadata, os, re, subprocess
+import hashlib, os, re, subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,15 +76,11 @@ def validate_version_match(observed: str | None, expected: str | None) -> str:
 def load_build_info(*, production: bool | None = None) -> BuildInfo:
     if production is None: production = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
     info = _generated_build_info()
-    try:
-        declared_version = importlib.metadata.version("data-access")
-    except importlib.metadata.PackageNotFoundError:
-        declared_version = None
-    if declared_version is not None and info.version is not None:
-        validate_version_match(info.version, declared_version)
-    elif production:
-        validate_version_match(info.version, declared_version)
-    if production: info.validate_production_ready()
+    # Runtime identity is read only from the build-time generated module.  Do
+    # not consult package metadata or SCM here: an installed artifact may not
+    # have either a matching distribution database or a checkout beside it.
+    if production:
+        info.validate_production_ready()
     return info
 
 class ScmVersionResolver:

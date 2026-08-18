@@ -107,6 +107,17 @@ class FittedState:
         object.__setattr__(self, "feature_order", tuple(self.feature_order))
         object.__setattr__(self, "learned_params", _freeze(self.learned_params))
 
+    def validate_application_window(
+        self,
+        start_time: datetime,
+        end_time: Optional[datetime] = None,
+    ) -> None:
+        """Validate that application begins strictly after the fit window."""
+        if start_time <= self.fit_end_time:
+            raise TimingContractError(
+                "application start_time must be after fit_end_time"
+            )
+
     def is_compatible_with(self, factor_ids: List[str]) -> bool:
         """Check if factors match the positional fitted feature contract."""
         if not self.feature_ids:

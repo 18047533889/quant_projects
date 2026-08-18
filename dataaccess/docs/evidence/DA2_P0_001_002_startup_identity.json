@@ -1,0 +1,72 @@
+{
+  "task": "DA2-P0-001/002 startup identity and local wheel provenance verification",
+  "head": "8c326a56669965ec7afd78531fd691788e60bf23",
+  "dirty": true,
+  "dirty_count_at_capture": 39,
+  "commands": [
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q tests/test_build_identity_p0.py tests/unit/test_execution_identity_r2.py tests/unit/test_r32_p0_001_020_fixes.py",
+      "result": "35 passed"
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q tests/test_build_identity_p0.py tests/unit/test_execution_identity_r2.py tests/unit/test_r32_p0_001_020_fixes.py tests/unit/test_r26_concurrency_startup_2026_08.py",
+      "result": "43 passed, 1 pre-existing readiness failure (503; schema validation fixture/environment)"
+    },
+    {
+      "command": "python3 -m compileall -q core/build_metadata.py runtime/startup_subject.py runtime/startup_gate.py read/execution_identity.py tests/test_build_identity_p0.py tests/unit/test_execution_identity_r2.py",
+      "result": "passed"
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m pytest -q tests/test_build_identity_p0.py tests/unit/test_r32_identity_version_2026_08.py",
+      "result": "28 passed in 0.07s"
+    },
+    {
+      "command": "python3 scripts/check_wheel_inventory.py",
+      "result": "passed; data_access-0.10.2-py3-none-any.whl contains all 15 physical subpackages"
+    },
+    {
+      "command": "python3 -m build --wheel --outdir <temporary-directory> .",
+      "result": "passed in an isolated PEP 517 build environment; wheel has 399 archive entries, 394 data_access entries, 66 r30 entries, data_access/__init__.py, and data_access/_build_info.py"
+    },
+    {
+      "command": "python3 -m venv --system-site-packages <temporary-venv> && <temporary-venv>/bin/pip install --no-deps <wheel> && cd /tmp && <temporary-venv>/bin/python <identity-probe>",
+      "result": "installed import resolved from temporary site-packages; distribution, runtime, and frozen metadata versions all equal 0.10.2; runtime and frozen build SHA both null; BuildInfo.validate_production_ready failed closed with ValidationError: build metadata field 'build_sha' is unavailable"
+    },
+    {
+      "command": "python3 -m compileall -q core/build_metadata.py scripts/check_wheel_inventory.py tests/test_build_identity_p0.py tests/unit/test_r32_identity_version_2026_08.py",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "changes": [
+    "Runtime build identity reads only generated _build_info authority; no importlib.metadata or runtime SCM dependency.",
+    "Production metadata remains fail closed through BuildInfo.validate_production_ready.",
+    "Startup subject build SHA and package version share frozen authority; registry, contract, policy, and credential inputs are full width.",
+    "Production startup subject construction now fails the gate instead of silently publishing an empty subject digest.",
+    "Local wheel inventory is complete and installed package/distribution/frozen versions agree."
+  ],
+  "wheel_provenance": {
+    "artifact": "data_access-0.10.2-py3-none-any.whl",
+    "sample_sha256": "bb96fd8cdfb26b468dae5192e3ec6a9071bf63aacfce3a7fa3903e12140ee471",
+    "source_head": "8c326a56669965ec7afd78531fd691788e60bf23",
+    "source_dirty": true,
+    "frozen_metadata": {
+      "version": "0.10.2",
+      "build_sha": null,
+      "build_id": null,
+      "build_time": null,
+      "dirty": null
+    },
+    "version_authorities_agree": true,
+    "production_ready": false,
+    "blocker": "The current source tree is dirty and the setuptools build path copies the checked-in _build_info.py without generating release-grade SCM provenance. The installed wheel therefore has no full build SHA, build ID, build time, or clean-tree assertion."
+  },
+  "not_run": [
+    "publish/manifest/schema digest migration intentionally untouched",
+    "full repository regression",
+    "release-grade clean-tree wheel build from an immutable tagged revision"
+  ]
+}

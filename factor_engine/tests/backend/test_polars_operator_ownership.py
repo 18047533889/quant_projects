@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import ast
+import importlib
 from pathlib import Path
 
 
 ROOT = Path(__file__).parents[2]
 AUTO = ROOT / "cleaned_operators" / "auto_polars_all.py"
 NATIVE = ROOT / "cleaned_operators" / "polars_native" / "ts_advanced_batch5.py"
+GENERATOR = ROOT / "scripts" / "auto_generate_polars_bridges.py"
 
 
 def _canonical_registrations(path: Path, canonicals: set[str]) -> dict[str, list[str]]:
@@ -51,3 +53,35 @@ def test_km_equilibrium_distance_is_not_reintroduced_by_batch5() -> None:
     source = NATIVE.read_text(encoding="utf-8")
     assert 'canonical="ts_km_equilibrium_distance"' not in source
     assert "class TsDeviationFromMean" not in source
+
+
+def test_ts_corr_is_quarantined_from_generated_polars_surface() -> None:
+    auto_source = AUTO.read_text(encoding="utf-8")
+    assert 'canonical="ts_corr"' not in auto_source
+    assert "class TsCorrPolars" not in auto_source
+
+    generator_source = GENERATOR.read_text(encoding="utf-8")
+    assert 'POLARS_NATIVE_CANONICALS = frozenset({"ts_corr"})' in generator_source
+    tree = ast.parse(generator_source, filename=str(GENERATOR))
+    quarantine = next(
+        node for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "POLARS_NATIVE_CANONICALS"
+            for target in node.targets
+        )
+    )
+    assert isinstance(quarantine.value, ast.Call)
+    assert isinstance(quarantine.value.func, ast.Name)
+    assert quarantine.value.func.id == "frozenset"
+    assert len(quarantine.value.args) == 1
+    assert ast.literal_eval(quarantine.value.args[0]) == {"ts_corr"}
+
+
+def test_generated_module_import_blocker_is_unrelated_to_ts_corr() -> None:
+    try:
+        importlib.import_module("cleaned_operators.auto_polars_all")
+    except TypeError as exc:
+        assert "abstract class AcfPolars" in str(exc)
+    else:
+        raise AssertionError("auto_polars_all unexpectedly imported despite abstract bridges")

@@ -115,7 +115,49 @@ def test_current_execution_identity_uses_frozen_build_and_runtime_authorities(mo
 def test_startup_build_sha_fails_closed_when_frozen_metadata_missing(monkeypatch) -> None:
     monkeypatch.setattr(
         "data_access.core.build_metadata.load_build_info",
-        lambda: type("FrozenBuildInfo", (), {"build_sha": None})(),
+        lambda: (_ for _ in ()).throw(RuntimeError("metadata unavailable")),
     )
 
-    assert startup_subject._get_build_sha() == "unknown"
+    with pytest.raises(RuntimeError, match="metadata unavailable"):
+        startup_subject._get_build_sha()
+
+
+def test_startup_subject_uses_full_width_correctness_inputs(monkeypatch) -> None:
+    registry_names = {"dataset-" + "r" * 80: object()}
+    store = type("Store", (), {"_registry": type("Registry", (), {"_datasets": registry_names})()})()
+    contract_digest = "c" * 64
+    policy_digest = "p" * 64
+    generation = "generation-" + "g" * 80
+
+    store.contract_ir = lambda: type("Contract", (), {"digest": lambda self: contract_digest})()
+    policy = type("Policy", (), {"digest": lambda self: policy_digest})()
+    context = type("Context", (), {"access_policy": policy})()
+    monkeypatch.setattr("data_access.security.runtime.resolve_runtime_context", lambda: context)
+    monkeypatch.setattr(
+        "data_access.security.credentials._global_credential_provider",
+        lambda: type("Provider", (), {"generation": generation})(),
+    )
+
+    assert len(startup_subject._get_registry_digest(store)) == 64
+    assert startup_subject._get_contract_digest(store) == contract_digest
+    assert startup_subject._get_policy_digest() == policy_digest
+    assert startup_subject._get_credential_generation() == generation
+
+
+def test_startup_subject_invalidates_on_changes_after_old_truncation_boundary() -> None:
+    base = startup_subject.StartupSubjectDigest(
+        build_sha="a" * 40,
+        package_version="1.2.3",
+        registry_digest="r" * 64,
+        contract_digest="c" * 64,
+        policy_digest="p" * 64,
+        credential_generation="generation-" + "g" * 64,
+    )
+    variants = (
+        startup_subject.StartupSubjectDigest(**{**base.__dict__, "registry_digest": "r" * 63 + "x"}),
+        startup_subject.StartupSubjectDigest(**{**base.__dict__, "contract_digest": "c" * 63 + "x"}),
+        startup_subject.StartupSubjectDigest(**{**base.__dict__, "policy_digest": "p" * 63 + "x"}),
+        startup_subject.StartupSubjectDigest(**{**base.__dict__, "credential_generation": "generation-" + "g" * 63 + "x"}),
+    )
+
+    assert all(variant.to_digest() != base.to_digest() for variant in variants)

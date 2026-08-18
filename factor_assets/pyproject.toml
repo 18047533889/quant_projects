@@ -34,6 +34,15 @@ adapters = [
     "factor-engine>=0.3.0",
     "data-access>=0.10.0",
 ]
+# Explicit adapter profiles keep clean-wheel installs scoped and reproducible.
+adapters-qe = ["quant_evaluator>=0.0.1a1,<0.2"]
+adapters-fe = ["factor-engine>=0.3.0"]
+adapters-da = ["data-access>=0.10.0"]
+full = [
+    "quant_evaluator>=0.0.1a1,<0.2",
+    "factor-engine>=0.3.0",
+    "data-access>=0.10.0",
+]
 
 [tool.setuptools]
 package-dir = {"factor_assets" = "."}

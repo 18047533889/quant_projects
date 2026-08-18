@@ -52,6 +52,11 @@ class ContractImporter:
 
         if type_name and target_type is None:
             target_type = ContractImporter._resolve_type(type_name)
+            if target_type is None:
+                raise ValueError(
+                    f"Unable to resolve serialized type {type_name!r}; "
+                    "provide target_type explicitly"
+                )
 
         if target_type is None:
             return {k: ContractImporter.from_dict(v) if isinstance(v, dict) else v

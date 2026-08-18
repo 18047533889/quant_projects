@@ -6,10 +6,12 @@ Validates package installation and basic functionality in isolation.
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import zipfile
+from email.parser import Parser
 from pathlib import Path
 
 
@@ -81,10 +83,39 @@ def main():
             "factor_optimizer/policy/__init__.py",
             "factor_optimizer/search/__init__.py",
             "factor_optimizer/llm/__init__.py",
+            "factor_optimizer/llm/prompts.py",
+            "factor_optimizer/llm/proposal.py",
+            "factor_optimizer/llm/records.py",
             "factor_optimizer/adapters/__init__.py",
         }
         with zipfile.ZipFile(wheel_path) as archive:
             members = set(archive.namelist())
+            metadata_members = [
+                name
+                for name in members
+                if name.endswith(".dist-info/METADATA")
+            ]
+            if len(metadata_members) != 1:
+                print(
+                    "FAILED: Expected one dist-info/METADATA file, "
+                    f"found {len(metadata_members)}"
+                )
+                return 1
+            metadata = Parser().parsestr(
+                archive.read(metadata_members[0]).decode("utf-8")
+            )
+            requires_dist = {
+                re.sub(r"[-_.]+", "-", match.group(1).lower())
+                for requirement in metadata.get_all("Requires-Dist", [])
+                if (match := re.match(
+                    r"\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)",
+                    requirement.split(";", 1)[0],
+                ))
+            }
+            assert {"pyyaml", "numpy"} <= requires_dist, (
+                "Wheel metadata is missing declared Requires-Dist entries: "
+                f"{sorted({'pyyaml', 'numpy'} - requires_dist)}"
+            )
         missing = sorted(required_members - members)
         bytecode = sorted(
             name for name in members if "__pycache__" in name or name.endswith(".pyc")
@@ -131,10 +162,16 @@ from factor_optimizer import CapabilityError, ExecutionMode
 from factor_optimizer import adapters, contracts, grammar, llm, policy, search, seen
 from factor_optimizer.complexity import ComplexityBudget
 from factor_optimizer.contracts.splits import SealedTestResult
+from factor_optimizer.llm.prompts import PromptTemplate
+from factor_optimizer.llm.proposal import ProposalRequest
+from factor_optimizer.llm.records import compute_hash
 
 assert ExecutionMode.RESEARCH_ONLY.value == 'research_only'
 assert issubclass(CapabilityError, Exception)
 assert SealedTestResult.__name__ == 'SealedTestResult'
+assert PromptTemplate.__name__ == 'PromptTemplate'
+assert ProposalRequest.__name__ == 'ProposalRequest'
+assert len(compute_hash('wheel-smoke')) == 64
 assert ComplexityBudget(strict=True).is_within_budget(
     __import__('factor_optimizer.complexity.profile', fromlist=['ComplexityProfile'])
     .ComplexityProfile()

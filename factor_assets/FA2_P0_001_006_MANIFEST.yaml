@@ -1,0 +1,22 @@
+schema_version: 1
+scope: FA2-P0-001..006
+status: CLOSED_LOCAL
+change: adapter repair
+latest_fix:
+  catalog_serialization: get_catalog_entry uses _catalog_payload
+  regression_cause: preserved
+validation:
+  focused_tests:
+    passed: 17
+    failed: 0
+  py_compile: PASSED
+  clean_wheel_smoke:
+    phases: 5
+    passed: 5
+    failed: 0
+production: NOT_RUN
+provenance:
+  repository_state: local_current_tree
+  commit: NONE
+  remotes: NONE
+  release_readiness: NOT_CLAIMED
