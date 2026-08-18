@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011734_c2251def",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "-(clip(((safe_div(close, delay(close, 5)) - 1) / (1 + abs(clip(safe_div(safe_div(ATR_WILDER(high, low, close, 20), close) - ts_mean(safe_div(ATR_WILDER(high, low, close, 20), close), 20), ts_std(safe_div(ATR_WILDER(high, low, close, 20), close), 20) + 1e-8), -2, 2))) * (1 + tanh(ts_ema(ts_pct(close, 1), 7) * 5))) * (1 + tanh(sign(ts_pct(close, 1)) * tanh(safe_div(volume - ts_mean(volume, 20), ts_mean(volume, 20) + 1e-8) * 3))) * (1 + tanh(ts_rank(volume, 12) * safe_div(ts_mean(volume, 3), ts_mean(volume, 10) + 1e-8))), -5, 5))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:17:34Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.21993208202384712,
+      "rank_ic": 0.028896422167914902
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_vol_gated_herding_mutated；VWAP→VWAP RankIC=0.0289 RankICIR=0.21993208202384712；route=local_python；lqtp_native=False。"
+}

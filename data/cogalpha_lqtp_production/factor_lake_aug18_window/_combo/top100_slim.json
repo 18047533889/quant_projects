@@ -1,0 +1,6746 @@
+{
+  "2026-08-11": [
+    {
+      "combo_rank": 1,
+      "asset": "603299.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7847,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7808,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7747,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7571,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.757,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7557,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "600029.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7549,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "600221.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7549,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7536,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "600269.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7523,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "601111.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7518,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "688121.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7513,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7494,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "603855.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7485,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.748,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7468,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "000488.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7468,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "000825.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7467,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "601618.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7466,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "600959.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7465,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "600284.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7461,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "601866.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.746,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "601022.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7454,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "300247.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.743,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.743,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "601399.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7424,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7422,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "000727.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7421,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "603194.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7419,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "300301.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7418,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7413,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "000761.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7404,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "688128.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.74,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "600965.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7394,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "601018.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7394,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "002221.SZ",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7385,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "000928.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7381,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "600917.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7379,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "002183.SZ",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7377,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "601688.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7376,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "001213.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7372,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "001289.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7371,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "601818.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7369,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7368,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "002996.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7367,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7364,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 47,
+      "asset": "601377.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7363,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "600581.SH",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7358,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "600906.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7351,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "300867.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7349,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "601326.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7347,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "002145.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7347,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "600006.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7342,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 55,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7341,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "601518.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7337,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "002101.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7334,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600866.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7332,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "600955.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7331,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "688055.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7331,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "600339.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7328,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "600027.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7327,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "601788.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7327,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "601068.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.732,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "601500.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7312,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "000166.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7311,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "600568.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7311,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 68,
+      "asset": "601128.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.731,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "688439.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.731,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "000521.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.731,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "688459.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7309,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "300831.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7305,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7303,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "603323.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.73,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "601019.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.73,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "603969.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7298,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600307.SH",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7292,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "300839.SZ",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.729,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "002997.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.729,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "002034.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.729,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "601860.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7289,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "601966.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7289,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "601800.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7289,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "601992.SH",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7287,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "601162.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7285,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "600905.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7283,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "688334.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7282,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "600480.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7281,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "601333.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7276,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "603279.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7276,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "600179.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7274,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "600720.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7274,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "002936.SZ",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "603213.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "000936.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "001215.SZ",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7267,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "603310.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7263,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "000541.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7262,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "600908.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7259,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "600375.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7257,
+      "n_factors": 153
+    }
+  ],
+  "2026-08-12": [
+    {
+      "combo_rank": 1,
+      "asset": "603299.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7944,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7805,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7737,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7666,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "603969.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7653,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "600029.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7646,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7621,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7597,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "688591.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7578,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "603072.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7567,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "600269.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7561,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7559,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "600906.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7549,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "001289.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.754,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "603310.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7517,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "601609.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7505,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7502,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "601022.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7499,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7496,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7494,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "601111.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.749,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "600568.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7486,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7485,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7485,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7475,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "601018.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7472,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "600339.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7467,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "001215.SZ",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7466,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "688128.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7457,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "601377.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.745,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "000928.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7449,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "600221.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7431,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "601975.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7428,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "601618.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7426,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "603855.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7426,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "601117.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.742,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "002053.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7417,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "601866.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7416,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "601788.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7408,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "000420.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7401,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "600027.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7401,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "688121.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.74,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "601326.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.74,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7399,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7399,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "603323.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7391,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 47,
+      "asset": "688101.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7391,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "603194.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7388,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "601066.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7388,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "000825.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7387,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "603033.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7385,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "002997.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7378,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "688439.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7377,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "001237.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7372,
+      "n_factors": 152
+    },
+    {
+      "combo_rank": 55,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7368,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "603053.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "603856.SH",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7363,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "603080.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7363,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "600917.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.736,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "002736.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7355,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "600905.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7346,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "002066.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7345,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7339,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7338,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "603181.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "603213.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7331,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "601128.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7325,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 68,
+      "asset": "601333.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7323,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "300529.SZ",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.732,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "000166.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7319,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "601818.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7315,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "688334.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7312,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "300831.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7311,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7302,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "600955.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.73,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "605368.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7299,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "603416.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7298,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "601800.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7298,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "603689.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7298,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "601186.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7292,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "601390.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7292,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "300881.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7292,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "600835.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7292,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "601330.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.729,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "002807.SZ",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7288,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "688750.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7284,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "601019.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7283,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "688343.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.728,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "002145.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.728,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "603271.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7273,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "600866.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.727,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "003816.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "601658.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7268,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "600956.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7266,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "603279.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7266,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "601112.SH",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7262,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7259,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "600023.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7258,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "000521.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7256,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "002171.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7254,
+      "n_factors": 153
+    }
+  ],
+  "2026-08-13": [
+    {
+      "combo_rank": 1,
+      "asset": "300737.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7835,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "300839.SZ",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7815,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "688591.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7744,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "688219.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.772,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "601068.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7696,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "601112.SH",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7668,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7636,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "000404.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7581,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7577,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "603299.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7571,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "603969.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7562,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "603344.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7534,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "603033.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7527,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "605368.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7521,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7508,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7492,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "003019.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7478,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "600955.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7471,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "300047.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7471,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7468,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "000821.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7459,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "002183.SZ",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.745,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "603072.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7448,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7444,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "002638.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7438,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "603416.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7435,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "301632.SZ",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7434,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "300928.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "601609.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7408,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "600456.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.74,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "688722.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7397,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7387,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "001215.SZ",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7387,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "000016.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7379,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "603053.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7379,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "002785.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7376,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "300867.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7376,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "603701.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7372,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "603293.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7357,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7346,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "002084.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7345,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "603867.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7344,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "301622.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7342,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "000553.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7342,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "603098.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.734,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "002053.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7331,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 47,
+      "asset": "300121.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7324,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7312,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "603135.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7309,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "688750.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.73,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "601618.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7298,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "000050.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7296,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "600361.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7295,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "600470.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7294,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 55,
+      "asset": "688343.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7294,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7289,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "300210.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7284,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600469.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7284,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7284,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "688798.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7281,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "300470.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7278,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "601117.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7276,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "300650.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7275,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "603279.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.727,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "600198.SH",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7268,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "301372.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7266,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 68,
+      "asset": "002386.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7263,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "300095.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7261,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "002997.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7261,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "603718.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7261,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "002171.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.726,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "603194.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7258,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "002752.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7253,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "300831.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7252,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "603271.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7246,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "603165.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7244,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "002391.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.724,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "688209.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.724,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "601399.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.724,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "688199.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7239,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "000620.SZ",
+      "sw_l1": "房地产",
+      "style": "其他",
+      "combo": 0.7238,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "600808.SH",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7237,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "600075.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7237,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "601022.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7236,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "000727.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7235,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "300563.SZ",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7234,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "600433.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7231,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "600678.SH",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7231,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "601866.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.723,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "003006.SZ",
+      "sw_l1": "美容护理",
+      "style": "消费",
+      "combo": 0.7229,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "002136.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7219,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "600171.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7216,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "000629.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7205,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "600339.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7205,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7201,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "600269.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.72,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "300881.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7198,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "002978.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7197,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "603886.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7191,
+      "n_factors": 153
+    }
+  ],
+  "2026-08-14": [
+    {
+      "combo_rank": 1,
+      "asset": "000404.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7809,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "601068.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7794,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "688219.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7741,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7661,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "603008.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7656,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "300737.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7649,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7594,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "300140.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.755,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "600469.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7537,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "002053.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7529,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "300047.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7525,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "301632.SZ",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7491,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "000016.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7486,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "002183.SZ",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.747,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "300839.SZ",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7453,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7451,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "003006.SZ",
+      "sw_l1": "美容护理",
+      "style": "消费",
+      "combo": 0.7434,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "000591.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7434,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7422,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "300069.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "301372.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7407,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "603508.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7399,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7399,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "002868.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7398,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "603100.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7396,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "605166.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7395,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "300470.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7386,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "000791.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7372,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "300553.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7364,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "000727.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7362,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "688156.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7358,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7349,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "603416.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7338,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "600163.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.733,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "300867.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7329,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "603477.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7322,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "688089.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7319,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "003019.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7315,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7313,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "603822.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7301,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "003035.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.73,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7293,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "601022.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7285,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "601828.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7283,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "001237.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7281,
+      "n_factors": 152
+    },
+    {
+      "combo_rank": 47,
+      "asset": "001289.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7278,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7276,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "603279.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7274,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "600866.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "603080.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7268,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "688006.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7267,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "688680.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7263,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "603293.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7253,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 55,
+      "asset": "002772.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7251,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "603098.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7243,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.724,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600470.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7234,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "300831.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7232,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "603072.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7228,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "002307.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7224,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "300928.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7221,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "600075.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7217,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "000927.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7216,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "002136.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7216,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "603299.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7209,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "603468.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7209,
+      "n_factors": 143
+    },
+    {
+      "combo_rank": 68,
+      "asset": "603697.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7207,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "601618.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7202,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "000966.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7201,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "600285.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.72,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.72,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "688343.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7199,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "603915.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7196,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "603272.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7186,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "688277.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7184,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600187.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7178,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "688041.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7177,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "600029.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7177,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "603135.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7175,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "300910.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7175,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "688116.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7166,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "600269.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.716,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "601117.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7157,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "301325.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7154,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "688069.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7153,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "000825.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.715,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.715,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "600170.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.715,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "301622.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7149,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "000993.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7149,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "603868.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7149,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "601878.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7147,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "000557.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7145,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "603194.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7144,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "003030.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7137,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "603978.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7134,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "600361.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7132,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "601399.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7132,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "000928.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.713,
+      "n_factors": 153
+    }
+  ],
+  "2026-08-17": [
+    {
+      "combo_rank": 1,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.8148,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "605166.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7873,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "688089.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7854,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "000404.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7818,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "300140.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7772,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "000791.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7769,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.772,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.77,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "002053.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7673,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "601018.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7643,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "301632.SZ",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7628,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "603100.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7625,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "000993.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7622,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "002608.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7607,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "601668.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7606,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "300047.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7602,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "000966.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.76,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "003035.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7598,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7594,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "603815.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7593,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "603477.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7593,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "000401.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7586,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "603053.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7578,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "000016.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7571,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "300470.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7568,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "600221.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7545,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "601068.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7541,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7533,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "002638.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7524,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7519,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "603008.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7517,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "601800.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7514,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "603693.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7508,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "300910.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7506,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7504,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "300682.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7503,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7502,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.75,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "600163.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7498,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7496,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "600021.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7479,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "600023.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7478,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "688100.SH",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7462,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7458,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "600285.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7452,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "001896.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7441,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 47,
+      "asset": "600170.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.744,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "600996.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7439,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "000488.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7424,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "603697.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7423,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7422,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "000543.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7415,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "600903.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7414,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "001965.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 55,
+      "asset": "688156.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7408,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "000928.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7405,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "001289.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7405,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600720.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7404,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7399,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "600185.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7397,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "601111.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7392,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "603568.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7391,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7388,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "600576.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7386,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "600735.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7385,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "601818.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7382,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "300999.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7381,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 68,
+      "asset": "000591.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7379,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "600025.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7378,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "600027.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7374,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "001213.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7369,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "301372.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7368,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "600982.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "601117.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7362,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "600080.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.736,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600084.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "000629.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "600469.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7352,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "600029.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7351,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "002027.SZ",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7349,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "603551.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7348,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "000601.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7348,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "605368.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7345,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7343,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "600310.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.734,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7339,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "002405.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7336,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "002736.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "603689.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "003816.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7333,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "600004.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7326,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7325,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "600917.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7325,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "601390.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7323,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "000531.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "300237.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "002034.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "601878.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7316,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "301575.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7316,
+      "n_factors": 153
+    }
+  ],
+  "2026-08-18": [
+    {
+      "combo_rank": 1,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7897,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 2,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7889,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 3,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7825,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 4,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7811,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 5,
+      "asset": "605166.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7803,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 6,
+      "asset": "002225.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7801,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 7,
+      "asset": "300352.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7791,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 8,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7766,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 9,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7741,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 10,
+      "asset": "300682.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7734,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 11,
+      "asset": "002183.SZ",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.77,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 12,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7699,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 13,
+      "asset": "603815.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7691,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 14,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7688,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 15,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7688,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 16,
+      "asset": "000791.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7678,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 17,
+      "asset": "300737.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7649,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 18,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7648,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 19,
+      "asset": "688089.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7638,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 20,
+      "asset": "300910.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7633,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 21,
+      "asset": "601059.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7633,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 22,
+      "asset": "601236.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7632,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 23,
+      "asset": "002797.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7624,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 24,
+      "asset": "601187.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7609,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 25,
+      "asset": "000821.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7607,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 26,
+      "asset": "000868.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7597,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 27,
+      "asset": "000591.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7588,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 28,
+      "asset": "300047.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7574,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 29,
+      "asset": "600080.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7573,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 30,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7571,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 31,
+      "asset": "601211.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7571,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 32,
+      "asset": "000420.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7548,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 33,
+      "asset": "003035.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7546,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 34,
+      "asset": "603033.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.754,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 35,
+      "asset": "688186.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7536,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 36,
+      "asset": "000404.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.752,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 37,
+      "asset": "600576.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7513,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 38,
+      "asset": "601198.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7512,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 39,
+      "asset": "000818.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7512,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 40,
+      "asset": "688100.SH",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7502,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 41,
+      "asset": "601878.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.75,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 42,
+      "asset": "002307.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7498,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 43,
+      "asset": "002608.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7492,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 44,
+      "asset": "000166.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7489,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 45,
+      "asset": "002405.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7488,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 46,
+      "asset": "000016.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7476,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 47,
+      "asset": "000825.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.747,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 48,
+      "asset": "000728.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7468,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 49,
+      "asset": "300422.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7465,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 50,
+      "asset": "603281.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7451,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 51,
+      "asset": "601456.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7447,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 52,
+      "asset": "002500.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7447,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 53,
+      "asset": "301327.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7443,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 54,
+      "asset": "601990.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7442,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 55,
+      "asset": "002198.SZ",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7442,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 56,
+      "asset": "002259.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7438,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 57,
+      "asset": "000966.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7434,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7431,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 59,
+      "asset": "002204.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7422,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 60,
+      "asset": "603712.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.742,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 61,
+      "asset": "600996.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.742,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 62,
+      "asset": "603008.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7419,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 63,
+      "asset": "000401.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7418,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 64,
+      "asset": "600537.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7416,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 65,
+      "asset": "603557.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7405,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 66,
+      "asset": "688069.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7404,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 67,
+      "asset": "603515.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7401,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 68,
+      "asset": "300264.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7397,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 69,
+      "asset": "002051.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7394,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 70,
+      "asset": "000993.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7393,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 71,
+      "asset": "300165.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7392,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 72,
+      "asset": "002531.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7389,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 73,
+      "asset": "603359.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7385,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 74,
+      "asset": "600185.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7381,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 75,
+      "asset": "688339.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.738,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 76,
+      "asset": "600292.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7367,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 77,
+      "asset": "300237.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 78,
+      "asset": "300145.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7364,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 79,
+      "asset": "002736.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.736,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 80,
+      "asset": "000488.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.736,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 81,
+      "asset": "002928.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7359,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 82,
+      "asset": "000536.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7359,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 83,
+      "asset": "688660.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 84,
+      "asset": "300460.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 85,
+      "asset": "300140.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 86,
+      "asset": "301575.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7355,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 87,
+      "asset": "603505.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.735,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 88,
+      "asset": "000531.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7349,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 89,
+      "asset": "601668.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.734,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 90,
+      "asset": "002866.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7339,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 91,
+      "asset": "688631.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7337,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 92,
+      "asset": "600452.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7333,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 93,
+      "asset": "688567.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7327,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 94,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7323,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 95,
+      "asset": "688219.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7321,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 96,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7321,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 97,
+      "asset": "000027.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7317,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 98,
+      "asset": "600061.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7315,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 99,
+      "asset": "300205.SZ",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7312,
+      "n_factors": 153
+    },
+    {
+      "combo_rank": 100,
+      "asset": "603189.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7311,
+      "n_factors": 153
+    }
+  ],
+  "top100_0817_with_ret": [
+    {
+      "combo_rank": 1,
+      "asset": "600930.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.8148,
+      "n_factors": 153,
+      "ret_0818": -0.0074
+    },
+    {
+      "combo_rank": 2,
+      "asset": "605166.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7873,
+      "n_factors": 153,
+      "ret_0818": -0.0118
+    },
+    {
+      "combo_rank": 3,
+      "asset": "688089.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7854,
+      "n_factors": 153,
+      "ret_0818": -0.0155
+    },
+    {
+      "combo_rank": 4,
+      "asset": "000404.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7818,
+      "n_factors": 153,
+      "ret_0818": -0.0014
+    },
+    {
+      "combo_rank": 5,
+      "asset": "300140.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7772,
+      "n_factors": 153,
+      "ret_0818": 0.0075
+    },
+    {
+      "combo_rank": 6,
+      "asset": "000791.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7769,
+      "n_factors": 153,
+      "ret_0818": -0.0225
+    },
+    {
+      "combo_rank": 7,
+      "asset": "601901.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.772,
+      "n_factors": 153,
+      "ret_0818": -0.0073
+    },
+    {
+      "combo_rank": 8,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.77,
+      "n_factors": 153,
+      "ret_0818": -0.0919
+    },
+    {
+      "combo_rank": 9,
+      "asset": "002053.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7673,
+      "n_factors": 153,
+      "ret_0818": 0.0504
+    },
+    {
+      "combo_rank": 10,
+      "asset": "601018.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7643,
+      "n_factors": 153,
+      "ret_0818": 0.003
+    },
+    {
+      "combo_rank": 11,
+      "asset": "301632.SZ",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7628,
+      "n_factors": 153,
+      "ret_0818": 0.0144
+    },
+    {
+      "combo_rank": 12,
+      "asset": "603100.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7625,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 13,
+      "asset": "000993.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7622,
+      "n_factors": 153,
+      "ret_0818": -0.01
+    },
+    {
+      "combo_rank": 14,
+      "asset": "002608.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7607,
+      "n_factors": 153,
+      "ret_0818": -0.014
+    },
+    {
+      "combo_rank": 15,
+      "asset": "601668.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7606,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 16,
+      "asset": "300047.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7602,
+      "n_factors": 153,
+      "ret_0818": -0.0186
+    },
+    {
+      "combo_rank": 17,
+      "asset": "000966.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.76,
+      "n_factors": 153,
+      "ret_0818": -0.0122
+    },
+    {
+      "combo_rank": 18,
+      "asset": "003035.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7598,
+      "n_factors": 153,
+      "ret_0818": -0.0165
+    },
+    {
+      "combo_rank": 19,
+      "asset": "600115.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7594,
+      "n_factors": 153,
+      "ret_0818": -0.0085
+    },
+    {
+      "combo_rank": 20,
+      "asset": "603815.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7593,
+      "n_factors": 153,
+      "ret_0818": -0.013
+    },
+    {
+      "combo_rank": 21,
+      "asset": "603477.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7593,
+      "n_factors": 153,
+      "ret_0818": 0.0068
+    },
+    {
+      "combo_rank": 22,
+      "asset": "000401.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7586,
+      "n_factors": 153,
+      "ret_0818": -0.0056
+    },
+    {
+      "combo_rank": 23,
+      "asset": "603053.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7578,
+      "n_factors": 153,
+      "ret_0818": 0.0046
+    },
+    {
+      "combo_rank": 24,
+      "asset": "000016.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7571,
+      "n_factors": 153,
+      "ret_0818": -0.0042
+    },
+    {
+      "combo_rank": 25,
+      "asset": "300470.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7568,
+      "n_factors": 153,
+      "ret_0818": 0.0039
+    },
+    {
+      "combo_rank": 26,
+      "asset": "600221.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7545,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 27,
+      "asset": "601068.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7541,
+      "n_factors": 153,
+      "ret_0818": 0.0045
+    },
+    {
+      "combo_rank": 28,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7533,
+      "n_factors": 153,
+      "ret_0818": -0.026
+    },
+    {
+      "combo_rank": 29,
+      "asset": "002638.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7524,
+      "n_factors": 153,
+      "ret_0818": 0.1
+    },
+    {
+      "combo_rank": 30,
+      "asset": "600053.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7519,
+      "n_factors": 153,
+      "ret_0818": -0.0098
+    },
+    {
+      "combo_rank": 31,
+      "asset": "603008.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7517,
+      "n_factors": 153,
+      "ret_0818": 0.0089
+    },
+    {
+      "combo_rank": 32,
+      "asset": "601800.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7514,
+      "n_factors": 153,
+      "ret_0818": -0.0068
+    },
+    {
+      "combo_rank": 33,
+      "asset": "603693.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7508,
+      "n_factors": 153,
+      "ret_0818": -0.017
+    },
+    {
+      "combo_rank": 34,
+      "asset": "300910.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7506,
+      "n_factors": 153,
+      "ret_0818": -0.0048
+    },
+    {
+      "combo_rank": 35,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7504,
+      "n_factors": 153,
+      "ret_0818": -0.0021
+    },
+    {
+      "combo_rank": 36,
+      "asset": "300682.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7503,
+      "n_factors": 153,
+      "ret_0818": -0.0353
+    },
+    {
+      "combo_rank": 37,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7502,
+      "n_factors": 153,
+      "ret_0818": -0.0059
+    },
+    {
+      "combo_rank": 38,
+      "asset": "603665.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.75,
+      "n_factors": 153,
+      "ret_0818": -0.0178
+    },
+    {
+      "combo_rank": 39,
+      "asset": "600163.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7498,
+      "n_factors": 153,
+      "ret_0818": -0.0117
+    },
+    {
+      "combo_rank": 40,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7496,
+      "n_factors": 153,
+      "ret_0818": -0.0167
+    },
+    {
+      "combo_rank": 41,
+      "asset": "600021.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7479,
+      "n_factors": 153,
+      "ret_0818": -0.0113
+    },
+    {
+      "combo_rank": 42,
+      "asset": "600023.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7478,
+      "n_factors": 153,
+      "ret_0818": -0.0041
+    },
+    {
+      "combo_rank": 43,
+      "asset": "688100.SH",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7462,
+      "n_factors": 153,
+      "ret_0818": -0.0082
+    },
+    {
+      "combo_rank": 44,
+      "asset": "688033.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7458,
+      "n_factors": 153,
+      "ret_0818": 0.0016
+    },
+    {
+      "combo_rank": 45,
+      "asset": "600285.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7452,
+      "n_factors": 153,
+      "ret_0818": 0.0123
+    },
+    {
+      "combo_rank": 46,
+      "asset": "001896.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7441,
+      "n_factors": 153,
+      "ret_0818": -0.0267
+    },
+    {
+      "combo_rank": 47,
+      "asset": "600170.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.744,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 48,
+      "asset": "600996.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7439,
+      "n_factors": 153,
+      "ret_0818": -0.0103
+    },
+    {
+      "combo_rank": 49,
+      "asset": "000488.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7424,
+      "n_factors": 153,
+      "ret_0818": -0.0105
+    },
+    {
+      "combo_rank": 50,
+      "asset": "603697.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7423,
+      "n_factors": 153,
+      "ret_0818": 0.0259
+    },
+    {
+      "combo_rank": 51,
+      "asset": "601868.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7422,
+      "n_factors": 153,
+      "ret_0818": -0.0078
+    },
+    {
+      "combo_rank": 52,
+      "asset": "000543.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7415,
+      "n_factors": 153,
+      "ret_0818": -0.0066
+    },
+    {
+      "combo_rank": 53,
+      "asset": "600903.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7414,
+      "n_factors": 153,
+      "ret_0818": 0.0174
+    },
+    {
+      "combo_rank": 54,
+      "asset": "001965.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153,
+      "ret_0818": 0.0055
+    },
+    {
+      "combo_rank": 55,
+      "asset": "688156.SH",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7408,
+      "n_factors": 153,
+      "ret_0818": 0.0112
+    },
+    {
+      "combo_rank": 56,
+      "asset": "000928.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7405,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 57,
+      "asset": "001289.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7405,
+      "n_factors": 153,
+      "ret_0818": -0.0032
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600720.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7404,
+      "n_factors": 153,
+      "ret_0818": -0.0058
+    },
+    {
+      "combo_rank": 59,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7399,
+      "n_factors": 153,
+      "ret_0818": -0.0127
+    },
+    {
+      "combo_rank": 60,
+      "asset": "600185.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7397,
+      "n_factors": 153,
+      "ret_0818": -0.0065
+    },
+    {
+      "combo_rank": 61,
+      "asset": "601111.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7392,
+      "n_factors": 153,
+      "ret_0818": -0.0068
+    },
+    {
+      "combo_rank": 62,
+      "asset": "603568.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7391,
+      "n_factors": 153,
+      "ret_0818": 0.0156
+    },
+    {
+      "combo_rank": 63,
+      "asset": "603992.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7388,
+      "n_factors": 153,
+      "ret_0818": -0.0293
+    },
+    {
+      "combo_rank": 64,
+      "asset": "600576.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7386,
+      "n_factors": 153,
+      "ret_0818": -0.0164
+    },
+    {
+      "combo_rank": 65,
+      "asset": "600735.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7385,
+      "n_factors": 153,
+      "ret_0818": -0.0149
+    },
+    {
+      "combo_rank": 66,
+      "asset": "601818.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7382,
+      "n_factors": 153,
+      "ret_0818": -0.0033
+    },
+    {
+      "combo_rank": 67,
+      "asset": "300999.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7381,
+      "n_factors": 153,
+      "ret_0818": 0.0268
+    },
+    {
+      "combo_rank": 68,
+      "asset": "000591.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7379,
+      "n_factors": 153,
+      "ret_0818": -0.0183
+    },
+    {
+      "combo_rank": 69,
+      "asset": "600025.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7378,
+      "n_factors": 153,
+      "ret_0818": 0.0094
+    },
+    {
+      "combo_rank": 70,
+      "asset": "600027.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7374,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 71,
+      "asset": "001213.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7369,
+      "n_factors": 153,
+      "ret_0818": -0.0028
+    },
+    {
+      "combo_rank": 72,
+      "asset": "301372.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7368,
+      "n_factors": 153,
+      "ret_0818": 0.0296
+    },
+    {
+      "combo_rank": 73,
+      "asset": "600982.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153,
+      "ret_0818": -0.0121
+    },
+    {
+      "combo_rank": 74,
+      "asset": "601117.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153,
+      "ret_0818": 0.0094
+    },
+    {
+      "combo_rank": 75,
+      "asset": "601881.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7362,
+      "n_factors": 153,
+      "ret_0818": -0.0155
+    },
+    {
+      "combo_rank": 76,
+      "asset": "600080.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.736,
+      "n_factors": 153,
+      "ret_0818": -0.0164
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600084.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7356,
+      "n_factors": 153,
+      "ret_0818": 0.0024
+    },
+    {
+      "combo_rank": 78,
+      "asset": "000629.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153,
+      "ret_0818": -0.0097
+    },
+    {
+      "combo_rank": 79,
+      "asset": "600469.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7352,
+      "n_factors": 153,
+      "ret_0818": -0.0094
+    },
+    {
+      "combo_rank": 80,
+      "asset": "600029.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7351,
+      "n_factors": 153,
+      "ret_0818": -0.004
+    },
+    {
+      "combo_rank": 81,
+      "asset": "002027.SZ",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7349,
+      "n_factors": 153,
+      "ret_0818": 0.002
+    },
+    {
+      "combo_rank": 82,
+      "asset": "603551.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7348,
+      "n_factors": 153,
+      "ret_0818": -0.0021
+    },
+    {
+      "combo_rank": 83,
+      "asset": "000601.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7348,
+      "n_factors": 153,
+      "ret_0818": -0.0124
+    },
+    {
+      "combo_rank": 84,
+      "asset": "605368.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7345,
+      "n_factors": 153,
+      "ret_0818": 0.0137
+    },
+    {
+      "combo_rank": 85,
+      "asset": "600688.SH",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7343,
+      "n_factors": 153,
+      "ret_0818": 0.0071
+    },
+    {
+      "combo_rank": 86,
+      "asset": "600310.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.734,
+      "n_factors": 153,
+      "ret_0818": -0.021
+    },
+    {
+      "combo_rank": 87,
+      "asset": "600416.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7339,
+      "n_factors": 153,
+      "ret_0818": -0.0222
+    },
+    {
+      "combo_rank": 88,
+      "asset": "002405.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7336,
+      "n_factors": 153,
+      "ret_0818": -0.0169
+    },
+    {
+      "combo_rank": 89,
+      "asset": "002736.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153,
+      "ret_0818": -0.008
+    },
+    {
+      "combo_rank": 90,
+      "asset": "603689.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153,
+      "ret_0818": 0.0094
+    },
+    {
+      "combo_rank": 91,
+      "asset": "003816.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7333,
+      "n_factors": 153,
+      "ret_0818": 0.0026
+    },
+    {
+      "combo_rank": 92,
+      "asset": "600004.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7326,
+      "n_factors": 153,
+      "ret_0818": -0.004
+    },
+    {
+      "combo_rank": 93,
+      "asset": "603075.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7325,
+      "n_factors": 153,
+      "ret_0818": 0.0188
+    },
+    {
+      "combo_rank": 94,
+      "asset": "600917.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7325,
+      "n_factors": 153,
+      "ret_0818": 0.0042
+    },
+    {
+      "combo_rank": 95,
+      "asset": "601390.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7323,
+      "n_factors": 153,
+      "ret_0818": -0.0069
+    },
+    {
+      "combo_rank": 96,
+      "asset": "000531.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": -0.0104
+    },
+    {
+      "combo_rank": 97,
+      "asset": "300237.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": -0.0151
+    },
+    {
+      "combo_rank": 98,
+      "asset": "002034.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": 0.0014
+    },
+    {
+      "combo_rank": 99,
+      "asset": "601878.SH",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7316,
+      "n_factors": 153,
+      "ret_0818": -0.0107
+    },
+    {
+      "combo_rank": 100,
+      "asset": "301575.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7316,
+      "n_factors": 153,
+      "ret_0818": -0.0142
+    }
+  ],
+  "entered": [
+    {
+      "combo_rank": 8,
+      "asset": "603021.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.77,
+      "n_factors": 153,
+      "ret_0818": -0.0919
+    },
+    {
+      "combo_rank": 10,
+      "asset": "601018.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7643,
+      "n_factors": 153,
+      "ret_0818": 0.003
+    },
+    {
+      "combo_rank": 14,
+      "asset": "002608.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7607,
+      "n_factors": 153,
+      "ret_0818": -0.014
+    },
+    {
+      "combo_rank": 15,
+      "asset": "601668.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7606,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 20,
+      "asset": "603815.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7593,
+      "n_factors": 153,
+      "ret_0818": -0.013
+    },
+    {
+      "combo_rank": 22,
+      "asset": "000401.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7586,
+      "n_factors": 153,
+      "ret_0818": -0.0056
+    },
+    {
+      "combo_rank": 23,
+      "asset": "603053.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7578,
+      "n_factors": 153,
+      "ret_0818": 0.0046
+    },
+    {
+      "combo_rank": 26,
+      "asset": "600221.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7545,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 28,
+      "asset": "688708.SH",
+      "sw_l1": "国防军工",
+      "style": "其他",
+      "combo": 0.7533,
+      "n_factors": 153,
+      "ret_0818": -0.026
+    },
+    {
+      "combo_rank": 29,
+      "asset": "002638.SZ",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7524,
+      "n_factors": 153,
+      "ret_0818": 0.1
+    },
+    {
+      "combo_rank": 32,
+      "asset": "601800.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7514,
+      "n_factors": 153,
+      "ret_0818": -0.0068
+    },
+    {
+      "combo_rank": 33,
+      "asset": "603693.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7508,
+      "n_factors": 153,
+      "ret_0818": -0.017
+    },
+    {
+      "combo_rank": 35,
+      "asset": "601669.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7504,
+      "n_factors": 153,
+      "ret_0818": -0.0021
+    },
+    {
+      "combo_rank": 36,
+      "asset": "300682.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7503,
+      "n_factors": 153,
+      "ret_0818": -0.0353
+    },
+    {
+      "combo_rank": 37,
+      "asset": "600035.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7502,
+      "n_factors": 153,
+      "ret_0818": -0.0059
+    },
+    {
+      "combo_rank": 40,
+      "asset": "001391.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7496,
+      "n_factors": 153,
+      "ret_0818": -0.0167
+    },
+    {
+      "combo_rank": 41,
+      "asset": "600021.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7479,
+      "n_factors": 153,
+      "ret_0818": -0.0113
+    },
+    {
+      "combo_rank": 42,
+      "asset": "600023.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7478,
+      "n_factors": 153,
+      "ret_0818": -0.0041
+    },
+    {
+      "combo_rank": 43,
+      "asset": "688100.SH",
+      "sw_l1": "通信",
+      "style": "科技",
+      "combo": 0.7462,
+      "n_factors": 153,
+      "ret_0818": -0.0082
+    },
+    {
+      "combo_rank": 46,
+      "asset": "001896.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7441,
+      "n_factors": 153,
+      "ret_0818": -0.0267
+    },
+    {
+      "combo_rank": 48,
+      "asset": "600996.SH",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7439,
+      "n_factors": 153,
+      "ret_0818": -0.0103
+    },
+    {
+      "combo_rank": 49,
+      "asset": "000488.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7424,
+      "n_factors": 153,
+      "ret_0818": -0.0105
+    },
+    {
+      "combo_rank": 52,
+      "asset": "000543.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7415,
+      "n_factors": 153,
+      "ret_0818": -0.0066
+    },
+    {
+      "combo_rank": 53,
+      "asset": "600903.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7414,
+      "n_factors": 153,
+      "ret_0818": 0.0174
+    },
+    {
+      "combo_rank": 54,
+      "asset": "001965.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153,
+      "ret_0818": 0.0055
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600720.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7404,
+      "n_factors": 153,
+      "ret_0818": -0.0058
+    },
+    {
+      "combo_rank": 59,
+      "asset": "688538.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7399,
+      "n_factors": 153,
+      "ret_0818": -0.0127
+    },
+    {
+      "combo_rank": 60,
+      "asset": "600185.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7397,
+      "n_factors": 153,
+      "ret_0818": -0.0065
+    },
+    {
+      "combo_rank": 61,
+      "asset": "601111.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7392,
+      "n_factors": 153,
+      "ret_0818": -0.0068
+    },
+    {
+      "combo_rank": 62,
+      "asset": "603568.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7391,
+      "n_factors": 153,
+      "ret_0818": 0.0156
+    },
+    {
+      "combo_rank": 64,
+      "asset": "600576.SH",
+      "sw_l1": "社会服务",
+      "style": "消费",
+      "combo": 0.7386,
+      "n_factors": 153,
+      "ret_0818": -0.0164
+    },
+    {
+      "combo_rank": 65,
+      "asset": "600735.SH",
+      "sw_l1": "纺织服饰",
+      "style": "消费",
+      "combo": 0.7385,
+      "n_factors": 153,
+      "ret_0818": -0.0149
+    },
+    {
+      "combo_rank": 66,
+      "asset": "601818.SH",
+      "sw_l1": "银行",
+      "style": "其他",
+      "combo": 0.7382,
+      "n_factors": 153,
+      "ret_0818": -0.0033
+    },
+    {
+      "combo_rank": 67,
+      "asset": "300999.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7381,
+      "n_factors": 153,
+      "ret_0818": 0.0268
+    },
+    {
+      "combo_rank": 69,
+      "asset": "600025.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7378,
+      "n_factors": 153,
+      "ret_0818": 0.0094
+    },
+    {
+      "combo_rank": 70,
+      "asset": "600027.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7374,
+      "n_factors": 153,
+      "ret_0818": 0.0
+    },
+    {
+      "combo_rank": 71,
+      "asset": "001213.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7369,
+      "n_factors": 153,
+      "ret_0818": -0.0028
+    },
+    {
+      "combo_rank": 73,
+      "asset": "600982.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7365,
+      "n_factors": 153,
+      "ret_0818": -0.0121
+    },
+    {
+      "combo_rank": 76,
+      "asset": "600080.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.736,
+      "n_factors": 153,
+      "ret_0818": -0.0164
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600084.SH",
+      "sw_l1": "食品饮料",
+      "style": "消费",
+      "combo": 0.7356,
+      "n_factors": 153,
+      "ret_0818": 0.0024
+    },
+    {
+      "combo_rank": 78,
+      "asset": "000629.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.7356,
+      "n_factors": 153,
+      "ret_0818": -0.0097
+    },
+    {
+      "combo_rank": 81,
+      "asset": "002027.SZ",
+      "sw_l1": "传媒",
+      "style": "科技",
+      "combo": 0.7349,
+      "n_factors": 153,
+      "ret_0818": 0.002
+    },
+    {
+      "combo_rank": 82,
+      "asset": "603551.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7348,
+      "n_factors": 153,
+      "ret_0818": -0.0021
+    },
+    {
+      "combo_rank": 83,
+      "asset": "000601.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7348,
+      "n_factors": 153,
+      "ret_0818": -0.0124
+    },
+    {
+      "combo_rank": 84,
+      "asset": "605368.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7345,
+      "n_factors": 153,
+      "ret_0818": 0.0137
+    },
+    {
+      "combo_rank": 86,
+      "asset": "600310.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.734,
+      "n_factors": 153,
+      "ret_0818": -0.021
+    },
+    {
+      "combo_rank": 88,
+      "asset": "002405.SZ",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7336,
+      "n_factors": 153,
+      "ret_0818": -0.0169
+    },
+    {
+      "combo_rank": 89,
+      "asset": "002736.SZ",
+      "sw_l1": "非银金融",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153,
+      "ret_0818": -0.008
+    },
+    {
+      "combo_rank": 90,
+      "asset": "603689.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7335,
+      "n_factors": 153,
+      "ret_0818": 0.0094
+    },
+    {
+      "combo_rank": 91,
+      "asset": "003816.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7333,
+      "n_factors": 153,
+      "ret_0818": 0.0026
+    },
+    {
+      "combo_rank": 92,
+      "asset": "600004.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7326,
+      "n_factors": 153,
+      "ret_0818": -0.004
+    },
+    {
+      "combo_rank": 94,
+      "asset": "600917.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7325,
+      "n_factors": 153,
+      "ret_0818": 0.0042
+    },
+    {
+      "combo_rank": 95,
+      "asset": "601390.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7323,
+      "n_factors": 153,
+      "ret_0818": -0.0069
+    },
+    {
+      "combo_rank": 96,
+      "asset": "000531.SZ",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": -0.0104
+    },
+    {
+      "combo_rank": 97,
+      "asset": "300237.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": -0.0151
+    },
+    {
+      "combo_rank": 98,
+      "asset": "002034.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7322,
+      "n_factors": 153,
+      "ret_0818": 0.0014
+    },
+    {
+      "combo_rank": 100,
+      "asset": "301575.SZ",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7316,
+      "n_factors": 153,
+      "ret_0818": -0.0142
+    }
+  ],
+  "exited": [
+    {
+      "combo_rank": 3,
+      "asset": "688219.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7741,
+      "n_factors": 153,
+      "ret_0818": -0.0047
+    },
+    {
+      "combo_rank": 6,
+      "asset": "300737.SZ",
+      "sw_l1": "建筑材料",
+      "style": "其他",
+      "combo": 0.7649,
+      "n_factors": 153,
+      "ret_0818": -0.0158
+    },
+    {
+      "combo_rank": 14,
+      "asset": "002183.SZ",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.747,
+      "n_factors": 153,
+      "ret_0818": -0.0238
+    },
+    {
+      "combo_rank": 15,
+      "asset": "300839.SZ",
+      "sw_l1": "石油石化",
+      "style": "其他",
+      "combo": 0.7453,
+      "n_factors": 153,
+      "ret_0818": 0.0055
+    },
+    {
+      "combo_rank": 17,
+      "asset": "003006.SZ",
+      "sw_l1": "美容护理",
+      "style": "消费",
+      "combo": 0.7434,
+      "n_factors": 153,
+      "ret_0818": 0.0059
+    },
+    {
+      "combo_rank": 20,
+      "asset": "300069.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.741,
+      "n_factors": 153,
+      "ret_0818": -0.0031
+    },
+    {
+      "combo_rank": 22,
+      "asset": "603508.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7399,
+      "n_factors": 153,
+      "ret_0818": -0.0042
+    },
+    {
+      "combo_rank": 24,
+      "asset": "002868.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7398,
+      "n_factors": 153,
+      "ret_0818": 0.0216
+    },
+    {
+      "combo_rank": 29,
+      "asset": "300553.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7364,
+      "n_factors": 153,
+      "ret_0818": -0.0318
+    },
+    {
+      "combo_rank": 30,
+      "asset": "000727.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7362,
+      "n_factors": 153,
+      "ret_0818": 0.0044
+    },
+    {
+      "combo_rank": 32,
+      "asset": "688707.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7349,
+      "n_factors": 153,
+      "ret_0818": -0.0205
+    },
+    {
+      "combo_rank": 33,
+      "asset": "603416.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7338,
+      "n_factors": 153,
+      "ret_0818": -0.0073
+    },
+    {
+      "combo_rank": 35,
+      "asset": "300867.SZ",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7329,
+      "n_factors": 153,
+      "ret_0818": 0.059
+    },
+    {
+      "combo_rank": 39,
+      "asset": "003019.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7315,
+      "n_factors": 153,
+      "ret_0818": 0.0068
+    },
+    {
+      "combo_rank": 41,
+      "asset": "603822.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7301,
+      "n_factors": 153,
+      "ret_0818": 0.0256
+    },
+    {
+      "combo_rank": 44,
+      "asset": "601022.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7285,
+      "n_factors": 153,
+      "ret_0818": 0.0158
+    },
+    {
+      "combo_rank": 45,
+      "asset": "601828.SH",
+      "sw_l1": "商贸零售",
+      "style": "消费",
+      "combo": 0.7283,
+      "n_factors": 153,
+      "ret_0818": -0.0046
+    },
+    {
+      "combo_rank": 46,
+      "asset": "001237.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7281,
+      "n_factors": 152,
+      "ret_0818": -0.0135
+    },
+    {
+      "combo_rank": 49,
+      "asset": "603279.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7274,
+      "n_factors": 153,
+      "ret_0818": 0.0056
+    },
+    {
+      "combo_rank": 50,
+      "asset": "600866.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7269,
+      "n_factors": 153,
+      "ret_0818": 0.0183
+    },
+    {
+      "combo_rank": 51,
+      "asset": "603080.SH",
+      "sw_l1": "公用事业",
+      "style": "其他",
+      "combo": 0.7268,
+      "n_factors": 153,
+      "ret_0818": 0.0195
+    },
+    {
+      "combo_rank": 52,
+      "asset": "688006.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7267,
+      "n_factors": 153,
+      "ret_0818": 0.0989
+    },
+    {
+      "combo_rank": 53,
+      "asset": "688680.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7263,
+      "n_factors": 153,
+      "ret_0818": -0.0096
+    },
+    {
+      "combo_rank": 54,
+      "asset": "603293.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7253,
+      "n_factors": 153,
+      "ret_0818": -0.014
+    },
+    {
+      "combo_rank": 55,
+      "asset": "002772.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7251,
+      "n_factors": 153,
+      "ret_0818": 0.0743
+    },
+    {
+      "combo_rank": 56,
+      "asset": "603098.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7243,
+      "n_factors": 153,
+      "ret_0818": 0.0048
+    },
+    {
+      "combo_rank": 58,
+      "asset": "600470.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7234,
+      "n_factors": 153,
+      "ret_0818": 0.0232
+    },
+    {
+      "combo_rank": 59,
+      "asset": "300831.SZ",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7232,
+      "n_factors": 153,
+      "ret_0818": -0.0223
+    },
+    {
+      "combo_rank": 60,
+      "asset": "603072.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7228,
+      "n_factors": 153,
+      "ret_0818": -0.0076
+    },
+    {
+      "combo_rank": 61,
+      "asset": "002307.SZ",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7224,
+      "n_factors": 153,
+      "ret_0818": -0.0166
+    },
+    {
+      "combo_rank": 62,
+      "asset": "300928.SZ",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7221,
+      "n_factors": 153,
+      "ret_0818": -0.0019
+    },
+    {
+      "combo_rank": 63,
+      "asset": "600075.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7217,
+      "n_factors": 153,
+      "ret_0818": 0.0246
+    },
+    {
+      "combo_rank": 64,
+      "asset": "000927.SZ",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7216,
+      "n_factors": 153,
+      "ret_0818": -0.0041
+    },
+    {
+      "combo_rank": 65,
+      "asset": "002136.SZ",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7216,
+      "n_factors": 153,
+      "ret_0818": -0.0186
+    },
+    {
+      "combo_rank": 66,
+      "asset": "603299.SH",
+      "sw_l1": "化工",
+      "style": "其他",
+      "combo": 0.7209,
+      "n_factors": 153,
+      "ret_0818": 0.0099
+    },
+    {
+      "combo_rank": 67,
+      "asset": "603468.SH",
+      "sw_l1": "汽车",
+      "style": "其他",
+      "combo": 0.7209,
+      "n_factors": 143,
+      "ret_0818": 0.0012
+    },
+    {
+      "combo_rank": 69,
+      "asset": "601618.SH",
+      "sw_l1": "建筑装饰",
+      "style": "其他",
+      "combo": 0.7202,
+      "n_factors": 153,
+      "ret_0818": -0.0078
+    },
+    {
+      "combo_rank": 73,
+      "asset": "688343.SH",
+      "sw_l1": "计算机",
+      "style": "科技",
+      "combo": 0.7199,
+      "n_factors": 153,
+      "ret_0818": -0.0239
+    },
+    {
+      "combo_rank": 74,
+      "asset": "603915.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7196,
+      "n_factors": 153,
+      "ret_0818": 0.0109
+    },
+    {
+      "combo_rank": 75,
+      "asset": "603272.SH",
+      "sw_l1": "轻工制造",
+      "style": "消费",
+      "combo": 0.7186,
+      "n_factors": 153,
+      "ret_0818": -0.0558
+    },
+    {
+      "combo_rank": 76,
+      "asset": "688277.SH",
+      "sw_l1": "医药生物",
+      "style": "其他",
+      "combo": 0.7184,
+      "n_factors": 153,
+      "ret_0818": 0.0359
+    },
+    {
+      "combo_rank": 77,
+      "asset": "600187.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7178,
+      "n_factors": 153,
+      "ret_0818": -0.0074
+    },
+    {
+      "combo_rank": 78,
+      "asset": "688041.SH",
+      "sw_l1": "电子",
+      "style": "科技",
+      "combo": 0.7177,
+      "n_factors": 153,
+      "ret_0818": -0.0302
+    },
+    {
+      "combo_rank": 80,
+      "asset": "603135.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7175,
+      "n_factors": 153,
+      "ret_0818": -0.0053
+    },
+    {
+      "combo_rank": 82,
+      "asset": "688116.SH",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7166,
+      "n_factors": 153,
+      "ret_0818": -0.0161
+    },
+    {
+      "combo_rank": 83,
+      "asset": "600269.SH",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.716,
+      "n_factors": 153,
+      "ret_0818": -0.0053
+    },
+    {
+      "combo_rank": 85,
+      "asset": "301325.SZ",
+      "sw_l1": "电气设备",
+      "style": "其他",
+      "combo": 0.7154,
+      "n_factors": 153,
+      "ret_0818": -0.0038
+    },
+    {
+      "combo_rank": 86,
+      "asset": "688069.SH",
+      "sw_l1": "环保",
+      "style": "其他",
+      "combo": 0.7153,
+      "n_factors": 153,
+      "ret_0818": -0.0066
+    },
+    {
+      "combo_rank": 87,
+      "asset": "000825.SZ",
+      "sw_l1": "钢铁",
+      "style": "其他",
+      "combo": 0.715,
+      "n_factors": 153,
+      "ret_0818": -0.0231
+    },
+    {
+      "combo_rank": 90,
+      "asset": "301622.SZ",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7149,
+      "n_factors": 153,
+      "ret_0818": 0.0005
+    },
+    {
+      "combo_rank": 92,
+      "asset": "603868.SH",
+      "sw_l1": "家用电器",
+      "style": "消费",
+      "combo": 0.7149,
+      "n_factors": 153,
+      "ret_0818": 0.0019
+    },
+    {
+      "combo_rank": 94,
+      "asset": "000557.SZ",
+      "sw_l1": "交通运输",
+      "style": "其他",
+      "combo": 0.7145,
+      "n_factors": 153,
+      "ret_0818": -0.0027
+    },
+    {
+      "combo_rank": 95,
+      "asset": "603194.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7144,
+      "n_factors": 153,
+      "ret_0818": -0.0044
+    },
+    {
+      "combo_rank": 96,
+      "asset": "003030.SZ",
+      "sw_l1": "农林牧渔",
+      "style": "消费",
+      "combo": 0.7137,
+      "n_factors": 153,
+      "ret_0818": 0.0354
+    },
+    {
+      "combo_rank": 97,
+      "asset": "603978.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7134,
+      "n_factors": 153,
+      "ret_0818": -0.0066
+    },
+    {
+      "combo_rank": 98,
+      "asset": "600361.SH",
+      "sw_l1": "有色金属",
+      "style": "其他",
+      "combo": 0.7132,
+      "n_factors": 153,
+      "ret_0818": -0.0109
+    },
+    {
+      "combo_rank": 99,
+      "asset": "601399.SH",
+      "sw_l1": "机械设备",
+      "style": "其他",
+      "combo": 0.7132,
+      "n_factors": 153,
+      "ret_0818": -0.0153
+    }
+  ]
+}

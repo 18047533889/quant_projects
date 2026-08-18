@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011755_f72e2cf1",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "-(ts_ema((safe_div(close - low, high - low + 1e-8) - 0.5) * safe_div(high - low, ts_median((high - low), 20) + 1e-8), 5))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:17:55Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.17899438991074296,
+      "rank_ic": 0.021802481450754623
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_vol_regime_breakout_continuous；VWAP→VWAP RankIC=0.0218 RankICIR=0.17899438991074296；route=local_python；lqtp_native=False。"
+}

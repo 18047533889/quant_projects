@@ -1,0 +1,37 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011640_999f5102",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "# python factor factor_adaptive_volume_smoothness",
+  "expression_type": "python",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:16:40Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.5361619197222851,
+      "rank_ic": 0.034340771438990746
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_adaptive_volume_smoothness；VWAP→VWAP RankIC=0.0343 RankICIR=0.5361619197222851；route=local_python；lqtp_native=False。",
+  "code": "def factor_adaptive_volume_smoothness(df):\n    df_copy = df.copy()\n    high_resvol = df_copy['style_gate_resvol_high'] > 0\n    cv_short = df_copy['volume'].rolling(10, min_periods=10).std(ddof=1) / df_copy['volume'].rolling(10, min_periods=10).mean().replace(0, np.nan)\n    cv_long = df_copy['volume'].rolling(20, min_periods=20).std(ddof=1) / df_copy['volume'].rolling(20, min_periods=20).mean().replace(0, np.nan)\n    factor = -np.where(high_resvol, cv_long, cv_short)\n    df_copy['factor_adaptive_volume_smoothness'] = factor\n    return df_copy['factor_adaptive_volume_smoothness']"
+}

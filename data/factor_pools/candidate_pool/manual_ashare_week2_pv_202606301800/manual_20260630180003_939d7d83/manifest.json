@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180003_939d7d83",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(ts_delta(close, 1) * log(1 + volume / ts_mean(volume, 5)) * (1 + min(2, max(0, (high - low - ts_mean(high - low, 5)) / ts_std(high - low, 5)))), 12)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:03Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 w2_003 量加权对数区间门控（herd_stress，qualified，来源 Week2汇报.pdf，Rank IC 4.83%）。ΔC（绝对涨跌额）× log量比 × 5日range z-score 加成"
+}

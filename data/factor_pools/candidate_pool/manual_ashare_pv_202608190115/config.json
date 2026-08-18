@@ -1,0 +1,66 @@
+{
+  "schema_version": "disk.v1",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "frequency_bucket": "daily",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "mining_scope": {
+    "primary_tables": [
+      "StockDailyBar",
+      "StockCapitalDaily"
+    ],
+    "auxiliary_tables": [
+      "StockList",
+      "StockStatus",
+      "StockIndustry",
+      "Calendar"
+    ],
+    "forbidden_tables": [
+      "StockBalance",
+      "StockIncome",
+      "StockCashFlow"
+    ]
+  },
+  "operator_policy": "afv_us_pv_daily",
+  "data_source": {
+    "local": "data/a_share/lqtp_data/",
+    "cos": "cos://qs-cold/clean_data/ashare/lqtp_data/"
+  },
+  "mined_by": "sunhaiwei",
+  "created_at": "2026-08-19T01:15:00Z",
+  "mining_config": {
+    "train_period": [
+      "2014-01-01",
+      "2021-12-31"
+    ],
+    "valid_period": [
+      "2022-01-01",
+      "2023-12-31"
+    ],
+    "test_period": [
+      "2024-01-01",
+      "2026-06-25"
+    ]
+  },
+  "mining_run_stats": {
+    "llm_model": "manual-rankic-gt0p02-screening",
+    "llm_provider": "manual",
+    "llm_base_url": "",
+    "token_usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "started_at": "2026-08-01T10:57:00Z",
+    "finished_at": "2026-08-19T01:15:00Z",
+    "duration_seconds": 0,
+    "candidates_generated": 180,
+    "candidates_submitted": 180
+  }
+}

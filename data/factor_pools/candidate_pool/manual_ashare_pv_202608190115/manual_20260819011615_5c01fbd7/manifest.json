@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011615_5c01fbd7",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "where(safe_div(volume, ts_ema(volume, 20)) > 1.5, log(cap(safe_div(safe_div(ts_sum(where(ts_pct(close, 1) < 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) < 0, 1, 0), 20) + 1e-8), safe_div(ts_sum(where(ts_pct(close, 1) >= 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) >= 0, 1, 0), 20) + 1e-8)), 1e-6, 1e6)) * 1.5, where(safe_div(volume, ts_ema(volume, 20)) < 0.6, log(cap(safe_div(safe_div(ts_sum(where(ts_pct(close, 1) < 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) < 0, 1, 0), 20) + 1e-8), safe_div(ts_sum(where(ts_pct(close, 1) >= 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) >= 0, 1, 0), 20) + 1e-8)), 1e-6, 1e6)) * 0.5, log(cap(safe_div(safe_div(ts_sum(where(ts_pct(close, 1) < 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) < 0, 1, 0), 20) + 1e-8), safe_div(ts_sum(where(ts_pct(close, 1) >= 0, high - low, 0), 20), ts_sum(where(ts_pct(close, 1) >= 0, 1, 0), 20) + 1e-8)), 1e-6, 1e6))))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:16:15Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.4953668943702827,
+      "rank_ic": 0.03714268011032892
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_asym_vol_gated；VWAP→VWAP RankIC=0.0371 RankICIR=0.4953668943702827；route=local_python；lqtp_native=False。"
+}

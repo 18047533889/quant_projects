@@ -1,0 +1,37 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011650_d0d06dfd",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "# python factor factor_downside_vol_liquidity_momentum",
+  "expression_type": "python",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:16:50Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.2425037375902997,
+      "rank_ic": 0.032495546079042946
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_downside_vol_liquidity_momentum；VWAP→VWAP RankIC=0.0325 RankICIR=0.2425037375902997；route=local_python；lqtp_native=False。",
+  "code": "def factor_downside_vol_liquidity_momentum(df):\n    df_copy = df.copy()\n    close = df_copy['close']\n    momentum = close / close.shift(21) - 1.0\n    returns = close.pct_change()\n    downside_returns = returns.where(returns < 0, np.nan)\n    vol_short = downside_returns.rolling(21, min_periods=5).std(ddof=1)\n    vol_long = downside_returns.rolling(63, min_periods=5).std(ddof=1)\n    high_liquidity = df_copy['style_gate_liquidity_high'] > 0\n    vol = np.where(high_liquidity, vol_short, vol_long)\n    vol = np.where(vol == 0.0, np.nan, vol)\n    factor = momentum / vol\n    df_copy['factor_downside_vol_liquidity_momentum'] = factor\n    return df_copy['factor_downside_vol_liquidity_momentum']"
+}

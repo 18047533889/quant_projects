@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180030_03e3edef",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(ts_delta(close, 1) / delay(close, 1) * volume / ts_mean(volume, 5) * (high - low) / close, 5)",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:30Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 a_002 羊群动量×应激区间（herd_stress，elite，来源 A.pdf，IC 2.42% / Rank IC 4.51% / ICIR 0.24 / Rank ICIR 0.37）。ΔC/C × V/MA(V,5) × (H-L)/C；EMA(5)"
+}

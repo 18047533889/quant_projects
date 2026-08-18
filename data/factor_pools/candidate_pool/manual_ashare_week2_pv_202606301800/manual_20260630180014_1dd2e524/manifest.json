@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180014_1dd2e524",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ema(close / (high - low), 8) * (sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25))) * ema(volume, 10) + (1 - sigmoid(5 * (volume - 0.85 * ts_mean(volume, 25)))) * ema(volume, 30))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:14Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 w2_014 自适应 sigmoid 量能混合（dir_vol_volume，elite，来源 Week2汇报.pdf，Rank IC 3.85%）。sigmoid 切换快/慢 EMA 量能混合"
+}

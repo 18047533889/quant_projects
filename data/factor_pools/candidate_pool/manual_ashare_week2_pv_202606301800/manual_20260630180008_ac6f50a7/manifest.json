@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180008_ac6f50a7",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "tanh(2 * (high - low) / (2 * close - high - low) * ts_mean(close, 5) / ts_mean(high - low, 5))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:08Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 w2_008 Tanh 门控量确认动量（intraday_pressure，qualified，来源 Week2汇报.pdf，Rank IC 4.53%）。日内反转位置 + tanh 压缩"
+}

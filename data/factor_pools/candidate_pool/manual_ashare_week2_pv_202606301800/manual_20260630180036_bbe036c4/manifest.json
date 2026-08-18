@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260630180036_bbe036c4",
+  "campaign_id": "manual_ashare_week2_pv_202606301800",
+  "formula": "ts_pct(close, 5) * (0.5 + 0.5 * ts_rank(safe_div_null(ts_mean(true_range(high, low, close), 14), close), 20)) * safe_div_null(volume, ts_mean(volume, 20))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-06-30T18:00:36Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    }
+  },
+  "description": "A股价量因子 a_008 波动门控动量×量比。Ret5 × [0.5+0.5×RankPct(SMA14(TrueRange)/C)] × V/MA(V,20)；ATR 简单均值已展开为 true_range 与 ts_mean 基础算子。"
+}

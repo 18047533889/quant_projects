@@ -1,0 +1,36 @@
+{
+  "schema_version": "disk.v1",
+  "candidate_id": "manual_20260819011657_55dd8502",
+  "campaign_id": "manual_ashare_pv_202608190115",
+  "formula": "-(log(cap( safe_div( safe_div(ts_sum(where(close > delay(close, 1), (high - low), 0), 10), ts_sum(where(close > delay(close, 1), 1, 0), 10) + 1e-8), cap(safe_div(ts_sum(where(close <= delay(close, 1), (high - low), 0), 10), ts_sum(where(close <= delay(close, 1), 1, 0), 10) + 1e-8), 1e-12, 1e12) ), 1e-12, 1e12)))",
+  "expression_type": "dsl",
+  "generator_name": "manual",
+  "generator_version": "1.0.0",
+  "mined_by": "sunhaiwei",
+  "market": "ashare",
+  "universe_id": "A_SHARE_ALL_A_EX_ST",
+  "domain_root": "price_volume",
+  "domain": "price_volume",
+  "frequency_bucket": "daily",
+  "signal_structure": "cross_sectional",
+  "asset_class": "equity",
+  "born_timestamp": "2026-08-19T01:16:57Z",
+  "metrics": {
+    "train": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "valid": {
+      "ic": null,
+      "icir": null,
+      "rank_ic": null
+    },
+    "test": {
+      "ic": null,
+      "icir": 0.43209173939702267,
+      "rank_ic": 0.03199908282246549
+    }
+  },
+  "description": "A股 RankIC>2% 精选 factor_range_asym_log_short；VWAP→VWAP RankIC=0.0320 RankICIR=0.43209173939702267；route=lqtp_dsl；lqtp_native=True。"
+}
