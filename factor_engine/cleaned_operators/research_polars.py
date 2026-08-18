@@ -101,8 +101,10 @@ class TSMomentNativePolars(SeriesOperator):
             valid = valid[np.isfinite(valid)]
             if valid.size < d:
                 return math.nan
-            mean = float(np.mean(valid))
-            return float(np.mean((valid - mean) ** k))
+            # Use a compensated direct-window mean so large offsets do not
+            # change the central moment through avoidable summation error.
+            mean = math.fsum(float(value) for value in valid) / valid.size
+            return float(math.fsum((float(value) - mean) ** k for value in valid) / valid.size)
 
         return x.with_columns([
             pl.col(c).rolling_map(

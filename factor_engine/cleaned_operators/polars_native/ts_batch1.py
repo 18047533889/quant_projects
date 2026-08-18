@@ -983,12 +983,31 @@ class TSKurtPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, feature, window, **kwargs):
+        # ``rolling_map`` includes nulls in the physical window.  The pandas
+        # authority uses finite observations for kurtosis, so count the finite
+        # pairs explicitly rather than using the raw window length.
+        def kurtosis_fn(values: pl.Series) -> float:
+            finite = np.asarray(values.to_numpy(), dtype=float)
+            finite = finite[np.isfinite(finite)]
+            count = finite.size
+            if count < 4:
+                return float("nan")
+            centered = finite - float(np.mean(finite))
+            second = float(np.sum(centered * centered))
+            if second == 0.0:
+                return -3.0
+            biased_excess = count * float(np.sum(centered ** 4)) / (second * second) - 3.0
+            return float(
+                (count - 1.0) / ((count - 2.0) * (count - 3.0))
+                * ((count + 1.0) * biased_excess + 6.0)
+            )
+
         return (
             feature.to_frame()
             .lazy()
             .with_columns([
                 pl.col(feature.name)
-                .rolling_map(lambda s: s.kurtosis() if len(s) >= 4 else None, window_size=window)
+                .rolling_map(kurtosis_fn, window_size=window, min_samples=1)
                 .alias("result")
             ])
             .select(["result"])
