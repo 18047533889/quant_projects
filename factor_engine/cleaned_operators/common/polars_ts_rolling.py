@@ -393,16 +393,15 @@ class TSRegressionInterceptNative(SeriesOperator):
             x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
 
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
-            slope = pl.when(moments["raw_xx"] <= 0).then(None).otherwise(
-                moments["raw_xy"] / moments["raw_xx"]
-            )
-            intercept = pl.when(moments["raw_xx"] <= 0).then(None).otherwise(0.0)
+            intercept = pl.when(
+                moments["raw_xx"].is_null() | (moments["raw_xx"] <= 0)
+            ).then(None).otherwise(0.0)
             if add_intercept:
                 centered_slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
                     moments["cross"] / moments["ss_x"]
                 )
                 intercept = moments["mean_y"] - centered_slope * moments["mean_x"]
-            exprs.append((intercept if add_intercept else intercept).alias(c))
+            exprs.append(intercept.alias(c))
 
         return y.with_columns(exprs)
 

@@ -212,9 +212,6 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("holder_concentration", ("top_holder_shares", "total_shares"), holder_concentration, "Top-holder concentration ratio."),
     ("unitize", ("x",), unitize, "Cross-sectional normalize to [-1, 1]."),
     ("winsorize_mean", ("x", "trim_pct"), winsorize_mean, "Cross-sectional trimmed mean."),
-    ("ts_regression_intercept", ("y", "x", "window", "min_periods", "add_intercept"), ts_regression_intercept, "Rolling regression intercept."),
-    ("ts_regression_r2", ("y", "x", "window", "min_periods", "add_intercept"), ts_regression_r2, "Rolling regression R-squared."),
-    ("ts_regression_resid", ("y", "x", "window", "min_periods", "add_intercept"), ts_regression_resid, "Rolling regression residual at window end."),
 )
 
 

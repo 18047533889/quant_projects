@@ -1,9 +1,13 @@
 """R2-P0-022: selectable Polars rolling regression parity."""
 from __future__ import annotations
 
+import math
+
 import pytest
 import polars as pl
 
+from cleaned_operators import load_all
+from cleaned_operators.registry import OperatorRegistry
 from backend.operator_errors import FutureReferenceError
 from cleaned_operators.common.polars_ts_rolling import (
     TSRegressionInterceptNative,
@@ -15,6 +19,27 @@ from cleaned_operators.common.polars_ts_rolling import (
 
 def values(frame):
     return frame["a"].to_list()
+
+
+def test_registered_regression_no_intercept_matches_origin_oracle() -> None:
+    load_all()
+    x = pl.DataFrame({"a": [1.0, 2.0]})
+    y = pl.DataFrame({"a": [3.0, 5.0]})
+    expected = {
+        "ts_regression_slope": [None, 2.6],
+        "ts_regression_intercept": [None, 0.0],
+        "ts_regression_resid": [None, -0.2],
+    }
+    for canonical, values_expected in expected.items():
+        operator = OperatorRegistry.get(canonical, "polars", mode="research")
+        actual = operator.calculate(
+            y, x, window=2, min_periods=2, add_intercept=False
+        )["a"].to_list()
+        for got, want in zip(actual, values_expected):
+            if want is None:
+                assert got is None or (isinstance(got, float) and math.isnan(got))
+            else:
+                assert got == pytest.approx(want)
 
 
 def test_regression_default_min_periods_is_three():
