@@ -273,3 +273,96 @@ def test_explicit_source_residency_creates_typed_transfer(monkeypatch):
     assert edge.target_backend == PhysicalBackend.PANDAS_NUMPY
     assert edge.estimated_bytes == 1600
     assert result.production_ready is True
+
+
+def test_region_and_transfer_estimates_use_local_node_evidence(monkeypatch):
+    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr(
+        "backend.operator_capability.capability_for",
+        lambda *a, **k: SimpleNamespace(
+            execution_kind=ExecutionKind.PANDAS_REFERENCE,
+            is_production_eligible=lambda: True,
+        ),
+    )
+    source = PlanNode(
+        "column",
+        attrs={
+            "source_backend": "polars_panel",
+            "source_representation": "polars_wide",
+            "estimated_rows": 7,
+            "estimated_bytes": 111,
+            "estimated_memory_bytes": 222,
+        },
+        node_id="source",
+    )
+    root = PlanNode(
+        "synthetic_pandas",
+        inputs=(source,),
+        attrs={
+            "estimated_rows": 13,
+            "estimated_bytes": 333,
+            "estimated_memory_bytes": 444,
+        },
+        node_id="root",
+    )
+
+    result = BatchGlobalOptimizer().optimize_batch(
+        {"root": root}, {}, {}, _ctx(100, mode="production", complete=True)
+    )
+
+    regions = {
+        node_id: region
+        for region in result.physical_plan.regions
+        for node_id in region.node_ids
+    }
+    assert regions["source"].estimated_rows == 7
+    assert regions["source"].estimated_memory_bytes == 222
+    assert regions["root"].estimated_rows == 13
+    assert regions["root"].estimated_memory_bytes == 444
+    edge = result.physical_plan.edges[0]
+    assert edge.estimated_rows == 7
+    assert edge.estimated_bytes == 111
+
+
+def test_native_fraction_is_derived_from_execution_kinds(monkeypatch):
+    monkeypatch.setattr("backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("backend.operator_capability.supports_polars", lambda *a, **k: False)
+    monkeypatch.setattr(
+        "backend.operator_capability.capability_for",
+        lambda *a, **k: SimpleNamespace(
+            execution_kind=ExecutionKind.NATIVE_EXPR,
+            is_production_eligible=lambda: True,
+        ),
+    )
+    source = PlanNode("column", node_id="source")
+    root = PlanNode("synthetic_native", inputs=(source,), node_id="root")
+
+    result = BatchGlobalOptimizer().optimize_batch(
+        {"root": root}, {}, {}, _ctx(10, mode="production", complete=True)
+    )
+
+    assert result.physical_plan.native_fraction == 0.5
+
+
+def test_disconnected_same_residency_nodes_remain_separate():
+    left = PlanNode(
+        "column",
+        attrs={"source_backend": "pandas_numpy", "source_representation": "pandas_long"},
+        node_id="left",
+    )
+    right = PlanNode(
+        "column",
+        attrs={"source_backend": "pandas_numpy", "source_representation": "pandas_long"},
+        node_id="right",
+    )
+
+    result = BatchGlobalOptimizer().optimize_batch(
+        {"left": left, "right": right}, {}, {}, _ctx(10, complete=True)
+    )
+
+    assert len(result.physical_plan.regions) == 2
+    assert {tuple(region.node_ids) for region in result.physical_plan.regions} == {
+        ("left",),
+        ("right",),
+    }
