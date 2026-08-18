@@ -1,6 +1,7 @@
 task_id: POL2-P0-002
 base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
-commit_sha: null
+implementation_commit_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
+integrated_commit_sha: fe8c7e72a990a35b90975b26a42f869ae4259014
 owned_files:
   - factor_engine/cleaned_operators/common/polars_ts_rolling.py
   - factor_engine/tests/backend/test_ts_corr_parity.py
@@ -14,6 +15,8 @@ backends_touched:
   - polars
   - pandas_reference
 status: MANUAL_REVIEW
+independent_review: APPROVE_WITH_EVIDENCE_FIXES
+production_admission: NOT_PROVEN
 reproduction:
   recorded_defect: selectable Polars ts_corr formula remains wrong in another implementation
   result: NOT_REPRODUCED

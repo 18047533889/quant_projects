@@ -1,23 +1,30 @@
 task_id: q-evidence-generation-timestamp
-base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
-commit_sha: b38393aab282987b4311f2a0180d1fbf11957da6
+source_base_sha: 708b02a3621dbadbeeb161d0b5b6c01fd6613378
+source_commit_sha: 07ec8f65b712f6c4ad48bd91e5072259d7b928ad
+integrated_commit_sha: 8a7edd6c6900e8c0fd2eeaebabe2d2011b73aa17
 owned_files:
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/backend/q_backend/q_physical_implementation_registry.py
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - factor_engine/backend/q_backend/q_physical_implementation_registry.py
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+  - factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - factor_engine/q_timestamp_artifact_validation_manifest.yaml
 modified_files:
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/backend/q_backend/q_physical_implementation_registry.py
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
-  - /home/shw/quant_projects/.claude/worktrees/agent-a4404f91bc2dea6c1/factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - factor_engine/backend/q_backend/q_physical_implementation_registry.py
+  - factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py
+  - factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - factor_engine/q_timestamp_artifact_validation_manifest.yaml
 tests_run:
   - "POLARS_MAX_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q tests/q_backend/test_q2_p0_001_005_gates.py tests/q_backend/test_q_compatibility_contract.py"
+  - "POLARS_MAX_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -c 'import backend.q_backend.q_physical_implementation_registry; import backend.q_backend.q_capability_evidence; import backend.q_backend.q_compiler'"
 tests_passed: 61
+import_smoke: PASS
+independent_review: APPROVE_WITH_EVIDENCE_FIXES
 limitations:
   - "No broad repository gates or full suite run."
-  - "Python import smoke test not run; syntax compilation completed with python3."
+  - "Actual q runtime and pandas-to-q parity were not run."
 evidence:
   reproduction: "Before fix, artifact payloads omitted generation_timestamp and focused validation tests passed."
   focused_tests: "61 passed"
   syntax_compile: "Changed production and test files compiled successfully with python3."
   git_diff_check: "PASS"
   generation_timestamp_rule: "Each artifact payload now requires parseable timezone-aware generation_timestamp."
+  review_result: "No functional defect found; metadata binding corrected after local integration."
