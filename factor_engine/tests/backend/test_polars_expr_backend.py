@@ -39,8 +39,8 @@ def source():
     ret = pd.Series([0.01, 0.02, -0.01, 0.03, 0.04, 0.01, 0.02, 0.05], index=idx)
     x = pd.Series([1.0, 2.0, 4.0, 8.0, 10.0, 20.0, 40.0, 80.0], index=idx)
     y = pd.Series([0.5, 1.0, 2.0, 4.0, 5.0, 10.0, 20.0, 40.0], index=idx)
-    grp = pd.Series([1, 1, 1, 1, 2, 2, 2, 2], index=idx, dtype=float)
-    return InMemorySeriesSource(data={"close": close, "ret": ret, "x": x, "y": y, "grp": grp})
+    group_id = pd.Series([1, 1, 1, 1, 2, 2, 2, 2], index=idx, dtype=float)
+    return InMemorySeriesSource(data={"close": close, "ret": ret, "x": x, "y": y, "group_id": group_id})
 
 
 def _run_expr(source, expr, *, use_polars_expr: bool):
@@ -98,8 +98,8 @@ def test_polars_expr_capable_subset_of_production_ops():
         ("winsorize", lambda: make_cleaned_call_factory("winsorize")(col("x"), 0.25)),
         ("coalesce", lambda: make_cleaned_call_factory("coalesce")(col("x"), col("y"))),
         ("where", lambda: make_cleaned_call_factory("where")(col("x"), col("x"), col("y"))),
-        ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("x"), col("grp"))),
-        ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("x"), col("grp"))),
+        ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("x"), col("group_id"))),
+        ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("x"), col("group_id"))),
         ("cs_quantile", lambda: make_cleaned_call_factory("cs_quantile")(col("x"), 0.5)),
         ("cum_sum", lambda: make_cleaned_call_factory("cum_sum")(col("x"))),
         ("gt", lambda: make_cleaned_call_factory("gt")(col("x"), col("y"))),
@@ -109,10 +109,10 @@ def test_polars_expr_capable_subset_of_production_ops():
         ("cum_max", lambda: make_cleaned_call_factory("cum_max")(col("x"))),
         ("is_finite", lambda: make_cleaned_call_factory("is_finite")(col("x"))),
         ("fillna", lambda: make_cleaned_call_factory("fillna")(col("x"), 0)),
-        ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("x"), col("grp"))),
+        ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("x"), col("group_id"))),
         (
             "group_decay_linear",
-            lambda: make_cleaned_call_factory("group_decay_linear")(col("x"), col("grp"), 5),
+            lambda: make_cleaned_call_factory("group_decay_linear")(col("x"), col("group_id"), 5),
         ),
         ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("x"))),
         ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(col("x"))),
