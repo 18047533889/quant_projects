@@ -300,9 +300,9 @@ class QBackend(Backend):
                 return
             visited.add(node_id)
 
-            # Canonical PlanNode ABI: op, inputs, attrs, semantic_attrs, node_id.
-            # semantic_attrs remain metadata owned by the planner; q receives
-            # only operator attributes needed by the compiler.
+            # Preserve the canonical PlanNode ABI at the backend boundary. The
+            # compiler may validate semantic metadata, but q remains a physical
+            # target and never becomes its authority.
             inputs = tuple(node.inputs)
             for child in inputs:
                 if child.node_id is None:
@@ -313,10 +313,11 @@ class QBackend(Backend):
 
             nodes.append(
                 {
-                    "id": node_id,
-                    "operator": node.op,
+                    "node_id": node_id,
+                    "op": node.op,
                     "inputs": [child.node_id for child in inputs],
-                    "params": dict(node.attrs),
+                    "attrs": dict(node.attrs),
+                    "semantic_attrs": dict(node.semantic_attrs),
                 }
             )
 

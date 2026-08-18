@@ -121,7 +121,7 @@ class TestQCompiler:
         assert compiler.compile_operator("add", ["x", "y"]) == "x + y"
         assert compiler.compile_operator("subtract", ["x", "y"]) == "x - y"
         assert compiler.compile_operator("multiply", ["x", "y"]) == "x * y"
-        assert compiler.compile_operator("divide", ["x", "y"]) == "x / y"
+        assert compiler.compile_operator("divide", ["x", "y"]) == "x % y"
 
         # Unary ops
         assert compiler.compile_operator("negate", ["x"]) == "neg x"
@@ -170,8 +170,7 @@ class TestQCompiler:
         assert result == "rank x"
 
         result = compiler.compile_operator("cs_rank", ["x"])
-        # cs_rank uses lambda form which gets applied in the context
-        assert result == "{iasc iasc x}"
+        assert result == "({(iasc iasc x)%count x})[x]"
 
     def test_compile_aggregation_operator(self):
         """测试聚合算子编译。"""
@@ -189,8 +188,8 @@ class TestQCompiler:
 
         # Valid region
         nodes = [
-            {"operator": "add", "id": "n1"},
-            {"operator": "ts_mean", "id": "n2"},
+            {"op": "add", "node_id": "n1"},
+            {"op": "ts_mean", "node_id": "n2"},
         ]
         is_valid, unsupported = compiler.validate_region(nodes, mode="research")
         assert is_valid
@@ -198,8 +197,8 @@ class TestQCompiler:
 
         # Invalid region
         nodes = [
-            {"operator": "add", "id": "n1"},
-            {"operator": "garch", "id": "n2"},
+            {"op": "add", "node_id": "n1"},
+            {"op": "garch", "node_id": "n2"},
         ]
         is_valid, unsupported = compiler.validate_region(nodes, mode="research")
         assert not is_valid
@@ -211,16 +210,18 @@ class TestQCompiler:
 
         nodes = [
             {
-                "id": "n1",
-                "operator": "add",
+                "node_id": "n1",
+                "op": "add",
                 "inputs": ["input1", "input2"],
-                "params": {},
+                "attrs": {},
+                "semantic_attrs": {},
             },
             {
-                "id": "n2",
-                "operator": "ts_mean",
+                "node_id": "n2",
+                "op": "ts_mean",
                 "inputs": ["n1"],
-                "params": {"window": 20},
+                "attrs": {"window": 20},
+                "semantic_attrs": {},
             },
         ]
 

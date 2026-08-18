@@ -6,7 +6,12 @@ import pytest
 
 import backend.q_backend as q_backend
 from backend.q_backend.q_backend import get_q_backend
-from backend.q_backend.q_compiler import QCompiler, get_q_compiler
+from backend.q_backend.q_compiler import (
+    QCompiler,
+    QLowering,
+    QLoweringKind,
+    get_q_compiler,
+)
 from backend.q_backend.q_capability import QBackendCapability, QCapabilityLevel
 from backend.q_backend.q_physical_implementation_registry import (
     QEvidenceArtifact,
@@ -42,6 +47,74 @@ def test_rank_specialized_lowering_precedes_generic_dispatch() -> None:
     assert compiler.compile_operator("rank", ["x"]) == "rank x"
     assert compiler.compile_operator("cs_rank", ["x"]) == "({(iasc iasc x)%count x})[x]"
     assert compiler.compile_operator("divide", ["x", "y"]) == "x % y"
+
+
+def test_typed_lowerings_do_not_dispatch_from_source_shape() -> None:
+    compiler = QCompiler()
+    compiler._operator_map["add"] = QLowering("{x+y}", QLoweringKind.INFIX)
+    compiler._operator_map["log1p"] = QLowering("not-a-lambda", QLoweringKind.LAMBDA)
+
+    assert compiler.compile_operator("add", ["left", "right"]) == "left {x+y} right"
+    assert compiler.compile_operator("log1p", ["x"]) == "(not-a-lambda)[x]"
+
+
+def test_every_executable_lowering_has_one_explicit_kind() -> None:
+    compiler = QCompiler()
+
+    assert set(compiler._operator_map) == set(compiler.executable_lowerings())
+    assert all(isinstance(lowering, QLowering) for lowering in compiler._operator_map.values())
+    assert all(isinstance(source, str) for source in compiler.executable_lowerings().values())
+    assert compiler.executable_lowerings()["power"] == "infix:xexp"
+    assert compiler._operator_map["power"].kind is QLoweringKind.INFIX
+    assert compiler.compile_operator("power", ["x", "y"]) == "x xexp y"
+
+
+def test_lowering_evidence_identity_binds_dispatch_kind() -> None:
+    prefix = QLowering("q_source", QLoweringKind.PREFIX)
+    infix = QLowering("q_source", QLoweringKind.INFIX)
+
+    assert prefix.evidence_source == "prefix:q_source"
+    assert infix.evidence_source == "infix:q_source"
+    assert compute_q_implementation_hash(
+        "op", "q_op", prefix.evidence_source, "domain"
+    ) != compute_q_implementation_hash(
+        "op", "q_op", infix.evidence_source, "domain"
+    )
+
+
+def test_specialized_lowerings_are_parameter_sensitive_and_reachable() -> None:
+    compiler = QCompiler()
+
+    assert compiler.compile_operator("lag", ["x"], {"periods": 1}) == "prev x"
+    assert compiler.compile_operator("lag", ["x"], {"periods": 3}) == "3 prev\\x"
+    assert compiler.compile_operator("ts_corr", ["x", "y"], {"window": 5}) == "5 cor[x;y]"
+    assert compiler.compile_operator("ts_corr", ["x", "y"], {"window": 20}) == "20 cor[x;y]"
+    assert compiler.compile_operator("ema", ["x"], {"span": 3}) == "ema[0.5;x]"
+    assert compiler.compile_operator("sma", ["x"], {"window": 7}) == "7 mavg x"
+    assert compiler.compile_operator("clip", ["x"], {"lower": -1, "upper": 1}) == "(x|-1)&1"
+    assert compiler.compile_operator("where", ["c", "x", "y"]) == "?[c;x;y]"
+    assert compiler.compile_operator("fillna", ["x"], {"fill_value": 0}) == "x^0"
+
+
+@pytest.mark.parametrize(
+    ("op_name", "inputs", "params", "message"),
+    [
+        ("lag", ["x"], {}, "periods"),
+        ("lag", ["x"], {"periods": 0}, "positive integer"),
+        ("ts_corr", ["x"], {"window": 5}, "requires 2 inputs"),
+        ("ema", ["x"], {"span": float("inf")}, "positive integer"),
+        ("clip", ["x"], {"lower": None, "upper": 1}, "finite number"),
+        ("where", ["c", "x"], {}, "requires 3 inputs"),
+    ],
+)
+def test_specialized_lowerings_fail_closed(
+    op_name: str,
+    inputs: list[str],
+    params: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        QCompiler().compile_operator(op_name, inputs, params)
 
 
 def test_research_and_production_backend_singletons_are_isolated() -> None:
@@ -82,9 +155,27 @@ def test_custom_compiler_registry_does_not_cross_contaminate() -> None:
     assert not get_q_compiler().capability.registry.has_lowering("custom_only")
 
 
-def test_unsupported_quantiles_fail_closed_before_parameter_validation() -> None:
-    compiler = get_q_compiler()
-    for op_name in ("ts_quantile", "cs_quantile"):
+def test_unproven_windowed_lambdas_and_quantiles_fail_closed() -> None:
+    compiler = QCompiler()
+    unsupported = (
+        "ts_median",
+        "ts_product",
+        "ts_var",
+        "ts_skew",
+        "ts_kurt",
+        "ts_argmax",
+        "ts_argmin",
+        "ts_days_since_high",
+        "ts_days_since_low",
+        "ts_rank",
+        "ts_zscore",
+        "ts_demean",
+        "ts_normalize",
+        "ts_quantile",
+        "cs_quantile",
+        "cs_percentile_rank",
+    )
+    for op_name in unsupported:
         with pytest.raises(ValueError, match="not supported"):
             compiler.compile_operator(op_name, ["x"], {"window": 5, "q": 0.5})
 
@@ -231,7 +322,9 @@ def _certified_compiler_with_global_disagreement(tmp_path) -> QCompiler:
     )
     registry.register(certified)
     compiler = QCompiler(QBackendCapability(registry))
-    compiler._operator_map = {"certified": lowering_source}
+    compiler._operator_map = {
+        "certified": QLowering(lowering_source, QLoweringKind.PREFIX)
+    }
     return compiler
 
 
@@ -246,7 +339,7 @@ def test_operator_certification_is_independent_of_unrelated_declaration_gaps(tmp
 
 def test_compiler_production_admission_requires_global_production_membership(tmp_path) -> None:
     compiler = _certified_compiler_with_global_disagreement(tmp_path)
-    nodes = [{"id": "n1", "operator": "certified", "inputs": ["x"]}]
+    nodes = [{"node_id": "n1", "op": "certified", "inputs": ["x"]}]
 
     assert compiler.capability.registry.is_production_certified("certified") is True
     assert compiler.capability.get_capability("certified", mode="production") is QCapabilityLevel.UNSUPPORTED
@@ -256,7 +349,7 @@ def test_compiler_production_admission_requires_global_production_membership(tmp
 
 def test_physical_region_admission_is_fail_closed_in_production() -> None:
     compiler = get_q_compiler()
-    nodes = [{"id": "n1", "operator": "add", "inputs": ["x", "y"]}]
+    nodes = [{"node_id": "n1", "op": "add", "inputs": ["x", "y"]}]
 
     research_valid, _ = compiler.validate_region(nodes, mode="research")
     production_valid, unsupported = compiler.validate_region(nodes, mode="production")

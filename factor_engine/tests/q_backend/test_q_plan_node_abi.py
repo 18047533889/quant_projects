@@ -37,16 +37,18 @@ def test_extract_nodes_uses_canonical_plan_node_abi() -> None:
 
     assert nodes == [
         {
-            "id": "leaf",
-            "operator": "column",
+            "node_id": "leaf",
+            "op": "column",
             "inputs": [],
-            "params": {"name": "close"},
+            "attrs": {"name": "close"},
+            "semantic_attrs": {"unit": "price"},
         },
         {
-            "id": "root",
-            "operator": "ts_mean",
+            "node_id": "root",
+            "op": "ts_mean",
             "inputs": ["leaf"],
-            "params": {"window": 5},
+            "attrs": {"window": 5},
+            "semantic_attrs": {"frequency": "daily"},
         },
     ]
 
@@ -63,13 +65,17 @@ def test_plan_to_q_region_passes_canonical_nodes_to_compile_preparation() -> Non
 
         def compile_region(self, region_id, nodes, *, input_tables, output_name, mode):
             calls["compiled"] = (region_id, nodes, input_tables, output_name, mode)
-            return SimpleNamespace(region_id=region_id, node_ids=tuple(n["id"] for n in nodes))
+            return SimpleNamespace(
+                region_id=region_id,
+                node_ids=tuple(n["node_id"] for n in nodes),
+            )
 
     result = _backend_with_compiler(Compiler())._plan_to_q_region(root, None)
 
     assert result.region_id == "region_root"
     assert calls["validated"] == (calls["compiled"][1], "research")
-    assert calls["compiled"][1][-1]["params"] == {"window": 5}
+    assert calls["compiled"][1][-1]["attrs"] == {"window": 5}
+    assert calls["compiled"][1][-1]["semantic_attrs"] == {}
 
 
 def test_real_compiler_rejects_whole_tree_source_node() -> None:
@@ -102,10 +108,11 @@ def test_real_compiler_accepts_explicit_region_inputs_and_canonical_params() -> 
         "mean_region",
         [
             {
-                "id": "mean",
-                "operator": "ts_mean",
+                "node_id": "mean",
+                "op": "ts_mean",
                 "inputs": ["input_table"],
-                "params": {"window": 5},
+                "attrs": {"window": 5},
+                "semantic_attrs": {"frequency": "daily"},
             }
         ],
         input_tables=["input_table"],

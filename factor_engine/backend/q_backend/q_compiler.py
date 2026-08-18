@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from enum import Enum
 from numbers import Real
 from typing import Any, Literal
 
@@ -43,6 +44,28 @@ class QRegionPlan:
     estimated_rows: int = 0
 
 
+class QLoweringKind(str, Enum):
+    """Typed q expression shape used by compiler dispatch."""
+
+    INFIX = "infix"
+    PREFIX = "prefix"
+    LAMBDA = "lambda"
+    ROLLING = "rolling"
+    AGGREGATE = "aggregate"
+    SPECIALIZED = "specialized"
+
+
+@dataclass(frozen=True)
+class QLowering:
+    source: str
+    kind: QLoweringKind
+
+    @property
+    def evidence_source(self) -> str:
+        """Bind certification to both q source and dispatch semantics."""
+        return f"{self.kind.value}:{self.source}"
+
+
 class QCompiler:
     """Canonical IR → q 代码编译器。
 
@@ -58,7 +81,7 @@ class QCompiler:
         self._operator_map = self._build_operator_map()
         if capability is None:
             registry = QPhysicalImplementationRegistry(
-                lowerings=self._operator_map,
+                lowerings=self.executable_lowerings(),
                 declared_targets=QPhysicalImplementationRegistry._DECLARED_TARGETS,
             )
             self.capability = QBackendCapability(registry)
@@ -66,14 +89,17 @@ class QCompiler:
             self.capability = capability
 
     def executable_lowerings(self) -> dict[str, str]:
-        return dict(self._operator_map)
+        return {
+            canonical: lowering.evidence_source
+            for canonical, lowering in self._operator_map.items()
+        }
 
     def declared_targets(self) -> frozenset[str]:
         return self.capability.registry.declared_targets()
 
-    def _build_operator_map(self) -> dict[str, str]:
-        """构建算子名称 → q 函数映射。"""
-        return {
+    def _build_operator_map(self) -> dict[str, QLowering]:
+        """Build the typed canonical operator to q lowering map."""
+        sources = {
             # Arithmetic
             "add": "+",
             "subtract": "-",
@@ -114,31 +140,12 @@ class QCompiler:
             "ts_min": "mmin",
             "ts_max": "mmax",
             "ts_count": "mcount",
-            "ts_median": "{(w#0Nf),med (w-1)#x}",  # rolling median
-            "ts_product": "{(*/)x}",
-            "ts_var": "{dev[x] xexp 2}",
 
             # Cumulative operations
             "ts_cumsum": "sums",
             "ts_cumprod": "prds",
             "ts_cummax": "maxs",
             "ts_cummin": "mins",
-
-            # Time series statistical moments
-            "ts_skew": "{(avg((x-avg x)xexp 3))%(dev x)xexp 3}",
-            "ts_kurt": "{(avg((x-avg x)xexp 4))%(dev x)xexp 4}",
-
-            # Time series position/extrema
-            "ts_argmax": "{x?max x}",
-            "ts_argmin": "{x?min x}",
-            "ts_days_since_high": "{((count x)-1)-x?max x}",
-            "ts_days_since_low": "{((count x)-1)-x?min x}",
-
-            # Time series rank/zscore
-            "ts_rank": "{(iasc iasc x)%count x}",
-            "ts_zscore": "{(x-avg x)%dev x}",
-            "ts_demean": "{x-avg x}",
-            "ts_normalize": "{x%sum abs x}",
 
             # Aggregations
             "mean": "avg",
@@ -182,6 +189,45 @@ class QCompiler:
             "sma": "mavg",
             "wma": "{wavg[til count x;x]}",
         }
+        by_kind = {
+            QLoweringKind.INFIX: {
+                "add", "subtract", "multiply", "divide", "power", "greater",
+                "less", "greater_equal", "less_equal", "equal", "not_equal",
+            },
+            QLoweringKind.PREFIX: {
+                "negate", "abs", "sqrt", "log", "exp", "sign", "floor",
+                "ceil", "delta", "ts_diff", "ts_cumsum", "ts_cumprod",
+                "ts_cummax", "ts_cummin", "ffill", "first", "last",
+            },
+            QLoweringKind.LAMBDA: {
+                "log1p", "expm1", "round", "pct_change", "ts_returns",
+                "var", "product", "count_nonzero", "cs_zscore", "cs_demean",
+                "cs_normalize", "cs_var",
+            },
+            QLoweringKind.ROLLING: {
+                "ts_mean", "ts_sum", "ts_std", "ts_min", "ts_max", "ts_count",
+            },
+            QLoweringKind.AGGREGATE: {
+                "mean", "sum", "std", "min", "max", "median", "cs_mean",
+                "cs_std", "cs_median",
+            },
+            QLoweringKind.SPECIALIZED: {
+                "lag", "rank", "cs_rank", "where", "fillna", "clip",
+                "ts_corr", "ts_cov", "ts_beta", "ema", "sma", "wma",
+            },
+        }
+        classified = [name for names in by_kind.values() for name in names]
+        if len(classified) != len(set(classified)) or set(classified) != set(sources):
+            raise RuntimeError("q lowering kinds must classify every operator exactly once")
+        kinds = {
+            name: kind
+            for kind, names in by_kind.items()
+            for name in names
+        }
+        return {
+            name: QLowering(source=source, kind=kinds[name])
+            for name, source in sources.items()
+        }
 
     def has_lowering(self, op_name: str) -> bool:
         """Return whether this compiler has an executable lowering."""
@@ -217,9 +263,10 @@ class QCompiler:
         if not self.can_compile_operator(op_name):
             raise ValueError(f"Operator {op_name} not supported in q backend")
 
-        q_func = self._operator_map.get(op_name)
-        if q_func is None:
+        lowering = self._operator_map.get(op_name)
+        if lowering is None:
             raise ValueError(f"No q mapping for operator {op_name}")
+        q_func = lowering.source
 
         params = params or {}
 
@@ -235,15 +282,6 @@ class QCompiler:
             if not math.isfinite(float(value)) or int(value) != value or value <= 0:
                 raise ValueError(f"{op_name} parameter '{name}' must be a positive integer")
             return int(value)
-
-        def probability(name: str) -> float:
-            value = required_param(name)
-            if isinstance(value, bool) or not isinstance(value, Real):
-                raise ValueError(f"{op_name} parameter '{name}' must be finite in [0, 1]")
-            value = float(value)
-            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
-                raise ValueError(f"{op_name} parameter '{name}' must be finite in [0, 1]")
-            return value
 
         def finite_number(name: str) -> Real:
             value = required_param(name)
@@ -314,33 +352,17 @@ class QCompiler:
                 raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
             return f"{inputs[0]}^{fill_value}"
 
-        if op_name in {"ts_quantile", "cs_quantile"}:
-            q_val = probability("q")
-            if len(inputs) != 1:
-                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            window = positive_int("window") if op_name.startswith("ts_") else None
-            return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}" if window else f"{q_val} quantile {inputs[0]}"
-
-        if op_name == "cs_percentile_rank":
-            if len(inputs) != 1:
-                raise ValueError(f"cs_percentile_rank requires 1 input, got {len(inputs)}")
-            return f"({{(iasc iasc x)%count x}})[{inputs[0]}]"
-
-        # Simple binary operators
-        if q_func in {"+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=", "<>"}:
+        if lowering.kind is QLoweringKind.INFIX:
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{inputs[0]} {q_func} {inputs[1]}"
 
-        # 一元算子 (简单函数)
-        if q_func in {"neg", "abs", "sqrt", "log", "exp", "signum", "floor", "ceiling",
-                      "sums", "prds", "maxs", "mins", "fills", "first", "last"}:
+        if lowering.kind is QLoweringKind.PREFIX:
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{q_func} {inputs[0]}"
 
-        # 一元算子 (lambda 表达式)
-        if q_func.startswith("{") and q_func.endswith("}"):
+        if lowering.kind is QLoweringKind.LAMBDA:
             if len(inputs) == 1:
                 return f"({q_func})[{inputs[0]}]"
             elif len(inputs) == 2:
@@ -350,8 +372,7 @@ class QCompiler:
             else:
                 raise ValueError(f"{op_name} with lambda requires 1-3 inputs, got {len(inputs)}")
 
-        # 滚动窗口算子
-        if op_name.startswith("ts_") and q_func in {"mavg", "msum", "mdev", "mmin", "mmax", "mcount"}:
+        if lowering.kind is QLoweringKind.ROLLING:
             window = positive_int("window")
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
@@ -363,77 +384,10 @@ class QCompiler:
                 raise ValueError(f"sma requires 1 input, got {len(inputs)}")
             return f"{window} mavg {inputs[0]}"
 
-        # 聚合算子
-        if q_func in {"avg", "sum", "dev", "min", "max", "med"}:
+        if lowering.kind is QLoweringKind.AGGREGATE:
             if len(inputs) != 1:
                 raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
             return f"{q_func} {inputs[0]}"
-
-        # Correlation/Covariance/Beta
-        if op_name in {"ts_corr", "ts_cov"}:
-            window = positive_int("window")
-            if len(inputs) != 2:
-                raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
-            return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
-
-        if op_name == "ts_beta":
-            window = positive_int("window")
-            if len(inputs) != 2:
-                raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
-            return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
-
-        # EMA (exponential moving average)
-        if op_name == "ema":
-            span = positive_int("span")
-            alpha = 2.0 / (span + 1)
-            if len(inputs) != 1:
-                raise ValueError(f"ema requires 1 input, got {len(inputs)}")
-            return f"ema[{alpha};{inputs[0]}]"
-
-        # WMA (weighted moving average)
-        if op_name == "wma":
-            window = positive_int("window")
-            if len(inputs) != 1:
-                raise ValueError(f"wma requires 1 input, got {len(inputs)}")
-            return f"{{wavg[til {window};-{window}#{inputs[0]}]}}each {window}_mavg {inputs[0]}"
-
-        # Clip
-        if op_name == "clip":
-            lower = finite_number("lower")
-            upper = finite_number("upper")
-            if len(inputs) != 1:
-                raise ValueError(f"clip requires 1 input, got {len(inputs)}")
-            return f"({inputs[0]}|{lower})&{upper}"
-
-        # Where (conditional)
-        if op_name == "where":
-            if len(inputs) != 3:
-                raise ValueError(f"where requires 3 inputs (cond, true_val, false_val), got {len(inputs)}")
-            return f"?[{inputs[0]};{inputs[1]};{inputs[2]}]"
-
-        # Fill operations
-        if op_name == "fillna":
-            fill_value = finite_number("fill_value")
-            if len(inputs) != 1:
-                raise ValueError(f"fillna requires 1 input, got {len(inputs)}")
-            return f"{inputs[0]}^{fill_value}"
-
-        # Quantile
-        if op_name in {"ts_quantile", "cs_quantile"}:
-            q_val = probability("q")
-            if len(inputs) != 1:
-                raise ValueError(f"{op_name} requires 1 input, got {len(inputs)}")
-            window = positive_int("window") if op_name.startswith("ts_") else None
-            if window:
-                return f"{{({q_val}) mquantile[-{window}#x]}} each {inputs[0]}"
-            else:
-                return f"{q_val} quantile {inputs[0]}"
-
-        # Percentile rank
-        if op_name == "cs_percentile_rank":
-            if len(inputs) != 1:
-                raise ValueError(f"cs_percentile_rank requires 1 input, got {len(inputs)}")
-            return f"({{(iasc iasc x)%count x}})[{inputs[0]}]"
 
         raise ValueError(f"Compilation not implemented for {op_name}")
 
@@ -476,27 +430,27 @@ class QCompiler:
 
         # 逐节点编译
         for node in nodes:
-            node_id = node["id"]
-            op_name = node["operator"]
+            node_id = node["node_id"]
+            op_name = node["op"]
             inputs = node.get("inputs", [])
-            params = node.get("params", {})
+            attrs = node.get("attrs", {})
 
             try:
-                q_expr = self.compile_operator(op_name, inputs, params)
+                q_expr = self.compile_operator(op_name, inputs, attrs)
                 q_statements.append(f"{node_id}: {q_expr};")
             except Exception as e:
                 logger.error(f"Failed to compile node {node_id}: {e}")
                 raise
 
         # 输出赋值
-        final_node = nodes[-1]["id"]
+        final_node = nodes[-1]["node_id"]
         q_statements.append(f"{output_name}: {final_node}")
 
         q_code = "\n".join(q_statements)
 
         # 检查是否需要排序
         requires_sort = any(
-            self.capability.requires_global_sort(n["operator"])
+            self.capability.requires_global_sort(n["op"])
             for n in nodes
         )
 
@@ -505,7 +459,7 @@ class QCompiler:
 
         return QRegionPlan(
             region_id=region_id,
-            node_ids=tuple(n["id"] for n in nodes),
+            node_ids=tuple(n["node_id"] for n in nodes),
             q_code=q_code,
             input_tables=tuple(input_tables),
             output_table=output_name,
@@ -529,7 +483,7 @@ class QCompiler:
         """
         unsupported = []
         for node in nodes:
-            op_name = node["operator"]
+            op_name = node["op"]
             admitted = (
                 self.is_production_certified(op_name)
                 if mode == "production"
