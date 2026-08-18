@@ -1,6 +1,6 @@
 task_id: R2-P0-038
 base_sha: c35e732683897bd419a381969276648c506882ce
-source_commit_sha: c2928b6c654f7ab8d14fd6e499d0afa47b5e2940
+source_commit_sha: 893fb95d8d2129194f075914b968d833f03c7862
 owned_files:
   - dataaccess/r30/universe_snapshot.py
   - dataaccess/tests/unit/test_r30_snapshots_2026_08.py
