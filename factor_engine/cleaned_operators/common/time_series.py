@@ -1182,7 +1182,11 @@ class TSCorrelation(SeriesOperator):
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=w, min_periods=mp).corr(y)
+        # Pairwise rolling semantics treat both NaN and +/-Inf as missing,
+        # matching the finite-pair contract used by the Polars implementation.
+        x_finite = x.where(np.isfinite(x))
+        y_finite = y.where(np.isfinite(y))
+        return x_finite.rolling(window=w, min_periods=mp).corr(y_finite)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
 class TSCorr(TSCorrelation):

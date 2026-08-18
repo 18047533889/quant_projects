@@ -134,6 +134,32 @@ class TestTsCorrParity:
         vals = valid.values
         assert np.all(vals >= -1.0 - 1e-12) and np.all(vals <= 1.0 + 1e-12)
 
+    @pytest.mark.parametrize("use_numba", [False, True])
+    def test_inf_handling_matches_finite_pair_contract(self, monkeypatch, use_numba):
+        idx = pd.MultiIndex.from_product(
+            [pd.date_range("2024-01-01", periods=5, freq="D"), ["A"]],
+            names=["timestamp", "instrument"],
+        )
+        x_values = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=idx)
+        y_values = pd.Series([2.0, np.inf, 6.0, 8.0, 10.0], index=idx)
+        source = InMemorySeriesSource(data={"x": x_values, "y": y_values})
+        if use_numba:
+            monkeypatch.setenv("FACTOR_ENGINE_USE_NUMBA", "1")
+        else:
+            monkeypatch.delenv("FACTOR_ENGINE_USE_NUMBA", raising=False)
+
+        pd_result = _run_ts_corr(source, window=3, backend="pandas")
+        pl_result = _run_ts_corr(source, window=3, backend="polars")
+
+        pd.testing.assert_series_equal(
+            pd_result, pl_result, check_names=False, rtol=1e-9, atol=1e-10
+        )
+        # The Inf pair is skipped: windows ending at rows 2, 3, and 4
+        # still contain two finite pairs and are perfectly correlated.
+        np.testing.assert_allclose(
+            pd_result.to_numpy(), [np.nan, np.nan, 1.0, 1.0, 1.0], equal_nan=True
+        )
+
     def test_anti_correlation(self, anti_corr_source):
         """Test perfect negative correlation."""
         pd_result = _run_ts_corr(anti_corr_source, window=5, backend="pandas")
