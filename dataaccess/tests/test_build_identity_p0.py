@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import subprocess
 
 import pytest
@@ -10,6 +11,7 @@ from data_access.core.build_metadata import (
     generate_build_info,
     load_build_info,
     validate_revision,
+    validate_version_match,
 )
 
 
@@ -79,6 +81,33 @@ def test_source_date_epoch_is_deterministic_and_validated(monkeypatch: pytest.Mo
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "invalid")
     with pytest.raises(Exception, match="SOURCE_DATE_EPOCH"):
         generate_build_info()
+
+
+def test_runtime_declared_version_mismatch_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("importlib.metadata.version", lambda _: "0.10.1")
+    with pytest.raises(Exception, match="version mismatch"):
+        load_build_info(production=False)
+
+
+def test_runtime_missing_metadata_rejected_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("importlib.metadata.version", lambda _: (_ for _ in ()).throw(
+        importlib.metadata.PackageNotFoundError("data-access")
+    ))
+    with pytest.raises(Exception, match="unavailable"):
+        load_build_info(production=True)
+
+
+    with pytest.raises(Exception, match="version mismatch"):
+        validate_version_match("0.10.1", "0.10.2")
+
+
+def test_version_match_returns_canonical_declared_value() -> None:
+    assert validate_version_match("0.10.2", "0.10.2") == "0.10.2"
+
+
+def test_missing_version_metadata_rejected() -> None:
+    with pytest.raises(Exception, match="unavailable"):
+        validate_version_match(None, "0.10.2")
 
 
 def test_installed_style_import_has_single_version_authority() -> None:

@@ -1,6 +1,6 @@
 """Canonical build-time identity for DataAccess."""
 from __future__ import annotations
-import hashlib, os, re, subprocess
+import hashlib, importlib.metadata, os, re, subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,9 +51,39 @@ def _generated_build_info() -> BuildInfo:
     except (ImportError, AttributeError): return BuildInfo(None, None, None, None, None)
     return BuildInfo(getattr(_build_info, "__version__", None), getattr(_build_info, "__build_sha__", getattr(_build_info, "__commit_id__", None)), getattr(_build_info, "__build_id__", None), getattr(_build_info, "__build_time__", None), getattr(_build_info, "__build_dirty__", None), getattr(_build_info, "__dependency_lock_hash__", None), getattr(_build_info, "__build_tag__", None), getattr(_build_info, "__build_branch__", None))
 
+def validate_version_match(observed: str | None, expected: str | None) -> str:
+    """Validate that two package-version claims identify the same release.
+
+    Version claims are part of the build identity; silently accepting a wheel
+    whose generated metadata disagrees with its declared package version can
+    reuse incompatible cache/results.  Keep this check typed and independent
+    of Git so it is safe at runtime.
+    """
+    observed_text = _required(observed, "observed version")
+    expected_text = _required(expected, "expected version")
+    if not _VERSION_RE.fullmatch(observed_text):
+        raise ValidationError(f"invalid observed package version {observed_text!r}")
+    if not _VERSION_RE.fullmatch(expected_text):
+        raise ValidationError(f"invalid expected package version {expected_text!r}")
+    if observed_text != expected_text:
+        raise ValidationError(
+            "package version mismatch: "
+            f"generated={observed_text!r}, declared={expected_text!r}"
+        )
+    return observed_text
+
+
 def load_build_info(*, production: bool | None = None) -> BuildInfo:
     if production is None: production = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
     info = _generated_build_info()
+    try:
+        declared_version = importlib.metadata.version("data-access")
+    except importlib.metadata.PackageNotFoundError:
+        declared_version = None
+    if declared_version is not None and info.version is not None:
+        validate_version_match(info.version, declared_version)
+    elif production:
+        validate_version_match(info.version, declared_version)
     if production: info.validate_production_ready()
     return info
 
@@ -110,4 +140,4 @@ class CiEvidence:
     evidence_url: str | None = None
     def is_complete(self) -> bool: return all([self.commit_sha, self.workflow_run_id, self.workflow_status == "success", self.tests_passed, self.benchmarks_passed])
     def to_dict(self) -> dict[str, Any]: return {**self.__dict__, "complete": self.is_complete()}
-__all__ = ["BuildInfo", "ScmVersionResolver", "CiEvidence", "generate_build_info", "write_build_info_module", "load_build_info", "validate_revision"]
+__all__ = ["BuildInfo", "ScmVersionResolver", "CiEvidence", "generate_build_info", "write_build_info_module", "load_build_info", "validate_revision", "validate_version_match"]
