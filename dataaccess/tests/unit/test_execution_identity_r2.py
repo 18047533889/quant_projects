@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from data_access.read.execution_identity import ExecutionIdentity
+from data_access.read.execution_identity import ExecutionIdentity, get_current_execution_identity
 from data_access.runtime import startup_subject
 
 
@@ -48,7 +48,56 @@ def test_execution_identity_normalizes_aware_build_time_to_utc() -> None:
     assert utc.digest() == same_instant.digest()
 
 
-def test_startup_build_sha_uses_frozen_loader_without_subprocess(monkeypatch) -> None:
+def test_incomplete_execution_identity_cannot_form_digest() -> None:
+    identity = ExecutionIdentity(
+        package_version="1.2.3",
+        runtime_mode="production",
+        semantic_execution_version="v1",
+    )
+
+    assert identity.available is False
+    with pytest.raises(Exception, match="build_sha"):
+        identity.digest()
+
+
+def test_current_execution_identity_fails_closed_without_build_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "data_access.core.build_metadata.load_build_info",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("metadata unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="metadata unavailable"):
+        get_current_execution_identity()
+
+
+def test_current_execution_identity_uses_frozen_build_and_runtime_authorities(monkeypatch) -> None:
+    frozen = type(
+        "FrozenBuildInfo",
+        (),
+        {
+            "build_sha": "c" * 40,
+            "version": "1.2.3",
+            "build_id": "build-c",
+            "build_time": "2026-08-15T00:00:00Z",
+        },
+    )()
+    monkeypatch.setattr(
+        "data_access.core.build_metadata.load_build_info",
+        lambda **kwargs: frozen,
+    )
+    monkeypatch.setattr(
+        "data_access.runtime.mode_identity.current_runtime_mode",
+        lambda: type("Mode", (), {"value": "production"})(),
+    )
+
+    identity = get_current_execution_identity()
+
+    assert identity.available is True
+    assert identity.build_sha == "c" * 40
+    assert identity.runtime_mode == "production"
+    assert len(identity.digest()) == 64
+
+
     full_sha = "b" * 40
     monkeypatch.setattr(
         "data_access.core.build_metadata.load_build_info",

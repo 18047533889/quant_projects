@@ -1,8 +1,8 @@
 """Canonical build-time identity for DataAccess."""
 from __future__ import annotations
-import os, re, subprocess, time, uuid
+import hashlib, os, re, subprocess
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from data_access.core.exceptions import ValidationError
@@ -73,8 +73,27 @@ class ScmVersionResolver:
     def get_current_branch(self) -> str | None: return self._run("rev-parse", "--abbrev-ref", "HEAD") or None
 
 def generate_build_info(repo_root: Path | None = None) -> BuildInfo:
-    resolver = ScmVersionResolver(repo_root or Path.cwd()); sha = resolver.get_build_sha()
-    return BuildInfo(resolver.get_version_from_git(), sha, f"{sha[:12]}-{uuid.uuid4().hex[:12]}", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), resolver.is_dirty(), tag=resolver.get_current_tag(), branch=resolver.get_current_branch())
+    resolver = ScmVersionResolver(repo_root or Path.cwd())
+    sha = resolver.get_build_sha()
+    version = resolver.get_version_from_git()
+    dirty = resolver.is_dirty()
+    tag = resolver.get_current_tag()
+    branch = resolver.get_current_branch()
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is not None:
+        try:
+            build_time = datetime.fromtimestamp(int(source_date_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValidationError("SOURCE_DATE_EPOCH must be a valid Unix timestamp") from exc
+    else:
+        build_time = resolver._run("show", "-s", "--format=%cI", "HEAD")
+        try:
+            build_time = datetime.fromisoformat(build_time.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        except ValueError as exc:
+            raise ValidationError(f"invalid Git commit timestamp {build_time!r}") from exc
+    identity = "|".join(str(value or "") for value in (version, sha, build_time, dirty, tag))
+    build_id = f"{sha[:12]}-{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:12]}"
+    return BuildInfo(version, sha, build_id, build_time, dirty, tag=tag, branch=branch)
 
 def write_build_info_module(build_info: BuildInfo, output_path: Path) -> None:
     build_info.validate_production_ready()

@@ -82,20 +82,24 @@ class TestP0041ToP0043_SnapshotConvergence:
     def test_p0_042_execution_identity_separate(self):
         """R32-P0-042: ExecutionIdentity tracks code facts separately."""
         exec_id = ExecutionIdentity(
-            build_sha="abc123",
+            build_sha="a" * 40,
             package_version="0.11.0",
+            build_id="build-a",
+            build_time=datetime(2026, 8, 15, tzinfo=timezone.utc),
             runtime_mode="production",
             semantic_execution_version="v1",
         )
 
         digest = exec_id.digest()
-        assert len(digest) == 16
-        assert exec_id.build_sha == "abc123"
+        assert len(digest) == 64
+        assert exec_id.build_sha == "a" * 40
 
         # Different build = different execution identity
         exec_id2 = ExecutionIdentity(
-            build_sha="xyz789",
+            build_sha="b" * 40,
             package_version="0.11.0",
+            build_id="build-b",
+            build_time=datetime(2026, 8, 15, tzinfo=timezone.utc),
             runtime_mode="production",
             semantic_execution_version="v1",
         )

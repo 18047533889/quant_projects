@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from data_access.core.exceptions import ValidationError
+
 
 @dataclass(frozen=True)
 class ExecutionIdentity:
@@ -32,8 +34,33 @@ class ExecutionIdentity:
     runtime_mode: str | None = None
     semantic_execution_version: str | None = None
 
+    def validate(self) -> None:
+        """Reject incomplete build facts before forming a cache identity."""
+        from data_access.core.build_metadata import BuildInfo
+
+        BuildInfo(
+            version=self.package_version,
+            build_sha=self.build_sha,
+            build_id=self.build_id,
+            build_time=self.build_time.isoformat() if self.build_time else None,
+            dirty=False,
+        ).validate_production_ready()
+        if not self.runtime_mode:
+            raise ValidationError("execution identity runtime_mode is unavailable")
+        if not self.semantic_execution_version:
+            raise ValidationError("execution identity semantic_execution_version is unavailable")
+
+    @property
+    def available(self) -> bool:
+        try:
+            self.validate()
+        except ValidationError:
+            return False
+        return True
+
     def digest(self) -> str:
-        """Canonical full-width digest of execution identity."""
+        """Canonical full-width digest of a complete execution identity."""
+        self.validate()
         build_time = self.build_time
         if build_time is not None and build_time.tzinfo is not None:
             build_time = build_time.astimezone(timezone.utc)
@@ -65,41 +92,33 @@ class ExecutionIdentity:
 
 
 def get_current_execution_identity() -> ExecutionIdentity:
-    """Get code/build facts from the frozen build authority."""
+    """Get complete code/build facts from the frozen build authority."""
+    from data_access.core.build_metadata import load_build_info
+
+    info = load_build_info(production=True)
     try:
-        from data_access.core.build_metadata import load_build_info
+        btime = datetime.fromisoformat(info.build_time.replace("Z", "+00:00"))
+    except (AttributeError, ValueError) as exc:
+        raise ValidationError(f"invalid frozen build_time {info.build_time!r}") from exc
 
-        info = load_build_info()
-        sha = info.build_sha
-        ver = info.version
-        bid = info.build_id
-        btime = (
-            datetime.fromisoformat(info.build_time.replace("Z", "+00:00"))
-            if info.build_time
-            else None
-        )
-    except Exception:
-        sha = ver = bid = btime = None
+    from data_access.runtime.mode_identity import current_runtime_mode
 
-    try:
-        from data_access.read.query_budget import get_runtime_mode
-
-        mode = get_runtime_mode()
-    except Exception:
-        mode = None
+    mode = current_runtime_mode().value
 
     # Semantic execution version tracks PIT/compiler/operator semantic changes
     # that invalidate cached results even with same data
     semantic_version = "v1"
 
-    return ExecutionIdentity(
-        build_sha=sha,
-        package_version=ver,
-        build_id=bid,
+    identity = ExecutionIdentity(
+        build_sha=info.build_sha,
+        package_version=info.version,
+        build_id=info.build_id,
         build_time=btime,
         runtime_mode=mode,
         semantic_execution_version=semantic_version,
     )
+    identity.validate()
+    return identity
 
 
 @dataclass(frozen=True)
