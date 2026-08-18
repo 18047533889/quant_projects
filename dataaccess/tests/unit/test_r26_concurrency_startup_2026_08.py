@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -251,3 +251,46 @@ def test_ready_fails_closed_when_current_startup_identity_cannot_be_built():
             response = client.get("/ready")
     assert response.status_code == 503
     assert response.json()["detail"] == "Service not ready (startup identity unavailable)"
+
+
+def test_require_startup_certificate_reuses_valid_subject_bound_cache():
+    """A valid, currently bound cache is reused without rerunning the gate."""
+    from data_access.runtime.startup_gate import (
+        build_startup_certificate,
+        require_startup_certificate,
+    )
+
+    store = _base_store()
+    certificate = build_startup_certificate(True, [], subject_digest="current")
+    store._startup_certificate = certificate
+    subject = Mock()
+    subject.to_digest.return_value = "current"
+    with patch(
+        "data_access.runtime.startup_subject.build_startup_subject_digest",
+        return_value=subject,
+    ), patch("data_access.runtime.startup_gate.run_startup_gate") as gate:
+        assert require_startup_certificate(store) is certificate
+    gate.assert_not_called()
+
+
+def test_require_startup_certificate_reruns_gate_when_subject_unavailable():
+    """An unavailable current identity must not make a cached certificate valid."""
+    from data_access.runtime.startup_gate import (
+        build_startup_certificate,
+        require_startup_certificate,
+    )
+
+    store = _base_store()
+    cached = build_startup_certificate(True, [], subject_digest="current")
+    replacement = build_startup_certificate(True, [], subject_digest="replacement")
+    store._startup_certificate = cached
+    with patch(
+        "data_access.runtime.startup_subject.build_startup_subject_digest",
+        side_effect=RuntimeError("identity unavailable"),
+    ), patch(
+        "data_access.runtime.startup_gate.run_startup_gate",
+        return_value=replacement,
+    ) as gate:
+        assert require_startup_certificate(store) is replacement
+    gate.assert_called_once_with(store, production=None, checks=None)
+    assert store._startup_certificate is replacement

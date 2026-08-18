@@ -160,8 +160,12 @@ def require_startup_certificate(
             from data_access.runtime.startup_subject import build_startup_subject_digest
             current_digest = build_startup_subject_digest(store).to_digest()
         except Exception:
+            # An unavailable identity cannot validate a cached certificate.  Do
+            # not fail open on a digest-less cache; rerun the startup gate.
             current_digest = None
-        if not startup_certificate_expired(cert, current_subject_digest=current_digest):
+        if current_digest and not startup_certificate_expired(
+            cert, current_subject_digest=current_digest
+        ):
             return cert
     cert = run_startup_gate(store, production=production, checks=checks)
     try:

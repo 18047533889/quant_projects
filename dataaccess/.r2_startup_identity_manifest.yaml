@@ -1,0 +1,21 @@
+task_id: p0-startup-certificate-identity
+base_sha: 066bf9d2d9781b56fda94502c358cb1dc0c1cd58
+owned_files:
+  - dataaccess/runtime/startup_gate.py
+  - dataaccess/tests/unit/test_r26_concurrency_startup_2026_08.py
+modified_files:
+  - dataaccess/runtime/startup_gate.py
+  - dataaccess/tests/unit/test_r26_concurrency_startup_2026_08.py
+canonicals_touched: []
+backends_touched: []
+change: cached startup certificates require successfully constructed current subject digest; unavailable identity reruns gate
+focused_tests: 3 passed, 6 deselected
+full_file_test: 1 pre-existing/environment-sensitive failure, 8 passed
+compile: python3 -m py_compile passed
+independent_review: no concrete correctness findings
+known_limitations:
+  - full DataAccess test suite and root CI not run
+  - unrelated readiness test sees existing us_is_early_close schema warning and returns 503
+production_certification: NOT_RUN
+evidence_generated:
+  - dataaccess/.r2_startup_identity_manifest.yaml
