@@ -151,7 +151,7 @@ class BatchOptimizationResult:
     per_node_choices: dict[str, NodeBackendChoice]
     shared_benefits: dict[str, SharedNodeBenefit]
     total_shared_benefit_ms: float
-    optimization_basis: str  # "dp_global" | "per_root_fallback"
+    optimization_basis: str  # "dp_global_exact" | "dp_global_approximate"
     production_ready: bool = False
     readiness_reason: str = ""
 
@@ -172,10 +172,18 @@ class PhysicalBatchGlobalOptimizer:
         transfer_cost_per_mb: float = 0.05,
         delegate_penalty_ms: float = 3.0,
         scan_cost_per_mb: float = 0.01,
+        exact_search_max_ambiguous_nodes: int = 12,
+        approximate_max_passes: int = 4,
     ) -> None:
+        if exact_search_max_ambiguous_nodes < 0:
+            raise ValueError("exact_search_max_ambiguous_nodes must be non-negative")
+        if approximate_max_passes <= 0:
+            raise ValueError("approximate_max_passes must be positive")
         self.transfer_cost_per_mb = transfer_cost_per_mb
         self.delegate_penalty_ms = delegate_penalty_ms
         self.scan_cost_per_mb = scan_cost_per_mb
+        self.exact_search_max_ambiguous_nodes = exact_search_max_ambiguous_nodes
+        self.approximate_max_passes = approximate_max_passes
 
         # Memo for DP: (node_id, output_backend) -> (cost, choice)
         self.memo: dict[tuple[str, PhysicalBackend], tuple[float, NodeBackendChoice]] = {}
@@ -304,7 +312,7 @@ class PhysicalBatchGlobalOptimizer:
         # Solve one assignment problem over the complete discovered DAG.  A
         # shared node is represented by one graph variable, so all roots observe
         # the same persisted assignment.
-        self._choices = self._optimize_graph(
+        self._choices, optimization_basis = self._optimize_graph(
             all_nodes, node_graph, estimate_rows, ctx, node_estimates
         )
         per_node_choices = dict(self._choices)
@@ -340,7 +348,7 @@ class PhysicalBatchGlobalOptimizer:
             per_node_choices=per_node_choices,
             shared_benefits=shared_benefits,
             total_shared_benefit_ms=total_benefit,
-            optimization_basis="dp_global",
+            optimization_basis=optimization_basis,
             production_ready=production_ready,
             readiness_reason=readiness_reason,
         )
@@ -468,7 +476,7 @@ class PhysicalBatchGlobalOptimizer:
         rows: int,
         ctx: Any,
         node_estimates: dict[str, tuple[int, int, int]],
-    ) -> dict[str, NodeBackendChoice]:
+    ) -> tuple[dict[str, NodeBackendChoice], str]:
         """Minimize one objective over every logical node and dependency edge."""
         candidates = {
             node_id: self._eligible_choices(node_id, node, rows, ctx)
@@ -480,51 +488,16 @@ class PhysicalBatchGlobalOptimizer:
             for node_id, choices in candidates.items()
             if len(choices) == 1
         }
-        best_cost = float("inf")
-        best: dict[str, NodeBackendChoice] | None = None
-
-        def objective(assignment: dict[str, NodeBackendChoice]) -> float:
-            cost = sum(choice.compute_cost_ms for choice in assignment.values())
-            for consumer_id, children in node_graph.items():
-                consumer = assignment[consumer_id]
-                for child_id in children:
-                    producer = assignment[child_id]
-                    if (producer.backend, producer.representation) != (
-                        consumer.backend, consumer.representation
-                    ):
-                        cost += self._estimate_transfer_cost_bytes(
-                            producer.backend,
-                            consumer.backend,
-                            node_estimates[child_id][1],
-                        )
-            return cost
-
-        def search(index: int, assignment: dict[str, NodeBackendChoice]) -> None:
-            nonlocal best, best_cost
-            compute_floor = sum(choice.compute_cost_ms for choice in assignment.values())
-            if compute_floor > best_cost:
-                return
-            if index == len(ambiguous):
-                value = objective(assignment)
-                signature = tuple(
-                    assignment[node_id].backend.value for node_id in sorted(assignment)
-                )
-                best_signature = tuple(
-                    best[node_id].backend.value for node_id in sorted(best)
-                ) if best is not None else ()
-                if value < best_cost or (value == best_cost and signature < best_signature):
-                    best_cost = value
-                    best = dict(assignment)
-                return
-            node_id = ambiguous[index]
-            for choice in sorted(candidates[node_id], key=lambda item: item.backend.value):
-                assignment[node_id] = choice
-                search(index + 1, assignment)
-            assignment.pop(node_id, None)
-
-        search(0, dict(fixed))
-        if best is None:
-            raise ValueError("batch-global assignment produced no complete solution")
+        if len(ambiguous) <= self.exact_search_max_ambiguous_nodes:
+            best = self._exact_assignment(
+                candidates, ambiguous, fixed, node_graph, node_estimates
+            )
+            basis = "dp_global_exact"
+        else:
+            best = self._approximate_assignment(
+                candidates, ambiguous, fixed, node_graph, node_estimates
+            )
+            basis = "dp_global_approximate"
 
         result: dict[str, NodeBackendChoice] = {}
         for node_id, choice in best.items():
@@ -548,7 +521,164 @@ class PhysicalBatchGlobalOptimizer:
                 execution_kind=choice.execution_kind,
                 production_certified=choice.production_certified,
             )
-        return result
+        return result, basis
+
+    def _assignment_objective(
+        self,
+        assignment: dict[str, NodeBackendChoice],
+        node_graph: dict[str, list[str]],
+        node_estimates: dict[str, tuple[int, int, int]],
+    ) -> float:
+        cost = sum(choice.compute_cost_ms for choice in assignment.values())
+        for consumer_id, children in node_graph.items():
+            consumer = assignment[consumer_id]
+            for child_id in children:
+                producer = assignment[child_id]
+                if (producer.backend, producer.representation) != (
+                    consumer.backend, consumer.representation
+                ):
+                    cost += self._estimate_transfer_cost_bytes(
+                        producer.backend,
+                        consumer.backend,
+                        node_estimates[child_id][1],
+                    )
+        return cost
+
+    def _exact_assignment(
+        self,
+        candidates: dict[str, tuple[NodeBackendChoice, ...]],
+        ambiguous: list[str],
+        fixed: dict[str, NodeBackendChoice],
+        node_graph: dict[str, list[str]],
+        node_estimates: dict[str, tuple[int, int, int]],
+    ) -> dict[str, NodeBackendChoice]:
+        best_cost = float("inf")
+        best: dict[str, NodeBackendChoice] | None = None
+
+        def search(index: int, assignment: dict[str, NodeBackendChoice]) -> None:
+            nonlocal best, best_cost
+            compute_floor = sum(choice.compute_cost_ms for choice in assignment.values())
+            if compute_floor > best_cost:
+                return
+            if index == len(ambiguous):
+                value = self._assignment_objective(
+                    assignment, node_graph, node_estimates
+                )
+                signature = self._assignment_signature(assignment)
+                best_signature = self._assignment_signature(best) if best is not None else ()
+                if value < best_cost or (value == best_cost and signature < best_signature):
+                    best_cost = value
+                    best = dict(assignment)
+                return
+            node_id = ambiguous[index]
+            for choice in self._sorted_choices(candidates[node_id]):
+                assignment[node_id] = choice
+                search(index + 1, assignment)
+            assignment.pop(node_id, None)
+
+        search(0, dict(fixed))
+        if best is None:
+            raise ValueError("batch-global assignment produced no complete solution")
+        return best
+
+    def _approximate_assignment(
+        self,
+        candidates: dict[str, tuple[NodeBackendChoice, ...]],
+        ambiguous: list[str],
+        fixed: dict[str, NodeBackendChoice],
+        node_graph: dict[str, list[str]],
+        node_estimates: dict[str, tuple[int, int, int]],
+    ) -> dict[str, NodeBackendChoice]:
+        """Deterministic bounded coordinate descent over the global objective."""
+        assignment = dict(fixed)
+        for node_id in ambiguous:
+            assignment[node_id] = min(
+                self._sorted_choices(candidates[node_id]),
+                key=lambda choice: (choice.compute_cost_ms, choice.backend.value,
+                                    choice.representation.value),
+            )
+
+        parents: dict[str, list[str]] = {node_id: [] for node_id in assignment}
+        for consumer_id, child_ids in node_graph.items():
+            for child_id in child_ids:
+                parents[child_id].append(consumer_id)
+        for node_id in parents:
+            parents[node_id].sort()
+
+        for _ in range(self.approximate_max_passes):
+            changed = False
+            for node_id in ambiguous:
+                current = assignment[node_id]
+                best_choice = current
+                best_key: tuple[float, str, str] | None = None
+                for choice in self._sorted_choices(candidates[node_id]):
+                    key = (
+                        self._local_choice_cost(
+                            node_id,
+                            choice,
+                            assignment,
+                            node_graph,
+                            parents,
+                            node_estimates,
+                        ),
+                        choice.backend.value,
+                        choice.representation.value,
+                    )
+                    if best_key is None or key < best_key:
+                        best_key = key
+                        best_choice = choice
+                assignment[node_id] = best_choice
+                changed = changed or best_choice != current
+            if not changed:
+                break
+        return assignment
+
+    def _local_choice_cost(
+        self,
+        node_id: str,
+        choice: NodeBackendChoice,
+        assignment: dict[str, NodeBackendChoice],
+        node_graph: dict[str, list[str]],
+        parents: dict[str, list[str]],
+        node_estimates: dict[str, tuple[int, int, int]],
+    ) -> float:
+        """Score only terms incident to one node for bounded coordinate descent."""
+        cost = choice.compute_cost_ms
+        for child_id in node_graph.get(node_id, ()):
+            child = assignment[child_id]
+            if (child.backend, child.representation) != (
+                choice.backend, choice.representation
+            ):
+                cost += self._estimate_transfer_cost_bytes(
+                    child.backend, choice.backend, node_estimates[child_id][1]
+                )
+        for parent_id in parents[node_id]:
+            parent = assignment[parent_id]
+            if (choice.backend, choice.representation) != (
+                parent.backend, parent.representation
+            ):
+                cost += self._estimate_transfer_cost_bytes(
+                    choice.backend, parent.backend, node_estimates[node_id][1]
+                )
+        return cost
+
+    @staticmethod
+    def _sorted_choices(
+        choices: tuple[NodeBackendChoice, ...],
+    ) -> tuple[NodeBackendChoice, ...]:
+        return tuple(sorted(
+            choices,
+            key=lambda choice: (choice.backend.value, choice.representation.value),
+        ))
+
+    @staticmethod
+    def _assignment_signature(
+        assignment: dict[str, NodeBackendChoice],
+    ) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            (assignment[node_id].backend.value, assignment[node_id].representation.value)
+            for node_id in sorted(assignment)
+        )
 
     @staticmethod
     def _derive_node_estimates(
@@ -976,6 +1106,8 @@ class BatchGlobalOptimizer(PhysicalBatchGlobalOptimizer):
         transfer_cost_per_mb: float = 0.05,
         delegate_penalty_ms: float = 3.0,
         scan_cost_per_mb: float = 0.01,
+        exact_search_max_ambiguous_nodes: int = 12,
+        approximate_max_passes: int = 4,
         min_savings_bytes: int = 10 * 1024 * 1024,
         min_savings_work: float = 50_000.0,
         min_reuse_count: int = 2,
@@ -984,6 +1116,8 @@ class BatchGlobalOptimizer(PhysicalBatchGlobalOptimizer):
             transfer_cost_per_mb=transfer_cost_per_mb,
             delegate_penalty_ms=delegate_penalty_ms,
             scan_cost_per_mb=scan_cost_per_mb,
+            exact_search_max_ambiguous_nodes=exact_search_max_ambiguous_nodes,
+            approximate_max_passes=approximate_max_passes,
         )
         self._min_savings_bytes = min_savings_bytes
         self._min_savings_work = min_savings_work

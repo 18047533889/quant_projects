@@ -377,3 +377,73 @@ def test_disconnected_same_residency_nodes_remain_separate():
         ("left",),
         ("right",),
     }
+
+
+def test_exact_search_is_used_at_explicit_threshold():
+    source = PlanNode("column", node_id="source")
+    root = PlanNode("column", inputs=(source,), node_id="root")
+
+    result = BatchGlobalOptimizer(
+        exact_search_max_ambiguous_nodes=2
+    ).optimize_batch({"root": root}, {}, {}, _ctx(10, complete=True))
+
+    assert result.optimization_basis == "dp_global_exact"
+    assert set(result.per_node_choices) == {"root", "source"}
+
+
+def test_large_ambiguous_dag_uses_bounded_deterministic_fallback(monkeypatch):
+    node = PlanNode("column", node_id="node-0")
+    for index in range(1, 18):
+        node = PlanNode("column", inputs=(node,), node_id=f"node-{index}")
+
+    optimizer = BatchGlobalOptimizer(
+        exact_search_max_ambiguous_nodes=4,
+        approximate_max_passes=2,
+    )
+    monkeypatch.setattr(
+        optimizer,
+        "_exact_assignment",
+        lambda *args, **kwargs: pytest.fail("large DAG entered exact enumeration"),
+    )
+    local_cost_calls = 0
+    original_local_cost = optimizer._local_choice_cost
+
+    def counted_local_cost(*args, **kwargs):
+        nonlocal local_cost_calls
+        local_cost_calls += 1
+        return original_local_cost(*args, **kwargs)
+
+    monkeypatch.setattr(optimizer, "_local_choice_cost", counted_local_cost)
+    first = optimizer.optimize_batch(
+        {"root": node}, {}, {}, _ctx(10, complete=True)
+    )
+    first_signature = {
+        node_id: (choice.backend, choice.representation)
+        for node_id, choice in first.per_node_choices.items()
+    }
+    first_call_count = local_cost_calls
+
+    local_cost_calls = 0
+    second = optimizer.optimize_batch(
+        {"root": node}, {}, {}, _ctx(10, complete=True)
+    )
+    second_signature = {
+        node_id: (choice.backend, choice.representation)
+        for node_id, choice in second.per_node_choices.items()
+    }
+
+    assert first.optimization_basis == "dp_global_approximate"
+    assert second.optimization_basis == "dp_global_approximate"
+    assert len(first.per_node_choices) == 18
+    assert first_signature == second_signature
+    assert len(first.physical_plan.regions) == 1
+    assert first.physical_plan.edges == ()
+    assert first_call_count <= 2 * 18 * 2
+    assert local_cost_calls == first_call_count
+
+
+def test_search_configuration_rejects_unbounded_values():
+    with pytest.raises(ValueError, match="exact_search_max_ambiguous_nodes"):
+        BatchGlobalOptimizer(exact_search_max_ambiguous_nodes=-1)
+    with pytest.raises(ValueError, match="approximate_max_passes"):
+        BatchGlobalOptimizer(approximate_max_passes=0)
