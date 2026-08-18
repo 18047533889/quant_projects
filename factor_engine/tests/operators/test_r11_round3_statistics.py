@@ -27,6 +27,7 @@ import pandas as pd
 import pytest
 
 from backend.operator_errors import FutureReferenceError, OperatorParameterError
+from cleaned_operators.common.polars_statistics import AutocorrPolars
 from cleaned_operators.common.statistics import ACF, Mad, Mode, autocorr, residual
 from cleaned_operators.registry import OperatorRegistry
 
@@ -180,6 +181,54 @@ def test_autocorr_lag_zero_is_one():
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0]})
     out = autocorr().calculate(x, lag=0)
     assert out.iloc[-1, 0] == pytest.approx(1.0)
+
+
+def test_polars_autocorr_matches_expanding_pandas_oracle():
+    import polars as pl
+
+    x = pd.DataFrame({"A": [0.0, 1.0, 4.0, 2.0, 8.0, 3.0, 5.0]})
+    pandas_out = autocorr().calculate(x, lag=1)
+    polars_out = AutocorrPolars().calculate(pl.DataFrame(x), lag=1)
+
+    np.testing.assert_allclose(
+        polars_out["A"].to_numpy(), pandas_out["A"].to_numpy(), equal_nan=True
+    )
+    assert polars_out["A"][-1] == pytest.approx(pandas_out["A"].iloc[-1])
+
+
+def test_polars_autocorr_rejects_negative_lag():
+    import polars as pl
+
+    with pytest.raises(FutureReferenceError):
+        AutocorrPolars()._calculate_series(
+            pl.DataFrame({"A": [1.0, 2.0, 3.0]}), lag=-1
+        )
+
+
+def test_polars_autocorr_zero_lag_and_unestimable_windows():
+    import polars as pl
+
+    op = AutocorrPolars()
+    zero_lag = op.calculate(pl.DataFrame({"A": [1.0, 2.0, 3.0]}), lag=0)
+    assert np.isnan(zero_lag["A"][0])
+    np.testing.assert_allclose(zero_lag["A"][1:].to_numpy(), [1.0, 1.0])
+
+    constant = op.calculate(pl.DataFrame({"A": [1.0, 1.0, 1.0]}), lag=1)
+    np.testing.assert_allclose(
+        constant["A"].to_numpy(), [np.nan, np.nan, np.nan], equal_nan=True
+    )
+
+
+def test_polars_autocorr_does_not_reconnect_nan_gap_pairs():
+    import polars as pl
+
+    values = [1.0, np.nan, 3.0, 4.0, 5.0]
+    out = AutocorrPolars().calculate(pl.DataFrame({"A": values}), lag=1)
+
+    # Only physical pairs (3, 4) and (4, 5) are valid at the final prefix.
+    # Compacting finite values would incorrectly add the cross-gap pair (1, 3).
+    assert np.isnan(out["A"][2])
+    assert out["A"][4] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

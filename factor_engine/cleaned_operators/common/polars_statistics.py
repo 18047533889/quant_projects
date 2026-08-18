@@ -394,11 +394,47 @@ class AutocorrPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, lag: int = 1, **kwargs) -> pl.DataFrame:
-        l = max(int(kwargs.get("d", lag)), 0)
-        w = max(l + 2, 5)
+        l = int(kwargs.get("d", lag))
+        if l < 0:
+            from backend.operator_errors import FutureReferenceError
+
+            raise FutureReferenceError(f"negative lag {l} references future data")
+
+        def _expanding_autocorr(values: np.ndarray) -> list[float]:
+            result = np.full(len(values), np.nan, dtype=np.float64)
+            for i in range(len(values)):
+                prefix = np.asarray(values[: i + 1], dtype=np.float64)
+                if l == 0:
+                    if np.isfinite(prefix).sum() >= 2:
+                        result[i] = 1.0
+                    continue
+
+                # Preserve physical row positions: a missing value at either
+                # endpoint invalidates that lagged pair instead of reconnecting
+                # the finite observations on either side of the gap.
+                if prefix.size <= l:
+                    continue
+                left = prefix[:-l]
+                right = prefix[l:]
+                pairs = np.isfinite(left) & np.isfinite(right)
+                if int(pairs.sum()) < 2:
+                    continue
+                left = left[pairs]
+                right = right[pairs]
+                left_centered = left - left.mean()
+                right_centered = right - right.mean()
+                denom = float(
+                    np.sqrt(np.dot(left_centered, left_centered)
+                           * np.dot(right_centered, right_centered))
+                )
+                if denom == 0.0 or not np.isfinite(denom):
+                    continue
+                result[i] = float(np.dot(left_centered, right_centered) / denom)
+            return result.tolist()
+
         cols = _numeric_cols(x)
         return x.with_columns([
-            pl.rolling_corr(pl.col(c), pl.col(c).shift(l), window_size=w, min_samples=l + 2).alias(c)
+            pl.Series(name=c, values=_expanding_autocorr(x[c].to_numpy()))
             for c in cols
         ])
 
