@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
+from data_access.core.exceptions import DataAccessError, SourceResolutionError
 from data_access.r30._shared import stable_digest_full
 from data_access.r30.calendar_snapshot import canonical
 
@@ -133,8 +134,12 @@ class UniverseSnapshot:
                 try:
                     out = resolve(universe_id, time_range, instruments)
                     resolved = out if out is not None else ()
-                except Exception:
-                    resolved = ()
+                except DataAccessError:
+                    raise
+                except Exception as exc:
+                    raise SourceResolutionError(
+                        f"failed to resolve universe {universe_id!r}"
+                    ) from exc
             else:
                 resolved = ()
         if market is None:

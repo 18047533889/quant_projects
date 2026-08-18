@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import patch
 
+from data_access.core.exceptions import AccessDeniedError, SourceResolutionError
 from data_access.read.session_calendar import (
     MarketCalendar,
     build_ashare_session,
@@ -265,6 +266,29 @@ def test_universe_snapshot_from_store_resolves():
     assert snap.snapshot_id == UniverseSnapshot.build(
         "csi300", "ashare", ["600000", "000001"], "1", "1"
     ).snapshot_id
+
+
+def test_universe_snapshot_from_store_resolution_failure_is_typed_and_fail_closed():
+    class BrokenStore:
+        def _resolve_universe_instruments(self, universe, time_range=None, instruments=None):
+            raise OSError("fixture resolver failure")
+
+    import pytest
+
+    with pytest.raises(SourceResolutionError, match="failed to resolve universe") as exc_info:
+        UniverseSnapshot.from_store(BrokenStore(), "csi300", market="ashare")
+    assert isinstance(exc_info.value.__cause__, OSError)
+
+
+def test_universe_snapshot_from_store_preserves_typed_access_denial():
+    class DeniedStore:
+        def _resolve_universe_instruments(self, universe, time_range=None, instruments=None):
+            raise AccessDeniedError("denied")
+
+    import pytest
+
+    with pytest.raises(AccessDeniedError, match="denied"):
+        UniverseSnapshot.from_store(DeniedStore(), "csi300", market="ashare")
 
 
 def test_universe_snapshot_to_dict():
