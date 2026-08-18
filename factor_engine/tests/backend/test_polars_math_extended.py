@@ -41,11 +41,20 @@ def _assert_close(got: pl.DataFrame, exp: pd.DataFrame):
     ["asin", "acos", "atan", "tan", "cbrt", "ceil", "floor", "inv", "inverse", "reverse"],
 )
 def test_unary_math_polars_matches_pandas(name: str):
-    op_p = OperatorRegistry.get(name, backend="polars")
-    op_n = OperatorRegistry.get(name, backend="pandas_numpy")
+    # Research-mode lookup exercises the implementation even for unsafe names;
+    # production admission is checked separately below.
+    op_p = OperatorRegistry.get(name, backend="polars", mode="research")
+    op_n = OperatorRegistry.get(name, backend="pandas_numpy", mode="research")
+    assert op_p is not None
+    assert op_n is not None
     x = _panel().clip(lower=0.11)
     pl_x = pl.from_pandas(x.reset_index(names=["date"]))
     _assert_close(op_p.calculate(pl_x), op_n.calculate(x))
+
+
+def test_tan_remains_fail_closed_in_production():
+    assert OperatorRegistry.get("tan", backend="polars") is None
+    assert OperatorRegistry.get("tan", backend="pandas_numpy") is None
 
 
 def test_round_polars_matches_pandas():
