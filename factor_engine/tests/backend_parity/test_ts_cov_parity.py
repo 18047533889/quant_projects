@@ -33,12 +33,12 @@ def _pandas_ts_cov(x: pd.DataFrame, y: pd.DataFrame, window: int,
 def _polars_ts_cov(x: pd.DataFrame, y: pd.DataFrame, window: int,
                    ddof: int = 1, min_periods: int | None = None) -> pd.DataFrame:
     """Call Polars backend ts_cov and convert back to pandas."""
-    from cleaned_operators.common.time_series import TSCovPolars
+    from cleaned_operators.common.polars_ts_rolling import TSCovNative
 
     x_pl = pl.from_pandas(x.reset_index(drop=True))
     y_pl = pl.from_pandas(y.reset_index(drop=True))
 
-    op = TSCovPolars()
+    op = TSCovNative()
     result_pl = op._calculate_series(x_pl, y_pl, window=window, ddof=ddof, min_periods=min_periods)
 
     result_pd = result_pl.to_pandas()
