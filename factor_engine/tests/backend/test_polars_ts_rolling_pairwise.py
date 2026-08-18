@@ -133,6 +133,20 @@ def test_large_offset_values_keep_centered_moments_stable():
     _assert_series(_values(TSRegressionR2Native()._calculate_series(y, x, window=4, min_periods=2)), expected["r2"])
 
 
+def test_large_offset_covariance_matches_centered_numpy_reference() -> None:
+    """Pairwise covariance/regression preserve low-order differences at 1e12 offsets."""
+
+    x_values = [1e12 + value for value in (1.0, 2.0, 4.0, 8.0)]
+    y_values = [3e12 + value for value in (2.0, 4.0, 8.0, 16.0)]
+    x = pl.DataFrame({"a": x_values})
+    y = pl.DataFrame({"a": y_values})
+    expected_cov = [None, 1.0, 14.0 / 3.0, 115.0 / 6.0]
+    expected_slope = [None, 2.0, 2.0, 2.0]
+
+    _assert_series(_values(TSCovNative()._calculate_series(x, y, window=4, min_periods=2)), expected_cov, abs_tol=1e-8, rel_tol=1e-10)
+    _assert_series(_values(TSRegressionSlopeNative()._calculate_series(y, x, window=4, min_periods=2)), expected_slope, abs_tol=1e-8, rel_tol=1e-8)
+
+
 def test_large_offset_anchor_rollout_keeps_final_correlation():
     x_values = [0.0, 10_000_000_001.0, 10_000_000_002.0, 10_000_000_004.0, 10_000_000_008.0]
     y_values = [0.0, 10_000_000_003.0, 10_000_000_007.0, 10_000_000_006.0, 10_000_000_011.0]

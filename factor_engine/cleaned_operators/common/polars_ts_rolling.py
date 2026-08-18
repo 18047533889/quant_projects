@@ -94,6 +94,20 @@ def _pairwise_rolling_moments(
         [left * right for left, right in zip(x_centered, y_centered)]
     )
     ready = count >= min_periods
+    # Re-center a second time around the window mean.  Expanding
+    # ``sum((x-anchor) * (y-anchor)) - sum_x * sum_y / count`` loses low-order
+    # covariance when observations have a large common offset.  The direct
+    # residual products retain those low-order differences while keeping the
+    # anchor local to each active window.
+    mean_x = x_anchor + sum_x / count
+    mean_y = y_anchor + sum_y / count
+    centered_x = [value - mean_x for value in x_window]
+    centered_y = [value - mean_y for value in y_window]
+    stable_sum_xx = pl.sum_horizontal([value * value for value in centered_x])
+    stable_sum_yy = pl.sum_horizontal([value * value for value in centered_y])
+    stable_sum_xy = pl.sum_horizontal(
+        [left * right for left, right in zip(centered_x, centered_y)]
+    )
 
     # Through-origin fits need uncentered sums, but compute them from the
     # same per-window anchor to avoid squaring large absolute offsets.
@@ -108,11 +122,11 @@ def _pairwise_rolling_moments(
 
     return {
         "count": count,
-        "mean_x": pl.when(ready).then(x_anchor + sum_x / count).otherwise(None),
-        "mean_y": pl.when(ready).then(y_anchor + sum_y / count).otherwise(None),
-        "cross": pl.when(ready).then(sum_xy - sum_x * sum_y / count).otherwise(None),
-        "ss_x": pl.when(ready).then(sum_xx - sum_x * sum_x / count).otherwise(None),
-        "ss_y": pl.when(ready).then(sum_yy - sum_y * sum_y / count).otherwise(None),
+        "mean_x": pl.when(ready).then(mean_x).otherwise(None),
+        "mean_y": pl.when(ready).then(mean_y).otherwise(None),
+        "cross": pl.when(ready).then(stable_sum_xy).otherwise(None),
+        "ss_x": pl.when(ready).then(stable_sum_xx).otherwise(None),
+        "ss_y": pl.when(ready).then(stable_sum_yy).otherwise(None),
         "raw_xx": pl.when(ready).then(raw_xx).otherwise(None),
         "raw_xy": pl.when(ready).then(raw_xy).otherwise(None),
         "raw_yy": pl.when(ready).then(raw_yy).otherwise(None),
