@@ -37,6 +37,25 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in _SKIP]
 
 
+def _require_pairwise_columns(
+    left: pl.DataFrame, right: pl.DataFrame | None, *, operator: str
+) -> list[str]:
+    """Fail closed when a wide pairwise operand lacks counterpart columns."""
+    if right is None:
+        raise ValueError(f"{operator} requires a counterpart panel")
+    left_cols = _numeric_cols(left)
+    right_cols = set(_numeric_cols(right))
+    missing = [column for column in left_cols if column not in right_cols]
+    if missing:
+        sample = missing[:5]
+        raise ValueError(
+            f"{operator}: counterpart panel missing {len(missing)} column(s); "
+            f"left_count={len(left_cols)}, right_count={len(right_cols)}, "
+            f"missing_sample={sample!r}"
+        )
+    return left_cols
+
+
 def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     if "date" in source.columns and "date" not in result.columns:
         result = result.with_columns(source["date"])
@@ -135,12 +154,12 @@ class TSCorrNative(SeriesOperator):
         min_p = 2 if min_periods is None else strict_integer(min_periods, "min_periods", minimum=1)
         if min_p > w:
             raise ValueError("min_periods must be <= window")
-        cols = _numeric_cols(x)
+        cols = _require_pairwise_columns(x, y, operator="ts_corr")
 
         exprs = []
         for c in cols:
             x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
+            y_col = y[c]
 
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_p)
             corr = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(
@@ -187,15 +206,12 @@ class TSCovNative(SeriesOperator):
         if min_p > w:
             raise ValueError("min_periods must be <= window")
 
-        cols = _numeric_cols(x)
-
-        if y is None:
-            raise ValueError("ts_cov requires y")
+        cols = _require_pairwise_columns(x, y, operator="ts_cov")
 
         exprs = []
         for c in cols:
             x_col = pl.col(c)
-            y_col = y[c] if c in y.columns else pl.lit(None, dtype=pl.Float64)
+            y_col = y[c]
 
             moments = _pairwise_rolling_moments(
                 x_col, y_col, window=w, min_periods=min_p
@@ -294,10 +310,8 @@ class TSRegressionSlopeNative(SeriesOperator):
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
                          window: int = 20, *legacy_args, lag=None, retval=None, min_periods: int | None = None, add_intercept=True, **kwargs) -> pl.DataFrame:
         w, mp = _validate_regression_params(window, min_periods)
-        cols = _numeric_cols(y)
+        cols = _require_pairwise_columns(y, x, operator="ts_regression_slope")
 
-        if x is None:
-            raise ValueError("ts_regression_slope requires x")
         if legacy_args:
             if len(legacy_args) > 4:
                 raise TypeError(
@@ -330,7 +344,7 @@ class TSRegressionSlopeNative(SeriesOperator):
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
+            x_col = x[c]
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
             if add_intercept:
                 slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
@@ -382,15 +396,13 @@ class TSRegressionInterceptNative(SeriesOperator):
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
                          window: int = 20, min_periods: int | None = None, add_intercept: bool = True, **kwargs) -> pl.DataFrame:
         w, mp = _validate_regression_params(window, min_periods)
-        cols = _numeric_cols(y)
+        cols = _require_pairwise_columns(y, x, operator="ts_regression_intercept")
 
-        if x is None:
-            raise ValueError("ts_regression_intercept requires x")
 
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
+            x_col = x[c]
 
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
             intercept = pl.when(
@@ -429,15 +441,13 @@ class TSRegressionResidNative(SeriesOperator):
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
                          window: int = 20, min_periods: int | None = None, add_intercept: bool = True, **kwargs) -> pl.DataFrame:
         w, mp = _validate_regression_params(window, min_periods)
-        cols = _numeric_cols(y)
+        cols = _require_pairwise_columns(y, x, operator="ts_regression_resid")
 
-        if x is None:
-            raise ValueError("ts_regression_resid requires x")
 
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
+            x_col = x[c]
 
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
             if add_intercept:
@@ -481,15 +491,13 @@ class TSRegressionR2Native(SeriesOperator):
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
                          window: int = 20, min_periods: int | None = None, add_intercept: bool = True, **kwargs) -> pl.DataFrame:
         w, mp = _validate_regression_params(window, min_periods)
-        cols = _numeric_cols(y)
+        cols = _require_pairwise_columns(y, x, operator="ts_regression_r2")
 
-        if x is None:
-            raise ValueError("ts_regression_r2 requires x")
 
         exprs = []
         for c in cols:
             y_col = pl.col(c)
-            x_col = x[c] if c in x.columns else pl.lit(None, dtype=pl.Float64)
+            x_col = x[c]
 
             moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
             if add_intercept:

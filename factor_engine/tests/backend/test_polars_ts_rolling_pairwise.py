@@ -144,12 +144,26 @@ def test_large_offset_anchor_rollout_keeps_final_correlation():
     _assert_series(actual, expected["corr"])
 
 
-def test_missing_matching_column_returns_null_instead_of_dtype_error():
+def test_missing_matching_column_fails_closed_for_pairwise_operators():
     left = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
     missing = pl.DataFrame({"b": [2.0, 3.0, 4.0]})
-    assert _values(TSCorrNative()._calculate_series(left, missing, window=3)) == [None] * 3
-    assert _values(TSCovNative()._calculate_series(left, missing, window=3)) == [None] * 3
-    assert _values(TSRegressionSlopeNative()._calculate_series(left, missing, window=3)) == [None] * 3
+    for operator, args in (
+        (TSCorrNative(), (left, missing)),
+        (TSCovNative(), (left, missing)),
+        (TSRegressionSlopeNative(), (left, missing)),
+        (TSRegressionInterceptNative(), (left, missing)),
+        (TSRegressionResidNative(), (left, missing)),
+        (TSRegressionR2Native(), (left, missing)),
+    ):
+        with pytest.raises(ValueError, match="missing.*column"):
+            operator._calculate_series(*args, window=3)
+
+
+def test_pairwise_matching_columns_retain_aligned_arithmetic():
+    left = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
+    right = pl.DataFrame({"a": [2.0, 4.0, 8.0]})
+    result = TSCorrNative()._calculate_series(left, right, window=3, min_periods=2)
+    assert result["a"].to_list() == [None, 1.0, pytest.approx(0.9819805060619659)]
 
 
 def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():

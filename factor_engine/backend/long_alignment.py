@@ -35,10 +35,45 @@ def assert_unique_keys(lf: "pl.LazyFrame", *, context: str = "") -> None:
         raise AlignmentError(msg)
 
 
+def _key_set(lf: "pl.LazyFrame"):
+    """Materialize only the binary alignment keys for an exact-set check."""
+    return lf.select([_TS, _INST]).collect()
+
+
+def assert_exact_key_set(
+    left: "pl.LazyFrame", right: "pl.LazyFrame", *, context: str = ""
+) -> None:
+    """Require identical, unique ``(ts, inst)`` key sets in both operands.
+
+    A left join is not sufficient for binary long-panel arithmetic: it can
+    silently turn an absent right observation into NULL.  Keep this check
+    explicit and small (only keys are collected), while reporting directional
+    counts and representative keys to make bad inputs actionable.
+    """
+    assert_unique_keys(left, context=f"{context} left" if context else "left")
+    assert_unique_keys(right, context=f"{context} right" if context else "right")
+    left_keys = _key_set(left)
+    right_keys = _key_set(right)
+    left_set = set(zip(left_keys[_TS].to_list(), left_keys[_INST].to_list()))
+    right_set = set(zip(right_keys[_TS].to_list(), right_keys[_INST].to_list()))
+    missing_right = left_set - right_set
+    missing_left = right_set - left_set
+    if missing_right or missing_left:
+        def sample(keys):
+            return sorted((repr(ts), repr(inst)) for ts, inst in keys)[:5]
+
+        prefix = f"{context}: " if context else ""
+        raise AlignmentError(
+            f"{prefix}binary key sets are not exactly aligned; "
+            f"left_count={len(left_set)}, right_count={len(right_set)}, "
+            f"missing_right={len(missing_right)} sample={sample(missing_right)}, "
+            f"missing_left={len(missing_left)} sample={sample(missing_left)}"
+        )
+
+
 def anchor_left_join_binary(left: "pl.LazyFrame", right: "pl.LazyFrame", *, right_col: str = "_y") -> "pl.LazyFrame":
-    """以左操作数为 anchor 做 LEFT JOIN；右缺失 → NULL。"""
-    assert_unique_keys(left, context="binary join left")
-    assert_unique_keys(right, context="binary join right")
+    """Join binary long inputs only after exact key-set validation."""
+    assert_exact_key_set(left, right, context="binary join")
     return left.join(
         right.rename({_VAL: right_col}),
         on=[_TS, _INST],
@@ -51,8 +86,14 @@ def anchor_left_join_triple(
     mid: "pl.LazyFrame",
     right: "pl.LazyFrame",
 ) -> "pl.LazyFrame":
-    """三元算子：左 anchor 串联 LEFT JOIN。"""
-    return anchor_left_join_binary(left, mid, right_col="_ym").join(
+    """Join three long inputs only after exact key-set validation."""
+    assert_exact_key_set(left, mid, context="triple join left/mid")
+    assert_exact_key_set(left, right, context="triple join left/right")
+    return left.join(
+        mid.rename({_VAL: "_ym"}),
+        on=[_TS, _INST],
+        how="left",
+    ).join(
         right.rename({_VAL: "_y"}),
         on=[_TS, _INST],
         how="left",
