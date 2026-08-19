@@ -1,6 +1,7 @@
 """read/manifest.py：数据集 manifest 构建/加载/裁剪单测。"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pyarrow as pa
@@ -54,6 +55,20 @@ def test_build_load_prune(tmp_path):
     assert manifest.time_column == "date"
     pruned = manifest.prune(time_range=("2024-01-03", "2024-01-03"))
     assert len(pruned) == 1 and "2024-01-03" in pruned[0]
+    assert len(manifest.manifest_generation_id or "") == 32
+    assert len(manifest.dataset_version) == 64
+    assert len(manifest.partition_version) == 64
+    assert all(len(value) == 64 for value in manifest.schema_hashes)
+
+
+def test_load_rejects_malformed_generation_identity(tmp_path):
+    store = _make_store(tmp_path)
+    store.build_dataset_manifest("daily_ds")
+    meta_path = tmp_path / "_manifest.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["manifest_generation_id"] = "not-a-uuid"
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    assert DatasetManifest.load(tmp_path) is None
 
 
 def _make_int_time_store(tmp_path):

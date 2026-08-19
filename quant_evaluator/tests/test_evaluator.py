@@ -159,6 +159,20 @@ class TestEvaluator:
         assert result.has_metric("derived_metric")
         assert result.get_metric("derived_metric") == 2.0
 
+    def test_registry_compute_fn_fallback_filters_kwargs_and_forwards_dependencies(self):
+        evaluator = Evaluator(enable_cache=False)
+
+        batch = self.create_test_batch(T=25, N=10, F=1)
+        labels = self.create_test_labels(T=25, N=10)
+        result = evaluator.evaluate(
+            batch,
+            labels,
+            [{"metric_id": "coverage", "metric_kind": "custom"}],
+            use_chunking=False,
+        )
+
+        assert result.get_metric("coverage") == (1.0, 250, 250)
+
     def test_evaluate_with_caching(self):
         evaluator = Evaluator(enable_cache=True)
 
@@ -473,4 +487,44 @@ class TestEvaluator:
                 [{"mean_metric": 1.0}, {"mean_metric": 9.0}],
                 ["mean_metric"],
                 graph,
+            )
+
+    def test_registry_metric_requires_declared_input(self):
+        evaluator = Evaluator(enable_cache=False)
+        batch = self.create_test_batch(T=25, N=10)
+        labels = self.create_test_labels(T=25, N=10)
+
+        with pytest.raises(InvalidContractError, match="missing required input.*ic_series"):
+            evaluator.evaluate(
+                batch,
+                labels,
+                [{"metric_id": "mean_ic", "metric_kind": "custom"}],
+                use_chunking=False,
+            )
+
+    def test_registry_metric_rejects_insufficient_periods(self, monkeypatch):
+        from quant_evaluator.registry.metrics import MetricSpec, MetricStatus, MetricTier
+        import quant_evaluator.runtime.evaluator as evaluator_module
+
+        spec = MetricSpec(
+            name="period_metric",
+            display_name="Period Metric",
+            description="test metric",
+            status=MetricStatus.STABLE,
+            tier=MetricTier.CORE,
+            compute_fn=lambda factor_batch, label_bundle: 1.0,
+            requires=["factor_batch", "label_bundle"],
+            min_periods=20,
+        )
+        monkeypatch.setattr(evaluator_module, "get_metric", lambda name: spec)
+        evaluator = Evaluator(enable_cache=False)
+        batch = self.create_test_batch(T=19, N=10)
+        labels = self.create_test_labels(T=19, N=10)
+
+        with pytest.raises(InvalidContractError, match="requires at least 20 periods"):
+            evaluator.evaluate(
+                batch,
+                labels,
+                [{"metric_id": "period_metric", "metric_kind": "custom"}],
+                use_chunking=False,
             )

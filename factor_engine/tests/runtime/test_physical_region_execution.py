@@ -82,12 +82,15 @@ def _plan(
     *regions: BackendRegion,
     edges: tuple[TransferEdge, ...] = (),
     roots: tuple[str, ...] | None = None,
+    topological_order: tuple[str, ...] | None = None,
 ) -> PhysicalRegionPlan:
     return PhysicalRegionPlan(
         plan_id="physical",
         regions=regions,
         edges=edges,
-        topological_order=tuple(region.region_id for region in regions),
+        topological_order=topological_order or tuple(
+            region.region_id for region in regions
+        ),
         root_region_ids=roots or (regions[-1].region_id,),
         total_compute_ms=1.0,
         total_transfer_ms=0.0,
@@ -141,7 +144,7 @@ def test_ready_single_region_executes_original_root_without_hybrid_routing() -> 
                     _region(region_id="r2", node_ids=("factor",)),
                 )
             ),
-            "exactly one BackendRegion",
+            "exactly one materialized output",
         ),
         (
             _optimization(_plan(_region(PhysicalBackend.CLICKHOUSE_SQL))),
@@ -166,7 +169,7 @@ def test_physical_execution_rejects_unexecutable_plans(
         )
 
 
-def test_physical_execution_rejects_transfer_edges() -> None:
+def test_physical_execution_materializes_valid_transfer_in_topological_order() -> None:
     first = _region(region_id="r1", node_ids=("child",))
     region = _region(region_id="r2", node_ids=("factor",))
     edge = TransferEdge(
@@ -182,19 +185,55 @@ def test_physical_execution_rejects_transfer_edges() -> None:
         estimated_transfer_ms=1.0,
     )
     optimization = _optimization(
-        _plan(first, region, edges=(edge,), roots=("r2",))
+        _plan(
+            region,
+            first,
+            edges=(edge,),
+            roots=("r2",),
+            topological_order=("r1", "r2"),
+        )
+    )
+    root = PlanNode(
+        op="add",
+        inputs=(PlanNode(op="literal", attrs={"value": 2}, node_id="child"),),
+        node_id="debug-root",
+    )
+    backend = HybridBackend()
+
+    result = _execute_ready_single_region_plan(
+        optimization,
+        root,
+        backend,
+        SimpleNamespace(runtime_stats={}),
+        logical_root_id="factor",
     )
 
-    with pytest.raises(PhysicalPlanRequiredError, match="rejects TransferEdge"):
-        _execute_ready_single_region_plan(
-            optimization,
-            PlanNode(op="literal", node_id="factor"),
-            HybridBackend(),
-            object(),
-            logical_root_id="factor",
-        )
+    assert result == "pandas-result"
+    assert backend.route_calls == 0
+    assert [call[0].node_id for call in backend._pandas.calls] == [
+        "child",
+        "debug-root",
+    ]
+    assert backend._pandas.calls[1][0].inputs[0].attrs["value"] == "pandas-result"
 
 
+def test_physical_execution_rejects_malformed_transfer_residency() -> None:
+    first = _region(region_id="r1", node_ids=("child",))
+    region = _region(region_id="r2", node_ids=("factor",))
+    edge = TransferEdge(
+        edge_id="e1",
+        producer_region="r1",
+        consumer_region="r2",
+        source_backend=PhysicalBackend.POLARS_PANEL,
+        target_backend=PhysicalBackend.PANDAS_NUMPY,
+        source_representation=Representation.PANDAS_LONG,
+        target_representation=Representation.PANDAS_LONG,
+        estimated_rows=1,
+        estimated_bytes=8,
+        estimated_transfer_ms=1.0,
+    )
+    with pytest.raises(ValueError, match="source residency"):
+        _plan(first, region, edges=(edge,), roots=("r2",))
 def test_concrete_backend_must_match_fixed_physical_backend() -> None:
     PolarsBackend = type("PolarsBackend", (), {"execute": lambda self, plan, ctx: None})
 
@@ -214,7 +253,7 @@ def test_batch_admission_accepts_two_roots_in_one_region() -> None:
     assert _admit_ready_single_region_batch(optimization, ("a", "b")) is optimization
 
 
-def test_batch_admission_rejects_two_regions() -> None:
+def test_batch_admission_accepts_two_regions_with_valid_topology() -> None:
     optimization = _optimization(
         _plan(
             _region(region_id="r1", node_ids=("a",)),
@@ -222,8 +261,7 @@ def test_batch_admission_rejects_two_regions() -> None:
         )
     )
 
-    with pytest.raises(PhysicalPlanRequiredError, match="exactly one BackendRegion"):
-        _admit_ready_single_region_batch(optimization, ("a", "b"))
+    assert _admit_ready_single_region_batch(optimization, ("a", "b")) is optimization
 
 
 def test_execute_root_with_path_uses_real_snapshot_and_records_provenance(

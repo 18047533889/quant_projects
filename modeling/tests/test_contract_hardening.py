@@ -3,8 +3,9 @@ from datetime import datetime
 import numpy as np
 import pytest
 
+from modeling_adapters import TransformMode
 from modeling_adapters.adapter import FactorPreprocessAdapter
-from modeling_adapters.contracts import FitWindow, OutOfFoldSpec, PreprocessContract, SplitSpec, TransformMode
+from modeling_adapters.contracts import FitWindow, OutOfFoldSpec, PreprocessContract, SplitSpec
 from modeling_adapters.errors import AdapterError, ContractViolation
 
 

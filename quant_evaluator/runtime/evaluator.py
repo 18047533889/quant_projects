@@ -7,6 +7,7 @@ Orchestrates metric computation with planning, caching, and budget tracking.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Callable
 import hashlib
+import inspect
 import json
 import types
 from types import MappingProxyType
@@ -38,6 +39,7 @@ from quant_evaluator.runtime.budgets import (
     BudgetTracker,
     ResourceUsage,
 )
+from quant_evaluator.registry.metrics import get_metric
 
 
 @dataclass
@@ -170,6 +172,11 @@ class Evaluator:
         # Build dependency graph
         dep_graph = resolve_metric_dependencies(metric_specs)
 
+        # Registry metadata is enforced for catalog metrics. Locally registered
+        # callables retain their existing contract and signature behavior.
+        for metric_id in dep_graph.nodes:
+            self._validate_metric_requirements(metric_id, factor_batch, label_bundle)
+
         # Chunking is opt-in: unsafe metrics default to full-batch execution.
         batch_plan = None
         if use_chunking and self._chunking_is_safe(dep_graph):
@@ -250,6 +257,10 @@ class Evaluator:
                 continue
 
             self._cache_misses += 1
+
+            self._validate_metric_requirements(
+                metric_id, factor_batch, label_bundle, result.metrics
+            )
 
             # Compute metric
             metric_value = self._compute_metric(
@@ -386,10 +397,7 @@ class Evaluator:
         Returns:
             Computed metric value
         """
-        if metric_id not in self._metric_functions:
-            raise InvalidContractError(f"Metric function not registered: {metric_id}")
-
-        metric_fn = self._metric_functions[metric_id]
+        metric_fn = self._resolve_metric_function(metric_id)
 
         # Prepare arguments
         args = {
@@ -398,14 +406,98 @@ class Evaluator:
             "computed_metrics": computed_metrics,
             "metadata": node.metadata,
         }
+        args.update(
+            (dependency, computed_metrics[dependency])
+            for dependency in node.dependencies
+            if dependency in computed_metrics and dependency not in args
+        )
+
+        try:
+            signature = inspect.signature(metric_fn)
+        except (TypeError, ValueError):
+            call_args = args
+        else:
+            accepts_kwargs = any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
+            )
+            if accepts_kwargs:
+                call_args = args
+            else:
+                call_args = {
+                    name: value
+                    for name, value in args.items()
+                    if name in signature.parameters
+                    and signature.parameters[name].kind
+                    in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+                }
+                unresolved = [
+                    name
+                    for name, parameter in signature.parameters.items()
+                    if parameter.kind
+                    in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+                    and parameter.default is inspect.Parameter.empty
+                    and name not in call_args
+                ]
+                if unresolved:
+                    raise InvalidContractError(
+                        f"Metric {metric_id} has unresolved required parameters: "
+                        f"{', '.join(unresolved)}"
+                    )
 
         # Call metric function
         try:
-            return metric_fn(**args)
+            return metric_fn(**call_args)
         except QuantEvaluatorError:
             raise
         except Exception as e:
             raise RuntimeError(f"Error computing metric {metric_id}: {e}") from e
+
+    def _validate_metric_requirements(
+        self,
+        metric_id: str,
+        factor_batch: FactorBatch,
+        label_bundle: LabelBundle,
+        computed_metrics: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Validate requirements declared by registry-owned metrics."""
+        if metric_id in self._metric_functions:
+            return
+        try:
+            spec = get_metric(metric_id)
+        except KeyError:
+            return
+
+        available = {
+            "factor_batch": factor_batch,
+            "label_bundle": label_bundle,
+            "computed_metrics": computed_metrics,
+            "metadata": {},
+        }
+        missing = [name for name in (spec.requires or []) if name not in available or available[name] is None]
+        if missing:
+            raise InvalidContractError(
+                f"Metric {metric_id} missing required input(s): {', '.join(missing)}"
+            )
+        if spec.min_periods is not None and factor_batch.num_times < spec.min_periods:
+            raise InvalidContractError(
+                f"Metric {metric_id} requires at least {spec.min_periods} periods; "
+                f"got {factor_batch.num_times}"
+            )
+
+    def _resolve_metric_function(self, metric_id: str) -> Callable:
+        metric_fn = self._metric_functions.get(metric_id)
+        if metric_fn is not None:
+            return metric_fn
+        try:
+            metric_fn = get_metric(metric_id).compute_fn
+        except KeyError as exc:
+            raise InvalidContractError(
+                f"Metric function not registered: {metric_id}"
+            ) from exc
+        if metric_fn is None:
+            raise InvalidContractError(f"Metric function not registered: {metric_id}")
+        return metric_fn
 
     def _extract_chunk_batch(
         self,
@@ -573,7 +665,7 @@ class Evaluator:
 
     def _cache_identity(self, metric_id, node, factor_batch, label_bundle, chunk=None):
         try:
-            metric_fn = self._metric_functions[metric_id]
+            metric_fn = self._resolve_metric_function(metric_id)
             if not isinstance(metric_fn, types.FunctionType):
                 # Callable instances can hide mutable state behind descriptors or
                 # custom attribute access; their semantic identity is unprovable.
@@ -750,10 +842,10 @@ def evaluate(
             for factor_id, count, total in zip(factor_batch.factor_ids, counts, totals)
         }
 
-    def ic_metric(method):
+    def ic_metric(method, min_periods=1):
         def compute(factor_batch, label_bundle, **kwargs):
             series, counts = compute_daily_ic(factor_batch, label_bundle, method=method)
-            mean, _ = compute_mean_ic(series, counts, min_periods=1)
+            mean, _ = compute_mean_ic(series, counts, min_periods=min_periods)
             return {
                 factor_id: (float(mean[index]), int(np.sum(counts[:, index][np.isfinite(series[:, index])])))
                 for index, factor_id in enumerate(factor_batch.factor_ids)
@@ -762,6 +854,7 @@ def evaluate(
 
     supported = {
         "coverage": coverage_metric,
+        "mean_ic": ic_metric("pearson", min_periods=20),
         "pearson_ic": ic_metric("pearson"),
         "rank_ic": ic_metric("spearman"),
     }

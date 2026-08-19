@@ -4,6 +4,7 @@ Tests for selection decision records and policies.
 
 import pytest
 
+import factor_assets.selection.policy as policy_module
 from factor_assets.selection import (
     SelectionReason,
     SelectionDecision,
@@ -272,6 +273,27 @@ def test_selection_policy_reject_gate_failure():
     assert "fail_gate" in decision.notes
 
 
+def test_selection_policy_rejects_gate_from_different_factor():
+    """A passing gate cannot be replayed to approve another factor."""
+    policy = SelectionPolicy(policy_name="test_policy")
+    replayed_gate = GateEvaluation(
+        gate_name="quality_gate",
+        factor_id="DIFFERENT_FACTOR",
+        result=GateResult.PASS,
+        timestamp="2024-01-01T00:00:00Z",
+    )
+
+    decision = policy.make_decision(
+        factor_id="TARGET_FACTOR",
+        gate_evaluations=[replayed_gate],
+        evidence_refs=("EVD_001",),
+    )
+
+    assert not decision.approved
+    assert decision.reason == SelectionReason.REJECTED_GATE_FAILURE
+    assert "quality_gate" in decision.notes
+
+
 def test_selection_policy_reject_high_similarity():
     """Test policy rejects when similarity exceeds threshold."""
     policy = SelectionPolicy(
@@ -350,6 +372,38 @@ def test_selection_policy_get_decision():
 
     not_found = policy.get_decision("F999")
     assert not_found is None
+
+
+def test_selection_policy_same_timestamp_decisions_have_distinct_ids(monkeypatch):
+    """Repeated timestamps must not overwrite decision identity or history."""
+    fixed_now = policy_module.datetime(2024, 1, 2, tzinfo=policy_module.timezone.utc)
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(policy_module, "datetime", FixedDateTime)
+    policy = SelectionPolicy(policy_name="test_policy")
+    gate_eval = GateEvaluation(
+        gate_name="test_gate",
+        factor_id="F001",
+        result=GateResult.PASS,
+        timestamp="2024-01-01T00:00:00Z",
+    )
+
+    first = policy.make_decision(
+        factor_id="F001", gate_evaluations=[gate_eval], evidence_refs=("EVD_001",)
+    )
+    second = policy.make_decision(
+        factor_id="F001", gate_evaluations=[gate_eval], evidence_refs=("EVD_002",)
+    )
+
+    assert first.decision_id.startswith("SD_F001_20240102T000000000000")
+    assert second.decision_id.startswith("SD_F001_20240102T000000000000")
+    assert first.decision_id != second.decision_id
+    assert policy.get_all_decisions("F001") == [first, second]
+    assert policy.get_decision("F001") == second
 
 
 def test_selection_policy_get_most_recent():

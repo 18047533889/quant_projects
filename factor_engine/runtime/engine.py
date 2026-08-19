@@ -86,8 +86,12 @@ def _admit_ready_single_region_batch(
     optimization: Any,
     logical_root_ids: tuple[str, ...],
 ) -> Any:
-    """Admit the only physical-plan boundary currently executable in batch mode."""
-    from planner.backend_region import PhysicalRegionPlan
+    """Admit a production-ready physical plan without changing its routing."""
+    from planner.backend_region import (
+        PhysicalBackend,
+        PhysicalRegionPlan,
+        Representation,
+    )
 
     physical_plan = getattr(optimization, "physical_plan", None)
     if not isinstance(physical_plan, PhysicalRegionPlan):
@@ -97,24 +101,78 @@ def _admit_ready_single_region_batch(
         raise PhysicalPlanRequiredError(
             f"PhysicalRegionPlan is not production-ready: {reason}"
         )
-    if physical_plan.edges:
-        raise PhysicalPlanRequiredError(
-            "production batch rejects TransferEdge plans"
-        )
-    if len(physical_plan.regions) != 1:
-        raise PhysicalPlanRequiredError(
-            "production batch requires exactly one BackendRegion"
-        )
-    region = physical_plan.regions[0]
-    if physical_plan.topological_order != (region.region_id,):
-        raise PhysicalPlanRequiredError("single-region batch has invalid topology")
-    if physical_plan.root_region_ids != (region.region_id,):
-        raise PhysicalPlanRequiredError("single-region batch must identify its root region")
-    missing = set(logical_root_ids).difference(region.node_ids)
+    regions = {region.region_id: region for region in physical_plan.regions}
+    if not regions:
+        raise PhysicalPlanRequiredError("production batch requires a BackendRegion")
+    if (
+        len(regions) != len(physical_plan.regions)
+        or len(physical_plan.topological_order) != len(regions)
+        or set(physical_plan.topological_order) != set(regions)
+    ):
+        raise PhysicalPlanRequiredError("physical batch has invalid topology")
+    if not physical_plan.root_region_ids or not set(
+        physical_plan.root_region_ids
+    ).issubset(regions):
+        raise PhysicalPlanRequiredError("physical batch has invalid root regions")
+
+    node_regions: dict[str, str] = {}
+    for region in physical_plan.regions:
+        for node_id in region.node_ids:
+            if node_id in node_regions:
+                raise PhysicalPlanRequiredError(
+                    f"logical node {node_id!r} belongs to multiple BackendRegions"
+                )
+            node_regions[node_id] = region.region_id
+    missing = set(logical_root_ids).difference(node_regions)
     if missing:
         raise PhysicalPlanRequiredError(
             f"physical region does not contain batch roots: {sorted(missing)!r}"
         )
+
+    order = {
+        region_id: index
+        for index, region_id in enumerate(physical_plan.topological_order)
+    }
+    edge_ids: set[str] = set()
+    edge_pairs: set[tuple[str, str]] = set()
+    for edge in physical_plan.edges:
+        if edge.edge_id in edge_ids:
+            raise PhysicalPlanRequiredError(
+                f"duplicate TransferEdge ID {edge.edge_id!r}"
+            )
+        edge_ids.add(edge.edge_id)
+        producer = regions.get(edge.producer_region)
+        consumer = regions.get(edge.consumer_region)
+        if producer is None or consumer is None:
+            raise PhysicalPlanRequiredError(
+                f"TransferEdge {edge.edge_id!r} references an unknown region"
+            )
+        pair = (edge.producer_region, edge.consumer_region)
+        if pair in edge_pairs:
+            raise PhysicalPlanRequiredError(
+                "multiple TransferEdges between one region pair are ambiguous"
+            )
+        edge_pairs.add(pair)
+        if order[edge.producer_region] >= order[edge.consumer_region]:
+            raise PhysicalPlanRequiredError(
+                f"TransferEdge {edge.edge_id!r} violates topological order"
+            )
+        source_matches_producer = (
+            edge.source_backend == producer.backend
+            and edge.source_representation == producer.representation
+        )
+        allowed_boundary = (
+            edge.source_backend == PhysicalBackend.DUCKDB_SQL
+            and edge.source_representation == Representation.ARROW_TABLE
+        )
+        if (
+            not (source_matches_producer or allowed_boundary)
+            or edge.target_backend != consumer.backend
+            or edge.target_representation != consumer.representation
+        ):
+            raise PhysicalPlanRequiredError(
+                f"TransferEdge {edge.edge_id!r} backend residency is malformed"
+            )
     return optimization
 
 
@@ -167,15 +225,17 @@ def _physical_plan_telemetry(
     materialization_count: int = 0,
 ) -> dict[str, Any]:
     physical_plan = optimization.physical_plan
-    region = physical_plan.regions[0]
+    regions = {region.region_id: region for region in physical_plan.regions}
+    root_region_id = physical_plan.root_region_ids[0]
+    region = regions[root_region_id]
     planned = region.backend.value
     return {
         "plan_id": physical_plan.plan_id,
         "plan_hash": physical_plan.plan_hash,
         "planned_backend": planned,
         "actual_backend": actual_backend or planned,
-        "region_id": region.region_id,
-        "backend_switch_count": 0,
+        "region_id": root_region_id,
+        "backend_switch_count": physical_plan.backend_switch_count,
         "materialization_count": materialization_count,
         "resident_reuse_count": 0,
         "python_to_q_bytes": 0,
@@ -190,21 +250,130 @@ def _execute_ready_single_region_plan(
     *,
     logical_root_id: str,
 ) -> Any:
-    """Execute an original logical root on the planner-fixed concrete backend."""
+    """Execute a planner-selected physical DAG without runtime backend routing.
+
+    Each region is executed once in the plan's declared topological order.
+    A cross-region child is replaced only by the value materialized at its
+    matching ``TransferEdge``; the executor never invents an edge or changes a
+    region's selected backend.
+    """
     _admit_ready_single_region_batch(optimization, (logical_root_id,))
     physical_plan = optimization.physical_plan
-    region = physical_plan.regions[0]
-    selected = _physical_backend_for_region(backend, region.backend)
+    regions = {region.region_id: region for region in physical_plan.regions}
+    node_regions = {
+        node_id: region.region_id
+        for region in physical_plan.regions
+        for node_id in region.node_ids
+    }
+    # The public batch root ID is authoritative even when PlanNode.node_id is a
+    # debug-only identifier (the long-standing single-region contract).
+    root_region_id = node_regions[logical_root_id]
+    if len(regions) == 1 and not physical_plan.edges:
+        selected = _physical_backend_for_region(backend, regions[root_region_id].backend)
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        runtime["physical_plan"] = _physical_plan_telemetry(
+            optimization,
+            actual_backend=str(
+                getattr(selected, "runtime_backend_label", "")
+                or regions[root_region_id].backend.value
+            ),
+        )
+        ctx.runtime_stats = runtime
+        return selected.execute(logical_root, ctx)
 
+    nodes: dict[str, PlanNode] = {}
+    parents: dict[str, set[str]] = {}
+
+    def collect(node: PlanNode, *, is_root: bool = False) -> str:
+        node_id = logical_root_id if is_root else str(node.node_id or "")
+        if not node_id or node_id not in node_regions:
+            raise PhysicalPlanRequiredError(
+                "physical region node IDs do not identify the logical plan"
+            )
+        if node_id in nodes and nodes[node_id] is not node:
+            raise PhysicalPlanRequiredError(f"duplicate logical node ID {node_id!r}")
+        nodes[node_id] = node
+        for child in node.inputs:
+            child_id = collect(child)
+            parents.setdefault(child_id, set()).add(node_id)
+        return node_id
+
+    collect(logical_root, is_root=True)
+
+    edge_by_pair = {
+        (edge.producer_region, edge.consumer_region): edge
+        for edge in physical_plan.edges
+    }
+    required_pairs = {
+        (node_regions[child_id], node_regions[parent_id])
+        for child_id, parent_ids in parents.items()
+        for parent_id in parent_ids
+        if node_regions[child_id] != node_regions[parent_id]
+    }
+    if required_pairs != set(edge_by_pair):
+        missing = sorted(required_pairs.difference(edge_by_pair))
+        extra = sorted(set(edge_by_pair).difference(required_pairs))
+        raise PhysicalPlanRequiredError(
+            f"TransferEdge boundaries do not match logical plan: missing={missing!r}, extra={extra!r}"
+        )
+
+    outputs: dict[str, Any] = {}
+    actual_labels: dict[str, str] = {}
+    for region_id in physical_plan.topological_order:
+        region = regions[region_id]
+        candidates = [
+            node_id
+            for node_id in region.node_ids
+            if node_id == logical_root_id
+            or any(node_regions[parent] != region_id for parent in parents.get(node_id, ()))
+        ]
+        if len(candidates) != 1:
+            raise PhysicalPlanRequiredError(
+                f"BackendRegion {region_id!r} must have exactly one materialized output"
+            )
+        output_id = candidates[0]
+
+        def lower(node_id: str) -> PlanNode:
+            node = nodes[node_id]
+            lowered_inputs: list[PlanNode] = []
+            for child in node.inputs:
+                child_id = str(child.node_id or "")
+                child_region = node_regions[child_id]
+                if child_region == region_id:
+                    lowered_inputs.append(lower(child_id))
+                    continue
+                edge = edge_by_pair[(child_region, region_id)]
+                if child_region not in outputs:
+                    raise PhysicalPlanRequiredError(
+                        f"TransferEdge {edge.edge_id!r} producer was not materialized"
+                    )
+                lowered_inputs.append(
+                    PlanNode(op="literal", attrs={"value": outputs[child_region]})
+                )
+            return PlanNode(
+                op=node.op,
+                inputs=tuple(lowered_inputs),
+                attrs=node.attrs,
+                semantic_attrs=node.semantic_attrs,
+                node_id=node.node_id,
+            )
+
+        selected = _physical_backend_for_region(backend, region.backend)
+        actual_labels[region_id] = str(
+            getattr(selected, "runtime_backend_label", "") or region.backend.value
+        )
+        # Calling HybridBackend.execute here would re-run routing.
+        outputs[region_id] = selected.execute(lower(output_id), ctx)
+
+    actual_backend = actual_labels[root_region_id]
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime["physical_plan"] = _physical_plan_telemetry(
         optimization,
-        actual_backend=str(getattr(selected, "runtime_backend_label", "") or region.backend.value),
+        actual_backend=actual_backend,
+        materialization_count=len(physical_plan.edges),
     )
     ctx.runtime_stats = runtime
-
-    # Calling HybridBackend.execute here would re-run routing.
-    return selected.execute(logical_root, ctx)
+    return outputs[root_region_id]
 
 
 def _validate_run_mode(mode: str) -> None:

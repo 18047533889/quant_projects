@@ -122,7 +122,7 @@ def publish_from_staging(
 
         target_parent = target_dir.parent
         target_parent.mkdir(parents=True, exist_ok=True)
-        candidate_dir = target_parent / f".publish_candidate.{uuid.uuid4().hex[:12]}"
+        candidate_dir = target_parent / f".publish_candidate.{uuid.uuid4().hex}"
 
         with mutation_lock(target_dir.parent):
             with _publish_lock(target_parent, target_dir.name):
@@ -667,14 +667,14 @@ def _schema_hash_str(meta: Any) -> str:
             for i in range(len(meta.schema.names))
         ]
     text = json.dumps(pairs, sort_keys=True)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _archive_path(parent: Path, target_name: str) -> Path:
     """算归档位置：{parent}/_archive/{target_name}_{YYYYMMDD_HHMMSS}_{shortuuid}/"""
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    short = uuid.uuid4().hex[:8]
-    return parent / _ARCHIVE_SUBDIR / f"{target_name}_{ts}_{short}"
+    token = uuid.uuid4().hex
+    return parent / _ARCHIVE_SUBDIR / f"{target_name}_{ts}_{token}"
 
 
 def _target_has_published_content(target_dir: Path) -> bool:
@@ -799,7 +799,7 @@ def _rollback_final(target_dir: Path, archive_path: Path | None) -> None:
     """verify 失败时回滚：把刚发布的 target rename 走，归档 rename 回来。"""
     try:
         if target_dir.exists():
-            failed = target_dir.parent / f".publish_failed.{uuid.uuid4().hex[:8]}"
+            failed = target_dir.parent / f".publish_failed.{uuid.uuid4().hex}"
             os.rename(str(target_dir), str(failed))
             logger.error(
                 "publish 验证失败，失败版本留存在 %s 供排查（未自动删除）", failed,

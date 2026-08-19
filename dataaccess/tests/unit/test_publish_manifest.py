@@ -2,6 +2,7 @@
 """publish manifest 与 revision dedup 单元测试。"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -40,6 +41,29 @@ def test_write_publish_manifest_atomic(tmp_path: Path):
     assert manifest["rows"] == 1
     assert manifest["params"]["factor_id"] == "f1"
     assert manifest["file_count"] == 1
+    assert manifest["manifest_version"] == 4
+    assert len(manifest["content_hash"]) == 64
+
+
+def test_read_publish_manifest_accepts_only_valid_v3_or_v4_identity(tmp_path: Path):
+    target = tmp_path / "published"
+    target.mkdir()
+    path = target / ".publish_manifest.json"
+
+    path.write_text(
+        json.dumps({"manifest_version": 3, "content_hash": "a" * 16}),
+        encoding="utf-8",
+    )
+    assert read_publish_manifest(target) is not None
+
+    for payload in (
+        {"manifest_version": 3, "content_hash": "a" * 64},
+        {"manifest_version": 4, "content_hash": "a" * 16},
+        {"manifest_version": 4, "content_hash": "g" * 64},
+        {"manifest_version": 5, "content_hash": "a" * 64},
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        assert read_publish_manifest(target) is None
 
 
 def test_revision_column_dedup_keeps_latest():

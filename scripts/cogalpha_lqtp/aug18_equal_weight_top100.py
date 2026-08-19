@@ -113,6 +113,43 @@ def _rewrite_binary_minmax(text: str) -> str:
     return out
 
 
+def _rewrite_sigmoid_exp(text: str) -> str:
+    """LQTP has sigmoid but not exp.  1/(1+exp(-x)) == sigmoid(x)."""
+    import re
+
+    pat = re.compile(r"1\s*/\s*\(\s*1\s*\+\s*exp\s*\(\s*-")
+    out = text
+    for _ in range(32):
+        m = pat.search(out)
+        if not m:
+            break
+        open_idx = out.find("exp", m.start())
+        open_idx = out.find("(", open_idx)
+        depth = 0
+        i = open_idx
+        while i < len(out):
+            if out[i] == "(":
+                depth += 1
+            elif out[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        inner = out[open_idx + 1 : i].strip()
+        if inner.startswith("-"):
+            inner = inner[1:].strip()
+            if inner.startswith("(") and inner.endswith(")"):
+                inner = inner[1:-1]
+        # consume trailing ')' of 1/(1+exp(...))
+        j = i + 1
+        while j < len(out) and out[j].isspace():
+            j += 1
+        if j < len(out) and out[j] == ")":
+            j += 1
+        out = out[: m.start()] + f"sigmoid({inner})" + out[j:]
+    return out
+
+
 def rewrite_dsl_for_lqtp(dsl: str) -> str:
     def atr(args: list[str]) -> str | None:
         if len(args) < 4:
@@ -135,23 +172,45 @@ def rewrite_dsl_for_lqtp(dsl: str) -> str:
             return f"sqrt({base})"
         return None
 
+    def wma_repl(args: list[str]) -> str | None:
+        if len(args) != 2:
+            return None
+        return f"ema({args[0]}, {args[1]})"
+
     out = dsl
     out = _replace_func_calls(out, "ATR_WILDER", atr)
     out = _replace_func_calls(out, "ATR", atr)
     out = _replace_func_calls(out, "rolling_vwap", rv)
-    out = _replace_func_calls(out, "pow", pow_repl)
-    out = _replace_func_calls(out, "power", pow_repl)
+    for _ in range(16):
+        nxt = _replace_func_calls(out, "pow", pow_repl)
+        nxt = _replace_func_calls(nxt, "power", pow_repl)
+        if nxt == out:
+            break
+        out = nxt
+    out = _replace_func_calls(out, "WMA", wma_repl)
+    out = _replace_func_calls(out, "wma", wma_repl)
     out = dsl_to_lqtp(out)
     out = _rewrite_binary_minmax(out)
+    out = _rewrite_sigmoid_exp(out)
     import re
+
+    out = re.sub(r"\bRANK\s*\(", "rank(", out)
 
     def divide_repl(args: list[str]) -> str | None:
         if len(args) != 2:
             return None
         return f"safe_div({args[0]}, {args[1]})"
 
-    out = _replace_func_calls(out, "divide", divide_repl)
+    for _ in range(16):
+        nxt = _replace_func_calls(out, "divide", divide_repl)
+        if nxt == out:
+            break
+        out = nxt
+    # ClickHouse UInt64 vs Float64: force volume/amount and 0/1 gates to float.
+    out = re.sub(r",\s*1\s*,\s*0\s*\)", ", 1.0, 0.0)", out)
+    out = re.sub(r",\s*0\s*\)", ", 0.0)", out)
     out = re.sub(r"\bvolume\b", "(volume * 1.0)", out)
+    out = re.sub(r"\bamount\b", "(amount * 1.0)", out)
     return out
 
 
@@ -206,6 +265,46 @@ SKIP_PYTHON_ONLY = {
     "factor_liquidity_adaptive_momentum",
 }
 
+_PLACEHOLDER_DSL = (
+    "rollmean10",
+    "intraday_return",
+    "rollmean20volume",
+    "smoothed_median",
+    "intraday_ret",
+    "overnight_ret",
+    "autocorr",
+    "rank_63",
+    "ATR14",
+    "sq_ret",
+    "(python)",
+    "signreturn",
+    "signvolume",
+    "window=",
+)
+
+
+def _alias_of_180(name: str, man_names: set[str]) -> str | None:
+    if name in man_names:
+        return name
+    cand = str(name or "")
+    if cand.endswith("_v1") and cand[:-3] in man_names:
+        return cand[:-3]
+    if cand.startswith("cand_"):
+        rest = cand[5:]
+        for guess in (rest, f"factor_{rest}", f"factor_{rest[:-3]}" if rest.endswith("_v1") else ""):
+            if guess and guess in man_names:
+                return guess
+    return None
+
+
+def _is_runnable_lqtp_dsl(dsl: str) -> bool:
+    text = (dsl or "").strip()
+    if not text or text.startswith("(python)"):
+        return False
+    if "=" in text and ";" in text:
+        return False
+    return not any(tok in text for tok in _PLACEHOLDER_DSL)
+
 
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -231,6 +330,8 @@ def resolve_dsl_jobs(work: Path) -> list[dict[str, str]]:
     cat = _load_json(work / "screening_reeval_catalog.json")
     idx = _catalog_index(cat)
     jobs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    man_names = {rec["display_name"] for rec in man}
     for rec in man:
         name = rec["display_name"]
         if name in SKIP_PYTHON_ONLY:
@@ -241,7 +342,29 @@ def resolve_dsl_jobs(work: Path) -> list[dict[str, str]]:
         dsl = (entry.get("lqtp_formula") or entry.get("dsl") or "").strip()
         if not dsl:
             continue
-        jobs.append({"name": name, "dsl": dsl})
+        jobs.append({"name": name, "dsl": dsl, "source": "screening_180"})
+        seen.add(name)
+
+    weekly_path = work / "reports" / "weekly_dug_neutral_rankic.json"
+    if weekly_path.exists():
+        weekly = _load_json(weekly_path)
+        for rec in weekly.get("selected") or []:
+            ric = abs(float(rec.get("display_rank_ic") or rec.get("mean_rank_ic") or 0.0))
+            if ric < 0.02:
+                continue
+            name = str(rec.get("factor_id") or rec.get("display_name") or "").strip()
+            if not name or name in seen or name in SKIP_PYTHON_ONLY:
+                continue
+            if _alias_of_180(name, man_names):
+                continue
+            cand = str(rec.get("candidate_id") or "")
+            if _alias_of_180(cand, man_names):
+                continue
+            dsl = (rec.get("lqtp_formula") or rec.get("fe_dsl") or rec.get("dsl") or "").strip()
+            if not _is_runnable_lqtp_dsl(dsl):
+                continue
+            jobs.append({"name": name, "dsl": dsl, "source": "weekly_dug"})
+            seen.add(name)
     return jobs
 
 
@@ -533,10 +656,130 @@ def analyze(*, lake_root: Path, parquet_root: Path, out_dir: Path, k: int = 100)
         d: _slim(top_frames[d]) for d in KEEP_DATES
     }
     slim["top100_0817_with_ret"] = _slim(new_ret)
+    slim["top100_0814_with_ret"] = _slim(old_ret)
     slim["entered"] = _slim(entered_ret)
     slim["exited"] = _slim(exited_ret)
     _save_json(out_dir / "top100_slim.json", slim)
+    render_shareable_html(summary, slim, out_dir / "aug18_factor_rotation.html")
     return summary
+
+
+def _pct(v: Any) -> str:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{x * 100:+.2f}%"
+
+
+def _table_rows(rows: list[dict[str, Any]], with_ret: bool) -> str:
+    parts: list[str] = []
+    for r in rows:
+        style = str(r.get("style") or "")
+        cls = "tech" if style == "科技" else "cons" if style == "消费" else "oth"
+        ret_td = f"<td>{_pct(r.get('ret_0818'))}</td>" if with_ret else ""
+        parts.append(
+            f"<tr class='{cls}'><td>{int(r.get('combo_rank') or 0)}</td>"
+            f"<td>{r.get('asset','')}</td><td>{r.get('sw_l1','')}</td>"
+            f"<td>{style}</td><td>{float(r.get('combo') or 0):.3f}</td>{ret_td}</tr>"
+        )
+    return "".join(parts)
+
+
+def render_shareable_html(summary: dict[str, Any], slim: dict[str, Any], out_path: Path) -> None:
+    n = int(summary.get("n_factors_used") or 0)
+    rot = summary.get("rotation_8_14_to_8_17") or {}
+    ret = summary.get("ret_20260818") or {}
+    daily = summary.get("daily_style_counts") or {}
+    old_s = rot.get("old_style") or {}
+    new_s = rot.get("new_style") or {}
+    mkt = ret.get("market_style_ew") or {}
+    ind14 = (daily.get(PREV_DATE) or {}).get("industry") or {}
+    ind17 = (daily.get(SIGNAL_DATE) or {}).get("industry") or {}
+    names = sorted(
+        set(ind14) | set(ind17),
+        key=lambda x: int(ind17.get(x, 0)) - int(ind14.get(x, 0)),
+        reverse=True,
+    )
+    ind_rows = "".join(
+        f"<tr><td>{k}</td><td>{int(ind14.get(k, 0))}</td><td>{int(ind17.get(k, 0))}</td>"
+        f"<td>{int(ind17.get(k, 0)) - int(ind14.get(k, 0)):+d}</td></tr>"
+        for k in names
+    )
+    day_rows = "".join(
+        f"<tr><td>{d}</td>"
+        f"<td>{(daily.get(d) or {}).get('style', {}).get('科技', 0)}</td>"
+        f"<td>{(daily.get(d) or {}).get('style', {}).get('消费', 0)}</td>"
+        f"<td>{(daily.get(d) or {}).get('style', {}).get('其他', 0)}</td>"
+        f"<td>{(daily.get(d) or {}).get('industry', {}).get('公用事业', 0)}</td>"
+        f"<td>{(daily.get(d) or {}).get('industry', {}).get('电子', 0)}</td></tr>"
+        for d in KEEP_DATES
+    )
+    util14 = int(ind14.get("公用事业", 0))
+    util17 = int(ind17.get("公用事业", 0))
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>8.18 等权因子 Top100 调仓验证</title>
+<style>
+body{{font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:24px;max-width:1100px;color:#1a1a1a;}}
+h1{{font-size:22px;margin:0 0 8px}}
+h2{{font-size:18px;margin:28px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}}
+h3{{font-size:15px;margin:20px 0 8px}}
+.muted{{color:#666}}
+.callout{{background:#fff8e6;border:1px solid #e6d08a;padding:12px 14px;margin:16px 0}}
+.stats{{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 20px}}
+.stat{{border:1px solid #ddd;padding:10px 14px;min-width:140px}}
+.stat b{{display:block;font-size:20px}}
+.stat span{{color:#666;font-size:12px}}
+table{{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 20px}}
+th,td{{border:1px solid #e5e5e5;padding:4px 8px;text-align:left}}
+th{{background:#f4f4f4;position:sticky;top:0}}
+tr.tech td:nth-child(4){{color:#b42318;font-weight:600}}
+tr.cons td:nth-child(4){{color:#067647;font-weight:600}}
+</style>
+</head>
+<body>
+<h1>8.18 是不是量化按 8.17 因子在减科技、加消费？</h1>
+<p class="muted">{n} 条 RankIC&gt;2% 价量因子截面分位等权 · Top100 · T+1 调仓 · 窗口 2026-08-11 至 08-18<br>
+科技=电子/计算机/通信/传媒；消费=食品饮料/家电/商贸/社服/美护/纺服/农渔/轻工</p>
+<div class="callout"><b>结论：不像。</b> 8.17 相对 8.14，科技 {old_s.get('科技',0)}→{new_s.get('科技',0)}，消费 {old_s.get('消费',0)}→{new_s.get('消费',0)}。
+真正加仓的是公用事业（{util14}→{util17}）。8.18 全市场消费强于科技，但按 8.17 信号调进去的新票当天并未兑现。</div>
+<div class="stats">
+<div class="stat"><b>{old_s.get('科技',0)} → {new_s.get('科技',0)}</b><span>科技 8.14→8.17</span></div>
+<div class="stat"><b>{old_s.get('消费',0)} → {new_s.get('消费',0)}</b><span>消费 8.14→8.17</span></div>
+<div class="stat"><b>{util14} → {util17}</b><span>公用事业 8.14→8.17</span></div>
+<div class="stat"><b>{rot.get('overlap',0)} / 100</b><span>两日 Top100 重叠</span></div>
+<div class="stat"><b>{_pct(mkt.get('科技'))}</b><span>8.18 全市场科技等权</span></div>
+<div class="stat"><b>{_pct(mkt.get('消费'))}</b><span>8.18 全市场消费等权</span></div>
+<div class="stat"><b>{_pct(ret.get('book_8_14_signal'))}</b><span>8.14 信号组合 8.18 收益</span></div>
+<div class="stat"><b>{_pct(ret.get('book_8_17_signal'))}</b><span>8.17 信号组合 8.18 收益</span></div>
+<div class="stat"><b>{_pct(ret.get('entered_8_17'))}</b><span>8.17 新进 {rot.get('entered',0)} 只 · 8.18</span></div>
+<div class="stat"><b>{_pct(ret.get('exited_8_17'))}</b><span>8.17 踢出 {rot.get('exited',0)} 只 · 8.18</span></div>
+</div>
+<h2>每日 Top100 风格只数</h2>
+<table>
+<thead><tr><th>日期</th><th>科技</th><th>消费</th><th>其他</th><th>公用事业</th><th>电子</th></tr></thead>
+<tbody>{day_rows}</tbody>
+</table>
+<h2>8.14 → 8.17 申万一级只数</h2>
+<table>
+<thead><tr><th>行业</th><th>8.14</th><th>8.17</th><th>变动</th></tr></thead>
+<tbody>{ind_rows}</tbody>
+</table>
+<h3>8.17 收盘 Top100（对应 8.18 调仓）</h3>
+<table><thead><tr><th>#</th><th>代码</th><th>申万一级</th><th>风格</th><th>等权分位</th><th>8.18收益</th></tr></thead>
+<tbody>{_table_rows(slim.get('top100_0817_with_ret') or slim.get(SIGNAL_DATE) or [], True)}</tbody></table>
+<h3>8.14 收盘 Top100（对应 8.17 调仓）</h3>
+<table><thead><tr><th>#</th><th>代码</th><th>申万一级</th><th>风格</th><th>等权分位</th><th>8.18收益</th></tr></thead>
+<tbody>{_table_rows(slim.get('top100_0814_with_ret') or slim.get(PREV_DATE) or [], True)}</tbody></table>
+<p class="muted">方法：RankIC&gt;2% 可 LQTP 取数的因子等权（含 8/4 清单 + 本周新挖去重后可跑公式）。8.18 收益用收盘/前收-1。本次用了 {n} 条。</p>
+</body></html>
+"""
+    out_path.write_text(html, encoding="utf-8")
+    Path("/home/shw/aug18_factor_rotation.html").write_text(html, encoding="utf-8")
 
 
 def main() -> int:

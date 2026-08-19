@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 _PROCESS_CONNECTION_LOCK = threading.RLock()
 _LEASE_LOCK = threading.RLock()
 _ACTIVE_LEASES: dict[str, tuple[str, int, set[str]]] = {}
+_SHARED_WORKSPACE_LEASES: set[tuple[str, str]] = set()
 
 
 def _safe_q_identifier(value: str) -> str:
@@ -98,6 +99,9 @@ class QExecutor:
         # execution is the smallest safe critical section for that workspace.
         self._connection_lock = _PROCESS_CONNECTION_LOCK
         self._telemetry_lock = threading.Lock()
+        self._pending_workspace_cleanup: dict[
+            tuple[str, str, int], frozenset[str]
+        ] = {}
 
         # Telemetry counters for residency tracking
         self._telemetry = {
@@ -129,6 +133,7 @@ class QExecutor:
         workspace_id: str | None = None,
         generation_id: str | None = None,
         allow_legacy_handles: bool = False,
+        _defer_workspace_cleanup: bool = False,
     ) -> QExecutionResult:
         """执行 q Region 计划。
 
@@ -176,6 +181,19 @@ class QExecutor:
 
         q: Any | None = None
         resident_handle: QResidentTableHandle | None = None
+        with _LEASE_LOCK:
+            shared_workspace = (
+                workspace_id,
+                generation_id,
+            ) in _SHARED_WORKSPACE_LEASES
+            existing_lease = _ACTIVE_LEASES.get(workspace_id)
+            workspace_symbols_before = frozenset(
+                existing_lease[2]
+                if shared_workspace
+                and existing_lease is not None
+                and existing_lease[:1] == (generation_id,)
+                else ()
+            )
         try:
             with self._connection_lock:
                 start_time = time.perf_counter()
@@ -230,6 +248,11 @@ class QExecutor:
                 execution_time = (time.perf_counter() - start_time) * 1000
 
                 if return_resident_handle:
+                    with _LEASE_LOCK:
+                        shared_workspace = (
+                            workspace_id,
+                            generation_id,
+                        ) in _SHARED_WORKSPACE_LEASES
                     resident_handle = QResidentTableHandle(
                         table_name=plan.output_table,
                         q_table_ref=q_result,
@@ -240,6 +263,11 @@ class QExecutor:
                         workspace_id=workspace_id,
                         generation_id=generation_id,
                         q_symbol=output_symbol,
+                        _release_callback=(
+                            self._release_batch_handle
+                            if shared_workspace
+                            else self._release_resident_handle
+                        ),
                     )
                     self._register_lease(resident_handle)
 
@@ -268,7 +296,7 @@ class QExecutor:
             # Direct executions own their workspace.  Always release it,
             # including cancellation-like BaseExceptions, while preserving
             # any original failure from the execution body.
-            if q is not None and resident_handle is None:
+            if q is not None and resident_handle is None and not _defer_workspace_cleanup:
                 with self._connection_lock:
                     self._cleanup_workspace(q, workspace_id, generation_id)
 
@@ -315,6 +343,63 @@ class QExecutor:
                 raise QExecutionError("Resident workspace lease identity conflict")
             symbols.add(handle.q_symbol or handle.table_name)
 
+    def _release_batch_handle(self, handle: QResidentTableHandle) -> None:
+        """Release one published batch symbol without invalidating siblings."""
+        if handle.workspace_id is None or handle.generation_id is None:
+            return
+        physical_symbol = handle.q_symbol or handle.table_name
+        try:
+            with self._connection_lock:
+                q = self.process_manager.get_connection()
+                if handle.connection_id != id(q):
+                    raise QExecutionError("Resident workspace connection identity conflict")
+                with _LEASE_LOCK:
+                    lease = _ACTIVE_LEASES.get(handle.workspace_id)
+                    if lease is None:
+                        return
+                    if lease[:2] != (handle.generation_id, handle.connection_id):
+                        raise QExecutionError("Resident workspace lease identity conflict")
+                    if physical_symbol not in lease[2]:
+                        return
+                q(f"delete {physical_symbol} from `.")
+                with _LEASE_LOCK:
+                    lease = _ACTIVE_LEASES.get(handle.workspace_id)
+                    if lease is not None and lease[:2] == (
+                        handle.generation_id,
+                        handle.connection_id,
+                    ):
+                        lease[2].discard(physical_symbol)
+                        if not lease[2]:
+                            del _ACTIVE_LEASES[handle.workspace_id]
+                            _SHARED_WORKSPACE_LEASES.discard(
+                                (handle.workspace_id, handle.generation_id)
+                            )
+        except Exception:
+            object.__setattr__(handle, "_released", False)
+            raise
+
+    def _release_resident_handle(self, handle: QResidentTableHandle) -> None:
+        """Release the handle's entire owned workspace, retrying on failure."""
+        if handle.workspace_id is None or handle.generation_id is None:
+            return
+        try:
+            with self._connection_lock:
+                q = self.process_manager.get_connection()
+                if handle.connection_id != id(q):
+                    raise QExecutionError("Resident workspace connection identity conflict")
+                if not self._cleanup_workspace(
+                    q,
+                    handle.workspace_id,
+                    handle.generation_id,
+                    expected_connection_id=handle.connection_id,
+                ):
+                    raise QExecutionError("Resident workspace cleanup failed")
+        except Exception:
+            # QResidentTableHandle marks itself released before invoking us.
+            # Roll that state back so callers can retry an unsuccessful cleanup.
+            object.__setattr__(handle, "_released", False)
+            raise
+
     @staticmethod
     def _validate_lease(
         handle: QResidentTableHandle,
@@ -342,18 +427,57 @@ class QExecutor:
                 )
 
     @staticmethod
-    def _cleanup_workspace(q: Any, workspace_id: str, generation_id: str) -> None:
+    def _cleanup_workspace(
+        q: Any,
+        workspace_id: str,
+        generation_id: str,
+        *,
+        preserve_symbols: frozenset[str] | set[str] = frozenset(),
+        expected_connection_id: int | None = None,
+    ) -> bool:
+        """Delete unpreserved symbols, retaining failed deletions for retry."""
+        connection_id = id(q) if expected_connection_id is None else expected_connection_id
         with _LEASE_LOCK:
             lease = _ACTIVE_LEASES.get(workspace_id)
-            if lease is None or lease[0] != generation_id:
-                return
-            symbols = tuple(lease[2])
-            del _ACTIVE_LEASES[workspace_id]
+            if lease is None:
+                return True
+            if lease[:2] != (generation_id, connection_id) or id(q) != connection_id:
+                return False
+            symbols = tuple(symbol for symbol in lease[2] if symbol not in preserve_symbols)
+        failed: set[str] = set()
         for symbol in symbols:
             try:
                 q(f"delete {symbol} from `.")
             except Exception:
+                failed.add(symbol)
                 logger.warning("Failed to clean q workspace symbol %s", symbol, exc_info=True)
+        with _LEASE_LOCK:
+            lease = _ACTIVE_LEASES.get(workspace_id)
+            if lease is None:
+                return not failed
+            if lease[:2] != (generation_id, connection_id):
+                return False
+            lease[2].difference_update(set(symbols) - failed)
+            if not lease[2]:
+                del _ACTIVE_LEASES[workspace_id]
+                _SHARED_WORKSPACE_LEASES.discard((workspace_id, generation_id))
+        return not failed
+
+    def _retry_pending_workspace_cleanup(self, q: Any) -> None:
+        """Retry workspaces retained after connection or delete failures."""
+        for (workspace_id, generation_id, connection_id), preserve_symbols in tuple(
+            self._pending_workspace_cleanup.items()
+        ):
+            if self._cleanup_workspace(
+                q,
+                workspace_id,
+                generation_id,
+                preserve_symbols=preserve_symbols,
+                expected_connection_id=connection_id,
+            ):
+                self._pending_workspace_cleanup.pop(
+                    (workspace_id, generation_id, connection_id), None
+                )
 
     def _increment_telemetry(self, key: str, amount: int = 1) -> None:
         with self._telemetry_lock:
@@ -427,6 +551,10 @@ class QExecutor:
         available_inputs: dict[str, pd.DataFrame | QResidentTableHandle] = dict(input_data)
         workspace_id = uuid.uuid4().hex
         generation_id = uuid.uuid4().hex
+        published_handles: list[QResidentTableHandle] = []
+        batch_succeeded = False
+        with _LEASE_LOCK:
+            _SHARED_WORKSPACE_LEASES.add((workspace_id, generation_id))
 
         try:
             for i, plan in enumerate(plans):
@@ -446,23 +574,56 @@ class QExecutor:
                     workspace_id=workspace_id,
                     generation_id=generation_id,
                     allow_legacy_handles=False,
+                    _defer_workspace_cleanup=True,
                 )
                 results.append(result)
 
-                if enable_residency and not is_last and result.resident_handle:
-                    available_inputs[plan.output_table] = result.resident_handle
-                    logger.info(
-                        f"Retained resident handle from {plan.region_id} for downstream regions"
-                    )
+                if not is_last:
+                    if enable_residency and result.resident_handle:
+                        published_handles.append(result.resident_handle)
+                        available_inputs[plan.output_table] = result.resident_handle
+                        logger.info(
+                            f"Retained resident handle from {plan.region_id} for downstream regions"
+                        )
+                    else:
+                        available_inputs[plan.output_table] = result.output_df
+            batch_succeeded = True
             return results
         finally:
+            preserve_symbols = frozenset(
+                {
+                    handle.q_symbol or handle.table_name
+                    for handle in published_handles
+                }
+                if batch_succeeded
+                else set()
+            )
+            with _LEASE_LOCK:
+                lease = _ACTIVE_LEASES.get(workspace_id)
+                cleanup_connection_id = lease[1] if lease is not None else 0
+            cleanup_key = (workspace_id, generation_id, cleanup_connection_id)
             with self._connection_lock:
                 try:
                     q = self.process_manager.get_connection()
                 except Exception:
-                    q = None
-                if q is not None:
-                    self._cleanup_workspace(q, workspace_id, generation_id)
+                    # Keep lease ownership so a later batch/release can retry;
+                    # never mask the execution exception already in flight.
+                    self._pending_workspace_cleanup[cleanup_key] = preserve_symbols
+                else:
+                    self._retry_pending_workspace_cleanup(q)
+                    if self._cleanup_workspace(
+                        q,
+                        workspace_id,
+                        generation_id,
+                        preserve_symbols=preserve_symbols,
+                        expected_connection_id=cleanup_connection_id,
+                    ):
+                        self._pending_workspace_cleanup.pop(cleanup_key, None)
+                    else:
+                        self._pending_workspace_cleanup[cleanup_key] = preserve_symbols
+            with _LEASE_LOCK:
+                if workspace_id not in _ACTIVE_LEASES:
+                    _SHARED_WORKSPACE_LEASES.discard((workspace_id, generation_id))
 
 
 # Global singleton

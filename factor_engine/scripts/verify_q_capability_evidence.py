@@ -16,6 +16,20 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(FE_ROOT.parent))
 sys.path.insert(0, str(FE_ROOT))
 
+MANDATORY_GATES = frozenset({
+    "Q_NATIVE_WITHOUT_LOWERING",
+    "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+    "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+    "Q_CAPABILITY_SINGLE_AUTHORITY",
+})
+
+
+def _verification_passed(report, gates):
+    """Return whether readiness and every mandatory gate pass."""
+    return bool(report.get("production_ready")) and all(
+        name in gates and gates[name][0] for name in MANDATORY_GATES
+    )
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -60,39 +74,30 @@ def main():
             "gates": gate_results,
         }
         print(json.dumps(output, indent=2))
-        return
+        sys.exit(0 if _verification_passed(report, gates) else 1)
 
     if args.gates_only:
+        report = generate_capability_report()
         print("=" * 80)
         print("Q BACKEND CAPABILITY HARD GATES")
         print("=" * 80)
         print()
 
-        all_passed = True
-        mandatory_gates = {
-            "Q_NATIVE_WITHOUT_LOWERING",
-            "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
-            "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
-            "Q_CAPABILITY_SINGLE_AUTHORITY",
-        }
-
         for gate_name, (passed, message) in gates.items():
             status = "✓ PASS" if passed else "✗ FAIL"
-            mandatory = " [MANDATORY]" if gate_name in mandatory_gates else ""
+            mandatory = " [MANDATORY]" if gate_name in MANDATORY_GATES else ""
             print(f"{status} {gate_name}{mandatory}")
             print(f"     {message}")
             print()
-            if not passed and gate_name in mandatory_gates:
-                all_passed = False
 
-        if all_passed:
+        if _verification_passed(report, gates):
             print("=" * 80)
             print("All mandatory gates PASSED")
             print("=" * 80)
             sys.exit(0)
         else:
             print("=" * 80)
-            print("Some mandatory gates FAILED - Q backend NOT production ready")
+            print("Some mandatory gates FAILED or Q backend is NOT production ready")
             print("=" * 80)
             sys.exit(1)
 
@@ -138,7 +143,7 @@ def main():
 
     for gate_name, (passed, message) in gates.items():
         status = "✓ PASS" if passed else "✗ FAIL"
-        mandatory = " [MANDATORY]" if gate_name in mandatory_gates else ""
+        mandatory = " [MANDATORY]" if gate_name in MANDATORY_GATES else ""
         print(f"{status} {gate_name}{mandatory}")
         print(f"     {message}")
         print()
@@ -194,13 +199,7 @@ def main():
 
     # Check all mandatory gates
     all_mandatory_passed = all(
-        passed for name, (passed, _) in gates.items()
-        if name in {
-            "Q_NATIVE_WITHOUT_LOWERING",
-            "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
-            "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
-            "Q_CAPABILITY_SINGLE_AUTHORITY",
-        }
+        name in gates and gates[name][0] for name in MANDATORY_GATES
     )
 
     if all_mandatory_passed and report['production_ready']:

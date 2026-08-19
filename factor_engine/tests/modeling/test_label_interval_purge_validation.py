@@ -73,21 +73,9 @@ def test_purge_overlap_drops_expected_rows_for_5day_label():
 
 
 def test_purge_overlap_drops_nothing_when_horizon_is_zero():
-    """horizon_bars=0 means no forward label, so no purge needed."""
-    dates = pd.date_range("2020-01-01", periods=20, freq="D")
-    train_ds = _panel(dates[:15].tolist())
-    val_ds = _panel(dates[15:20].tolist())
-
-    contract = LabelContract(label_name="same_day", horizon_bars=0)
-
-    pre_purge_count = len(train_ds.frame)
-    purged = purge_overlap(train_ds, val_ds, contract, calendar=None)
-    post_purge_count = len(purged.frame)
-
-    # With horizon=0, no rows should be dropped (but edge case: horizon=0 still needs 1-bar gap)
-    # Actually, horizon_bars must be >= 1 per LabelContract validation
-    # This test shows what happens if horizon=0 is allowed
-    assert post_purge_count > 0
+    """LabelContract rejects zero-length horizons by production invariant."""
+    with pytest.raises(ValueError, match=r"horizon_bars must be >= 1"):
+        LabelContract(label_name="same_day", horizon_bars=0)
 
 
 def test_purge_overlap_detects_all_rows_purged_scenario():
@@ -165,6 +153,8 @@ def test_walk_forward_with_label_purge_integration():
         purge_policy="label_interval",
         embargo_bars=0,
         min_train_dates=40,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
 
     folds = make_walk_forward_splits(ds, spec)
@@ -209,6 +199,8 @@ def test_walk_forward_purge_with_embargo_combination():
         purge_policy="label_interval",
         embargo_bars=3,
         min_train_dates=60,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
 
     # Apply combined purge + embargo
@@ -268,6 +260,8 @@ def test_purge_with_gap_days_and_label_interval_are_independent():
         purge_policy="label_interval",  # plus label purge
         embargo_bars=0,
         min_train_dates=40,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
 
     folds = make_walk_forward_splits(ds, spec)

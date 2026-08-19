@@ -125,6 +125,117 @@ def test_resident_handle_creation(mock_q_process, mock_type_adapter, sample_inpu
     mock_type_adapter.q_to_pandas.assert_not_called()
 
 
+def test_resident_handle_release_is_idempotent_and_context_manager(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    result = executor.execute_region(
+        sample_region_plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+    )
+    handle = result.resident_handle
+    assert handle is not None
+    assert repr(handle) == (
+        "QResidentTableHandle(table=result, rows=100, bytes=8000, "
+        "region=region_A, workspace=" + handle.workspace_id + ", generation="
+        + handle.generation_id + ")"
+    )
+
+    handle.release()
+    handle.close()
+    delete_calls = [call for call in mock_q_process.call_args_list if "delete" in str(call)]
+    assert len(delete_calls) >= 3
+    assert handle.workspace_id not in __import__(
+        "backend.q_backend.q_executor", fromlist=["_ACTIVE_LEASES"]
+    )._ACTIVE_LEASES
+
+    with pytest.raises(RuntimeError, match="already been released"):
+        with handle:
+            pass
+
+
+def test_resident_handle_release_retries_connection_acquisition_failure(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    result = executor.execute_region(
+        sample_region_plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+    )
+    handle = result.resident_handle
+    assert handle is not None
+    symbol = handle.q_symbol
+
+    executor.process_manager.get_connection.side_effect = RuntimeError("connection closed")
+    with pytest.raises(RuntimeError, match="connection closed"):
+        handle.release()
+    assert not handle._released
+
+    executor.process_manager.get_connection.side_effect = None
+    executor.process_manager.get_connection.return_value = mock_q_process
+    handle.release()
+    handle.close()
+    assert handle._released
+    assert sum(
+        "delete" in str(call) and symbol in str(call)
+        for call in mock_q_process.call_args_list
+    ) == 1
+
+
+def test_resident_handle_release_retries_delete_failure(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    result = executor.execute_region(
+        sample_region_plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+    )
+    handle = result.resident_handle
+    assert handle is not None
+    symbol = handle.q_symbol
+    original_side_effect = mock_q_process.side_effect
+
+    def fail_delete_once(command):
+        if isinstance(command, str) and command.startswith("delete "):
+            raise RuntimeError("delete failed")
+        return original_side_effect(command) if original_side_effect else mock_q_process.return_value
+
+    mock_q_process.side_effect = fail_delete_once
+    with pytest.raises(Exception, match="cleanup failed"):
+        handle.release()
+    assert not handle._released
+    assert symbol in q_executor_module._ACTIVE_LEASES[handle.workspace_id][2]
+
+    mock_q_process.side_effect = original_side_effect
+    handle.release()
+    handle.close()
+    assert handle._released
+    assert handle.workspace_id not in q_executor_module._ACTIVE_LEASES
+
+
+def test_stale_resident_handle_release_is_noop(
+    mock_q_process, mock_type_adapter, sample_input_data, sample_region_plan
+):
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    result = executor.execute_region(
+        sample_region_plan,
+        {"input_table": sample_input_data},
+        return_resident_handle=True,
+    )
+    handle = result.resident_handle
+    assert handle is not None
+    handle.release()
+    call_count = mock_q_process.call_count
+
+    handle.release()
+    assert mock_q_process.call_count == call_count
+
+
 def test_intermediate_residency_skips_q_to_pandas_materialization(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
@@ -266,6 +377,123 @@ def test_batch_regions_automatic_residency(mock_q_process, mock_type_adapter, sa
     assert telemetry["q_to_python_bytes"] > 0  # Final download
 
 
+def test_batch_sibling_handles_release_independently(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Releasing one published handle preserves sibling residency."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    plans = [
+        QRegionPlan("A", ("a",), "aout: input_table", ("input_table",), "aout"),
+        QRegionPlan("B", ("b",), "bout: aout", ("aout",), "bout"),
+        QRegionPlan("C", ("c",), "final: bout", ("bout",), "final"),
+    ]
+    results = executor.execute_batch_regions(
+        plans, {"input_table": sample_input_data}, enable_residency=True
+    )
+    handle_a, handle_b = results[0].resident_handle, results[1].resident_handle
+    assert handle_a is not None and handle_b is not None
+    assert handle_a.workspace_id == handle_b.workspace_id
+    workspace_id = handle_a.workspace_id
+    symbol_a, symbol_b = handle_a.q_symbol, handle_b.q_symbol
+
+    handle_a.release()
+    lease = q_executor_module._ACTIVE_LEASES[workspace_id]
+    assert symbol_a not in lease[2]
+    assert symbol_b in lease[2]
+    executor._validate_lease(handle_b, mock_q_process, allow_legacy_handles=False)
+    deletes = [str(call) for call in mock_q_process.call_args_list if "delete" in str(call)]
+    assert sum(symbol_a in call for call in deletes) == 1
+    assert not any(symbol_b in call for call in deletes)
+
+    handle_b.release()
+    assert workspace_id not in q_executor_module._ACTIVE_LEASES
+    deletes = [str(call) for call in mock_q_process.call_args_list if "delete" in str(call)]
+    assert sum(symbol_b in call for call in deletes) == 1
+
+
+def test_batch_published_handle_lives_until_explicit_release(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """A successful batch transfers its non-final symbol lease to the handle."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    plans = [
+        QRegionPlan(
+            region_id="region_A",
+            node_ids=("node_1",),
+            q_code="temp1: mavg[20; input_table[`price]]",
+            input_tables=("input_table",),
+            output_table="temp1",
+        ),
+        QRegionPlan(
+            region_id="region_B",
+            node_ids=("node_2",),
+            q_code="final: mavg[10; temp1]",
+            input_tables=("temp1",),
+            output_table="final",
+        ),
+    ]
+
+    results = executor.execute_batch_regions(
+        plans, {"input_table": sample_input_data}, enable_residency=True
+    )
+    handle = results[0].resident_handle
+    assert handle is not None
+    symbol = handle.q_symbol
+    assert symbol is not None
+    delete_calls = lambda: [
+        str(call) for call in mock_q_process.call_args_list if "delete" in str(call)
+    ]
+
+    assert not any(symbol in call for call in delete_calls())
+    executor._validate_lease(handle, mock_q_process, allow_legacy_handles=False)
+    mock_q_process(symbol)
+    assert mock_q_process.call_args == ((symbol,),)
+
+    before_release = sum(symbol in call for call in delete_calls())
+    handle.release()
+    handle.close()
+    assert sum(symbol in call for call in delete_calls()) == before_release + 1
+    assert handle.workspace_id not in q_executor_module._ACTIVE_LEASES
+
+
+def test_failed_resident_batch_cleans_published_intermediate(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """A batch that fails before return keeps ownership and cleans its workspace."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    leases_before = set(q_executor_module._ACTIVE_LEASES)
+    plans = [
+        QRegionPlan(
+            region_id="region_A",
+            node_ids=("node_1",),
+            q_code="temp1: mavg[20; input_table[`price]]",
+            input_tables=("input_table",),
+            output_table="temp1",
+        ),
+        QRegionPlan(
+            region_id="region_B",
+            node_ids=("node_2",),
+            q_code="final: missing",
+            input_tables=("missing",),
+            output_table="final",
+        ),
+    ]
+
+    with pytest.raises(Exception):
+        executor.execute_batch_regions(
+            plans, {"input_table": sample_input_data}, enable_residency=True
+        )
+
+    assert any("delete" in str(call) for call in mock_q_process.call_args_list)
+    assert set(q_executor_module._ACTIVE_LEASES) == leases_before
+
+
 def test_batch_regions_without_residency(mock_q_process, mock_type_adapter, sample_input_data):
     """Test that disabling residency forces re-uploads (baseline comparison)."""
     reset_q_executor_telemetry()
@@ -303,6 +531,79 @@ def test_batch_regions_without_residency(mock_q_process, mock_type_adapter, samp
 
     # With residency disabled, no reuse should happen
     assert telemetry["resident_reuse_count"] == 0
+    assert any("delete" in str(call) for call in mock_q_process.call_args_list)
+    assert not executor._pending_workspace_cleanup
+
+
+def test_failed_batch_connection_cleanup_is_retained_and_retried(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """A failed final connection lookup keeps cleanup ownership for retry."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    plans = [
+        QRegionPlan(
+            "region_A", ("node_1",),
+            "temp1: mavg[20; input_table[`price]]", ("input_table",), "temp1",
+        ),
+        QRegionPlan(
+            "region_B", ("node_2",), "final: missing", ("missing",), "final",
+        ),
+    ]
+    q_connection = mock_q_process
+    calls = 0
+
+    def fail_final_connection():
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            raise RuntimeError("cleanup connection failed")
+        return q_connection
+
+    executor.process_manager.get_connection.side_effect = fail_final_connection
+    with pytest.raises(Exception, match="Missing input tables"):
+        executor.execute_batch_regions(
+            plans, {"input_table": sample_input_data}, enable_residency=True
+        )
+    assert executor._pending_workspace_cleanup
+    original_workspaces = {
+        workspace_id for workspace_id, _, _ in executor._pending_workspace_cleanup
+    }
+    assert original_workspaces <= set(q_executor_module._ACTIVE_LEASES)
+
+    executor.process_manager.get_connection.side_effect = None
+    executor.process_manager.get_connection.return_value = mock_q_process
+    deletes_before = sum("delete" in str(call) for call in mock_q_process.call_args_list)
+    executor.execute_batch_regions([], {}, enable_residency=False)
+    assert not executor._pending_workspace_cleanup
+    assert original_workspaces.isdisjoint(q_executor_module._ACTIVE_LEASES)
+    assert sum("delete" in str(call) for call in mock_q_process.call_args_list) > deletes_before
+
+
+def test_pending_cleanup_rejects_replacement_connection(
+    mock_q_process, mock_type_adapter
+):
+    """Pending ownership never deletes old-connection symbols through a new q."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    workspace_id, generation_id = "old_workspace", "old_generation"
+    old_connection_id = id(mock_q_process)
+    symbol = "qe_old_workspace_result"
+    q_executor_module._ACTIVE_LEASES[workspace_id] = (
+        generation_id, old_connection_id, {symbol}
+    )
+    key = (workspace_id, generation_id, old_connection_id)
+    executor._pending_workspace_cleanup[key] = frozenset()
+    replacement_q = MagicMock()
+
+    executor._retry_pending_workspace_cleanup(replacement_q)
+
+    replacement_q.assert_not_called()
+    assert key in executor._pending_workspace_cleanup
+    assert symbol in q_executor_module._ACTIVE_LEASES[workspace_id][2]
+    del q_executor_module._ACTIVE_LEASES[workspace_id]
 
 
 def test_resident_handle_with_different_table_names(mock_q_process, mock_type_adapter):

@@ -3,20 +3,38 @@ scope: FA2-P0-001..006
 status: CLOSED_LOCAL
 change: adapter repair
 latest_fix:
-  catalog_serialization: get_catalog_entry uses _catalog_payload
+  catalog_serialization: get_catalog_entry validates catalog key/payload identity
+  universe_reads: read_joined
   regression_cause: preserved
 validation:
   focused_tests:
-    passed: 17
+    passed: 20
     failed: 0
   py_compile: PASSED
-  clean_wheel_smoke:
-    phases: 5
-    passed: 5
-    failed: 0
+  import_smoke:
+    status: PASSED
+    pythonpath: /home/shw/quant_projects
+  scoped_diff_check: PASSED
+  independent_review:
+    catalog_identity: CLEAN
+    universe_repair: MANUAL_SCOPED_REVIEW_ONLY
+    universe_repair_agent_api: FAILED
+  broad_regression: NOT_RUN
+  full_regression: NOT_RUN
+  full_compile: NOT_RUN
+  registry: NOT_RUN
+  parity: NOT_RUN
+  pit: NOT_RUN
+  ci: NOT_RUN
+  production_certification: NOT_RUN
 production: NOT_RUN
 provenance:
   repository_state: local_current_tree
+  head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+  dirty_count: 78
+  modified_files:
+    - adapters/data_access.py
+    - tests/test_adapter_data_access.py
   commit: NONE
-  remotes: NONE
+  remotes: NOT_USED
   release_readiness: NOT_CLAIMED

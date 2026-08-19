@@ -424,6 +424,10 @@ class StreamingEvaluator:
                        Signature: (state, factor_batch, label_bundle) -> state
             metric_kind: Type of metric
         """
+        if metric_id in self._streaming_metrics:
+            raise InvalidContractError(
+                f"Streaming metric already registered: {metric_id}"
+            )
         self._streaming_metrics[metric_id] = {
             "update_fn": update_fn,
             "metric_kind": metric_kind,
@@ -450,6 +454,17 @@ class StreamingEvaluator:
             InvalidContractError: If metrics not registered
             RuntimeError: If budget exceeded
         """
+        requested_metric_ids = [spec["metric_id"] for spec in metric_specs]
+        if len(requested_metric_ids) != len(set(requested_metric_ids)):
+            duplicate_ids = sorted(
+                {metric_id for metric_id in requested_metric_ids
+                 if requested_metric_ids.count(metric_id) > 1},
+                key=str,
+            )
+            raise InvalidContractError(
+                f"duplicate requested metric_specs: {duplicate_ids}"
+            )
+
         start_time = time.time()
         self.budget_tracker.reset()
         self._peak_memory_mb = 0.0
@@ -726,6 +741,16 @@ class StreamingEvaluator:
                 metric_kind = MetricKind.SUMMARY
             else:
                 metric_kind = MetricKind.CUSTOM
+
+            registered = self._streaming_metrics.get(metric_id)
+            if registered is None:
+                raise InvalidContractError(f"Streaming metric not registered: {metric_id}")
+            registered_kind = registered["metric_kind"]
+            if metric_kind != registered_kind:
+                raise InvalidContractError(
+                    f"Streaming metric kind mismatch for {metric_id}: "
+                    f"requested {metric_kind.value}, registered {registered_kind.value}"
+                )
 
             states[metric_id] = StreamingMetricState(
                 metric_id=metric_id,

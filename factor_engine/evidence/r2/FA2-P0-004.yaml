@@ -1,0 +1,39 @@
+task_id: FA2-P0-004
+finding: missing_factor_data_error_maps_to_typed_not_found
+base_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+current_head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+dirty_count_before_evidence: 74
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_assets/adapters/data_access.py
+  - factor_assets/tests/test_adapter_data_access.py
+  - factor_engine/evidence/r2/FA2-P0-004.yaml
+modified_files:
+  - factor_assets/adapters/data_access.py
+  - factor_assets/tests/test_adapter_data_access.py
+status: CLOSED_LOCAL
+implementation:
+  - DataError exceptions identifying a missing factor are mapped to DataAccessNotFoundError.
+  - The original DataError is retained as the typed error cause and exception context.
+regression_oracle:
+  - Synthetic DataError with the DataAccess missing-factor message is raised by read_factors.
+  - DAFactorValueReader.read_factor_values raises DataAccessNotFoundError with a DataError cause.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_assets && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest -q tests/test_adapter_data_access.py -p no:xdist
+  result: 18 passed
+syntax_compile:
+  command: python3 -m py_compile /home/shw/quant_projects/factor_assets/adapters/data_access.py /home/shw/quant_projects/factor_assets/tests/test_adapter_data_access.py
+  result: PASS
+import_smoke:
+  command: PYTHONPATH=/home/shw/quant_projects python3 -c "from factor_assets.adapters.data_access import DAFactorValueReader, DataAccessNotFoundError; print('import smoke passed')"
+  result: PASS
+scoped_diff_check:
+  command: git -C /home/shw/quant_projects/factor_assets diff --check -- adapters/data_access.py tests/test_adapter_data_access.py
+  result: PASS
+review_status: LOCAL_FOCUSED_REVIEWED
+known_limitations:
+  - broad repository tests, four-backend parity, PIT, registry, root CI, and production gates were NOT_RUN
+  - existing unrelated dirty files were preserved
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

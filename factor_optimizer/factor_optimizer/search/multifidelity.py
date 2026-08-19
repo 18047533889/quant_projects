@@ -144,7 +144,9 @@ class PromotionCriteria:
             checks.append(score >= self.min_score)
 
         if self.top_k_fraction is not None:
-            threshold_rank = int(total * self.top_k_fraction)
+            threshold_rank = 0
+            if total > 0 and self.top_k_fraction > 0:
+                threshold_rank = max(1, int(total * self.top_k_fraction))
             checks.append(rank < threshold_rank)
 
         if self.min_improvement is not None and baseline_score is not None:

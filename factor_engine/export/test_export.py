@@ -199,7 +199,7 @@ class TestContractImporter:
     def test_import_model_operator_spec(self):
         """Test importing ModelOperatorSpec."""
         data = {
-            "__type__": "factor_engine.modeling.contracts.ModelOperatorSpec",
+            "__type__": "modeling.contracts.ModelOperatorSpec",
             "canonical": "test_op",
             "execution_class": ModelExecutionClass.SAME_TIME_CROSS_SECTIONAL,
             "semantic_role": "model_feature",
@@ -233,7 +233,7 @@ class TestContractImporter:
     def test_import_explicit_target_type_with_stale_metadata(self):
         """Explicit target_type remains authoritative over stale metadata."""
         data = {
-            "__type__": "factor_engine.modeling.contracts.ModelOperatorSpec",
+            "__type__": "modeling.contracts.ModelOperatorSpec",
             "canonical": "explicit_target",
             "execution_class": ModelExecutionClass.SAME_TIME_CROSS_SECTIONAL,
             "semantic_role": "diagnostic",

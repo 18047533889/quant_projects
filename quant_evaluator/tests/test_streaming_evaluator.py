@@ -208,7 +208,35 @@ class TestStreamingEvaluator:
 
         assert "test_metric" in evaluator._streaming_metrics
 
-    def test_batch_to_generator(self):
+    def test_register_streaming_metric_rejects_duplicate_id(self):
+        evaluator = StreamingEvaluator()
+
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+
+        with pytest.raises(InvalidContractError, match="already registered"):
+            evaluator.register_streaming_metric(
+                "coverage", streaming_summary_updater, MetricKind.SUMMARY
+            )
+
+    def test_evaluate_stream_rejects_duplicate_metric_specs(self):
+        evaluator = StreamingEvaluator()
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+        batch = self.create_test_batch(T=2, N=1, F=1)
+        labels = self.create_test_labels(T=2, N=1)
+
+        with pytest.raises(InvalidContractError, match="duplicate requested metric_specs"):
+            evaluator.evaluate_stream(
+                iter(((batch, labels),)),
+                (
+                    {"metric_id": "coverage", "metric_kind": "coverage"},
+                    {"metric_id": "coverage", "metric_kind": "coverage"},
+                ),
+            )
+
         evaluator = StreamingEvaluator(
             chunk_size_time=50,
             chunk_size_factors=2,
@@ -723,6 +751,14 @@ class TestStreamingEvaluator:
 
         with pytest.raises(InvalidContractError, match="not registered"):
             evaluator.evaluate_large_batch(batch, labels, metric_specs)
+
+        evaluator.register_streaming_metric(
+            "coverage", streaming_coverage_updater, MetricKind.COVERAGE
+        )
+        with pytest.raises(InvalidContractError, match="kind mismatch"):
+            evaluator.evaluate_large_batch(
+                batch, labels, [{"metric_id": "coverage", "metric_kind": "summary"}]
+            )
 
     def test_budget_tracking(self):
         budget = ComputationBudget(max_operations=3, allow_overflow=False)

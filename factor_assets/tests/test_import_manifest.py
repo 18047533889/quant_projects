@@ -45,7 +45,9 @@ def test_shipped_production_packages_import_recursively() -> None:
     )
 
 
-def test_incomplete_namespaces_are_explicitly_research_only() -> None:
-    """Incomplete extracted namespaces must not masquerade as production APIs."""
-    assert importlib.import_module("factor_assets.assembly").RESEARCH_ONLY is True
+def test_namespace_capability_markers_match_shipped_surfaces() -> None:
+    """Production and incomplete namespaces must expose truthful capabilities."""
+    assembly = importlib.import_module("factor_assets.assembly")
+    assert assembly.FactorSetAssembler is not None
+    assert not hasattr(assembly, "RESEARCH_ONLY")
     assert importlib.import_module("factor_assets.campaigns").RESEARCH_ONLY is True

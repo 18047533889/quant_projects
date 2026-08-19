@@ -13,6 +13,7 @@ from modeling_adapters.contracts import (
     SplitSpec,
     OutOfFoldSpec,
     ModelReadyData,
+    TransformMode,
 )
 from modeling_adapters.errors import (
     ModelingError,
@@ -20,6 +21,8 @@ from modeling_adapters.errors import (
     FitWindowError,
     SplitError,
     ContractViolation,
+    AdapterError,
+    InsufficientDataError,
 )
 
 __all__ = [
@@ -29,12 +32,16 @@ __all__ = [
     "SplitSpec",
     "OutOfFoldSpec",
     "ModelReadyData",
+    "TransformMode",
     # Errors
     "ModelingError",
     "FutureLeakageError",
     "FitWindowError",
     "SplitError",
     "ContractViolation",
+    "AdapterError",
+    "InsufficientDataError",
+    "package_info",
 ]
 
 

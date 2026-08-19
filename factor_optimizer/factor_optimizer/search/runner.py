@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.trial import Trial, TrialStatus
+from factor_optimizer.contracts.splits import EvaluationProtocol
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 
 
@@ -24,6 +25,8 @@ class SearchConfig:
     max_concurrency: int = 1
     evaluation_cost_units: Optional[float] = None
     execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY
+    # Existing callbacks remain compatible; safe callers opt into the protocol.
+    require_evaluation_protocol: bool = False
 
     def __post_init__(self):
         if isinstance(self.execution_mode, str):
@@ -58,6 +61,7 @@ class SearchConfig:
             "max_concurrency": self.max_concurrency,
             "evaluation_cost_units": self.evaluation_cost_units,
             "execution_mode": self.execution_mode.value,
+            "require_evaluation_protocol": self.require_evaluation_protocol,
         }
 
     @classmethod
@@ -263,6 +267,12 @@ class SearchRunner:
     ):
         if config.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
+        if config.require_evaluation_protocol and not isinstance(
+            evaluation_fn, EvaluationProtocol
+        ):
+            raise TypeError(
+                "safe search requires an EvaluationProtocol with a validated SplitPlan"
+            )
         self.config = config
         self.proposal_fn = proposal_fn
         self.evaluation_fn = evaluation_fn
@@ -347,7 +357,11 @@ class SearchRunner:
 
                 trial.update_status(TrialStatus.EVALUATING)
                 try:
-                    result = self.evaluation_fn(trial, fidelity)
+                    result = (
+                        self.evaluation_fn.evaluate(trial, fidelity)
+                        if isinstance(self.evaluation_fn, EvaluationProtocol)
+                        else self.evaluation_fn(trial, fidelity)
+                    )
                     actual_cost = result.get("cost")
                     if actual_cost is None:
                         raise ValueError("evaluation result cost is unknown")

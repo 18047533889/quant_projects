@@ -311,6 +311,102 @@ class TestDataAccessAdapter:
         assert "sector" in result
         assert "categories" in result["sector"]
 
+    def test_rejects_misaligned_size_exposure(self):
+        """Provider values must align exactly with dates and assets."""
+        provider = MockExposureProvider()
+        provider.get_size_exposure = lambda **kwargs: {
+            "values": [[1.0, 2.0]],
+            "dates": ["2024-01-01", "2024-01-02"],
+            "assets": ["ONLY_ONE"],
+            "metric": kwargs["size_metric"],
+            "metadata": {},
+        }
+
+        with pytest.raises(ValueError, match="shape must align"):
+            DataAccessAdapter(provider).fetch_size_exposure(
+                market="us", size_metric="market_cap"
+            )
+
+    def test_rejects_size_metric_mismatch(self):
+        """Provider identity cannot substitute a different size metric."""
+        provider = MockExposureProvider()
+        provider.get_size_exposure = lambda **kwargs: {
+            "values": [[1.0]],
+            "dates": ["2024-01-01"],
+            "assets": ["A"],
+            "metric": "wrong_metric",
+            "metadata": {},
+        }
+
+        with pytest.raises(ValueError, match="metric does not match request"):
+            DataAccessAdapter(provider).fetch_size_exposure(
+                market="us", size_metric="market_cap"
+            )
+
+    def test_rejects_missing_required_exposure_field(self):
+        """All provider responses must include boundary metadata."""
+        provider = MockExposureProvider()
+        provider.get_industry_exposure = lambda **kwargs: {
+            "values": [["IND_0"]],
+            "dates": ["2024-01-01"],
+            "assets": ["A"],
+            "classification": kwargs["industry_classification"],
+        }
+
+        with pytest.raises(ValueError, match="missing required fields"):
+            DataAccessAdapter(provider).fetch_industry_exposure(market="ashare")
+
+    @pytest.mark.parametrize(
+        ("exposure_type", "field", "wrong_value"),
+        [
+            ("sector", "classification", "wrong"),
+            ("beta", "window_days", 1),
+            ("momentum", "exposure_name", "other"),
+        ],
+    )
+    def test_multi_exposure_rejects_response_identity_mismatch(
+        self, exposure_type, field, wrong_value
+    ):
+        """Multi-fetch must not replay exposure data under another identity."""
+        provider = MockExposureProvider()
+        method_name = (
+            f"get_{exposure_type}_exposure"
+            if exposure_type in {"sector", "beta"}
+            else "get_custom_exposure"
+        )
+        setattr(
+            provider,
+            method_name,
+            lambda *args, **kwargs: {
+                "values": [[1.0]],
+                "dates": ["2024-01-01"],
+                "assets": ["A"],
+                field: wrong_value,
+                "metadata": {},
+            },
+        )
+
+        with pytest.raises(ValueError, match=f"{field} does not match request"):
+            DataAccessAdapter(provider).fetch_multi_exposure(
+                market="us", exposure_types=[exposure_type]
+            )
+
+    def test_valid_provider_result_is_returned_unchanged(self):
+        """Validation preserves a valid provider-owned result object."""
+        provider = MockExposureProvider()
+        payload = {
+            "values": [[1.0]],
+            "dates": ["2024-01-01"],
+            "assets": ["A"],
+            "metric": "market_cap",
+            "metadata": {},
+        }
+        provider.get_size_exposure = lambda **kwargs: payload
+
+        result = DataAccessAdapter(provider).fetch_size_exposure(market="us")
+
+        assert result is payload
+
 
 class TestOptionalDependency:
     """Test optional dependency handling."""
@@ -320,6 +416,24 @@ class TestOptionalDependency:
         # This will be False unless dataaccess is installed
         available = check_data_access_available()
         assert isinstance(available, bool)
+
+    def test_availability_requires_default_provider(self):
+        """An importable package alone must not advertise default integration."""
+        try:
+            import dataaccess  # noqa: F401
+        except ImportError:
+            pytest.skip("dataaccess is not installed")
+
+        try:
+            from factor_preprocess.adapters._data_access_impl import (  # noqa: F401
+                DefaultExposureProvider,
+            )
+        except ImportError:
+            assert not check_data_access_available()
+            with pytest.raises(OptionalDependencyMissing):
+                create_adapter()
+        else:
+            assert check_data_access_available()
 
     def test_optional_dependency_missing_exception(self):
         """Test exception structure."""

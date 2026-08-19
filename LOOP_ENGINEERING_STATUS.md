@@ -1,5 +1,195 @@
 # Loop Engineering Status - Session 4
 
+## 2026-08-19 - FactorOptimizer clean-wheel revalidation
+
+- Re-ran `factor_optimizer/scripts/wheel_clean_install_smoke.py` with single-thread BLAS/OpenMP/MKL. Wheel build, payload and dependency metadata checks, isolated venv install, public imports, and SearchConfig smoke all passed: **5/5 stages passed**.
+- The smoke validates local wheel isolation and the declared research-only package surface; it does not establish a production execution capability. CI, release provenance, and production certification remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - QuantEvaluator absolute-TTL focused audit
+
+- Revalidated the current L1/L2/L3 absolute insertion-origin TTL and promotion regressions (`ttl or promotion`) serially with single-thread BLAS/OpenMP/MKL and no xdist: **29 passed, 98 deselected**.
+- Coverage includes exact-boundary expiry, slow serialization/encoding exhaustion, invalid origins and TTLs, fractional Redis TTL rounding, remaining-TTL publication, and L2/L3 promotion without TTL restart. No new TTL defect was reproduced in this focused audit.
+- Real Redis, broad QE (resource-blocked below), CI, release, parity, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - QuantEvaluator broad regression resource result
+
+- Re-attempted the complete QuantEvaluator suite serially with single-thread BLAS/OpenMP/MKL and no xdist. The process was killed with exit **137** before completion, so this gate remains **NOT_RUN / RESOURCE_BLOCKED**, not passing.
+- Existing focused QE evidence remains valid only for its recorded shards. No broad QuantEvaluator, CI, release, parity, real-Redis, or production claim follows.
+
+## 2026-08-19 - FactorPreprocess complete local regression
+
+- Ran the complete FactorPreprocess suite serially with single-thread BLAS/OpenMP/MKL and no xdist: **734 passed, 2 skipped, 22 warnings**.
+- The warnings are numerical/deprecation warnings exercised by edge-case tests (constant/all-NaN slices, robust-regression division branches, wavelet boundary effects, and pandas `GroupBy.apply` deprecation); no test failed. This is current-tree local evidence only; cross-package CI, release provenance, and production certification remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - FactorAssets capability-manifest reconciliation
+
+- The complete FactorAssets suite reproduced one stale capability assertion: `factor_assets.assembly` now ships `FactorSetAssembler`, but the import manifest still required the former `RESEARCH_ONLY` marker.
+- Updated only the manifest regression to assert the shipped assembler surface and absence of the incomplete-namespace marker while retaining the `campaigns` research-only gate. Production assembly code was not changed.
+- Focused serial validation: **2 passed**; complete FactorAssets local suite: **596 passed, 43 skipped**. This is current-tree local evidence only; CI, release provenance, and production certification remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - Modeling clean-wheel revalidation
+
+- Re-ran the opt-in clean build/install namespace gate with `RUN_WHEEL_SMOKE=1`, single-thread BLAS/OpenMP/MKL, and no xdist: **1 passed**. The current-tree wheel remained isolated to `modeling_adapters` and did not install legacy top-level `modeling`.
+- This is current-tree local evidence only; cross-package CI, release provenance, and production certification remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - FactorOptimizer small-cohort promotion repair
+
+- Reproduced `PromotionCriteria.top_k_fraction` truncation: with fraction `0.2` and cohort totals 1-4, `int(total * fraction)` was zero and rejected even rank 0, preventing any candidate from advancing to the next fidelity tier.
+- Positive fractions now retain the prior floor semantics for ordinary cohorts while admitting at least the best candidate for every non-empty cohort. Empty or invalid non-positive totals remain fail-closed.
+- Added boundary coverage for totals 1-4 and 0/-1 while preserving the existing total=10 cutoff oracle. Focused serial validation: **26 passed**; complete FactorOptimizer local suite: **443 passed, 4 skipped**; `py_compile` and scoped `git diff --check` passed.
+- Independent review was attempted but blocked by the agent API prompt-length failure. This is local focused evidence only; broader optimizer, integration, CI, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - FactorAssets decision identity and QE disk sidecar cleanup
+
+- `SelectionPolicy.make_decision` now uses microsecond timestamp IDs with an in-policy numeric suffix fallback, preventing same-factor decisions at an identical clock value from colliding with the durable `(factor_id, decision_id)` uniqueness contract. Equal-timestamp `get_decision` follows append order. Serial selection/repository validation: **136 passed**.
+- `DiskCacheLayer` dependency invalidation now removes an adjacent valid dependency-matching sidecar with its modern record without double-counting it; unrelated or malformed compatibility sidecars remain. A complete post-change cache run passed: **125 passed**.
+- Independently reproduced a related read-path orphan: rejecting an expired/incompatible modern record removed only `.cache`. The read path now removes an adjacent valid same-logical-key sidecar while retaining unrelated or malformed sidecars. Focused regression: **4 passed, 123 deselected**; complete cache suite: **127 passed**.
+- The serialized QuantEvaluator cache/evaluator/streaming/public-API shard passed after the final read-path addition: **216 passed, 2 expected numerical warnings**. Broad QE, real Redis, root CI, release, parity, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - FactorAssets legacy packaging metadata hardening
+
+- Under the currently installed setuptools, the legacy `setup.py bdist_wheel` path already inherited the expected `pyproject.toml` metadata, so a missing-metadata failure was **not reproduced locally**. Explicit name/version, Python requirement, and runtime dependencies were nevertheless added to `setup.py` as legacy-environment compatibility hardening while preserving explicit package mapping.
+- Extended the legacy archive regression to inspect wheel `METADATA` for Name, Version, Requires-Python, and both runtime requirements. Focused serial test: **1 passed**.
+- This is local archive evidence only; broader package, CI, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - Q `ts_beta` lowering quarantine
+
+- Production Q `ts_beta` lowering was incorrect: it returned a scalar final-window value and omitted canonical `min_periods` semantics. `ts_beta` was removed from the QCompiler lowering map and `SPECIALIZED` classification; `has_lowering`, `can_compile`, and `executable_lowerings` are false, research validation rejects it, and compile is unsupported.
+- Modified scope: `factor_engine/backend/q_backend/q_compiler.py` and `factor_engine/tests/q_backend/test_q_compatibility_contract.py`; evidence: `factor_engine/evidence/r2/Q2-P0-008.yaml`, bound to HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`.
+- Focused compatibility suite: **23 passed**; syntax compile **passed**. Broad, registry, parity, CI, and production gates remain **NOT_RUN**.
+- Local dirty-tree evidence only; no commit and no production-readiness claim.
+
+## 2026-08-19 - QE Redis get cleanup snapshot hardening
+
+- `RedisCacheLayer.get` now threads the exact compressed value returned by its transactional pipeline into `_cleanup_get_pair`; malformed or missing metadata quarantine compares that original value snapshot and no longer performs a second Redis `GET`. Valid metadata continues to use generation-checked cleanup.
+- Added a regression asserting cleanup receives the pipeline snapshot and that a cleanup-time Redis reread would fail the test. Focused serial cache suite with single-thread BLAS/OpenMP/MKL and no xdist: **124 passed**.
+- This is local focused evidence only. The earlier broad QuantEvaluator run exited 137 before completion; broad QE, real Redis, CI, release, parity, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - Modeling full local and clean-wheel validation
+
+- Ran the complete standalone modeling test suite serially with single-thread BLAS/OpenMP/MKL and no xdist: **131 passed, 2 skipped**. The skips are the expected optional `factor_preprocess`-unavailable branch and opt-in wheel test in the default run.
+- Ran the clean build/install namespace-isolation gate separately with `RUN_WHEEL_SMOKE=1`: **1 passed**. The temporary wheel contained only `modeling_adapters`, clean installation imported it successfully, and legacy top-level `modeling` was absent.
+- This is current-tree local evidence only. Cross-package root CI, release provenance, and production certification remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - QE Redis malformed quarantine value-race hardening
+
+- Repaired `RedisCacheLayer` malformed/empty-metadata quarantine so the Lua compare-and-delete checks both the scanned metadata payload and the scanned physical value payload before deleting either key; a value-only replacement now wins the race.
+- Extended the existing fake Redis oracle and added focused value-only replacement coverage. Subsequent full cache validation after pipeline-snapshot and disk-sidecar hardening reached **127 passed**; source/test `py_compile` and scoped `git diff --check` passed.
+- Internal `put`/`get` pipelines remain transactional; this closes the defense-in-depth external/non-transactional writer race without changing normal publication semantics. Review attempts were blocked by repeated prompt-length API errors, and no real Redis instance was exercised, so status is **LOCAL_FOCUSED_TESTED / REAL_REDIS_NOT_RUN**.
+- Broad, distributed-real-Redis, CI, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - Modeling default package-boundary regression
+
+- Added `modeling/tests/test_package_discovery.py`, a default pytest regression that reads the active setuptools discovery configuration and verifies discovery is limited to `modeling_adapters` plus its subpackages and excludes legacy `modeling`.
+- Focused serial validation with single-thread BLAS/OpenMP/MKL and no xdist: **21 passed, 1 skipped**; scoped `git diff --check` passed. The skip is an existing optional adapter test, not the new package-boundary regression.
+- The clean build/install smoke remains an opt-in integration test; prior clean-wheel evidence remains local-only. Broad, CI, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - QE cache and modeling focused evidence
+
+- Local-only focused evidence: QE cache **122 passed** after fixing modern-record plus sidecar double-counting; modeling contracts **20 passed, 1 skipped**.
+- Broad, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - Focused QE, modeling, FactorAssets, and FactorOptimizer evidence
+
+- Local-only focused evidence: QE cache **122 passed**; modeling **20 passed, 2 skipped**; FactorAssets assembly/legacy **13 passed**; FactorOptimizer correctness **19 passed**.
+- FactorOptimizer wheel rebuilt at `/home/shw/quant_projects/factor_optimizer/dist/factor_optimizer-0.1.0-py3-none-any.whl`; clean-wheel smoke **5 checks passed**.
+- Broad, release, and production gates remain **NOT_RUN**. No production claim.
+
+## 2026-08-19 - QE legacy dependency invalidation and modeling public export
+
+- Repaired `quant_evaluator/runtime/cache_v2.py` dependency invalidation so valid legacy value/`.meta.json` pairs are deferred to metadata-driven dependency matching instead of being deleted as malformed immutable records.
+- Current QE rerun: **121 passed, 1 failed**. The remaining failure is `TestMultiLevelCache.test_legacy_metadata_key_cannot_redirect_dependency_walk`; orphan/legacy disk tests pass, but QE scope remains **UNRESOLVED**.
+- Exported the public `TransformMode` contract from `modeling_adapters` and changed hardening coverage to exercise the top-level import. Direct import smoke passed.
+- Modeling contract validation: **21 passed, 1 skipped**. FactorAssets focused validation: **12 passed**. FactorOptimizer clean-wheel build/smoke evidence is preserved.
+- Evidence is local-only and current-tree scoped; broad repository, release, and production certification remain **NOT_RUN**. No production-readiness claim follows.
+
+## 2026-08-19 - FA2-P0-001..006 adapter evidence update
+
+- Current local FactorEngine HEAD: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count: **78**. Modified adapter scope: `factor_assets/adapters/data_access.py` and `factor_assets/tests/test_adapter_data_access.py`.
+- Catalog handling validates catalog key/payload identity; universe reads use `read_joined`.
+- Focused validation: **20 passed**; `py_compile` **PASS**; import smoke **PASS** with `PYTHONPATH=/home/shw/quant_projects`; scoped diff-check **PASS**.
+- Review: catalog identity independent review **CLEAN**; universe repair received manual scoped review only because the agent API failed.
+- Provenance: commit **NONE**; remotes **NOT_USED**. Broad/full regression, full compile, registry, parity, PIT, CI, and production certification remain **NOT_RUN**; this is local current-tree evidence only.
+
+## 2026-08-19 - FA2-P0-003 catalog availability false-positive repair
+
+- Repaired `factor_assets/adapters/data_access.py`: `check_factor_availability` now validates the catalog window and probes `read_factors` for the requested PIT date; a typed missing-factor `DataError` returns `False` instead of trusting stale active metadata.
+- Added focused regression coverage in `factor_assets/tests/test_adapter_data_access.py` for an active in-window catalog entry whose `read_factors` raises missing-data `DataError`; the test asserts fail-closed availability. Existing missing-factor read mapping coverage remains intact.
+- Current FactorEngine HEAD: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count before evidence edit: **76**. Existing unrelated dirty files were preserved; no commit or remote operation was made.
+- Focused serial pytest: **19 passed** with `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1`, no xdist. `py_compile` passed; import smoke passed; scoped `git diff --check` passed.
+- Evidence manifest: `factor_engine/evidence/r2/FA2-P0-003.yaml`. Status: `CLOSED_LOCAL / LOCAL_FOCUSED_REVIEWED`.
+- Broad repository, four-backend parity, PIT, registry, root CI, and production gates remain `NOT_RUN`; no production-certification claim follows.
+
+## 2026-08-19 - FA2-P0-004 DataAccess missing-factor error mapping
+
+- Repaired `factor_assets/adapters/data_access.py` so a DataAccess `DataError` identifying a missing factor is translated to `DataAccessNotFoundError`, preserving the original exception as `cause` and context.
+- Added an oracle regression in `factor_assets/tests/test_adapter_data_access.py` using the missing-factor DataAccess message and asserting the typed error plus original `DataError` cause.
+- Current FactorEngine HEAD: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count before evidence edit: **74**. Existing unrelated dirty files were preserved; no protected registry files were edited.
+- Focused serial pytest: **18 passed** with `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1`, no xdist. `py_compile` passed; import smoke passed; scoped `git diff --check` passed.
+- Evidence manifest: `factor_engine/evidence/r2/FA2-P0-004.yaml`. Status: `CLOSED_LOCAL / LOCAL_FOCUSED_REVIEWED`.
+- Broad repository, parity, PIT, registry, root CI, and production gates remain `NOT_RUN`; no production-readiness claim follows. No commit or remote operation was made.
+
+## 2026-08-19 - RIDGE2-P0-001 local verification
+
+- Verified the existing Ridge repair only; no source or test changes were made, and no defect was found.
+- Evidence: `factor_engine/evidence/r2/RIDGE2-P0-001.yaml`, current HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`, dirty count **71** before the evidence edit.
+- Focused pytest: **3 passed, 2 warnings**; `py_compile` passed; import smoke passed; scoped Ridge diff check passed.
+- Probes passed: dual-input all-NaN column preserved while finite-column slope remained finite; positional alpha matched the oracle; malformed alpha raised `OperatorParameterError`; all-NaN outputs remained NaN.
+- Status: `CLOSED_LOCAL`; broad gates and production certification remain `NOT_RUN`. Unrelated edits were preserved; no commit was made.
+
+## 2026-08-19 - QuantEvaluator streaming and generic metric dispatch repair
+
+- Repaired the QuantEvaluator streaming metric-kind mismatch and generic registry metric dispatch.
+- Validation: streaming suite **51 passed**; combined evaluator/streaming suite **77 passed**; generic evaluator focused suite **26 passed**; scoped `git diff --check` **passed**.
+- Evidence is local-only; no production-readiness claim follows.
+
+## 2026-08-19 - FactorAssets admission and QE cache fail-closed evidence
+
+- FactorAssets assembly now requires a `SelectionDecision` for non-manual policies, admits only the latest approved decision, and preserves manual-policy compatibility.
+- QE cache L2 epoch publication now fails closed and cleans up temporary artifacts on publication failure.
+- Focused validation: FactorAssets assembly tests **31 passed**; cache tests **119 passed**.
+- Evidence is local-only; no production-readiness claim follows.
+
+## 2026-08-19 - POL2-P0-004 Polars moment and kurtosis verification
+
+- Reviewed the active `ts_moment` (`cleaned_operators.research_polars.TSMomentNativePolars`) and `ts_kurt` (`cleaned_operators.common.time_series.TSKurtosisPolars`) authorities against pandas/NumPy rolling-window oracles. No defect remained: trailing alignment, finite-window admission, NaN/Inf handling, and constant-window `ts_kurt=-3.0` behavior matched.
+- No implementation or regression-test edits were required. Serial focused validation: **22 passed, 2 warnings**; owned modules compiled; import smoke passed; scoped `git diff --check` passed.
+- Evidence manifest: `factor_engine/evidence/r2/POL2-P0-004.yaml`, bound to current HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4` with dirty count **68**. Existing unrelated dirty files were preserved.
+- Status: **LOCAL-ONLY / REGRESSION_TESTED**. Broad repository, parity, PIT, registry, and production gates remain `NOT_RUN`; no production-readiness or `CLOSED_VERIFIED` claim follows.
+
+## 2026-08-19 - POL2 selectable Polars rolling verification
+
+- Repaired `TSEwmCorrNative` finite-pair state advancement and `TSTrendSlopeNative` physical-row local-centering semantics for prefix windows, gaps, NaN, and infinity values.
+- Independent review found a reachable synthetic row-index collision when input contained `__ts_row`; fixed with a collision-resistant temporary name and added regression coverage.
+- Validation: serial focused suite `15 passed, 2 warnings`; changed files compile; Polars module import smoke passed; scoped `git diff --check` passed.
+- Committed locally as `f0dc00138b8a2fd98ba6dbd26f0366c4b87b8f92` with evidence manifest `factor_engine/evidence/r2/POL2-P0-003-polars-rolling.yaml`; targeted status is `REGRESSION_TESTED`.
+- Broad repository, parity, PIT, root, and production gates remain `NOT_RUN`; no production-readiness or `CLOSED_VERIFIED` claim follows.
+
+## 2026-08-19 - POL2-P0-003 retry: Polars historical-mean oracle verification
+
+- Reviewed the active authority `factor_engine/cleaned_operators/common/polars_ts_rolling.py` for `ts_cov` and rolling regression outputs (`slope`, `intercept`, `resid`, `r2`). The implementation recomputes finite-pair means and centered moments per trailing window; it does not use an expanding historical mean.
+- Compared covariance and regression behavior against the independent direct-window finite-pair oracle in `factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py`, including missing values, infinities, constant windows, large offsets, prefix windows, and endpoint residual semantics. No active defect was reproduced; no production or test implementation files were changed.
+- Validation: serial focused pytest with single-thread BLAS/Polars settings and no xdist: **22 passed, 2 warnings**; owned modules compiled; import smoke passed; scoped `git diff --check` passed.
+- Current FactorEngine HEAD: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty-file count before evidence edit: **70**. Existing unrelated dirty files were preserved; protected files were not edited.
+- Evidence manifest updated at `factor_engine/evidence/r2/POL2-P0-003-polars-rolling.yaml`. This is local-only regression evidence. Full suite, cross-backend parity, PIT, registry, root CI, and production gates remain `NOT_RUN`; no production-certification claim follows.
+
+### 2026-08-19 - QuantEvaluator registry and namespace evidence
+
+- Bound `hac_tstat` to its `compute_fn` in `quant_evaluator/registry/metrics.py`.
+- Focused registry validation: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q ... -p no:xdist` — 42 passed; no xdist used.
+- Corrected modeling documentation references to the top-level `modeling` package.
+- Namespace wheel validation: 3 passed.
+- Remaining risks: runtime dispatch divergence, the `FactorAssets` policy gap, and distributed cache limits remain open. This is local evidence only; no production-readiness claim follows.
+
+## POL2-P0-003 Polars ts_ewm_corr pairwise finite-state repair
+
+- Reproduced: `TSEwmCorrNative` independently advanced the x/y EWM states when only one operand was missing. For `x=[1,None,3,4]`, `y=[2,5,None,8]`, the prior implementation returned `0.7359187006792064` at the final row while the pandas pairwise EWM oracle returned `1.0`.
+- Implemented locally: matching columns are required through `_require_pairwise_columns`; rows are admitted only when both operands are finite, and invalid values are nulled before all EWM means, variances, and covariance expressions.
+- Added focused coverage for missing-column fail-closed behavior and pairwise finite observations in `factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py`.
+- Validation: serial focused pytest previously completed with `12 passed` and 2 existing production-mode warnings; `python3 -m py_compile` passed for both owned files; scoped `git diff --check` passed; pandas oracle probe returned `[nan, nan, nan, 1.0]`.
+- Current tree: owned files are modified and uncommitted; current FactorEngine HEAD is `96e1fdd009f0bd36052c7710ea5acd5cf5fdf45f`.
+- Status: `LOCAL_TESTED / REVIEW_PENDING`. Independent reviewer attempts failed at the agent API prompt-validation layer; no production-readiness or `CLOSED_VERIFIED` claim follows. Broader EWM adjust/warmup/constant-window parity remains unrun.
+
 ## FactorOptimizer Docker packaging repair (local-only)
 
 ## POL2-P0-002 Polars ts_corr authority quarantine
@@ -906,9 +1096,9 @@ q P0-C structural scope is now `CLOSED_LOCAL` after independent `53` focused com
 
 ### 2026-08-19 - OP2-P0-001 direct mining catalog checker evidence
 - Implementation present in `factor_engine/scripts/export_direct_mining_catalog.py` with focused coverage in `factor_engine/tests/test_export_direct_mining_catalog.py`; focused serial validation: `7 passed`, `py_compile: PASS`, scoped `git diff --check: PASS`.
-- Real `--check`: **FAIL_CLOSED (exit 1)** because `build/mining/direct_mining_catalog.json` and `build/mining/direct_mining_manifest.json` are missing; docs artifacts remain stale at `e0d56b06ccc2f5ceaeda0870e460949533e3edaa` versus current HEAD `8c326a56669965ec7afd78531fd691788e60bf23`, and report `dirty=false` while the tree is dirty.
-- Generated JSON was not regenerated. Production surface count, production certification, and broad gates are `NOT_PROVEN`/`NOT_RUN`. YAML validation: `PASS`.
-- Evidence manifest: `factor_engine/evidence/r2/OP2_P0_001_MANIFEST.yaml`; generation timestamp `2026-08-18T19:29:46Z`, `git_sha=8c326a56669965ec7afd78531fd691788e60bf23`, dirty tree with `22` files, local-only with no commit/remotes. No production-readiness claim follows.
+- Clean detached worktree generation at current HEAD succeeded, and required catalog/manifest plus checker docs were installed into the working tree. Real `python3 scripts/export_direct_mining_catalog.py --check`: **PASS (exit 0)**, reporting `direct mining artifacts are current and consistent`.
+- Artifacts were generated from a clean detached snapshot because the integration tree contains unrelated dirty files; provenance remains local-only. Production surface count, production certification, and broad gates are `NOT_PROVEN`/`NOT_RUN`. YAML validation: `PASS`.
+- Evidence manifest: `factor_engine/evidence/r2/OP2_P0_001_MANIFEST.yaml`; generation timestamp `2026-08-19T07:10:00Z`, `git_sha=8c326a56669965ec7afd78531fd691788e60bf23`, dirty tree with `22` files, local-only with no commit/remotes. No production-readiness claim follows.
 
 ### 2026-08-19 - Cache epoch and package smoke evidence
 - QuantEvaluator `cache_v2` disk epoch `OSError` handling now fails closed. Focused cache validation: `112 passed in 3.80s`; `py_compile` and scoped `git diff --check` passed.
@@ -949,3 +1139,165 @@ q P0-C structural scope is now `CLOSED_LOCAL` after independent `53` focused com
 - Strengthened `scripts/wheel_clean_install_smoke.py` to require those three wheel members and exercise stable installed symbols (`PromptTemplate`, `ProposalRequest`, and `compute_hash`) in the isolated environment. Existing dependency metadata and bytecode checks remain intact.
 - Validation: `py_compile` and scoped `git diff --check` passed; full clean wheel build/install/import/smoke completed successfully with `factor_optimizer-0.1.0-py3-none-any.whl`.
 - Status: **CLOSED_LOCAL** for these LLM payload/import assertions. Dirty-tree local evidence only; no release or production-readiness claim.
+
+### 2026-08-19 - QuantEvaluator stable coverage metric registry
+- Reproducible defect/fix: the stable `coverage` metric was registered without `compute_fn`; `registry/metrics.py` now binds it to `compute_coverage`, and `tests/test_registry.py` asserts the executable binding.
+- Focused validation: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q /home/shw/quant_projects/quant_evaluator/tests/test_registry.py -p no:xdist` — **35 passed in 0.04s**.
+
+### 2026-08-19 - DataAccess manifest identity migration and Polars ts_cov review
+- DataAccess manifest identity migration completed. Focused validation: **19 passed**; `compileall` passed.
+- FactorEngine focused validation: **26 passed**, with **2 warnings**.
+- Polars `ts_cov` review found **no defect; no edits**.
+- Full gates: **NOT_RUN**. Evidence is local-only; no production-readiness claim follows.
+- Focused FactorEngine modeling validation of the two named test files passed 19 tests in 0.58s after fixture-only guard alignment; production defaults unchanged; local-only evidence and no production-readiness claim.
+
+### 2026-08-19 - QE, Modeling, FactorAssets, and FactorOptimizer focused evidence
+- QE `cache_v2` focused suite: **126 passed**, including orphan sidecar dependency invalidation repair.
+- Modeling focused wheel/contracts validation: **21 passed, 1 skipped**; `package_info` export is covered.
+- FactorAssets assembly focused suite: **12 passed**, including equal-timestamp conflict repair.
+- FactorOptimizer local ignored wheel was rebuilt and clean-installed verification passed.
+- Evidence is from the local current tree only. Broad, release, and production gates are **NOT_RUN**; no production-readiness claim follows.
+
+### 2026-08-19 - FactorPreprocess and QuantEvaluator repair evidence
+
+- FactorPreprocess `FittedState` now validates the application-window `end_time` against the fitted state contract; `factor_preprocess/tests/contracts/test_contracts.py` passed **27 tests**.
+- QuantEvaluator `RedisCacheLayer` now applies `default_ttl` when a Redis write omits an explicit TTL; `quant_evaluator/tests/test_cache_v2.py` passed **115 tests**.
+
+### 2026-08-19 - FactorOptimizer and modeling status
+
+- FactorOptimizer focused tests: **43 passed**.
+- Modeling README namespace fix: **completed**.
+- Cache legacy invalidation defect: **remains under repair**.
+- Evidence is local-only; no production-readiness claim follows.
+- Evidence is local/current-tree and FakeRedis-backed only; it is not production readiness or real Redis certification.
+
+### 2026-08-19 - FactorEngine evidence hash compatibility repair
+
+- Repaired evidence-hash compatibility in the current FactorEngine evidence path.
+- Focused validation: `tests/backend/test_operator_evidence_schema.py` — **4 passed**.
+- Remaining open risk: `semantic_hash_stale` has no production caller, so production integration remains unproven.
+
+### 2026-08-19 - QuantEvaluator orphan-sidecar invalidation repair
+
+- Repaired QuantEvaluator `cache_v2` orphan-sidecar invalidation for the completed local scope.
+- Validation: `pytest -q /home/shw/quant_projects/quant_evaluator/tests/test_cache_v2.py -p no:xdist` — **116 passed in 3.64s**.
+- This is current-tree local evidence only; broader durability, distributed coordination, and production readiness remain open.
+
+### 2026-08-19 - Q PlanNode canonical ID collision repair
+
+- Reproduced and repaired Q extraction silently collapsing distinct `PlanNode` objects with the same canonical `node_id`.
+- `QBackend._extract_nodes_topological()` now preserves shared references to the same object while failing closed on distinct-object ID collisions.
+- Focused validation: `tests/q_backend/test_q_plan_node_abi.py` — **11 passed, 2 pre-existing warnings**; `py_compile` and scoped `git diff --check` passed.
+- Local commit: `19d2ff95`; evidence: `evidence/r2/Q2-P0-019-q-plan-node-abi.yaml`.
+- Independent review was attempted but the review agent terminated with an API prompt-length error; no independent review claim is made. Q remains fail-closed and not production-certified; full compile, registry, parity, PIT, CI, and production gates remain `NOT_RUN`.
+
+### 2026-08-19 - QuantEvaluator Redis clear generation fencing
+
+- Repaired `RedisCacheLayer.clear` in `quant_evaluator/runtime/cache_v2.py` to delete value/metadata pairs only when the scanned generation still matches, preserving replacements published after the scan.
+- Regression test: `TestRedisCacheLayer.test_clear_preserves_replacement_written_after_scan`.
+- Focused one-pass result: `1 passed`; full cache suite: `117 passed`.
+- Metric registry/runtime dispatch mismatch remains open. Evidence is current-tree local-only; no production-readiness claim follows.
+
+### 2026-08-19 - QuantEvaluator public mean_ic repair
+
+- Reproduced 3 valid daily periods returning valid `mean_ic` after the adapter used `min_periods=1`. `runtime/evaluator.py` now parameterizes `ic_metric` and binds `mean_ic` with `min_periods=20`, while `pearson_ic` and `rank_ic` retain `min_periods=1`.
+- `tests/test_public_api_repair.py` covers fewer-than-20 invalid periods and 20 valid periods with observation counts.
+- Serial validation with `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/shw/quant_projects python3 -m pytest -p no:xdist tests/test_public_api_repair.py tests/metrics/test_ic.py tests/test_registry.py`: **67 passed, 2 existing warnings**.
+- Evidence is local-only; no production-readiness claim follows. Generic runtime registry dispatch and streaming gaps remain open.
+
+### 2026-08-19 - QuantEvaluator cache/modeling authority repairs
+
+- Repaired the `cache_v2` shared-epoch failure in `quant_evaluator/runtime/cache_v2.py`; the regression suite reported **118 passed** with single-thread BLAS/OpenMP settings and no xdist. Evidence is local-only.
+- Corrected the modeling `AUTHORITY` stale import to `modeling_adapters.preprocess.fitted`; wheel regeneration and extraction validation remain **NOT_RUN**.
+- Generic QE registry/streaming gaps and the `FactorAssets` `SelectionDecision` gap remain open.
+
+### 2026-08-19 - QuantEvaluator streaming duplicate metric ID repair
+
+- Duplicate metric registration and duplicate requested metric specs now fail closed by raising `InvalidContractError`.
+- Focused validation used `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1` with no xdist; result: **51 passed**.
+- The checked-in FactorEngine wheel is stale: current `pyproject.toml` includes `planning*`, but the wheel contains zero `planning/` entries and needs regeneration. This is local-only evidence; production readiness is not claimed.
+
+### 2026-08-19 - Q resident-handle lifecycle cleanup
+
+- Added explicit idempotent `release()`/`close()` and context-manager cleanup for Q resident handles, including q lease-symbol cleanup and stale/double-release coverage.
+- Scoped files: `factor_engine/backend/q_backend/q_adapter.py`, `factor_engine/backend/q_backend/q_executor.py`, and `factor_engine/backend/q_backend/test_q_residency.py`.
+- Focused serial validation: **14 passed**; `py_compile`, import smoke, and scoped `git diff --check` passed. No commit or remotes used.
+- Review status: manual scoped review only. Broad gates, full compile, registry bootstrap, parity, PIT, CI, and production certification remain **NOT_RUN**; Q is not production-certified.
+
+### 2026-08-19 - Q resident release connection teardown
+
+- Reproduced and repaired resident-handle release raising when q connection acquisition failed during teardown; release now treats unavailable connections as a stale no-op while live lease/symbol cleanup remains exactly once.
+- Scoped files: `factor_engine/backend/q_backend/q_executor.py` and `factor_engine/backend/q_backend/test_q_residency.py`; `q_adapter.py` belongs to the prior lifecycle task and is unchanged by this delta.
+- Focused serial validation: **15 passed**; `py_compile`, import smoke, and scoped `git diff --check` passed. No commit or remotes used.
+- Review status: manual scoped review only. Broad gates, full compile, registry bootstrap, parity, PIT, CI, and production certification remain **NOT_RUN**; Q is not production-certified.
+
+- Repaired the Q capability verifier so `--json` and `--gates-only` exit nonzero unless `production_ready` and every mandatory gate pass; missing mandatory gates now fail closed.
+- Scoped files: `factor_engine/scripts/verify_q_capability_evidence.py` and `factor_engine/tests/q_backend/test_q2_p0_001_005_gates.py`.
+- Focused validation: **42 tests passed**; `py_compile` passed; scoped `git diff --check` passed. No commit was made.
+- Independent review agent API attempt failed; manual scoped review was clean.
+- Limitations: import smoke, broad Q runtime/parity/null-time, full compile, registry bootstrap, PIT, CI, and production certification remain **NOT_RUN**. This is current-tree local evidence only; Q is not production-certified.
+
+### 2026-08-19 - QuantEvaluator cache/modeling serial verification
+
+- `cache_v2` serial suite: **119 passed**.
+- Modeling tests: **129 passed, 1 skipped**; clean-wheel modeling smoke: **ALL CHECKS PASSED**.
+- Read-only cache/modeling probes failed at API prompt validation, so no new defect was established. Evidence is local-only; no production-readiness claim follows.
+
+### 2026-08-19 - QuantEvaluator cache epoch-fence repair validation
+
+- QuantEvaluator cache epoch-fence repair validated: `tests/test_cache_v2.py` — **120 passed in 3.69s** with `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1`; existing evidence for `tests/test_evaluator.py` — **28 passed in 0.29s**.
+- Status remains local-only; no production-readiness claim follows.
+
+### 2026-08-19 - QuantEvaluator cache clear start-epoch fence repair
+
+- Repaired the `cache_v2` clear start-epoch fence so clear operations do not remove entries published after the clear epoch was captured.
+- Full QuantEvaluator validation: `tests/test_cache_v2.py tests/test_evaluator.py` — **149 passed in 3.88s** with single-thread BLAS/OpenMP environment settings.
+- Evidence is current-tree local-only; no production-readiness claim follows.
+
+### 2026-08-19 - Modeling opt-in clean-wheel smoke gate
+
+- Added the opt-in wheel smoke pytest gate at `modeling/tests/test_wheel_clean_install_smoke.py`; from the modeling root, `RUN_WHEEL_SMOKE=1` with the contract tests produced **31 passed in 14.15s**.
+- The standalone wheel smoke script also passed: **ALL CHECKS PASSED**.
+- Evidence is local-only; no production-readiness claim follows.
+
+### 2026-08-19 - DataAccess semantic catalog correctness identity
+
+- Reproduced and repaired a cache-identity collision where catalogs differing only by `SemanticField.availability_latency` serialized identically. Canonical serialization now includes latency, and `DataAccessStore` uses the strict 256-bit catalog identity for query-cache correctness keys.
+- Focused serial validation: `tests/unit/test_semantic_catalog_identity.py` plus `tests/unit/test_r2_query_cache_identity.py` — **9 passed in 0.07s**; `py_compile`, import smoke, and scoped `git diff --check` passed.
+- Evidence: `dataaccess/DA2_P0_002_MANIFEST.yaml`; current local HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count at evidence capture **83**; no commit or remotes used.
+- Independent review was attempted but the agent terminated with an API prompt-length error. Full cached PIT reads, broad regression, full compile, registry, parity, PIT poison, CI, and production certification remain **NOT_RUN**; production readiness is not claimed.
+
+### 2026-08-19 - FactorEngine multi-region physical plan authority
+
+- Reproduced the production admission defect where valid planner-emitted multi-region `PhysicalRegionPlan` objects with `TransferEdge` boundaries were rejected as single-region-only. The executor now validates topology, roots, node ownership, edge residency, and planner readiness; executes regions in declared topological order; materializes only explicit transfer boundaries; and preserves fixed concrete backend selection without runtime rerouting.
+- Focused serial validation: `factor_engine/tests/runtime/test_physical_region_execution.py` — **17 passed**; syntax compilation, import smoke, and scoped `git diff --check` passed.
+- Evidence: `/tmp/R2-P0-059-062-063_repair_report.md`; current local HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count after repair **87**; no commit or remotes used.
+- Independent read-only review was attempted but the agent API returned a prompt-length error. Full repository tests, real-data execution, backend parity, registry, PIT, CI, and production certification remain **NOT_RUN**; FactorEngine production readiness is not claimed.
+
+### 2026-08-19 - R2-P0-039 DataAccess PIT latest-period revision handling
+
+- DataAccess PIT latest-period empty `revision_order` now preserves historical `(instrument, knowledge_time)` states at the running maximum period; explicit `revision_order` ranking remains preserved.
+- Same-`knowledge_time` multiple qualifying rows fail closed with `ambiguous latest PIT vintage: missing revision_order`.
+- Focused regression: **1 passed**. Whole `tests/test_cos_pit_runtime.py`: **3 passed, 2 failed** because unrelated strict-calendar fixtures raise `CalendarUnavailableError` before PIT selection.
+- `py_compile`: **PASS**; import smoke: **PASS**; scoped diff check: **PASS**. Independent review was unavailable due to API prompt length.
+- Full regression, full compile, registry, parity, broad PIT poison, CI, and production certification remain **NOT_RUN**. Current HEAD: `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; dirty count: **89**; no commit or remotes. Release readiness is not claimed.
+
+### 2026-08-19 - POL2-P0-004 Polars ts_moment and ts_kurt audit
+
+- Audited selectable Polars `ts_moment` and `ts_kurt`; authoritative implementations use trailing-window local means, and no production defect was reproduced.
+- Added two oracle tests in `factor_engine/tests/backend/test_polars_ts_moment_kurt_r2.py`; focused validation: **2 passed**. Compile and scoped diff checks passed.
+- Evidence: `factor_engine/evidence/r2/POL2-P0-004.yaml`. Import, full parity, broad gates, CI, and production certification remain **NOT_RUN**; no production claim.
+
+### 2026-08-19 - Q2-P0-009 batch nonresident dependency repair
+
+- Repaired `execute_batch_regions` so non-final regions publish their materialized `output_df` for downstream dependencies when `enable_residency=False`; the resident-handle path remains unchanged when residency is enabled and a handle is returned.
+- Focused `backend/q_backend/test_q_executor_recovery.py`: **17 passed**. Syntax compile and scoped diff check passed.
+- Evidence: `factor_engine/evidence/r2/Q2-P0-009.yaml`, bound to current HEAD `19d2ff954b56f5dfd034d8ec8e8631af0ff271d4`; no commit.
+- Broad, registry, parity, CI, and production gates remain **NOT_RUN**. This is local current-tree evidence only; no production-readiness claim follows.
+
+### 2026-08-19 - FactorPreprocess exposure boundary validation
+
+- Reproduced `DataAccessAdapter` accepting an exposure whose `values` shape did not align with `dates`/`assets` and whose returned metric differed from the requested metric.
+- Added fail-closed validation for required fields, two-dimensional shape alignment, and request identity across industry, size, sector, beta, and custom exposure paths. Valid provider result objects remain unchanged.
+- Focused serial validation: `tests/adapters/test_data_access.py` — **32 passed, 1 skipped in 0.14s**. Complete FactorPreprocess serial suite: **741 passed, 2 skipped, 22 warnings in 15.17s**.
+- Independent review was attempted twice but the agent terminated with an API prompt-length error; no independent review claim is made. Evidence is current-tree local-only; cross-package CI, release provenance, and production certification remain **NOT_RUN**.

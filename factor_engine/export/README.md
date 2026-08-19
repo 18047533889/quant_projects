@@ -34,7 +34,7 @@ from dataaccess.export import (
 Serialize contracts to JSON, Parquet, and Feather formats:
 
 ```python
-from factor_engine.modeling.contracts import ModelOperatorSpec, ModelExecutionClass
+from modeling.contracts import ModelOperatorSpec, ModelExecutionClass
 from factor_engine.export import serialize_to_json, serialize_to_parquet
 
 # Single contract to JSON
@@ -70,7 +70,7 @@ Deserialize contracts with automatic type reconstruction:
 
 ```python
 from factor_engine.export import import_from_json, import_from_parquet
-from factor_engine.modeling.contracts import ModelOperatorSpec
+from modeling.contracts import ModelOperatorSpec
 
 # Import with type reconstruction
 spec = import_from_json("spec.json", target_type=ModelOperatorSpec)
@@ -195,7 +195,7 @@ new_data = migrate_contract(old_data, "ModelOperatorSpec", "1.0.0", "2.0.0")
 ### Export Model Specifications
 
 ```python
-from factor_engine.modeling.contracts import ModelOperatorSpec, ModelExecutionClass
+from modeling.contracts import ModelOperatorSpec, ModelExecutionClass
 from factor_engine.export import serialize_to_parquet
 
 # Create specifications

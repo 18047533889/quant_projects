@@ -30,6 +30,7 @@ import glob as glob_module
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -44,8 +45,8 @@ from data_access.core.exceptions import DataError
 
 
 def uuid4_hex() -> str:
-    """#P0-30 manifest generation id（uuid4 短 hex）。"""
-    return uuid.uuid4().hex[:16]
+    """#P0-30 manifest generation id（完整 uuid4 hex）。"""
+    return uuid.uuid4().hex
 
 
 def _fsync_parent(path: Path) -> None:
@@ -248,7 +249,7 @@ class DatasetManifest:
         }
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()[:16]
+        ).hexdigest()
 
     @property
     def partition_version(self) -> str:
@@ -261,7 +262,7 @@ class DatasetManifest:
         }
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()[:16]
+        ).hexdigest()
 
     def to_table(self) -> pa.Table:
         rows = [f.to_row() for f in self.files]
@@ -370,6 +371,8 @@ class DatasetManifest:
         if parquet_gen is not None or sidecar_gen is not None:
             if parquet_gen is None or sidecar_gen is None or parquet_gen != sidecar_gen:
                 return None  # 单侧缺失 / 不一致 → mixed generation
+            if not _valid_generation_id(parquet_gen):
+                return None  # malformed identity → fail closed
         generation = parquet_gen or sidecar_gen
         src = meta.get("source_epoch")
         built = meta.get("manifest_built_epoch")
@@ -504,6 +507,13 @@ def _str_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _valid_generation_id(value: Any) -> bool:
+    """接受完整 UUID；16 hex 仅用于读取本格式既有 legacy manifest。"""
+    return isinstance(value, str) and bool(
+        re.fullmatch(r"(?:[0-9a-f]{16}|[0-9a-f]{32})", value)
+    )
 
 
 def _parquet_generation_id(path: Path) -> str | None:
@@ -1023,7 +1033,7 @@ def _schema_hash(schema: Any) -> str:
         names = list(schema.names)
         types = [str(schema.column(i).physical_type) for i in range(len(names))]
     text = json.dumps(list(zip(names, types)), sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def load_manifest_for_dataset(store: Any, dataset: str, **params: Any) -> DatasetManifest | None:

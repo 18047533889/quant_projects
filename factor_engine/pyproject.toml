@@ -51,6 +51,7 @@ include = [
     "modeling",
     "modeling.*",
     "planner*",
+    "planning*",
     "research_tools*",
     "runtime*",
     "security*",

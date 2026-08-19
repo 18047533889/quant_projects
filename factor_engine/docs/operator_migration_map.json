@@ -1,8 +1,8 @@
 {
-  "count": 274,
+  "count": 278,
   "fingerprint": {
     "dirty": true,
-    "head": "e0d56b06ccc2f5ceaeda0870e460949533e3edaa"
+    "head": "19d2ff954b56f5dfd034d8ec8e8631af0ff271d4"
   },
   "map": {
     "ABS": {
@@ -305,10 +305,6 @@
       "kind": "alias",
       "replacement": "winsorize"
     },
-    "WMA": {
-      "kind": "alias",
-      "replacement": "ts_decay_linear"
-    },
     "ZSCORE": {
       "kind": "alias",
       "replacement": "zscore"
@@ -484,6 +480,10 @@
     "ewm_var": {
       "kind": "alias",
       "replacement": "ts_ewm_var"
+    },
+    "fin_mad": {
+      "kind": "alias",
+      "replacement": "fin_mean_abs_deviation"
     },
     "fmax": {
       "kind": "alias",
@@ -957,6 +957,14 @@
       "kind": "alias",
       "replacement": "ts_garch_next_vol_forecast"
     },
+    "ts_har_rv_forecast": {
+      "kind": "alias",
+      "replacement": "ts_har_rv_next_vol_forecast"
+    },
+    "ts_har_rv_innovation_z": {
+      "kind": "alias",
+      "replacement": "ts_har_rv_forecast_error_z"
+    },
     "ts_har_rv_next_forecast": {
       "kind": "alias",
       "replacement": "ts_har_rv_next_vol_forecast"
@@ -1073,6 +1081,10 @@
       "kind": "alias",
       "replacement": "ts_weighted_downside_deviation"
     },
+    "ts_wma": {
+      "kind": "alias",
+      "replacement": "WMA"
+    },
     "var": {
       "kind": "alias",
       "replacement": "ts_var"
@@ -1100,6 +1112,10 @@
     "window_sum": {
       "kind": "alias",
       "replacement": "ts_sum"
+    },
+    "wma": {
+      "kind": "alias",
+      "replacement": "WMA"
     }
   },
   "schema_version": "factor_engine.operator_migration_map.v1"

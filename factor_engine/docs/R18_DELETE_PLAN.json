@@ -1,12 +1,26 @@
 {
-  "count": 20,
+  "count": 30,
   "deletions": [
+    {
+      "canonical": "acos",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "generic raw arccos — no factor semantics; use acos_bounded on a bounded input"
+    },
     {
       "canonical": "arg",
       "delete_reason": "",
       "direct_use_status": "move_internal",
       "replacement": "",
       "retention_reason": "DSL/grammar primitive — internal supporting layer"
+    },
+    {
+      "canonical": "asin",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "generic raw arcsin — no factor semantics; use asin_bounded on a bounded input"
     },
     {
       "canonical": "circulating_cap_unlock_proxy",
@@ -21,6 +35,34 @@
       "direct_use_status": "move_internal",
       "replacement": "",
       "retention_reason": "DSL/grammar primitive — internal supporting layer"
+    },
+    {
+      "canonical": "cos",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "generic raw cosine — no factor semantics; use cos_phase inside a phase/seasonality recipe"
+    },
+    {
+      "canonical": "cosh",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "hyperbolic cosine — raw math, not a factor canonical"
+    },
+    {
+      "canonical": "cot",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "cotangent — raw math, not a factor canonical"
+    },
+    {
+      "canonical": "csc",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "cosecant — raw math, not a factor canonical"
     },
     {
       "canonical": "cube",
@@ -107,6 +149,34 @@
       "retention_reason": "internal supporting layer — not public mining"
     },
     {
+      "canonical": "sec",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "secant — raw math, not a factor canonical"
+    },
+    {
+      "canonical": "sin",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "generic raw sine — no factor semantics; use sin_phase inside a phase/seasonality recipe"
+    },
+    {
+      "canonical": "sinh",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "hyperbolic sine — raw math, not a factor canonical"
+    },
+    {
+      "canonical": "tan",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "tangent — raw math, not a factor canonical"
+    },
+    {
       "canonical": "ts_dmd_dominant_frequency",
       "delete_reason": "",
       "direct_use_status": "move_internal",
@@ -144,7 +214,7 @@
   ],
   "fingerprint": {
     "dirty": true,
-    "head": "e0d56b06ccc2f5ceaeda0870e460949533e3edaa"
+    "head": "19d2ff954b56f5dfd034d8ec8e8631af0ff271d4"
   },
   "schema_version": "factor_engine.r18.delete_plan.v1"
 }

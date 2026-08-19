@@ -665,6 +665,18 @@ class DiskCacheLayer:
         """Get metadata path for cache file."""
         return cache_path.with_suffix(".meta.json")
 
+    def _unlink_matching_sidecar_unlocked(self, cache_path: Path, key: str) -> None:
+        """Remove a valid stale sidecar only when it owns this logical key."""
+        sidecar_path = self._meta_path(cache_path)
+        try:
+            sidecar = CacheMetadata.from_dict(
+                json.loads(sidecar_path.read_text(encoding="utf-8"))
+            )
+        except Exception:
+            return
+        if sidecar.key == key:
+            sidecar_path.unlink(missing_ok=True)
+
     @staticmethod
     def _decode_record(raw: bytes) -> Tuple[CacheMetadata, bytes]:
         """Decode one immutable JSON record containing metadata and payload."""
@@ -749,6 +761,7 @@ class DiskCacheLayer:
                     metadata.compression_method, self.compressor
                 ) or metadata.is_expired(time.time()):
                     cache_path.unlink(missing_ok=True)
+                    self._unlink_matching_sidecar_unlocked(cache_path, key)
                     return None
                 if metadata.compression_method != "none":
                     data = self.compressor.decompress(compressed_data)
@@ -757,7 +770,21 @@ class DiskCacheLayer:
                 return pickle.loads(data), metadata
             except Exception as e:
                 logger.warning(f"Failed to load cache record for key {key}: {e}")
-                cache_path.unlink(missing_ok=True)
+                # A raw legacy value can occupy this path beside a valid sidecar.
+                # It is not safe to delete those bytes merely because the modern
+                # decoder cannot interpret them.
+                preserve_legacy_value = False
+                try:
+                    sidecar = self._meta_path(cache_path)
+                    CacheMetadata.from_dict(
+                        json.loads(sidecar.read_text(encoding="utf-8"))
+                    )
+                    preserve_legacy_value = True
+                except (FileNotFoundError, OSError, TypeError, ValueError,
+                        json.JSONDecodeError):
+                    pass
+                if not preserve_legacy_value:
+                    cache_path.unlink(missing_ok=True)
                 return None
 
         # Read legacy two-file entries only as a fail-closed compatibility path.
@@ -930,25 +957,34 @@ class DiskCacheLayer:
         generation: Optional[str] = None,
     ) -> bool:
         """Delete a scanned pair only if both files remain unchanged."""
-        if expected_value is None:
-            return False
         with self._root_lock(), self._entry_lock(value_path):
             try:
                 current_text = meta_path.read_text(encoding="utf-8")
+            except (FileNotFoundError, OSError):
+                return False
+            if current_text != expected_text:
+                return False
+            try:
+                current = CacheMetadata.from_dict(json.loads(current_text))
+            except Exception:
+                return False
+            if generation is not None and current.generation != generation:
+                return False
+            if dependency is not None and dependency not in current.dependencies:
+                return False
+            if expected_value is None:
+                # A missing legacy value is removable only while it remains
+                # absent; a concurrent replacement must win the race.
+                if value_path.exists():
+                    return False
+                meta_path.unlink(missing_ok=True)
+                return True
+            try:
                 current_value = value_path.read_bytes()
             except (FileNotFoundError, OSError):
                 return False
-            if current_text != expected_text or current_value != expected_value:
+            if current_value != expected_value:
                 return False
-            if generation is not None:
-                try:
-                    current = CacheMetadata.from_dict(json.loads(current_text))
-                except Exception:
-                    return False
-                if current.generation != generation:
-                    return False
-                if dependency not in current.dependencies:
-                    return False
             meta_path.unlink(missing_ok=True)
             value_path.unlink(missing_ok=True)
             return True
@@ -966,23 +1002,73 @@ class DiskCacheLayer:
     ):
         removed_keys = set()
         removed_count = 0
+        removed_value_paths = set()
         for cache_path in self.root_dir.rglob("*.cache"):
             if cache_path.name.startswith(".tmp."):
                 continue
+            # A sidecar may be stale metadata left beside a newer immutable
+            # record. Decode the modern record first so the sidecar cannot hide
+            # dependency invalidation for the actual value.
             try:
                 raw = cache_path.read_bytes()
                 metadata, _ = self._decode_record(raw)
                 if dependency not in metadata.dependencies:
+                    sidecar_path = self._meta_path(cache_path)
+                    try:
+                        sidecar = CacheMetadata.from_dict(
+                            json.loads(sidecar_path.read_text(encoding="utf-8"))
+                        )
+                    except Exception:
+                        sidecar = None
+                    if sidecar is None or dependency not in sidecar.dependencies:
+                        continue
+                    # A sidecar claiming a dependency for a modern record is
+                    # stale/forged; quarantine only this physical pair.
+                    with self._entry_lock(cache_path):
+                        if cache_path.read_bytes() == raw:
+                            cache_path.unlink(missing_ok=True)
+                            sidecar_path.unlink(missing_ok=True)
                     continue
                 with self._entry_lock(cache_path):
                     if cache_path.read_bytes() != raw:
                         continue
                     cache_path.unlink(missing_ok=True)
+                    sidecar_path = self._meta_path(cache_path)
+                    try:
+                        sidecar = CacheMetadata.from_dict(
+                            json.loads(sidecar_path.read_text(encoding="utf-8"))
+                        )
+                    except Exception:
+                        sidecar = None
+                    if sidecar is not None and dependency in sidecar.dependencies:
+                        sidecar_path.unlink(missing_ok=True)
+                    removed_value_paths.add(cache_path)
                     removed_count += 1
                     if cache_path == self._key_path(metadata.key):
                         removed_keys.add(metadata.key)
             except Exception as e:
                 logger.warning(f"Failed to inspect disk cache record {cache_path}: {e}")
+                # A raw legacy value is preservable only when its adjacent sidecar
+                # authenticates the bytes and clearly belongs to another key.
+                preserve_legacy_value = False
+                try:
+                    sidecar_path = self._meta_path(cache_path)
+                    sidecar_text = sidecar_path.read_text(encoding="utf-8")
+                    sidecar_data = json.loads(sidecar_text)
+                    CacheMetadata.from_dict(sidecar_data)
+                    # A valid checksum-authenticated sidecar identifies a
+                    # legacy value even when its logical key hashes to this
+                    # same physical path.  The sidecar scan below will then
+                    # apply dependency policy to the pair atomically.
+                    preserve_legacy_value = (
+                        sidecar_data.get("checksum")
+                        == hashlib.sha256(raw).hexdigest()
+                    )
+                except (FileNotFoundError, OSError, TypeError, ValueError,
+                        json.JSONDecodeError, UnboundLocalError):
+                    pass
+                if preserve_legacy_value:
+                    continue
                 try:
                     with self._entry_lock(cache_path):
                         if cache_path.read_bytes() == raw:
@@ -991,24 +1077,46 @@ class DiskCacheLayer:
                     pass
         for meta_path in self.root_dir.rglob("*.meta.json"):
             value_path = meta_path.with_name(meta_path.name[:-len(".meta.json")] + ".cache")
-            scanned_text = None
-            scanned_value = None
+            if value_path in removed_value_paths:
+                # The modern scan already removed this physical record; retain
+                # a stale sidecar for compatibility without double-counting.
+                continue
+            # A valid modern record owns this physical path; an adjacent
+            # sidecar is stale and must not be treated as a legacy pair.
+            if value_path.exists():
+                try:
+                    self._decode_record(value_path.read_bytes())
+                    continue
+                except Exception:
+                    pass
             try:
+                # Parse and validate the sidecar before touching the value file.
+                # A missing legacy value is a quarantinable orphan only when this
+                # valid metadata record actually claims the dependency.
                 scanned_text = meta_path.read_text(encoding="utf-8")
-                scanned_value = value_path.read_bytes()
                 metadata = CacheMetadata.from_dict(json.loads(scanned_text))
                 if dependency not in metadata.dependencies:
                     continue
-                if self._invalidate_scanned_pair(meta_path, value_path, scanned_text,
-                    expected_value=scanned_value, dependency=dependency,
-                    generation=metadata.generation):
-                    removed_count += 1
-                    if value_path == self._key_path(metadata.key):
-                        removed_keys.add(metadata.key)
-            except Exception:
-                if scanned_text is not None:
-                    self._invalidate_scanned_pair(meta_path, value_path, scanned_text,
-                        expected_value=scanned_value)
+            except Exception as e:
+                logger.warning(f"Failed to inspect legacy cache metadata {meta_path}: {e}")
+                continue
+
+            try:
+                scanned_value = value_path.read_bytes()
+            except (FileNotFoundError, OSError):
+                scanned_value = None
+
+            if self._invalidate_scanned_pair(
+                meta_path,
+                value_path,
+                scanned_text,
+                expected_value=scanned_value,
+                dependency=dependency,
+                generation=metadata.generation,
+            ):
+                removed_count += 1
+                if value_path == self._key_path(metadata.key):
+                    removed_keys.add(metadata.key)
 
         return removed_keys if return_keys else removed_count
 
@@ -1120,10 +1228,16 @@ class RedisCacheLayer:
             return False
 
     _COMPARE_QUARANTINE_SCRIPT = """
-    local payload = redis.call('HGET', KEYS[1], 'data')
+    local metadata = redis.call('HGET', KEYS[1], 'data')
     if ARGV[1] == 'missing' then
-        if payload ~= false then return 0 end
-    elseif payload ~= ARGV[2] then
+        if metadata ~= false then return 0 end
+    elseif metadata ~= ARGV[2] then
+        return 0
+    end
+    local value = redis.call('GET', KEYS[2])
+    if ARGV[3] == 'missing' then
+        if value ~= false then return 0 end
+    elseif value ~= ARGV[4] then
         return 0
     end
     return redis.call('DEL', KEYS[1], KEYS[2])
@@ -1159,28 +1273,24 @@ class RedisCacheLayer:
             return False
 
     def _compare_quarantine_physical(
-        self, meta_key: Any, value_key: Any, raw_data: Optional[Any]
+        self,
+        meta_key: Any,
+        value_key: Any,
+        raw_data: Optional[Any],
+        raw_value: Optional[Any],
     ) -> bool:
-        """Quarantine a malformed pair only if its scanned payload persists."""
+        """Quarantine a malformed pair only if both scanned payloads persist."""
         try:
-            if raw_data is None:
-                result = self.client.eval(
-                    self._COMPARE_QUARANTINE_SCRIPT,
-                    2,
-                    meta_key,
-                    value_key,
-                    "missing",
-                    "",
-                )
-            else:
-                result = self.client.eval(
-                    self._COMPARE_QUARANTINE_SCRIPT,
-                    2,
-                    meta_key,
-                    value_key,
-                    "present",
-                    raw_data,
-                )
+            result = self.client.eval(
+                self._COMPARE_QUARANTINE_SCRIPT,
+                2,
+                meta_key,
+                value_key,
+                "missing" if raw_data is None else "present",
+                "" if raw_data is None else raw_data,
+                "missing" if raw_value is None else "present",
+                "" if raw_value is None else raw_value,
+            )
             return bool(result)
         except Exception as e:
             logger.warning(
@@ -1213,28 +1323,37 @@ class RedisCacheLayer:
             return False
 
     def _cleanup_get_pair(
-        self, value_key: Any, meta_key: Any, meta_dict: Optional[dict]
+        self,
+        value_key: Any,
+        meta_key: Any,
+        meta_dict: Optional[dict],
+        compressed_data: Optional[Any],
     ) -> None:
-        """Remove a bad read pair only if its scanned metadata still matches."""
+        """Remove a bad read pair only if its scanned payloads still match."""
         raw_data = None
         if meta_dict:
             raw_data = meta_dict.get(b"data")
             if raw_data is None:
                 raw_data = meta_dict.get("data")
         if raw_data is None:
-            self._compare_quarantine_physical(meta_key, value_key, None)
+            self._compare_quarantine_physical(
+                meta_key, value_key, None, compressed_data
+            )
             return
         try:
             raw_text = raw_data.decode("utf-8") if isinstance(raw_data, bytes) else raw_data
             generation = CacheMetadata.from_dict(json.loads(raw_text)).generation
         except Exception:
-            self._compare_quarantine_physical(meta_key, value_key, raw_data)
+            self._compare_quarantine_physical(
+                meta_key, value_key, raw_data, compressed_data
+            )
             return
         self._compare_delete_physical(meta_key, value_key, generation)
 
     def get(self, key: str) -> Optional[Tuple[Any, CacheMetadata]]:
         prefixed = self._prefixed_key(key)
         meta_dict = None
+        compressed_data = None
 
         try:
             # Get value and metadata
@@ -1248,7 +1367,9 @@ class RedisCacheLayer:
 
             if not compressed_data or not meta_dict:
                 if compressed_data or meta_dict:
-                    self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
+                    self._cleanup_get_pair(
+                        prefixed, f"{prefixed}:meta", meta_dict, compressed_data
+                    )
                 return None
 
             # Decode metadata
@@ -1260,12 +1381,16 @@ class RedisCacheLayer:
 
             # Check expiration
             if metadata.is_expired(time.time()):
-                self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
+                self._cleanup_get_pair(
+                    prefixed, f"{prefixed}:meta", meta_dict, compressed_data
+                )
                 return None
             if metadata.key != key or not _codec_compatible(
                 metadata.compression_method, self.compressor
             ):
-                self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
+                self._cleanup_get_pair(
+                    prefixed, f"{prefixed}:meta", meta_dict, compressed_data
+                )
                 return None
 
             # Decompress and deserialize
@@ -1279,7 +1404,9 @@ class RedisCacheLayer:
 
         except Exception as e:
             logger.warning(f"Failed to get from Redis cache for key {key}: {e}")
-            self._cleanup_get_pair(prefixed, f"{prefixed}:meta", meta_dict)
+            self._cleanup_get_pair(
+                prefixed, f"{prefixed}:meta", meta_dict, compressed_data
+            )
             return None
 
     def put(
@@ -1394,7 +1521,9 @@ class RedisCacheLayer:
                         if raw_data is None:
                             value_key = self._value_key_for_meta(meta_key)
                             if value_key is not None:
-                                quarantine_records.append((meta_key, value_key, None))
+                                quarantine_records.append(
+                                    (meta_key, value_key, None, self.client.get(value_key))
+                                )
                             continue
                         if isinstance(raw_data, bytes):
                             raw_data = raw_data.decode("utf-8")
@@ -1417,9 +1546,13 @@ class RedisCacheLayer:
                             f"Failed to inspect Redis cache metadata {meta_key!r}: {e}"
                         )
                         if value_key is not None:
-                            quarantine_records.append((meta_key, value_key, raw_data))
+                            quarantine_records.append(
+                                (meta_key, value_key, raw_data, self.client.get(value_key))
+                            )
                         else:
-                            quarantine_records.append((meta_key, meta_key, raw_data))
+                            quarantine_records.append(
+                                (meta_key, meta_key, raw_data, self.client.get(meta_key))
+                            )
                 if cursor == 0:
                     break
 
@@ -1452,8 +1585,10 @@ class RedisCacheLayer:
                     break
             removed_keys = set()
             removed_count = 0
-            for meta_key, value_key, raw_data in quarantine_records:
-                self._compare_quarantine_physical(meta_key, value_key, raw_data)
+            for meta_key, value_key, raw_data, raw_value in quarantine_records:
+                self._compare_quarantine_physical(
+                    meta_key, value_key, raw_data, raw_value
+                )
             for value_key, meta_key, raw_value in value_orphans:
                 self._compare_delete_value_orphan(value_key, meta_key, raw_value)
             for meta_key, value_key, logical_key, generation in records_to_remove:

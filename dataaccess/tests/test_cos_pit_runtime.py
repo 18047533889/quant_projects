@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
+import duckdb
 
 from data_access.core.exceptions import ValidationError
 from data_access.cos_contract import require_cos_contract, validate_event_filters
 from data_access.cos_runtime import _read_cos_events, _read_cos_events_asof
+from store import _period_selection_sql
 
 
 class _Dataset:
@@ -37,6 +40,60 @@ class FakeEventStore:
         # Missing declared columns are null in this bounded fake fixture.
         projected = frame.reindex(columns=requested)
         return pa.Table.from_pandas(projected, preserve_index=False)
+
+
+def test_latest_period_empty_revision_order_preserves_pit_history_and_fails_closed_on_ambiguity(tmp_path):
+    parquet = tmp_path / "us_financial_vintages.parquet"
+    frame = pd.DataFrame({
+        "ticker": ["A", "A", "A"],
+        "filing_date": ["2024-05-01", "2024-08-01", "2024-08-01"],
+        "period_end": ["2024-03-31", "2024-06-30", "2024-06-30"],
+        "value": [10, 20, 21],
+    })
+    rows = f"SELECT * FROM read_parquet('{parquet.as_posix()}')"
+
+    pq.write_table(
+        pa.Table.from_pandas(frame.iloc[:2], preserve_index=False), parquet
+    )
+    query, _ = _period_selection_sql(
+        rows,
+        inst_col="ticker",
+        period_col="period_end",
+        knowledge_col="filing_date",
+        selection="latest_period",
+        period_is_text=True,
+    )
+    result = duckdb.sql(
+        f"SELECT ticker, filing_date, period_end, value FROM ({query}) "
+        "ORDER BY filing_date"
+    ).fetchall()
+    assert result == [
+        ("A", "2024-05-01", "2024-03-31", 10),
+        ("A", "2024-08-01", "2024-06-30", 20),
+    ]
+
+    asof = duckdb.sql(
+        "WITH selected AS (" + query + "), decisions(ticker, decision_time) AS "
+        "(VALUES ('A', DATE '2024-06-01'), ('A', DATE '2024-09-01')) "
+        "SELECT d.decision_time, s.value FROM decisions AS d "
+        "ASOF LEFT JOIN selected AS s ON d.ticker = s.ticker "
+        "AND d.decision_time >= CAST(s.filing_date AS DATE) "
+        "ORDER BY d.decision_time"
+    ).fetchall()
+    assert [row[1] for row in asof] == [10, 20]
+
+    pq.write_table(pa.Table.from_pandas(frame, preserve_index=False), parquet)
+    query, _ = _period_selection_sql(
+        rows,
+        inst_col="ticker",
+        period_col="period_end",
+        knowledge_col="filing_date",
+        selection="latest_period",
+        period_is_text=True,
+    )
+    with pytest.raises(duckdb.Error, match="ambiguous latest PIT vintage"):
+        duckdb.sql(query).fetchall()
+
 
 
 def test_latest_period_does_not_roll_back_after_old_period_restatement():

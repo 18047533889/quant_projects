@@ -5,18 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
 
 MANIFEST_NAME = ".publish_manifest.json"
+_LEGACY_V3_HASH_RE = re.compile(r"[0-9a-f]{16}\Z")
+_V4_HASH_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _content_hash(file_rows: list[Any]) -> str:
     """#P0-30 文件清单内容指纹（path, size, mtime_ns 序列）。"""
     text = json.dumps(file_rows, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _parquet_files_under(root: Path) -> tuple[tuple[str, int, int], ...]:
@@ -85,7 +88,7 @@ def write_publish_manifest(
         "content_hash": _content_hash(
             [(e["path"], e["size"], e["mtime_ns"]) for e in file_entries]
         ),
-        "manifest_version": 3,
+        "manifest_version": 4,
     }
     # #P1-final closure 19：统一 atomic durable-write（tmp→fsync(fd)→replace→fsync(dir)）
     from data_access.core.atomic import atomic_write_text
@@ -103,6 +106,21 @@ def read_publish_manifest(target_dir: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    if not isinstance(payload, dict):
+        return None
+    version = payload.get("manifest_version")
+    content_hash = payload.get("content_hash")
+    if version == 3:
+        valid_hash = isinstance(content_hash, str) and bool(
+            _LEGACY_V3_HASH_RE.fullmatch(content_hash)
+        )
+    elif version == 4:
+        valid_hash = isinstance(content_hash, str) and bool(
+            _V4_HASH_RE.fullmatch(content_hash)
+        )
+    else:
+        return None
+    return payload if valid_hash else None

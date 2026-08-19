@@ -182,7 +182,6 @@ class QCompiler:
             # Correlation
             "ts_corr": "cor",
             "ts_cov": "cov",
-            "ts_beta": "{cov[x;y]%dev[y] xexp 2}",
 
             # Simple indicators
             "ema": "ema",
@@ -213,7 +212,7 @@ class QCompiler:
             },
             QLoweringKind.SPECIALIZED: {
                 "lag", "rank", "cs_rank", "where", "fillna", "clip",
-                "ts_corr", "ts_cov", "ts_beta", "ema", "sma", "wma",
+                "ts_corr", "ts_cov", "ema", "sma", "wma",
             },
         }
         classified = [name for names in by_kind.values() for name in names]
@@ -314,12 +313,6 @@ class QCompiler:
             if len(inputs) != 2:
                 raise ValueError(f"{op_name} requires 2 inputs, got {len(inputs)}")
             return f"{window} {q_func}[{inputs[0]};{inputs[1]}]"
-
-        if op_name == "ts_beta":
-            window = positive_int("window")
-            if len(inputs) != 2:
-                raise ValueError(f"ts_beta requires 2 inputs, got {len(inputs)}")
-            return f"({q_func})[{window}#{inputs[0]};{window}#{inputs[1]}]"
 
         if op_name == "ema":
             span = positive_int("span")

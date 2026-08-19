@@ -5,8 +5,54 @@ Provides protocol-based boundary for fetching exposure context (industry, sector
 used in neutralization and feature engineering. Fails gracefully if not available.
 """
 
+from collections.abc import Mapping, Sized
 from typing import Protocol, Dict, Any, Optional, List
 import numpy as np
+
+
+def _validate_exposure_result(
+    result: Dict[str, Any],
+    *,
+    identity_field: Optional[str] = None,
+    expected_identity: Any = None,
+) -> Dict[str, Any]:
+    """Validate provider alignment and request identity before exposing data."""
+    if not isinstance(result, Mapping):
+        raise ValueError("exposure result must be a mapping")
+
+    required = {"values", "dates", "assets", "metadata"}
+    missing = sorted(required - set(result))
+    if missing:
+        raise ValueError(f"exposure result missing required fields: {missing}")
+
+    dates = result["dates"]
+    assets = result["assets"]
+    if (
+        isinstance(dates, (str, bytes))
+        or isinstance(assets, (str, bytes))
+        or not isinstance(dates, Sized)
+        or not isinstance(assets, Sized)
+    ):
+        raise ValueError("exposure dates and assets must be sized sequences")
+
+    values = np.asarray(result["values"])
+    expected_shape = (len(dates), len(assets))
+    if values.ndim != 2 or values.shape != expected_shape:
+        raise ValueError(
+            "exposure values shape must align with dates and assets: "
+            f"expected {expected_shape}, got {values.shape}"
+        )
+
+    if identity_field is not None:
+        if identity_field not in result:
+            raise ValueError(f"exposure result missing identity field: {identity_field}")
+        if result[identity_field] != expected_identity:
+            raise ValueError(
+                f"exposure {identity_field} does not match request: "
+                f"expected {expected_identity!r}, got {result[identity_field]!r}"
+            )
+
+    return result
 
 
 class OptionalDependencyMissing(Exception):
@@ -215,12 +261,17 @@ class DataAccessAdapter:
         Raises:
             OptionalDependencyMissing: If dataaccess not available
         """
-        return self._provider.get_industry_exposure(
+        result = self._provider.get_industry_exposure(
             market=market,
             start_date=start_date,
             end_date=end_date,
             assets=assets,
             industry_classification=industry_classification,
+        )
+        return _validate_exposure_result(
+            result,
+            identity_field="classification",
+            expected_identity=industry_classification,
         )
 
     def fetch_size_exposure(
@@ -247,12 +298,17 @@ class DataAccessAdapter:
         Raises:
             OptionalDependencyMissing: If dataaccess not available
         """
-        return self._provider.get_size_exposure(
+        result = self._provider.get_size_exposure(
             market=market,
             start_date=start_date,
             end_date=end_date,
             assets=assets,
             size_metric=size_metric,
+        )
+        return _validate_exposure_result(
+            result,
+            identity_field="metric",
+            expected_identity=size_metric,
         )
 
     def fetch_multi_exposure(
@@ -293,16 +349,25 @@ class DataAccessAdapter:
                     market, start_date, end_date, assets
                 )
             elif exp_type == "sector":
-                result["sector"] = self._provider.get_sector_exposure(
+                exposure = self._provider.get_sector_exposure(
                     market, start_date, end_date, assets
+                )
+                result["sector"] = _validate_exposure_result(
+                    exposure,
+                    identity_field="classification",
+                    expected_identity="default",
                 )
             elif exp_type == "beta":
-                result["beta"] = self._provider.get_beta_exposure(
+                exposure = self._provider.get_beta_exposure(
                     market, start_date, end_date, assets
                 )
+                result["beta"] = _validate_exposure_result(
+                    exposure,
+                    identity_field="window_days",
+                    expected_identity=252,
+                )
             else:
-                # Custom exposure
-                result[exp_type] = self._provider.get_custom_exposure(
+                exposure = self._provider.get_custom_exposure(
                     exposure_name=exp_type,
                     market=market,
                     start_date=start_date,
@@ -310,17 +375,23 @@ class DataAccessAdapter:
                     assets=assets,
                     **kwargs,
                 )
+                result[exp_type] = _validate_exposure_result(
+                    exposure,
+                    identity_field="exposure_name",
+                    expected_identity=exp_type,
+                )
 
         return result
 
 
 def check_data_access_available() -> bool:
-    """Check if dataaccess package is available."""
+    """Check whether the dataaccess integration can construct its default provider."""
     try:
         import dataaccess
-        return True
+        from factor_preprocess.adapters._data_access_impl import DefaultExposureProvider
     except ImportError:
         return False
+    return True
 
 
 def create_adapter(provider: Optional[ExposureProvider] = None) -> DataAccessAdapter:

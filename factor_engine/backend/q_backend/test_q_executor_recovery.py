@@ -443,3 +443,34 @@ def test_two_executor_instances_serialize_shared_connection():
         thread.join()
 
     assert peak_active == 1
+
+
+def test_batch_nonresident_dependency_receives_materialized_output(monkeypatch):
+    executor = QExecutor(process_manager=MagicMock(), type_adapter=MagicMock())
+    seen_inputs: dict[str, dict[str, pd.DataFrame]] = {}
+
+    def fake_execute(plan, input_data, **kwargs):
+        seen_inputs[plan.region_id] = input_data
+        if plan.region_id == "a":
+            output = pd.DataFrame({"value": [2.0]})
+        else:
+            output = pd.DataFrame({"value": [input_data["a_out"]["value"].iloc[0] + 1.0]})
+        return QExecutionResult(
+            region_id=plan.region_id,
+            output_df=output,
+            execution_time_ms=1.0,
+            rows_processed=len(output),
+            success=True,
+        )
+
+    monkeypatch.setattr(executor, "execute_region", fake_execute)
+    plans = [_plan("a", ("base",), "a_out"), _plan("b", ("a_out",), "final")]
+
+    results = executor.execute_batch_regions(
+        plans,
+        {"base": pd.DataFrame({"value": [1.0]})},
+        enable_residency=False,
+    )
+
+    assert results[-1].output_df["value"].tolist() == [3.0]
+    assert seen_inputs["b"]["a_out"]["value"].tolist() == [2.0]

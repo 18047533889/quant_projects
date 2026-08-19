@@ -3,6 +3,7 @@
 from .candidate_mutation import CandidateMutation
 from .search_budget import SearchBudget, BudgetTracker
 from .trial import Trial, TrialStatus
+from .splits import EvaluationProtocol, SplitPlan
 
 __all__ = [
     "CandidateMutation",
@@ -10,4 +11,6 @@ __all__ = [
     "BudgetTracker",
     "Trial",
     "TrialStatus",
+    "SplitPlan",
+    "EvaluationProtocol",
 ]

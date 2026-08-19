@@ -32,6 +32,7 @@ class TestDAFactorValueReader:
         assert reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2)) == {"rows": 1}
         assert calls[0][0] == (["F1"],)
         assert calls[0][1]["time_range"] == (date(2020, 1, 1), date(2020, 1, 2))
+        assert "universe" not in calls[0][1]
 
     def test_import_type_error_is_not_reported_as_missing_dependency(self):
         import factor_assets.adapters.data_access as da_mod
@@ -54,6 +55,26 @@ class TestDAFactorValueReader:
         with pytest.raises(DataAccessSchemaError):
             reader.read_factor_values("F1", date(2020, 1, 1), date(2020, 1, 2))
 
+    def test_missing_factor_data_error_is_typed_not_found(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import (
+            DAFactorValueReader,
+            DataAccessNotFoundError,
+        )
+
+        class DataError(Exception):
+            pass
+
+        def read_missing_factor(*args, **kwargs):
+            raise DataError("read_factors: factor ['missing_factor'] 都没有可读文件")
+
+        store = SimpleNamespace(read_factors=read_missing_factor)
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+
+        with pytest.raises(DataAccessNotFoundError) as exc_info:
+            reader.read_factor_values("missing_factor", date(2020, 1, 1), date(2020, 1, 2))
+        assert isinstance(exc_info.value.cause, DataError)
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""
@@ -104,14 +125,34 @@ class TestDACatalogReader:
             end_time="2020-12-31",
             to_dict=lambda: {"factor_id": "F1", "status": "active", "universe": "US"},
         )
+        meta_two = SimpleNamespace(
+            status="active",
+            to_dict=lambda: {"factor_id": "F2", "status": "active", "universe": "US"},
+        )
         store = SimpleNamespace(
-            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta, "F2": meta})
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta, "F2": meta_two})
         )
         with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
             reader = DACatalogReader(store=store)
         assert reader.get_catalog_entry("F1")["status"] == "active"
         assert reader.get_catalog_entry("missing") is None
         assert reader.list_available_factors({"universe": "US"}) == ("F1", "F2")
+
+    def test_catalog_key_payload_factor_id_mismatch_is_schema_error(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DACatalogReader, DataAccessSchemaError
+
+        meta = SimpleNamespace(to_dict=lambda: {"factor_id": "OTHER", "status": "active"})
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta})
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DACatalogReader(store=store)
+
+        with pytest.raises(DataAccessSchemaError, match="disagrees"):
+            reader.get_catalog_entry("F1")
+        with pytest.raises(DataAccessSchemaError, match="disagrees"):
+            reader.list_available_factors()
 
     def test_catalog_serialization_failure_is_typed(self):
         import factor_assets.adapters.data_access as da_mod
@@ -148,32 +189,68 @@ class TestDACatalogReader:
         from factor_assets.adapters.data_access import DAFactorValueReader
 
         meta = SimpleNamespace(status="active", start_time="2020-01-01", end_time="2020-12-31")
-        store = SimpleNamespace(get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta}))
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta}),
+            read_factors=lambda *args, **kwargs: object(),
+        )
         with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
             reader = DAFactorValueReader(store=store)
         assert reader.check_factor_availability("F1", date(2020, 6, 1)) is True
         assert reader.check_factor_availability("F1", date(2021, 1, 1)) is False
         assert reader.check_factor_availability("missing") is False
 
-    def test_universe_argument_is_forwarded_to_data_access(self):
+    def test_availability_fails_closed_when_catalog_is_stale(self):
+        import factor_assets.adapters.data_access as da_mod
+        from factor_assets.adapters.data_access import DAFactorValueReader
+
+        class DataError(Exception):
+            pass
+
+        meta = SimpleNamespace(status="active", start_time="2020-01-01", end_time="2020-12-31")
+
+        def read_missing_factor(*args, **kwargs):
+            raise DataError("read_factors: factor ['F1'] missing underlying data")
+
+        store = SimpleNamespace(
+            get_factor_catalog=lambda: SimpleNamespace(records={"F1": meta}),
+            read_factors=read_missing_factor,
+        )
+        with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
+            reader = DAFactorValueReader(store=store)
+
+        assert reader.check_factor_availability("F1", date(2020, 6, 1)) is False
+
+    def test_universe_filters_long_layout_rows(self):
         import factor_assets.adapters.data_access as da_mod
         from factor_assets.adapters.data_access import DAFactorValueReader
 
         class Handle:
+            def __init__(self, rows):
+                self.rows = rows
+
             def to_arrow(self):
-                return {"rows": 1}
+                return self.rows
 
         calls = []
-        store = SimpleNamespace(
-            read_factors=lambda *args, **kwargs: (calls.append((args, kwargs)) or Handle())
-        )
+
+        def read_factors(*args, **kwargs):
+            calls.append(("read_factors", args, kwargs))
+            return Handle([{"asset": "A", "universe": "A"}, {"asset": "B", "universe": "B"}])
+
+        def read_joined(*args, **kwargs):
+            calls.append(("read_joined", args, kwargs))
+            return Handle([{"asset": "A", "universe": "A"}])
+
+        store = SimpleNamespace(read_factors=read_factors, read_joined=read_joined)
         with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
             reader = DAFactorValueReader(store=store)
         result = reader.read_factor_values(
-            "F1", date(2020, 1, 1), date(2020, 1, 2), universe="US"
+            "F1", date(2020, 1, 1), date(2020, 1, 2), universe="A"
         )
-        assert result == {"rows": 1}
-        assert calls[0][1]["universe"] == "US"
+        assert result == [{"asset": "A", "universe": "A"}]
+        assert calls[0][0] == "read_joined"
+        assert calls[0][2]["universe"] == "A"
+        assert calls[0][2]["params"] == {"factor_id": "F1"}
 
     def test_missing_da_raises_error(self):
         """Test that missing DA raises OptionalDependencyMissing when DA not available."""

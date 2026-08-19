@@ -213,6 +213,7 @@ register_metric(MetricSpec(
     description="Heteroskedasticity and autocorrelation consistent t-statistic for IC",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_hac_tstat_value,
     requires=["ic_series"],
     min_periods=30,
 ))

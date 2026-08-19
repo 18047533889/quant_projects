@@ -8,7 +8,7 @@
 
 ## Single Source of Truth
 
-**`factor_engine/modeling/`** is the **AUTHORITATIVE** modeling package for:
+**Top-level `modeling/`** is the **AUTHORITATIVE** modeling package for:
 
 - ✓ Model training (`trainer.py`)
 - ✓ Walk-forward splitting (`walk_forward.py`)
@@ -93,9 +93,9 @@ scaler.fit(X_train, fit_window)
 scaler.transform(X_val, apply_start_time=None)  # OLD CODE: Silent bypass
 ```
 
-**After** (fail-closed, as of FM2-P0-012~015):
+**After** (fail-closed, as of FM2-P0-012~015; standalone adapter namespace):
 ```python
-from modeling.preprocess.fitted import CrossSectionalScaler
+from modeling_adapters.preprocess.fitted import CrossSectionalScaler
 
 scaler = CrossSectionalScaler()
 scaler.fit(X_train, fit_window)
@@ -188,7 +188,7 @@ FITTED_TRANSFORM_REQUIRES_APPLICATION_PERIOD = PASS  # transform() requires appl
 
 ## For New Code
 
-**Rule**: Always use `factor_engine.modeling` for:
+**Rule**: Always use top-level `modeling` for:
 - Model training and prediction
 - Walk-forward splitting
 - Purge and embargo
@@ -198,4 +198,4 @@ FITTED_TRANSFORM_REQUIRES_APPLICATION_PERIOD = PASS  # transform() requires appl
 - Writing adapters to `factor_preprocess`
 - Defining minimal contracts for non-factor_engine consumers
 
-When in doubt, use `factor_engine.modeling`.
+When in doubt, use top-level `modeling`.

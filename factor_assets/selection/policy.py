@@ -149,8 +149,17 @@ class SelectionPolicy:
         Returns:
             SelectionDecision record
         """
-        now = datetime.now(timezone.utc).isoformat()
-        decision_id = f"SD_{factor_id}_{now.replace(':', '').replace('-', '')[:15]}"
+        now_value = datetime.now(timezone.utc)
+        now = now_value.isoformat()
+        decision_id = f"SD_{factor_id}_{now_value.strftime('%Y%m%dT%H%M%S%f')}"
+        # Preserve the timestamp-based ID format while disambiguating repeated clock values.
+        existing_ids = {decision.decision_id for decision in self._decisions}
+        suffix = 1
+        candidate_id = decision_id
+        while candidate_id in existing_ids:
+            candidate_id = f"{decision_id}_{suffix}"
+            suffix += 1
+        decision_id = candidate_id
 
         gate_result_ids = tuple(
             f"{ev.gate_name}_{ev.timestamp[:10]}"
@@ -178,7 +187,10 @@ class SelectionPolicy:
         # Gate evaluation is mandatory for admission.  Keep this fail-closed:
         # all([]) is True, but an approval without any evaluated gate is invalid.
         all_gates_passed = bool(gate_evaluations) and all(
-            hasattr(ev, 'passed') and ev.passed
+            hasattr(ev, "passed")
+            and hasattr(ev, "factor_id")
+            and ev.factor_id == factor_id
+            and ev.passed
             for ev in gate_evaluations
         )
 
@@ -186,7 +198,12 @@ class SelectionPolicy:
             failed_gates = [
                 ev.gate_name
                 for ev in gate_evaluations
-                if hasattr(ev, 'passed') and not ev.passed
+                if (
+                    not hasattr(ev, "passed")
+                    or not hasattr(ev, "factor_id")
+                    or ev.factor_id != factor_id
+                    or not ev.passed
+                )
             ]
             gate_note = (
                 "No gate evaluations provided"
@@ -283,7 +300,10 @@ class SelectionPolicy:
         if not factor_decisions:
             return None
 
-        return sorted(factor_decisions, key=lambda d: d.timestamp, reverse=True)[0]
+        return next(
+            decision for decision in reversed(self._decisions)
+            if decision.factor_id == factor_id
+        )
 
     def get_all_decisions(self, factor_id: Optional[str] = None) -> list[SelectionDecision]:
         """

@@ -112,4 +112,5 @@ def semantic_hash_stale(canon: str, *, polars_hash: str, duckdb_hash: str) -> bo
 
 
 def compute_implementation_hash(source: str) -> str:
+    """Return the legacy 16-hex implementation hash used by evidence records."""
     return hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]

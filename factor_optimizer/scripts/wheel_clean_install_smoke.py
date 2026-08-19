@@ -87,6 +87,7 @@ def main():
             "factor_optimizer/llm/proposal.py",
             "factor_optimizer/llm/records.py",
             "factor_optimizer/adapters/__init__.py",
+            "factor_optimizer/adapters/quant_evaluator.py",
         }
         with zipfile.ZipFile(wheel_path) as archive:
             members = set(archive.namelist())

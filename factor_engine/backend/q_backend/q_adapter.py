@@ -21,7 +21,7 @@ Hard Gates (文档 §85):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from collections.abc import Mapping
 from typing import Any
@@ -48,6 +48,28 @@ class QResidentTableHandle:
     workspace_id: str | None = None  # Owning execution workspace
     generation_id: str | None = None  # Lease generation within the process
     q_symbol: str | None = None  # Physical symbol in the owning workspace
+    _release_callback: Any = field(default=None, repr=False, compare=False)
+    _released: bool = field(default=False, init=False, repr=False, compare=False)
+
+    def release(self) -> None:
+        """Release the owning q workspace lease exactly once."""
+        if self._released:
+            return
+        callback = self._release_callback
+        object.__setattr__(self, "_released", True)
+        if callback is not None:
+            callback(self)
+
+    close = release
+
+    def __enter__(self) -> "QResidentTableHandle":
+        if self._released:
+            raise RuntimeError("Q-resident handle has already been released")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.release()
+        return None
 
     def __repr__(self) -> str:
         return (

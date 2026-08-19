@@ -1,0 +1,41 @@
+task_id: FA2-P0-003
+finding: catalog_availability_false_positive_when_factor_data_missing
+base_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+current_head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+dirty_count_before_evidence: 76
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_assets/adapters/data_access.py
+  - factor_assets/tests/test_adapter_data_access.py
+  - factor_engine/evidence/r2/FA2-P0-003.yaml
+modified_files:
+  - factor_assets/adapters/data_access.py
+  - factor_assets/tests/test_adapter_data_access.py
+status: CLOSED_LOCAL
+implementation:
+  - check_factor_availability now validates the requested date against catalog bounds before probing read_factors.
+  - A typed DataError indicating missing factor data causes availability to return False.
+  - Non-missing read failures continue to propagate rather than being hidden.
+regression_oracle:
+  - Synthetic active catalog entry covers 2020-01-01 through 2020-12-31.
+  - Synthetic read_factors raises DataError for missing underlying factor data.
+  - check_factor_availability('F1', 2020-06-01) returns False.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest -q factor_assets/tests/test_adapter_data_access.py -p no:xdist
+  result: 19 passed
+syntax_compile:
+  command: cd /home/shw/quant_projects && python3 -m py_compile factor_assets/adapters/data_access.py factor_assets/tests/test_adapter_data_access.py
+  result: PASS
+import_smoke:
+  command: cd /home/shw/quant_projects && python3 -c 'import factor_assets.adapters.data_access as m; assert hasattr(m, "DAFactorValueReader")'
+  result: PASS
+scoped_diff_check:
+  command: cd /home/shw/quant_projects && git diff --check -- factor_assets/adapters/data_access.py factor_assets/tests/test_adapter_data_access.py
+  result: PASS
+review_status: LOCAL_FOCUSED_REVIEWED
+known_limitations:
+  - broad repository tests, four-backend parity, PIT, registry, root CI, and production gates were NOT_RUN
+  - existing unrelated dirty files were preserved
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

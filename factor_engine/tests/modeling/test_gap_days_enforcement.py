@@ -47,6 +47,8 @@ def test_gap_days_zero_allows_adjacent_dates():
         retrain_every_bars=10,
         gap_days=0,  # explicit zero
         min_train_dates=20,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds = make_walk_forward_splits(ds, spec)
     assert len(folds) > 0
@@ -75,6 +77,8 @@ def test_gap_days_five_creates_five_day_gap():
         retrain_every_bars=20,
         gap_days=5,
         min_train_dates=30,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds = make_walk_forward_splits(ds, spec)
     assert len(folds) > 0
@@ -104,6 +108,8 @@ def test_gap_days_ten_creates_ten_day_gap():
         retrain_every_bars=30,
         gap_days=10,
         min_train_dates=40,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds = make_walk_forward_splits(ds, spec)
     assert len(folds) > 0
@@ -137,8 +143,11 @@ def test_check_fold_order_validates_gap_days():
         retrain_every_bars=10,
         gap_days=5,
         min_train_dates=20,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds = make_walk_forward_splits(ds, spec)
+    assert len(folds) > 0
 
     # check_fold_order should validate gap (returns violations list)
     violations = check_fold_order(folds, gap_days=5)
@@ -194,6 +203,8 @@ def test_gap_days_larger_than_step_reduces_fold_count():
         retrain_every_bars=10,
         gap_days=0,
         min_train_dates=20,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds_no_gap = make_walk_forward_splits(ds, spec_no_gap)
 
@@ -205,6 +216,8 @@ def test_gap_days_larger_than_step_reduces_fold_count():
         retrain_every_bars=10,
         gap_days=15,  # large gap
         min_train_dates=20,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds_large_gap = make_walk_forward_splits(ds, spec_large_gap)
 
@@ -225,6 +238,8 @@ def test_gap_days_with_expanding_window():
         retrain_every_bars=20,
         gap_days=7,
         min_train_dates=30,
+        min_train_stocks=20,
+        min_train_obs=1,
     )
     folds = make_walk_forward_splits(ds, spec)
     assert len(folds) > 0

@@ -1,0 +1,45 @@
+schema_version: 1
+task_id: DA2-P0-002
+scope: semantic catalog correctness identity
+status: CLOSED_LOCAL
+change:
+  catalog_serialization: availability_latency included in SemanticField.to_dict
+  query_cache_identity: strict 256-bit semantic catalog digest
+  identity_failure: cache path fails closed with no catalog fingerprint
+validation:
+  focused_tests:
+    command_scope:
+      - tests/unit/test_semantic_catalog_identity.py
+      - tests/unit/test_r2_query_cache_identity.py
+    passed: 9
+    failed: 0
+  py_compile: PASSED
+  import_smoke: PASSED
+  scoped_diff_check: PASSED
+  independent_review:
+    status: UNAVAILABLE
+    reason: agent API prompt-length failure
+  broad_regression: NOT_RUN
+  full_regression: NOT_RUN
+  full_compile: NOT_RUN
+  registry: NOT_RUN
+  parity: NOT_RUN
+  pit_poison: NOT_RUN
+  ci: NOT_RUN
+  production_certification: NOT_RUN
+production: NOT_RUN
+provenance:
+  repository_state: local_current_tree
+  head: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+  dirty_count: 83
+  modified_files:
+    - dataaccess/read/semantic_catalog.py
+    - dataaccess/store.py
+    - dataaccess/tests/unit/test_semantic_catalog_identity.py
+    - dataaccess/DA2_P0_002_MANIFEST.yaml
+  commit: NONE
+  remotes: NOT_USED
+  release_readiness: NOT_CLAIMED
+limitations:
+  - Full cached PIT read through DataAccessStore was not exercised.
+  - Compatibility with every downstream consumer of the deprecated 16-character fingerprint was not broadly tested.

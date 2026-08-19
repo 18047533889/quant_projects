@@ -5394,6 +5394,7 @@ class DataAccessStore:
                         selection=spec.period_selection,
                         period_values=spec.period_values,
                         period_is_text=_column_is_text(dsobj, spec.period_time),
+                        revision_order=spec.revision_order,
                     )
                     params_list.extend(_pp)
                 if (
@@ -5496,6 +5497,7 @@ class DataAccessStore:
                         selection=spec.period_selection,
                         period_values=spec.period_values,
                         period_is_text=_column_is_text(dsobj, spec.period_time),
+                        revision_order=spec.revision_order,
                     )
                     params_list.extend(_pp)
                 # 跨窗口/seed 统一按 (instrument, knowledge_time) 去重最新 revision
@@ -9113,6 +9115,7 @@ def _period_selection_sql(
     selection: str,
     period_values: Sequence[Any] | None = None,
     period_is_text: bool = False,
+    revision_order: Sequence[str] = (),
 ) -> tuple[str, list[Any]]:
     """#45 财务报告期选择（PIT 状态更新语义）。
 
@@ -9148,16 +9151,45 @@ def _period_selection_sql(
         p = _quote_ident(period_col)
         exclude = ""
     if sel == "latest_period":
-        wrapped = (
-            f"SELECT *{exclude} FROM ("
-            f"SELECT *, MAX({p}) OVER ("
-            f"PARTITION BY {_quote_ident(inst_col)} "
-            f"ORDER BY {_quote_ident(knowledge_col)} "
-            f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pm "
-            f"FROM ({inner}) AS _pl) AS _ps "
-            f"WHERE _ps.{p} = _ps._pm"
+        # US financial feeds may omit revision_order.  Preserve each historical
+        # knowledge-time state whose period is the running latest period so later
+        # as-of joins can reconstruct earlier decisions.  Without an explicit
+        # revision order, duplicate qualifying rows at one knowledge time are
+        # ambiguous and must fail closed rather than rely on parquet row order.
+        if revision_order:
+            order = ", ".join(
+                f"{_quote_ident(c)} DESC" for c in revision_order
+            )
+            latest = (
+                f"SELECT *, MAX({p}) OVER ("
+                f"PARTITION BY {_quote_ident(inst_col)} ORDER BY {_quote_ident(knowledge_col)} "
+                f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pm "
+                f"FROM ({inner}) AS _pl"
+            )
+            marked = (
+                f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {_quote_ident(inst_col)}, "
+                f"{_quote_ident(knowledge_col)} ORDER BY {order}) AS _latest_rn "
+                f"FROM ({latest}) AS _latest WHERE _latest.{p} = _latest._pm"
+            )
+            return (
+                f"SELECT * EXCLUDE (_latest_rn, _pm{', _period_time' if period_is_text else ''}) "
+                f"FROM ({marked}) AS _ls WHERE _ls._latest_rn = 1",
+                [],
+            )
+        latest = (
+            f"SELECT *, MAX({p}) OVER (PARTITION BY {_quote_ident(inst_col)} "
+            f"ORDER BY {_quote_ident(knowledge_col)} ROWS BETWEEN UNBOUNDED PRECEDING "
+            f"AND CURRENT ROW) AS _pm FROM ({inner}) AS _pl"
         )
-        return wrapped, []
+        return (
+            f"SELECT * EXCLUDE (_pm, _vintage_count{', _period_time' if period_is_text else ''}) FROM ("
+            f"SELECT *, COUNT(*) OVER (PARTITION BY {_quote_ident(inst_col)}, "
+            f"{_quote_ident(knowledge_col)}) AS _vintage_count "
+            f"FROM ({latest}) AS _marked WHERE _marked.{p} = _marked._pm) AS _ls "
+            f"WHERE _ls._vintage_count = 1 OR "
+            f"error('ambiguous latest PIT vintage: missing revision_order')",
+            [],
+        )
     if sel == "exact_period":
         vals = list(period_values or ())
         if not vals:

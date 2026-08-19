@@ -117,6 +117,27 @@ def test_specialized_lowerings_fail_closed(
         QCompiler().compile_operator(op_name, inputs, params)
 
 
+def test_ts_beta_is_quarantined_instead_of_returning_final_window_scalar() -> None:
+    compiler = QCompiler()
+
+    assert compiler.has_lowering("ts_beta") is False
+    assert compiler.can_compile_operator("ts_beta") is False
+    assert "ts_beta" not in compiler.executable_lowerings()
+    valid, unsupported = compiler.validate_region(
+        [{"node_id": "beta", "op": "ts_beta", "inputs": ["returns", "market"]}],
+        mode="research",
+    )
+    assert valid is False
+    assert unsupported == ["ts_beta"]
+
+    with pytest.raises(ValueError, match="ts_beta.*not supported"):
+        compiler.compile_operator(
+            "ts_beta",
+            ["returns", "market"],
+            {"window": 20, "min_periods": 10},
+        )
+
+
 def test_research_and_production_backend_singletons_are_isolated() -> None:
     production = get_q_backend(production_mode=True, fallback_to_pandas=False)
     research = get_q_backend(production_mode=False, fallback_to_pandas=True)

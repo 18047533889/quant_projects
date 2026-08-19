@@ -79,6 +79,21 @@ def test_promotion_criteria_top_k():
     assert not criteria.should_promote(score=0.5, rank=3, total=10)
 
 
+@pytest.mark.parametrize("total", [1, 2, 3, 4])
+def test_promotion_criteria_top_k_keeps_best_small_cohort(total):
+    criteria = PromotionCriteria(top_k_fraction=0.2)
+
+    assert criteria.should_promote(score=0.5, rank=0, total=total)
+    assert not criteria.should_promote(score=0.5, rank=1, total=total)
+
+
+@pytest.mark.parametrize("total", [0, -1])
+def test_promotion_criteria_top_k_rejects_empty_cohort(total):
+    criteria = PromotionCriteria(top_k_fraction=0.2)
+
+    assert not criteria.should_promote(score=0.5, rank=0, total=total)
+
+
 def test_promotion_criteria_improvement():
     criteria = PromotionCriteria(min_improvement=0.1)
 

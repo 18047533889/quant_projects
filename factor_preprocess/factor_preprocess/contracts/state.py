@@ -117,6 +117,14 @@ class FittedState:
             raise TimingContractError(
                 "application start_time must be after fit_end_time"
             )
+        if end_time is not None and end_time <= start_time:
+            raise TimingContractError(
+                "application end_time must be after start_time"
+            )
+        if end_time is not None and end_time <= self.fit_end_time:
+            raise TimingContractError(
+                "application end_time must be after fit_end_time"
+            )
 
     def is_compatible_with(self, factor_ids: List[str]) -> bool:
         """Check if factors match the positional fitted feature contract."""

@@ -47,7 +47,26 @@ class DataAccessSchemaError(DataAccessAdapterError):
     code = "SCHEMA_ERROR"
 
 
+def _is_missing_factor_error(exc: BaseException) -> bool:
+    """Identify DataAccess's typed error for a factor with no readable data."""
+    if type(exc).__name__.lower() != "dataerror":
+        return False
+    text = str(exc).lower()
+    return "factor" in text and any(
+        marker in text
+        for marker in (
+            "not found",
+            "missing",
+            "no readable",
+            "没有可读文件",
+            "不存在",
+        )
+    )
+
+
 def _raise_typed(message: str, exc: BaseException) -> None:
+    if _is_missing_factor_error(exc):
+        raise DataAccessNotFoundError(message, cause=exc) from exc
     name = type(exc).__name__.lower()
     if "permission" in name or "authoriz" in name:
         raise DataAccessPermissionError(message, cause=exc) from exc
@@ -180,7 +199,13 @@ def _catalog_payload(factor_id: str, meta: Any) -> dict[str, Any]:
         raise DataAccessSchemaError(
             f"DataAccess catalog record {factor_id!r} did not produce a mapping"
         )
-    return dict(payload)
+    payload = dict(payload)
+    if payload.get("factor_id") != factor_id:
+        raise DataAccessSchemaError(
+            f"DataAccess catalog record key {factor_id!r} disagrees with "
+            f"payload factor_id {payload.get('factor_id')!r}"
+        )
+    return payload
 
 
 def _catalog_records(store: Any) -> Mapping[str, Any]:
@@ -243,11 +268,22 @@ class DAFactorValueReader:
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
         try:
-            handle = self._store.read_factors(
-                [factor_id],
-                time_range=(start_date, end_date),
-                universe=universe,
-            )
+            if universe is None:
+                handle = self._store.read_factors(
+                    [factor_id],
+                    time_range=(start_date, end_date),
+                )
+            else:
+                # DataAccess's long read_factors path accepts ``universe`` but
+                # does not apply membership filtering.  read_joined is the
+                # public path that performs the date/asset inner join.
+                handle = self._store.read_joined(
+                    "factor_lake",
+                    {"factor_lake": ["datetime", "asset", "value"]},
+                    time_range=(start_date, end_date),
+                    universe=universe,
+                    params={"factor_id": factor_id},
+                )
         except Exception as exc:
             _raise_typed(f"DataAccess factor read failed for {factor_id!r}", exc)
         materialize = getattr(handle, "to_arrow", None)
@@ -265,7 +301,7 @@ class DAFactorValueReader:
         factor_id: str,
         as_of_date: Optional[date] = None,
     ) -> bool:
-        """Check authoritative factor metadata, optionally at an explicit PIT date."""
+        """Check catalog metadata and confirm the factor is readable at a PIT date."""
         records = _catalog_records(self._store)
         meta = records.get(factor_id)
         if meta is None:
@@ -277,7 +313,18 @@ class DAFactorValueReader:
             return True
         start = _coerce_catalog_date(getattr(meta, "start_time", None))
         end = _coerce_catalog_date(getattr(meta, "end_time", None))
-        return (start is None or start <= as_of_date) and (end is None or as_of_date <= end)
+        if not (start is None or start <= as_of_date) or not (end is None or as_of_date <= end):
+            return False
+        try:
+            self._store.read_factors(
+                [factor_id],
+                time_range=(as_of_date, as_of_date),
+            )
+        except Exception as exc:
+            if _is_missing_factor_error(exc):
+                return False
+            raise
+        return True
 
 
 

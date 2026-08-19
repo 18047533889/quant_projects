@@ -218,6 +218,61 @@ class TestFittedState:
             datetime(2021, 12, 31),
         ) is None
 
+    def test_application_window_end_must_follow_start(self):
+        """Reject application windows whose end is not after their start."""
+        state = FittedState(
+            state_id="state_001",
+            transform_name="rolling_mean",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+        )
+
+        with pytest.raises(
+            TimingContractError,
+            match="application end_time must be after start_time",
+        ):
+            state.validate_application_window(
+                datetime(2021, 1, 1),
+                datetime(2021, 1, 1),
+            )
+
+    def test_application_window_end_before_start_is_rejected(self):
+        """Reject application windows ending before their start."""
+        state = FittedState(
+            state_id="state_001",
+            transform_name="rolling_mean",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+        )
+
+        with pytest.raises(
+            TimingContractError,
+            match="application end_time must be after start_time",
+        ):
+            state.validate_application_window(
+                datetime(2021, 1, 2),
+                datetime(2021, 1, 1),
+            )
+
+    def test_application_window_end_must_follow_fit_end(self):
+        """Reject application windows ending at or before fit end."""
+        state = FittedState(
+            state_id="state_001",
+            transform_name="rolling_mean",
+            transform_version="1.0.0",
+            fit_start_time=datetime(2020, 1, 1),
+            fit_end_time=datetime(2020, 12, 31),
+        )
+
+        for end_time in (datetime(2020, 12, 31), datetime(2020, 12, 30)):
+            with pytest.raises(TimingContractError):
+                state.validate_application_window(
+                    datetime(2021, 1, 1),
+                    end_time,
+                )
+
     def test_feature_contract_validation(self):
         """Test that feature contract is validated."""
         # Missing feature_order when feature_ids provided

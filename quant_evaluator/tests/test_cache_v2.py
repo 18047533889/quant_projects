@@ -363,7 +363,218 @@ class TestDiskCacheLayer:
             assert cache.get("key1") is None
             assert not cache_path.exists()
 
-    def test_missing_legacy_value_invalidates_unchanged_metadata(self, tmp_path):
+    def test_expired_modern_get_removes_matching_stale_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "modern"
+        assert cache.put(key, "value", ttl_seconds=1.0)
+        value_path = cache._key_path(key)
+        sidecar = CacheMetadata(
+            key=key,
+            created_at=clock.now,
+            last_accessed=clock.now,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=1.0,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.write_text(json.dumps(sidecar.to_dict()), encoding="utf-8")
+
+        clock.now = 1001.0
+        assert cache.get(key) is None
+        assert not value_path.exists()
+        assert not meta_path.exists()
+
+    def test_expired_modern_get_preserves_unrelated_stale_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        clock = FrozenClock(1000.0)
+        monkeypatch.setattr(cache_v2_module.time, "time", clock.time)
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "modern"
+        assert cache.put(key, "value", ttl_seconds=1.0)
+        value_path = cache._key_path(key)
+        sidecar = CacheMetadata(
+            key="unrelated",
+            created_at=clock.now,
+            last_accessed=clock.now,
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"other"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.write_text(json.dumps(sidecar.to_dict()), encoding="utf-8")
+
+        clock.now = 1001.0
+        assert cache.get(key) is None
+        assert not value_path.exists()
+        assert meta_path.exists()
+
+    def test_modern_record_is_invalidated_when_unrelated_sidecar_exists(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        assert cache.put("modern", "value", dependencies={"source"})
+        cache._meta_path(cache._key_path("modern")).write_text(
+            json.dumps({"unrelated": True}), encoding="utf-8"
+        )
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not cache._key_path("modern").exists()
+
+    def test_modern_record_is_invalidated_when_valid_stale_sidecar_lacks_dependency(
+        self, tmp_path
+    ):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "modern"
+        assert cache.put(key, "value", dependencies={"source"})
+        value_path = cache._key_path(key)
+        stale = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"unrelated"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.write_text(
+            json.dumps({
+                **stale.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(b"stale").hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not value_path.exists()
+        assert meta_path.exists()
+
+    def test_modern_invalidation_removes_dependency_matching_sidecar(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "modern"
+        assert cache.put(key, "value", dependencies={"source"})
+        value_path = cache._key_path(key)
+        stale = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.write_text(json.dumps(stale.to_dict()), encoding="utf-8")
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not value_path.exists()
+        assert not meta_path.exists()
+
+    def test_valid_legacy_pair_remains_dependency_addressable(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy"
+        value = b"legacy-value"
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=len(value),
+            compressed_size=len(value),
+            ttl_seconds=None,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps({
+                **metadata.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(value).hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+        value_path.write_bytes(value)
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not value_path.exists()
+        assert not meta_path.exists()
+
+    def test_raw_legacy_value_with_unrelated_valid_sidecar_survives_scan(self, tmp_path):
+        """A valid unrelated sidecar must not erase raw legacy bytes."""
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        value_path = cache._key_path("legacy-raw")
+        raw_value = b"legacy bytes that are not a modern record"
+        metadata = CacheMetadata(
+            key="unrelated-key",
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=len(raw_value),
+            compressed_size=len(raw_value),
+            ttl_seconds=None,
+            dependencies={"other"},
+            compression_method="none",
+        )
+        value_path.parent.mkdir(parents=True, exist_ok=True)
+        value_path.write_bytes(raw_value)
+        cache._meta_path(value_path).write_text(
+            json.dumps({
+                **metadata.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(raw_value).hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependencies("source") == 0
+        assert value_path.read_bytes() == raw_value
+        assert cache._meta_path(value_path).exists()
+
+    def test_raw_legacy_value_with_same_key_sidecar_survives_unrelated_scan(self, tmp_path):
+        """A same-key legacy sidecar still owns its raw value during scanning."""
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy-same-key"
+        raw_value = b"legacy bytes"
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=len(raw_value),
+            compressed_size=len(raw_value),
+            ttl_seconds=None,
+            dependencies={"other"},
+            compression_method="none",
+        )
+        value_path.parent.mkdir(parents=True, exist_ok=True)
+        value_path.write_bytes(raw_value)
+        cache._meta_path(value_path).write_text(
+            json.dumps({
+                **metadata.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(raw_value).hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependencies("source") == 0
+        assert value_path.read_bytes() == raw_value
+        assert cache._meta_path(value_path).exists()
+
         cache = DiskCacheLayer(tmp_path, create_compressor("none"))
         key = "legacy-missing-value"
         value_path = cache._key_path(key)
@@ -388,6 +599,89 @@ class TestDiskCacheLayer:
         assert cache.get(key) is None
         assert not meta_path.exists()
         assert not value_path.exists()
+
+    def test_dependency_invalidation_quarantines_missing_legacy_value(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy-missing-value"
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps({**metadata.to_dict(), "checksum": "missing"}),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not meta_path.exists()
+        assert not value_path.exists()
+
+    def test_dependency_invalidation_quarantines_orphan_legacy_metadata(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy-orphan-dependency"
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=1,
+            compressed_size=1,
+            ttl_seconds=None,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps({**metadata.to_dict(), "checksum": "missing"}),
+            encoding="utf-8",
+        )
+
+        assert cache.invalidate_dependencies("source") == 1
+        assert not meta_path.exists()
+        assert not value_path.exists()
+
+    def test_dependency_invalidation_preserves_unrelated_legacy_pair(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy-unrelated"
+        value_path = cache._key_path(key)
+        value = b"legacy raw value"
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=len(value),
+            compressed_size=len(value),
+            ttl_seconds=None,
+            dependencies={"other"},
+            compression_method="none",
+        )
+        meta_path = cache._meta_path(value_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps({
+                **metadata.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(value).hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+        value_path.write_bytes(value)
+
+        assert cache.invalidate_dependencies("unrelated") == 0
+        assert value_path.read_bytes() == value
+        assert meta_path.exists()
 
     def test_dependency_invalidation_uses_physical_record_when_metadata_key_is_corrupt(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -947,12 +1241,22 @@ class FakeRedisClient:
             if not args or current != args[0]:
                 return 0
         else:
-            mode, expected = args
-            if mode == "missing":
+            metadata_mode, expected_metadata, value_mode, expected_value = args
+            if metadata_mode == "missing":
                 if raw_data is not None:
                     return 0
-            elif raw_data != expected and (
-                not isinstance(raw_data, bytes) or raw_data.decode("utf-8") != expected
+            elif raw_data != expected_metadata and (
+                not isinstance(raw_data, bytes)
+                or raw_data.decode("utf-8") != expected_metadata
+            ):
+                return 0
+            raw_value = self.get(value_key)
+            if value_mode == "missing":
+                if raw_value is not None:
+                    return 0
+            elif raw_value != expected_value and (
+                not isinstance(raw_value, bytes)
+                or raw_value.decode("utf-8") != expected_value
             ):
                 return 0
         return self.delete(meta_key, value_key)
@@ -1034,6 +1338,45 @@ class TestRedisCacheLayer:
         layer.key_prefix = "cache:"
         layer.default_ttl = 3600
         return layer
+
+    def test_get_quarantine_uses_pipeline_value_snapshot(self, monkeypatch):
+        """Malformed metadata cleanup must not reread Redis after the pipeline."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        calls = []
+
+        class SnapshotClient:
+            def pipeline(self):
+                class Pipeline:
+                    def get(self, key):
+                        return self
+
+                    def hgetall(self, key):
+                        return self
+
+                    def execute(self):
+                        return [b"compressed-snapshot", {b"data": b"{malformed"}]
+
+                return Pipeline()
+
+            def get(self, key):
+                raise AssertionError("get cleanup must use the pipeline snapshot")
+
+        layer.client = SnapshotClient()
+        monkeypatch.setattr(
+            layer,
+            "_compare_quarantine_physical",
+            lambda meta_key, value_key, raw_data, raw_value: calls.append(
+                (meta_key, value_key, raw_data, raw_value)
+            ),
+        )
+
+        assert layer.get("key") is None
+        assert calls == [
+            ("cache:key:meta", "cache:key", b"{malformed", b"compressed-snapshot")
+        ]
 
     def test_no_ttl_remains_non_expiring_in_redis_metadata_and_storage(self, monkeypatch):
         monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)
@@ -2294,6 +2637,30 @@ raise SystemExit(0 if removed == 1 else 2)
         assert layer.invalidate_dependencies("source") == 0
         assert physical_meta in client.hashes
         assert client.values[b"cache:corrupt"] == b"replacement"
+
+    def test_corrupt_redis_metadata_preserves_value_only_replacement_race(self):
+        """A changed value must survive while corrupt metadata is unchanged."""
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        physical_meta = b"cache:corrupt-value-race:meta"
+
+        class ReplaceValueBeforeQuarantine(FakeRedisPipelineClient):
+            def eval(self, script, numkeys, meta_key, value_key, *args):
+                self.values[value_key] = b"replacement"
+                return super().eval(
+                    script, numkeys, meta_key, value_key, *args
+                )
+
+        layer.client = ReplaceValueBeforeQuarantine(
+            hashes={physical_meta: {b"data": b"{not-json"}},
+            values={b"cache:corrupt-value-race": b"scanned-old"},
+        )
+
+        assert layer.invalidate_dependencies("source") == 0
+        assert physical_meta in layer.client.hashes
+        assert layer.client.values[b"cache:corrupt-value-race"] == b"replacement"
 
     def test_empty_redis_metadata_preserves_replacement_race(self):
         """A replacement after empty metadata inspection must survive quarantine."""

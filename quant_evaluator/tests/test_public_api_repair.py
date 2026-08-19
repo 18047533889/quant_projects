@@ -1,6 +1,7 @@
 import inspect
 
 import numpy as np
+import pytest
 
 
 def _contracts():
@@ -50,6 +51,54 @@ def test_public_evaluate_returns_canonical_bundle():
     assert result.factor_ids == ("f",)
     assert result.label_id == "ret"
     assert result.get_diagnosis("f").coverage == 1.0
+
+
+def test_public_evaluate_supports_mean_ic_registry_metric():
+    from quant_evaluator import evaluate
+
+    batch, labels = _contracts()
+    values = np.tile(np.arange(10, dtype=float)[None, :, None], (3, 1, 1))
+    batch = type(batch)(
+        factor_ids=batch.factor_ids,
+        time_axis=batch.time_axis,
+        asset_axis=type(batch.asset_axis)(
+            name="asset", dtype="int64", size=10, values=np.arange(10)
+        ),
+        values=values,
+    )
+    labels = type(labels)(
+        target_id=labels.target_id,
+        values=np.tile(np.arange(10, dtype=float)[None, :], (3, 1)),
+        horizon=labels.horizon,
+        decision_time=labels.decision_time,
+        label_start_time=labels.label_start_time,
+        label_end_time=labels.label_end_time,
+    )
+    short_result = evaluate(batch, labels, metrics=["mean_ic"])
+    short_metric = short_result.get_metric("mean_ic")
+    assert not short_metric.valid
+    assert short_metric.value is None
+    assert short_metric.observation_count == 30
+
+    long_values = np.tile(np.arange(10, dtype=float)[None, :, None], (20, 1, 1))
+    long_batch = type(batch)(
+        factor_ids=batch.factor_ids,
+        time_axis=type(batch.time_axis)(name="time", dtype="int64", size=20, values=np.arange(20)),
+        asset_axis=batch.asset_axis,
+        values=long_values,
+    )
+    long_labels = type(labels)(
+        target_id=labels.target_id,
+        values=np.tile(np.arange(10, dtype=float)[None, :], (20, 1)),
+        horizon=labels.horizon,
+        decision_time=tuple(range(20)),
+        label_start_time=tuple(range(20)),
+        label_end_time=tuple(range(1, 21)),
+    )
+    long_metric = evaluate(long_batch, long_labels, metrics=["mean_ic"]).get_metric("mean_ic")
+    assert long_metric.valid
+    assert long_metric.value == pytest.approx(1.0)
+    assert long_metric.observation_count == 200
 
 
 def test_public_evaluate_broadcasts_one_dimensional_label_validity():

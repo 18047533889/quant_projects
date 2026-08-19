@@ -10,7 +10,10 @@ Tests verify:
 
 import hashlib
 import json
+import subprocess
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -117,6 +120,65 @@ class TestQ2P0001ProductionSafeSingleDefinition:
 class TestQ2P0002VerificationScriptHonesty:
     """Q2-P0-002: Verify verification script is honest about readiness."""
 
+    def test_json_exit_status_requires_readiness_and_mandatory_gates(self):
+        from scripts.verify_q_capability_evidence import _verification_passed
+
+        passing_gates = {
+            name: (True, "PASS")
+            for name in (
+                "Q_NATIVE_WITHOUT_LOWERING",
+                "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+                "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+                "Q_CAPABILITY_SINGLE_AUTHORITY",
+            )
+        }
+        assert _verification_passed({"production_ready": True}, passing_gates)
+        assert not _verification_passed({"production_ready": False}, passing_gates)
+
+        missing_gate = dict(passing_gates)
+        missing_gate.pop("Q_CAPABILITY_SINGLE_AUTHORITY")
+        assert not _verification_passed({"production_ready": True}, missing_gate)
+
+        failed_gate = dict(passing_gates)
+        failed_gate["Q_NATIVE_WITHOUT_LOWERING"] = (False, "FAIL")
+        assert not _verification_passed({"production_ready": True}, failed_gate)
+
+    def test_json_cli_returns_failure_when_backend_not_ready(self):
+        script = Path(__file__).resolve().parents[2] / "scripts" / "verify_q_capability_evidence.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--json"],
+            cwd=script.parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        payload = json.loads(result.stdout)
+        expected = bool(payload["report"].get("production_ready")) and all(
+            payload["gates"].get(name, {}).get("passed", False)
+            for name in {
+                "Q_NATIVE_WITHOUT_LOWERING",
+                "Q_PRODUCTION_SAFE_SINGLE_DEFINITION",
+                "Q_COMPILER_ADMISSION_USES_EVIDENCE_AUTHORITY_ONLY",
+                "Q_CAPABILITY_SINGLE_AUTHORITY",
+            }
+        )
+        assert result.returncode == (0 if expected else 1)
+
+    def test_gates_only_cli_returns_failure_when_backend_not_ready(self):
+        from scripts.verify_q_capability_evidence import _verification_passed
+
+        script = Path(__file__).resolve().parents[2] / "scripts" / "verify_q_capability_evidence.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--gates-only"],
+            cwd=script.parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        report = generate_capability_report()
+        gates = run_all_q_capability_gates()
+        assert result.returncode == (0 if _verification_passed(report, gates) else 1)
+
     def test_production_ready_requires_full_evidence(self):
         """production_ready flag must require all lowerings have full evidence."""
         report = generate_capability_report()
@@ -169,11 +231,7 @@ class TestQ2P0003RemoveDuplicateAuthority:
         """Hard gate Q_CAPABILITY_SINGLE_AUTHORITY must pass."""
         passed, message = QCapabilityGate.gate_q_capability_single_authority()
 
-        assert passed is False, (
-            "The canonical authority gate must fail closed while declarations "
-            "and executable lowerings disagree."
-        )
-        assert "declared_without_lowering" in message
+        assert passed is True, f"Q_CAPABILITY_SINGLE_AUTHORITY gate failed: {message}"
 
 
 class TestQ2P0004CompilerUsesEvidenceAuthority:

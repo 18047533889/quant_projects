@@ -1,9 +1,5 @@
-"""Assembly namespace.
+"""Deterministic factor-set assembly."""
 
-The assembly implementation has not been extracted into this distribution yet.
-Keep the namespace importable without exporting modules that are not shipped.
-"""
+from factor_assets.assembly.engine import FactorSetAssembler
 
-RESEARCH_ONLY = True
-
-__all__ = ["RESEARCH_ONLY"]
+__all__ = ["FactorSetAssembler"]

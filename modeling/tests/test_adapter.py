@@ -9,6 +9,15 @@ from modeling_adapters.contracts import PreprocessContract, FitWindow, Transform
 from modeling_adapters.errors import AdapterError, FutureLeakageError
 
 
+def test_star_import_exports_package_info():
+    """Package metadata helper is part of the public star-import surface."""
+    namespace = {}
+    exec("from modeling_adapters import *", namespace)
+
+    assert "package_info" in namespace
+    assert namespace["package_info"]()["name"] == "modeling-adapters"
+
+
 class TestFactorPreprocessAdapter:
     """Tests for FactorPreprocessAdapter."""
 

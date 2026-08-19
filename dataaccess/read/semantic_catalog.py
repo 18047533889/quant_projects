@@ -191,6 +191,7 @@ class SemanticField:
             "required_filters": list(self.required_filters),
             "revision_order": list(self.revision_order),
             "availability": self.availability,
+            "availability_latency": self.availability_latency,
             "primary_key": list(self.primary_key),
             "duplicate_policy": self.duplicate_policy,
             "aliases": list(self.aliases),

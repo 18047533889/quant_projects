@@ -2,10 +2,12 @@
 
 from datetime import datetime
 
+import numpy as np
 import pytest
 
 from factor_optimizer.contracts.search_budget import SearchBudget
 from factor_optimizer.contracts.splits import (
+    EvaluationProtocol,
     SealedTestHandle,
     SealedTestResult,
     SplitPlan,
@@ -144,6 +146,37 @@ def test_multifidelity_promotes_only_with_explicit_eligible_evidence():
     assert session.trials[0].metadata["fidelity"] == 1
 
 
+def test_safe_search_rejects_unrestricted_callback():
+    with pytest.raises(TypeError, match="EvaluationProtocol"):
+        SearchRunner(
+            SearchConfig(
+                budget=SearchBudget(max_trials=1, max_evaluations=1),
+                require_evaluation_protocol=True,
+            ),
+            _trial,
+            lambda trial, fidelity: {"score": 1.0, "cost": 1.0},
+        )
+
+
+def test_safe_search_accepts_validated_protocol():
+    protocol = EvaluationProtocol(
+        SplitPlan("split", [True], [False], [False], {}),
+        lambda trial, fidelity: {
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
+        },
+    )
+    session = SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+            require_evaluation_protocol=True,
+        ),
+        _trial,
+        protocol,
+    ).run("safe")
+    assert session.successful_trials()[0].evaluation_ref == "eval-safe"
+
+
 def test_recovery_to_old_best_is_plateau_not_progress():
     detector = PlateauDetector(
         PlateauConfig(window_size=3, min_relative_improvement=0.001)
@@ -151,16 +184,39 @@ def test_recovery_to_old_best_is_plateau_not_progress():
     assert detector.is_plateau([1.0, 0.5, 1.0])
 
 
+def test_split_plan_validates_boundaries_and_is_usable():
+    plan = SplitPlan("split", [True, False], [False, True], [False, False], {})
+    assert validate_split_plan(plan)["validated"] is True
+
+
+def test_split_plan_rejects_integer_masks():
+    with pytest.raises(ValueError, match="boolean boundaries"):
+        SplitPlan("split", [1, 0], [0, 1], [0, 0], {})
+
+
+def test_split_plan_rejects_non_builtin_bool_masks():
+    with pytest.raises(ValueError, match="boolean boundaries"):
+        SplitPlan("split", [np.bool_(True)], [False], [False], {})
+
+
 @pytest.mark.parametrize(
-    "operation",
+    "factory, error",
     [
-        lambda: SplitPlan("split", [1], [2], [3], {}),
-        lambda: SealedTestHandle("session", "trial", datetime.now()),
-        lambda: SealedTestResult("trial", {"rank_ic": 1.0}, datetime.now(), "session"),
-        lambda: validate_split_plan(object()),
-        lambda: create_split_aware_evaluation_fn(object(), object()),
+        (lambda: SplitPlan("", [True], [False], [False], {}), ValueError),
+        (lambda: SplitPlan("split", [], [False], [False], {}), ValueError),
+        (lambda: SplitPlan("split", [True], [False, True], [False], {}), ValueError),
+        (lambda: SplitPlan("split", [True], [True], [False], {}), ValueError),
+        (lambda: validate_split_plan(object()), TypeError),
+        (lambda: create_split_aware_evaluation_fn(object(), object()), TypeError),
     ],
 )
-def test_split_and_sealed_test_stubs_fail_closed(operation):
+def test_invalid_split_contracts_fail_closed(factory, error):
+    with pytest.raises(error):
+        factory()
+
+
+def test_sealed_test_stubs_still_fail_closed():
     with pytest.raises(NotImplementedError):
-        operation()
+        SealedTestHandle("session", "trial", datetime.now())
+    with pytest.raises(NotImplementedError):
+        SealedTestResult("trial", {"rank_ic": 1.0}, datetime.now(), "session")
