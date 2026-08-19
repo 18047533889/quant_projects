@@ -7,6 +7,7 @@ Validates package installation and basic functionality in isolation.
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix="modeling_wheel_test_") as tmpdir:
         tmpdir = Path(tmpdir)
         print(f"Test directory: {tmpdir}")
+
+        # Ensure stale build output cannot contribute interpreter-specific files.
+        build_dir = package_root / "build"
+        if build_dir.is_dir():
+            shutil.rmtree(build_dir)
 
         # Build wheel
         print("\n[1/5] Building wheel...")
@@ -94,6 +100,11 @@ def main():
             assert package_roots == {"modeling_adapters"}, package_roots
             assert any(name.startswith("modeling_adapters/") for name in names)
             assert not any(name.startswith("modeling/") for name in names)
+            assert not any(
+                "__pycache__/" in name
+                or name.endswith((".pyc", ".pyo"))
+                for name in names
+            )
         print(f"✓ Built and layout-checked: {wheel_path.name}")
 
         # Create venv

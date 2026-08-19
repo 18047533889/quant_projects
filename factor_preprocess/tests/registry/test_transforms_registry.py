@@ -141,6 +141,7 @@ class TestTransformRegistry:
             dummy_transform,
             TransformCategory.CROSS_SECTIONAL,
             tags={"original"},
+            admission="PRODUCTION",
         )
 
         exposed = retrieve(registry)
@@ -191,16 +192,27 @@ class TestTransformRegistry:
         with pytest.raises(ValueError, match="already registered with version"):
             registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL, version="2.0.0")
 
-    def test_omitted_admission_defaults_to_production(self):
+    def test_omitted_admission_is_unverified_and_rejected_for_production(self):
         registry = TransformRegistry()
         registry.register("dummy", dummy_transform, TransformCategory.CROSS_SECTIONAL)
 
         metadata = registry.get("dummy")
         assert metadata is not None
-        assert metadata.admission == "PRODUCTION"
-        validated = registry.validate_production("dummy")
-        assert validated.name == metadata.name
-        assert validated is not metadata
+        assert metadata.admission == "UNKNOWN"
+        with pytest.raises(ValueError, match="UNKNOWN"):
+            registry.validate_production("dummy")
+
+    def test_explicit_production_admission_passes_validation(self):
+        registry = TransformRegistry()
+        registry.register(
+            "dummy",
+            dummy_transform,
+            TransformCategory.CROSS_SECTIONAL,
+            admission="PRODUCTION",
+        )
+
+        metadata = registry.validate_production("dummy")
+        assert metadata.name == "dummy"
 
     def test_invalid_admission_is_rejected(self):
         with pytest.raises(ValueError, match="admission must be"):

@@ -8,7 +8,13 @@ from typing import Any, Callable, Dict, List, Optional
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.trial import Trial, TrialStatus
-from factor_optimizer.contracts.splits import EvaluationProtocol
+from factor_optimizer.contracts.splits import (
+    EvaluationProtocol,
+    SealedTestHandle,
+    SealedTestResult,
+    SplitPlan,
+    validate_split_plan,
+)
 from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
 
 
@@ -87,9 +93,18 @@ class SearchSession:
     finished_at: Optional[datetime] = None
     stop_reason: Optional[str] = None
     recent_scores: List[float] = field(default_factory=list)
+    frozen_at: Optional[datetime] = None
+    sealed_trial_id: Optional[str] = None
+    sealed_split_id: Optional[str] = None
+    sealed_test_consumed: bool = False
+
+    def _ensure_mutable(self) -> None:
+        if self.frozen_at is not None:
+            raise ValueError("search session is frozen")
 
     def add_trial(self, trial: Trial) -> None:
         """Add a trial to the session, rejecting reused trial IDs."""
+        self._ensure_mutable()
         if any(existing.trial_id == trial.trial_id for existing in self.trials):
             raise ValueError(f"trial_id already recorded: {trial.trial_id}")
         self.trials.append(trial)
@@ -100,6 +115,7 @@ class SearchSession:
 
     def update_best(self, trial_id: str, score: float) -> bool:
         """Update best score if improved. Returns True if new best."""
+        self._ensure_mutable()
         if self.best_score is None or score > self.best_score:
             self.best_score = score
             self.best_trial_id = trial_id
@@ -112,8 +128,90 @@ class SearchSession:
 
     def finish(self, reason: str) -> None:
         """Mark session as finished."""
+        self._ensure_mutable()
         self.finished_at = datetime.now()
         self.stop_reason = reason
+
+    def freeze_for_sealed_test(self, split_plan: SplitPlan) -> SealedTestHandle:
+        """Freeze the finished winner and issue its one-shot test authority."""
+        validate_split_plan(split_plan)
+        if not self.is_finished():
+            raise ValueError("cannot freeze an unfinished search session")
+        if self.frozen_at is not None:
+            raise ValueError("search session is already frozen")
+        if not self.best_trial_id:
+            raise ValueError("cannot freeze a session without an evaluated winner")
+        winner = next(
+            (trial for trial in self.successful_trials() if trial.trial_id == self.best_trial_id),
+            None,
+        )
+        if winner is None or not winner.evaluation_ref:
+            raise ValueError("frozen winner must have evaluation evidence")
+        self.frozen_at = datetime.now()
+        self.sealed_trial_id = winner.trial_id
+        self.sealed_split_id = split_plan.split_id
+        return SealedTestHandle(
+            search_session_id=self.session_id,
+            trial_id=winner.trial_id,
+            split_id=split_plan.split_id,
+            evaluation_ref=winner.evaluation_ref,
+            frozen_at=self.frozen_at,
+        )
+
+    def consume_sealed_test(
+        self,
+        handle: SealedTestHandle,
+        split_plan: SplitPlan,
+        evaluator: Callable[[Trial, SplitPlan], Dict[str, float]],
+    ) -> SealedTestResult:
+        """Validate and consume a handle by evaluating only its bound test plan."""
+        validate_split_plan(split_plan)
+        if not isinstance(handle, SealedTestHandle):
+            raise TypeError("handle must be a SealedTestHandle")
+        if not callable(evaluator):
+            raise TypeError("evaluator must be callable")
+        if self.frozen_at is None:
+            raise ValueError("search session is not frozen")
+        if self.sealed_test_consumed:
+            raise ValueError("sealed test handle has already been consumed")
+        expected = (
+            self.session_id,
+            self.sealed_trial_id,
+            self.sealed_split_id,
+            self.frozen_at,
+        )
+        actual = (
+            handle.search_session_id,
+            handle.trial_id,
+            handle.split_id,
+            handle.frozen_at,
+        )
+        if actual != expected or split_plan.split_id != self.sealed_split_id:
+            raise ValueError("sealed test handle does not match frozen session")
+        winner = next(
+            (trial for trial in self.successful_trials() if trial.trial_id == handle.trial_id),
+            None,
+        )
+        if winner is None or winner.evaluation_ref != handle.evaluation_ref:
+            raise ValueError("sealed test handle evidence does not match frozen winner")
+        metrics = evaluator(winner, split_plan)
+        if not isinstance(metrics, dict) or not all(
+            isinstance(name, str)
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and isfinite(value)
+            for name, value in metrics.items()
+        ):
+            raise ValueError("sealed test evaluator must return finite numeric metrics")
+        self.sealed_test_consumed = True
+        return SealedTestResult(
+            trial_id=winner.trial_id,
+            test_metrics=dict(metrics),
+            frozen_at=self.frozen_at,
+            search_session_id=self.session_id,
+            split_id=split_plan.split_id,
+            evaluation_ref=winner.evaluation_ref,
+        )
 
     def is_finished(self) -> bool:
         """Check if session is complete."""
@@ -138,15 +236,22 @@ class SearchSession:
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "stop_reason": self.stop_reason,
             "recent_scores": list(self.recent_scores),
+            "frozen_at": self.frozen_at.isoformat() if self.frozen_at else None,
+            "sealed_trial_id": self.sealed_trial_id,
+            "sealed_split_id": self.sealed_split_id,
+            "sealed_test_consumed": self.sealed_test_consumed,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SearchSession":
         """Deserialize and validate a session checkpoint."""
         values = dict(data)
-        required = {"session_id", "config", "budget_tracker", "trials", "duplicate_trials",
-                    "best_score", "best_trial_id", "started_at", "finished_at",
-                    "stop_reason", "recent_scores"}
+        required = {
+            "session_id", "config", "budget_tracker", "trials", "duplicate_trials",
+            "best_score", "best_trial_id", "started_at", "finished_at", "stop_reason",
+            "recent_scores", "frozen_at", "sealed_trial_id", "sealed_split_id",
+            "sealed_test_consumed",
+        }
         missing = required.difference(values)
         if missing:
             raise ValueError(f"session checkpoint missing fields: {sorted(missing)}")
@@ -156,6 +261,9 @@ class SearchSession:
             started_at = datetime.fromisoformat(started_at)
         if isinstance(finished_at, str):
             finished_at = datetime.fromisoformat(finished_at)
+        frozen_at = values["frozen_at"]
+        if isinstance(frozen_at, str):
+            frozen_at = datetime.fromisoformat(frozen_at)
         budget_tracker = BudgetTracker.from_dict(values["budget_tracker"])
         config = SearchConfig.from_dict(values["config"])
         if budget_tracker.budget.to_dict() != config.budget.to_dict():
@@ -250,6 +358,10 @@ class SearchSession:
             finished_at=finished_at,
             stop_reason=values["stop_reason"],
             recent_scores=list(values["recent_scores"]),
+            frozen_at=frozen_at,
+            sealed_trial_id=values["sealed_trial_id"],
+            sealed_split_id=values["sealed_split_id"],
+            sealed_test_consumed=values["sealed_test_consumed"],
         )
         return session
 

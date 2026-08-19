@@ -49,10 +49,16 @@ _SHARED_WORKSPACE_LEASES: set[tuple[str, str]] = set()
 
 
 def _safe_q_identifier(value: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", value)
-    if not cleaned or cleaned[0].isdigit():
-        cleaned = f"v_{cleaned}"
-    return cleaned
+    """Encode a logical name as a valid, injective q identifier."""
+    encoded = "".join(
+        character if ("A" <= character <= "Z" or "a" <= character <= "z" or "0" <= character <= "9")
+        else f"_{byte:02x}"
+        for character in value
+        for byte in (ord(character),)
+    )
+    if not encoded or encoded[0].isdigit():
+        encoded = f"v_{encoded}"
+    return encoded
 
 
 @dataclass(frozen=True)
@@ -153,6 +159,11 @@ class QExecutor:
         workspace_id = workspace_id or uuid.uuid4().hex
         generation_id = generation_id or uuid.uuid4().hex
         workspace_prefix = f"qe_{_safe_q_identifier(workspace_id)}_"
+        # Batch regions intentionally share one namespace so resident handles can
+        # flow into later regions. Direct calls sharing that workspace need an
+        # execution identity: logical names alone would alias their q symbols.
+        if not _defer_workspace_cleanup:
+            workspace_prefix += f"{uuid.uuid4().hex}_"
         if not materialize_output and not return_resident_handle:
             raise ValueError(
                 "execute_region must materialize output or return a resident handle"
@@ -181,19 +192,12 @@ class QExecutor:
 
         q: Any | None = None
         resident_handle: QResidentTableHandle | None = None
+        workspace_symbols_before: frozenset[str] = frozenset()
         with _LEASE_LOCK:
             shared_workspace = (
                 workspace_id,
                 generation_id,
             ) in _SHARED_WORKSPACE_LEASES
-            existing_lease = _ACTIVE_LEASES.get(workspace_id)
-            workspace_symbols_before = frozenset(
-                existing_lease[2]
-                if shared_workspace
-                and existing_lease is not None
-                and existing_lease[:1] == (generation_id,)
-                else ()
-            )
         try:
             with self._connection_lock:
                 start_time = time.perf_counter()
@@ -201,6 +205,15 @@ class QExecutor:
                 # The lock spans upload, execution, and output retrieval so
                 # another execution cannot overwrite this connection's names.
                 q = self.process_manager.get_connection()
+                with _LEASE_LOCK:
+                    existing_lease = _ACTIVE_LEASES.get(workspace_id)
+                    workspace_symbols_before = frozenset(
+                        existing_lease[2]
+                        if shared_workspace
+                        and existing_lease is not None
+                        and existing_lease[:2] == (generation_id, id(q))
+                        else ()
+                    )
                 bindings = self._load_inputs_to_q(
                     q,
                     input_data,
@@ -249,10 +262,12 @@ class QExecutor:
 
                 if return_resident_handle:
                     with _LEASE_LOCK:
-                        shared_workspace = (
-                            workspace_id,
-                            generation_id,
-                        ) in _SHARED_WORKSPACE_LEASES
+                        lease = _ACTIVE_LEASES.get(workspace_id)
+                        handle_owned_symbols = frozenset(
+                            lease[2].difference(workspace_symbols_before)
+                            if shared_workspace and lease is not None
+                            else ()
+                        )
                     resident_handle = QResidentTableHandle(
                         table_name=plan.output_table,
                         q_table_ref=q_result,
@@ -264,7 +279,11 @@ class QExecutor:
                         generation_id=generation_id,
                         q_symbol=output_symbol,
                         _release_callback=(
-                            self._release_batch_handle
+                            (
+                                lambda handle: self._release_shared_symbols(
+                                    handle, handle_owned_symbols
+                                )
+                            )
                             if shared_workspace
                             else self._release_resident_handle
                         ),
@@ -298,7 +317,16 @@ class QExecutor:
             # any original failure from the execution body.
             if q is not None and resident_handle is None and not _defer_workspace_cleanup:
                 with self._connection_lock:
-                    self._cleanup_workspace(q, workspace_id, generation_id)
+                    if shared_workspace:
+                        self._cleanup_workspace(
+                            q,
+                            workspace_id,
+                            generation_id,
+                            preserve_symbols=workspace_symbols_before,
+                            expected_connection_id=id(q),
+                        )
+                    else:
+                        self._cleanup_workspace(q, workspace_id, generation_id)
 
     @staticmethod
     def _resident_result_metadata(q_result: Any) -> tuple[int, int]:
@@ -345,9 +373,16 @@ class QExecutor:
 
     def _release_batch_handle(self, handle: QResidentTableHandle) -> None:
         """Release one published batch symbol without invalidating siblings."""
+        self._release_shared_symbols(handle, frozenset({handle.q_symbol or handle.table_name}))
+
+    def _release_shared_symbols(
+        self,
+        handle: QResidentTableHandle,
+        physical_symbols: frozenset[str],
+    ) -> None:
+        """Release symbols owned by one handle on a shared workspace."""
         if handle.workspace_id is None or handle.generation_id is None:
             return
-        physical_symbol = handle.q_symbol or handle.table_name
         try:
             with self._connection_lock:
                 q = self.process_manager.get_connection()
@@ -359,21 +394,28 @@ class QExecutor:
                         return
                     if lease[:2] != (handle.generation_id, handle.connection_id):
                         raise QExecutionError("Resident workspace lease identity conflict")
-                    if physical_symbol not in lease[2]:
-                        return
-                q(f"delete {physical_symbol} from `.")
+                    owned_symbols = physical_symbols.intersection(lease[2])
+                failed: set[str] = set()
+                for physical_symbol in owned_symbols:
+                    try:
+                        q(f"delete {physical_symbol} from `.")
+                    except Exception:
+                        failed.add(physical_symbol)
+                succeeded = owned_symbols.difference(failed)
                 with _LEASE_LOCK:
                     lease = _ACTIVE_LEASES.get(handle.workspace_id)
                     if lease is not None and lease[:2] == (
                         handle.generation_id,
                         handle.connection_id,
                     ):
-                        lease[2].discard(physical_symbol)
+                        lease[2].difference_update(succeeded)
                         if not lease[2]:
                             del _ACTIVE_LEASES[handle.workspace_id]
                             _SHARED_WORKSPACE_LEASES.discard(
                                 (handle.workspace_id, handle.generation_id)
                             )
+                if failed:
+                    raise QExecutionError("Resident symbol cleanup failed")
         except Exception:
             object.__setattr__(handle, "_released", False)
             raise

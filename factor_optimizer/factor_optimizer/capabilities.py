@@ -40,9 +40,7 @@ PRODUCTION_CAPABILITY = ProductionCapability(
     status=CapabilityStatus.RESEARCH_ONLY,
     supported=False,
     blockers=(
-        "split_plan_contract_stub",
-        "sealed_test_handle_stub",
-        "split_aware_qe_integration_missing",
+        "trusted_split_aware_qe_integration_missing",
         "production_legality_chain_missing",
     ),
 )

@@ -7,6 +7,7 @@ Tests verify:
 """
 
 from unittest.mock import MagicMock, patch
+import threading
 
 import numpy as np
 import pandas as pd
@@ -413,6 +414,282 @@ def test_batch_sibling_handles_release_independently(
     assert sum(symbol_b in call for call in deletes) == 1
 
 
+def test_direct_handle_on_shared_batch_workspace_releases_only_its_symbol(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """A direct result sharing a batch workspace cannot delete batch siblings."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    batch_plans = [
+        QRegionPlan("A", ("a",), "aout: input_table", ("input_table",), "aout"),
+        QRegionPlan("B", ("b",), "bout: aout", ("aout",), "bout"),
+        QRegionPlan("C", ("c",), "final: bout", ("bout",), "final"),
+    ]
+    results = executor.execute_batch_regions(
+        batch_plans, {"input_table": sample_input_data}, enable_residency=True
+    )
+    handle_a, handle_b = results[0].resident_handle, results[1].resident_handle
+    assert handle_a is not None and handle_b is not None
+    assert handle_a.workspace_id == handle_b.workspace_id
+
+    direct_result = executor.execute_region(
+        QRegionPlan("direct", ("d",), "direct: aout", ("aout",), "direct"),
+        {"aout": handle_a},
+        return_resident_handle=True,
+        materialize_output=False,
+        workspace_id=handle_a.workspace_id,
+        generation_id=handle_a.generation_id,
+    )
+    direct_handle = direct_result.resident_handle
+    assert direct_handle is not None
+    assert direct_handle.q_symbol not in {handle_a.q_symbol, handle_b.q_symbol}
+
+    direct_handle.release()
+    executor._validate_lease(handle_b, mock_q_process, allow_legacy_handles=False)
+    lease = q_executor_module._ACTIVE_LEASES[handle_b.workspace_id]
+    assert handle_b.q_symbol in lease[2]
+    deletes = [str(call) for call in mock_q_process.call_args_list if "delete" in str(call)]
+    assert sum(direct_handle.q_symbol in call for call in deletes) == 1
+    assert not any(handle_b.q_symbol in call for call in deletes)
+
+    handle_a.release()
+    handle_b.release()
+    assert handle_b.workspace_id not in q_executor_module._ACTIVE_LEASES
+
+
+
+def test_direct_materialized_call_preserves_batch_symbols(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Direct materialization on a batch lease only removes direct symbols."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    results = executor.execute_batch_regions(
+        [
+            QRegionPlan("A", ("a",), "aout: input_table", ("input_table",), "aout"),
+            QRegionPlan("B", ("b",), "bout: aout", ("aout",), "bout"),
+            QRegionPlan("C", ("c",), "final: bout", ("bout",), "final"),
+        ],
+        {"input_table": sample_input_data},
+        enable_residency=True,
+    )
+    source = results[0].resident_handle
+    sibling = results[1].resident_handle
+    assert source is not None and sibling is not None
+
+    direct = executor.execute_region(
+        QRegionPlan("direct", ("direct-node",), "direct: aout", ("aout",), "direct"),
+        {"aout": source},
+        workspace_id=source.workspace_id,
+        generation_id=source.generation_id,
+        return_resident_handle=False,
+        materialize_output=True,
+    )
+    assert direct.success
+    executor._validate_lease(source, mock_q_process, allow_legacy_handles=False)
+    executor._validate_lease(sibling, mock_q_process, allow_legacy_handles=False)
+    lease = q_executor_module._ACTIVE_LEASES[source.workspace_id]
+    assert source.q_symbol in lease[2]
+    assert sibling.q_symbol in lease[2]
+
+    sibling.release()
+    source.release()
+
+
+def test_physical_identifier_encoding_avoids_logical_name_aliases(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Unsafe logical names remain distinct after q namespace encoding."""
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    plan = QRegionPlan(
+        "collision",
+        ("a-b", "a_b"),
+        "result: a-b + a_b",
+        (),
+        "result",
+    )
+
+    result = executor.execute_region(plan, {}, return_resident_handle=False)
+
+    assert result.success
+    commands = [call.args[0] for call in mock_q_process.call_args_list if call.args]
+    generated = next(command for command in commands if "result:" in command)
+    assert "a_2db" in generated
+    assert "a_5fb" in generated
+    assert generated.count("a_2db") == 1
+    assert generated.count("a_5fb") == 1
+
+def test_concurrent_direct_handles_do_not_claim_each_others_symbols(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Concurrent direct calls bind cleanup to their serialized workspace delta."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    batch = executor.execute_batch_regions(
+        [
+            QRegionPlan("A", ("a",), "aout: input_table", ("input_table",), "aout"),
+            QRegionPlan("B", ("b",), "bout: aout", ("aout",), "bout"),
+            QRegionPlan("C", ("c",), "final: bout", ("bout",), "final"),
+        ],
+        {"input_table": sample_input_data},
+        enable_residency=True,
+    )
+    source, sibling = batch[0].resident_handle, batch[1].resident_handle
+    assert source is not None and sibling is not None
+
+    class CoordinatedLock:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._attempt_lock = threading.Lock()
+            self._attempts = 0
+            self._both_attempted = threading.Event()
+
+        def __enter__(self):
+            with self._attempt_lock:
+                self._attempts += 1
+                if self._attempts == 2:
+                    self._both_attempted.set()
+            assert self._both_attempted.wait(timeout=2)
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self._lock.release()
+
+    original_lock = executor._connection_lock
+    executor._connection_lock = CoordinatedLock()
+    handles = {}
+    failures = []
+
+    def execute(name):
+        try:
+            handles[name] = executor.execute_region(
+                QRegionPlan(
+                    name,
+                    (f"node_{name}",),
+                    f"out_{name}: aout",
+                    ("aout",),
+                    f"out_{name}",
+                ),
+                {"aout": source},
+                return_resident_handle=True,
+                materialize_output=False,
+                workspace_id=source.workspace_id,
+                generation_id=source.generation_id,
+            ).resident_handle
+        except BaseException as exc:
+            failures.append(exc)
+
+    threads = [threading.Thread(target=execute, args=(name,)) for name in ("x", "y")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+    executor._connection_lock = original_lock
+
+    assert not failures
+    assert all(not thread.is_alive() for thread in threads)
+    handle_x, handle_y = handles["x"], handles["y"]
+    assert handle_x is not None and handle_y is not None
+
+    handle_x.release()
+    executor._validate_lease(handle_y, mock_q_process, allow_legacy_handles=False)
+    executor._validate_lease(sibling, mock_q_process, allow_legacy_handles=False)
+    lease = q_executor_module._ACTIVE_LEASES[source.workspace_id]
+    assert handle_y.q_symbol in lease[2]
+    deletes = [str(call) for call in mock_q_process.call_args_list if "delete" in str(call)]
+    assert not any(handle_y.q_symbol in call for call in deletes)
+    assert not any(sibling.q_symbol in call for call in deletes)
+
+    handle_y.release()
+    sibling.release()
+    source.release()
+    assert source.workspace_id not in q_executor_module._ACTIVE_LEASES
+
+
+def test_shared_direct_handle_partial_release_retries_remaining_symbols(
+    mock_q_process, mock_type_adapter, sample_input_data
+):
+    """Partial shared-handle cleanup removes successes and retries failures only."""
+    import backend.q_backend.q_executor as q_executor_module
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    results = executor.execute_batch_regions(
+        [
+            QRegionPlan("A", ("a",), "aout: input_table", ("input_table",), "aout"),
+            QRegionPlan("B", ("b",), "bout: aout", ("aout",), "bout"),
+            QRegionPlan("C", ("c",), "final: bout", ("bout",), "final"),
+        ],
+        {"input_table": sample_input_data},
+        enable_residency=True,
+    )
+    sibling = results[1].resident_handle
+    source = results[0].resident_handle
+    assert sibling is not None and source is not None
+    direct = executor.execute_region(
+        QRegionPlan("direct", ("d",), "direct: aout", ("aout",), "direct"),
+        {"aout": source},
+        return_resident_handle=True,
+        materialize_output=False,
+        workspace_id=source.workspace_id,
+        generation_id=source.generation_id,
+    ).resident_handle
+    assert direct is not None
+    with q_executor_module._LEASE_LOCK:
+        owned = frozenset(
+            q_executor_module._ACTIVE_LEASES[direct.workspace_id][2]
+        ).difference({sibling.q_symbol, source.q_symbol})
+    assert len(owned) >= 2
+    symbols = tuple(sorted(owned))
+    fail_symbol = symbols[-1]
+    original_side_effect = mock_q_process.side_effect
+    delete_counts_before = {
+        symbol: sum(
+            str(call) == f"call('delete {symbol} from `.')"
+            for call in mock_q_process.call_args_list
+        )
+        for symbol in symbols
+    }
+    failed_once = False
+
+    def fail_later_symbol(command):
+        nonlocal failed_once
+        if isinstance(command, str) and command == f"delete {fail_symbol} from `.":
+            failed_once = True
+            raise RuntimeError("delete failed")
+        return original_side_effect(command) if original_side_effect else mock_q_process.return_value
+
+    mock_q_process.side_effect = fail_later_symbol
+    with pytest.raises(Exception, match="symbol cleanup failed"):
+        direct.release()
+    assert failed_once and not direct._released
+    lease = q_executor_module._ACTIVE_LEASES[direct.workspace_id]
+    assert fail_symbol in lease[2]
+    for symbol in symbols[:-1]:
+        assert symbol not in lease[2]
+    assert sibling.q_symbol in lease[2]
+
+    mock_q_process.side_effect = original_side_effect
+    direct.release()
+    delete_calls = [str(call) for call in mock_q_process.call_args_list]
+    for symbol in symbols[:-1]:
+        assert sum(
+            call == f"call('delete {symbol} from `.')" for call in delete_calls
+        ) == delete_counts_before[symbol] + 1
+    assert sum(
+        call == f"call('delete {fail_symbol} from `.')" for call in delete_calls
+    ) == delete_counts_before[fail_symbol] + 2
+    assert direct._released
+    assert direct.workspace_id in q_executor_module._ACTIVE_LEASES
+    executor._validate_lease(sibling, mock_q_process, allow_legacy_handles=False)
+    sibling.release()
+    source.release()
+    assert direct.workspace_id not in q_executor_module._ACTIVE_LEASES
+
+
 def test_batch_published_handle_lives_until_explicit_release(
     mock_q_process, mock_type_adapter, sample_input_data
 ):
@@ -715,6 +992,44 @@ def test_stale_resident_handle_fails_before_q_execution(
 
     mock_type_adapter.q_to_pandas.assert_not_called()
     mock_q_process.assert_not_called()
+
+
+def test_stale_resident_handle_fails_for_generation_mismatch(
+    mock_q_process, mock_type_adapter, sample_region_plan
+):
+    """A handle from another workspace generation fails closed before q execution."""
+    import backend.q_backend.q_executor as q_executor_module
+    from backend.q_backend.q_errors import QExecutionError
+
+    workspace_id = "shared-workspace"
+    connection_id = id(mock_q_process)
+    q_executor_module._ACTIVE_LEASES[workspace_id] = (
+        "current-generation",
+        connection_id,
+        {"qe_shared_workspace_result"},
+    )
+    stale_handle = QResidentTableHandle(
+        table_name="input_table",
+        q_table_ref=MagicMock(),
+        row_count=100,
+        byte_size=8000,
+        region_id="old_region",
+        connection_id=connection_id,
+        workspace_id=workspace_id,
+        generation_id="old-generation",
+        q_symbol="qe_shared_workspace_result",
+    )
+
+    executor = QExecutor(type_adapter=mock_type_adapter)
+    with pytest.raises(QExecutionError, match="Stale Q-resident handle"):
+        executor.execute_region(
+            sample_region_plan,
+            {"input_table": stale_handle},
+        )
+
+    mock_type_adapter.q_to_pandas.assert_not_called()
+    mock_q_process.assert_not_called()
+    del q_executor_module._ACTIVE_LEASES[workspace_id]
 
 
 def test_resident_metadata_failure_does_not_materialize(

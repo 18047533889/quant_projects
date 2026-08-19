@@ -215,8 +215,56 @@ def test_invalid_split_contracts_fail_closed(factory, error):
         factory()
 
 
-def test_sealed_test_stubs_still_fail_closed():
-    with pytest.raises(NotImplementedError):
-        SealedTestHandle("session", "trial", datetime.now())
-    with pytest.raises(NotImplementedError):
-        SealedTestResult("trial", {"rank_ic": 1.0}, datetime.now(), "session")
+def test_sealed_test_workflow_freezes_and_consumes_once():
+    protocol = EvaluationProtocol(
+        SplitPlan("split", [True], [False], [False], {}),
+        lambda trial, fidelity: {
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
+        },
+    )
+    session = SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+            require_evaluation_protocol=True,
+        ),
+        _trial,
+        protocol,
+    ).run("safe")
+    plan = SplitPlan("test", [False], [False], [True], {})
+    handle = session.freeze_for_sealed_test(plan)
+    result = session.consume_sealed_test(
+        handle, plan, lambda trial, split: {"rank_ic": 0.25}
+    )
+    assert result.trial_id == "trial"
+    assert result.test_metrics == {"rank_ic": 0.25}
+    with pytest.raises(ValueError, match="already been consumed"):
+        session.consume_sealed_test(handle, plan, lambda trial, split: {"rank_ic": 0.1})
+
+
+def test_sealed_test_rejects_mismatched_plan_and_post_freeze_mutation():
+    protocol = EvaluationProtocol(
+        SplitPlan("split", [True], [False], [False], {}),
+        lambda trial, fidelity: {
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
+        },
+    )
+    session = SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+        ),
+        _trial,
+        protocol,
+    ).run("safe")
+    plan = SplitPlan("test", [False], [False], [True], {})
+    handle = session.freeze_for_sealed_test(plan)
+    with pytest.raises(ValueError, match="already frozen"):
+        session.freeze_for_sealed_test(plan)
+    with pytest.raises(ValueError, match="does not match"):
+        session.consume_sealed_test(
+            handle,
+            SplitPlan("other", [False], [False], [True], {}),
+            lambda trial, split: {"rank_ic": 0.1},
+        )
+

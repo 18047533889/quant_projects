@@ -152,6 +152,17 @@ def _pairwise_rolling_moments(
 class TSCorrNative(SeriesOperator):
     """Rolling correlation between x and y."""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_corr", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=False, supports_inf=False,
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCorrNative:v1",
+        emitter_identity="polars.rolling.pairwise_moments:v1",
+        parameter_domain_hash="ts_corr.x:dataframe,y:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=2",
+        semantic_contract_hash="ts_corr:pairwise_finite:v1",
+    )
+
     metadata = OperatorMetadata(
         name="ts_corr",
         category="time_series",

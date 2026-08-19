@@ -12,10 +12,10 @@ from factor_assets.selection import (
 )
 
 
-def _passing_gate() -> GateEvaluation:
+def _passing_gate(factor_id: str) -> GateEvaluation:
     return GateEvaluation(
         gate_name="quality",
-        factor_id="F_ADVERSARIAL",
+        factor_id=factor_id,
         result=GateResult.PASS,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
@@ -45,7 +45,7 @@ def test_nonempty_evidence_cannot_approve_without_gate_evaluations():
 def test_negative_similarity_is_compared_by_absolute_score():
     decision = _policy().make_decision(
         factor_id="F_NEGATIVE_SIMILARITY",
-        gate_evaluations=[_passing_gate()],
+        gate_evaluations=[_passing_gate("F_NEGATIVE_SIMILARITY")],
         evidence_refs=("EVD_PRESENT",),
         max_similarity=-0.99,
     )
@@ -59,7 +59,7 @@ def test_negative_similarity_is_compared_by_absolute_score():
 def test_nonfinite_similarity_never_approves(score: float):
     decision = _policy().make_decision(
         factor_id="F_NONFINITE_SIMILARITY",
-        gate_evaluations=[_passing_gate()],
+        gate_evaluations=[_passing_gate("F_NONFINITE_SIMILARITY")],
         evidence_refs=("EVD_PRESENT",),
         max_similarity=score,
     )

@@ -352,6 +352,41 @@ class TestDiskCacheLayer:
             value, metadata = result
             np.testing.assert_array_equal(value, data)
 
+    def test_valid_legacy_pair_reaches_verified_read(self, tmp_path):
+        cache = DiskCacheLayer(tmp_path, create_compressor("none"))
+        key = "legacy"
+        value = {"source": "legacy"}
+        raw_value = cache_v2_module.pickle.dumps(
+            value, protocol=cache_v2_module.pickle.HIGHEST_PROTOCOL
+        )
+        value_path = cache._key_path(key)
+        metadata = CacheMetadata(
+            key=key,
+            created_at=time.time(),
+            last_accessed=time.time(),
+            access_count=0,
+            size_bytes=len(raw_value),
+            compressed_size=len(raw_value),
+            ttl_seconds=None,
+            dependencies={"source"},
+            compression_method="none",
+        )
+        value_path.parent.mkdir(parents=True, exist_ok=True)
+        value_path.write_bytes(raw_value)
+        cache._meta_path(value_path).write_text(
+            json.dumps({
+                **metadata.to_dict(),
+                "checksum": cache_v2_module.hashlib.sha256(raw_value).hexdigest(),
+            }),
+            encoding="utf-8",
+        )
+
+        result = cache.get(key)
+
+        assert result is not None
+        assert result[0] == value
+        assert result[1].key == key
+
     def test_malformed_record_is_quarantined(self):
         """Malformed single-file records must not remain readable."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1377,6 +1412,23 @@ class TestRedisCacheLayer:
         assert calls == [
             ("cache:key:meta", "cache:key", b"{malformed", b"compressed-snapshot")
         ]
+
+    def test_clear_preserves_epoch_returned_as_bytes(self):
+        layer = object.__new__(RedisCacheLayer)
+        layer.compressor = create_compressor("none")
+        layer.key_prefix = "cache:"
+        layer.default_ttl = 3600
+        epoch_key = b"cache::invalidation_epoch"
+        layer.client = FakeRedisClient(
+            hashes={b"cache:key:meta": {b"data": b"metadata"}},
+            values={b"cache:key": b"value", epoch_key: b"epoch"},
+        )
+
+        layer.clear()
+
+        assert epoch_key in layer.client.values
+        assert b"cache:key" not in layer.client.values
+        assert b"cache:key:meta" not in layer.client.hashes
 
     def test_no_ttl_remains_non_expiring_in_redis_metadata_and_storage(self, monkeypatch):
         monkeypatch.setattr(cache_v2_module.time, "time", FrozenClock(1000.0).time)

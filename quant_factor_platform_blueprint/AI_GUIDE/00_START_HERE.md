@@ -1,5 +1,7 @@
 # 00 — Start Here：AI 开发总指令
 
+> **Context budget:** skim this file for orientation. Do **not** load the entire `AI_GUIDE/` tree (or `docs/R2_HISTORY_ARCHIVE.md`) into a session/subagent. Open only the chapter for the package you are changing.
+
 ## 0.1 目标
 
 把现有 `quant_projects` 从“多个历史模块并存、能力重复、接口分散”的状态，整理为一套可以独立分发、企业级可维护、适配数万到十万因子规模的模型前因子平台。

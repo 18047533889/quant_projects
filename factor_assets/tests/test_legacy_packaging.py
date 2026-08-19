@@ -13,6 +13,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_runtime_dependencies_are_declared_in_pyproject() -> None:
+    dependencies = (PROJECT_ROOT / "pyproject.toml").read_text()
+
+    assert '"numpy>=1.24"' in dependencies
+    assert '"scipy>=1.10"' in dependencies
+
+
 def _source_copy(tmp_path: Path) -> Path:
     destination = tmp_path / "factor_assets"
     shutil.copytree(
@@ -63,6 +70,8 @@ def test_legacy_archives_preserve_factor_assets_namespace(tmp_path: Path) -> Non
         assert "Requires-Python: >=3.10" in metadata
         assert "Requires-Dist: typing-extensions>=4.5.0" in metadata
         assert "Requires-Dist: dataclasses-json>=0.5.13" in metadata
+        assert "Requires-Dist: numpy>=1.24" in metadata
+        assert "Requires-Dist: scipy>=1.10" in metadata
 
     with tarfile.open(sdist_paths[0], "r:gz") as archive:
         names = set(archive.getnames())

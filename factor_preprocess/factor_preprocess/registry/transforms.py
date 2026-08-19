@@ -34,7 +34,7 @@ class TransformMetadata:
     parameters: Dict[str, Any] = field(default_factory=dict)
     tags: Set[str] = field(default_factory=set)
     causal_safe: bool = True
-    admission: str = "PRODUCTION"
+    admission: str = "UNKNOWN"
     signature_hash: Optional[str] = None
 
     def __post_init__(self):
@@ -114,11 +114,12 @@ class TransformRegistry:
         admission : str
             Production admission class
         """
-        # Existing callers omit admission for ordinary causal transforms;
-        # make that omission explicit rather than treating it as unknown.
-        admission = admission or "PRODUCTION"
-        if admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
-            raise ValueError("admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY")
+        if admission is None:
+            admission = "UNKNOWN"
+        elif admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
+            raise ValueError(
+                "admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY"
+            )
         if admission == "PRODUCTION" and not causal_safe:
             raise ValueError("Production transforms must be causal_safe")
 
@@ -247,6 +248,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional rank with tie handling",
         tags={"rank", "normalization", "cs"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "cs_zscore", cs_zscore, TransformCategory.CROSS_SECTIONAL,
@@ -254,6 +256,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional z-score normalization",
         tags={"zscore", "normalization", "cs"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "cs_demean", cs_demean, TransformCategory.CROSS_SECTIONAL,
@@ -261,6 +264,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional demean",
         tags={"demean", "normalization", "cs"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "cs_winsor", cs_winsor, TransformCategory.CROSS_SECTIONAL,
@@ -268,6 +272,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional winsorization",
         tags={"winsor", "outlier", "cs"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "cs_scale", cs_scale, TransformCategory.CROSS_SECTIONAL,
@@ -275,6 +280,7 @@ def create_default_registry() -> TransformRegistry:
         description="Cross-sectional scaling to target std",
         tags={"scale", "normalization", "cs"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
 
     # Temporal transforms
@@ -284,6 +290,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling window mean",
         tags={"rolling", "mean", "temporal"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "rolling_std", rolling_std, TransformCategory.TEMPORAL,
@@ -291,6 +298,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling window standard deviation",
         tags={"rolling", "std", "temporal"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "rolling_zscore", rolling_zscore, TransformCategory.TEMPORAL,
@@ -298,6 +306,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling z-score normalization",
         tags={"rolling", "zscore", "temporal"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "ewma", ewma, TransformCategory.TEMPORAL,
@@ -305,6 +314,7 @@ def create_default_registry() -> TransformRegistry:
         description="Exponentially weighted moving average",
         tags={"ewma", "temporal", "smoothing"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
 
     # Volatility transforms
@@ -314,6 +324,7 @@ def create_default_registry() -> TransformRegistry:
         description="Scale by realized volatility",
         tags={"volatility", "scale"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "volatility_scale_returns", volatility_scale_returns, TransformCategory.VOLATILITY,
@@ -321,6 +332,7 @@ def create_default_registry() -> TransformRegistry:
         description="Scale returns by volatility",
         tags={"volatility", "returns", "scale"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "realized_volatility", realized_volatility, TransformCategory.VOLATILITY,
@@ -328,6 +340,7 @@ def create_default_registry() -> TransformRegistry:
         description="Compute realized volatility",
         tags={"volatility", "compute"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
 
     # Missingness transforms
@@ -337,6 +350,7 @@ def create_default_registry() -> TransformRegistry:
         description="Forward fill missing values",
         tags={"missing", "fill"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "missing_indicator", missing_indicator, TransformCategory.MISSINGNESS,
@@ -344,6 +358,7 @@ def create_default_registry() -> TransformRegistry:
         description="Binary missing data indicator",
         tags={"missing", "indicator"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "missing_run_length", missing_run_length, TransformCategory.MISSINGNESS,
@@ -351,6 +366,7 @@ def create_default_registry() -> TransformRegistry:
         description="Consecutive missing observation count",
         tags={"missing", "run_length"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "missing_rate", missing_rate, TransformCategory.MISSINGNESS,
@@ -358,6 +374,7 @@ def create_default_registry() -> TransformRegistry:
         description="Rolling missing data rate",
         tags={"missing", "rate"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "impute_with_fallback", impute_with_fallback, TransformCategory.MISSINGNESS,
@@ -386,6 +403,7 @@ def create_default_registry() -> TransformRegistry:
         description="Days since last non-missing update",
         tags={"freshness", "staleness"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "observation_age", observation_age, TransformCategory.FRESHNESS,
@@ -393,6 +411,7 @@ def create_default_registry() -> TransformRegistry:
         description="Age of observation in days",
         tags={"freshness", "age"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "freshness_score", freshness_score, TransformCategory.FRESHNESS,
@@ -400,6 +419,7 @@ def create_default_registry() -> TransformRegistry:
         description="Continuous freshness score [0, 1]",
         tags={"freshness", "score"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "stale_data_indicator", stale_data_indicator, TransformCategory.FRESHNESS,
@@ -407,6 +427,7 @@ def create_default_registry() -> TransformRegistry:
         description="Binary stale data indicator",
         tags={"freshness", "staleness", "indicator"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
 
     # Neutralization transforms
@@ -416,6 +437,7 @@ def create_default_registry() -> TransformRegistry:
         description="OLS residual neutralization",
         tags={"neutralize", "ols", "residual"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
     registry.register(
         "compute_exposures", compute_exposures, TransformCategory.NEUTRALIZATION,
@@ -423,6 +445,7 @@ def create_default_registry() -> TransformRegistry:
         description="Compute factor exposures",
         tags={"exposure", "ols"},
         causal_safe=True,
+        admission="PRODUCTION",
     )
 
     # Full-series decomposition uses symmetric/zero-phase reconstruction and is

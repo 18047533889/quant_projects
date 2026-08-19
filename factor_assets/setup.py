@@ -11,6 +11,8 @@ setup(
     install_requires=[
         "typing-extensions>=4.5.0",
         "dataclasses-json>=0.5.13",
+        "numpy>=1.24",
+        "scipy>=1.10",
     ],
     package_dir={"factor_assets": "."},
     packages=[

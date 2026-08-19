@@ -1,6 +1,5 @@
-"""Opt-in pytest gate for the standalone wheel smoke test."""
+"""Pytest gate for the standalone wheel smoke test."""
 
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,9 +9,7 @@ import pytest
 
 @pytest.mark.integration
 def test_clean_wheel_install_smoke():
-    """Run the existing wheel smoke script when explicitly requested."""
-    if os.environ.get("RUN_WHEEL_SMOKE") != "1":
-        pytest.skip("set RUN_WHEEL_SMOKE=1 to run the wheel smoke test")
+    """Build and validate the standalone wheel in an isolated environment."""
 
     script = Path(__file__).resolve().parents[1] / "scripts" / "wheel_clean_install_smoke.py"
     try:

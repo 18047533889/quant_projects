@@ -3,6 +3,7 @@ from factor_assets.contracts.asset import AssetMetadata, FactorAsset
 from factor_assets.contracts.factor_set import FactorSetSpec
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
+from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.selection import SelectionDecision, SelectionReason
 
 
@@ -21,6 +22,13 @@ def make_asset(factor_id, *, frequency="daily", domains=("price",), state=Lifecy
         lifecycle_state=state,
         registered_at="2024-01-01T00:00:00Z",
         family="family-a" if factor_id != "F3" else "family-b",
+        latest_evidence_ref=EvidenceBundleRef(
+            bundle_id=f"bundle-{factor_id}",
+            evaluation_run_id="run-1",
+            factor_ids=(factor_id,),
+            timestamp="2024-01-01T00:00:00Z",
+            qe_version="1.0",
+        ),
     )
 
 
@@ -51,7 +59,44 @@ def make_decision(factor_id, *, approved=True, timestamp="2024-01-01T00:00:00Z")
     )
 
 
-def test_non_manual_selection_policy_requires_decisions():
+def test_non_manual_assembly_rejects_unproven_approval():
+    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    forged = SelectionDecision(
+        decision_id="forged",
+        factor_id="F1",
+        approved=True,
+        reason=SelectionReason.APPROVED,
+        timestamp="2024-01-01T00:00:00Z",
+        policy_version="1.0",
+        evidence_refs=(),
+        gate_results=(),
+    )
+    try:
+        FactorSetAssembler().assemble(spec, [make_asset("F1")], selection_decisions=[forged])
+    except ValueError as exc:
+        assert "approved selection decisions require" in str(exc)
+    else:
+        raise AssertionError("unproven approvals must fail closed")
+
+
+def test_non_manual_assembly_rejects_evidence_free_approved_asset():
+    spec = FactorSetSpec("set-1", "Automated", "family_robust")
+    asset = make_asset("F1")
+    asset = FactorAsset(
+        metadata=asset.metadata,
+        lineage=asset.lineage,
+        lifecycle_state=asset.lifecycle_state,
+        registered_at=asset.registered_at,
+        family=asset.family,
+    )
+    try:
+        FactorSetAssembler().assemble(spec, [asset], selection_decisions=[make_decision("F1")])
+    except ValueError as exc:
+        assert "lacks evidence bundle" in str(exc)
+    else:
+        raise AssertionError("evidence-free approved assets must fail closed")
+
+
     spec = FactorSetSpec("set-1", "Automated", "family_robust")
     try:
         FactorSetAssembler().assemble(spec, [make_asset("F1")])

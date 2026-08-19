@@ -59,6 +59,15 @@ class FactorSetAssembler:
                     raise TypeError(
                         "selection_decisions must contain SelectionDecision values"
                     )
+                if decision.is_approved and (
+                    not decision.has_evidence
+                    or not decision.has_gate_results
+                    or decision.reason.value != "APPROVED"
+                ):
+                    raise ValueError(
+                        "approved selection decisions require evidence references, "
+                        "gate results, and an APPROVED reason"
+                    )
                 by_timestamp = decisions_by_factor.setdefault(decision.factor_id, {})
                 existing = by_timestamp.get(decision.timestamp)
                 if existing is not None and existing != decision:
@@ -92,10 +101,14 @@ class FactorSetAssembler:
                 continue
             assets_by_id[asset.factor_id] = asset
             if (
-                (admitted_factor_ids is None or asset.factor_id in admitted_factor_ids)
-                and self._matches(asset, spec)
+                admitted_factor_ids is None or asset.factor_id in admitted_factor_ids
             ):
-                matched.append(asset)
+                if admitted_factor_ids is not None and not asset.has_evidence:
+                    raise ValueError(
+                        f"approved factor asset lacks evidence bundle: {asset.factor_id}"
+                    )
+                if self._matches(asset, spec):
+                    matched.append(asset)
 
         matched.sort(key=lambda asset: asset.factor_id)
         matched = self._apply_family_constraints(matched, spec.family_constraints)

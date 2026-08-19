@@ -63,36 +63,45 @@ class SearchEvaluationResult:
         return self.validation_metrics[metric]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SealedTestHandle:
+    """Immutable authority for one test-split evaluation of a frozen winner."""
+
     search_session_id: str
     trial_id: str
+    split_id: str
+    evaluation_ref: str
     frozen_at: datetime
 
     def __post_init__(self):
-        raise NotImplementedError(
-            "SealedTestHandle cannot be issued until search freeze and QE contracts exist."
-        )
+        for name in ("search_session_id", "trial_id", "split_id", "evaluation_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(self.frozen_at, datetime):
+            raise TypeError("frozen_at must be a datetime")
 
 
-@dataclass
+@dataclass(frozen=True)
 class SealedTestResult:
+    """Result produced by consuming a sealed handle through ``SearchSession``."""
+
     trial_id: str
     test_metrics: Dict[str, float]
     frozen_at: datetime
     search_session_id: str
-
-    @classmethod
-    def from_search_session(cls, session: Any, split_plan: SplitPlan) -> "SealedTestResult":
-        raise NotImplementedError(
-            "SealedTestResult is a stub. Implement when QE integration is real."
-        )
+    split_id: str
+    evaluation_ref: str
 
     def __post_init__(self):
-        raise NotImplementedError(
-            "SealedTestResult cannot be constructed directly. A real sealed-test "
-            "factory must verify a SealedTestHandle and execute QE on the test split."
-        )
+        if not isinstance(self.test_metrics, dict):
+            raise TypeError("test_metrics must be a dict")
+        for name in ("trial_id", "search_session_id", "split_id", "evaluation_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(self.frozen_at, datetime):
+            raise TypeError("frozen_at must be a datetime")
 
 
 def validate_split_plan(split_plan: SplitPlan) -> Dict[str, Any]:

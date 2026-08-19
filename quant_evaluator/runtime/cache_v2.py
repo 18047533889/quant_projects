@@ -785,7 +785,7 @@ class DiskCacheLayer:
                     pass
                 if not preserve_legacy_value:
                     cache_path.unlink(missing_ok=True)
-                return None
+                    return None
 
         # Read legacy two-file entries only as a fail-closed compatibility path.
         if not meta_path.exists():
@@ -1619,7 +1619,16 @@ class RedisCacheLayer:
             cursor = 0
             while True:
                 cursor, keys = self.client.scan(cursor, match=pattern, count=100)
-                cache_keys = [key for key in keys if key != epoch_key]
+                cache_keys = [
+                    key
+                    for key in keys
+                    if (
+                        key.decode("utf-8", errors="replace")
+                        if isinstance(key, bytes)
+                        else key
+                    )
+                    != epoch_key
+                ]
                 if cache_keys:
                     self.client.delete(*cache_keys)
                 if cursor == 0:

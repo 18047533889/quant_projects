@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -9,6 +11,7 @@ import duckdb
 from data_access.core.exceptions import ValidationError
 from data_access.cos_contract import require_cos_contract, validate_event_filters
 from data_access.cos_runtime import _read_cos_events, _read_cos_events_asof
+from data_access.read.session_calendar import MarketCalendar, build_us_session
 from store import _period_selection_sql
 
 
@@ -30,6 +33,28 @@ class FakeEventStore:
         self.tables = tables
         self._registry = _Registry(tables)
         self.view_columns = []
+
+        # Keep the fake explicit and deterministic: strict PIT availability must
+        # use a real US session calendar, including every filing date and the
+        # following sessions through the fixture horizon.
+        filing_dates = [
+            pd.to_datetime(value).date()
+            for frame in tables.values()
+            if "filing_date" in frame
+            for value in frame["filing_date"].dropna()
+        ]
+        start = min(filing_dates) if filing_dates else date(2024, 1, 1)
+        end = max(filing_dates) if filing_dates else start
+        self._calendar = MarketCalendar(
+            "us",
+            trading_days=[d.date() for d in pd.bdate_range(start, end + pd.Timedelta(days=7))],
+            timezone="America/New_York",
+            source="explicit-test",
+            session=build_us_session(),
+        )
+
+    def get_calendar(self, market):
+        return self._calendar if str(market).strip().lower() == "us" else None
 
     def sql(self, query, **kwargs):
         dataset = kwargs["read_datasets"][0]
