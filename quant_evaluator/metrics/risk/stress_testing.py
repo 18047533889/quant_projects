@@ -142,7 +142,7 @@ def apply_hypothetical_scenario(
 def compute_scenario_impact(
     returns: np.ndarray,
     scenario_returns: np.ndarray,
-    metrics: List[str] = ["mean", "sharpe", "max_drawdown"],
+    metrics: Optional[List[str]] = None,
     periods_per_year: int = 252,
 ) -> Dict[str, Union[float, np.ndarray]]:
     """
@@ -151,7 +151,8 @@ def compute_scenario_impact(
     Args:
         returns: Baseline return series (T,) or (T, F)
         scenario_returns: Scenario return series (S,) or (S, F)
-        metrics: List of metrics to compute ("mean", "sharpe", "max_drawdown", "var", "cvar")
+        metrics: List of metrics to compute ("mean", "sharpe", "max_drawdown", "var", "cvar");
+            defaults to ["mean", "sharpe", "max_drawdown"]
         periods_per_year: Periods per year for annualization
 
     Returns:
@@ -162,6 +163,9 @@ def compute_scenario_impact(
         compute_maximum_drawdown,
     )
     from quant_evaluator.metrics.risk.var_cvar import compute_var, compute_cvar
+
+    if metrics is None:
+        metrics = ["mean", "sharpe", "max_drawdown"]
 
     result = {}
 

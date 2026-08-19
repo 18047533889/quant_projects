@@ -11,11 +11,17 @@ from typing import Dict, List, Optional, Callable, Any
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
 from quant_evaluator.metrics.quality import compute_coverage
 from quant_evaluator.metrics.registry_adapters import (
+    compute_block_bootstrap_ci_value,
     compute_hac_tstat_value,
     compute_half_life_value,
+    compute_factor_turnover_rate_value,
     compute_ic_autocorr_lag1_value,
     compute_ic_ir_value,
+    compute_quantile_returns_full_value,
+    compute_quantile_spread_value,
     compute_rank_stability_value,
+    compute_subsample_stability_value,
+    compute_turnover_value,
 )
 
 
@@ -74,8 +80,15 @@ def register_metric(spec: MetricSpec) -> None:
         spec: MetricSpec to register
 
     Raises:
-        ValueError: If metric name already registered
+        ValueError: If metric name already registered, or if a STABLE metric
+            has no ``compute_fn`` (a STABLE claim without a bound
+            implementation is a fail-open capability lie).
     """
+    if spec.status is MetricStatus.STABLE and spec.compute_fn is None:
+        raise ValueError(
+            f"Metric '{spec.name}' claims STABLE but has no compute_fn; "
+            "register it as EXPERIMENTAL until an implementation is bound"
+        )
     if spec.name in _METRIC_CATALOG:
         raise ValueError(f"Metric '{spec.name}' already registered")
     _METRIC_CATALOG[spec.name] = spec
@@ -192,6 +205,7 @@ register_metric(MetricSpec(
     description="Average turnover rate for factor-based portfolios",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_turnover_value,
     requires=["factor_batch"],
     min_periods=2,
 ))
@@ -202,6 +216,7 @@ register_metric(MetricSpec(
     description="Return spread between top and bottom quantiles",
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
+    compute_fn=compute_quantile_spread_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=20,
 ))
@@ -224,6 +239,7 @@ register_metric(MetricSpec(
     description="Standard deviation of mean IC across bootstrap subsamples",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_subsample_stability_value,
     requires=["ic_series"],
     min_periods=40,
 ))
@@ -234,6 +250,7 @@ register_metric(MetricSpec(
     description="First-order autocorrelation of IC series",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_ic_autocorr_lag1_value,
     requires=["ic_series"],
     min_periods=30,
 ))
@@ -244,6 +261,7 @@ register_metric(MetricSpec(
     description="Spearman correlation of factor ranks across time",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_stability_value,
     requires=["factor_batch"],
     min_periods=20,
 ))
@@ -254,6 +272,7 @@ register_metric(MetricSpec(
     description="Estimated half-life of IC decay via AR(1)",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_half_life_value,
     requires=["ic_series"],
     min_periods=60,
 ))
@@ -262,9 +281,10 @@ register_metric(MetricSpec(
 register_metric(MetricSpec(
     name="block_bootstrap_ci",
     display_name="Block Bootstrap Confidence Interval",
-    description="95% confidence interval for mean IC via block bootstrap",
-    status=MetricStatus.EXPERIMENTAL,
+    description="95% confidence interval half-width for mean IC via block bootstrap",
+    status=MetricStatus.STABLE,
     tier=MetricTier.RESEARCH,
+    compute_fn=compute_block_bootstrap_ci_value,
     requires=["ic_series"],
     min_periods=60,
 ))
@@ -273,8 +293,9 @@ register_metric(MetricSpec(
     name="factor_turnover_rate",
     display_name="Factor Turnover Rate",
     description="Turnover rate of top/bottom quantile membership",
-    status=MetricStatus.EXPERIMENTAL,
+    status=MetricStatus.STABLE,
     tier=MetricTier.RESEARCH,
+    compute_fn=compute_factor_turnover_rate_value,
     requires=["factor_batch"],
     min_periods=30,
 ))
@@ -285,6 +306,7 @@ register_metric(MetricSpec(
     description="Return distribution across all quantiles",
     status=MetricStatus.STABLE,
     tier=MetricTier.RESEARCH,
+    compute_fn=compute_quantile_returns_full_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=20,
 ))

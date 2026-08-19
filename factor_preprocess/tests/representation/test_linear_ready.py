@@ -208,3 +208,14 @@ class TestAssessCollinearity:
 
         # These should be highly correlated
         assert result["max_correlation"] > 0.95
+
+    def test_constant_column_undefined_pairs_reported(self):
+        """A constant column gives NaN correlations — must be counted, not hidden."""
+        X = np.array([[1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
+        result = assess_collinearity(X, threshold=0.99)
+
+        # Column 0 is constant: its correlation with column 1 is NaN.
+        assert result["n_undefined_pairs"] == 1
+        assert result["n_high_corr_pairs"] == 0
+        # max_correlation must ignore the NaN pair, not become NaN.
+        assert np.isfinite(result["max_correlation"])

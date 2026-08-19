@@ -111,13 +111,21 @@ def build_linear_ready(
         X = np.nan_to_num(X, nan=0.0)
 
     elif config.fill_method == "mean":
+        # An all-NaN column has no mean to fill with; nan_to_num would
+        # silently substitute 0.0 and inject a fake all-zero "signal" into
+        # the model, so fail closed naming the dead columns.
+        all_nan = np.all(np.isnan(X), axis=0)
+        if np.any(all_nan):
+            dead = [feature_names[i] if feature_names else f"f{i}"
+                    for i in np.where(all_nan)[0]]
+            raise ValueError(
+                f"fill_method='mean' cannot fill all-NaN columns: {dead}"
+            )
         col_means = np.nanmean(X, axis=0)
         for col_idx in range(n_features):
             mask = np.isnan(X[:, col_idx])
             if np.any(mask):
                 X[mask, col_idx] = col_means[col_idx]
-        # Handle columns that are all NaN
-        X = np.nan_to_num(X, nan=0.0)
 
     elif config.fill_method == "drop":
         mask = np.all(np.isfinite(X), axis=1)
@@ -201,27 +209,39 @@ def assess_collinearity(X: np.ndarray, threshold: float = 0.99) -> dict:
             "has_collinearity": False,
             "max_correlation": 0.0,
             "high_correlation_pairs": [],
+            "n_high_corr_pairs": 0,
+            "n_undefined_pairs": 0,
         }
 
     # Compute correlation matrix
-    corr_matrix = np.corrcoef(X, rowvar=False)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr_matrix = np.corrcoef(X, rowvar=False)
+
+    # A constant or fully-NaN column yields NaN correlations; those pairs
+    # are "unknown", not "uncorrelated" — record them instead of silently
+    # dropping them from the diagnostics.
+    nan_mask = np.triu(np.isnan(corr_matrix), k=1)
 
     # Find high correlations (excluding diagonal)
+    finite_corr = np.where(np.isnan(corr_matrix), 0.0, corr_matrix)
     mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
     high_corr_pairs = []
 
     for i in range(n_features):
         for j in range(i + 1, n_features):
+            if np.isnan(corr_matrix[i, j]):
+                continue
             if np.abs(corr_matrix[i, j]) >= threshold:
                 high_corr_pairs.append((i, j, corr_matrix[i, j]))
 
     max_corr = 0.0
     if mask.any():
-        max_corr = np.max(np.abs(corr_matrix[mask]))
+        max_corr = np.max(np.abs(finite_corr[mask]))
 
     return {
         "has_collinearity": len(high_corr_pairs) > 0,
         "max_correlation": float(max_corr),
         "high_correlation_pairs": high_corr_pairs,
         "n_high_corr_pairs": len(high_corr_pairs),
+        "n_undefined_pairs": int(np.sum(nan_mask)),
     }

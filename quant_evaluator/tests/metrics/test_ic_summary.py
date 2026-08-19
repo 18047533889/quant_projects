@@ -289,3 +289,39 @@ class TestICStability:
         mean_stab_f1 = np.nanmean(stability_series[:, 0])
         mean_stab_f2 = np.nanmean(stability_series[:, 1])
         assert mean_stab_f1 > mean_stab_f2
+
+    def test_stability_interior_nan_no_crash(self):
+        """Interior NaNs must not crash corrcoef (previously NaNs were
+        dropped per half independently → length mismatch ValueError)."""
+        np.random.seed(7)
+        ic_series = np.random.randn(100, 1)
+        # Scatter interior NaNs so each 60-window has asymmetric NaNs
+        ic_series[10:15, 0] = np.nan
+        ic_series[70, 0] = np.nan
+
+        stability_series, valid_windows = compute_ic_stability(
+            ic_series, window_size=60, min_periods=20
+        )
+
+        # No crash; windows with enough joint-valid periods still produce values
+        assert stability_series.shape[0] == 41
+        assert valid_windows[0] > 0
+        # All produced values are finite correlations
+        produced = stability_series[~np.isnan(stability_series)]
+        assert np.all(np.abs(produced) <= 1.0)
+
+    def test_stability_min_periods_counts_joint_valid(self):
+        """min_periods now requires jointly valid periods; a window where
+        halves each have 20 valid but only 25 jointly valid (>=20) works,
+        while heavy misalignment that drops below min_periods is skipped."""
+        np.random.seed(11)
+        ic_series = np.random.randn(60, 1)
+        # NaN only in second half — first half fully valid
+        ic_series[30:40, 0] = np.nan
+
+        stability_series, valid_windows = compute_ic_stability(
+            ic_series, window_size=60, min_periods=20
+        )
+
+        # Second half has 20 valid, joint valid = 20 → exactly at min_periods
+        assert valid_windows[0] == 1

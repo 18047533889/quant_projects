@@ -8,6 +8,13 @@ import numpy as np
 import pandas as pd
 from typing import Optional, Literal
 
+from factor_preprocess.neutralization._alignment import (
+    add_position_key,
+    align_residuals_to_values,
+    merged_exposure_cols,
+    nan_residuals,
+)
+
 
 def ridge_neutralize(
     values: pd.DataFrame,
@@ -56,30 +63,31 @@ def ridge_neutralize(
     Intercept is not penalized when add_intercept=True.
     Per-date operation prevents time-series leakage.
     """
-    merged = values.merge(
+    values_with_key, row_key = add_position_key(values)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
         suffixes=("", "_exp"),
     )
 
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         # Drop rows with any NaN
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
+        if n_valid < min_observations or n_valid <= X.shape[1] + int(add_intercept):
+            # Insufficient data, or the fit is (near-)determined — an
+            # exactly-determined regression "fits" perfectly and silently
+            # returns ~0 residuals that look like a fully neutralized factor.
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -130,21 +138,17 @@ def ridge_neutralize(
                 residuals[~valid_mask] = np.nan
 
             except np.linalg.LinAlgError:
-                residuals = np.full_like(y, np.nan)
+                residuals = nan_residuals(y)
 
         result_df = pd.DataFrame({
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    return align_residuals_to_values(results, row_key, values.index)
 
 
 def lasso_neutralize(
@@ -198,29 +202,30 @@ def lasso_neutralize(
     Uses coordinate descent for L1 minimization.
     Implements soft thresholding for feature selection.
     """
-    merged = values.merge(
+    values_with_key, row_key = add_position_key(values)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
         suffixes=("", "_exp"),
     )
 
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
+        if n_valid < min_observations or n_valid <= X.shape[1] + int(add_intercept):
+            # Insufficient data, or the fit is (near-)determined — an
+            # exactly-determined regression "fits" perfectly and silently
+            # returns ~0 residuals that look like a fully neutralized factor.
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -287,22 +292,20 @@ def lasso_neutralize(
                 residuals = y - y_pred
                 residuals[~valid_mask] = np.nan
 
-            except Exception:
-                residuals = np.full_like(y, np.nan)
+            # MemoryError is deliberately NOT caught: a per-date OOM must
+            # propagate, not silently shrink the panel one date at a time.
+            except (ValueError, IndexError, np.linalg.LinAlgError, ArithmeticError):
+                residuals = nan_residuals(y)
 
         result_df = pd.DataFrame({
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    return align_residuals_to_values(results, row_key, values.index)
 
 
 def elastic_net_neutralize(
@@ -359,29 +362,30 @@ def elastic_net_neutralize(
     Combines L1 (feature selection) and L2 (stability).
     Uses coordinate descent with elastic net penalty.
     """
-    merged = values.merge(
+    values_with_key, row_key = add_position_key(values)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
         suffixes=("", "_exp"),
     )
 
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
+        if n_valid < min_observations or n_valid <= X.shape[1] + int(add_intercept):
+            # Insufficient data, or the fit is (near-)determined — an
+            # exactly-determined regression "fits" perfectly and silently
+            # returns ~0 residuals that look like a fully neutralized factor.
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -444,19 +448,16 @@ def elastic_net_neutralize(
                 residuals = y - y_pred
                 residuals[~valid_mask] = np.nan
 
-            except Exception:
-                residuals = np.full_like(y, np.nan)
+            # MemoryError deliberately not caught — see ridge path above.
+            except (ValueError, IndexError, np.linalg.LinAlgError, ArithmeticError):
+                residuals = nan_residuals(y)
 
         result_df = pd.DataFrame({
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    return align_residuals_to_values(results, row_key, values.index)

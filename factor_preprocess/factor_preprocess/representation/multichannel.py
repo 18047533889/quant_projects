@@ -122,7 +122,7 @@ def build_multichannel(
     - raw: original factor values
     - rank: percentile ranks [0, 1] or integer ranks
     - zscore: cross-sectional z-scores
-    - residual: residuals after removing basis (stub: returns zeros)
+    - residual: NOT IMPLEMENTED — requesting it raises NotImplementedError
 
     All channels preserve NaN from input and apply transforms cross-sectionally.
     """
@@ -151,13 +151,14 @@ def build_multichannel(
             )
 
         elif channel_type == "residual":
-            # Stub: residual channel not yet implemented
-            # Future: orthogonalize against industry/sector/market
-            if config.residual_basis is not None:
-                raise NotImplementedError(
-                    f"residual_basis='{config.residual_basis}' not yet supported"
-                )
-            channels["residual"] = np.zeros_like(values)
+            # Residualization is not implemented.  Emitting a placeholder
+            # (e.g. zeros) would inject a fake all-zero "residual" signal
+            # into downstream models with no warning, so fail closed.
+            # Future: orthogonalize against industry/sector/market.
+            raise NotImplementedError(
+                "residual channel is not implemented; request it only once "
+                "a residualization basis is supported"
+            )
 
     # Determine shape
     if values.ndim == 3:

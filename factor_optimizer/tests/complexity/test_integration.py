@@ -248,3 +248,29 @@ def test_tracker_violation_details():
     assert "failed_checks" in violation
     assert violation["failed_checks"]["cost"] is False
     assert violation["failed_checks"]["operator_count"] is False
+
+
+def test_budget_memory_check_uses_dedicated_field():
+    """Native profiles carry memory on the field, not in metadata — the
+    budget check must fire for them (previously silently skipped)."""
+    budget = ComplexityBudget(max_memory_mb=100.0)
+
+    over = ComplexityProfile(estimated_cost=50.0, memory_estimate=150.0)
+    under = ComplexityProfile(estimated_cost=50.0, memory_estimate=80.0)
+
+    assert budget.check(over) == {"memory": False}
+    assert budget.check(under) == {"memory": True}
+
+
+def test_complexity_profile_from_dict_rejects_unknown_fields():
+    with pytest.raises(ValueError, match="unknown ComplexityProfile fields"):
+        ComplexityProfile.from_dict({"estimated_cost": 1.0, "legacy": True})
+
+
+def test_mutation_delta_rejects_invalid_window():
+    estimator = ComplexityEstimator()
+    parent = ComplexityProfile(operator_count=3, lookback_periods=20, estimated_cost=10.0)
+
+    for bad in (0, "large", float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="positive finite numeric new_window"):
+            estimator.estimate_mutation_delta(parent, "window_adjust", {"new_window": bad})

@@ -18,6 +18,8 @@ try:
 except Exception:
     pl = None
 
+from cleaned_operators.base import ParamSpec, ParamRole
+
 
 def frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     """Re-wrap a numeric array on the template index/columns as float."""
@@ -234,6 +236,30 @@ def register_polars_udf(canonical: str) -> None:
             pdfs = [_pl_to_pd(f) for f in frames]
             out = pandas_op.calculate(*pdfs, **params)
             return _pl_rebuild(frames[0], out)
+
+    # R20: Attach param_specs from the pandas_numpy reference so the polars bridge
+    # carries the same contract.  The registry backfills param_names but NOT
+    # param_specs from a second registration.
+    _pandas_ref = OperatorRegistry.get(canonical, "pandas_numpy")
+    if _pandas_ref is not None:
+        _ref_specs = getattr(getattr(_pandas_ref, "metadata", None), "param_specs", None)
+        _ref_names = set(getattr(getattr(_pandas_ref, "metadata", None), "param_names", None) or [])
+        _ref_aliases = set(getattr(getattr(_pandas_ref, "metadata", None), "param_aliases", None) or [])
+        _udf_names = set(getattr(_PolarsUdf.metadata, "param_names", None) or [])
+        _udf_aliases = set(getattr(_PolarsUdf.metadata, "param_aliases", None) or [])
+        if _ref_specs:
+            from cleaned_operators.base import ParamSpec as _PS
+            _filtered = {k: v for k, v in _ref_specs.items()
+                         if isinstance(v, _PS)
+                         and (k in _ref_names or k in _ref_aliases)
+                         and (k in _udf_names or k in _udf_aliases)}
+            if _filtered:
+                _PolarsUdf.metadata = PolarsMetadata(
+                    name=canonical,
+                    category="polars_udf",
+                    param_names=[],
+                    param_specs=_filtered,
+                )
 
     OperatorRegistry.register(
         _PolarsUdf(),

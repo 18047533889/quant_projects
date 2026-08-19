@@ -78,14 +78,22 @@ def _cross_sectional_residual(
     Returns:
         Residuals (N,)
     """
-    # Handle missing values
-    valid_mask = ~(np.isnan(y) | np.any(np.isnan(X), axis=1))
+    # Handle missing values.  inf must be treated as invalid too: an inf
+    # residual slips past NaN-only masks downstream and poisons consumers.
+    valid_mask = ~(~np.isfinite(y) | np.any(~np.isfinite(X), axis=1))
     if weights is not None:
         valid_mask &= ~np.isnan(weights)
 
     if np.sum(valid_mask) < X.shape[1] + 1:
-        # Insufficient data for regression
-        return y
+        # Insufficient observations for this cross-section: signal failure
+        # with NaN (matching the rank-deficient/singular contract) instead
+        # of silently returning the raw, un-neutralized factor values.
+        logger.warning(
+            f"Exposure neutralization skipped: only {int(np.sum(valid_mask))} "
+            f"valid observations for {X.shape[1]} exposures. "
+            f"Returning NaN to signal computation failure."
+        )
+        return np.full_like(y, np.nan)
 
     y_valid = y[valid_mask]
     X_valid = X[valid_mask, :]
@@ -113,6 +121,8 @@ def _cross_sectional_residual(
     elif method == "weighted_ols" and weights is not None:
         # Weighted OLS: beta = (X'WX)^-1 X'Wy
         w_valid = weights[valid_mask]
+        if np.any(w_valid < 0):
+            raise ContractViolation("weighted_ols requires non-negative weights")
         W = np.diag(w_valid)
         try:
             XtWX = X_valid.T @ W @ X_valid
@@ -125,11 +135,14 @@ def _cross_sectional_residual(
             )
             return np.full_like(y, np.nan)
     elif method == "ridge":
-        # Ridge regression with small lambda
-        lambda_ridge = 0.01
+        # Ridge with scale-aware lambda: a fixed 0.01 is invisible next to
+        # small-scale exposures (X'X ~ 1e-8), which silently regresses away
+        # to raw-value passthrough.  Tie the penalty to X's own scale.
         try:
             XtX = X_valid.T @ X_valid
             Xty = X_valid.T @ y_valid
+            scale = np.trace(XtX) / X_valid.shape[1]
+            lambda_ridge = 1e-8 * max(scale, 1e-300)
             beta = np.linalg.solve(XtX + lambda_ridge * np.eye(X_valid.shape[1]), Xty)
         except np.linalg.LinAlgError as e:
             logger.warning(
@@ -138,12 +151,14 @@ def _cross_sectional_residual(
             )
             return np.full_like(y, np.nan)
     else:
+        if method == "weighted_ols":
+            raise ValueError("method 'weighted_ols' requires weights to be provided")
         raise ValueError(f"Unknown method: {method}")
 
     # Compute residuals
     residual = np.full_like(y, np.nan, dtype=np.float64)
     residual[valid_mask] = y_valid - X_valid @ beta
-    residual[~valid_mask] = y[~valid_mask]  # Keep original NaN
+    # Invalid entries keep their original (typically NaN) values.
 
     return residual
 

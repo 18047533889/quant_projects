@@ -9,6 +9,13 @@ import numpy as np
 import pandas as pd
 from typing import Optional, Literal
 
+from factor_preprocess.neutralization._alignment import (
+    add_position_key,
+    align_residuals_to_values,
+    merged_exposure_cols,
+    nan_residuals,
+)
+
 
 def _gaussian_kernel(distances: np.ndarray, bandwidth: float) -> np.ndarray:
     """Gaussian kernel: K(u) = exp(-u^2 / 2) / sqrt(2*pi)"""
@@ -98,30 +105,28 @@ def kernel_neutralize(
         "tricube": _tricube_kernel,
     }[kernel]
 
-    merged = values.merge(
+    values_with_key, row_key = add_position_key(values)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
         suffixes=("", "_exp"),
     )
 
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         # Drop rows with any NaN
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
         if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -156,14 +161,18 @@ def kernel_neutralize(
                 weights = kernel_func(distances, h)
 
                 # Predict using local regression
-                y_pred_valid = np.zeros(n_valid)
+                y_pred_valid = np.full(n_valid, np.nan)
 
                 for i in range(n_valid):
                     w = weights[i, :]  # Weights for observation i
 
                     if w.sum() < 1e-10:
-                        # No neighbors, use global mean
-                        y_pred_valid[i] = y_valid.mean()
+                        # Degenerate kernel weights (isolated point / tiny
+                        # bandwidth): no local information exists, so the
+                        # prediction is undefined. Falling back to the global
+                        # mean would silently replace a residual with 0 (y - mean
+                        # of nothing meaningful) — fail closed to NaN instead.
+                        continue
                     else:
                         if local_constant:
                             # Nadaraya-Watson estimator (local constant)
@@ -187,22 +196,20 @@ def kernel_neutralize(
                 residuals_valid = y_valid - y_pred_valid
 
                 # Assign residuals back to full array
-                residuals = np.full_like(y, np.nan)
+                residuals = nan_residuals(y)
                 residuals[valid_mask] = residuals_valid
 
-            except (np.linalg.LinAlgError, ValueError, MemoryError):
-                residuals = np.full_like(y, np.nan)
+            # MemoryError is deliberately NOT caught: a per-date OOM must
+            # propagate, not silently shrink the panel one date at a time.
+            except (np.linalg.LinAlgError, ValueError):
+                residuals = nan_residuals(y)
 
         result_df = pd.DataFrame({
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    return align_residuals_to_values(results, row_key, values.index)

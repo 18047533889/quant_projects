@@ -424,13 +424,28 @@ class GPUBackend:
 
                     v_finite = v[finite_mask]
 
-                    # Fast argsort-based ranking on GPU
-                    order = cp.argsort(v_finite)
-                    ranks = cp.empty(n_valid, dtype=cp.int32)
-                    ranks[order] = cp.arange(n_valid, dtype=cp.int32)
-
-                    # Convert ranks to quantile bins
-                    q_bins = (ranks * n_quantiles) // n_valid
+                    # QE-Q-P0-002: percentile boundaries + searchsorted
+                    # side='right' (reference semantics). The previous
+                    # rank-floor formula disagreed with the reference whenever
+                    # n_valid was not divisible by n_quantiles.
+                    sv = cp.sort(v_finite)
+                    boundaries = cp.empty(n_quantiles - 1, dtype=cp.float64)
+                    for b in range(n_quantiles - 1):
+                        # Positions within 1e-9 of an integer snap to the
+                        # exact sorted value (parity with the NumPy
+                        # reference's _percentile_boundaries snap).
+                        pos = (b + 1) / n_quantiles * (n_valid - 1)
+                        lo = int(pos)
+                        frac = pos - lo
+                        if lo >= n_valid - 1:
+                            boundaries[b] = sv[lo]
+                        elif frac < 1e-9:
+                            boundaries[b] = sv[lo]
+                        elif frac > 1.0 - 1e-9:
+                            boundaries[b] = sv[lo + 1]
+                        else:
+                            boundaries[b] = sv[lo] + frac * (sv[lo + 1] - sv[lo])
+                    q_bins = cp.searchsorted(boundaries, v_finite, side='right')
                     q_bins = cp.clip(q_bins, 0, n_quantiles - 1)
 
                     quantiles[t, finite_mask, f] = q_bins

@@ -21,6 +21,8 @@ _PAIRWISE_CANONICALS = frozenset({
     "ts_regression_intercept",
     "ts_regression_resid",
     "ts_regression_r2",
+    "ts_ewm_corr",
+    "ts_ewm_cov",
 })
 
 
@@ -280,6 +282,7 @@ class TSEwmCorrNative(SeriesOperator):
         param_names=["x", "y", "window"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_specs={"window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None,
@@ -311,6 +314,53 @@ class TSEwmCorrNative(SeriesOperator):
 
             corr = pl.when((x_std == 0) | (y_std == 0) | x_std.is_null() | y_std.is_null()).then(None).otherwise(cov / (x_std * y_std))
             exprs.append(corr.alias(c))
+
+        return x.lazy().with_columns(exprs).collect()
+
+
+@_register_rolling_operator(
+    name="ts_ewm_cov",
+    category="time_series",
+    business_category="time_series",
+    canonical="ts_ewm_cov",
+    source=_SRC,
+    backend="polars",
+)
+class TSEwmCovNative(SeriesOperator):
+    """Exponentially weighted covariance."""
+
+    metadata = OperatorMetadata(
+        name="ts_ewm_cov",
+        category="time_series",
+        description="指数加权协方差",
+        param_names=["x", "y", "window"],
+        return_type="series",
+        tags=["time_series", "polars", "native"],
+        param_specs={"window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None,
+                         window: int = 20, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=2)
+        alpha = 2.0 / (w + 1)
+
+        cols = _require_pairwise_columns(x, y, operator="ts_ewm_cov")
+
+        exprs = []
+        for c in cols:
+            x_raw = pl.col(c)
+            y_raw = y[c]
+            valid = x_raw.is_finite().fill_null(False) & y_raw.is_finite().fill_null(False)
+            x_col = pl.when(valid).then(x_raw).otherwise(None)
+            y_col = pl.when(valid).then(y_raw).otherwise(None)
+
+            x_mean = x_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
+            y_mean = y_col.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
+
+            cov = ((x_col - x_mean) * (y_col - y_mean)).ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
+            exprs.append(cov.alias(c))
 
         return x.lazy().with_columns(exprs).collect()
 

@@ -84,6 +84,15 @@ class LineageGraph:
         """
         factor_id = lineage.factor_id
 
+        # Reject self-parenting and edges that would close a cycle: a cycle
+        # makes ancestors/descendants traversal wrong (or infinite) and
+        # corrupts lineage-based novelty checks.
+        for parent_ref in lineage.parents:
+            if parent_ref.factor_id == factor_id:
+                raise ValueError(
+                    f"Factor {factor_id} cannot list itself as a parent"
+                )
+
         # Initialize collections if not present
         if factor_id not in self._parents:
             self._parents[factor_id] = set()
@@ -110,6 +119,19 @@ class LineageGraph:
                 timestamp=parent_ref.timestamp,
             )
             self._edges[(parent_id, factor_id)] = edge
+
+        # Cycle guard AFTER edges are staged: if the new factor is already an
+        # ancestor of one of its parents (or of itself through them), the DAG
+        # would become cyclic — roll the registration back and refuse it.
+        if self.has_cycle(factor_id):
+            for parent_ref in lineage.parents:
+                parent_id = parent_ref.factor_id
+                self._children[parent_id].discard(factor_id)
+                self._edges.pop((parent_id, factor_id), None)
+            self._parents[factor_id] = set()
+            raise ValueError(
+                f"Registering factor {factor_id} would create a lineage cycle"
+            )
 
         # Register campaign association
         if lineage.campaign_id:

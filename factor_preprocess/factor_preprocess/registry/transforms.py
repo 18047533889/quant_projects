@@ -33,20 +33,41 @@ class TransformMetadata:
     description: str
     parameters: Dict[str, Any] = field(default_factory=dict)
     tags: Set[str] = field(default_factory=set)
-    causal_safe: bool = True
-    admission: str = "UNKNOWN"
+    # Fail-closed defaults: causal safety and production admission are never
+    # implied by omission.  A registration without an explicit causal claim
+    # stays UNVERIFIED until a certification pipeline upgrades it.
+    causal_safe: bool = False
+    causal_verified: bool = False
+    admission: str = "UNVERIFIED"
     signature_hash: Optional[str] = None
+    implementation_hash: Optional[str] = None
 
     def __post_init__(self):
-        """Compute signature hash after initialization."""
+        """Compute signature and implementation hashes after initialization."""
         if self.signature_hash is None:
             self.signature_hash = self._compute_signature_hash()
+        if self.implementation_hash is None:
+            self.implementation_hash = self._compute_implementation_hash()
 
     def _compute_signature_hash(self) -> str:
         """Compute stable hash of function signature."""
         sig = inspect.signature(self.func)
         sig_str = f"{self.name}:{str(sig)}"
         return hashlib.sha256(sig_str.encode()).hexdigest()[:16]
+
+    def _compute_implementation_hash(self) -> str:
+        """Hash source code + semantic version, not just the signature.
+
+        ``signature_hash`` cannot detect an algorithm rewrite that keeps the
+        same parameter list; ``implementation_hash`` binds the transform body
+        so reproducibility identities change when the code changes.
+        """
+        try:
+            source = inspect.getsource(self.func)
+        except (OSError, TypeError):
+            source = repr(getattr(self.func, "__code__", self.func))
+        impl_str = f"{self.name}:{self.version}:{source}"
+        return hashlib.sha256(impl_str.encode()).hexdigest()[:16]
 
     def bind_parameters(self, parameters: Dict[str, Any]) -> None:
         """Validate configured keyword parameters against the callable signature."""
@@ -87,7 +108,8 @@ class TransformRegistry:
         description: str = "",
         parameters: Optional[Dict[str, Any]] = None,
         tags: Optional[Set[str]] = None,
-        causal_safe: bool = True,
+        causal_safe: Optional[bool] = None,
+        causal_verified: bool = False,
         admission: Optional[str] = None,
     ) -> None:
         """
@@ -109,19 +131,31 @@ class TransformRegistry:
             Default parameter values
         tags : set, optional
             Searchable tags
-        causal_safe : bool
-            Whether transform preserves causal structure
+        causal_safe : bool, optional
+            Whether transform preserves causal structure.  Omission means
+            UNVERIFIED (fail-closed), not True.
+        causal_verified : bool
+            Whether causal safety has been certified by a test pipeline.
         admission : str
-            Production admission class
+            Production admission class.  Omission means UNVERIFIED.
         """
+        if causal_safe is None:
+            causal_safe = causal_verified
         if admission is None:
-            admission = "UNKNOWN"
-        elif admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
+            admission = "CAUSAL_CERTIFIED" if causal_verified else "UNVERIFIED"
+        elif admission not in {
+            "PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY",
+            "UNVERIFIED", "CAUSAL_CERTIFIED",
+        }:
             raise ValueError(
-                "admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY"
+                "admission must be PRODUCTION, OFFLINE_ONLY, RESEARCH_ONLY, "
+                "UNVERIFIED, or CAUSAL_CERTIFIED"
             )
-        if admission == "PRODUCTION" and not causal_safe:
-            raise ValueError("Production transforms must be causal_safe")
+        if admission in {"PRODUCTION", "CAUSAL_CERTIFIED"} and not causal_safe:
+            raise ValueError(
+                f"admission={admission} requires causal_safe=True; certify the "
+                "transform before claiming causal safety"
+            )
 
         metadata = TransformMetadata(
             name=name,
@@ -132,6 +166,7 @@ class TransformRegistry:
             parameters=deepcopy(parameters or {}),
             tags=deepcopy(tags or set()),
             causal_safe=causal_safe,
+            causal_verified=causal_verified,
             admission=admission,
         )
 
@@ -149,8 +184,10 @@ class TransformRegistry:
                 and existing.parameters == metadata.parameters
                 and existing.tags == metadata.tags
                 and existing.causal_safe == metadata.causal_safe
+                and existing.causal_verified == metadata.causal_verified
                 and existing.admission == metadata.admission
                 and existing.signature_hash == metadata.signature_hash
+                and existing.implementation_hash == metadata.implementation_hash
             )
             if not same_registration:
                 raise ValueError(
@@ -213,6 +250,11 @@ class TransformRegistry:
         """Get signature hash for reproducibility tracking."""
         metadata = self._transforms.get(name)
         return metadata.signature_hash if metadata else None
+
+    def get_implementation_hash(self, name: str) -> Optional[str]:
+        """Get source-bound implementation hash for reproducibility tracking."""
+        metadata = self._transforms.get(name)
+        return metadata.implementation_hash if metadata else None
 
 
 def create_default_registry() -> TransformRegistry:

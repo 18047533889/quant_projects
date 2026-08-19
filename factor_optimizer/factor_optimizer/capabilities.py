@@ -42,6 +42,7 @@ PRODUCTION_CAPABILITY = ProductionCapability(
     blockers=(
         "trusted_split_aware_qe_integration_missing",
         "production_legality_chain_missing",
+        "sealed_test_evidence_escalation_missing",
     ),
 )
 

@@ -4,6 +4,7 @@ Evidence threshold gates for factor selection.
 Gates evaluate evidence against thresholds without duplicating evaluation logic.
 """
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping, Optional, Protocol, Union
@@ -48,6 +49,13 @@ class MetricEvidence:
             raise ValueError("metric evidence unit is required")
         if not isinstance(self.direction, MetricDirection):
             raise TypeError("metric evidence direction must be a MetricDirection")
+        if isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
+            raise TypeError("metric evidence value must be a non-boolean number")
+        if not math.isfinite(self.value):
+            raise ValueError(
+                "metric evidence value must be finite (NaN/±inf is an "
+                "overflowed or failed measurement, not an admittable score)"
+            )
 
 
 class GateResult(Enum):
@@ -382,7 +390,11 @@ class CompositeGate:
                         metric_value=evidence.value,
                     )
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — fail closed on any
+                # sub-gate crash (a gate that raises is a failed
+                # evaluation, never a passing one; letting an unexpected
+                # exception type propagate would abort the whole
+                # composite run instead of recording one bad gate).
                 fail_closed(
                     gate,
                     f"Gate evaluation failed for {binding.metric_id}: {type(exc).__name__}",
@@ -455,6 +467,8 @@ class MinimumICGate(ThresholdGate):
             threshold: Minimum absolute IC value
             gate_version: Gate version identifier
         """
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold):
+            raise ValueError("IC threshold must be a finite non-boolean number")
         if threshold < 0:
             raise ValueError("IC threshold must be non-negative")
 
@@ -478,9 +492,28 @@ class MinimumICGate(ThresholdGate):
         metric_value: float,
     ) -> GateEvaluation:
         """Evaluate IC gate using absolute value."""
-        abs_value = abs(metric_value)
         now = datetime.now(timezone.utc).isoformat()
 
+        if isinstance(metric_value, bool) or not math.isfinite(metric_value):
+            # NaN/±inf IC is an overflowed or failed measurement, not
+            # evidence of skill: fail closed instead of |inf| >= threshold.
+            return GateEvaluation(
+                gate_name=self._gate_name,
+                factor_id=factor_id,
+                result=GateResult.FAIL,
+                timestamp=now,
+                evidence_id=evidence_id,
+                metric_name=metric_name,
+                metric_value=metric_value,
+                threshold=self._threshold,
+                message=(
+                    f"|{metric_name}| non-finite ({metric_value!r}) — "
+                    "fail closed"
+                ),
+                gate_version=self._gate_version,
+            )
+
+        abs_value = abs(metric_value)
         passed = abs_value >= self._threshold
         message = (
             f"|{metric_name}|={abs_value:.4f} >= {self._threshold:.4f} (raw={metric_value:.4f})"
@@ -521,6 +554,8 @@ class MaximumTurnoverGate(ThresholdGate):
             threshold: Maximum acceptable turnover
             gate_version: Gate version identifier
         """
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold):
+            raise ValueError("Turnover threshold must be a finite non-boolean number")
         if threshold < 0:
             raise ValueError("Turnover threshold must be non-negative")
 
@@ -551,6 +586,8 @@ class MinimumCoverageGate(ThresholdGate):
             threshold: Minimum coverage fraction (0 to 1)
             gate_version: Gate version identifier
         """
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold):
+            raise ValueError("Coverage threshold must be a finite non-boolean number")
         if not 0 <= threshold <= 1:
             raise ValueError("Coverage threshold must be in [0, 1]")
 
@@ -698,6 +735,26 @@ class ParetoDominanceGate:
             candidate_val = candidate_metrics[metric]
             reference_val = reference_metrics[metric]
 
+            # A non-numeric value on either side would raise TypeError in
+            # math.isfinite / comparisons; guard so a standalone
+            # evaluate() call cannot crash on broken input data
+            # (undefined comparisons prove nothing → "not dominated").
+            if (
+                isinstance(candidate_val, bool) or not isinstance(candidate_val, (int, float))
+                or isinstance(reference_val, bool) or not isinstance(reference_val, (int, float))
+            ):
+                return False
+            # A non-finite side makes the comparison undefined — fail
+            # closed by returning "not dominated" and letting evaluate()
+            # record the contamination.  The behavior change vs the old
+            # code is ±inf, not NaN (NaN comparisons were already all
+            # False, which hit the "reference is worse" return False):
+            # a −inf candidate against a clearly dominating reference
+            # used to count as dominated (True); an undefined metric
+            # proves nothing, so it no longer does.
+            if not math.isfinite(candidate_val) or not math.isfinite(reference_val):
+                return False
+
             # Determine if reference is better
             if metric in self._higher_is_better:
                 if reference_val > candidate_val:
@@ -742,6 +799,40 @@ class ParetoDominanceGate:
             GateEvaluation result (PASS if not dominated, FAIL if dominated)
         """
         now = datetime.now(timezone.utc).isoformat()
+
+        # Any non-finite TRACKED metric (in higher/lower_is_better) makes the
+        # Pareto comparison undefined: fail closed (FAIL) rather than letting
+        # NaN comparison semantics silently pass an unmeasurable factor.
+        # Untracked metrics are never compared, so they are ignored here
+        # (they cannot contaminate the dominance check).
+        tracked = self._higher_is_better | self._lower_is_better
+        nonfinite = []
+        for metric in tracked & set(candidate_metrics.keys()):
+            value = candidate_metrics[metric]
+            # bool is an int subclass but not a valid metric value; a
+            # non-numeric value would raise TypeError in the comparisons
+            # later — treat both as undefined and fail closed.  Note:
+            # numpy float64 passes (float subclass); numpy float32/int64
+            # do NOT (cast at the boundary, not here).
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                nonfinite.append(metric)
+        if nonfinite:
+            return GateEvaluation(
+                gate_name=self._gate_name,
+                factor_id=factor_id,
+                result=GateResult.FAIL,
+                timestamp=now,
+                evidence_id=evidence_id,
+                message=(
+                    f"Candidate has non-finite/non-numeric tracked metrics, "
+                    f"Pareto comparison undefined: {', '.join(sorted(nonfinite)[:5])} — fail closed"
+                ),
+                gate_version=self._gate_version,
+            )
 
         dominated_by = []
         for ref_id, ref_metrics in reference_factors:

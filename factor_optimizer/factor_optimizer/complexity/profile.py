@@ -1,5 +1,6 @@
 """ComplexityProfile: adapter projection of FE complexity analysis."""
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -58,7 +59,16 @@ class ComplexityProfile:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ComplexityProfile":
-        """Deserialize from dictionary."""
+        """Deserialize from dictionary (fail-closed on unknown fields)."""
+        known = {
+            "operator_count", "max_depth", "lookback_periods", "stateful_operators",
+            "cross_sectional_operators", "nonlinear_operators", "estimated_cost",
+            "domains", "sources", "estimated_latency_ms", "memory_estimate",
+            "metadata",
+        }
+        unknown = set(data) - known
+        if unknown:
+            raise ValueError(f"unknown ComplexityProfile fields: {sorted(unknown)}")
         return cls(**data)
 
     def is_within_budget(self, max_cost: float) -> bool:
@@ -163,6 +173,19 @@ class ComplexityEstimator:
         # Adjust based on mutation type
         if mutation_type == "window_adjust":
             new_window = parameters.get("new_window", parent_profile.lookback_periods)
+            # A non-numeric or non-positive window silently produced a
+            # garbage lookback (or ZeroDivision-by-1-masked cost) profile.
+            # NaN/inf must be rejected too: NaN comparisons are always False
+            # and inf poisons the cost estimate.
+            if (
+                not isinstance(new_window, (int, float))
+                or isinstance(new_window, bool)
+                or not math.isfinite(new_window)
+                or new_window <= 0
+            ):
+                raise ValueError(
+                    "window_adjust requires a positive finite numeric new_window"
+                )
             new_profile.lookback_periods = new_window
             # Cost scales roughly with window
             cost_ratio = new_window / max(parent_profile.lookback_periods, 1)

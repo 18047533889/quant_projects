@@ -198,6 +198,47 @@ def test_pareto_frontier_hypervolume_not_2d():
         frontier.hypervolume((0.0, 0.0, 0.0))
 
 
+def test_pareto_frontier_extremes_tie_break_deterministic():
+    # Two points tied on every objective (domination needs a strict >,
+    # so exact duplicates coexist on the frontier): max() returns the
+    # first maximal element in insertion order, so an equivalent
+    # frontier added in a different order would report a different
+    # extreme.  The tie-break on trial_id makes the answer stable.
+    frontier = ParetoFrontier()
+
+    frontier.add_point(ParetoPoint(trial_id="t1", objectives=(0.9, 0.4)))
+    frontier.add_point(ParetoPoint(trial_id="t2", objectives=(0.9, 0.4)))
+
+    frontier_reversed = ParetoFrontier()
+    frontier_reversed.add_point(ParetoPoint(trial_id="t2", objectives=(0.9, 0.4)))
+    frontier_reversed.add_point(ParetoPoint(trial_id="t1", objectives=(0.9, 0.4)))
+
+    assert frontier.extremes()[0].trial_id == "t2"
+    assert frontier_reversed.extremes()[0].trial_id == "t2"
+
+
+def test_pareto_frontier_hypervolume_equal_y_never_negative():
+    # A frontier containing equal-objective duplicates (domination uses
+    # strict >, so exact duplicates coexist) sorts to a zero-height slice;
+    # the hypervolume must not go negative and must not lose the positive
+    # slice before the duplicate.
+    frontier = ParetoFrontier()
+
+    frontier.add_point(ParetoPoint(trial_id="t1", objectives=(1.0, 0.5)))
+    frontier.add_point(ParetoPoint(trial_id="t2", objectives=(1.0, 0.5)))
+    frontier.add_point(ParetoPoint(trial_id="t3", objectives=(0.5, 1.0)))
+
+    hv = frontier.hypervolume((0.0, 0.0))
+
+    # Same frontier without the duplicate gives the reference volume.
+    single = ParetoFrontier()
+    single.add_point(ParetoPoint(trial_id="t1", objectives=(1.0, 0.5)))
+    single.add_point(ParetoPoint(trial_id="t3", objectives=(0.5, 1.0)))
+
+    assert hv >= 0.0
+    assert hv == pytest.approx(single.hypervolume((0.0, 0.0)))
+
+
 def test_pareto_frontier_coverage():
     frontier1 = ParetoFrontier()
     frontier2 = ParetoFrontier()

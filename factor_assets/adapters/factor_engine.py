@@ -70,7 +70,7 @@ class FEIdentityProvider:
         # Parse and normalize expression through FE
         try:
             expr_node = self._parse_expression(expression)
-        except Exception as e:
+        except (TypeError, ValueError, KeyError, AttributeError, RuntimeError) as e:
             raise ValueError(f"Invalid factor expression: {e}") from e
 
         # Get FE canonical representation
@@ -96,7 +96,7 @@ class FEIdentityProvider:
         """
         try:
             expr_node = self._parse_expression(expression)
-        except Exception as e:
+        except (TypeError, ValueError, KeyError, AttributeError, RuntimeError) as e:
             raise ValueError(f"Invalid factor expression: {e}") from e
 
         return canonical_expression(expr_node)
@@ -184,7 +184,7 @@ class FEIdentityProvider:
         # Use FE's ensure_expr for simple field names only
         try:
             return ensure_expr(expression)
-        except Exception as e:
+        except (TypeError, ValueError, KeyError, AttributeError, RuntimeError) as e:
             raise ValueError(f"Failed to parse expression '{expression}': {e}") from e
 
     def validate_expression(self, expression: str) -> bool:
@@ -200,7 +200,7 @@ class FEIdentityProvider:
         try:
             self._parse_expression(expression)
             return True
-        except Exception:
+        except (TypeError, ValueError, KeyError, AttributeError, RuntimeError):
             return False
 
 

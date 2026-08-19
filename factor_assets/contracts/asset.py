@@ -8,7 +8,11 @@ NO raw factor values stored — only references and metadata.
 from dataclasses import dataclass
 from typing import Optional
 
-from factor_assets.contracts.lifecycle import LifecycleState
+from factor_assets.contracts.lifecycle import (
+    HealthState,
+    LifecycleState,
+    ValidationStatus,
+)
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.errors import MissingInputError
@@ -65,6 +69,10 @@ class FactorAsset:
     lineage: LineageRef
     lifecycle_state: LifecycleState
     registered_at: str  # ISO 8601 timestamp
+    # Orthogonal lifecycle dimensions (P0 #12): evidence freshness and
+    # usability are tracked independently of the pipeline stage.
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+    health_state: HealthState = HealthState.ACTIVE
     first_evaluated_at: Optional[str] = None
     approved_at: Optional[str] = None
     production_ready_at: Optional[str] = None
@@ -111,6 +119,16 @@ class FactorAsset:
     def is_production_ready(self) -> bool:
         """Check if asset is production certified."""
         return self.lifecycle_state == LifecycleState.PRODUCTION_READY
+
+    @property
+    def is_usable(self) -> bool:
+        """Check health dimension: usable for new assemblies."""
+        return self.health_state == HealthState.ACTIVE
+
+    @property
+    def is_validation_current(self) -> bool:
+        """Check validation dimension: evidence is complete and fresh."""
+        return self.validation_status == ValidationStatus.VALIDATED
 
     @property
     def has_evidence(self) -> bool:

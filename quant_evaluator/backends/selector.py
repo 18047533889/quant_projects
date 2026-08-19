@@ -466,7 +466,7 @@ def benchmark_backends(
                         "available": True,
                     }
                     gpu_backend.clear_memory_pool()
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, OSError, MemoryError) as e:
                 results["cupy"] = {
                     "available": False,
                     "error": str(e),

@@ -42,6 +42,34 @@ _FULL_HISTORY_RECURSIVE: tuple[str, ...] = (
     "ts_interval_nesting_depth", "candle_gap_atr",
 )
 
+# R20 execution_contract statefulness extension (collective follow-up from
+# R20-MA-DISTANCE-SLOPE / R20-SUPERTREND / R20-BVC-VPIN / R20-KELTNER): the
+# derivative canonicals below sit on recursive parents already declared above
+# (Wilder ATR / EMA-spread / Supertrend state machine / PSAR / KAMA), so their
+# runtime contract is the SAME recursive full-history replay — but they were
+# only tagged ``stateful``/``full_replay`` in technical/indicators_v2.py's
+# ``_RECURSIVE_EWM`` registration tags, which ``execution_contract()`` never
+# consults.  Without this tuple they resolved ``stateless`` while genuinely
+# depending on full history (a chunked/incremental execution would silently
+# drop the recursive warmup).
+_R20_DERIVATIVE_RECURSIVE: tuple[str, ...] = (
+    # Wilder-ATR derivatives (R20-KELTNER + indicators_v2 atr_* family)
+    "atr_pct", "atr_zscore", "atr_percentile", "atr_short_long_ratio",
+    "atr_acceleration",
+    "keltner_width_pct", "keltner_compression", "keltner_breakout_strength",
+    # EMA/DEMA/TEMA/KAMA-recursive distance/slope/crossover (R20-MA-DISTANCE)
+    "ema_distance_pct", "dema_distance_pct", "tema_distance_pct",
+    "ma_slope_pct", "ema_crossover",
+    # Supertrend state-machine derivatives (R20-SUPERTREND)
+    "supertrend_direction", "supertrend_distance_pct",
+    "supertrend_flip", "supertrend_days_since_flip",
+    # EMA-spread signed-flow imbalance (R20-BVC-VPIN)
+    "bvc_imbalance_ma",
+    # PSAR / KAMA recursive derivatives
+    "psar_direction", "psar_distance_pct", "psar_flip",
+    "psar_days_since_flip", "kama_distance_pct",
+)
+
 _APPLIED = False
 
 
@@ -53,5 +81,7 @@ def apply_stateful_contract_migration() -> None:
     for name in _CHECKPOINT_RECURSIVE:
         declare_stateful(name, state_model="recursive", chunking="checkpoint")
     for name in _FULL_HISTORY_RECURSIVE:
+        declare_stateful(name, state_model="recursive", chunking="required_full_history")
+    for name in _R20_DERIVATIVE_RECURSIVE:
         declare_stateful(name, state_model="recursive", chunking="required_full_history")
     _APPLIED = True

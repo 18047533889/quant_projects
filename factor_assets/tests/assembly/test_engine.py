@@ -97,6 +97,7 @@ def test_non_manual_assembly_rejects_evidence_free_approved_asset():
         raise AssertionError("evidence-free approved assets must fail closed")
 
 
+def test_non_manual_selection_requires_decisions():
     spec = FactorSetSpec("set-1", "Automated", "family_robust")
     try:
         FactorSetAssembler().assemble(spec, [make_asset("F1")])
@@ -251,4 +252,177 @@ def test_unknown_family_constraint_syntax_fails_closed():
         raise AssertionError("ambiguous family constraints must fail")
 
 
-    assert FactorSetAssembler.__name__ == "FactorSetAssembler"
+
+def test_ranking_is_evidence_based_not_lexicographic():
+    # F1 admitted most recently (2024-03) so it ranks ahead of F2 (2024-01)
+    # despite the lexicographic order F1 < F2 being coincidentally aligned;
+    # use F2 recent / F1 old so the two orderings genuinely disagree.
+    spec = FactorSetSpec("set-1", "Ranked", "pareto_front", max_factors=1)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[
+            make_decision("F1", timestamp="2024-01-01T00:00:00Z"),
+            make_decision("F2", timestamp="2024-03-01T00:00:00Z"),
+        ],
+    )
+    assert result.factor_ids == ("F2",)
+
+
+def test_manual_ranking_remains_lexicographic():
+    spec = FactorSetSpec("set-1", "Manual", "manual", max_factors=1)
+    result = FactorSetAssembler().assemble(
+        spec, [make_asset("F2"), make_asset("F1")]
+    )
+    assert result.factor_ids == ("F1",)
+
+
+def test_unknown_selection_policy_fails_closed():
+    spec = FactorSetSpec("set-1", "Bogus", "aggressive_growth")
+    try:
+        FactorSetAssembler().assemble(spec, [make_asset("F1")])
+    except ValueError as exc:
+        assert "unknown selection_policy" in str(exc)
+    else:
+        raise AssertionError("unknown selection policies must fail closed")
+
+
+def test_memberships_carry_decision_and_evidence_refs():
+    spec = FactorSetSpec("set-1", "Provenance", "pareto_front")
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1")],
+        selection_decisions=[make_decision("F1")],
+    )
+    (membership,) = result.memberships
+    assert membership.factor_id == "F1"
+    assert membership.role == "member"
+    assert membership.family_id == "family-a"
+    assert membership.selection_decision_ref == "decision-F1-2024-01-01T00:00:00Z"
+    assert membership.evidence_ref == "bundle-F1"
+    assert membership.reason == "APPROVED"
+
+
+def test_manual_memberships_have_null_decision_refs():
+    spec = FactorSetSpec("set-1", "Manual", "manual")
+    result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
+    (membership,) = result.memberships
+    assert membership.factor_id == "F1"
+    assert membership.selection_decision_ref is None
+    assert membership.reason is None
+    assert membership.evidence_ref == "bundle-F1"
+
+
+def test_assembly_hash_deterministic_and_content_sensitive():
+    spec = FactorSetSpec("set-1", "Hashed", "pareto_front")
+    decisions = [make_decision("F1"), make_decision("F2")]
+    first = FactorSetAssembler().assemble(
+        spec, [make_asset("F2"), make_asset("F1")],
+        selection_decisions=decisions, created_at="2024-02-01T00:00:00Z",
+    )
+    second = FactorSetAssembler().assemble(
+        spec, [make_asset("F1"), make_asset("F2")],
+        selection_decisions=list(reversed(decisions)),
+        created_at="2025-01-01T00:00:00Z",
+    )
+    # Same members + spec + decision refs: hash is order- and time-invariant.
+    assert first.assembly_hash == second.assembly_hash
+    assert first.policy_hash == second.policy_hash
+
+    # Changing the membership content changes the assembly hash.
+    changed_decisions = [make_decision("F1"), make_decision("F2", timestamp="2024-06-01T00:00:00Z")]
+    changed = FactorSetAssembler().assemble(
+        spec, [make_asset("F1"), make_asset("F2")],
+        selection_decisions=changed_decisions, created_at="2024-02-01T00:00:00Z",
+    )
+    assert changed.assembly_hash != first.assembly_hash
+
+    # Changing the policy semantics changes the policy hash only.
+    other_spec = FactorSetSpec("set-2", "Hashed", "family_robust")
+    other = FactorSetAssembler().assemble(
+        other_spec, [make_asset("F1"), make_asset("F2")],
+        selection_decisions=decisions, created_at="2024-02-01T00:00:00Z",
+    )
+    assert other.policy_hash != first.policy_hash
+
+
+def test_factor_set_split_and_snapshot_refs_flow_from_spec():
+    spec = FactorSetSpec(
+        "set-1", "Refs", "manual",
+        universe_ref="universe:ashare-v3", split_ref="split:oos-2024h1",
+    )
+    result = FactorSetAssembler().assemble(spec, [make_asset("F1")])
+    assert result.snapshot_ref == "universe:ashare-v3"
+    assert result.split_ref == "split:oos-2024h1"
+    assert result.universe_ref == "universe:ashare-v3"
+
+
+def test_factor_set_artifact_round_trip_from_assembly():
+    from factor_assets.contracts.factor_set import FactorSetArtifact
+
+    spec = FactorSetSpec(
+        "set-1", "Artifact", "pareto_front",
+        universe_ref="universe:ashare-v3", split_ref="split:oos-2024h1",
+    )
+    result = FactorSetAssembler().assemble(
+        spec, [make_asset("F1"), make_asset("F2")],
+        selection_decisions=[make_decision("F1"), make_decision("F2")],
+        created_at="2024-02-01T00:00:00Z",
+    )
+    artifact = FactorSetArtifact(
+        set_id=result.set_id,
+        name=result.name,
+        members=result.memberships,
+        created_at=result.created_at,
+        policy_hash=result.policy_hash,
+        assembly_hash=result.assembly_hash,
+        universe_ref=result.universe_ref,
+        snapshot_ref=result.snapshot_ref,
+        split_ref=result.split_ref,
+        spec=result.spec,
+    )
+    assert artifact.factor_ids == ("F1", "F2")
+    assert artifact.contains("F1") and not artifact.contains("F9")
+    assert artifact.split_ref == "split:oos-2024h1"
+
+
+def test_factor_set_artifact_rejects_duplicate_members():
+    from factor_assets.contracts.factor_set import FactorMembership, FactorSetArtifact
+
+    member = FactorMembership(factor_id="F1")
+    try:
+        FactorSetArtifact(
+            set_id="set-1", name="Bad", members=(member, member),
+            created_at="2024-02-01T00:00:00Z",
+            policy_hash="ph", assembly_hash="ah",
+        )
+    except ValueError as exc:
+        assert "duplicate factor_id" in str(exc)
+    else:
+        raise AssertionError("duplicate members must fail")
+
+
+def test_validation_status_orthogonal_to_lifecycle():
+    from factor_assets.contracts.asset import AssetMetadata, FactorAsset
+    from factor_assets.contracts.lifecycle import (
+        HealthState, LifecycleState, ValidationStatus,
+    )
+
+    asset = FactorAsset(
+        metadata=make_asset("F1").metadata,
+        lineage=make_asset("F1").lineage,
+        lifecycle_state=LifecycleState.PRODUCTION_READY,
+        registered_at="2024-01-01T00:00:00Z",
+        validation_status=ValidationStatus.STALE,
+        health_state=HealthState.DEPRECATED,
+    )
+    # Stage says certified, validation says evidence is stale, health says
+    # discouraged — all three dimensions are independently representable.
+    assert asset.is_production_ready
+    assert not asset.is_validation_current
+    assert not asset.is_usable
+
+    # Defaults preserve legacy construction (UNVALIDATED / ACTIVE).
+    legacy = make_asset("F2")
+    assert legacy.validation_status == ValidationStatus.UNVALIDATED
+    assert legacy.health_state == HealthState.ACTIVE

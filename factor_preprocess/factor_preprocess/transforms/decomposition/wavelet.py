@@ -10,6 +10,13 @@ import pandas as pd
 from typing import Optional, Dict, List
 import pywt
 
+# Narrowed catch set: the documented NaN fail-closed contract covers only
+# the *numerical* failures these libraries raise on degenerate-but-valid
+# input (too few observations, all-NaN windows, SVD non-convergence).
+# Programming errors (TypeError, AttributeError, KeyError from bad column
+# names) must propagate so they surface instead of being silently NaN'd.
+_NUMERICAL_FAILURES = (ValueError, IndexError, np.linalg.LinAlgError, ArithmeticError)
+
 
 def wavelet_decompose(
     values: pd.DataFrame,
@@ -133,8 +140,11 @@ def wavelet_decompose(
 
             return result_dict
 
-        except Exception:
-            # Wavelet decomposition may fail
+        except _NUMERICAL_FAILURES:
+            # Wavelet decomposition may fail on degenerate-but-valid input
+            # (too few points, non-invertible coefficient shape).  A bare
+            # `except Exception` would also swallow programming bugs; keep
+            # the NaN fail-closed contract for numerical failures only.
             na_series = pd.Series(np.nan, index=series.index)
             return {f'a{decomp_level}': na_series, f'd{decomp_level}': na_series.copy()}
 
@@ -327,13 +337,20 @@ def wavelet_denoise(
 
             return result
 
-        except Exception:
+        except _NUMERICAL_FAILURES:
+            # Soft-fail to NaN on degenerate-but-valid input only; do not
+            # swallow programming errors (a bare `except Exception` would
+            # hide TypeError/AttributeError from bad column wiring).
             result = pd.Series(np.nan, index=series.index)
             return result
 
     result = values.groupby(asset_col, sort=False)[value_col].apply(_wavelet_denoise_single)
 
-    # Reset index to match input
+    # Realign by label, not position — see decomposition.cycle.bandpass_filter
+    # for why a positional index reassignment mislabels interleaved layouts.
+    if isinstance(result.index, pd.MultiIndex):
+        result = result.droplevel(0)
+    result = result.loc[values.index].copy()
     result.index = values.index
 
     return result

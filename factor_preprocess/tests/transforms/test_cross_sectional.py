@@ -141,6 +141,18 @@ class TestCsDemean:
         for i in range(result.shape[0]):
             np.testing.assert_allclose(np.nanmean(result[i]), 0.0, atol=1e-10)
 
+    def test_inf_masked_to_nan(self):
+        """One inf must not turn every finite entry into ∓inf via the
+        slice mean; the inf position NaNs out (cs_zscore parity)."""
+        values = np.array([1.0, 2.0, np.inf, 4.0])
+        result = cs_demean(values)
+
+        assert np.isnan(result[2])
+        finite = np.array([1.0, 2.0, 4.0])
+        np.testing.assert_allclose(
+            result[[0, 1, 3]], finite - finite.mean(), atol=1e-12
+        )
+
 
 class TestCsWinsor:
     """Test cross-sectional winsorization."""
@@ -209,3 +221,13 @@ class TestCsScale:
         # Each row should have std ~1.0
         for i in range(result.shape[0]):
             np.testing.assert_allclose(np.nanstd(result[i], ddof=1), 1.0, atol=1e-10)
+
+    def test_inf_slice_passes_through(self):
+        """A slice containing inf has std=inf; inf*(1/inf)=NaN would
+        silently erase the inf position — pass the slice through
+        unchanged so the inf stays visible."""
+        values = np.array([1.0, 2.0, np.inf, 4.0])
+        result = cs_scale(values)
+
+        np.testing.assert_array_equal(result, values)
+        assert np.isinf(result[2])

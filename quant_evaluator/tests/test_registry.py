@@ -196,12 +196,16 @@ class TestResearchMetrics:
     def test_block_bootstrap_ci_spec(self):
         spec = get_metric("block_bootstrap_ci")
         assert spec.tier == MetricTier.RESEARCH
-        assert spec.status == MetricStatus.EXPERIMENTAL
+        # QE-P0-7: bound to a compute_fn adapter, so STABLE is truthful
+        assert spec.status == MetricStatus.STABLE
+        assert spec.compute_fn is not None
 
     def test_factor_turnover_rate_spec(self):
         spec = get_metric("factor_turnover_rate")
         assert spec.tier == MetricTier.RESEARCH
-        assert spec.status == MetricStatus.EXPERIMENTAL
+        # QE-P0-7: bound to a compute_fn adapter, so STABLE is truthful
+        assert spec.status == MetricStatus.STABLE
+        assert spec.compute_fn is not None
 
 
 class TestMetricPresets:

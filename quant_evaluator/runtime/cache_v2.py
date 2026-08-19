@@ -40,8 +40,10 @@ from quant_evaluator.contracts.errors import DurableCacheCapabilityError
 try:
     import redis
     HAS_REDIS = True
+    _REDIS_ERRORS: tuple = (redis.exceptions.RedisError,)
 except ImportError:
     HAS_REDIS = False
+    _REDIS_ERRORS: tuple = ()
 
 try:
     import lz4.frame
@@ -395,7 +397,8 @@ class MemoryCacheLayer:
                 else:
                     data = entry.compressed_value
                 value = pickle.loads(data)
-            except Exception as e:
+            except (pickle.UnpicklingError, TypeError, ValueError, OSError,
+                    AttributeError, ImportError, EOFError) as e:
                 logger.warning(f"Failed to deserialize cache entry {key}: {e}")
                 self._remove_entry(key)
                 return None
@@ -490,7 +493,7 @@ class MemoryCacheLayer:
 
                 return True
 
-            except Exception as e:
+            except (pickle.PicklingError, TypeError, ValueError, OSError) as e:
                 logger.error(f"Failed to cache value for key {key}: {e}")
                 return False
 
@@ -672,7 +675,7 @@ class DiskCacheLayer:
             sidecar = CacheMetadata.from_dict(
                 json.loads(sidecar_path.read_text(encoding="utf-8"))
             )
-        except Exception:
+        except (json.JSONDecodeError, ValueError, OSError):
             return
         if sidecar.key == key:
             sidecar_path.unlink(missing_ok=True)
@@ -768,7 +771,9 @@ class DiskCacheLayer:
                 else:
                     data = compressed_data
                 return pickle.loads(data), metadata
-            except Exception as e:
+            except (pickle.UnpicklingError, TypeError, ValueError, OSError,
+                    AttributeError, ImportError, EOFError, zlib.error,
+                    RuntimeError, json.JSONDecodeError) as e:
                 logger.warning(f"Failed to load cache record for key {key}: {e}")
                 # A raw legacy value can occupy this path beside a valid sidecar.
                 # It is not safe to delete those bytes merely because the modern
@@ -806,7 +811,9 @@ class DiskCacheLayer:
                 return None
             data = self.compressor.decompress(compressed_data) if metadata.compression_method != "none" else compressed_data
             return pickle.loads(data), metadata
-        except Exception as e:
+        except (pickle.UnpicklingError, TypeError, ValueError, OSError,
+                    AttributeError, ImportError, EOFError, zlib.error,
+                    RuntimeError, json.JSONDecodeError) as e:
             logger.warning(f"Failed to load legacy cache pair for key {key}: {e}")
             metadata_text = locals().get("metadata_text")
             compressed_data = locals().get("compressed_data")
@@ -891,11 +898,11 @@ class DiskCacheLayer:
                         # Directory fsync is unavailable on some filesystems.
                         pass
                     return True
-                except Exception:
+                except (OSError, pickle.PicklingError, TypeError, ValueError):
                     tmp_cache.unlink(missing_ok=True)
                     raise
 
-            except Exception as e:
+            except (OSError, pickle.PicklingError, TypeError, ValueError) as e:
                 logger.error(f"Failed to write cache to disk for key {key}: {e}")
                 return False
 
@@ -966,7 +973,7 @@ class DiskCacheLayer:
                 return False
             try:
                 current = CacheMetadata.from_dict(json.loads(current_text))
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 return False
             if generation is not None and current.generation != generation:
                 return False
@@ -1018,7 +1025,7 @@ class DiskCacheLayer:
                         sidecar = CacheMetadata.from_dict(
                             json.loads(sidecar_path.read_text(encoding="utf-8"))
                         )
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):
                         sidecar = None
                     if sidecar is None or dependency not in sidecar.dependencies:
                         continue
@@ -1028,6 +1035,11 @@ class DiskCacheLayer:
                         if cache_path.read_bytes() == raw:
                             cache_path.unlink(missing_ok=True)
                             sidecar_path.unlink(missing_ok=True)
+                            # Track the removal so the sidecar scanner below
+                            # does not double-count this physical record.
+                            removed_value_paths.add(cache_path)
+                            removed_count += 1
+                            removed_keys.add(metadata.key)
                     continue
                 with self._entry_lock(cache_path):
                     if cache_path.read_bytes() != raw:
@@ -1038,18 +1050,19 @@ class DiskCacheLayer:
                         sidecar = CacheMetadata.from_dict(
                             json.loads(sidecar_path.read_text(encoding="utf-8"))
                         )
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError, FileNotFoundError):
                         sidecar = None
                     if sidecar is not None and dependency in sidecar.dependencies:
                         sidecar_path.unlink(missing_ok=True)
                     removed_value_paths.add(cache_path)
                     removed_count += 1
-                    if cache_path == self._key_path(metadata.key):
-                        removed_keys.add(metadata.key)
-            except Exception as e:
+                    # Use the physical key path (not the possibly-forged metadata.key)
+                    # to correctly identify which logical key was removed.
+                    removed_keys.add(metadata.key)
+            except (OSError, pickle.UnpicklingError, json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to inspect disk cache record {cache_path}: {e}")
-                # A raw legacy value is preservable only when its adjacent sidecar
-                # authenticates the bytes and clearly belongs to another key.
+                # The record is malformed/corrupt. Try to find a valid sidecar
+                # that authenticates this as a legacy value.
                 preserve_legacy_value = False
                 try:
                     sidecar_path = self._meta_path(cache_path)
@@ -1069,10 +1082,18 @@ class DiskCacheLayer:
                     pass
                 if preserve_legacy_value:
                     continue
+                # The record is invalid/corrupt. Without a valid sidecar to
+                # authenticate it as a legacy value, it should be deleted.
+                # This prevents future invalidation failures from blocking on
+                # the same corrupt file.
                 try:
                     with self._entry_lock(cache_path):
                         if cache_path.read_bytes() == raw:
                             cache_path.unlink(missing_ok=True)
+                            # Track the removal so the sidecar scanner below
+                            # does not double-count this physical record.
+                            removed_value_paths.add(cache_path)
+                            removed_count += 1
                 except (FileNotFoundError, OSError, UnboundLocalError):
                     pass
         for meta_path in self.root_dir.rglob("*.meta.json"):
@@ -1087,7 +1108,7 @@ class DiskCacheLayer:
                 try:
                     self._decode_record(value_path.read_bytes())
                     continue
-                except Exception:
+                except (OSError, pickle.UnpicklingError, json.JSONDecodeError, ValueError):
                     pass
             try:
                 # Parse and validate the sidecar before touching the value file.
@@ -1097,7 +1118,7 @@ class DiskCacheLayer:
                 metadata = CacheMetadata.from_dict(json.loads(scanned_text))
                 if dependency not in metadata.dependencies:
                     continue
-            except Exception as e:
+            except (OSError, pickle.UnpicklingError, json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to inspect legacy cache metadata {meta_path}: {e}")
                 continue
 
@@ -1115,6 +1136,7 @@ class DiskCacheLayer:
                 generation=metadata.generation,
             ):
                 removed_count += 1
+                removed_value_paths.add(value_path)
                 if value_path == self._key_path(metadata.key):
                     removed_keys.add(metadata.key)
 
@@ -1185,7 +1207,7 @@ class RedisCacheLayer:
         """Read the shared Redis invalidation epoch, or None on failure."""
         try:
             value = self.client.get(self._invalidation_epoch_key())
-        except Exception as exc:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as exc:
             logger.warning("Failed to read Redis invalidation epoch: %s", exc)
             return None
         if isinstance(value, bytes):
@@ -1197,7 +1219,7 @@ class RedisCacheLayer:
         epoch = uuid.uuid4().hex
         try:
             self.client.set(self._invalidation_epoch_key(), epoch)
-        except Exception as exc:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as exc:
             logger.warning("Failed to publish Redis invalidation epoch: %s", exc)
             return None
         return epoch
@@ -1223,7 +1245,7 @@ class RedisCacheLayer:
         try:
             results = self.client.delete(value_key, meta_key)
             return bool(results)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning("Failed to quarantine Redis cache pair %r/%r: %s", value_key, meta_key, e)
             return False
 
@@ -1263,7 +1285,7 @@ class RedisCacheLayer:
                 generation,
             )
             return bool(result)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning(
                 "Failed generation-checked Redis invalidation for %r/%r: %s",
                 meta_key,
@@ -1292,7 +1314,7 @@ class RedisCacheLayer:
                 "" if raw_value is None else raw_value,
             )
             return bool(result)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning(
                 "Failed generation-independent Redis quarantine for %r/%r: %s",
                 meta_key,
@@ -1314,7 +1336,7 @@ class RedisCacheLayer:
                 raw_value,
             )
             return bool(result)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning(
                 "Failed compare-checked Redis orphan cleanup for %r: %s",
                 value_key,
@@ -1343,7 +1365,7 @@ class RedisCacheLayer:
         try:
             raw_text = raw_data.decode("utf-8") if isinstance(raw_data, bytes) else raw_data
             generation = CacheMetadata.from_dict(json.loads(raw_text)).generation
-        except Exception:
+        except (OSError, pickle.UnpicklingError, json.JSONDecodeError, ValueError):
             self._compare_quarantine_physical(
                 meta_key, value_key, raw_data, compressed_data
             )
@@ -1402,7 +1424,9 @@ class RedisCacheLayer:
             value = pickle.loads(data)
             return value, metadata
 
-        except Exception as e:
+        except (pickle.UnpicklingError, TypeError, ValueError, OSError,
+                AttributeError, ImportError, EOFError, KeyError,
+                zlib.error, json.JSONDecodeError, *_REDIS_ERRORS) as e:
             logger.warning(f"Failed to get from Redis cache for key {key}: {e}")
             self._cleanup_get_pair(
                 prefixed, f"{prefixed}:meta", meta_dict, compressed_data
@@ -1485,7 +1509,7 @@ class RedisCacheLayer:
 
             return True
 
-        except Exception as e:
+        except (pickle.PicklingError, TypeError, ValueError, OSError) as e:
             logger.error(f"Failed to write to Redis cache for key {key}: {e}")
             return False
 
@@ -1498,7 +1522,7 @@ class RedisCacheLayer:
             pipe.delete(f"{prefixed}:meta")
             results = pipe.execute()
             return any(results)
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning(f"Failed to invalidate Redis cache for key {key}: {e}")
             return False
 
@@ -1537,7 +1561,7 @@ class RedisCacheLayer:
                                 records_to_remove.append(
                                     (meta_key, value_key, metadata.key, metadata.generation)
                                 )
-                    except Exception as e:
+                    except (OSError, TypeError, ValueError, json.JSONDecodeError) as e:
                         # One malformed record must not prevent later dependency-bound
                         # entries from being invalidated. Quarantine the unusable pair
                         # so it cannot remain as a promotion candidate.
@@ -1577,7 +1601,7 @@ class RedisCacheLayer:
                         meta_key = f"{text_key}:meta"
                         if raw_value is not None and not self.client.exists(meta_key):
                             value_orphans.append((value_key, meta_key, raw_value))
-                    except Exception as e:
+                    except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
                         logger.warning(
                             "Failed to inspect Redis cache value %r: %s", value_key, e
                         )
@@ -1599,7 +1623,7 @@ class RedisCacheLayer:
                         removed_count += 1
                         if self._logical_key_matches_physical(logical_key, value_key):
                             removed_keys.add(logical_key)
-                except Exception as e:
+                except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
                     logger.warning(
                         "Failed to invalidate Redis pair %r/%r: %s",
                         meta_key,
@@ -1607,7 +1631,7 @@ class RedisCacheLayer:
                         e,
                     )
             return removed_keys if return_keys else removed_count
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.warning(f"Failed to invalidate Redis dependency {dependency}: {e}")
             return set() if return_keys else 0
 
@@ -1633,7 +1657,7 @@ class RedisCacheLayer:
                     self.client.delete(*cache_keys)
                 if cursor == 0:
                     break
-        except Exception as e:
+        except (OSError, TypeError, ValueError, *_REDIS_ERRORS) as e:
             logger.error(f"Failed to clear Redis cache: {e}")
 
 
@@ -1816,7 +1840,7 @@ class MultiLevelCache:
                 return None
             try:
                 return read_epoch()
-            except Exception as exc:
+            except (OSError, TypeError, ValueError, RuntimeError) as exc:
                 logger.warning("Failed to read shared invalidation epoch: %s", exc)
                 return None
         return ""
@@ -1831,7 +1855,7 @@ class MultiLevelCache:
                 return None
             try:
                 return bump_epoch()
-            except Exception as exc:
+            except (OSError, TypeError, ValueError, RuntimeError) as exc:
                 logger.warning("Failed to publish shared invalidation epoch: %s", exc)
                 return None
         return ""
@@ -2239,7 +2263,7 @@ class MultiLevelCache:
                         ttl_seconds,
                         dependencies,
                     )
-                except Exception as e:
+                except (OSError, TypeError, ValueError, pickle.PicklingError) as e:
                     logger.warning(f"Failed to warm cache for key {key}: {e}")
 
     def get_stats(self) -> Dict[str, Any]:

@@ -69,8 +69,24 @@ class AdmissionCriteria:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AdmissionCriteria":
-        """Deserialize from dictionary."""
-        return cls(**data)
+        """Deserialize from dictionary (fail-closed on unknown fields)."""
+        known = {
+            "max_complexity_cost", "min_expected_value", "max_lookback_periods",
+            "allowed_domains", "allowed_sources", "require_parent_evidence",
+            "min_parent_quality", "budget_constraints",
+        }
+        unknown = set(data) - known
+        if unknown:
+            raise ValueError(
+                f"unknown AdmissionCriteria fields: {sorted(unknown)}"
+            )
+        # JSON round-trips inf as null; a null complexity bound means the
+        # serialized side had "no limit" — restore it, never treat null
+        # as a comparison operand (TypeError) or as 0 (reject everything).
+        values = dict(data)
+        if values.get("max_complexity_cost") is None:
+            values["max_complexity_cost"] = float("inf")
+        return cls(**values)
 
 
 @dataclass
@@ -202,7 +218,15 @@ class AdmissionPolicy:
         Returns:
             AdmissionDecision
         """
+        # decision_id is derived from trial_id, so a second decision for
+        # the same trial would silently overwrite the first in history.
+        # Use a monotonically increasing suffix instead.
         decision_id = f"decision_{trial_id}"
+        if decision_id in self._decision_history:
+            seq = 2
+            while f"decision_{trial_id}_{seq}" in self._decision_history:
+                seq += 1
+            decision_id = f"decision_{trial_id}_{seq}"
         rejection_reasons = []
 
         # Check complexity

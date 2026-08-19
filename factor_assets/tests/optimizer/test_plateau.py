@@ -49,6 +49,19 @@ def test_plateau_detector_numeric_only():
         assert info["param_name"] == "window"
 
 
+def test_plateau_detector_bool_parameter_skipped():
+    """Test that boolean parameters are not perturbed (bool is subclass of int)."""
+    detector = ParameterPlateauDetector()
+
+    parameters = {"window": 20, "use_ema": True, "flag": False}
+    neighbors = detector.generate_neighbors(parameters, max_neighbors=8)
+
+    # Should only perturb 'window', never booleans
+    for neighbor in neighbors:
+        info = neighbor["perturbation_info"]
+        assert info["param_name"] == "window"
+
+
 def test_plateau_detector_zero_value():
     """Test perturbation of zero value."""
     detector = ParameterPlateauDetector(perturbation_scale=0.1)
@@ -233,3 +246,78 @@ def test_neighbor_survival_analyzer_filter_by_robustness():
     # Only cand_a should pass
     assert len(filtered) <= 2
     assert all(c["robustness_score"] >= 0.5 for c in filtered)
+
+
+def test_plateau_inf_neighbor_not_perfectly_robust():
+    """An overflowed (inf) neighbor metric must not make the region look
+    maximally robust: worst=inf used to give local_sensitivity=-inf,
+    clamped by the robustness score to a perfect sensitivity of 1.0."""
+    import math
+
+    detector = ParameterPlateauDetector()
+    analyzer = NeighborSurvivalAnalyzer()
+
+    analysis = detector.analyze_plateau(
+        base_parameters={"window": 20},
+        base_metric=0.10,
+        neighbor_results=[({"window": 21}, float("inf")), ({"window": 19}, float("inf"))],
+    )
+
+    # inf neighbors are excluded from finite stats, counted unstable
+    assert analysis.plateau_stability == 0.0
+    assert analysis.neighbor_survival_rate == 0.0
+    assert math.isnan(analysis.mean_neighbor_metric)
+
+    score = analyzer.compute_robustness_score(analysis)
+    assert score == 0.0  # unverifiable region, not maximally robust
+
+
+def test_plateau_nan_neighbor_excluded_from_stats():
+    """A NaN neighbor metric must not poison min/mean with
+    order-dependent results; finite neighbors still get real stats."""
+    import math
+
+    detector = ParameterPlateauDetector()
+    analysis = detector.analyze_plateau(
+        base_parameters={"window": 20},
+        base_metric=0.05,
+        neighbor_results=[({"window": 21}, float("nan")), ({"window": 19}, 0.049)],
+    )
+
+    # Same answer regardless of neighbor order
+    reordered = detector.analyze_plateau(
+        base_parameters={"window": 20},
+        base_metric=0.05,
+        neighbor_results=[({"window": 19}, 0.049), ({"window": 21}, float("nan"))],
+    )
+
+    assert analysis.worst_neighbor_metric == reordered.worst_neighbor_metric == 0.049
+    assert analysis.mean_neighbor_metric == reordered.mean_neighbor_metric == 0.049
+    # NaN neighbor is unstable and does not survive; 1 of 2 total
+    assert analysis.plateau_stability == 0.5
+    assert analysis.neighbor_survival_rate == 0.5
+    assert math.isfinite(analysis.local_sensitivity)
+
+
+def test_plateau_all_nonfinite_neighbors_unverifiable():
+    """Every-neighbor-non-finite ⇒ the region is unverifiable: zero
+    stability/survival and inf sensitivity, never a perfect score."""
+    import math
+
+    detector = ParameterPlateauDetector()
+    analyzer = NeighborSurvivalAnalyzer()
+
+    analysis = detector.analyze_plateau(
+        base_parameters={"window": 20},
+        base_metric=0.05,
+        neighbor_results=[
+            ({"window": 21}, float("nan")),
+            ({"window": 19}, float("-inf")),
+        ],
+    )
+
+    assert math.isnan(analysis.worst_neighbor_metric)
+    assert math.isinf(analysis.local_sensitivity)
+    assert analysis.plateau_stability == 0.0
+    assert analysis.neighbor_survival_rate == 0.0
+    assert analyzer.compute_robustness_score(analysis) == 0.0

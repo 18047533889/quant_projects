@@ -106,7 +106,7 @@ class MutationValidator:
                 metadata["fe_legality"] = legality_result
                 if not legality_result.get("is_legal", False):
                     errors.append(f"FE legality check failed: {legality_result.get('reason', 'unknown')}")
-            except Exception as e:
+            except (TypeError, ValueError, KeyError, RuntimeError, OSError) as e:
                 warnings.append(f"FE legality check error: {str(e)}")
 
         is_valid = len(errors) == 0

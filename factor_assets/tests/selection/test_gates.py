@@ -2,6 +2,7 @@
 Tests for evidence threshold gates.
 """
 
+import math
 import pytest
 
 from factor_assets.selection import (
@@ -534,6 +535,34 @@ def test_minimum_ic_gate_negative_threshold_rejected():
         MinimumICGate(threshold=-0.01)
 
 
+def test_minimum_ic_gate_bool_threshold_rejected():
+    """MinimumICGate rejects boolean threshold (bool is subclass of int)."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold=True)
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold=False)
+
+
+def test_minimum_ic_gate_nan_threshold_rejected():
+    """MinimumICGate rejects NaN threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold=float("nan"))
+
+
+def test_minimum_ic_gate_inf_threshold_rejected():
+    """MinimumICGate rejects inf threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold=float("inf"))
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold=float("-inf"))
+
+
+def test_minimum_ic_gate_string_threshold_rejected():
+    """MinimumICGate rejects string threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumICGate(threshold="0.02")
+
+
 def test_minimum_ic_gate_positive_ic_pass():
     """Test IC gate with positive IC passing."""
     gate = MinimumICGate(threshold=0.02)
@@ -680,6 +709,26 @@ def test_maximum_turnover_gate_negative_threshold_rejected():
         MaximumTurnoverGate(threshold=-0.1)
 
 
+def test_maximum_turnover_gate_bool_threshold_rejected():
+    """MaximumTurnoverGate rejects boolean threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MaximumTurnoverGate(threshold=True)
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MaximumTurnoverGate(threshold=False)
+
+
+def test_maximum_turnover_gate_nan_threshold_rejected():
+    """MaximumTurnoverGate rejects NaN threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MaximumTurnoverGate(threshold=float("nan"))
+
+
+def test_maximum_turnover_gate_inf_threshold_rejected():
+    """MaximumTurnoverGate rejects inf threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MaximumTurnoverGate(threshold=float("inf"))
+
+
 def test_maximum_turnover_gate_pass():
     """Test turnover gate passing."""
     gate = MaximumTurnoverGate(threshold=0.5)
@@ -748,6 +797,26 @@ def test_minimum_coverage_gate_threshold_bounds():
 
     with pytest.raises(ValueError, match="Coverage threshold must be in"):
         MinimumCoverageGate(threshold=1.5)
+
+
+def test_minimum_coverage_gate_bool_threshold_rejected():
+    """MinimumCoverageGate rejects boolean threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumCoverageGate(threshold=True)
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumCoverageGate(threshold=False)
+
+
+def test_minimum_coverage_gate_nan_threshold_rejected():
+    """MinimumCoverageGate rejects NaN threshold (NaN < 0 is False but NaN > 1 is also False)."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumCoverageGate(threshold=float("nan"))
+
+
+def test_minimum_coverage_gate_inf_threshold_rejected():
+    """MinimumCoverageGate rejects inf threshold."""
+    with pytest.raises(ValueError, match="finite non-boolean"):
+        MinimumCoverageGate(threshold=float("inf"))
 
 
 def test_minimum_coverage_gate_pass():
@@ -1332,6 +1401,172 @@ def test_pareto_dominance_with_negative_metrics():
     )
 
     assert evaluation.failed  # Dominated
+
+
+def test_minimum_ic_gate_inf_fails_closed():
+    """An overflowed |IC|=inf is a failed measurement, not skill:
+    must FAIL, not pass |inf| >= threshold."""
+    gate = MinimumICGate(threshold=0.02)
+
+    for bad in (float("inf"), float("-inf"), float("nan")):
+        evaluation = gate.evaluate(
+            factor_id="F001",
+            evidence_id="EVD_001",
+            metric_name="ic",
+            metric_value=bad,
+        )
+        assert evaluation.failed, f"{bad!r} must fail closed"
+        assert "non-finite" in evaluation.message
+
+
+def test_metric_evidence_rejects_nonfinite_value():
+    """MetricEvidence must reject NaN/±inf/bool at construction —
+    it is the typed channel feeding the gates."""
+    for bad in (float("nan"), float("inf"), float("-inf"), True):
+        with pytest.raises((ValueError, TypeError)):
+            MetricEvidence(bad, "correlation", MetricDirection.HIGHER_IS_BETTER)
+
+
+def test_pareto_gate_nan_candidate_fails_closed():
+    """NaN comparisons are all False, which used to make a partially-NaN
+    candidate 'not dominated' (gate PASS) even against a clearly
+    dominating reference — comparison undefined must fail closed."""
+    gate = ParetoDominanceGate(
+        higher_is_better_metrics=["sharpe", "ic"],
+        lower_is_better_metrics=["turnover"],
+    )
+
+    candidate = {"sharpe": float("nan"), "ic": 0.03, "turnover": 0.9}
+    references = [
+        ("F002", {"sharpe": 1.5, "ic": 0.05, "turnover": 0.3}),  # dominates all defined
+    ]
+
+    evaluation = gate.evaluate(
+        factor_id="F001",
+        evidence_id="EVD_001",
+        candidate_metrics=candidate,
+        reference_factors=references,
+    )
+
+    assert evaluation.failed
+    assert "non-finite" in evaluation.message
+
+
+def test_pareto_gate_nan_reference_not_dominating():
+    """A NaN reference metric makes domination unprovable: the reference
+    must not count as a dominator (is_dominated returns False on
+    non-finite comparison inputs)."""
+    gate = ParetoDominanceGate(
+        higher_is_better_metrics=["sharpe"],
+        lower_is_better_metrics=["turnover"],
+    )
+
+    assert not gate.is_dominated(
+        {"sharpe": 1.0, "turnover": 0.5},
+        {"sharpe": float("nan"), "turnover": 0.3},
+    )
+
+
+def test_pareto_gate_neg_inf_candidate_not_dominated():
+    """−inf candidate vs a clearly dominating reference: the comparison is
+    undefined (overflow), so domination must NOT be asserted.  The old
+    code returned True here (finite check did not exist) — ±inf, not NaN,
+    is the distinguishing case for this guard."""
+    gate = ParetoDominanceGate(higher_is_better_metrics=["sharpe"])
+
+    assert not gate.is_dominated(
+        {"sharpe": float("-inf")},
+        {"sharpe": 1.0},
+    )
+    # Symmetric: +inf reference cannot dominate either
+    assert not gate.is_dominated(
+        {"sharpe": 1.0},
+        {"sharpe": float("inf")},
+    )
+    # Non-numeric reference value must not raise TypeError from a
+    # standalone is_dominated/evaluate call (undefined → not dominated)
+    assert not gate.is_dominated({"sharpe": 1.0}, {"sharpe": None})
+
+
+def test_pareto_gate_untracked_nonfinite_metric_ignored():
+    """Only TRACKED metrics (in higher/lower_is_better) participate in the
+    fail-closed scan: an untracked NaN/str/None metric must not FAIL the
+    gate (it is never compared) and must not raise TypeError."""
+    gate = ParetoDominanceGate(
+        higher_is_better_metrics=["sharpe"],
+        lower_is_better_metrics=["turnover"],
+    )
+
+    evaluation = gate.evaluate(
+        factor_id="F001",
+        evidence_id="EV001",
+        candidate_metrics={
+            "sharpe": 1.2,
+            "turnover": 0.4,
+            "untracked_nan": float("nan"),   # ignored: never compared
+            "untracked_str": "not-a-number",  # ignored: never compared
+            "untracked_none": None,           # ignored: never compared
+        },
+        reference_factors=[("F000", {"sharpe": 0.8, "turnover": 0.6})],
+    )
+
+    assert evaluation.passed
+    assert "non-finite" not in evaluation.message
+
+
+def test_pareto_gate_tracked_nonnumeric_metric_fails_closed():
+    """A TRACKED metric with a non-numeric value would raise TypeError in
+    the comparisons; the gate must fail closed with a clear message
+    instead of crashing."""
+    gate = ParetoDominanceGate(higher_is_better_metrics=["sharpe"])
+
+    evaluation = gate.evaluate(
+        factor_id="F001",
+        evidence_id="EV001",
+        candidate_metrics={"sharpe": None},
+        reference_factors=[],
+    )
+
+    assert evaluation.failed
+    assert "sharpe" in evaluation.message
+    assert "fail closed" in evaluation.message
+
+
+def test_composite_evaluate_all_unexpected_exception_fails_closed():
+    """A sub-gate raising an exception (any type — IndexError here) must
+    fail that gate closed, not propagate out of evaluate_all and abort
+    the composite run."""
+    class ExplodingGate:
+        """Minimal gate-like object whose evaluate always raises IndexError."""
+        gate_name = "exploding_gate"
+        gate_version = "1.0"
+        metric_direction = MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+
+        def evaluate(self, factor_id, evidence_id, metric_name, metric_value):
+            raise IndexError("boom — sub-gate crash")
+
+    composite = CompositeGate(
+        gate_name="composite",
+        gates=[ExplodingGate()],
+        metric_bindings={
+            "exploding_gate": MetricBinding(
+                "sharpe", "ratio", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+            )
+        },
+    )
+    evidence = {
+        "sharpe": MetricEvidence(
+            1.5, "ratio", MetricDirection.ABSOLUTE_HIGHER_IS_BETTER
+        )
+    }
+
+    result, sub_evaluations = composite.evaluate_all("F001", "E001", evidence)
+
+    assert result.failed
+    assert "IndexError" in result.message or any(
+        "IndexError" in ev.message for ev in sub_evaluations
+    )
+    assert sub_evaluations and sub_evaluations[0].failed
 
 
 def test_gate_evaluation_immutability():

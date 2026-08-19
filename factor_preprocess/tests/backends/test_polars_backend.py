@@ -461,6 +461,38 @@ class TestPerformance:
 class TestEdgeCases:
     """Test edge cases for polars backend."""
 
+    def test_ols_neutralize_shuffled_input_preserves_per_row_residuals(self):
+        """Residual for row i must depend on (date, asset), not row position.
+
+        The polars join resets row identity; realignment must use the
+        positional key carried through the join, not the merged index.
+        """
+        df_values = generate_panel_data(n_dates=4, n_assets=8, seed=7)
+        np.random.seed(7)
+        df_exposures = df_values[["date", "asset_id"]].copy()
+        df_exposures["exp1"] = np.random.randn(len(df_exposures))
+
+        expected = ols_neutralize_polars(df_values, df_exposures, min_observations=5)
+        shuffled = df_values.sample(frac=1.0, random_state=3)
+        got = ols_neutralize_polars(shuffled, df_exposures, min_observations=5)
+        got = got.reindex(expected.index)
+        np.testing.assert_allclose(
+            got.to_numpy(), expected.to_numpy(), equal_nan=True,
+            rtol=1e-8, atol=1e-10,
+        )
+
+    def test_ols_neutralize_duplicate_exposure_key_keeps_one_row_per_input(self):
+        """A duplicated (date, asset) exposure row must not corrupt alignment."""
+        df_values = generate_panel_data(n_dates=4, n_assets=8, seed=7)
+        np.random.seed(7)
+        df_exposures = df_values[["date", "asset_id"]].copy()
+        df_exposures["exp1"] = np.random.randn(len(df_exposures))
+        expo_dup = pd.concat([df_exposures, df_exposures.iloc[[0]]], ignore_index=True)
+
+        out = ols_neutralize_polars(df_values, expo_dup, min_observations=5)
+        assert len(out) == len(df_values)
+        assert out.index.tolist() == df_values.index.tolist()
+
     def test_empty_dataframe(self):
         """Test empty DataFrame."""
         df = pd.DataFrame({

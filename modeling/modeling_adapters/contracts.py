@@ -263,3 +263,23 @@ class ModelReadyData:
         """Validate model ready data."""
         if self.data_start >= self.data_end:
             raise ContractViolation("data_start must be before data_end")
+        # Cross-check feature name count against the feature payload when a
+        # length is available, so a channel mismatch surfaces here instead
+        # of as a silent column misalignment downstream.  Bundles carry the
+        # feature channels on the LAST axis (2D (T, K) or 3D (T, N, K)).
+        # Only wide-layout (T, N, K) bundles are guaranteed to put features
+        # on the last axis; long/block layouts put other semantics there,
+        # and a 2D (T, N) single-feature payload must not false-trip either.
+        shape = getattr(self.features, "shape", None)
+        if (
+            shape is not None
+            and len(shape) >= 2
+            and len(self.feature_names) > 1
+            and shape[-1] != len(self.feature_names)
+        ):
+            raise ContractViolation(
+                f"features has {shape[-1]} feature channels but "
+                f"{len(self.feature_names)} feature_names given"
+            )
+        if not self.feature_names:
+            raise ContractViolation("feature_names must not be empty")

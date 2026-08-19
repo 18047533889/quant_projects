@@ -5,6 +5,7 @@ FA does NOT duplicate QE's evaluation logic or metric computation.
 Evidence is obtained through a protocol boundary from QE adapters.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Protocol, Optional
 
@@ -58,6 +59,48 @@ class EvidenceResult:
             raise ValueError("evaluation_run_id is required")
         if self.secondary_metrics is None:
             object.__setattr__(self, 'secondary_metrics', {})
+            dropped: list[str] = []
+        else:
+            validated = {}
+            dropped = []
+            for k, v in self.secondary_metrics.items():
+                if not isinstance(k, str):
+                    raise TypeError(
+                        f"secondary_metrics key must be str, got {type(k).__name__}"
+                    )
+                if isinstance(v, bool):
+                    raise TypeError(
+                        f"secondary_metrics['{k}'] must not be bool — use float"
+                    )
+                if not isinstance(v, (int, float)):
+                    # Corrupt non-numeric values are dropped, not silent
+                    dropped.append(k)
+                    continue
+                if not math.isfinite(float(v)):
+                    # NaN/inf values are dropped, not silent
+                    dropped.append(k)
+                    continue
+                validated[k] = float(v)
+            object.__setattr__(self, 'secondary_metrics', validated)
+
+        # primary_metric_value gets the same finite-number contract when
+        # present: a NaN/±inf/bool primary score is an overflowed or
+        # failed measurement, never admittable evidence.
+        if self.primary_metric_value is not None:
+            v = self.primary_metric_value
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+                object.__setattr__(self, 'primary_metric_value', None)
+                dropped = list(dropped) + [str(self.primary_metric_name or "primary_metric_value")]
+
+        if dropped:
+            # Surface every drop as a warning so downstream consumers see
+            # the evidence is partially unmeasurable (is_valid → False).
+            object.__setattr__(
+                self, 'warnings',
+                tuple(self.warnings) + tuple(
+                    f"dropped non-finite/non-numeric metric: {k}" for k in dropped
+                ),
+            )
 
     @property
     def has_warnings(self) -> bool:

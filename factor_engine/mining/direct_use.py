@@ -340,13 +340,95 @@ _PRICE_LEVEL_INTERMEDIATE_OPS = frozenset(
 # otherwise inherit from the mining layer.
 _RELATIVE_ALPHA_OPS = frozenset(
     {
-        "vwap_deviation", "NATR", "KeltnerPosition", "ichimoku_cloud_position",
+        "vwap_deviation", "NATR",
+        "atr_pct", "atr_zscore", "atr_percentile",
+        "true_range_pct", "true_range_surprise", "true_range_zscore",
+        "atr_short_long_ratio", "atr_acceleration",
+        "KeltnerPosition", "ichimoku_cloud_position",
+        "keltner_width_pct", "keltner_compression", "keltner_breakout_strength",
         "candle_gap_pct", "candle_gap_atr",
         "ts_swing_amplitude_pct", "ts_swing_amplitude_atr",
         "ts_channel_width_pct", "ts_channel_width_atr",
         "ts_distance_to_high", "ts_distance_to_low",
         "ts_distance_to_resistance", "ts_distance_to_support",
         "bollinger_pct_b", "bollinger_width",
+        # R20-PSAR-DIRECTUSE: dimensionless PSAR regime canonicals; the raw
+        # price-scale "PSAR" level stays intermediate (never in this set).
+        "psar_direction", "psar_distance_pct", "psar_flip", "psar_days_since_flip",
+        # R20-DONCHIAN-DIRECTUSE: causal dimensionless Donchian canonicals; the
+        # raw price-scale donchian_upper/lower/mid levels stay intermediate.
+        "donchian_width_pct", "donchian_channel_position",
+        "donchian_breakout_up", "donchian_breakout_down",
+        # R20-MA-DISTANCE-SLOPE: dimensionless MA distance/slope/crossover
+        # canonicals; the raw MA levels (KAMA/DEMA/TEMA, ts_ema/ts_sma) stay
+        # intermediate (never in this set).
+        "ema_distance_pct", "sma_distance_pct", "dema_distance_pct",
+        "tema_distance_pct", "kama_distance_pct", "ma_slope_pct",
+        "ema_crossover",
+        # R20-SUPERTREND-DIRECTUSE: dimensionless Supertrend regime canonicals;
+        # the raw price-scale "Supertrend"/"SupertrendDirection" levels stay
+        # intermediate (never in this set).
+        "supertrend_direction", "supertrend_distance_pct",
+        "supertrend_flip", "supertrend_days_since_flip",
+        # R20-ICHIMOKU-DIRECTUSE: dimensionless CAUSAL Ichimoku canonicals; the
+        # raw price-scale ichimoku_tenkan/kijun/senkou_a/senkou_b levels stay
+        # intermediate (never in this set).
+        "tenkan_kijun_cross", "chikou_distance_pct", "senkou_span_causal_pct",
+        # R20-VWAP-DIRECTUSE: dimensionless rolling-VWAP distance/slope/premium
+        # canonicals; the raw price-scale "rolling_vwap" level stays
+        # intermediate (never in this set).
+        "vwap_distance_pct", "vwap_slope_pct", "vwap_premium_pct",
+        # R20-CANDLESTICK-DIRECTUSE: dimensionless AGGREGATE candlestick-pattern
+        # strength canonicals (trailing-window means/fractions); the one-off
+        # binary cdl_* detectors are NOT direct alphas (never in this set).
+        "candle_body_strength", "candle_wick_balance",
+        "candle_range_pct", "candle_pattern_count",
+        # R20-SR-DIRECTUSE: dimensionless support/resistance canonicals over a
+        # prior-window typical-price median pivot; the price-scale
+        # ts_support_level / ts_resistance_level levels stay intermediate
+        # (never in this set).
+        "sr_distance_pct", "sr_touch_count",
+        # R20-CHANNEL-CONSOLIDATION-DIRECTUSE: dimensionless close-only
+        # consolidation tightness canonicals; channel_width_pct /
+        # channel_position were SKIPPED as exact-duplicate math of
+        # donchian_width_pct / donchian_channel_position (already here).
+        "consolidation_pct", "consolidation_range_pct",
+        # R20-SPECTRAL-EXCESS-DIRECTUSE: dimensionless spectral/wavelet energy
+        # ratios (trailing de-meaned rfft / Haar windows ending at t); the
+        # frequency_layer filters (ts_spectral_lowpass_trailing,
+        # ts_wavelet_shrinkage_trailing) return price-scale filtered series and
+        # are NOT alphas (never in this set).
+        "spectral_energy_ratio", "spectral_trend_share",
+        "wavelet_detail_energy_ratio",
+        # R20-REGRESSION-CAUSAL-DIRECTUSE: dimensionless causal regression
+        # canonicals (trailing OLS windows ending at t; the forecast family's
+        # fit window excludes the target bar).  mean_reversion_half_life was
+        # SKIPPED — ts_mean_reversion_half_life already implements the same
+        # AR(1) half-life estimator.
+        "reg_forecast_error_pct", "reg_slope_tstat", "reg_r2_trailing",
+        "reg_residual_zscore",
+        # R20-EVENT-STATE-ALPHA: dimensionless Event→Alpha / State→Alpha
+        # canonicals (trailing event-count / state-level windows ending at t,
+        # strict EventBool {0,1,NaN} inputs, degenerate denominators -> NaN).
+        "event_rate_pct", "event_recency_z", "event_cluster_score",
+        "state_dwell_pct", "state_transition_surprise",
+        # R20-BVC-VPIN-DIRECTUSE: dimensionless causal intraday BVC/VPIN
+        # canonicals (trailing windows ending at t, fail-closed masking,
+        # strict-positive close+volume).  Documented non-duplicates:
+        # micro_vpin (legacy |r|-weighted proxy, NOT true VPIN) and
+        # micro_bvc_vpin (research-only panel pipeline) stay OUT of this set;
+        # intraday_bvc_imbalance is panel-shaped, not a series alpha.
+        "bvc_sign_pct", "vpin_pct", "bvc_imbalance_ma",
+        # R20-RELALPHA-PROMOTION: the six dimensionless ex-self / prior-beta /
+        # group-relative canonicals from R20-EXSELF-CS-DIRECTUSE and
+        # R20-GROUPSTATE-BETA-DIRECTUSE.  They already resolved DIRECT_ALPHA
+        # via the verified MiningRole fallback; this set membership pins the
+        # promotion explicitly (same contract as every sibling R20 family) so
+        # the verdict never depends on role-fallback drift.  ex_self_mean_gap
+        # is deliberately NOT here: it carries x's unit (a level gap), i.e.
+        # NOT scale-invariant — intermediate/composition only.
+        "ex_self_zscore", "ex_self_rank_pct", "ex_self_mad_z",
+        "beta_residual_z", "beta_divergence_pct", "relative_strength_group_pct",
     }
 )
 

@@ -14,6 +14,12 @@ from quant_evaluator.runtime.intermediates import (
     CacheKey,
     CacheEntry,
 )
+from quant_evaluator.runtime.cache_protocol import (
+    CacheProtocol,
+)
+from quant_evaluator.runtime.cache_v2_adapter import (
+    V2IntermediateCache,
+)
 from quant_evaluator.runtime.budgets import (
     ComputationBudget,
     BudgetTracker,
@@ -43,6 +49,8 @@ __all__ = [
     "IntermediateCache",
     "CacheKey",
     "CacheEntry",
+    "CacheProtocol",
+    "V2IntermediateCache",
     "ComputationBudget",
     "BudgetTracker",
     "ResourceUsage",

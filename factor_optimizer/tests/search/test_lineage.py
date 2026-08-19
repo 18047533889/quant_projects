@@ -506,3 +506,48 @@ def test_lineage_tree_best_in_lineage_no_scores():
 
     best = tree.best_in_lineage("t1")
     assert best is None
+
+
+def test_lineage_tree_best_in_lineage_tie_break_deterministic():
+    # Two equal-score nodes in one lineage: best_in_lineage builds its
+    # candidate set from set-returning ancestors/descendants, whose string
+    # iteration order is PYTHONHASHSEED-dependent.  The winner must be the
+    # highest trial ID regardless of set order, so the answer is stable
+    # across processes.
+    tree = LineageTree()
+
+    seed = LineageNode(trial_id="seed1", generation=0, score=0.4)
+    tree.add_node(seed)
+
+    # Two children of the seed at an identical score; the query node t2
+    # sits below both.
+    t1 = LineageNode(trial_id="t1", parent_ids=["seed1"], generation=1, score=0.9)
+    tree.add_node(t1)
+    t3 = LineageNode(trial_id="t3", parent_ids=["seed1"], generation=1, score=0.9)
+    tree.add_node(t3)
+    t2 = LineageNode(trial_id="t2", parent_ids=["t1", "t3"], generation=2, score=0.5)
+    tree.add_node(t2)
+
+    best = tree.best_in_lineage("t2")
+    assert best is not None
+    assert best.score == 0.9
+    assert best.trial_id == "t3"  # tie-break on trial ID, not set order
+
+
+def test_lineage_analyzer_most_productive_lineage_tie_break_deterministic():
+    # Two equally productive seeds: the winner must be the lowest trial
+    # ID regardless of node insertion order (a from_dict rebuild of the
+    # same tree can insert in a different order than the live tree).
+    tree = LineageTree()
+
+    for seed_id, child_id in (("seed_b", "child_b"), ("seed_a", "child_a")):
+        seed = LineageNode(trial_id=seed_id, generation=0, score=0.1)
+        tree.add_node(seed)
+        tree.add_node(
+            LineageNode(
+                trial_id=child_id, parent_ids=[seed_id], generation=1, score=0.2
+            )
+        )
+
+    analyzer = LineageAnalyzer(tree)
+    assert analyzer.most_productive_lineage() == "seed_a"

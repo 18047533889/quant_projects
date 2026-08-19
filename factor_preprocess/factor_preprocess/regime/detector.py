@@ -178,12 +178,16 @@ def detect_variance_regime(
 
     result_df = temp_df.groupby(time_col, group_keys=False).apply(assign_regime, include_groups=False)
 
-    # Detect transitions
+    # Detect transitions.  A NaN diff (warmup row, NaN regime input) must
+    # NOT count as a transition: NaN != 0 evaluates True in pandas, which
+    # would flag spurious transitions on exactly the rows with no signal.
     transition_flag = (
         result_df.groupby(values[asset_col])['regime']
         .diff()
         .ne(0)
+        .where(lambda s: s.notna(), False)
         .fillna(False)
+        .astype(bool)
     )
 
     return RegimeState(
@@ -330,9 +334,16 @@ def detect_correlation_regime(
 
         strength[i] = np.clip(strength[i], 0.0, 1.0)
 
-    # Detect transitions
+    # Detect transitions.  NaN regime diffs (warmup / NaN input rows) must
+    # not be flagged — see detect_variance_regime for the rationale.
     regime_series = pd.Series(regime_labels, index=values.index)
-    transition_flag = regime_series.diff().ne(0).fillna(False)
+    transition_flag = (
+        regime_series.diff()
+        .ne(0)
+        .where(lambda s: s.notna(), False)
+        .fillna(False)
+        .astype(bool)
+    )
 
     return RegimeState(
         regime=regime_series,

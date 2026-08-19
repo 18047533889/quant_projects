@@ -80,6 +80,9 @@ _MIN_PERIODS_FLOORS = {
     "ts_partial_corr": 3,
     "ts_topk_std": 2,
     "ts_bottomk_std": 2,
+    # R20 pairwise ParamSpec repair: pairwise EWM needs >= 2 finite points.
+    "ts_ewm_corr": 2,
+    "ts_ewm_cov": 2,
 }
 
 _LOOKBACK_PARAM_PRIORITY = (

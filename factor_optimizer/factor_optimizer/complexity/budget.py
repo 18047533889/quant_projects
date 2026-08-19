@@ -62,8 +62,14 @@ class ComplexityBudget:
                 profile.stateful_operators <= self.max_stateful_operators
             )
 
-        if self.max_memory_mb is not None and profile.metadata.get("memory_estimate_mb") is not None:
-            results["memory"] = profile.metadata["memory_estimate_mb"] <= self.max_memory_mb
+        # Memory lives on the dedicated profile field; the metadata key is
+        # a legacy location.  Without this fallback the check silently
+        # never fired for native profiles (metadata was always empty).
+        memory_estimate = profile.memory_estimate
+        if memory_estimate is None:
+            memory_estimate = profile.metadata.get("memory_estimate_mb")
+        if self.max_memory_mb is not None and memory_estimate is not None:
+            results["memory"] = memory_estimate <= self.max_memory_mb
 
         return results
 

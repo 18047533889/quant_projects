@@ -1,0 +1,160 @@
+task_id: R20-CANDLESTICK-DIRECTUSE
+finding: causal_dimensionless_aggregate_candlestick_pattern_strength_direct_alpha_rehabilitation
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_candlestick_direct_use_rehab.py
+  - factor_engine/evidence/r2/R20-CANDLESTICK-DIRECTUSE.yaml
+status: CLOSED_LOCAL
+independent_review_status: CLOSED_VERIFIED
+implementation:
+  - Added four causal, dimensionless AGGREGATE candlestick-pattern-strength
+    canonicals in indicators_v2 (trailing window ENDS at t, rolling-only
+    bounded state — deliberately NOT in _RECURSIVE_EWM, no full-replay
+    governance needed).  These are NOT one-off binary cdl_* detectors:
+    candle_body_strength = mean over w of sign(close-open)*|close-open|/range
+    (aggregate directional candle strength in [-1,1]);
+    candle_wick_balance = mean over w of (lower_wick-upper_wick)/range
+    (buying-vs-selling pressure proxy in [-1,1]);
+    candle_range_pct = mean over w of (high-low)/close (dimensionless
+    bar-range volatility; plain range over close — no Wilder smoothing, no
+    prev-close gaps; asserted materially distinct from the registered
+    true_range_pct kernel);
+    candle_pattern_count = fraction of VALID w-bars classified as
+    |body/range|<0.1 (doji) OR a >=70%-of-range dominant wick whose opposite
+    wick <=15% of range (hammer / inverted-hammer / shooting-star rejection
+    shapes); bounded [0,1], bad bars excluded from BOTH numerator and
+    denominator (never counted as non-patterns).
+  - Reuse note: existing per-bar candle geometry canonicals
+    (cleaned_operators/price_volume/candle_geometry_v2.py, candle_body_ratio /
+    candle_upper_shadow_ratio / candle_lower_shadow_ratio in
+    price_volume/candle_patterns_extended) and the binary cdl_* family were
+    surveyed.  None provides the aggregate trailing-window strength contract
+    this slice requires (they are single-bar ratios or prior-window
+    z-scores/percentiles), so a local _candle_valid/_candle_geometry helper
+    was written in indicators_v2 mirroring the spirit of the registered
+    _validate_ohlc mask (close>0, OHLC nesting) plus the STRICT high>low
+    range requirement (a zero range cannot normalize the geometry).  No
+    existing canonical was modified.
+  - Data-integrity contract (never launder bad data): a bar is structurally
+    valid only when all four OHLC fields are present, close > 0, high > low
+    (STRICT) and high >= max(open,close) / low <= min(open,close); anything
+    else (high<low, non-positive close, zero range, NaN fields) is NaN on
+    that bar and excluded from the trailing mean (skipna) — verified: bad
+    bars produce NaN in body/wick/range kernels and never leak a fabricated
+    0/±1 geometry term; neighbours and clean-panel prefixes are bit-equal.
+  - candle_pattern_count exclusion semantics: a deformed bar drops out of
+    numerator AND denominator (fraction over VALID bars, min_periods=1
+    inner count with an explicit rows-presence warmup mask restoring the
+    strict w-row trailing-window contract), pinned by a dedicated
+    adversarial test (2-doji + 1-bad-bar window -> 2/3-over-valid, not
+    counted-as-non-pattern arithmetic).
+  - ParamSpecs: window _WIN_GE2 for all four (same contract as the
+    vwap_/donchian_ rolling families); no relational specs (single window,
+    no swap-duplicate search nodes).
+  - operator_surface.py: names appended to _TECHNICAL_V2_CANONICALS and
+    added to DAILY_FACTOR_MIGRATED via a new
+    _DAILY_CANDLE_PATTERN_PACK_2026_08 frozenset (mirrors
+    _DAILY_SUPERTREND_PACK_2026_08 / _DAILY_VWAP_PACK_2026_08 style).
+  - mining/direct_use.py: ONLY the four dimensionless aggregate names
+    appended to _RELATIVE_ALPHA_OPS; the one-off binary cdl_* detectors and
+    raw candle_* geometry levels are asserted NOT promoted.
+  - Concurrent-writer note: sibling writers may edit the same three source
+    files; every candlestick edit is anchored solely on the new candle_*
+    lines or clearly-shared insertion points (tail of _SPECS list,
+    _PARAM_SPECS tail, tail of _RELATIVE_ALPHA_OPS, tail of
+    _TECHNICAL_V2_CANONICALS, after the last _DAILY_*_PACK union) — never on
+    atr_*/psar_*/keltner_*/donchian_*/ma-family/ichimoku_*/supertrend_*/vwap_*
+    blocks.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_candlestick_direct_use_rehab.py -q
+  result: 10 passed
+  coverage:
+    - candle_body_strength manual pandas oracle (geometry recomputed from raw
+      OHLC, independent of the operator helper) + warmup NaN boundaries
+      (window-1 leading NaN, finite from index window) + |value| <= 1 bound
+    - candle_body_strength sign on deterministic directional panels (rising
+      closes -> strictly positive; falling -> strictly negative)
+    - candle_wick_balance manual oracle + deterministic hammer-panel exact
+      value ((lower-upper)/range) + sign + [-1,1] bound
+    - candle_range_pct manual oracle + distinctness vs the registered
+      true_range_pct kernel (>50% of bars differ by >1e-6 on the test panel)
+    - candle_pattern_count manual oracle (doji / dominant-wick+small-opposite
+      classification recomputed in numpy) + [0,1] bound + deterministic
+      all-doji panel -> exactly 1.0 + all-marubozu panel -> exactly 0.0
+    - malformed-OHLC masking: high<low, close<=0, zero-range and NaN-field
+      bars are NaN in every op (never laundered); neighbouring valid bars
+      stay finite
+    - candle_pattern_count bad-bar exclusion arithmetic: fraction over VALID
+      bars only (1/3 with one bad bar in a w=4 window; 1/4 once the bad bar
+      leaves; 0 for all-valid all-marubozu windows)
+    - prefix-invariance: truncated panel == full-panel prefix for all four
+      canonicals (exact frame equality, rolling-only kernels)
+    - ParamSpec keys/dtype, NOT in _RECURSIVE_EWM, no stateful tag,
+      causal+pit_safe tags present, window=1 ValueError guard
+    - _RELATIVE_ALPHA_OPS membership + binary cdl_* exclusion +
+      DAILY_FACTOR_MIGRATED and _TECHNICAL_V2_CANONICALS promotion membership
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_candlestick_direct_use_rehab.py
+  result: PASS
+registry_bootstrap:
+  command: OPENBLAS/OMP/MKL/POLARS threads=1 python3 -c "import cleaned_operators; cleaned_operators.load_all()"
+  result: PASS; all four canonicals resolve via
+    OperatorRegistry.get(name,'pandas_numpy') with param_specs ['window'];
+    _RELATIVE_ALPHA_OPS, DAILY_FACTOR_MIGRATED and _TECHNICAL_V2_CANONICALS
+    all contain all four (verified in the same process)
+integration:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_candlestick_direct_use_rehab.py tests/operators/test_r20_vwap_direct_use_rehab.py -q
+  result: 18 passed (candlestick 10 + sibling VWAP regression 8, 2026-08-19)
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + evidence YAML only)
+  date: 2026-08-19
+  verdict: PASS-with-findings (no P0/P1)
+  verified:
+    - Rolling-only bounded window state, trailing windows ending at t; no
+      future shift; prefix-invariance tests genuine (rolling kernels).
+    - Strict bad-bar contract: high<low / close<=0 / zero-range / NaN-field
+      bars are NaN, never laundered; pattern_count excludes bad bars from
+      BOTH numerator and denominator.
+    - Manual oracles recompute geometry from raw OHLC independently of the
+      operator helpers.
+    - Governance + promotion hygiene verified for all four names; binary
+      cdl_* detectors correctly excluded from _RELATIVE_ALPHA_OPS.
+  p2_findings_and_resolution:
+    - P2: candle_body_strength docstring said "skipna exclusion" while the
+      kernel uses min_periods=window (whole-covering-window NaN kill) —
+      CLOSED: docstring rewritten to document the fail-closed window-kill
+      and its intentional asymmetry vs candle_pattern_count's
+      over-valid-fraction contract (indicators_v2.py).
+    - P2: the NaN bleed of a bad bar through its covering window was
+      untested — CLOSED: test_candle_ops_mask_malformed_ohlc now asserts
+      out.iloc[15:19].isna().all() for window=4 plus recovery at row 19.
+    - P2: _candle_valid/_candle_geometry duplicates the spirit of
+      price_volume/candle_geometry_v2._validate_ohlc — ACCEPTED, recorded in
+      known_limitations (cross-module hoist deferred).
+  focused_tests_after_review: 10 passed (after docstring + NaN-bleed test
+    edits, 2026-08-19)
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the four new canonicals is
+    NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, and full
+    registry/backend/root CI are NOT_RUN.
+  - The local _candle_valid/_candle_geometry helpers mirror the spirit of
+    price_volume/candle_geometry_v2._validate_ohlc rather than importing it
+    (import would create a cross-module dependency from technical/ to
+    price_volume/ with a different registration contract); a future
+    cross-slice item could hoist the shared validity mask into a common
+    module and collapse the two.
+  - candle_pattern_count thresholds (0.1 doji, 0.7 dominant wick, 0.15
+    opposite wick) are fixed shape constants, not searchable parameters; a
+    future slice could parameterize them with relational ordering specs if
+    the search grammar needs them.
+  - No production certification claim; terminal usability is limited to the
+    mining-layer relative-alpha classification added here.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

@@ -213,7 +213,7 @@ class BudgetTracker:
         try:
             mem_info = self._process.memory_info()
             return mem_info.rss / (1024 * 1024)
-        except Exception:
+        except (OSError, AttributeError):
             return 0.0
 
     def format_usage_report(self) -> str:

@@ -40,7 +40,9 @@ class TestTransformRegistry:
         assert meta.func is dummy_transform
         assert meta.category == TransformCategory.CROSS_SECTIONAL
         assert meta.version == "1.0.0"
-        assert meta.causal_safe is True
+        # Omitted causal claim stays UNVERIFIED (fail-closed default).
+        assert meta.causal_safe is False
+        assert meta.admission == "UNVERIFIED"
 
     def test_get_function(self):
         """Test retrieving function directly."""
@@ -141,6 +143,7 @@ class TestTransformRegistry:
             dummy_transform,
             TransformCategory.CROSS_SECTIONAL,
             tags={"original"},
+            causal_safe=True,
             admission="PRODUCTION",
         )
 
@@ -198,8 +201,9 @@ class TestTransformRegistry:
 
         metadata = registry.get("dummy")
         assert metadata is not None
-        assert metadata.admission == "UNKNOWN"
-        with pytest.raises(ValueError, match="UNKNOWN"):
+        assert metadata.admission == "UNVERIFIED"
+        assert metadata.causal_safe is False
+        with pytest.raises(ValueError, match="UNVERIFIED"):
             registry.validate_production("dummy")
 
     def test_explicit_production_admission_passes_validation(self):
@@ -208,6 +212,7 @@ class TestTransformRegistry:
             "dummy",
             dummy_transform,
             TransformCategory.CROSS_SECTIONAL,
+            causal_safe=True,
             admission="PRODUCTION",
         )
 

@@ -1,10 +1,13 @@
 """
 Intermediate result caching for metric evaluation.
 
-Stores intermediate computations to avoid redundant work when multiple
-metrics depend on the same base computations.
+.. deprecated:: cache-unification
+    :class:`IntermediateCache` is deprecated; use
+    :class:`quant_evaluator.runtime.cache_v2_adapter.V2IntermediateCache`,
+    which implements the same surface over the production cache_v2 stack.
 """
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 import hashlib
@@ -55,7 +58,7 @@ class CacheEntry:
         if self.size_bytes == 0:
             try:
                 self.size_bytes = len(pickle.dumps(self.value))
-            except Exception:
+            except (pickle.PicklingError, TypeError, ValueError, OSError):
                 self.size_bytes = -1  # Unknown size
 
     def mark_accessed(self):
@@ -75,10 +78,21 @@ class IntermediateCache:
         """
         Initialize cache.
 
+        .. deprecated::
+            Superseded by ``V2IntermediateCache`` (cache_v2 backed).  Kept
+            functional for backward compatibility only.
+
         Args:
             max_size_mb: Maximum cache size in megabytes
             enable: Whether caching is enabled
         """
+        warnings.warn(
+            "IntermediateCache is deprecated; use "
+            "quant_evaluator.runtime.cache_v2_adapter.V2IntermediateCache "
+            "(cache_v2 backed) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.max_size_bytes = int(max_size_mb * 1024 * 1024)
         self.enable = enable
         self._cache: Dict[CacheKey, CacheEntry] = {}

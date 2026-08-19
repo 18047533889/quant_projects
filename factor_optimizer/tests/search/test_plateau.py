@@ -164,6 +164,20 @@ def test_plateau_detector_zero_baseline():
     assert not detector.is_plateau()
 
 
+def test_plateau_detector_nan_baseline_fails_closed_as_plateau():
+    # A NaN baseline takes the ratio path (NaN != 0 is True); every
+    # comparison against the NaN ratio is False, so relative_ok is
+    # False and the window reads as a plateau — an undefined
+    # measurement must never read as improvement.
+    config = PlateauConfig(window_size=2, min_relative_improvement=0.01)
+    detector = PlateauDetector(config)
+
+    detector.add_score(float("nan"))
+    detector.add_score(0.9)
+
+    assert detector.is_plateau()
+
+
 def test_plateau_detector_plateau_duration():
     config = PlateauConfig(min_relative_improvement=0.1)
     detector = PlateauDetector(config)

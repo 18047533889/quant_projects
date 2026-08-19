@@ -9,7 +9,12 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from modeling_adapters.contracts import FitWindow
-from modeling_adapters.errors import FitWindowError, FutureLeakageError, InsufficientDataError
+from modeling_adapters.errors import (
+    ContractViolation,
+    FitWindowError,
+    FutureLeakageError,
+    InsufficientDataError,
+)
 
 
 class FittedTransform(ABC):
@@ -115,23 +120,45 @@ class CrossSectionalScaler(FittedTransform):
         self.method = method
         self.mean_: Optional[np.ndarray] = None
         self.std_: Optional[np.ndarray] = None
+        self._degenerate_features: Optional[np.ndarray] = None
 
     def fit(self, X: np.ndarray, fit_window: FitWindow) -> "CrossSectionalScaler":
         """Fit scaler on training data."""
         if X.size == 0:
             raise InsufficientDataError("Empty training data")
 
-        self.fit_window = fit_window
+        if X.ndim != 2:
+            raise ContractViolation(
+                f"fit expects 2D (T, F) input, got shape {X.shape}"
+            )
 
         if self.method == "zscore":
             # Compute mean/std across time for each feature
-            self.mean_ = np.nanmean(X, axis=0)
-            self.std_ = np.nanstd(X, axis=0, ddof=1)
-            # Avoid division by zero
-            self.std_ = np.where(self.std_ < 1e-10, 1.0, self.std_)
+            mean_ = np.nanmean(X, axis=0)
+            std_ = np.nanstd(X, axis=0, ddof=1)
+            # Near-constant features: divide by 1.0 (leave the raw offset)
+            # rather than emitting NaN — the fitted path must stay applicable
+            # to OOS slices; degenerate features surface via get_state().
+            # Note: this diverges deliberately from stateless
+            # zscore_transform, which returns NaN for degenerate slices.
+            degenerate = std_ < 1e-10
+            if np.any(degenerate):
+                import logging
+                logging.getLogger(__name__).warning(
+                    "CrossSectionalScaler: %d feature(s) have near-zero "
+                    "std; they will not be rescaled (divided by 1.0)",
+                    int(np.sum(degenerate)),
+                )
+            std_ = np.where(degenerate, 1.0, std_)
+            self._degenerate_features = np.asarray(degenerate, dtype=bool)
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
+        # Commit state only after all fallible computation succeeded; a
+        # partial fit must not leave new-window authority over old params.
+        self.mean_ = mean_
+        self.std_ = std_
+        self.fit_window = fit_window
         self._fitted = True
         return self
 
@@ -165,6 +192,13 @@ class CrossSectionalScaler(FittedTransform):
         self._validate_temporal_ordering(apply_start_time)
 
         if self.method == "zscore":
+            # Width check: without it, numpy broadcasting silently replicates
+            # a (T,1) input across all fitted features — fabricated columns.
+            if X.ndim != 2 or X.shape[1] != len(self.mean_):
+                raise ContractViolation(
+                    f"transform expects 2D input with {len(self.mean_)} "
+                    f"feature column(s) to match fit, got shape {X.shape}"
+                )
             return (X - self.mean_) / self.std_
         else:
             raise ValueError(f"Unknown method: {self.method}")
@@ -175,6 +209,9 @@ class CrossSectionalScaler(FittedTransform):
             "method": self.method,
             "mean": self.mean_,
             "std": self.std_,
+            # Original (pre-overwrite) degeneracy flags: std_ is rewritten
+            # to 1.0 for degenerate features, so it cannot surface them.
+            "degenerate_features": getattr(self, "_degenerate_features", None),
             "fit_window": {
                 "fit_start": self.fit_window.fit_start if self.fit_window else None,
                 "fit_end": self.fit_window.fit_end if self.fit_window else None,

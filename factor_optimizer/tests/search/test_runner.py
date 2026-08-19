@@ -5,7 +5,15 @@ from datetime import datetime
 
 from factor_optimizer.search.runner import SearchRunner, SearchConfig, SearchSession
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
+from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
 from factor_optimizer.contracts.trial import Trial, TrialStatus
+
+
+def _protocol(fn):
+    """Wrap a generic evaluator callback in the required safe boundary."""
+    return EvaluationProtocol(
+        SplitPlan("search", [True], [False], [False], {}), fn
+    )
 
 
 @pytest.fixture
@@ -129,7 +137,7 @@ def test_search_runner_rejects_duplicate_trial_ids_before_evaluation():
         evaluated.append(trial.trial_id)
         return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0}
 
-    session = SearchRunner(config, lambda: next(proposals), evaluate).run("duplicates")
+    session = SearchRunner(config, lambda: next(proposals), _protocol(evaluate)).run("duplicates")
 
     assert evaluated == ["same"]
     assert [trial.trial_id for trial in session.trials] == ["same"]
@@ -148,7 +156,7 @@ def test_search_runner_does_not_mutate_aliased_duplicate_trial():
         evaluated.append(candidate.trial_id)
         return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0}
 
-    session = SearchRunner(config, lambda: trial, evaluate).run("aliased-duplicate")
+    session = SearchRunner(config, lambda: trial, _protocol(evaluate)).run("aliased-duplicate")
 
     assert evaluated == ["same"]
     assert trial.status is TrialStatus.EVALUATED
@@ -181,7 +189,7 @@ def test_search_runner_basic():
             "cost": 10.0,
         }
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("test-session")
 
     assert session.is_finished()
@@ -222,7 +230,7 @@ def test_search_runner_plateau_detection():
             "cost": 5.0,
         }
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("plateau-test")
 
     assert session.is_finished()
@@ -255,7 +263,7 @@ def test_search_runner_custom_plateau_detector():
     def custom_plateau(scores):
         return len(scores) >= 10
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn, custom_plateau)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn), custom_plateau)
     session = runner.run("custom-plateau")
 
     assert session.is_finished()
@@ -286,7 +294,7 @@ def test_search_runner_evaluation_failure():
             "cost": 10.0,
         }
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("failure-test")
 
     assert session.is_finished()
@@ -315,7 +323,7 @@ def test_search_runner_successful_trials():
             "cost": 10.0,
         }
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("success-test")
 
     successful = session.successful_trials()
@@ -335,7 +343,7 @@ def test_search_runner_cost_greater_than_remaining_does_not_execute():
         calls.append(trial.trial_id)
         return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 6.0}
 
-    runner = SearchRunner(config, proposal_fn, evaluation_fn)
+    runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("cost-boundary")
 
     assert calls == ["t1"]
@@ -363,7 +371,7 @@ def test_search_runner_evaluation_failure_refunds_reservation():
             raise RuntimeError("failed")
         return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 10.0}
 
-    session = SearchRunner(config, proposal_fn, evaluation_fn).run("refund")
+    session = SearchRunner(config, proposal_fn, _protocol(evaluation_fn)).run("refund")
     assert calls == 2
     assert session.budget_tracker.cost_used == 10.0
     assert session.budget_tracker.cost_reserved == 0.0
@@ -486,6 +494,7 @@ def test_search_session_rejects_inconsistent_recent_score_history(search_config)
             SearchSession.from_dict(invalid)
 
 
+def test_search_runner_resume_continues_from_checkpoint():
     budget = SearchBudget(max_trials=3, max_evaluations=3, max_cost_units=30.0)
     config = SearchConfig(budget=budget, enable_multifidelity=False)
     proposals = iter([
@@ -495,11 +504,11 @@ def test_search_session_rejects_inconsistent_recent_score_history(search_config)
     runner = SearchRunner(
         config,
         lambda: next(proposals),
-        lambda trial, fidelity: {
+        _protocol(lambda trial, fidelity: {
             "evaluation_id": trial.trial_id,
             "score": 0.5,
             "cost": 10.0,
-        },
+        }),
     )
     session = SearchSession(
         session_id="resume",
@@ -568,7 +577,7 @@ def test_search_runner_resume_rejects_finished_or_mismatched_session(search_conf
         budget_tracker=BudgetTracker(search_config.budget),
     )
     session.finish("done")
-    runner = SearchRunner(search_config, lambda: None, lambda trial, fidelity: {})
+    runner = SearchRunner(search_config, lambda: None, _protocol(lambda trial, fidelity: {}))
     with pytest.raises(ValueError, match="finished session"):
         runner.resume(session)
 

@@ -26,6 +26,8 @@ from cleaned_operators.base import (
     ScalarOperator,
     TwoVarOperator,
     register_operator,
+    ParamSpec,
+    ParamRole,
 )
 
 import numpy as np
@@ -160,7 +162,7 @@ class EWM(SeriesOperator):
 
 
 # canonical=ewm_corr backend=pandas_numpy selected=ewm_corr source=data_handling/window_ops.py
-@register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_np")
+@register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_np", backend="pandas_numpy")
 class EWMCorr(SeriesOperator):
     """指数加权相关系数"""
     metadata = OperatorMetadata(
@@ -170,7 +172,10 @@ class EWMCorr(SeriesOperator):
         examples=["ewm_corr(close, volume, 20)"],
         param_names=["x", "y", "span"],
         return_type="series",
-        tags=["data_handling", "ewm", "corr"]
+        tags=["data_handling", "ewm", "corr"],
+        # x/y are frame params, not searchable scalar knobs — spec only span
+        # (review P0: string placeholders crashed strict param validation).
+        param_specs={"span": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:
@@ -179,7 +184,7 @@ class EWMCorr(SeriesOperator):
 
 
 # canonical=ewm_cov backend=pandas_numpy selected=ewm_cov source=data_handling/window_ops.py
-@register_operator(name="ewm_cov", category="data_handling", business_category="data_cleaning", canonical="ewm_cov", source="factor_dsl_np")
+@register_operator(name="ewm_cov", category="data_handling", business_category="data_cleaning", canonical="ewm_cov", source="factor_dsl_np", backend="pandas_numpy")
 class EWMCov(SeriesOperator):
     """指数加权协方差"""
     metadata = OperatorMetadata(
@@ -189,7 +194,8 @@ class EWMCov(SeriesOperator):
         examples=["ewm_cov(close, volume, 20)"],
         param_names=["x", "y", "span"],
         return_type="series",
-        tags=["data_handling", "ewm", "cov"]
+        tags=["data_handling", "ewm", "cov"],
+        param_specs={"span": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:

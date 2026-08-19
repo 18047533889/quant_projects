@@ -158,3 +158,53 @@ class TestExposureDecompositionIntegration:
         original_corr = np.abs(np.corrcoef(factor_values.ravel(), exposures[:, :, 0].ravel())[0, 1])
         residual_corr = np.abs(np.corrcoef(residuals.ravel(), exposures[:, :, 0].ravel())[0, 1])
         assert residual_corr < original_corr / 2
+
+
+class TestExposureHardening:
+    def test_inf_y_is_invalid_not_residual(self):
+        """An inf in the factor must be masked out, not admitted as a valid
+        observation emitting a literal inf residual (weighted_ols probe)."""
+        np.random.seed(3)
+        T, N, K = 10, 8, 2
+        factor_values = np.random.randn(T, N)
+        exposures = np.random.randn(T, N, K)
+        weights = np.ones((T, N))
+        factor_values[3, 2] = np.inf
+
+        residuals = compute_exposure_residual(
+            factor_values, exposures, method="weighted_ols", weights=weights
+        )
+        # The inf asset is masked; remaining residuals are finite/NaN, never inf
+        assert not np.any(np.isposinf(residuals))
+        assert not np.any(np.isneginf(residuals))
+        # Row still produced residuals for the other assets
+        assert np.any(np.isfinite(residuals[3]))
+
+    def test_ridge_neutralizes_small_scale_exposures(self):
+        """Scale-blind lambda=0.01 previously left small-scale exposures
+        essentially un-neutralized (residual ~= raw factor)."""
+        np.random.seed(4)
+        T, N, K = 60, 40, 2
+        factor_values = np.random.randn(T, N)
+        exposures = np.random.randn(T, N, K) * 1e-4  # tiny scale
+
+        residuals = compute_exposure_residual(factor_values, exposures, method="ridge")
+
+        # Residual must genuinely differ from the raw factor (neutralization
+        # happened), while staying finite.
+        diff = np.nanmean(np.abs(residuals - factor_values))
+        assert np.isfinite(diff)
+        assert diff > 0.1
+
+    def test_weighted_ols_rejects_negative_weights(self):
+        np.random.seed(5)
+        T, N, K = 10, 8, 2
+        factor_values = np.random.randn(T, N)
+        exposures = np.random.randn(T, N, K)
+        weights = np.ones((T, N))
+        weights[0, 0] = -0.5
+
+        with pytest.raises(ContractViolation, match="non-negative weights"):
+            compute_exposure_residual(
+                factor_values, exposures, method="weighted_ols", weights=weights
+            )

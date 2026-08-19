@@ -9,6 +9,11 @@ import pandas as pd
 from typing import Optional, Tuple, NamedTuple
 from statsmodels.tsa.seasonal import STL as STL_statsmodels
 
+# Narrowed catch set for STL's degenerate-but-valid-input failures.
+# Programming errors (TypeError, AttributeError, bad column names) must
+# propagate instead of being silently NaN'd.
+_NUMERICAL_FAILURES = (ValueError, IndexError, np.linalg.LinAlgError, ArithmeticError)
+
 
 class STLResult(NamedTuple):
     """Container for STL decomposition results."""
@@ -137,8 +142,11 @@ def stl_decompose(
 
             return trend_out, seasonal_out, residual_out
 
-        except Exception:
-            # STL may fail for various reasons (insufficient data, numerical issues)
+        except _NUMERICAL_FAILURES:
+            # STL may fail on degenerate-but-valid input (constant series,
+            # insufficient non-NaN observations).  Keep the NaN
+            # fail-closed contract for these numerical failures; do not
+            # swallow programming errors that indicate a wiring bug.
             na_series = pd.Series(np.nan, index=series.index)
             return na_series.copy(), na_series.copy(), na_series.copy()
 

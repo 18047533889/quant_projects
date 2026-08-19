@@ -118,3 +118,32 @@ def test_weighted_ols_zero_weights_becomes_singular():
     # This might return NaN or handle gracefully depending on lstsq behavior
     # We just verify it doesn't silently return original y without warning
     assert np.all(np.isnan(result)) or not np.allclose(result, y)
+
+
+def test_sparse_cross_section_returns_nan_not_raw_factor():
+    """Pre-fix: a slice with < K+1 valid rows silently returned raw y."""
+    import numpy as np
+    from modeling_adapters.exposure import compute_exposure_residual
+
+    rng = np.random.default_rng(0)
+    T, N, K = 2, 6, 2
+    factor_values = rng.normal(size=(T, N))
+    exposures = rng.normal(size=(T, N, K))
+    # t=1: only 2 valid rows for K=2 exposures (needs >= 3)
+    factor_values[1, :] = [1.0, np.nan, np.nan, np.nan, np.nan, 2.0]
+
+    result = compute_exposure_residual(factor_values, exposures, method="ols")
+    assert not np.all(np.isnan(result[0, :])), "Dense slice must compute residuals"
+    assert np.all(np.isnan(result[1, :])), "Sparse slice must signal NaN, not pass raw y"
+
+
+def test_weighted_ols_without_weights_is_a_clear_error():
+    """Pre-fix: fell through to the misleading 'Unknown method' message."""
+    import numpy as np
+    import pytest
+    from modeling_adapters.exposure import compute_exposure_residual
+
+    factor_values = np.ones((1, 4))
+    exposures = np.ones((1, 4, 1))
+    with pytest.raises(ValueError, match="requires weights"):
+        compute_exposure_residual(factor_values, exposures, method="weighted_ols")

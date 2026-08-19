@@ -10,7 +10,7 @@ import hashlib
 import inspect
 import json
 import types
-from types import MappingProxyType
+
 import numpy as np
 import time
 
@@ -31,9 +31,9 @@ from quant_evaluator.planner.dependency_plan import (
     resolve_metric_dependencies,
 )
 from quant_evaluator.runtime.intermediates import (
-    IntermediateCache,
     CacheKey,
 )
+from quant_evaluator.runtime.cache_v2_adapter import V2IntermediateCache
 from quant_evaluator.runtime.budgets import (
     ComputationBudget,
     BudgetTracker,
@@ -82,7 +82,9 @@ class EvaluationResult:
         if self.metadata:
             result["metadata"] = self.metadata
         if self.provenance:
-            result["provenance"] = self.provenance
+            # Plain-dict copy: mappingproxy provenance must not leak into
+            # to_dict()/pickling paths (cannot pickle 'mappingproxy').
+            result["provenance"] = dict(self.provenance)
         return result
 
 
@@ -100,6 +102,7 @@ class Evaluator:
         cache_size_mb: float = 1024.0,
         budget: Optional[ComputationBudget] = None,
         max_chunk_memory_mb: float = 512.0,
+        cache: Optional[V2IntermediateCache] = None,
     ):
         """
         Initialize evaluator.
@@ -109,8 +112,15 @@ class Evaluator:
             cache_size_mb: Maximum cache size in MB
             budget: Computation budget (None = no limits)
             max_chunk_memory_mb: Maximum memory per chunk
+            cache: Explicit intermediate cache implementing the runtime
+                CacheProtocol; defaults to a cache_v2-backed
+                ``V2IntermediateCache``
         """
-        self.cache = IntermediateCache(max_size_mb=cache_size_mb, enable=enable_cache)
+        # `is not None`, not truthiness: an empty caller-supplied cache (e.g.
+        # one defining __len__/__bool__) must not be silently discarded.
+        self.cache = cache if cache is not None else V2IntermediateCache(
+            max_size_mb=cache_size_mb, enable=enable_cache
+        )
         self.budget = budget or ComputationBudget()
         self.budget_tracker = BudgetTracker(self.budget)
         self.max_chunk_memory_mb = max_chunk_memory_mb
@@ -720,22 +730,25 @@ class Evaluator:
             }
             payload = json.dumps(identity, sort_keys=True, separators=(",", ":"))
             return hashlib.sha256(payload.encode()).hexdigest()
-        except Exception:
+        except (TypeError, ValueError, OSError):
             return None
 
     def _provenance(self, factor_batch, label_bundle):
-        return MappingProxyType({
+        # Immutable-by-construction plain types (tuples/dicts of scalars and
+        # hash digests) — mappingproxy is not picklable and leaks into
+        # multiprocessing result payloads, so it must not be used here.
+        return {
             "factor_ids": tuple(factor_batch.factor_ids),
             "time_coordinates": self._freeze(factor_batch.time_axis.values),
             "asset_coordinates": self._freeze(factor_batch.asset_axis.values),
-            "context_refs": MappingProxyType(dict(factor_batch.context_refs)),
+            "context_refs": dict(factor_batch.context_refs),
             "factor_value_hash": factor_batch.value_hash or self._array_hash(factor_batch.values),
             "label_source_ref": label_bundle.source_ref,
             "label_calendar_ref": label_bundle.calendar_ref,
             "label_target_id": label_bundle.target_id,
             "label_value_hash": self._array_hash(label_bundle.values),
-            "label_metadata": MappingProxyType(dict(label_bundle.metadata)),
-        })
+            "label_metadata": dict(label_bundle.metadata),
+        }
 
     def _validate_inputs(
         self,
@@ -880,7 +893,12 @@ def evaluate(
                     f"Metric '{metric_id}' returned unsupported per-factor metadata"
                 )
             value, observation_count = payload
-            if not isinstance(value, (bool, int, float, np.number)):
+            if isinstance(value, bool):
+                raise UnsupportedMetricError(
+                    f"Metric '{metric_id}' returned a boolean for '{factor_id}' — "
+                    "use a numeric result instead of True/False"
+                )
+            if not isinstance(value, (int, float, np.number)):
                 raise UnsupportedMetricError(
                     f"Metric '{metric_id}' returned a non-scalar value for '{factor_id}'"
                 )

@@ -97,7 +97,11 @@ def hp_filter(
 
     result = values.groupby(asset_col, sort=False)[value_col].apply(_hp_filter_single)
 
-    # Reset index to match input
+    # Realign by label, not position — see decomposition.cycle.bandpass_filter
+    # for why a positional index reassignment mislabels interleaved layouts.
+    if isinstance(result.index, pd.MultiIndex):
+        result = result.droplevel(0)
+    result = result.loc[values.index].copy()
     result.index = values.index
 
     return result

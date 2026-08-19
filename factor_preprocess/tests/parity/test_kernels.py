@@ -164,6 +164,31 @@ def test_demean_mean_is_zero(sample_cs_data):
     mean = np.nanmean(result, axis=-1)
     np.testing.assert_allclose(mean, 0.0, atol=1e-12)
 
+def test_demean_inf_masked_to_nan_all_surfaces():
+    """One inf must not make the slice mean ±inf (which would turn every
+    finite entry into ∓inf).  All three demean surfaces mask inf → NaN."""
+    from factor_preprocess.transforms.cross_sectional import cs_demean
+
+    data = np.array([
+        [1.0, 2.0, np.inf, 4.0],
+        [np.nan, -np.inf, 3.0, 5.0],
+        [10.0, 20.0, 30.0, 40.0],
+    ])
+
+    ref = reference_cs_demean(data, axis=-1)
+    fast = fast_cs_demean(data, axis=-1)
+    transform = cs_demean(data, axis=-1)
+
+    # ±inf positions NaN out everywhere
+    for out in (ref, fast, transform):
+        assert np.isnan(out[0, 2]) and np.isnan(out[1, 1])
+
+    # Finite entries are finite everywhere and agree exactly
+    for out in (fast, transform):
+        assert np.all(np.isfinite(out[0, [0, 1, 3]]))
+        assert np.all(np.isfinite(out[2]))
+        np.testing.assert_allclose(out, ref, atol=1e-12)
+
 # ============================================================================
 # Rolling window parity tests
 # ============================================================================
@@ -267,6 +292,36 @@ class TestRollingParity:
 
         np.testing.assert_allclose(ref, fast, rtol=1e-10, atol=1e-12)
 
+    @pytest.mark.skipif(not HAS_NUMBA, reason="Numba not available")
+    def test_rolling_inf_propagates_consistently(self):
+        """±inf in a window is a VALUE, not missing: mean → ±inf, and all
+        three rolling surfaces (numba, stride-tricks, reference) agree.
+        (pandas.rolling would give NaN — documented divergence; our parity
+        contract is fast ↔ reference_bridge, and inf staying visible as inf
+        is safer than silently NaN-ing the window.)"""
+        data = np.array([
+            [1.0, 1.0],
+            [2.0, 2.0],
+            [np.inf, 3.0],
+            [4.0, 4.0],
+            [5.0, 5.0],
+        ])
+        window = 3
+
+        ref = reference_rolling_mean(data, window, axis=0)
+        fast = fast_rolling_mean(data, window, axis=0)
+        numb = numba_rolling_mean(data, window, axis=0)
+
+        np.testing.assert_array_equal(ref, fast)
+        np.testing.assert_array_equal(ref, numb)
+
+        # The documented contract: inf propagates into the output windows
+        # that contain it (rows 2-4 of column 0), clean column is exact.
+        assert np.all(np.isinf(ref[2:, 0]))
+        np.testing.assert_allclose(
+            ref[2:, 1], [2.0, 3.0, 4.0], rtol=0, atol=0
+        )
+
 
 # ============================================================================
 # Edge case tests
@@ -324,6 +379,55 @@ class TestEdgeCases:
         assert np.isnan(fast_rank[0, 2])
         assert np.isnan(ref_rank[0, 4])
         assert np.isnan(fast_rank[0, 4])
+
+    def test_zscore_inf_masked_to_nan(self):
+        """zscore must mask ±inf to NaN instead of routing the slice to
+        the constant branch (std>0 is False once nanstd returns NaN)."""
+        data = np.array([[1.0, 2.0, 3.0, 4.0, np.inf]])
+
+        for fn in (reference_cs_zscore, fast_cs_zscore):
+            result = fn(data, axis=-1)
+            # The inf itself must be NaN out
+            assert np.isnan(result[0, 4])
+            # The finite values must be actual z-scores of the 4 finite
+            # entries, not constant_value (0.0) — i.e. nonzero spread.
+            finite = result[0, :4]
+            assert np.all(np.isfinite(finite))
+            assert not np.all(finite == 0.0)
+            # spread check: max != min for a z-scored slice
+            assert finite.max() > finite.min()
+
+    def test_zscore_inf_parity_across_kernels(self):
+        """fast, reference and transforms-layer cs_zscore agree on ±inf input."""
+        from factor_preprocess.transforms.cross_sectional import cs_zscore
+
+        data = np.array([
+            [1.0, 2.0, np.inf, 4.0],
+            [np.nan, -np.inf, 3.0, 5.0],
+            [10.0, 20.0, 30.0, 40.0],
+        ])
+
+        ref = reference_cs_zscore(data, axis=-1)
+        fast = fast_cs_zscore(data, axis=-1)
+        transform = cs_zscore(data, axis=-1)
+
+        np.testing.assert_array_equal(np.isnan(ref), np.isnan(fast))
+        np.testing.assert_array_equal(np.isnan(ref), np.isnan(transform))
+        np.testing.assert_allclose(
+            ref[np.isfinite(ref)],
+            fast[np.isfinite(ref)],
+            rtol=1e-10,
+            atol=1e-14,
+        )
+        np.testing.assert_allclose(
+            ref[np.isfinite(ref)],
+            transform[np.isfinite(ref)],
+            rtol=1e-10,
+            atol=1e-14,
+        )
+        # ±inf positions NaN out in all three
+        assert np.isnan(ref[0, 2]) and np.isnan(fast[0, 2])
+        assert np.isnan(ref[1, 1]) and np.isnan(fast[1, 1])
 
     def test_very_small_values(self):
         """Test numerical stability with very small values."""

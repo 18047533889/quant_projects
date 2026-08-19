@@ -15,8 +15,10 @@ import math
 class SelectionReason(Enum):
     """Reason for selection decision."""
     APPROVED = "APPROVED"                    # Passed all gates
+    SHADOW = "SHADOW"                        # Duplicate of an admitted factor; recorded, not discarded
+    SHADOWED_COEXIST = "SHADOWED_COEXIST"    # Similar to an admitted factor but carries residual novelty
     REJECTED_GATE_FAILURE = "REJECTED_GATE_FAILURE"  # Failed admission gates
-    REJECTED_SIMILARITY = "REJECTED_SIMILARITY"      # Too similar to existing
+    REJECTED_SIMILARITY = "REJECTED_SIMILARITY"      # Too similar, no novelty evidence (fail-closed)
     REJECTED_EVIDENCE = "REJECTED_EVIDENCE"          # Insufficient evidence
     REJECTED_QUALITY = "REJECTED_QUALITY"            # Quality concerns
     PENDING_EVALUATION = "PENDING_EVALUATION"        # Awaiting evaluation
@@ -40,6 +42,7 @@ class SelectionDecision:
     evidence_refs: tuple[str, ...]
     gate_results: tuple[str, ...]  # Gate evaluation IDs
     similarity_refs: tuple[str, ...] = ()
+    novelty_refs: tuple[str, ...] = ()  # Provenance for novelty assessment
     actor: Optional[str] = None
     notes: Optional[str] = None
     metadata: Mapping[str, str] = None
@@ -91,6 +94,7 @@ class SelectionPolicy:
         policy_version: str = "1.0",
         similarity_threshold: float = 0.7,
         require_evidence: bool = True,
+        min_novelty_score: float = 0.0,
     ):
         """
         Initialize selection policy.
@@ -100,6 +104,11 @@ class SelectionPolicy:
             policy_version: Policy version
             similarity_threshold: Maximum allowed similarity to existing factors
             require_evidence: If True, require evidence for approval
+            min_novelty_score: Minimum conditional-novelty score (residual
+                signal on top of similar existing factors) required for a
+                high-similarity candidate to coexist instead of shadowing.
+                A caller-supplied ``novelty_score`` below this floor with a
+                present ``residual_ic`` fails closed to SHADOW/reject.
         """
         if not policy_name:
             raise ValueError("policy_name is required")
@@ -107,11 +116,14 @@ class SelectionPolicy:
             raise ValueError("policy_version is required")
         if not 0.0 <= similarity_threshold <= 1.0:
             raise ValueError("similarity_threshold must be in [0, 1]")
+        if not 0.0 <= min_novelty_score <= 1.0:
+            raise ValueError("min_novelty_score must be in [0, 1]")
 
         self._policy_name = policy_name
         self._policy_version = policy_version
         self._similarity_threshold = similarity_threshold
         self._require_evidence = require_evidence
+        self._min_novelty_score = min_novelty_score
         self._decisions: list[SelectionDecision] = []
 
     @property
@@ -131,6 +143,9 @@ class SelectionPolicy:
         evidence_refs: tuple[str, ...] = (),
         similarity_refs: tuple[str, ...] = (),
         max_similarity: Optional[float] = None,
+        novelty_score: Optional[float] = None,
+        residual_ic: Optional[float] = None,
+        novelty_refs: tuple[str, ...] = (),
         actor: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> SelectionDecision:
@@ -143,6 +158,13 @@ class SelectionPolicy:
             evidence_refs: Evidence reference IDs
             similarity_refs: Similarity check reference IDs
             max_similarity: Maximum similarity to existing factors (if computed)
+            novelty_score: Conditional-novelty score in [0, 1] (caller-computed
+                via the QE residual-IC wiring — see
+                factor_assets.adapters.residual_novelty; None means the
+                signal is absent)
+            residual_ic: Residual incremental IC of this factor on top of its
+                most similar admitted factor (caller-computed)
+            novelty_refs: Provenance references for the novelty assessment
             actor: Decision actor identifier
             notes: Optional decision notes
 
@@ -178,6 +200,7 @@ class SelectionPolicy:
                 evidence_refs=evidence_refs,
                 gate_results=gate_result_ids,
                 similarity_refs=similarity_refs,
+                novelty_refs=novelty_refs,
                 actor=actor,
                 notes=notes or "Insufficient evidence",
             )
@@ -220,6 +243,7 @@ class SelectionPolicy:
                 evidence_refs=evidence_refs,
                 gate_results=gate_result_ids,
                 similarity_refs=similarity_refs,
+                novelty_refs=novelty_refs,
                 actor=actor,
                 notes=notes or gate_note,
             )
@@ -241,6 +265,7 @@ class SelectionPolicy:
                     evidence_refs=evidence_refs,
                     gate_results=gate_result_ids,
                     similarity_refs=similarity_refs,
+                    novelty_refs=novelty_refs,
                     actor=actor,
                     notes=notes or f"Nonfinite similarity score {max_similarity!r}",
                 )
@@ -249,18 +274,124 @@ class SelectionPolicy:
             normalized_similarity = abs(max_similarity)
 
         if normalized_similarity is not None and normalized_similarity > self._similarity_threshold:
+            # High similarity is no longer an automatic discard.  With a
+            # result-identity duplicate (novelty_score == 0) the factor is
+            # recorded as SHADOW — kept for comparison, not admitted.  With a
+            # caller-computed residual signal that clears the novelty floor
+            # the factor coexists (SHADOWED_COEXIST, admitted).  With no
+            # novelty signal at all the decision fails closed exactly as
+            # before: the similarity evidence alone cannot justify admission.
+            novelty_signal_present = (
+                novelty_score is not None or residual_ic is not None
+            )
+            if novelty_signal_present and (
+                (novelty_score is not None and not math.isfinite(novelty_score))
+                or (residual_ic is not None and not math.isfinite(residual_ic))
+            ):
+                decision = SelectionDecision(
+                    decision_id=decision_id,
+                    factor_id=factor_id,
+                    approved=False,
+                    reason=SelectionReason.REJECTED_SIMILARITY,
+                    timestamp=now,
+                    policy_version=self._policy_version,
+                    evidence_refs=evidence_refs,
+                    gate_results=gate_result_ids,
+                    similarity_refs=similarity_refs,
+                    novelty_refs=novelty_refs,
+                    actor=actor,
+                    notes=notes or f"Nonfinite novelty signal (score={novelty_score!r}, residual_ic={residual_ic!r})",
+                )
+                self._decisions.append(decision)
+                return decision
+            if novelty_score is not None and not 0.0 <= novelty_score <= 1.0:
+                # Out-of-range scores fail closed instead of silently
+                # admission-deciding on a malformed value.
+                decision = SelectionDecision(
+                    decision_id=decision_id,
+                    factor_id=factor_id,
+                    approved=False,
+                    reason=SelectionReason.REJECTED_SIMILARITY,
+                    timestamp=now,
+                    policy_version=self._policy_version,
+                    evidence_refs=evidence_refs,
+                    gate_results=gate_result_ids,
+                    similarity_refs=similarity_refs,
+                    novelty_refs=novelty_refs,
+                    actor=actor,
+                    notes=notes or (
+                        f"novelty_score {novelty_score!r} outside [0, 1]"
+                    ),
+                )
+                self._decisions.append(decision)
+                return decision
+            if not novelty_signal_present:
+                decision = SelectionDecision(
+                    decision_id=decision_id,
+                    factor_id=factor_id,
+                    approved=False,
+                    reason=SelectionReason.REJECTED_SIMILARITY,
+                    timestamp=now,
+                    policy_version=self._policy_version,
+                    evidence_refs=evidence_refs,
+                    gate_results=gate_result_ids,
+                    similarity_refs=similarity_refs,
+                    novelty_refs=novelty_refs,
+                    actor=actor,
+                    notes=notes or (
+                        f"Similarity {normalized_similarity:.3f} exceeds threshold "
+                        f"{self._similarity_threshold:.3f} with no novelty evidence"
+                    ),
+                )
+                self._decisions.append(decision)
+                return decision
+            # A zero novelty score is a result-identity duplicate: recorded as
+            # SHADOW below, never admitted, even when the floor is 0.0.  A
+            # residual_ic without a novelty score cannot be mapped to [0, 1]
+            # here, so it also fails toward SHADOW (the QE residual-IC wiring
+            # is the only producer allowed to set novelty_score).
+            coexists = (
+                novelty_score is not None
+                and novelty_score > 0.0
+                and novelty_score >= self._min_novelty_score
+            )
+            if coexists:
+                decision = SelectionDecision(
+                    decision_id=decision_id,
+                    factor_id=factor_id,
+                    approved=True,
+                    reason=SelectionReason.SHADOWED_COEXIST,
+                    timestamp=now,
+                    policy_version=self._policy_version,
+                    evidence_refs=evidence_refs,
+                    gate_results=gate_result_ids,
+                    similarity_refs=similarity_refs,
+                    novelty_refs=novelty_refs,
+                    actor=actor,
+                    notes=notes or (
+                        f"Similarity {normalized_similarity:.3f} exceeds threshold but "
+                        f"residual novelty {novelty_score:.3f} clears floor "
+                        f"{self._min_novelty_score:.3f}"
+                    ),
+                )
+                self._decisions.append(decision)
+                return decision
             decision = SelectionDecision(
                 decision_id=decision_id,
                 factor_id=factor_id,
                 approved=False,
-                reason=SelectionReason.REJECTED_SIMILARITY,
+                reason=SelectionReason.SHADOW,
                 timestamp=now,
                 policy_version=self._policy_version,
                 evidence_refs=evidence_refs,
                 gate_results=gate_result_ids,
                 similarity_refs=similarity_refs,
+                novelty_refs=novelty_refs,
                 actor=actor,
-                notes=notes or f"Similarity {normalized_similarity:.3f} exceeds threshold {self._similarity_threshold:.3f}",
+                notes=notes or (
+                    f"Similarity {normalized_similarity:.3f} exceeds threshold; "
+                    "recorded as shadow of an existing admitted factor"
+                ),
             )
             self._decisions.append(decision)
             return decision
@@ -276,6 +407,7 @@ class SelectionPolicy:
             evidence_refs=evidence_refs,
             gate_results=gate_result_ids,
             similarity_refs=similarity_refs,
+            novelty_refs=novelty_refs,
             actor=actor,
             notes=notes or "Passed all admission criteria",
         )

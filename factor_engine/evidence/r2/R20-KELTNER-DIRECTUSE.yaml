@@ -1,0 +1,94 @@
+task_id: R20-KELTNER-DIRECTUSE
+finding: keltner_direct_alpha_rehabilitation
+base_sha: 60bb18ba02278b4e5c72da7d0924b78e336776be
+current_head: 60bb18ba02278b4e5c72da7d0924b78e336776be
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_keltner_direct_use_rehab.py
+  - factor_engine/evidence/r2/R20-KELTNER-DIRECTUSE.yaml
+status: CLOSED_LOCAL
+implementation:
+  - Added three causal, dimensionless Keltner canonicals:
+    keltner_width_pct ((Upper-Lower)/Mid, strict-positive mid masking),
+    keltner_compression (trailing rolling rank pct, 0..1, window ends at t),
+    keltner_breakout_strength (signed (close-band)/band_width; 0 inside the
+    band; NaN when the band itself is NaN — never a false 0).
+  - Raw KeltnerMid/KeltnerUpper/KeltnerLower remain price-scale INTERMEDIATE
+    (_PRICE_LEVEL_INTERMEDIATE_OPS untouched); they are NOT in
+    _RELATIVE_ALPHA_OPS.
+  - Reuse of existing Keltner helpers: KeltnerUpper/KeltnerLower/KeltnerMid,
+    _ema/_wilder/_tr wiring; multiplier stays a strict positive via
+    _keltner_multiplier.
+  - Registered via _SPECS with ParamSpecs mirroring KeltnerPosition
+    (ema_window/atr_window _WIN_GE1, multiplier _POS_FLOAT; compression adds
+    score_window _WIN_GE2).
+  - All three added to _RECURSIVE_EWM (EMA/Wilder recursive state ->
+    stateful/full_replay governance), _TECHNICAL_V2_CANONICALS,
+    DAILY_FACTOR_MIGRATED, and _RELATIVE_ALPHA_OPS.
+  - keltner_breakout_strength NaN semantics: a NaN band makes the comparison
+    False in pandas, which would silently collapse a cannot-judge bar to 0;
+    the operator masks warmup bars back to NaN explicitly.
+  - Concurrent-writer note: a PSAR writer edited the same three source files
+    in parallel.  One transient artifact (duplicated `_SPECS=[` line) from the
+    interleaved edits was repaired to a single _SPECS block; Keltner edits are
+    anchored solely on Keltner-specific lines.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_keltner_direct_use_rehab.py -q
+  result: 8 passed
+  coverage:
+    - width formula manual oracle (KeltnerUpper/Lower/Mid recomputed independently)
+    - strict-positive mid masking (negative close -> NaN bars, recovery to finite)
+    - compression bounded 0..1 + truncated-panel prefix equality (trailing window, no leakage)
+    - breakout formula oracles above/below/inside (positive / negative / exactly 0)
+    - ParamSpec presence (dtype set per param) + _RECURSIVE_EWM membership + stateful/full_replay tags
+    - _RELATIVE_ALPHA_OPS membership (3 new names present; KeltnerMid/Upper/Lower absent)
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_keltner_direct_use_rehab.py
+  result: PASS
+registry_bootstrap:
+  command: python3 -c "import cleaned_operators; cleaned_operators.load_all()" + OperatorRegistry.get smoke (threads pinned)
+  result: PASS; all 3 canonicals resolve with expected ParamSpec keys;
+    resolve_direct_use_status -> DIRECT_ALPHA for the 3 new names,
+    DIRECT_INTERMEDIATE for KeltnerMid/Upper/Lower
+integration:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_keltner_direct_use_rehab.py tests/operators/test_r20_psar_direct_use_rehab.py tests/operators/test_r20_atr_direct_use_rehab.py -q
+  result: 26 passed (all three R20 slices combined, 2026-08-19)
+  registry_bootstrap_recheck: load_all() PASS with all writers' edits present; 15
+    R20 canonicals resolve; _RELATIVE_ALPHA_OPS contains all 15 and excludes raw
+    levels (ATR_WILDER/true_range/PSAR/KeltnerUpper/Lower/Mid)
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + evidence YAML only)
+  date: 2026-08-19
+  verdict: PASS-with-findings (no P0/P1)
+  p2_findings_and_resolution:
+    - psar_flip/psar_days_since_flip lose/under-count regime changes across data
+      gaps (prev direction NaN) — defensible under the no-future-data contract,
+      already documented in R20-PSAR-DIRECTUSE.yaml known_limitations.
+    - keltner_breakout_strength NaN-band re-mask was not pinned by any oracle
+      (warmup NaNs came from span, not the mask) — CLOSED: added
+      test_keltner_breakout_strength_nan_close_stays_nan (NaN close bar ->
+      NaN output, never false 0).
+    - keltner_compression ranking direction ("low = compressed") not pinned —
+      CLOSED: added test_keltner_compression_direction_low_means_compressed
+      (decaying-amplitude panel must rank near the bottom of its window).
+    - psar run-twice bit-identity test is weak (deterministic code) — accepted,
+      duplicated-column check carries the discriminating value.
+    - recursive-op governance split between _RECURSIVE_EWM and the hard-coded
+      psar tag set — style note; a future slice may unify.
+  focused_tests_after_hardening: 10 passed (8 original + 2 new oracles)
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the new canonicals is NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, and full
+    registry/backend/root CI are NOT_RUN.
+  - No relational spec between ema_window/atr_window/score_window (independent
+    dimensions; matches KeltnerPosition precedent which has none either).
+  - layer_governance partition check currently also requires the concurrent
+    PSAR writer's classifications; verified passing at the time of this run.
+  - No production certification claim; terminal usability is limited to the
+    mining-layer relative-alpha classification added here.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

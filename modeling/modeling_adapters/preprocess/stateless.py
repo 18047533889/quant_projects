@@ -35,7 +35,10 @@ def rank_transform(
     if values.size == 0:
         raise InsufficientDataError("Empty array provided")
 
-    # Handle 1D case
+    # Reject boolean masks: True/False would silently rank as 1.0/0.0 and
+    # contaminate the cross-section with a two-valued pseudo-factor.
+    if values.dtype.kind == "b":
+        raise TypeError("rank_transform requires numeric values, not a boolean mask")
     if values.ndim == 1:
         values = values.reshape(-1, 1) if axis == 0 else values.reshape(1, -1)
         result = _rank_1d(values.ravel(), method=method, pct=pct)
@@ -107,12 +110,21 @@ def zscore_transform(
     if values.size == 0:
         raise InsufficientDataError("Empty array provided")
 
+    # Same guard as rank_transform: bool masks must not be scored as 0/1
+    # pseudo-factors (z-scores of True/False look deceptively valid).
+    if values.dtype.kind == "b":
+        raise TypeError("zscore_transform requires numeric values, not a boolean mask")
+
     # Compute mean and std along axis, keeping dims
     mean = np.nanmean(values, axis=axis, keepdims=True)
     std = np.nanstd(values, axis=axis, ddof=ddof, keepdims=True)
 
-    # Avoid division by zero
-    std = np.where(std < 1e-10, np.nan, std)
+    # Avoid division by zero: a degenerate (near-constant) slice yields NaN
+    # rather than a silent 0/0 result or inflated noise amplification.
+    # Deliberately loud: callers see NaN and must decide, mirroring the
+    # rank-deficient NaN contract in modeling_adapters.exposure.
+    with np.errstate(invalid="ignore"):
+        std = np.where(std < 1e-10, np.nan, std)
 
     # Standardize
     z = (values - mean) / std
@@ -147,6 +159,11 @@ def winsorize(
 
     if not (0 <= lower < upper <= 1):
         raise ValueError(f"Invalid quantiles: lower={lower}, upper={upper}")
+
+    # Same guard as rank_transform: bool subtraction is a cryptic numpy
+    # error deep in nanquantile; reject masks up front instead.
+    if values.dtype.kind == "b":
+        raise TypeError("winsorize requires numeric values, not a boolean mask")
 
     # Compute quantiles along axis
     q_lower = np.nanquantile(values, lower, axis=axis, keepdims=True)

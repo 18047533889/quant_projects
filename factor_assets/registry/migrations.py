@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib
 import sqlite3
-from factor_assets.errors import SchemaVersionError
+from factor_assets.errors import FactorAssetsError, SchemaVersionError
 
 SCHEMA_VERSION = 1
 _MIGRATIONS = {1: """
@@ -104,6 +104,8 @@ def migrate(conn: sqlite3.Connection) -> None:
         except sqlite3.DatabaseError as exc:
             raise SchemaVersionError("schema_meta table is malformed") from exc
         conn.commit()
-    except Exception:
+    except (sqlite3.Error, OSError, ValueError, TypeError, FactorAssetsError):
+        # SchemaVersionError (a ContractError) and other typed governance
+        # errors must roll back and propagate by type.
         conn.rollback()
         raise

@@ -8,6 +8,13 @@ import pandas as pd
 from typing import Optional, Union
 from datetime import datetime
 
+from factor_preprocess.neutralization._alignment import (
+    add_position_key,
+    align_residuals_to_values,
+    merged_exposure_cols,
+    nan_residuals,
+)
+
 
 def ols_neutralize(
     values: pd.DataFrame,
@@ -64,26 +71,24 @@ def ols_neutralize(
         suffixes=("", "_exp"),
     )
 
-    # Get exposure columns (exclude metadata)
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    # Resolve collision-renamed columns (a values column sharing an exposure
+    # name silently kept its original name after the suffixes merge).
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         # Extract y and X
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         # Drop rows with any NaN in y or X
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations or n_valid <= X.shape[1]:
-            # Insufficient data or rank deficient
-            residuals = np.full_like(y, np.nan)
+        if n_valid < min_observations or n_valid <= X.shape[1] + int(add_intercept):
+            # Insufficient data or rank deficient (intercept consumes one dof)
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -109,7 +114,7 @@ def ols_neutralize(
 
             except np.linalg.LinAlgError:
                 # Singular matrix
-                residuals = np.full_like(y, np.nan)
+                residuals = nan_residuals(y)
 
         # Build result DataFrame with original index
         result_df = pd.DataFrame({
@@ -120,15 +125,9 @@ def ols_neutralize(
 
         results.append(result_df)
 
-    # Concatenate and align with original index
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    residuals = all_results["residual"].reindex(range(len(values)))
-    residuals.index = values.index
-    residuals.name = "residual"
-    return residuals
+    # Concatenate and align with original index (duplicate exposure keys
+    # multiply merged rows; keep first occurrence — see _alignment helper).
+    return align_residuals_to_values(results, row_key, values.index)
 
 
 def compute_exposures(

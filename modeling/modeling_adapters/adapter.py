@@ -24,8 +24,10 @@ try:
         FittedState,
     )
     FACTOR_PREPROCESS_AVAILABLE = True
-except ImportError:
+    _FACTOR_PREPROCESS_IMPORT_ERROR: Optional[ImportError] = None
+except ImportError as _exc:
     FACTOR_PREPROCESS_AVAILABLE = False
+    _FACTOR_PREPROCESS_IMPORT_ERROR = _exc
 
 
 class FactorPreprocessAdapter:
@@ -38,8 +40,29 @@ class FactorPreprocessAdapter:
 
     def __init__(self):
         if not FACTOR_PREPROCESS_AVAILABLE:
+            # A nested ImportError inside factor_preprocess (e.g. a broken
+            # scipy install) must not be reported as "not installed".  The
+            # message of a "No module named X" names the failing module; a
+            # nested failure names one of factor_preprocess's dependencies
+            # while the top-level import of factor_preprocess itself is the
+            # origin of the chain.
+            _nested = (
+                _FACTOR_PREPROCESS_IMPORT_ERROR is not None
+                and str(_FACTOR_PREPROCESS_IMPORT_ERROR).strip()
+                not in (
+                    f"No module named 'factor_preprocess'",
+                    f"No module named 'factor_preprocess'",
+                )
+            )
+            cause = (
+                f" Import failed: {_FACTOR_PREPROCESS_IMPORT_ERROR}"
+                if _nested
+                else ""
+            )
             raise AdapterError(
-                "factor_preprocess not available. Install with: pip install -e ../factor_preprocess"
+                "factor_preprocess not available. "
+                "Install with: pip install -e ../factor_preprocess"
+                f"{cause}"
             )
 
     def translate_contract(
@@ -168,7 +191,13 @@ class FactorPreprocessAdapter:
     @staticmethod
     def validate_fitted_state_features(state: Any, feature_ids: List[str]) -> None:
         """Require exact ordered feature compatibility for a fitted state."""
-        expected = list(getattr(state, "feature_order", ()) or ())
+        # `is not None` semantics: getattr with a tuple default already
+        # avoids the truthiness crash a numpy array would trigger on `or`.
+        raw_order = getattr(state, "feature_order", None)
+        if raw_order is None:
+            expected: List[str] = []
+        else:
+            expected = list(raw_order)
         if expected and list(feature_ids) != expected:
             raise AdapterError(
                 "FittedState feature order mismatch: "

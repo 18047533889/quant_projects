@@ -1,5 +1,6 @@
 """Lifecycle orchestration over an authoritative repository transition boundary."""
 
+import logging
 from collections import deque
 from dataclasses import dataclass
 from threading import RLock
@@ -115,6 +116,10 @@ class LifecycleOrchestrator:
                 try:
                     observer(committed.event)
                 except Exception as exc:
+                    logging.warning(
+                        "Post-commit observer %r failed: %s", observer, exc,
+                        exc_info=True,
+                    )
                     observer_failures.append(
                         f"Post-commit observer {observer!r} failed: {exc}"
                     )

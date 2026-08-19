@@ -6,6 +6,8 @@ the corresponding packages are available. Core FA functionality works without th
 
 Available adapters:
     - quant_evaluator: EvidenceProvider for QE integration
+    - residual_novelty: Residual-IC conditional-novelty producer (QE wiring
+      behind SelectionPolicy.make_decision's novelty_score parameter)
     - factor_engine: FactorIdentityProvider for FE integration
     - data_access: Optional DA read integration (future)
 

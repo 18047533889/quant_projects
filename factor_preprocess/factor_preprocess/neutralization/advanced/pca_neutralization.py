@@ -9,6 +9,13 @@ import numpy as np
 import pandas as pd
 from typing import Optional, Union
 
+from factor_preprocess.neutralization._alignment import (
+    add_position_key,
+    align_residuals_to_values,
+    merged_exposure_cols,
+    nan_residuals,
+)
+
 
 def pca_neutralize(
     values: pd.DataFrame,
@@ -71,30 +78,30 @@ def pca_neutralize(
     if n_components is None and variance_threshold is None:
         variance_threshold = 0.95
 
-    merged = values.merge(
+    values_with_key, row_key = add_position_key(values)
+    merged = values_with_key.merge(
         exposures,
         on=[date_col, asset_col],
         how="left",
         suffixes=("", "_exp"),
     )
 
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    exposure_cols = merged_exposure_cols(exposures, values, date_col, asset_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         y = group[value_col].values
-        X = group[exposure_cols].values
+        X = group[exposure_cols].values.astype(np.float64, copy=False)
 
         # Drop rows with any NaN
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
+        # Rank guard: PCA on n_valid <= n_features is (near-)determined —
+        # components absorb y entirely and residuals silently collapse to ~0.
+        if n_valid < min_observations or n_valid <= X.shape[1]:
+            residuals = nan_residuals(y)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
@@ -174,18 +181,14 @@ def pca_neutralize(
                 residuals[~valid_mask] = np.nan
 
             except (np.linalg.LinAlgError, ValueError):
-                residuals = np.full_like(y, np.nan)
+                residuals = nan_residuals(y)
 
         result_df = pd.DataFrame({
             date_col: date,
             asset_col: group[asset_col].values,
             "residual": residuals,
-        }, index=group.index)
+        }, index=group[row_key].to_numpy())
 
         results.append(result_df)
 
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+    return align_residuals_to_values(results, row_key, values.index)

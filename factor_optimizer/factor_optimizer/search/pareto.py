@@ -22,8 +22,12 @@ class ParetoPoint:
     def __post_init__(self):
         if not self.objectives:
             raise ValueError("objectives cannot be empty")
-        if not all(isinstance(v, (int, float)) for v in self.objectives):
-            raise ValueError("all objectives must be numeric")
+        if not all(
+            isinstance(v, (int, float)) and not isinstance(v, bool)
+            for v in self.objectives
+        ):
+            # bool is an int subclass — True would silently rank as objective 1.0
+            raise ValueError("all objectives must be numeric non-boolean numbers")
         if not all(math.isfinite(float(v)) for v in self.objectives):
             raise ValueError("all objectives must be finite")
 
@@ -144,7 +148,13 @@ class ParetoFrontier:
 
         extremes = {}
         for i in range(self.num_dimensions):
-            best_point = max(self.points, key=lambda p: p.objectives[i])
+            # Tie-break on trial_id: max() returns the FIRST maximal
+            # element, and self.points order follows insertion (trial
+            # completion) order — equal-objective extremes would flip with
+            # a differently-ordered but equivalent frontier.
+            best_point = max(
+                self.points, key=lambda p: (p.objectives[i], p.trial_id)
+            )
             extremes[i] = best_point
 
         return extremes
@@ -186,9 +196,16 @@ class ParetoFrontier:
                 continue
 
             width = x - reference_point[0]
-            height = y - prev_y
+            # Defensive only: a frontier maintained through add_point
+            # cannot yield y < prev_y (such a point would be dominated
+            # and removed), but a directly-constructed or duplicated
+            # point list could — clamp so a degenerate slice adds zero,
+            # never a negative volume that silently shrinks the
+            # indicator.
+            height = max(0.0, y - prev_y)
             volume += width * height
-            prev_y = y
+            if y > prev_y:
+                prev_y = y
 
         return volume
 

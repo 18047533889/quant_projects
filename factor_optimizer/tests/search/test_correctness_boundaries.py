@@ -16,11 +16,43 @@ from factor_optimizer.contracts.splits import (
 )
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
-from factor_optimizer.search.runner import SearchConfig, SearchRunner
+from factor_optimizer.search.runner import (
+    SearchConfig,
+    SearchRunner,
+    SearchSession,
+)
 
 
 def _trial(trial_id="trial", mutation_id="mutation"):
     return Trial(trial_id=trial_id, mutation_id=mutation_id, status=TrialStatus.PROPOSED)
+
+
+def _eval_protocol(split_id, plan_masks, fn=None):
+    """Build an EvaluationProtocol bound to the given split plan."""
+    return EvaluationProtocol(
+        SplitPlan(split_id, *plan_masks, {}),
+        fn or (lambda trial, fidelity: {
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
+        }),
+    )
+
+
+def _run_safe_session():
+    # Search uses sample 0 (train); sample 1 is reserved for the sealed test.
+    protocol = _eval_protocol("split", ([True, False], [False, False], [False, False]))
+    return SearchRunner(
+        SearchConfig(
+            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+            enable_multifidelity=False,
+            require_evaluation_protocol=True,
+        ),
+        _trial,
+        protocol,
+    ).run("safe")
+
+
+def _sealed_plan():
+    return SplitPlan("test", [False, False], [False, False], [False, True], {})
 
 
 def test_malformed_trial_is_rejected_before_evaluation():
@@ -31,7 +63,8 @@ def test_malformed_trial_is_rejected_before_evaluation():
             enable_multifidelity=False,
         ),
         lambda: _trial(trial_id=""),
-        lambda trial, fidelity: evaluated.append(trial) or {"score": 1.0, "cost": 1.0},
+        _eval_protocol("split", ([True], [False], [False]),
+                       lambda trial, fidelity: evaluated.append(trial) or {"score": 1.0, "cost": 1.0}),
     )
 
     session = runner.run("malformed")
@@ -46,7 +79,8 @@ def test_malformed_validator_response_fails_closed():
     runner = SearchRunner(
         SearchConfig(budget=SearchBudget(max_trials=1, max_evaluations=1)),
         _trial,
-        lambda trial, fidelity: pytest.fail("illegal trial reached evaluation"),
+        _eval_protocol("split", ([True], [False], [False]),
+                       lambda trial, fidelity: pytest.fail("illegal trial reached evaluation")),
         trial_validator=lambda trial: {"checks_passed": ["claimed"]},
     )
 
@@ -72,7 +106,7 @@ def test_search_runner_persists_published_evidence_reference():
             evaluation_cost_units=1.0,
         ),
         _trial,
-        evaluate,
+        _eval_protocol("split", ([True], [False], [False]), evaluate),
     ).run("evidence-reference")
 
     assert session.trials[0].evaluation_ref == "store://evidence-1"
@@ -86,7 +120,8 @@ def test_search_runner_rejects_evaluation_without_evidence_reference():
             evaluation_cost_units=1.0,
         ),
         _trial,
-        lambda trial, fidelity: {"score": 1.0, "cost": 1.0},
+        _eval_protocol("split", ([True], [False], [False]),
+                       lambda trial, fidelity: {"score": 1.0, "cost": 1.0}),
     ).run("missing-evidence-reference")
 
     trial = session.trials[0]
@@ -111,7 +146,7 @@ def test_multifidelity_does_not_promote_on_score_alone():
             evaluation_cost_units=1.0,
         ),
         _trial,
-        evaluate,
+        _eval_protocol("split", ([True], [False], [False]), evaluate),
     ).run("no-false-promotion")
 
     assert fidelities == [0]
@@ -139,7 +174,7 @@ def test_multifidelity_promotes_only_with_explicit_eligible_evidence():
             evaluation_cost_units=1.0,
         ),
         _trial,
-        evaluate,
+        _eval_protocol("split", ([True], [False], [False]), evaluate),
     ).run("explicit-promotion")
 
     assert fidelities == [0, 1]
@@ -216,55 +251,33 @@ def test_invalid_split_contracts_fail_closed(factory, error):
 
 
 def test_sealed_test_workflow_freezes_and_consumes_once():
-    protocol = EvaluationProtocol(
-        SplitPlan("split", [True], [False], [False], {}),
-        lambda trial, fidelity: {
-            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
-        },
-    )
-    session = SearchRunner(
-        SearchConfig(
-            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
-            enable_multifidelity=False,
-            require_evaluation_protocol=True,
-        ),
-        _trial,
-        protocol,
-    ).run("safe")
-    plan = SplitPlan("test", [False], [False], [True], {})
+    session = _run_safe_session()
+    plan = _sealed_plan()
     handle = session.freeze_for_sealed_test(plan)
     result = session.consume_sealed_test(
-        handle, plan, lambda trial, split: {"rank_ic": 0.25}
+        handle, plan, EvaluationProtocol(plan, lambda trial, fidelity: {"rank_ic": 0.25})
     )
     assert result.trial_id == "trial"
     assert result.test_metrics == {"rank_ic": 0.25}
     with pytest.raises(ValueError, match="already been consumed"):
-        session.consume_sealed_test(handle, plan, lambda trial, split: {"rank_ic": 0.1})
+        session.consume_sealed_test(
+            handle, plan, EvaluationProtocol(plan, lambda trial, fidelity: {"rank_ic": 0.1})
+        )
 
 
 def test_sealed_test_rejects_mismatched_plan_and_post_freeze_mutation():
-    protocol = EvaluationProtocol(
-        SplitPlan("split", [True], [False], [False], {}),
-        lambda trial, fidelity: {
-            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
-        },
-    )
-    session = SearchRunner(
-        SearchConfig(
-            budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
-            enable_multifidelity=False,
-        ),
-        _trial,
-        protocol,
-    ).run("safe")
-    plan = SplitPlan("test", [False], [False], [True], {})
+    session = _run_safe_session()
+    plan = _sealed_plan()
     handle = session.freeze_for_sealed_test(plan)
     with pytest.raises(ValueError, match="already frozen"):
         session.freeze_for_sealed_test(plan)
     with pytest.raises(ValueError, match="does not match"):
         session.consume_sealed_test(
             handle,
-            SplitPlan("other", [False], [False], [True], {}),
-            lambda trial, split: {"rank_ic": 0.1},
+            SplitPlan("other", [False, False], [False, False], [False, True], {}),
+            EvaluationProtocol(
+                SplitPlan("other", [False, False], [False, False], [False, True], {}),
+                lambda trial, fidelity: {"rank_ic": 0.1},
+            ),
         )
 

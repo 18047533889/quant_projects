@@ -265,19 +265,22 @@ class BackendSelector:
         """
         total_elements = T * N
 
+        # CuPy first for very large rolling workloads — checked before numba
+        # so the numba branch below can't shadow it (previously the numba
+        # check returned first whenever numba was installed, making the CuPy
+        # branch reachable only when numba was absent).
+        if (
+            total_elements >= self.cupy_threshold
+            and self._capabilities[BackendType.CUPY].available
+        ):
+            return BackendType.CUPY
+
         # Numba is typically best for rolling operations
         if (
             total_elements >= self.numba_threshold
             and self._capabilities[BackendType.NUMBA].available
         ):
             return BackendType.NUMBA
-
-        # CuPy for very large rolling windows
-        if (
-            total_elements >= self.cupy_threshold
-            and self._capabilities[BackendType.CUPY].available
-        ):
-            return BackendType.CUPY
 
         return BackendType.NUMPY
 

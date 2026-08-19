@@ -4,6 +4,8 @@ Parameter plateau detection and neighbor survival analysis.
 Detects stable parameter regions via perturbation and robustness scoring.
 """
 
+import math
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -121,7 +123,7 @@ class ParameterPlateauDetector:
 
         # Generate neighbors by perturbing each numeric parameter
         for param_name, param_value in parameters.items():
-            if not isinstance(param_value, (int, float)):
+            if isinstance(param_value, bool) or not isinstance(param_value, (int, float)):
                 continue
 
             # Estimate reasonable perturbation range
@@ -205,8 +207,31 @@ class ParameterPlateauDetector:
         if not neighbor_metrics:
             neighbor_metrics = [base_metric]
 
-        worst_metric = min(neighbor_metrics)
-        mean_metric = sum(neighbor_metrics) / len(neighbor_metrics)
+        # Non-finite neighbor metrics (NaN/±inf from an overflowed or failed
+        # evaluation) must not be silently aggregated: a NaN poisons
+        # min/mean with order-dependent results, and an inf worst-metric
+        # makes local_sensitivity -inf, whose max(0, 1-inf)=inf sensitivity
+        # score then clamps the overall robustness to a perfect 1.0.
+        # Fail closed: exclude them from the finite statistics but keep
+        # every neighbor in the stability/survival denominators so a
+        # broken region scores low.
+        finite_metrics = [m for m in neighbor_metrics if math.isfinite(m)]
+        n_total = len(neighbor_metrics)
+        if not finite_metrics:
+            # Every neighbor evaluation was non-finite: the region is
+            # unverifiable, not maximally stable.
+            return PlateauAnalysis(
+                base_metric=base_metric,
+                worst_neighbor_metric=float("nan"),
+                mean_neighbor_metric=float("nan"),
+                local_sensitivity=float("inf"),
+                plateau_stability=0.0,
+                neighbor_survival_rate=0.0,
+                neighbors=neighbors,
+            )
+
+        worst_metric = min(finite_metrics)
+        mean_metric = sum(finite_metrics) / len(finite_metrics)
 
         # Compute local sensitivity (max degradation)
         if base_metric != 0:
@@ -214,19 +239,23 @@ class ParameterPlateauDetector:
         else:
             local_sensitivity = 0.0
 
-        # Compute plateau stability (fraction within tolerance)
+        # Compute plateau stability (fraction within tolerance); NaN/inf
+        # neighbors are never "within tolerance" (comparison is False).
         stable_count = sum(
             1 for m in neighbor_metrics
             if abs(m - base_metric) / abs(base_metric) <= self.stability_tolerance
-        ) if base_metric != 0 else len(neighbor_metrics)
-        plateau_stability = stable_count / len(neighbor_metrics)
+        ) if base_metric != 0 else len(finite_metrics)
+        plateau_stability = stable_count / n_total
 
-        # Compute neighbor survival rate (fraction above threshold)
+        # Compute neighbor survival rate (fraction above threshold);
+        # NaN/inf neighbors never count as survivors (comparison False —
+        # +inf survives only via finite-metric gating above, but an inf
+        # metric is an overflow, not a good neighbour).
         survival_count = sum(
             1 for m in neighbor_metrics
-            if m >= base_metric * self.survival_threshold
+            if math.isfinite(m) and m >= base_metric * self.survival_threshold
         )
-        neighbor_survival_rate = survival_count / len(neighbor_metrics)
+        neighbor_survival_rate = survival_count / n_total
 
         return PlateauAnalysis(
             base_metric=base_metric,
@@ -266,7 +295,11 @@ class NeighborSurvivalAnalyzer:
             plateau_analysis: Plateau analysis results
 
         Returns:
-            Robustness score in [0, 1]
+            Robustness score in [0, 1].  A non-finite local_sensitivity
+            (±inf, from an all-non-finite neighbor region, direct
+            construction, or overflow) contributes a sensitivity score of
+            0.0 — overflowed measurements are never admittable evidence
+            of robustness, even when they point "upward" (−inf).
         """
         # Weight different factors
         stability_weight = 0.4
@@ -276,7 +309,17 @@ class NeighborSurvivalAnalyzer:
         # Compute weighted score
         stability_score = plateau_analysis.plateau_stability
         survival_score = plateau_analysis.neighbor_survival_rate
-        sensitivity_score = max(0.0, 1.0 - plateau_analysis.local_sensitivity)
+        # A non-finite sensitivity (inf from an all-non-finite neighbor
+        # region) means "unverifiable", which must score as maximally
+        # UNrobust, not clamp up to 1.0.  This also intentionally zeroes
+        # −inf (a directly constructed or overflowed analysis where
+        # sensitivity improved without bound): an overflowed measurement
+        # in EITHER direction is not admittable evidence of robustness.
+        sensitivity = plateau_analysis.local_sensitivity
+        if not math.isfinite(sensitivity):
+            sensitivity_score = 0.0
+        else:
+            sensitivity_score = max(0.0, 1.0 - sensitivity)
 
         robustness = (
             stability_weight * stability_score +

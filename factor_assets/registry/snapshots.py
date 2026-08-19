@@ -13,6 +13,20 @@ from factor_assets.contracts.asset import FactorAsset
 from factor_assets.contracts.lifecycle import LifecycleState, StateEvent
 
 
+def _normalize_ts(ts: str) -> str:
+    """Canonicalize an ISO-8601 timestamp for comparison.
+
+    Mixed "+00:00" and "Z" suffixes compare wrongly as raw strings
+    ("...+00:00" < "...Z" lexicographically for identical instants), and
+    mixed formats mis-sort event histories.  Parse to a datetime first;
+    fall back to the raw string if unparseable.
+    """
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).isoformat()
+    except (ValueError, AttributeError):
+        return ts
+
+
 @dataclass(frozen=True)
 class SnapshotQuery:
     """
@@ -78,7 +92,7 @@ class SnapshotManager:
         Returns:
             SnapshotResult containing assets as of the specified time
         """
-        as_of = query.as_of_timestamp
+        as_of = _normalize_ts(query.as_of_timestamp)
 
         # Build historical state map from events
         historical_states = self._reconstruct_states(events, as_of)
@@ -88,7 +102,7 @@ class SnapshotManager:
 
         for asset in assets:
             # Check if asset was registered before as_of
-            if asset.registered_at > as_of:
+            if _normalize_ts(asset.registered_at) > as_of:
                 continue
 
             # Get historical state for this asset
@@ -138,11 +152,12 @@ class SnapshotManager:
         """
         states: dict[str, LifecycleState] = {}
 
-        # Sort events by timestamp
-        sorted_events = sorted(events, key=lambda e: e.timestamp)
+        # Sort events by timestamp (normalized: "+00:00" vs "Z" mixing
+        # would mis-sort identical instants).
+        sorted_events = sorted(events, key=lambda e: _normalize_ts(e.timestamp))
 
         for event in sorted_events:
-            if event.timestamp > as_of_timestamp:
+            if _normalize_ts(event.timestamp) > as_of_timestamp:
                 break
 
             states[event.factor_id] = event.to_state
@@ -168,11 +183,11 @@ class SnapshotManager:
         approved_at = None
         production_ready_at = None
 
-        for event in sorted(events, key=lambda e: e.timestamp):
+        for event in sorted(events, key=lambda e: _normalize_ts(e.timestamp)):
             if event.factor_id != asset.factor_id:
                 continue
 
-            if event.timestamp > as_of_timestamp:
+            if _normalize_ts(event.timestamp) > as_of_timestamp:
                 break
 
             historical_state = event.to_state
@@ -212,11 +227,11 @@ class SnapshotManager:
         """
         state = LifecycleState.REGISTERED
 
-        for event in sorted(events, key=lambda e: e.timestamp):
+        for event in sorted(events, key=lambda e: _normalize_ts(e.timestamp)):
             if event.factor_id != factor_id:
                 continue
 
-            if event.timestamp > as_of_timestamp:
+            if _normalize_ts(event.timestamp) > as_of_timestamp:
                 break
 
             state = event.to_state
@@ -248,15 +263,15 @@ class SnapshotManager:
             if event.factor_id != factor_id:
                 continue
 
-            if start_timestamp and event.timestamp < start_timestamp:
+            if start_timestamp and _normalize_ts(event.timestamp) < _normalize_ts(start_timestamp):
                 continue
 
-            if end_timestamp and event.timestamp > end_timestamp:
+            if end_timestamp and _normalize_ts(event.timestamp) > _normalize_ts(end_timestamp):
                 continue
 
             matching_events.append(event)
 
-        return tuple(sorted(matching_events, key=lambda e: e.timestamp))
+        return tuple(sorted(matching_events, key=lambda e: _normalize_ts(e.timestamp)))
 
     def compare_snapshots(
         self,
@@ -283,7 +298,10 @@ class SnapshotManager:
         # Count assets registered between timestamps
         new_registrations = sum(
             1 for asset in assets
-            if timestamp_a < asset.registered_at <= timestamp_b
+            if (
+                _normalize_ts(timestamp_a) < _normalize_ts(asset.registered_at)
+                <= _normalize_ts(timestamp_b)
+            )
         )
 
         # Count state changes

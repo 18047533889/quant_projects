@@ -127,13 +127,21 @@ def build_tree_ready(
         preprocessing_stats["missing_flag_value"] = -999.0
 
     elif config.handle_missing == "fill_median":
+        # An all-NaN column has no median; nan_to_num would silently
+        # substitute 0.0 and inject a fake all-zero "signal", so fail
+        # closed naming the dead columns.
+        all_nan = np.all(np.isnan(X), axis=0)
+        if np.any(all_nan):
+            dead = [feature_names[i] if feature_names is not None else f"f{i}"
+                    for i in np.where(all_nan)[0]]
+            raise ValueError(
+                f"handle_missing='fill_median' cannot fill all-NaN columns: {dead}"
+            )
         col_medians = np.nanmedian(X, axis=0)
         for col_idx in range(n_features):
             mask = np.isnan(X[:, col_idx])
             if np.any(mask):
                 X[mask, col_idx] = col_medians[col_idx]
-        # Handle all-NaN columns
-        X = np.nan_to_num(X, nan=0.0)
         preprocessing_stats["fill_medians"] = col_medians.tolist()
 
     # Clip outliers

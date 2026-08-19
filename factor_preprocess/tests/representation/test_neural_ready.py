@@ -255,13 +255,55 @@ class TestBuildNeuralReady:
         assert result.preprocessing_stats["n_missing_final"] == 0
 
     def test_all_nan_column_handling(self):
-        """Test handling of all-NaN columns."""
+        """All-NaN column under mean fill must fail closed, not fake-zero."""
         values = np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]])
         config = NeuralReadyConfig(handle_missing="mean", clip_outliers=False)
+
+        with pytest.raises(ValueError, match="all-NaN columns"):
+            build_neural_ready(values, config)
+
+    def test_all_nan_column_forward_fill_fails_closed(self):
+        """All-NaN column under forward_fill must fail closed, not fake-zero."""
+        values = np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]])
+        config = NeuralReadyConfig(handle_missing="forward_fill", clip_outliers=False)
+
+        with pytest.raises(ValueError, match="all-NaN columns"):
+            build_neural_ready(values, config)
+
+    def test_clip_outliers_inf_uses_finite_bounds(self):
+        """Clip bounds must come from finite values only; inf gets clipped."""
+        values = np.array([
+            [1.0], [2.0], [3.0], [4.0], [5.0],
+            [6.0], [7.0], [8.0], [9.0], [np.inf],
+        ])
+        config = NeuralReadyConfig(
+            handle_missing="zero",
+            clip_outliers=True,
+            outlier_quantile_range=(10.0, 90.0),
+            scaling="none",
+        )
         result = build_neural_ready(values, config)
 
-        # All-NaN column should be filled with 0
-        assert result.X[0, 1] == 0.0
+        assert np.all(np.isfinite(result.X))
+        # The inf row must have been clipped to the finite upper bound.
+        upper = result.preprocessing_stats["clip_bounds"][0]["upper"]
+        assert result.X[-1, 0] == upper
+
+    def test_clip_outliers_all_inf_column_skipped(self):
+        """A column with no finite values is skipped, not turned into NaN bounds."""
+        values = np.array([[1.0, np.inf], [2.0, -np.inf], [3.0, np.inf]])
+        config = NeuralReadyConfig(
+            # forward_fill is a no-op here (no NaN); "zero" would run
+            # nan_to_num, which converts ±inf to ±float-max before clipping.
+            handle_missing="forward_fill",
+            clip_outliers=True,
+            scaling="none",
+        )
+        result = build_neural_ready(values, config)
+
+        # Column 1 had no finite values: no clip bounds recorded, untouched.
+        assert len(result.preprocessing_stats["clip_bounds"]) == 1
+        assert np.isinf(result.X[:, 1]).all()
 
 
 class TestPrepareEmbeddings:

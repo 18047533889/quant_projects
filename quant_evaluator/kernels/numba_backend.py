@@ -294,18 +294,50 @@ def numba_quantile_binning(
                     indices[idx] = i
                     idx += 1
 
-            # Argsort to get rank order
+            # Argsort finite values once; the sorted view feeds boundary
+            # interpolation below (side='right' binning ignores tie ranks).
             order = np.argsort(v_finite)
+            v_sorted = v_finite[order]
 
-            # Assign quantile bins only to valid indices
+            # QE-Q-P0-002: percentile boundaries + searchsorted side='right'
+            # (reference semantics, QuantileTiePolicy.MAX). The previous
+            # rank-floor formula ((rank * n_quantiles) // n_valid) disagreed
+            # with the reference whenever n_valid was not divisible by
+            # n_quantiles.
+            n_boundaries = n_quantiles - 1
+            boundaries = np.empty(n_boundaries, dtype=np.float64)
+            for b in range(n_boundaries):
+                # Linear percentile position b+1 of n_quantiles (matches
+                # np.percentile default linear interpolation). Positions
+                # within 1e-9 of an integer snap to the exact sorted value
+                # so every backend agrees at tie-at-boundary positions
+                # (float pos can land one ulp above an exact integer).
+                pos = (b + 1) / n_quantiles * (n_valid - 1)
+                lo = int(pos)
+                frac = pos - lo
+                if lo >= n_valid - 1:
+                    boundaries[b] = v_sorted[lo]
+                elif frac < 1e-9:
+                    boundaries[b] = v_sorted[lo]
+                elif frac > 1.0 - 1e-9:
+                    boundaries[b] = v_sorted[lo + 1]
+                else:
+                    boundaries[b] = v_sorted[lo] + frac * (v_sorted[lo + 1] - v_sorted[lo])
+
+            # Assign quantile bins only to valid indices (side='right')
             for i in range(n_valid):
-                rank = i
-                q_bin = (rank * n_quantiles) // n_valid
+                value = v_finite[i]
+                q_bin = 0
+                for b in range(n_boundaries):
+                    if value >= boundaries[b]:
+                        q_bin = b + 1
+                    else:
+                        break
                 if q_bin >= n_quantiles:
                     q_bin = n_quantiles - 1
 
-                orig_idx = indices[order[i]]
-                quantiles[t, orig_idx, f] = q_bin
+                indices_i = indices[i]
+                quantiles[t, indices_i, f] = q_bin
 
     return quantiles
 
@@ -352,9 +384,13 @@ def numba_quantile_returns(
                         count += 1
                         sum_ret += label_values[t, n]
 
+                # Report the raw membership count (matching the NumPy fast
+                # kernel), not the post-threshold value — a quantile with
+                # count < min_assets still has members even though its mean
+                # return stays NaN.
+                quantile_counts[t, q, f] = count
                 if count >= min_assets:
                     quantile_returns[t, q, f] = sum_ret / float(count)
-                    quantile_counts[t, q, f] = count
 
     return quantile_returns, quantile_counts
 

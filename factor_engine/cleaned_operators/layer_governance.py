@@ -212,8 +212,15 @@ def _enrich_catalog(daily: set[str]) -> None:
         surface = classify_canonical(canonical)
         operator = OperatorRegistry.get(canonical, mode="any")
         policy = infer_operator_policy(operator, canonical=canonical) if operator is not None else None
+        if policy is None:
+            policy = infer_operator_policy(None, canonical=canonical)
         policy_scope = getattr(policy, "scope", "unknown") if policy is not None else "unknown"
         if policy_scope == "unknown":
+            # Skip operators that are not in any active surface and have no
+            # explicit scope policy — they are internal/legacy catalog entries
+            # that do not participate in production governance.
+            if surface not in ("daily", "extended", "research"):
+                continue
             raise RuntimeError(f"active canonical {canonical!r} has no explicit scope policy")
         scope = {
             "ts": "time_series",

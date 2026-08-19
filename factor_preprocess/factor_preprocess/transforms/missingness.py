@@ -316,8 +316,12 @@ def time_weighted_interpolate(
         if max_gap is not None and max_gap < 1:
             raise ValueError(f"max_gap must be >= 1, got {max_gap}")
 
-        # Extract the value and time columns
-        val_series = group[value_col] if value_col in group.columns else group
+        # Extract the value and time columns; a missing column is a wiring
+        # bug and must raise rather than silently falling back to the whole
+        # frame (whose .values would interpolate meaningless 2D data).
+        if value_col not in group.columns:
+            raise KeyError(f"Column '{value_col}' not found in input")
+        val_series = group[value_col]
         time_series = group[time_col] if time_col in group.columns else group.index
 
         # Create temporary dataframe with time index

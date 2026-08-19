@@ -1,0 +1,51 @@
+task_id: R20-ATR-DIRECTUSE
+finding: atr_true_range_direct_alpha_rehabilitation
+base_sha: 60bb18ba02278b4e5c72da7d0924b78e336776be
+current_head: 60bb18ba02278b4e5c72da7d0924b78e336776be
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_atr_direct_use_rehab.py
+  - factor_engine/evidence/r2/R20-ATR-DIRECTUSE.yaml
+status: CLOSED_LOCAL
+implementation:
+  - Added eight causal, dimensionless ATR/true-range canonicals: atr_pct, atr_zscore,
+    atr_percentile, true_range_pct, true_range_surprise, true_range_zscore,
+    atr_short_long_ratio, atr_acceleration.
+  - Raw ATR_WILDER / true_range remain intermediate; only the normalized /
+    standardized / surprise / regime derivatives enter _RELATIVE_ALPHA_OPS.
+  - Strict-positive close masking for atr_pct (bad price -> NaN, never abs()).
+  - atr_short_long_ratio carries a RelationalParamSpec (short_window < long_window).
+  - Wilder-derived canonicals are governed stateful/full_replay via _RECURSIVE_EWM;
+    bounded rolling standardizations stay trailing-window causal.
+  - Classified the new canonicals in _TECHNICAL_V2_CANONICALS and
+    DAILY_FACTOR_MIGRATED so layer governance finalization stays exact.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_atr_direct_use_rehab.py -q
+  result: 9 passed
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_atr_direct_use_rehab.py
+  result: PASS
+registry_bootstrap:
+  command: python3 -c "import cleaned_operators; cleaned_operators.load_all()" (threads pinned)
+  result: PASS after surface classification; all 8 canonicals resolve via OperatorRegistry.get
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + this YAML only)
+  date: 2026-08-19
+  verdict: PASS
+  findings: no P0/P1 defects; math/PIT/NaN/stateful-governance/ParamSpec/promotion confirmed
+  p2_observations:
+    - atr_percentile has a stylistic dead local `rank` binding (no behavioral effect)
+    - atr_zscore/atr_percentile have no relational spec between window and score_window
+      (semantically independent windows; acceptable)
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the new canonicals is NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, and full
+    registry/backend/root CI are NOT_RUN.
+  - No production certification claim; terminal usability is limited to the
+    mining-layer relative-alpha classification added here.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

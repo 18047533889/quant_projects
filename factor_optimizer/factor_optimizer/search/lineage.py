@@ -229,16 +229,19 @@ class LineageTree:
         lineage_ids = self.get_ancestors(trial_id) | self.get_descendants(trial_id)
         lineage_ids.add(trial_id)
 
-        # Filter nodes with scores
+        # Filter nodes with scores.  Iterate in sorted-ID order, not set
+        # order: set iteration for strings is PYTHONHASHSEED-dependent, so
+        # an unsorted max() over tied scores would flip the winner between
+        # processes.  Sorted IDs give a stable, recomputable tie-break.
         scored_nodes = [
-            self.nodes[tid] for tid in lineage_ids
+            self.nodes[tid] for tid in sorted(lineage_ids)
             if tid in self.nodes and self.nodes[tid].score is not None
         ]
 
         if not scored_nodes:
             return None
 
-        return max(scored_nodes, key=lambda n: n.score)
+        return max(scored_nodes, key=lambda n: (n.score, n.trial_id))
 
     def subtree_stats(self, trial_id: str) -> Dict[str, Any]:
         """
@@ -452,7 +455,10 @@ class LineageAnalyzer:
         Returns:
             Trial ID of most productive seed
         """
-        seeds = self.tree.get_seeds()
+        # Sort seeds so ties resolve to the lowest trial ID regardless of
+        # dict insertion order (which differs between a live tree and a
+        # from_dict rebuild of the same tree).
+        seeds = sorted(self.tree.get_seeds(), key=lambda s: s.trial_id)
         if not seeds:
             return None
 

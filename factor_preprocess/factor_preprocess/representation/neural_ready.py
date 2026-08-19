@@ -131,12 +131,19 @@ def build_neural_ready(
         X = np.nan_to_num(X, nan=0.0)
 
     elif config.handle_missing == "mean":
+        # An all-NaN column has no mean; nan_to_num would silently
+        # substitute 0.0 and inject a fake all-zero "signal" into the
+        # network, so fail closed.
+        if np.any(np.all(np.isnan(X), axis=0)):
+            dead = np.where(np.all(np.isnan(X), axis=0))[0].tolist()
+            raise ValueError(
+                f"handle_missing='mean' cannot fill all-NaN columns: {dead}"
+            )
         col_means = np.nanmean(X, axis=0)
         for col_idx in range(n_features):
             mask = np.isnan(X[:, col_idx])
             if np.any(mask):
                 X[mask, col_idx] = col_means[col_idx]
-        X = np.nan_to_num(X, nan=0.0)
 
     elif config.handle_missing == "forward_fill":
         for col_idx in range(n_features):
@@ -154,7 +161,14 @@ def build_neural_ready(
                             if i > 0:
                                 col_data[i] = col_data[last_valid_idx]
                 X[:, col_idx] = col_data
-        X = np.nan_to_num(X, nan=0.0)
+        # An all-NaN column has nothing to forward-fill; nan_to_num would
+        # silently substitute 0.0 and inject a fake all-zero "signal", so
+        # fail closed naming the dead columns.
+        if np.any(np.all(np.isnan(X), axis=0)):
+            dead = np.where(np.all(np.isnan(X), axis=0))[0].tolist()
+            raise ValueError(
+                f"handle_missing='forward_fill' cannot fill all-NaN columns: {dead}"
+            )
 
     preprocessing_stats["n_missing_after_fill"] = int(np.sum(np.isnan(X)))
 
@@ -166,8 +180,14 @@ def build_neural_ready(
 
         for col_idx in range(n_features):
             col_data = X[:, col_idx]
-            lower_bound = np.percentile(col_data, lower_q)
-            upper_bound = np.percentile(col_data, upper_q)
+            # NaN still allowed here only under keep-style policies; inf
+            # would make the percentile bounds meaningless and let ±inf
+            # through the clip, so compute bounds on finite values only.
+            finite = col_data[np.isfinite(col_data)]
+            if finite.size == 0:
+                continue
+            lower_bound = np.percentile(finite, lower_q)
+            upper_bound = np.percentile(finite, upper_q)
 
             clipped = np.clip(col_data, lower_bound, upper_bound)
             n_clipped += np.sum(col_data != clipped)

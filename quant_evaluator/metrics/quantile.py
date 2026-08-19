@@ -117,19 +117,10 @@ def assign_quantiles(
 
         v_finite = v[finite_mask]
 
-        # Use percentile for more consistent quantile boundaries
-        percentiles = np.linspace(0, 100, n_quantiles + 1)
-        boundaries = np.percentile(v_finite, percentiles[1:-1])
-
-        # QE-Q-P0-002: Boundary comparison must match Numba implementation
-        # searchsorted(side='left'): value == boundary → lower bin (MIN policy)
-        # searchsorted(side='right'): value == boundary → higher bin (MAX policy)
-        if policy == QuantileTiePolicy.MIN:
-            q_bins = np.searchsorted(boundaries, v_finite, side='left')
-        else:  # QuantileTiePolicy.MAX
-            q_bins = np.searchsorted(boundaries, v_finite, side='right')
-
-        q_bins = np.clip(q_bins, 0, n_quantiles - 1)
+        # QE-Q-P0-002: percentile boundaries + tie-policy searchsorted,
+        # shared with the fast/Numba/Polars implementations.
+        boundaries = _percentile_boundaries(v_finite, n_quantiles)
+        q_bins = _searchsorted_bins(boundaries, v_finite, n_quantiles, policy)
 
         quantiles[t, finite_mask] = q_bins
 
@@ -168,9 +159,6 @@ def assign_quantiles_fast(
 
     quantiles = np.full((T, N, F), -1, dtype=np.int32)
 
-    # Compute percentile boundaries for each time-factor slice
-    percentiles = np.linspace(0, 100, n_quantiles + 1)[1:-1]  # Exclude 0 and 100
-
     for t in range(T):
         for f in range(F):
             v = values[t, :, f]
@@ -182,22 +170,71 @@ def assign_quantiles_fast(
 
             v_finite = v[finite_mask]
 
-            # Compute quantile boundaries using percentile (fast, approximate)
-            boundaries = np.percentile(v_finite, percentiles)
-
-            # QE-Q-P0-002: Match boundary logic with Numba
-            if policy == QuantileTiePolicy.MIN:
-                q_bins = np.searchsorted(boundaries, v_finite, side='left')
-            else:  # MAX
-                q_bins = np.searchsorted(boundaries, v_finite, side='right')
-
-            q_bins = np.clip(q_bins, 0, n_quantiles - 1)
+            # QE-Q-P0-002: same percentile boundaries + tie policy as the
+            # reference implementation (shared helpers).
+            boundaries = _percentile_boundaries(v_finite, n_quantiles)
+            q_bins = _searchsorted_bins(boundaries, v_finite, n_quantiles, policy)
 
             quantiles[t, finite_mask, f] = q_bins
 
     if F == 1:
         return quantiles.reshape(T, N)
     return quantiles
+
+
+def _percentile_boundaries(
+    v_finite: np.ndarray,
+    n_quantiles: int,
+) -> np.ndarray:
+    """Internal boundary computation shared by every assign_quantiles* path.
+
+    QE-Q-P0-002: all quantile binning implementations (NumPy reference, fast,
+    Numba, Polars, CuPy) must derive bins from the same percentile boundaries,
+    so the boundary values themselves are computed in exactly one place.
+
+    Boundaries are interpolated on the sorted values with the formula
+    ``sv[lo] + frac * (sv[lo+1] - sv[lo])`` at position
+    ``pos = (b+1)/n_quantiles * (n-1)``.  Positions within 1e-9 of an integer
+    snap to the exact sorted value: np.percentile can land one ulp off the
+    data value there (its percentile/100 rounding), which would silently flip
+    the tie policy for the value sitting exactly on the boundary.  The snap
+    keeps every backend bit-identical at the only positions where exact ties
+    are possible.
+    """
+    sv = np.sort(v_finite)
+    n = sv.shape[0]
+    boundaries = np.empty(n_quantiles - 1, dtype=np.float64)
+    for b in range(n_quantiles - 1):
+        pos = (b + 1) / n_quantiles * (n - 1)
+        lo = int(pos)
+        frac = pos - lo
+        if lo >= n - 1:
+            boundaries[b] = sv[n - 1]
+        elif frac < 1e-9:
+            boundaries[b] = sv[lo]
+        elif frac > 1.0 - 1e-9:
+            boundaries[b] = sv[lo + 1]
+        else:
+            boundaries[b] = sv[lo] + frac * (sv[lo + 1] - sv[lo])
+    return boundaries
+
+
+def _searchsorted_bins(
+    boundaries: np.ndarray,
+    v_finite: np.ndarray,
+    n_quantiles: int,
+    policy: QuantileTiePolicy,
+) -> np.ndarray:
+    """Internal searchsorted binning honoring the tie policy.
+
+    MIN -> side='left' (value == boundary goes to the LOWER bin)
+    MAX -> side='right' (value == boundary goes to the HIGHER bin)
+    """
+    if policy == QuantileTiePolicy.MIN:
+        q_bins = np.searchsorted(boundaries, v_finite, side='left')
+    else:  # QuantileTiePolicy.MAX
+        q_bins = np.searchsorted(boundaries, v_finite, side='right')
+    return np.clip(q_bins, 0, n_quantiles - 1)
 
 
 def assign_quantiles_batch(
@@ -244,15 +281,10 @@ def assign_quantiles_batch(
 
             v_finite = v_t[mask, f]
 
-            # Use nanpercentile for robustness
-            percentiles = np.linspace(0, 100, n_quantiles + 1)[1:-1]
-            boundaries = np.percentile(v_finite, percentiles)
-
-            # QE-Q-P0-002: Boundary logic must match Numba
-            if policy == QuantileTiePolicy.MIN:
-                q_bins = np.searchsorted(boundaries, v_finite, side='left')
-            else:  # MAX
-                q_bins = np.searchsorted(boundaries, v_finite, side='right')
+            # QE-Q-P0-002: same percentile boundaries + tie policy as the
+            # reference implementation (shared helpers).
+            boundaries = _percentile_boundaries(v_finite, n_quantiles)
+            q_bins = _searchsorted_bins(boundaries, v_finite, n_quantiles, policy)
 
             quantiles[t, mask, f] = q_bins
 

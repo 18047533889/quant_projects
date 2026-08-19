@@ -203,6 +203,11 @@ def realized_volatility(
         ).std(ddof=ddof)
     )
 
+    # A zero-variance lagged window carries no volatility information;
+    # emit NaN rather than 0.0, matching volatility_scale's zero-vol
+    # masking (a 0.0 here divides to inf downstream).
+    vol = vol.mask(vol == 0.0)
+
     # Apply annualization factor
     result = vol * annualization_factor
 

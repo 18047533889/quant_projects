@@ -232,12 +232,12 @@ class ProposalGenerator:
                         producer_version="0.1.0",
                     )
                     proposals.append(mutation)
-                except Exception as e:
+                except (TypeError, ValueError, KeyError, AttributeError) as e:
                     validation_errors.append(f"Proposal {i}: {str(e)}")
 
         except json.JSONDecodeError as e:
             validation_errors.append(f"Invalid JSON: {str(e)}")
-        except Exception as e:
+        except (TypeError, ValueError, KeyError, RuntimeError, OSError) as e:
             validation_errors.append(f"Unexpected error: {str(e)}")
 
         return proposals, validation_errors

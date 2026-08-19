@@ -48,6 +48,7 @@ _POLICY_EXTENSION_CANONICALS: frozenset[str] = frozenset(
         "WMA",
         "ts_ema",
         "ts_ewm_corr",
+        "ts_ewm_cov",
         "neutralize",
         "quantile",
         "standardize",
@@ -870,8 +871,6 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "yoy_by_period": {"scope": "fundamental_period", "pit_safe": True, "min_periods": 5},
     "ts_ewm_std": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_ewm_var": {"scope": "ts", "pit_safe": True, "min_periods": 2},
-    "ts_ewm_cov": {"scope": "ts", "pit_safe": True, "min_periods": 2},
-    "ts_ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "avg2": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "ts_zscore": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     # Phase-1 composite lowerings（evidence 齐全且非 micro_* 可 production）
@@ -980,6 +979,25 @@ for _active_name in _ACTIVE_POLICY_CANONICALS - DAILY_CANONICALS:
         _reviewed_active_policy(_active_name, pit_safe=False),
     )
 
+# Pairwise EWM operators: ts_ewm_cov/ts_ewm_corr are renamed from ewm_cov/ewm_corr
+# by _normalize_semantic_names() at layer_governance import time.  The active-surface
+# filter above only sees ewm_corr (from EXTENDED_ONLY_CANONICALS), so ts_ewm_corr/
+# ts_ewm_cov entries placed in the dict literal would be removed.  Applied here,
+# unconditionally, after the filter, similar to _FINAL_PACK_POLICIES.
+# Also override ewm_corr with min_periods=2 since pairwise EWM needs at least 2 points.
+# _normalize_semantic_names() will alias ewm_corr -> ts_ewm_corr, but the policy
+# dict key must be ts_ewm_corr for infer_operator_policy to find it after alias resolution.
+_PAIRWISE_EWM_POLICIES = {
+    "ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ewm_cov": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_cov": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+}
+# Append to explicit policies and policy_required set so governance sees them.
+# Override any existing entry to ensure min_periods=2 is the final value.
+for _pk, _pv in _PAIRWISE_EWM_POLICIES.items():
+    _EXPLICIT_POLICIES[_pk] = _pv
+
 # Explicit scope overrides for the 2026-08 operator expansion.  Prefix-based
 # auto-inference would label non-``ts_``/``cs_``/``group_`` names elementwise;
 # these operators carry real time-series / cross-sectional semantics.
@@ -1076,6 +1094,22 @@ _EXPLICIT_POLICIES = {
     for name, policy in _EXPLICIT_POLICIES.items()
     if name in _ACTIVE_POLICY_CANONICALS
 }
+
+# Pairwise EWM operators: ts_ewm_cov/ts_ewm_corr are renamed from ewm_cov/ewm_corr
+# by _normalize_semantic_names() at layer_governance import time.  The active-surface
+# filter above only sees ewm_corr (from EXTENDED_ONLY_CANONICALS), so ts_ewm_corr/
+# ts_ewm_cov entries placed in the dict literal would be removed.  Applied here,
+# unconditionally, after the filter, similar to _FINAL_PACK_POLICIES.
+_PAIRWISE_EWM_POLICIES = {
+    "ts_ewm_corr": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_ewm_cov": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+}
+# Append to explicit policies and policy_required set so governance sees them.
+# Override any existing entry to ensure min_periods=2 is the final value.
+# _normalize_semantic_names() will alias ewm_corr -> ts_ewm_corr, but the policy
+# dict key must be ts_ewm_corr for infer_operator_policy to find it after alias resolution.
+for _pk, _pv in _PAIRWISE_EWM_POLICIES.items():
+    _EXPLICIT_POLICIES[_pk] = _pv
 
 # 2026-08 final pack (61 atomics).  These explicit policies must SURVIVE the
 # active-surface filter above (the surface unions are only populated when the

@@ -8,6 +8,8 @@ implementations while maximizing throughput for 10k+ factor batches.
 from typing import Tuple, Optional
 import numpy as np
 
+from quant_evaluator.metrics.quantile import _percentile_boundaries
+
 
 def fast_ic_batch(
     factor_values: np.ndarray,
@@ -233,13 +235,13 @@ def fast_quantile_binning(
 
             v_finite = v[finite_mask]
 
-            # Fast argsort-based ranking
-            order = np.argsort(v_finite)
-            ranks = np.empty(n_valid, dtype=np.int32)
-            ranks[order] = np.arange(n_valid, dtype=np.int32)
-
-            # Convert ranks to quantile bins using vectorized floor division
-            q_bins = (ranks * n_quantiles) // n_valid
+            # QE-Q-P0-002: percentile boundaries + tie-policy searchsorted
+            # (reference semantics, QuantileTiePolicy.MAX default). The
+            # previous rank-floor formula ((ranks * n_quantiles) // n_valid)
+            # disagreed with the reference whenever n_valid was not divisible
+            # by n_quantiles.
+            boundaries = _percentile_boundaries(v_finite, n_quantiles)
+            q_bins = np.searchsorted(boundaries, v_finite, side='right')
             q_bins = np.clip(q_bins, 0, n_quantiles - 1)
 
             quantiles[t, finite_mask, f] = q_bins
@@ -292,9 +294,13 @@ def compute_quantile_returns_fast(
                 q_mask = (q_assign_tf == q) & np.isfinite(label_t)
                 count = int(np.sum(q_mask))
 
+                # Report the raw membership count (matching the reference
+                # implementation), not the post-threshold value — a quantile
+                # with count < min_assets still has members even though its
+                # mean return stays NaN.
+                quantile_counts[t, q, f] = count
                 if count >= min_assets:
                     quantile_returns[t, q, f] = np.mean(label_t[q_mask])
-                    quantile_counts[t, q, f] = count
 
     return quantile_returns, quantile_counts
 

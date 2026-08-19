@@ -1,0 +1,166 @@
+task_id: R20-SR-DIRECTUSE
+finding: causal_dimensionless_support_resistance_prior_pivot_direct_alpha_rehabilitation
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_sr_direct_use_rehab.py
+  - factor_engine/evidence/r2/R20-SR-DIRECTUSE.yaml
+status: CLOSED_LOCAL
+independent_review_status: CLOSED_VERIFIED
+implementation:
+  - Added two causal, dimensionless support/resistance canonicals in
+    indicators_v2 over ONE documented pivot definition — the PRIOR-window
+    typical-price median pivot
+    pivot_t = ((h+l+c)/3).rolling(w, min_periods=w).median().shift(1),
+    i.e. the level a bar-t decision acts against is formed from the w bars
+    ENDING AT t-1 (strictly trailing, PIT-safe; mirrors the
+    donchian_breakout_* prior-window precedent).  Helper _sr_prior_pivot.
+  - sr_distance_pct = (close - pivot_t) / pivot-anchored close
+    ((close - pivot)/close): signed dimensionless distance of price from
+    the prior median typical-price level; strict-positive close masked
+    (non-positive close -> NaN, R5-38 never-laundered); warmup NaN (needs
+    w+1 rows).  Bounded, rolling-only kernel.
+  - sr_touch_count = fraction of the last w bars whose high OR low came
+    within tol (dimensionless relative tolerance, tol*pivot, _POS_FLOAT)
+    of the pivot.  A touch is a TIME-COINCIDENT event: window bar i is
+    judged against pivot_i — the prior-window median typical price AT
+    BAR i'S OWN ROW (rows i-w..i-1) — NEVER against the level formed
+    later at t (comparing bar i against pivot_t would leak t's
+    information backwards).  Bounded [0,1]; bars that cannot be judged
+    (missing high/low, no comparable level at their own row) drop out of
+    BOTH numerator and denominator — never counted as non-touches; the
+    judged bar t itself must have present extremes and a strict-positive
+    close (R5-38).
+  - Kernel-alignment note: the typical-price pivot is a DataFrame aligned
+    with the OHLC panel (typical price is computed columnwise), so
+    elementwise DataFrame arithmetic (high - pivot) correctly compares
+    bar i against its own row's level; the earlier
+    Series-broadcast/`[:, None]` variants were wrong (a pandas Series
+    aligns against DataFrame COLUMNS; an (n,1) numpy broadcast against an
+    (n,n) frame is a shape error).
+  - SKIP DECISION (per task brief): sr_breakout_up / sr_breakout_down
+    were considered and SKIPPED as near-duplicates — a prior-window
+    fresh-extreme breakout IS donchian_breakout_up/down (registered,
+    rolling(w).max().shift(1) prior extremes), and a close-beyond-pivot
+    breakout against the median pivot reduces to thresholding
+    sr_distance_pct, which already carries the distinct median-pivot
+    semantics.  No new breakout canonicals were added.
+  - Reuse survey: ts_support_level / ts_resistance_level are pivot-cluster
+    regression levels with left/right confirmation windows
+    (future-confirmation semantics, price-scale) — a different contract
+    and NOT dimensionless; they stay intermediate and are asserted NOT
+    promoted.  No existing canonical was modified.
+  - ParamSpecs: window _WIN_GE2 for both; tol _POS_FLOAT for
+    sr_touch_count (validated > 0 at the call boundary, ValueError on
+    tol <= 0 and window < 2).  Rolling-only bounded state — NOT in
+    _RECURSIVE_EWM (no full-replay governance needed); tags
+    causal/pit_safe/production_extension.
+  - operator_surface.py: names appended to _TECHNICAL_V2_CANONICALS and
+    added to DAILY_FACTOR_MIGRATED via a new _DAILY_SR_PACK_2026_08
+    frozenset (mirrors _DAILY_CANDLE_PATTERN_PACK_2026_08 style).
+  - mining/direct_use.py: ONLY the two dimensionless names appended to
+    _RELATIVE_ALPHA_OPS; the price-scale ts_support_level /
+    ts_resistance_level levels stay intermediate (never in the set).
+  - Concurrent-writer note: sibling writers edit the same three source
+    files; every SR edit is anchored solely on the new sr_* lines or
+    clearly-shared insertion points (tail of _SPECS, _PARAM_SPECS tail,
+    tail of _RELATIVE_ALPHA_OPS, tail of _TECHNICAL_V2_CANONICALS, after
+    the last _DAILY_*_PACK union) — never on
+    atr_*/psar_*/keltner_*/donchian_*/ma-family/ichimoku_*/supertrend_*/
+    vwap_*/candle_* blocks.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_sr_direct_use_rehab.py -q
+  result: 9 passed (2026-08-19)
+  coverage:
+    - sr_distance_pct manual pandas oracle (prior pivot recomputed from raw
+      OHLC, independent of the operator helper) + warmup NaN boundary (NaN
+      through index w-1, finite from w) + exact frame equality
+    - no-lookahead oracle: last-bar spike — pivot at t equals the median of
+      the w typical prices ENDING AT t-1 only; mutating bar t's own inputs
+      never changes the pivot at t (own-bar data cannot leak into the
+      reference level)
+    - sr_distance_pct sign on deterministic panels (rising -> strictly
+      positive; falling -> strictly negative) + malformed-bar masking
+      (close<=0 bar and NaN-close bar -> NaN on that bar, neighbours
+      finite)
+    - sr_touch_count manual per-bar oracle (numpy loops; each window bar i
+      judged against pivot_i at its OWN row) + [0,1] bound + warmup NaN
+    - deterministic flat panel: exact 1.0 at tol=0.031 (all touch) and
+      exact 0.0 at tol=0.0299 (no touch); tol=0.03 deliberately avoided —
+      band == |high-pivot| is an FP knife-edge (0.3 vs
+      0.3000000000000007) and would make the test roundoff-dependent
+    - malformed-bar exclusion semantics: NaN-high bar NaNs its own row
+      (present-extremes requirement) while the covering window's fraction
+      stays finite over the remaining judgeable bars (excluded, never
+      counted as a non-touch); non-positive close on the judged bar -> NaN
+    - prefix-invariance: truncated panel == full-panel prefix for both
+      canonicals (exact frame equality, rolling-only kernels)
+    - ParamSpec keys/dtypes (window int; tol float), NOT in
+      _RECURSIVE_EWM, no stateful tag, causal+pit_safe tags, window<2 and
+      tol<=0 ValueError guards
+    - _RELATIVE_ALPHA_OPS membership + ts_support_level /
+      ts_resistance_level intermediate exclusion + DAILY_FACTOR_MIGRATED
+      and _TECHNICAL_V2_CANONICALS promotion membership
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_sr_direct_use_rehab.py
+  result: PASS
+registry_bootstrap:
+  command: OPENBLAS/OMP/MKL/POLARS threads=1 python3 -c "import cleaned_operators; cleaned_operators.load_all()"
+  result: PASS; both canonicals resolve via
+    OperatorRegistry.get(name,'pandas_numpy') — sr_distance_pct params
+    ['window'], sr_touch_count params ['tol','window'], tags
+    causal/pit_safe/production_extension; _RELATIVE_ALPHA_OPS,
+    DAILY_FACTOR_MIGRATED and _TECHNICAL_V2_CANONICALS all contain both
+    (verified in the same process)
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the two new canonicals is
+    NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, full
+    registry/backend/root CI and the cross-module integration run with
+    sibling R20 modules are NOT_RUN (only the focused module was run).
+  - The pivot definition is deliberately ONE choice (median typical price
+    over the prior window); alternative pivots (min/max cluster levels,
+    quantile pivots) were not implemented and would be near-duplicates
+    under this contract.
+  - No production certification claim; terminal usability is limited to
+    the mining-layer relative-alpha classification added here.
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + evidence YAML only;
+    joint dispatch with the channel/consolidation slice)
+  date: 2026-08-19
+  verdict: PASS (with findings, no P0/P1)
+  verified:
+    - Causality: _sr_prior_pivot is strictly prior rows
+      (((h+l+c)/3).rolling(w).median().shift(1)); sr_touch_count judges
+      window bar i against pivot_i at bar i's OWN row via elementwise
+      DataFrame arithmetic — no backwards leakage of the level formed at t.
+    - den.where(den>0) -> NaN not 0 for all-unjudgeable windows; tol
+      _POS_FLOAT + explicit ValueError; warmup first finite pivot at row w.
+    - Genuine independent numpy-loop oracle; no-lookahead test mutates the
+      last bar's own inputs and proves the pivot at t is unchanged;
+      prefix-invariance computes the clean full panel before truncation.
+    - Flat-panel tol test pinned on both sides of the 0.3 FP knife-edge.
+    - Governance/promotion/skip rationale all confirmed (sr_breakout_* ==
+      donchian_breakout_* prior-window semantics; ts_support_level /
+      ts_resistance_level correctly absent).
+  p2_findings_and_resolution:
+    - P2: interior window bars with non-positive close were NOT excluded —
+      a close=0 bar with valid high/low still fed tp into pivot medians and
+      could count as a touch, inconsistent with the R5-38 header contract.
+      CLOSED: _sr_prior_pivot now NaNs the typical price of any bar with
+      missing/non-positive close (fail-closed — a pivot window covering one
+      NaNs out), and sr_touch_count excludes such bars from num/den.
+    - P2: num = touch.astype(float).where(valid) was redundant (touch
+      already & valid). CLOSED: dead .where removed.
+    - P2: warmup-edge rows t in [w, 2w) emit fractions over a partial
+      (<w) judgeable cohort. ACCEPTED: documented in the sr_touch_count
+      docstring (over-valid-fraction contract boundary artifact).
+  focused_tests_after_review: 22 passed (SR 9 + channel 13 combined serial
+    run after the fixes, 2026-08-19)
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

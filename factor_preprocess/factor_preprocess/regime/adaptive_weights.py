@@ -295,8 +295,11 @@ def regime_adaptive_weights(
         regime_int = int(regime)
 
         if regime_int not in fitted_state.regime_weights:
-            # Unknown regime -> keep original values
-            weighted_matrix[i, :] = factor_matrix[i, :]
+            # Unknown regime: fail closed with NaN. Silently passing raw
+            # unweighted values through would look like a valid (equal-)
+            # weighted signal downstream while actually skipping the
+            # regime model entirely.
+            continue
         else:
             # Apply regime-specific weights
             weights = fitted_state.regime_weights[regime_int]

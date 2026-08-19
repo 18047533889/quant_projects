@@ -6,9 +6,24 @@ from typing import Any
 from factor_assets.contracts.asset import AssetMetadata, FactorAsset
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.contracts.lineage import LineageRef, ParentRef
-from factor_assets.contracts.lifecycle import LifecycleState, StateEvent
+from factor_assets.contracts.lifecycle import (
+    HealthState,
+    LifecycleState,
+    StateEvent,
+    ValidationStatus,
+)
+from factor_assets.errors import SchemaVersionError
 
-CODEC_VERSION = 1
+# v1: initial codec (metadata/lineage/evidence/asset/state_event).
+# v2: asset payload gains validation_status and health_state (FA-P0-12).
+# v2 readers still accept v1 payloads (the two new fields default
+# fail-closed to UNVALIDATED/ACTIVE), but never write them.
+CODEC_VERSION = 2
+
+# Readers accept any version in this set; writers always emit
+# CODEC_VERSION.  A version outside the set is rejected rather than
+# guessed at (fail-closed on unknown future formats).
+_READABLE_CODEC_VERSIONS = (1, 2)
 
 def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -18,8 +33,20 @@ def _pack(kind: str, value: Any) -> str:
 
 def _unpack(text: str, kind: str) -> Any:
     obj = json.loads(text)
-    if not isinstance(obj, dict) or obj.get("codec") != kind or obj.get("version") != CODEC_VERSION:
+    if not isinstance(obj, dict) or obj.get("codec") != kind:
         raise ValueError(f"unsupported or invalid {kind} codec")
+    version = obj.get("version")
+    # bool is an int subclass (True == 1) and 1.0 == 1, so a type-weak
+    # membership test would accept malformed versions as v1.
+    if (
+        not isinstance(version, int)
+        or isinstance(version, bool)
+        or version not in _READABLE_CODEC_VERSIONS
+    ):
+        raise SchemaVersionError(
+            f"unsupported {kind} codec version {version!r}; "
+            f"readable versions are {list(_READABLE_CODEC_VERSIONS)}"
+        )
     return obj["value"]
 
 def metadata_to_json(value: AssetMetadata) -> str:
@@ -52,6 +79,8 @@ def asset_to_json(value: FactorAsset) -> str:
     obj["metadata"] = asdict(value.metadata)
     obj["lineage"] = asdict(value.lineage)
     obj["lifecycle_state"] = value.lifecycle_state.value
+    obj["validation_status"] = value.validation_status.value
+    obj["health_state"] = value.health_state.value
     return _pack("asset", obj)
 def asset_from_json(text: str) -> FactorAsset:
     obj = _unpack(text, "asset")
@@ -62,6 +91,10 @@ def asset_from_json(text: str) -> FactorAsset:
     obj["lineage"] = lineage_from_json(_pack("lineage", obj["lineage"]))
     obj["tags"] = tuple(obj.get("tags", ()))
     obj["lifecycle_state"] = LifecycleState(obj["lifecycle_state"])
+    obj["validation_status"] = ValidationStatus(
+        obj.get("validation_status", ValidationStatus.UNVALIDATED.value)
+    )
+    obj["health_state"] = HealthState(obj.get("health_state", HealthState.ACTIVE.value))
     obj["latest_evidence_ref"] = evidence_from_json(_pack("evidence_bundle", obj["latest_evidence_ref"]) if obj.get("latest_evidence_ref") else None)
     return FactorAsset(**obj)
 

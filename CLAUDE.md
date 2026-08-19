@@ -16,3 +16,12 @@
 - ≤15 GiB total; ≤2 disjoint low-memory Writers + 1 read-only Auditor.
 - Serial tests: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1`; no xdist.
 - Unrun gates stay `NOT_RUN`. Never claim production-ready without release-grade provenance.
+
+## Session hygiene
+- No `/loop` or `scheduled_tasks` unless user explicitly asks **this turn**.
+- Max 5 active todos; cancel completed Wave-0 / “78 subagents” platform tasks.
+- Bloat cleanup: `bash scripts/cleanup_claude_bloat.sh` then `/clear`.
+
+## Lanes
+- **Platform packages** (QE / FO / FA / FP / modeling): primary focus — see `PLATFORM_LOOP_STATUS.md`. FE/DA edits OK when narrowly needed to unblock platform work.
+- **FE / DA / Q / Polars**: can be a separate deep-dive session; don’t let them swallow the whole platform loop by default.

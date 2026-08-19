@@ -199,6 +199,10 @@ def rolling_zscore(
 
     # Z-score: (current - mean) / std
     current = values[value_col]
+    # Zero lagged std produces NaN, matching the documented contract and
+    # volatility_scale's zero-vol masking (an unmasked division would
+    # emit inf whenever the lagged window is constant).
+    rolling_std_val = rolling_std_val.mask(rolling_std_val == 0.0)
     result = (current - rolling_mean_val) / rolling_std_val
 
     return result

@@ -1,0 +1,53 @@
+audit_id: FA_SELECTION_ASSEMBLY_AUDIT
+date: 2026-08-19
+package: factor_assets
+scope: selection/policy.py, assembly/engine.py, contracts/factor_set.py, contracts/lifecycle.py, contracts/asset.py
+trigger: external platform review P0 #2 #3 #12 #13
+
+findings:
+  - id: FA-P0-2
+    file: selection/policy.py
+    lines: 15-23, 127-136, 249-266
+    issue: "high-similarity hard REJECTED_SIMILARITY destroys information; no SHADOW/COEXIST path"
+  - id: FA-P0-3
+    file: assembly/engine.py
+    lines: 113-116
+    issue: "matched.sort(key=factor_id) lexicographic truncation; selection_policy values not differentiated (L51 only special-cases 'manual')"
+  - id: FA-P0-12
+    file: contracts/lifecycle.py
+    lines: 16-24
+    issue: "LifecycleState conflates pipeline stage with health (DEPRECATED/RETIRED); no ValidationStatus/HealthState"
+  - id: FA-P0-13
+    file: contracts/factor_set.py
+    lines: 41-91
+    issue: "FactorSet lacks per-member provenance; no FactorMembership/FactorSetArtifact; no policy_hash/split_ref/assembly_hash"
+
+similarity_novelty_signals:
+  - similarity/exact.py SimilarityResult: similarity_score sign-preserving -> orientation derivable; policy currently destroys via abs()
+  - novelty/conditional.py NovelyResult: novelty_score [0,1], similar_factor_ids, assessment_method; only impl is result-identity SimpleConditionalNoveltyAssessor
+  - residual novelty lives in QE: quant_evaluator/metrics/interactions/conditional.py compute_incremental_ic (residualizes then ICs)
+  - wire path: novelty/provider.py EvidenceResult.secondary_metrics can carry incremental_ic via QE adapter; currently nothing populates it
+
+blast_radius:
+  rejected_similarity_refs: [selection/policy.py, tests/selection/test_policy.py L320 L546, tests/selection/test_policy_adversarial.py L54 L68]
+  selection_policy_string_refs: [assembly/engine.py L51, contracts/factor_set.py L21 L37-38, tests (constructor only), integration_tests (all use 'manual')]
+  factor_set_refs: [engine.py, contracts, root __init__.py, tests/assembly/test_engine.py, tests/test_import_manifest.py, integration_tests/test_fa_fo_workflow.py L139-144, integration_tests/test_all_packages_integration.py L178 L216-219]
+  production_callers_of_make_decision: none (tests only)
+
+minimal_change_list:
+  - "selection/policy.py L15-23: add SelectionReason SHADOW + SHADOWED_COEXIST; keep REJECTED_SIMILARITY for fail-closed"
+  - "selection/policy.py L127-136: make_decision gains optional novelty_score/residual_ic/similar_factor_ids params (caller-computed; FA stays evaluation-free)"
+  - "selection/policy.py L251-266: abs(sim)>threshold: exact duplicate (novelty_score==0 result-identity) -> SHADOW (recorded, not discarded); residual passes -> approved=True SHADOWED_COEXIST; signal missing -> keep REJECTED_SIMILARITY fail-closed"
+  - "selection/policy.py L81-115: SelectionPolicy gains min_novelty_score param (default 0.0)"
+  - "assembly/engine.py L113: replace lexicographic sort with evidence-based ranking (score desc then factor_id tiebreak); differentiate pareto_front/family_robust/diverse/manual policies"
+  - "assembly/engine.py L136-167: extend family grammar with min_per_family=N"
+  - "contracts/factor_set.py: add frozen FactorMembership(factor_id, orientation, family_id, cluster_id, role, selection_decision_ref, evidence_ref, novelty_ref, reason) + FactorSetArtifact(set_id, name, members, created_at, policy_hash, snapshot_ref, universe_ref, split_ref, assembly_hash, spec); FactorSet.memberships=() and FactorSetSpec.split_ref=None defaults (backward compatible)"
+  - "assembly/engine.py L120-134: compute assembly_hash (sha256 over sorted factor_ids + spec + decision ids); build memberships from latest_decisions"
+  - "contracts/lifecycle.py L16-24: keep LifecycleState pipeline stages; add orthogonal ValidationStatus(UNVALIDATED/PARTIAL/VALIDATED/STALE) + HealthState(ACTIVE/DEPRECATED/RETIRED); FactorAsset gains validation_status/health_state defaulted fields"
+  - "contracts/__init__.py + selection/__init__.py + assembly/__init__.py: export new names"
+
+test_impact:
+  breaks: [tests/selection/test_policy.py test_selection_policy_reject_high_similarity L297, test_selection_reason_enum L542 if exact members asserted, tests/selection/test_policy_adversarial.py L45 L59, tests/assembly/test_engine.py test_max_factors_and_deterministic_ordering L174, tests/contracts/test_contracts.py test_lifecycle_state_enum L47]
+  new_tests: [test_high_similarity_duplicate_becomes_shadow, test_high_similarity_with_residual_novelty_coexists, test_high_similarity_without_novelty_signal_fails_closed, test_shadow_decision_is_recorded_not_discarded, test_ranking_is_evidence_based_not_lexicographic, test_memberships_carry_decision_and_evidence_refs, test_assembly_hash_deterministic, test_membership_orientation_from_similarity_sign, test_validation_status_orthogonal_to_lifecycle, test_health_state_independent_of_stage]
+
+caveat: "no production caller of make_decision exists today; shadow/coexist chain is write-only until residual-IC wiring (QE compute_incremental_ic -> EvidenceResult.secondary_metrics -> policy) lands"

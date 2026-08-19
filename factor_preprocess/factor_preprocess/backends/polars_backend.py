@@ -368,13 +368,20 @@ def ols_neutralize_polars(
     """
     _require_polars()
 
-    # Convert to polars
+    # Convert to polars; carry a positional row key through the join so the
+    # residuals can be realigned to the ORIGINAL values row order.  The
+    # polars join resets row identity, and reindexing by the merged frame's
+    # index misaligns rows whenever the values index is non-unique or a
+    # duplicate (date, asset) key in exposures multiplies merged rows (same
+    # class of defect fixed in the pandas neutralizers via
+    # ``neutralization._alignment``).
     if isinstance(values, pd.DataFrame):
         pl_values = pl.from_pandas(values)
         return_pandas = True
     else:
         pl_values = values
         return_pandas = False
+    pl_values = pl_values.with_row_index("__values_pos__")
 
     if isinstance(exposures, pd.DataFrame):
         pl_exposures = pl.from_pandas(exposures)
@@ -439,26 +446,32 @@ def ols_neutralize_polars(
                 # Singular matrix
                 residuals = np.full_like(y, np.nan)
 
-        # Build result DataFrame with original index
+        # Build result frame keyed by the ORIGINAL values row position
         result_df = pd.DataFrame({
-            date_col: date,
-            asset_col: group[asset_col].values,
+            "__values_pos__": group["__values_pos__"].to_numpy(),
             "residual": residuals,
-        }, index=group.index)
+        })
+        result_df = result_df.set_index("__values_pos__")
 
         results.append(result_df)
 
-    # Concatenate and align with original index
+    n = len(pl_values)
+    # Concatenate and realign to the original values row order (positionally).
+    # Rows absent from the merge become NaN; duplicated positions (duplicate
+    # (date, asset) exposure keys multiply merged rows) keep the first.
     if not results:
         if return_pandas:
-            return pd.Series(np.nan, index=merged_pd.index)
+            return pd.Series(np.nan, index=values.index if return_pandas else None)
         else:
-            return pl.Series("residual", [np.nan] * len(merged))
+            return pl.Series("residual", [np.nan] * n)
 
     all_results = pd.concat(results)
-    residuals_series = all_results["residual"].reindex(merged_pd.index)
+    all_results = all_results[~all_results.index.duplicated(keep="first")]
+    residuals_series = all_results["residual"].reindex(range(n))
+    residuals_series.name = "residual"
 
     if return_pandas:
+        residuals_series.index = values.index
         return residuals_series
     else:
         return pl.from_pandas(residuals_series.to_frame()).to_series()

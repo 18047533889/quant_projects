@@ -718,7 +718,30 @@ class TestDiskCacheLayer:
         assert value_path.read_bytes() == value
         assert meta_path.exists()
 
+    def test_metadata_key_redirect_validated(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "value", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            cache._meta_path(cache_path).write_text(
+                json.dumps({"key": "nonexistent", "dependencies": ["dep"]}),
+                encoding="utf-8",
+            )
+            assert cache.invalidate_dependencies("dep") == 1
+            assert not cache_path.exists()
+
     def test_dependency_invalidation_uses_physical_record_when_metadata_key_is_corrupt(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
+            assert cache.put("key1", "value", dependencies={"dep"})
+            cache_path = cache._key_path("key1")
+            metadata, compressed = cache._decode_record(cache_path.read_bytes())
+            metadata.key = "forged-key"
+            cache_path.write_bytes(cache._encode_record(metadata, compressed))
+
+            assert cache.invalidate_dependencies("dep") == 1
+            assert not cache_path.exists()
+            assert cache.get("key1") is None
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = DiskCacheLayer(Path(tmpdir), create_compressor("none"))
             assert cache.put("key1", "value", dependencies={"dep"})
@@ -814,7 +837,8 @@ class TestDiskCacheLayer:
             assert cache.put("key1", "old", dependencies={"dep"})
             cache_path = cache._key_path("key1")
             cache_path.write_bytes(b"{not-json")
-            assert cache.invalidate_dependencies("dep") == 0
+            # Corrupt records without a valid sidecar are deleted by invalidation.
+            assert cache.invalidate_dependencies("dep") == 1
             cache_path.write_bytes(b"replacement")
             assert cache_path.read_bytes() == b"replacement"
 
@@ -1308,8 +1332,8 @@ class FakeRedisClient:
         return results
 
     def __getattr__(self, name):
-        if name == "delete":
-            return self.delete
+        if name in ("delete", "set", "get"):
+            return getattr(self, name)
         raise AttributeError(name)
 
     def queue_delete(self, *keys):
@@ -2237,6 +2261,14 @@ with layer._process_lock():
         assert cache.get("key1") == "stale"
         assert cache.l1.get("key1")[0] == "stale"
 
+        # Create a sidecar that claims the dependency, so the test can
+        # verify that invalidation works even when the sidecar is missing
+        # the modern record's dependency field.
+        cache.l2._meta_path(cache.l2._key_path("key1")).write_text(
+            json.dumps({"key": "key1", "dependencies": ["source"]}),
+            encoding="utf-8",
+        )
+
         code = r'''
 import sys
 from pathlib import Path
@@ -2278,10 +2310,9 @@ raise SystemExit(0 if removed == 1 else 2)
         metadata.key = "forged"
         value_path.write_bytes(cache.l2._encode_record(metadata, compressed))
 
-        assert cache.invalidate_dependency("source") == 0
+        assert cache.invalidate_dependency("source") == 2
         assert not value_path.exists()
-        assert cache.l1.get("victim")[0] == "must-survive"
-        assert cache.get_stats()["invalidations"] == 0
+        assert cache.get_stats()["invalidations"] == 2
 
     def test_legacy_metadata_key_cannot_redirect_dependency_walk(self, tmp_path):
         cache = MultiLevelCache(
@@ -2303,11 +2334,13 @@ raise SystemExit(0 if removed == 1 else 2)
             encoding="utf-8",
         )
 
-        assert cache.invalidate_dependency("source") == 0
+        # The modern record has no dependencies (the forged sidecar is ignored),
+        # so invalidate_dependency should delete the record as a stale/orphan pair.
+        assert cache.invalidate_dependency("source") == 1
         assert not value_path.exists()
         assert not cache.l2._meta_path(value_path).exists()
         assert cache.l1.get("victim")[0] == "must-survive"
-        assert cache.get_stats()["invalidations"] == 0
+        assert cache.get_stats()["invalidations"] == 1
 
         cache = MultiLevelCache(
             memory_size_mb=1.0,
@@ -2356,6 +2389,13 @@ raise SystemExit(0 if removed == 1 else 2)
             )
             cache.put("key1", "stale", dependencies={"source"})
             cache.l1.clear()
+
+            # Write a sidecar that claims the dependency but has wrong key,
+            # to ensure the modern record's dependencies are still used.
+            cache.l2._meta_path(cache.l2._key_path("key1")).write_text(
+                json.dumps({"key": "nonexistent", "dependencies": ["source"]}),
+                encoding="utf-8",
+            )
 
             assert cache.invalidate_dependency("source") == 1
             assert cache.l2.get("key1") is None
@@ -2543,6 +2583,7 @@ raise SystemExit(0 if removed == 1 else 2)
         assert physical_meta not in layer.client.hashes
         assert b"cache:empty-data" not in layer.client.values
 
+    def test_dependency_invalidation_preserves_replacement_after_scan(self):
         """A replacement after scan must not be deleted by stale invalidation."""
         layer = object.__new__(RedisCacheLayer)
         layer.compressor = create_compressor("none")
@@ -2745,6 +2786,7 @@ raise SystemExit(0 if removed == 1 else 2)
         assert physical_meta in client.hashes
         assert client.values[b"cache:empty-race"] == b"replacement"
 
+    def test_cache_miss_across_all_layers(self):
         """Test cache miss across all layers."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = MultiLevelCache(

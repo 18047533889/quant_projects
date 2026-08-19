@@ -161,11 +161,14 @@ def compute_ic_stability(
             first_half = ic_series[w:w+half_window, f]
             second_half = ic_series[w+half_window:w+window_size, f]
 
-            # Remove NaNs
-            first_valid = first_half[~np.isnan(first_half)]
-            second_valid = second_half[~np.isnan(second_half)]
+            # Correlate the same time periods across halves: drop a period
+            # only when EITHER half is NaN.  Dropping per half independently
+            # misaligns the series (and crashes corrcoef on length mismatch).
+            valid = ~np.isnan(first_half) & ~np.isnan(second_half)
+            first_valid = first_half[valid]
+            second_valid = second_half[valid]
 
-            if len(first_valid) < min_periods or len(second_valid) < min_periods:
+            if len(first_valid) < min_periods:
                 continue
 
             # Pearson correlation between halves

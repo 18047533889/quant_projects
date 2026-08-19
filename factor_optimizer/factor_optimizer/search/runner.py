@@ -1,8 +1,11 @@
 """SearchRunner: orchestrate mutation search with budget and plateau stopping."""
 
+import numbers
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import isfinite
+from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Optional
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
@@ -31,8 +34,12 @@ class SearchConfig:
     max_concurrency: int = 1
     evaluation_cost_units: Optional[float] = None
     execution_mode: ExecutionMode = ExecutionMode.RESEARCH_ONLY
-    # Existing callbacks remain compatible; safe callers opt into the protocol.
-    require_evaluation_protocol: bool = False
+    # Fail-closed default: search must run through an EvaluationProtocol with a
+    # validated SplitPlan. Generic evaluation callbacks are rejected outright
+    # unless the caller explicitly opts out via
+    # require_evaluation_protocol=False (deprecated escape hatch, research
+    # mode only; always rejected under PRODUCTION).
+    require_evaluation_protocol: bool = True
 
     def __post_init__(self):
         if isinstance(self.execution_mode, str):
@@ -96,7 +103,25 @@ class SearchSession:
     frozen_at: Optional[datetime] = None
     sealed_trial_id: Optional[str] = None
     sealed_split_id: Optional[str] = None
+    sealed_test_masks: Optional[Dict[str, List[bool]]] = None
     sealed_test_consumed: bool = False
+    sealed_test_results: List[Dict[str, Any]] = field(default_factory=list)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Sealed-test state is append-only through freeze/consume; direct
+        # assignment after freeze cannot reset the one-shot seal.
+        if (
+            getattr(self, "frozen_at", None) is not None
+            and name in ("frozen_at", "sealed_trial_id", "sealed_split_id",
+                         "sealed_test_masks", "sealed_test_consumed")
+            and getattr(self, name, None) is not value
+            and not getattr(self, "_sealing", False)
+        ):
+            raise ValueError(
+                f"sealed test state '{name}' is immutable after freeze; "
+                "use consume_sealed_test"
+            )
+        object.__setattr__(self, name, value)
 
     def _ensure_mutable(self) -> None:
         if self.frozen_at is not None:
@@ -116,6 +141,22 @@ class SearchSession:
     def update_best(self, trial_id: str, score: float) -> bool:
         """Update best score if improved. Returns True if new best."""
         self._ensure_mutable()
+        # A NaN comparison against any best_score is False, so accepting one
+        # would lock the incumbent forever; reject non-finite scores outright
+        # (mirroring SearchSession.from_dict's best_score contract).
+        # Accept numpy scalars via numbers.Real but still reject bool (a
+        # numbers.Real subclass would otherwise admit True as 1.0).
+        if (
+            isinstance(score, bool)
+            or not isinstance(score, (int, float, numbers.Real))
+        ):
+            raise ValueError("best score must be a finite non-boolean number")
+        try:
+            finite = isfinite(score)
+        except (OverflowError, TypeError, ValueError):
+            finite = False
+        if not finite:
+            raise ValueError("best score must be a finite non-boolean number")
         if self.best_score is None or score > self.best_score:
             self.best_score = score
             self.best_trial_id = trial_id
@@ -147,9 +188,29 @@ class SearchSession:
         )
         if winner is None or not winner.evaluation_ref:
             raise ValueError("frozen winner must have evaluation evidence")
+        search_plan = getattr(self.config, "_search_split_plan", None)
+        if search_plan is not None and not _sealed_test_disjoint(search_plan, split_plan):
+            raise ValueError(
+                "sealed test_mask overlaps the search-time train/validation masks; "
+                "the sealed segment must be disjoint from all search data"
+            )
         self.frozen_at = datetime.now()
-        self.sealed_trial_id = winner.trial_id
-        self.sealed_split_id = split_plan.split_id
+        # Allow the freeze itself to set the sealed identity exactly once.
+        object.__setattr__(self, "_sealing", True)
+        try:
+            self.sealed_trial_id = winner.trial_id
+            self.sealed_split_id = split_plan.split_id
+            # Pin the frozen masks so consume_sealed_test can reject a
+            # different plan that merely reuses the same split_id.  A
+            # read-only proxy + tuples: in-place item mutation must not be
+            # able to rewrite what the seal compares against.
+            self.sealed_test_masks = MappingProxyType({
+                "train": tuple(split_plan.train_mask),
+                "validation": tuple(split_plan.validation_mask),
+                "test": tuple(split_plan.test_mask),
+            })
+        finally:
+            object.__setattr__(self, "_sealing", False)
         return SealedTestHandle(
             search_session_id=self.session_id,
             trial_id=winner.trial_id,
@@ -168,8 +229,16 @@ class SearchSession:
         validate_split_plan(split_plan)
         if not isinstance(handle, SealedTestHandle):
             raise TypeError("handle must be a SealedTestHandle")
-        if not callable(evaluator):
-            raise TypeError("evaluator must be callable")
+        if not isinstance(evaluator, EvaluationProtocol):
+            raise TypeError(
+                "sealed test evaluation requires an EvaluationProtocol whose "
+                "split_plan is bound to the sealed test segment; bare callables "
+                "decide their own data boundary and are not accepted"
+            )
+        if evaluator.split_plan.split_id != split_plan.split_id:
+            raise ValueError(
+                "evaluator protocol split_id must match the sealed split_plan"
+            )
         if self.frozen_at is None:
             raise ValueError("search session is not frozen")
         if self.sealed_test_consumed:
@@ -188,13 +257,35 @@ class SearchSession:
         )
         if actual != expected or split_plan.split_id != self.sealed_split_id:
             raise ValueError("sealed test handle does not match frozen session")
+        # split_id equality alone is trivially forgeable; the plan presented
+        # at consume time must be mask-identical to the one frozen earlier.
+        frozen_masks = self.sealed_test_masks
+        if frozen_masks is not None and (
+            tuple(split_plan.train_mask) != frozen_masks["train"]
+            or tuple(split_plan.validation_mask) != frozen_masks["validation"]
+            or tuple(split_plan.test_mask) != frozen_masks["test"]
+        ):
+            raise ValueError(
+                "sealed test split_plan masks differ from the frozen plan; "
+                "a reused split_id cannot re-bind the sealed test segment"
+            )
+        # The evaluator must be bound to this exact plan, not just to a
+        # plan carrying the same split_id.
+        if (
+            tuple(evaluator.split_plan.train_mask) != tuple(split_plan.train_mask)
+            or tuple(evaluator.split_plan.validation_mask) != tuple(split_plan.validation_mask)
+            or tuple(evaluator.split_plan.test_mask) != tuple(split_plan.test_mask)
+        ):
+            raise ValueError(
+                "evaluator protocol masks must match the sealed split_plan masks"
+            )
         winner = next(
             (trial for trial in self.successful_trials() if trial.trial_id == handle.trial_id),
             None,
         )
         if winner is None or winner.evaluation_ref != handle.evaluation_ref:
             raise ValueError("sealed test handle evidence does not match frozen winner")
-        metrics = evaluator(winner, split_plan)
+        metrics = evaluator.evaluate(winner, 0)
         if not isinstance(metrics, dict) or not all(
             isinstance(name, str)
             and isinstance(value, (int, float))
@@ -203,8 +294,10 @@ class SearchSession:
             for name, value in metrics.items()
         ):
             raise ValueError("sealed test evaluator must return finite numeric metrics")
-        self.sealed_test_consumed = True
-        return SealedTestResult(
+        # Consume the seal via the guarded path (False→True is the one legal
+        # transition; any reset attempt stays blocked by __setattr__).
+        object.__setattr__(self, "sealed_test_consumed", True)
+        result = SealedTestResult(
             trial_id=winner.trial_id,
             test_metrics=dict(metrics),
             frozen_at=self.frozen_at,
@@ -212,6 +305,16 @@ class SearchSession:
             split_id=split_plan.split_id,
             evaluation_ref=winner.evaluation_ref,
         )
+        self.sealed_test_results.append(
+            {
+                "trial_id": result.trial_id,
+                "split_id": result.split_id,
+                "evaluation_ref": result.evaluation_ref,
+                "frozen_at": result.frozen_at.isoformat(),
+                "test_metrics": dict(result.test_metrics),
+            }
+        )
+        return result
 
     def is_finished(self) -> bool:
         """Check if session is complete."""
@@ -236,10 +339,28 @@ class SearchSession:
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "stop_reason": self.stop_reason,
             "recent_scores": list(self.recent_scores),
+            # Checkpoint format: 2 serializes sealed_test_masks alongside
+            # frozen_at; format 1 checkpoints (no key) predate mask pinning.
+            "checkpoint_format": 2,
+            # The search-time data boundary must survive a checkpoint
+            # roundtrip: freeze_for_sealed_test's overlap guard reads it
+            # from the config, so a restored session without it would
+            # silently skip the sealed/search disjointness check.
+            "search_split_masks": _serialize_search_split_plan(self.config),
             "frozen_at": self.frozen_at.isoformat() if self.frozen_at else None,
             "sealed_trial_id": self.sealed_trial_id,
             "sealed_split_id": self.sealed_split_id,
+            "sealed_test_masks": (
+                {
+                    "train": list(self.sealed_test_masks["train"]),
+                    "validation": list(self.sealed_test_masks["validation"]),
+                    "test": list(self.sealed_test_masks["test"]),
+                }
+                if self.sealed_test_masks is not None
+                else None
+            ),
             "sealed_test_consumed": self.sealed_test_consumed,
+            "sealed_test_results": [dict(item) for item in self.sealed_test_results],
         }
 
     @classmethod
@@ -262,6 +383,10 @@ class SearchSession:
         if isinstance(finished_at, str):
             finished_at = datetime.fromisoformat(finished_at)
         frozen_at = values["frozen_at"]
+        if frozen_at is not None and not isinstance(frozen_at, str):
+            raise ValueError(
+                "checkpoint frozen_at must be null or an ISO timestamp string"
+            )
         if isinstance(frozen_at, str):
             frozen_at = datetime.fromisoformat(frozen_at)
         budget_tracker = BudgetTracker.from_dict(values["budget_tracker"])
@@ -346,6 +471,102 @@ class SearchSession:
             evaluated_scores.append(float(score))
         if recent_scores and evaluated_scores[-len(recent_scores):] != recent_scores:
             raise ValueError("checkpoint recent_scores do not match evaluated trial history")
+        sealed_test_consumed = values["sealed_test_consumed"]
+        if not isinstance(sealed_test_consumed, bool):
+            raise ValueError("checkpoint sealed_test_consumed must be a boolean")
+        sealed_test_masks = values.get("sealed_test_masks")
+        if sealed_test_masks is not None:
+            if not isinstance(sealed_test_masks, dict) or set(sealed_test_masks) != {
+                "train", "validation", "test"
+            }:
+                raise ValueError("checkpoint sealed_test_masks must contain train/validation/test")
+            if not all(
+                isinstance(sealed_test_masks[name], list)
+                and sealed_test_masks[name]
+                and all(type(mask) is bool for mask in sealed_test_masks[name])
+                for name in ("train", "validation", "test")
+            ):
+                raise ValueError("checkpoint sealed_test_masks must be non-empty boolean lists")
+            mask_lengths = {len(sealed_test_masks[name]) for name in ("train", "validation", "test")}
+            if len(mask_lengths) != 1:
+                raise ValueError("checkpoint sealed_test_masks must have equal lengths")
+        # Format 2 checkpoints serialize sealed_test_masks alongside
+        # frozen_at, so a frozen session without masks is tampered/corrupt.
+        # Format 1 (pre-mask) checkpoints predate the key entirely and must
+        # still restore: their seal identity survives via frozen_at /
+        # sealed_trial_id / sealed_split_id, and the consume-time mask
+        # comparison degrades to skip rather than reject.
+        _format = values.get("checkpoint_format", 1)
+        if _format >= 2 and (frozen_at is None) != (sealed_test_masks is None):
+            raise ValueError("checkpoint sealed_test_masks must be present exactly when frozen")
+        if frozen_at is not None and sealed_test_masks is None:
+            warnings.warn(
+                "legacy checkpoint predates sealed_test_masks serialization; "
+                "restoring without frozen mask pinning (consume-time mask "
+                "comparison will be skipped)",
+                UserWarning,
+                stacklevel=2,
+            )
+        sealed_test_results = values.get("sealed_test_results", [])
+        if not isinstance(sealed_test_results, list):
+            raise ValueError("checkpoint sealed_test_results must be a list")
+        _REQUIRED_RESULT_KEYS = {"trial_id", "split_id", "evaluation_ref", "frozen_at", "test_metrics"}
+        for _idx, _item in enumerate(sealed_test_results):
+            if not isinstance(_item, dict):
+                raise ValueError(
+                    f"checkpoint sealed_test_results[{_idx}] must be a dict"
+                )
+            _missing_keys = _REQUIRED_RESULT_KEYS - _item.keys()
+            if _missing_keys:
+                raise ValueError(
+                    f"checkpoint sealed_test_results[{_idx}] missing keys: {sorted(_missing_keys)}"
+                )
+            # Validate string identity fields (non-empty, non-whitespace).
+            for _key in ("trial_id", "split_id", "evaluation_ref"):
+                _val = _item[_key]
+                if not isinstance(_val, str) or not _val.strip():
+                    raise ValueError(
+                        f"checkpoint sealed_test_results[{_idx}].{_key} must be a non-empty string"
+                    )
+            # frozen_at must be a parseable ISO timestamp string.
+            _frozen_at_raw = _item["frozen_at"]
+            if not isinstance(_frozen_at_raw, str):
+                raise ValueError(
+                    f"checkpoint sealed_test_results[{_idx}].frozen_at must be an ISO timestamp string"
+                )
+            try:
+                datetime.fromisoformat(_frozen_at_raw)
+            except (ValueError, TypeError) as _exc:
+                raise ValueError(
+                    f"checkpoint sealed_test_results[{_idx}].frozen_at is not a valid ISO timestamp"
+                ) from _exc
+            # test_metrics must be a dict of finite non-boolean numbers.
+            _metrics = _item["test_metrics"]
+            if not isinstance(_metrics, dict):
+                raise ValueError(
+                    f"checkpoint sealed_test_results[{_idx}].test_metrics must be a dict"
+                )
+            for _mkey, _mval in _metrics.items():
+                if (
+                    isinstance(_mval, bool)
+                    or not isinstance(_mval, (int, float))
+                    or not isfinite(_mval)
+                ):
+                    raise ValueError(
+                        f"checkpoint sealed_test_results[{_idx}].test_metrics[{_mkey!r}] "
+                        f"must be a finite non-boolean number, got {type(_mval).__name__}"
+                    )
+        if sealed_test_consumed and not sealed_test_results and sealed_test_masks is not None:
+            raise ValueError(
+                "checkpoint claims a consumed sealed test without recorded evidence"
+            )
+        if sealed_test_results and not sealed_test_consumed:
+            raise ValueError(
+                "checkpoint records sealed test evidence but the seal is unconsumed"
+            )
+        # Reattach the serialized search-time data boundary so the frozen
+        # session's overlap guard survives the checkpoint roundtrip.
+        _restore_search_split_plan(config, values.get("search_split_masks"))
         session = cls(
             session_id=values["session_id"],
             config=config,
@@ -358,12 +579,120 @@ class SearchSession:
             finished_at=finished_at,
             stop_reason=values["stop_reason"],
             recent_scores=list(values["recent_scores"]),
-            frozen_at=frozen_at,
-            sealed_trial_id=values["sealed_trial_id"],
-            sealed_split_id=values["sealed_split_id"],
-            sealed_test_consumed=values["sealed_test_consumed"],
+            frozen_at=None,
+            sealed_trial_id=None,
+            sealed_split_id=None,
+            sealed_test_masks=None,
+            sealed_test_consumed=False,
+            sealed_test_results=list(sealed_test_results),
         )
+        if frozen_at is not None:
+            # Replay the freeze through the guarded path so the restored
+            # session carries the same immutability guarantees as a live one.
+            object.__setattr__(session, "_sealing", True)
+            try:
+                session.frozen_at = frozen_at
+                # Validate identity fields for frozen sessions.
+                _stid = values["sealed_trial_id"]
+                if not isinstance(_stid, str) or not _stid.strip():
+                    raise ValueError(
+                        "checkpoint sealed_trial_id must be a non-empty string for a frozen session"
+                    )
+                session.sealed_trial_id = _stid
+                _ssid = values["sealed_split_id"]
+                if not isinstance(_ssid, str) or not _ssid.strip():
+                    raise ValueError(
+                        "checkpoint sealed_split_id must be a non-empty string for a frozen session"
+                    )
+                session.sealed_split_id = _ssid
+                if sealed_test_masks is not None:
+                    session.sealed_test_masks = MappingProxyType({
+                        "train": tuple(sealed_test_masks["train"]),
+                        "validation": tuple(sealed_test_masks["validation"]),
+                        "test": tuple(sealed_test_masks["test"]),
+                    })
+                session.sealed_test_consumed = sealed_test_consumed
+            finally:
+                object.__setattr__(session, "_sealing", False)
         return session
+
+
+def _sealed_test_disjoint(search_plan: SplitPlan, sealed_plan: SplitPlan) -> bool:
+    """Check the sealed test segment is disjoint from all search-time data."""
+    try:
+        for search_mask in (
+            search_plan.train_mask,
+            search_plan.validation_mask,
+        ):
+            # Unequal lengths make zip() silently truncate the comparison,
+            # so a longer sealed mask would only be checked on its prefix.
+            if len(sealed_plan.test_mask) != len(search_mask):
+                return False
+            for a, b in zip(sealed_plan.test_mask, search_mask):
+                # Fail closed on non-bool elements: a non-bool pair must be
+                # treated as overlap, not silently skipped.
+                if type(a) is not bool or type(b) is not bool:
+                    return False
+                if a and b:
+                    return False
+    except TypeError:
+        return False
+    return True
+
+
+def _serialize_search_split_plan(config: SearchConfig) -> Optional[Dict[str, Any]]:
+    """Serialize the search-time SplitPlan stashed on the config, if any."""
+    plan = getattr(config, "_search_split_plan", None)
+    if plan is None:
+        return None
+    return {
+        "split_id": plan.split_id,
+        "train": [bool(v) for v in plan.train_mask],
+        "validation": [bool(v) for v in plan.validation_mask],
+        "test": [bool(v) for v in plan.test_mask],
+    }
+
+
+def _restore_search_split_plan(
+    config: SearchConfig, payload: Optional[Dict[str, Any]]
+) -> None:
+    """Reattach a serialized search-time SplitPlan to a restored config.
+
+    Fail-closed: a malformed payload raises rather than leaving the overlap
+    guard silently disarmed.
+    """
+    if payload is None:
+        return
+    if not isinstance(payload, dict) or set(payload) != {
+        "split_id", "train", "validation", "test"
+    }:
+        raise ValueError("checkpoint search_split_masks must contain split_id/train/validation/test")
+    split_id = payload["split_id"]
+    if not isinstance(split_id, str) or not split_id.strip():
+        raise ValueError("checkpoint search_split_masks split_id must be a non-empty string")
+    masks = {}
+    for name in ("train", "validation", "test"):
+        mask = payload[name]
+        if not isinstance(mask, list) or not mask or any(
+            type(v) is not bool for v in mask
+        ):
+            raise ValueError(
+                "checkpoint search_split_masks must be non-empty boolean lists"
+            )
+        masks[name] = list(mask)
+    if len({len(masks[name]) for name in masks}) != 1:
+        raise ValueError("checkpoint search_split_masks must have equal lengths")
+    object.__setattr__(
+        config,
+        "_search_split_plan",
+        SplitPlan(
+            split_id,
+            masks["train"],
+            masks["validation"],
+            masks["test"],
+            {"restored_from_checkpoint": True},
+        ),
+    )
 
 
 class SearchRunner:
@@ -379,17 +708,35 @@ class SearchRunner:
     ):
         if config.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
-        if config.require_evaluation_protocol and not isinstance(
-            evaluation_fn, EvaluationProtocol
-        ):
-            raise TypeError(
-                "safe search requires an EvaluationProtocol with a validated SplitPlan"
+        if not isinstance(evaluation_fn, EvaluationProtocol):
+            if config.execution_mode is ExecutionMode.PRODUCTION:
+                raise TypeError(
+                    "production search requires an EvaluationProtocol with a "
+                    "validated SplitPlan; generic evaluation callbacks are "
+                    "not accepted"
+                )
+            if config.require_evaluation_protocol:
+                raise TypeError(
+                    "safe search requires an EvaluationProtocol with a validated SplitPlan"
+                )
+            warnings.warn(
+                "SearchRunner received a generic evaluation_fn; this escape "
+                "hatch is deprecated and will be removed. Wrap the callback "
+                "in an EvaluationProtocol with a validated SplitPlan.",
+                DeprecationWarning,
+                stacklevel=2,
             )
         self.config = config
         self.proposal_fn = proposal_fn
         self.evaluation_fn = evaluation_fn
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
+        if isinstance(evaluation_fn, EvaluationProtocol):
+            # Record the search-time data boundary so freeze_for_sealed_test
+            # can reject sealed plans that overlap search data.
+            object.__setattr__(
+                self.config, "_search_split_plan", evaluation_fn.split_plan
+            )
 
     def run(self, session_id: str) -> SearchSession:
         """Execute a new search until budget exhausted or plateau reached."""
@@ -432,8 +779,20 @@ class SearchRunner:
 
             try:
                 trial = self.proposal_fn()
-            except Exception:
+            except Exception as exc:
                 budget_tracker.record_trial()
+                # Burned budget must be visible: record the failure as a
+                # duplicate-slot trial instead of continuing silently.
+                failed = Trial(
+                    trial_id=f"proposal-failure-{budget_tracker.trials_used}",
+                    mutation_id="proposal-failure",
+                    status=TrialStatus.PROPOSED,
+                )
+                failed.update_status(
+                    TrialStatus.FAILED,
+                    failure_reason=f"proposal_fn error: {exc}",
+                )
+                session.duplicate_trials.append(failed)
                 continue
             budget_tracker.record_trial()
             if not isinstance(trial, Trial):
@@ -485,7 +844,18 @@ class SearchRunner:
                     break
 
                 try:
-                    score = float(result["score"])
+                    raw_score = result["score"]
+                    # bool is an int subclass; True silently coerces to 1.0
+                    # and produces a checkpoint SearchSession.from_dict
+                    # rejects, making the session un-deserializable.
+                    # np.bool_ does not subclass Python bool but also coerces.
+                    if isinstance(raw_score, bool) or (
+                        hasattr(raw_score, "dtype")
+                        and getattr(raw_score, "dtype", None) is not None
+                        and raw_score.dtype.kind == "b"
+                    ):
+                        raise ValueError("evaluation result score must not be boolean")
+                    score = float(raw_score)
                     if not isfinite(score):
                         raise ValueError("evaluation result score must be finite")
                     rank = result.get("rank")
@@ -498,7 +868,12 @@ class SearchRunner:
                         and total > 0
                         and 0 <= rank < total
                     )
-                except Exception as exc:
+                except (TypeError, ValueError, KeyError, AttributeError,
+                        OverflowError) as exc:
+                    # A lazy score object raising anything else (e.g. a
+                    # RuntimeError from a user evaluator) escapes to the
+                    # caller instead of silently killing the whole run —
+                    # mark FAILED only for the expected coercion failures.
                     trial.update_status(TrialStatus.FAILED, failure_reason=str(exc))
                     break
 

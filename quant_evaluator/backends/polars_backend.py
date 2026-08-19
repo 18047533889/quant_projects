@@ -267,36 +267,60 @@ def polars_quantile_binning(
     asset_idx = np.tile(np.repeat(np.arange(N), F), T)
     factor_idx = np.tile(np.arange(F), T * N)
 
-    factor_id_arr = np.array([factor_ids[i] for i in factor_idx])
     value_flat = factor_values.ravel()
 
     df = pl.DataFrame({
         "time_idx": time_idx,
         "asset_idx": asset_idx,
-        "factor_id": factor_id_arr,
         "factor_idx": factor_idx,
         "value": value_flat,
     })
 
-    # Compute quantiles using polars
+    # QE-Q-P0-002: percentile boundaries + tie-policy comparison (reference
+    # semantics, QuantileTiePolicy.MAX default). The previous rank-floor
+    # formula disagreed with the reference whenever n_valid was not divisible
+    # by n_quantiles.  Boundaries are computed in NumPy via the shared
+    # _percentile_boundaries helper (single source of truth, including the
+    # 1e-9 integer-position snap: polars' own quantile interpolation can land
+    # one ulp off the data value there, silently flipping the tie policy for
+    # the value sitting exactly on the boundary) and joined in as per-group
+    # literal columns.
+    from quant_evaluator.metrics.quantile import _percentile_boundaries
+
+    n_boundaries = n_quantiles - 1
+
+    # Per-(t, f) boundaries computed in NumPy (parity with the reference).
+    boundary_rows = []
+    for t in range(T):
+        for f in range(F):
+            v = factor_values[t, :, f]
+            v_finite = v[np.isfinite(v)]
+            if v_finite.shape[0] < min_valid:
+                continue
+            bounds = _percentile_boundaries(v_finite, n_quantiles)
+            row = {"time_idx": t, "factor_idx": f}
+            for b in range(n_boundaries):
+                row[f"boundary_{b}"] = float(bounds[b])
+            boundary_rows.append(row)
+
+    if not boundary_rows:
+        return np.full((T, N, F), -1, dtype=np.int32)
+
+    boundaries_df = pl.DataFrame(boundary_rows)
+
     quantile_result = (
         df
         .lazy()
         .filter(pl.col("value").is_finite())
+        .join(boundaries_df.lazy(), on=["time_idx", "factor_idx"], how="inner")
         .with_columns([
-            pl.col("value")
-            .rank(method="average")
-            .over(["time_idx", "factor_id"])
-            .alias("rank"),
-            pl.len().over(["time_idx", "factor_id"]).alias("n_valid"),
-        ])
-        .filter(pl.col("n_valid") >= min_valid)
-        .with_columns([
-            ((pl.col("rank") - 1) * n_quantiles / pl.col("n_valid"))
-            .floor()
-            .clip(0, n_quantiles - 1)
-            .cast(pl.Int32)
-            .alias("quantile"),
+            # searchsorted side='right': boundary values go to the HIGHER bin
+            pl.sum_horizontal([
+                (pl.col("value") >= pl.col(f"boundary_{b}")).cast(pl.Int32)
+                for b in range(n_boundaries)
+            ]).clip(0, n_quantiles - 1).alias("quantile")
+            if n_boundaries > 0
+            else pl.lit(0, dtype=pl.Int32).alias("quantile"),
         ])
         .select(["time_idx", "asset_idx", "factor_idx", "quantile"])
         .collect()
@@ -366,6 +390,8 @@ def polars_quantile_returns(
     })
 
     # Compute mean returns per quantile
+    # NOTE: the count threshold must be applied AFTER aggregating (and the
+    # raw count reported regardless), matching compute_quantile_returns_fast.
     quantile_stats = (
         df
         .lazy()
@@ -375,7 +401,6 @@ def polars_quantile_returns(
             pl.col("label").mean().alias("mean_return"),
             pl.len().alias("count"),
         ])
-        .filter(pl.col("count") >= min_assets)
         .collect()
     )
 
@@ -390,7 +415,10 @@ def polars_quantile_returns(
         means = quantile_stats["mean_return"].to_numpy()
         counts = quantile_stats["count"].to_numpy()
 
-        quantile_returns[times, quantiles, factors] = means
         quantile_counts[times, quantiles, factors] = counts
+        sufficient = counts >= min_assets
+        quantile_returns[times[sufficient], quantiles[sufficient], factors[sufficient]] = (
+            means[sufficient]
+        )
 
     return quantile_returns, quantile_counts

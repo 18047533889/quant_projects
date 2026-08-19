@@ -10,6 +10,11 @@ import pandas as pd
 from typing import Optional
 from scipy import signal
 
+# Narrowed catch set for bandpass / CF-filter internal numerical failures.
+# Programming errors (TypeError, AttributeError, bad column names) must
+# propagate instead of being silently NaN'd.
+_NUMERICAL_FAILURES = (ValueError, IndexError, np.linalg.LinAlgError, ArithmeticError)
+
 
 def bandpass_filter(
     values: pd.DataFrame,
@@ -96,8 +101,12 @@ def bandpass_filter(
         # Note: filtfilt is acausal but we already shifted data by 1
         try:
             filtered = signal.sosfiltfilt(sos, y)
-        except Exception:
-            # Filter may fail for various reasons
+        except _NUMERICAL_FAILURES:
+            # Filter may fail for degenerate-but-valid input (e.g. series
+            # shorter than the padding requirement).  Keep the NaN
+            # fail-closed contract for these numerical failures; do not
+            # swallow programming errors (TypeError/AttributeError) that
+            # indicate a wiring bug rather than a numerical constraint.
             result = pd.Series(np.nan, index=series.index)
             return result
 
@@ -109,7 +118,15 @@ def bandpass_filter(
 
     result = values.groupby(asset_col, sort=False)[value_col].apply(_bandpass_single)
 
-    # Reset index to match input
+    # Realign by label: groupby.apply returns rows grouped by asset (first-
+    # appearance order) under a (asset, original-label) MultiIndex, so a
+    # positional index reassignment would silently relabel asset A's rows
+    # onto asset B's rows for interleaved layouts that pass the per-asset
+    # monotonicity guard above.  Restore the original labels and select in
+    # input row order instead.
+    if isinstance(result.index, pd.MultiIndex):
+        result = result.droplevel(0)
+    result = result.loc[values.index].copy()
     result.index = values.index
 
     return result
@@ -265,13 +282,20 @@ def christiano_fitzgerald_filter(
 
             return result
 
-        except Exception:
+        except _NUMERICAL_FAILURES:
+            # CF asymmetric filter may fail on degenerate windows; keep
+            # the NaN fail-closed contract for numerical failures only,
+            # not for programming errors.
             result = pd.Series(np.nan, index=series.index)
             return result
 
     result = values.groupby(asset_col, sort=False)[value_col].apply(_cf_filter_single)
 
-    # Reset index to match input
+    # Realign by label, not position — see bandpass_filter for why a
+    # positional index reassignment mislabels interleaved layouts.
+    if isinstance(result.index, pd.MultiIndex):
+        result = result.droplevel(0)
+    result = result.loc[values.index].copy()
     result.index = values.index
 
     return result

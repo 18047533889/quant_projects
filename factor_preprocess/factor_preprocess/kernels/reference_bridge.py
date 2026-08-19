@@ -86,9 +86,17 @@ def reference_cs_zscore(
     -------
     np.ndarray
         Z-scored values. NaN inputs produce NaN outputs.
+        Non-finite inputs (±inf) produce NaN outputs — mirrors
+        transforms.cross_sectional.cs_zscore (FP-P0-12), so an inf
+        can never masquerade as a perfectly average (0.0) factor value.
     """
     if values.size == 0:
         return values.copy()
+
+    # nanmean/nanstd do not ignore ±inf, so an inf would push std to NaN
+    # and silently route the slice into the constant branch.  Mask
+    # non-finite inputs to NaN first — parity with fast_cs_zscore.
+    values = np.where(np.isfinite(values), values, np.nan)
 
     mean = np.nanmean(values, axis=axis, keepdims=True)
     std = np.nanstd(values, axis=axis, keepdims=True, ddof=ddof)
@@ -122,9 +130,17 @@ def reference_cs_demean(
     -------
     np.ndarray
         Demeaned values. NaN inputs produce NaN outputs.
+        Non-finite inputs (±inf) produce NaN outputs — mirrors
+        transforms.cross_sectional.cs_demean, so one inf cannot turn
+        every finite value into ∓inf via the slice mean.
     """
     if values.size == 0:
         return values.copy()
+
+    # nanmean does not ignore ±inf: one inf makes the slice mean inf and
+    # every finite entry becomes -inf.  Mask non-finite inputs to NaN
+    # first (parity with transforms.cs_demean, FP-P2-6).
+    values = np.where(np.isfinite(values), values, np.nan)
 
     mean = np.nanmean(values, axis=axis, keepdims=True)
     return values - mean

@@ -106,8 +106,8 @@ def test_feature_bundle_values_and_channel_mapping_are_adapted():
 
     bundle = FeatureBundle(
         bundle_id="b",
-        time_axis=AxisRef("date", [], "datetime64[ns]"),
-        asset_axis=AxisRef("asset", [], "object"),
+        time_axis=AxisRef("date", [np.datetime64("2020-01-01")], "datetime64[ns]"),
+        asset_axis=AxisRef("asset", ["A1"], "object"),
         channels={"features": ChannelRef("features", "feature", ["a", "b"])},
         values=np.zeros((1, 1, 2)),
     )
@@ -119,3 +119,45 @@ def test_feature_bundle_values_and_channel_mapping_are_adapted():
     )
     assert result.features.shape == (1, 1, 2)
     assert result.feature_names == ["a", "b"]
+
+
+def test_model_ready_data_rejects_feature_name_mismatch():
+    """Pre-fix: features vs feature_names length was never cross-checked."""
+    from modeling_adapters.contracts import ModelReadyData
+    from modeling_adapters.errors import ContractViolation
+
+    with pytest.raises(ContractViolation, match="feature channels"):
+        ModelReadyData(
+            features=np.zeros((3, 2)),
+            feature_names=["a", "b", "c"],
+            data_start=datetime(2020, 1, 1),
+            data_end=datetime(2020, 1, 2),
+            preprocess_contract_id="p",
+        )
+
+
+def test_model_ready_data_rejects_empty_feature_names():
+    from modeling_adapters.contracts import ModelReadyData
+    from modeling_adapters.errors import ContractViolation
+
+    with pytest.raises(ContractViolation, match="feature_names"):
+        ModelReadyData(
+            features=np.zeros((3, 2)),
+            feature_names=[],
+            data_start=datetime(2020, 1, 1),
+            data_end=datetime(2020, 1, 2),
+            preprocess_contract_id="p",
+        )
+
+
+def test_model_ready_data_accepts_3d_bundle_last_axis_channels():
+    from modeling_adapters.contracts import ModelReadyData
+
+    data = ModelReadyData(
+        features=np.zeros((1, 1, 2)),
+        feature_names=["a", "b"],
+        data_start=datetime(2020, 1, 1),
+        data_end=datetime(2020, 1, 2),
+        preprocess_contract_id="p",
+    )
+    assert data.features.shape == (1, 1, 2)

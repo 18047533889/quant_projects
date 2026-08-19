@@ -360,6 +360,17 @@ def _min_periods_from_contract(canonical: str, catalog: dict[str, Any]) -> int |
             return _MIN_PERIODS_FLOORS[canonical]
     except (ImportError, AttributeError):
         pass
+    # R20 pairwise repair review P1: the declared explicit policy is a contract
+    # too — a hardening patch must never clobber a declared min_periods >= 2
+    # with the fallback 1 (the ts_ewm_corr/ts_ewm_cov split-brain class).
+    try:
+        from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+
+        declared_policy = (_EXPLICIT_POLICIES.get(canonical) or {}).get("min_periods")
+        if isinstance(declared_policy, (int, float)) and declared_policy >= 2:
+            return int(declared_policy)
+    except (ImportError, AttributeError):
+        pass
     return _bars_from_tags(catalog)
 
 

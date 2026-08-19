@@ -119,3 +119,13 @@ class TestTransformsWithRealData:
         X_w = winsorize(X, lower=0.01, upper=0.99, axis=1)
         X_z = zscore_transform(X_w, axis=1)
         assert X_z.shape == X.shape
+
+
+def test_rank_transform_rejects_boolean_mask():
+    """Pre-fix: True/False silently ranked as 1.0/0.0 pseudo-factor."""
+    import numpy as np
+    import pytest
+    from modeling_adapters.preprocess.stateless import rank_transform
+
+    with pytest.raises(TypeError, match="boolean mask"):
+        rank_transform(np.array([True, False, True]))

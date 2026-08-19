@@ -77,7 +77,11 @@ class TestBackendSelector:
         backend = selector.select_for_rolling(T=1000, N=5000, window=20)
         caps = get_backend_capabilities()
 
-        if caps[BackendType.NUMBA].available:
+        if caps[BackendType.CUPY].available:
+            # 5M elements >= default cupy_threshold(500k) → CuPy must win
+            # even though numba is also installed (ordering guard).
+            assert backend == BackendType.CUPY
+        elif caps[BackendType.NUMBA].available:
             assert backend == BackendType.NUMBA
         else:
             assert backend == BackendType.NUMPY

@@ -14,7 +14,7 @@ def test_package_reports_research_only_production_capability():
     capability = info["production_capability"]
     assert capability["status"] == "research_only"
     assert capability["supported"] is False
-    assert "split_plan_contract_stub" in capability["blockers"]
+    assert "trusted_split_aware_qe_integration_missing" in capability["blockers"]
 
 
 def test_production_search_config_fails_closed():
@@ -44,10 +44,12 @@ def test_mock_qe_is_explicitly_research_only():
 
 
 def test_direct_sealed_test_result_is_not_production_valid():
-    with pytest.raises(NotImplementedError, match="cannot be constructed directly"):
+    with pytest.raises(TypeError, match="frozen_at must be a datetime"):
         SealedTestResult(
             trial_id="trial",
             test_metrics={"rank_ic": 0.1},
             frozen_at=None,
             search_session_id="session",
+            split_id="split",
+            evaluation_ref="store://evidence-1",
         )

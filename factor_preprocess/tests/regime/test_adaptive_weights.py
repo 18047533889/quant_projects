@@ -454,7 +454,7 @@ class TestRegimeAdaptiveWeights:
             )
 
     def test_unknown_regime_preserves_original(self):
-        """Unknown regime should preserve original factor values."""
+        """Unknown regime fails closed to NaN (no silent raw pass-through)."""
         train_dates = pd.date_range("2020-01-01", periods=100, freq="D")
         train_df = pd.DataFrame({
             "date": train_dates,
@@ -487,5 +487,5 @@ class TestRegimeAdaptiveWeights:
             time_col="date",
         )
 
-        # Unknown regime should preserve original values
-        np.testing.assert_allclose(result["factor1"].values, [1.0, 2.0, 3.0])
+        # Unknown regime must not silently pass raw values through
+        assert np.all(np.isnan(result["factor1"].values))

@@ -80,30 +80,25 @@ def _assign_quantiles_jit(values: np.ndarray, n_quantiles: int, policy: str) -> 
             # Sort to compute quantile boundaries
             v_sorted = np.sort(v_valid)
 
-            # Compute quantile boundaries using np.percentile positions
-            # Match NumPy's percentile linear interpolation
+            # QE-Q-P0-002: boundary interpolation matches the shared NumPy
+            # helper _percentile_boundaries (metrics/quantile.py) exactly,
+            # including the 1e-9 integer-position snap. The previous
+            # np.linspace(0,100) + (1-frac)/frac lerp could land one ulp off
+            # the exact sorted value, flipping the tie policy.
             boundaries = np.empty(n_quantiles - 1, dtype=np.float64)
-            percentiles = np.linspace(0.0, 100.0, n_quantiles + 1)
 
-            for q in range(1, n_quantiles):
-                pct = percentiles[q]
-                # NumPy percentile formula: index = (n-1) * pct/100
-                pos = (n_valid - 1) * pct / 100.0
-                idx_low = int(np.floor(pos))
-                idx_high = int(np.ceil(pos))
-
-                # Clamp to valid range
-                idx_low = min(max(idx_low, 0), n_valid - 1)
-                idx_high = min(max(idx_high, 0), n_valid - 1)
-
-                # Linear interpolation
-                # CRITICAL: When both values are equal, use the value directly
-                # to avoid floating point errors from interpolation arithmetic
-                if idx_low == idx_high or v_sorted[idx_low] == v_sorted[idx_high]:
-                    boundaries[q - 1] = v_sorted[idx_low]
+            for b in range(n_quantiles - 1):
+                pos = (b + 1) / n_quantiles * (n_valid - 1)
+                lo = int(pos)
+                frac = pos - lo
+                if lo >= n_valid - 1:
+                    boundaries[b] = v_sorted[n_valid - 1]
+                elif frac < 1e-9:
+                    boundaries[b] = v_sorted[lo]
+                elif frac > 1.0 - 1e-9:
+                    boundaries[b] = v_sorted[lo + 1]
                 else:
-                    frac = pos - np.floor(pos)
-                    boundaries[q - 1] = v_sorted[idx_low] * (1.0 - frac) + v_sorted[idx_high] * frac
+                    boundaries[b] = v_sorted[lo] + frac * (v_sorted[lo + 1] - v_sorted[lo])
 
             # Assign quantiles - mimic numpy searchsorted behavior
             # searchsorted returns the insertion position to maintain sorted order

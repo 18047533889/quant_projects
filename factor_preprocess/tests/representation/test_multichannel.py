@@ -93,21 +93,20 @@ class TestBuildMultichannel:
             np.testing.assert_allclose(np.mean(col_data), 0.0, atol=1e-10)
             np.testing.assert_allclose(np.std(col_data, ddof=1), 1.0, atol=1e-10)
 
-    def test_residual_channel_stub(self):
-        """Test residual channel (stub implementation)."""
+    def test_residual_channel_fails_closed(self):
+        """Residual channel is not implemented and must not emit fake zeros."""
         values = np.array([[1.0, 2.0], [3.0, 4.0]])
         config = MultichannelConfig(channels=["residual"])
-        result = build_multichannel(values, config, axis=0)
 
-        # Stub returns zeros
-        np.testing.assert_array_equal(result.channels["residual"], np.zeros_like(values))
+        with pytest.raises(NotImplementedError, match="residual channel"):
+            build_multichannel(values, config, axis=0)
 
     def test_residual_with_basis_not_implemented(self):
         """Test that residual_basis raises NotImplementedError."""
         values = np.array([[1.0, 2.0], [3.0, 4.0]])
         config = MultichannelConfig(channels=["residual"], residual_basis="industry")
 
-        with pytest.raises(NotImplementedError, match="residual_basis"):
+        with pytest.raises(NotImplementedError, match="not implemented"):
             build_multichannel(values, config, axis=0)
 
     def test_nan_preservation(self):

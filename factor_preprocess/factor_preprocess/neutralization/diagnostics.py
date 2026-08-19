@@ -6,7 +6,7 @@ and post-neutralization validation.
 """
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 
 def compute_condition_number(
@@ -410,7 +410,13 @@ def flag_ill_conditioned_dates(
     """
     cond_df = compute_condition_number(exposures, date_col, asset_col)
 
-    flagged = cond_df[cond_df["condition_number"] > threshold].copy()
+    # NaN condition numbers (SVD failure / no valid rows) are the most
+    # ill-conditioned dates of all — flag them as 'severe' rather than
+    # letting the > threshold comparison silently drop them.
+    nan_mask = cond_df["condition_number"].isna()
+    flagged = cond_df[
+        nan_mask | (cond_df["condition_number"] > threshold)
+    ].copy()
 
     if len(flagged) > 0:
         flagged["severity"] = pd.cut(
@@ -418,11 +424,12 @@ def flag_ill_conditioned_dates(
             bins=[threshold, 1000, np.inf],
             labels=["moderate", "severe"],
         )
+        flagged.loc[flagged["condition_number"].isna(), "severity"] = "severe"
 
     return flagged
 
 
-def summarize_diagnostics(diagnostics: Dict[str, pd.DataFrame]) -> Dict[str, any]:
+def summarize_diagnostics(diagnostics: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     """
     Summarize diagnostics into key metrics.
 

@@ -364,3 +364,38 @@ def test_evidence_result_secondary_metrics_default():
     )
 
     assert result.secondary_metrics == {}
+
+
+def test_evidence_result_nonfinite_secondary_drop_is_warned():
+    """Dropped non-finite secondary metrics must not vanish silently: each
+    drop becomes a warning, so is_valid reports the contamination."""
+    result = EvidenceResult(
+        factor_id="F001",
+        evaluation_run_id="RUN_123",
+        evidence_id="EVD_001",
+        timestamp="2024-01-01T00:00:00Z",
+        available=True,
+        secondary_metrics={"ic": 0.05, "bad_nan": float("nan"), "bad_inf": float("inf")},
+    )
+
+    assert result.secondary_metrics == {"ic": 0.05}
+    assert any("bad_nan" in w for w in result.warnings)
+    assert any("bad_inf" in w for w in result.warnings)
+    assert not result.is_valid  # has_warnings -> not valid
+
+
+def test_evidence_result_nonfinite_primary_invalidated():
+    """A NaN/±inf/bool primary metric is an overflowed or failed
+    measurement: it must not survive as the primary score."""
+    for bad in (float("nan"), float("inf"), float("-inf"), True):
+        result = EvidenceResult(
+            factor_id="F001",
+            evaluation_run_id="RUN_123",
+            evidence_id="EVD_001",
+            timestamp="2024-01-01T00:00:00Z",
+            available=True,
+            primary_metric_name="residual_ic",
+            primary_metric_value=bad,
+        )
+        assert result.primary_metric_value is None, f"{bad!r} survived"
+        assert result.has_warnings

@@ -182,7 +182,7 @@ def _evaluate_batch_task(task: BatchEvaluationTask) -> BatchEvaluationTaskResult
             execution_time_seconds=elapsed,
         )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, ArithmeticError, MemoryError) as e:
         elapsed = time.time() - start_time
         return BatchEvaluationTaskResult(
             task_id=task.task_id,
@@ -382,7 +382,7 @@ class ParallelBatchExecutor:
             start = time.time()
             _evaluate_batch_task(sample_task)
             return time.time() - start
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, OSError):
             # Fallback: assume 1 second per task
             return 1.0
 

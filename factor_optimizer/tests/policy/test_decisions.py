@@ -1,5 +1,7 @@
 """Tests for admission decisions policy."""
 
+import json
+
 import pytest
 from factor_optimizer.policy.decisions import (
     AdmissionCriteria,
@@ -392,3 +394,35 @@ def test_admission_policy_metadata():
 
     assert decision.decision_metadata["campaign_id"] == "campaign_001"
     assert decision.decision_metadata["iteration"] == 5
+
+
+def test_admission_policy_decision_ids_do_not_collide():
+    """Repeated decisions for the same trial must not overwrite history."""
+    policy = AdmissionPolicy()
+    first = policy.decide(mutation_id="m1", trial_id="t1", complexity_cost=50.0, expected_value=0.5)
+    second = policy.decide(mutation_id="m2", trial_id="t1", complexity_cost=60.0, expected_value=0.4)
+
+    assert first.decision_id != second.decision_id
+    assert policy.get_decision(first.decision_id) is first
+    assert policy.get_decision(second.decision_id) is second
+    assert len(policy.get_decisions_for_trial("t1")) == 2
+
+
+def test_admission_criteria_from_dict_rejects_unknown_fields():
+    """Unknown serialized fields must fail closed, not silently pass through."""
+    with pytest.raises(ValueError, match="unknown AdmissionCriteria fields"):
+        AdmissionCriteria.from_dict({"max_complexity_cost": 100.0, "legacy_flag": True})
+
+
+def test_admission_criteria_from_dict_json_null_bound_restores_inf():
+    """A strict JSON round-trip turns inf into null; a null bound must
+    restore "no limit", not crash or reject everything."""
+    serialized = AdmissionCriteria(max_complexity_cost=float("inf")).to_dict()
+    # Python's json emits Infinity by default; strict parsers (and null-storing
+    # JSON paths) yield null.  Force the null form to pin the restore branch.
+    as_json = json.loads(json.dumps(serialized))
+    as_json["max_complexity_cost"] = None
+
+    restored = AdmissionCriteria.from_dict(as_json)
+
+    assert restored.max_complexity_cost == float("inf")

@@ -12,20 +12,62 @@ from typing import Optional
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.errors import LifecycleConflictError
 
+__all__ = [
+    "LifecycleState",
+    "ValidationStatus",
+    "HealthState",
+    "StateTransition",
+    "StateEvent",
+    "is_legal_transition",
+    "get_required_evidence",
+    "validate_transition",
+]
+
 
 class LifecycleState(Enum):
     """
-    Factor asset lifecycle states.
+    Factor asset lifecycle stages.
 
     Conservative flow: REGISTERED -> EVALUATED -> APPROVED -> PRODUCTION_READY
     Each state requires specific evidence before transition.
+
+    Health semantics (deprecated/retired) live in :class:`HealthState`; the
+    DEPRECATED/RETIRED members here remain for backward compatibility with
+    existing checkpoints and transition tables.
     """
     REGISTERED = "REGISTERED"           # Initial registration, identity established
     EVALUATED = "EVALUATED"             # Evidence attached, metrics computed
     APPROVED = "APPROVED"               # Passed gates, ready for selection
     PRODUCTION_READY = "PRODUCTION_READY"  # Certified for production use
-    DEPRECATED = "DEPRECATED"           # No longer recommended
-    RETIRED = "RETIRED"                 # Archived, not for new use
+    DEPRECATED = "DEPRECATED"           # No longer recommended (health: see HealthState)
+    RETIRED = "RETIRED"                 # Archived, not for new use (health: see HealthState)
+
+
+class ValidationStatus(Enum):
+    """
+    Orthogonal validation dimension for a factor asset.
+
+    Answers "how fresh/complete is the validation evidence", independent of
+    pipeline stage (:class:`LifecycleState`) or health (:class:`HealthState`).
+    """
+
+    UNVALIDATED = "UNVALIDATED"  # No evaluation evidence yet
+    PARTIAL = "PARTIAL"          # Some metrics computed, gates incomplete
+    VALIDATED = "VALIDATED"      # Full gate suite passed on current evidence
+    STALE = "STALE"              # Evidence predates current data/universe/split
+
+
+class HealthState(Enum):
+    """
+    Orthogonal health dimension for a factor asset.
+
+    Answers "should this factor still be used", independent of pipeline stage
+    (:class:`LifecycleState`) or validation freshness (:class:`ValidationStatus`).
+    """
+
+    ACTIVE = "ACTIVE"        # Usable
+    DEPRECATED = "DEPRECATED"  # Discouraged; kept for reference/comparison
+    RETIRED = "RETIRED"      # Archived; excluded from new assemblies
 
 
 @dataclass(frozen=True)
@@ -104,6 +146,33 @@ _LEGAL_TRANSITIONS = [
         LifecycleState.EVALUATED,
         required_evidence=("evaluation_bundle_ref",),
         description="Re-evaluation with new evidence"
+    ),
+    # Deprecation/retirement must be reachable from any live state — a factor
+    # can go bad at any stage, and the old table only allowed it from
+    # PRODUCTION_READY (a dead end for everything else).
+    StateTransition(
+        LifecycleState.REGISTERED,
+        LifecycleState.DEPRECATED,
+        required_evidence=(),
+        description="Marked deprecated before evaluation"
+    ),
+    StateTransition(
+        LifecycleState.EVALUATED,
+        LifecycleState.DEPRECATED,
+        required_evidence=(),
+        description="Marked deprecated after evaluation"
+    ),
+    StateTransition(
+        LifecycleState.APPROVED,
+        LifecycleState.DEPRECATED,
+        required_evidence=(),
+        description="Marked deprecated before production"
+    ),
+    StateTransition(
+        LifecycleState.DEPRECATED,
+        LifecycleState.RETIRED,
+        required_evidence=(),
+        description="Archived and retired"
     ),
 ]
 

@@ -188,13 +188,12 @@ class TestBuildTreeReady:
         assert "n_missing_final" in result.preprocessing_stats
 
     def test_all_nan_column_handling(self):
-        """Test handling of all-NaN columns."""
+        """All-NaN column under median fill must fail closed, not fake-zero."""
         values = np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]])
         config = TreeReadyConfig(handle_missing="fill_median")
-        result = build_tree_ready(values, config)
 
-        # All-NaN column should be filled with 0
-        assert result.X[0, 1] == 0.0
+        with pytest.raises(ValueError, match="all-NaN columns"):
+            build_tree_ready(values, config)
 
 
 class TestSuggestTreeParams:

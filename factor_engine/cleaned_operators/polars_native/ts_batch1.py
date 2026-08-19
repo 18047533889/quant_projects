@@ -229,7 +229,7 @@ class TSQuantilePolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SCALAR),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, quantile=0.5, **kwargs):
@@ -259,7 +259,7 @@ class TSQuantileIfPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SCALAR),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, condition, window, quantile=0.5, **kwargs):
@@ -791,7 +791,7 @@ class TSTopkMeanPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -822,7 +822,7 @@ class TSTopkSumPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -853,7 +853,7 @@ class TSTopkStdPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -884,7 +884,7 @@ class TSBottomkMeanPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -915,7 +915,7 @@ class TSBottomkSumPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -946,7 +946,7 @@ class TSBottomkStdPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.SCALAR),
+        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, k, **kwargs):
@@ -1047,7 +1047,7 @@ class TSMomentPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SCALAR),
+        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, n=2, **kwargs):
@@ -1080,8 +1080,8 @@ class TSQuantileRangePolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "lower": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.25, param_role=ParamRole.SCALAR),
-        "upper": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.75, param_role=ParamRole.SCALAR),
+        "lower": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.25, param_role=ParamRole.NUMERICAL),
+        "upper": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.75, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, lower=0.25, upper=0.75, **kwargs):
@@ -1111,7 +1111,7 @@ class TSTrimmedMeanPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
-        "trim": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.SCALAR),
+        "trim": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, trim=0.1, **kwargs):
@@ -1154,7 +1154,7 @@ class TSRatioPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "stat": ParamSpec(dtype=str, default='mean', param_role=ParamRole.SCALAR),
+        "stat": ParamSpec(dtype=str, default='mean', param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, stat="mean", **kwargs):
@@ -1290,7 +1290,7 @@ class TSSumDecayPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "decay": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.9, param_role=ParamRole.SCALAR),
+        "decay": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.9, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, decay=0.9, **kwargs):
@@ -1327,7 +1327,7 @@ class TSDecayExpWindowPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=None, param_role=ParamRole.SCALAR),
+        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=None, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, alpha=None, **kwargs):
@@ -1948,7 +1948,7 @@ class TSDownsideDeviationPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=0.0, **kwargs):
@@ -1982,7 +1982,7 @@ class TSUpsideDeviationPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=0.0, **kwargs):
@@ -2016,7 +2016,7 @@ class TSExpectedShortfallPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.SCALAR),
+        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, alpha=0.05, **kwargs):
@@ -2053,8 +2053,8 @@ class TSLowerPartialMomentPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.SCALAR),
-        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
+        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=0.0, n=2, **kwargs):
@@ -2087,8 +2087,8 @@ class TSUpperPartialMomentPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.SCALAR),
-        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
+        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=0.0, n=2, **kwargs):
@@ -2479,7 +2479,7 @@ class TSEwmCorrPolarsNative(SeriesOperator):
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "span": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "span": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, x, y, span, **kwargs):
@@ -2523,7 +2523,7 @@ class TSEwmCovPolarsNative(SeriesOperator):
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "span": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "span": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, x, y, span, **kwargs):
@@ -2562,8 +2562,8 @@ class TSKamaPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "fast": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SCALAR),
-        "slow": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.SCALAR),
+        "fast": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
+        "slow": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, fast=2, slow=30, **kwargs):
@@ -2632,7 +2632,7 @@ class TSAutocorrelationTimePolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.SCALAR),
+        "max_lag": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, max_lag=None, **kwargs):
@@ -3435,8 +3435,8 @@ class TSTailRatioPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "upper": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.SCALAR),
-        "lower": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.SCALAR),
+        "upper": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.NUMERICAL),
+        "lower": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, upper=0.95, lower=0.05, **kwargs):
@@ -3470,7 +3470,7 @@ class TSTailMeanPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=0.95, **kwargs):
@@ -3507,7 +3507,7 @@ class TSExpectedShortfallAsymmetryPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.SCALAR),
+        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, alpha=0.05, **kwargs):
@@ -3735,7 +3735,7 @@ class TSFfillLimitedPolarsNative(SeriesOperator):
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "max_fill": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.SCALAR),
+        "max_fill": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, max_fill=5, **kwargs):
@@ -3840,7 +3840,7 @@ class TSRobustEmaPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "span": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "clip_std": ParamSpec(dtype=float, min=0.0, default=3.0, param_role=ParamRole.SCALAR),
+        "clip_std": ParamSpec(dtype=float, min=0.0, default=3.0, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, span, clip_std=3.0, **kwargs):
@@ -3999,7 +3999,7 @@ class TSQuantileRegressionSlopePolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SCALAR),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, quantile=0.5, **kwargs):
@@ -4054,7 +4054,7 @@ class TSExpectilePolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SCALAR),
+        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, tau=0.5, **kwargs):
@@ -4109,7 +4109,7 @@ class TSSupportLevelPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "buffer": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.02, param_role=ParamRole.SCALAR),
+        "buffer": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.02, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, buffer=0.02, **kwargs):
@@ -4137,7 +4137,7 @@ class TSResistanceLevelPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "buffer": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.02, param_role=ParamRole.SCALAR),
+        "buffer": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.02, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, buffer=0.02, **kwargs):
@@ -4229,7 +4229,7 @@ class TSBreakoutHighPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=1.0, **kwargs):
@@ -4260,7 +4260,7 @@ class TSBreakdownLowPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.SCALAR),
+        "threshold": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, feature, window, threshold=1.0, **kwargs):

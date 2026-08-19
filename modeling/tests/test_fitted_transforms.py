@@ -81,6 +81,51 @@ class TestCrossSectionalScaler:
         state = scaler.get_state()
         assert state["method"] == "zscore"
 
+    def test_transform_width_mismatch_raises(self):
+        """A (T,1) input against a 5-feature fit previously broadcast into
+        five fabricated columns instead of failing."""
+        from modeling_adapters.errors import ContractViolation
+
+        X_train = np.random.randn(100, 5)
+        fit_window = FitWindow(fit_start=datetime(2020, 1, 1), fit_end=datetime(2020, 12, 31))
+        scaler = CrossSectionalScaler()
+        scaler.fit(X_train, fit_window)
+
+        with pytest.raises(ContractViolation, match="feature column"):
+            scaler.transform(np.random.randn(50, 1), apply_start_time=datetime(2021, 1, 1))
+        with pytest.raises(ContractViolation, match="feature column"):
+            scaler.transform(np.random.randn(50, 3), apply_start_time=datetime(2021, 1, 1))
+
+    def test_get_state_surfaces_degenerate_features(self):
+        """std_ is overwritten to 1.0 for degenerate features; get_state
+        must expose the degeneracy explicitly."""
+        X_train = np.random.randn(100, 3)
+        X_train[:, 2] = 7.0  # constant column
+        fit_window = FitWindow(fit_start=datetime(2020, 1, 1), fit_end=datetime(2020, 12, 31))
+        scaler = CrossSectionalScaler()
+        scaler.fit(X_train, fit_window)
+
+        state = scaler.get_state()
+        assert state["degenerate_features"] is not None
+        assert state["degenerate_features"].tolist() == [False, False, True]
+
+    def test_failed_refit_keeps_consistent_state(self):
+        """A hostile refit must not commit the new fit_window while keeping
+        old parameters under old _fitted authority."""
+        X_train = np.random.randn(100, 2)
+        fit_window = FitWindow(fit_start=datetime(2020, 1, 1), fit_end=datetime(2020, 12, 31))
+        scaler = CrossSectionalScaler()
+        scaler.fit(X_train, fit_window)
+
+        class Hostile(np.ndarray):
+            pass
+
+        with pytest.raises(Exception):
+            scaler.fit(np.array([["a", "b"]], dtype=object), fit_window)
+
+        # fit_window must still be the old one (no partial commit)
+        assert scaler.fit_window == fit_window
+
 
 class TestFittedTransformFactory:
     def test_create_fitted_scaler_zscore(self):

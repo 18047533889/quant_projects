@@ -9,7 +9,12 @@ from factor_assets.contracts.asset import AssetMetadata, FactorAsset
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef, evidence_bundle_event_id
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.lifecycle import LifecycleState, StateEvent, validate_transition
-from factor_assets.errors import CapabilityError, DuplicateIdentityError, LifecycleConflictError
+from factor_assets.errors import (
+    CapabilityError,
+    DuplicateIdentityError,
+    FactorAssetsError,
+    LifecycleConflictError,
+)
 from factor_assets.registry.repository import AssetNotFoundError, CommittedTransition, LifecycleRepository, RepositoryStats
 from factor_assets.registry.migrations import migrate
 from factor_assets.registry.serialization import asset_from_json, asset_to_json, event_from_json, event_to_json, evidence_to_json
@@ -48,7 +53,11 @@ class SQLiteLifecycleRepository:
                 conn.execute("INSERT INTO assets VALUES (?,?,?,?)", (metadata.factor_id, metadata.canonical_hash, asset_to_json(asset), 0))
                 conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (metadata.factor_id, 0, None, event_to_json(event)))
                 conn.commit(); return asset
-            except Exception: conn.rollback(); raise
+            except (sqlite3.Error, OSError, ValueError, TypeError,
+                    FactorAssetsError, AssetNotFoundError):
+                # Governance/contract errors (DuplicateIdentityError etc.) must
+                # roll back and still propagate by their own type.
+                conn.rollback(); raise
 
     def get(self, factor_id: str) -> FactorAsset:
         with self._connection() as conn:
@@ -109,7 +118,11 @@ class SQLiteLifecycleRepository:
                 elif to_state == LifecycleState.PRODUCTION_READY and asset.production_ready_at is None: updates["production_ready_at"] = now
                 updated = replace(asset, **updates); event = StateEvent(factor_id, asset.lifecycle_state, to_state, now, refs, decision_id, policy_version, actor, notes); new_revision = revision + 1
                 conn.execute("UPDATE assets SET payload=?,revision=? WHERE factor_id=?", (asset_to_json(updated), new_revision, factor_id)); conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (factor_id,new_revision,decision_id,event_to_json(event))); conn.commit(); return CommittedTransition(updated,event,new_revision)
-            except Exception: conn.rollback(); raise
+            except (sqlite3.Error, OSError, ValueError, TypeError,
+                    FactorAssetsError, AssetNotFoundError):
+                # Governance/contract errors (DuplicateIdentityError etc.) must
+                # roll back and still propagate by their own type.
+                conn.rollback(); raise
 
     def transition(self, *args, **kwargs): return self.commit_transition(*args, **kwargs).asset
     def get_events(self, factor_id=None):
