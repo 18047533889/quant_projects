@@ -25,6 +25,7 @@ def build_backend(backend_type: str):
     - ``auto`` / ``hybrid``：SQL + Polars；数据源有 ``scan_polars_long`` 时自动走
       ``hybrid_long``（DuckDB long 物化 + 原生 Polars long），否则宽表 hybrid
     - ``debug``：只打印计划，不读数据
+    - ``q_kdb`` / ``q``：Q/KDB 物理执行后端（R21-Q-FACTORY-INTEGRATION）
 
     示例：
         >>> build_backend("auto")
@@ -73,6 +74,10 @@ def build_backend(backend_type: str):
         from .hybrid_backend import HybridBackend
 
         return HybridBackend()
+    if normalized in {"q_kdb", "q"}:
+        from .q_backend import QBackend
+
+        return QBackend(fallback_to_pandas=False, production_mode=True)
 
     raise ValueError(f"Unsupported backend type: {backend_type}")
 

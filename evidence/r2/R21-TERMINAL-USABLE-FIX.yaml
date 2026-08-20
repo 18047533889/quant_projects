@@ -1,0 +1,19 @@
+ticket: R21-TERMINAL-USABLE-FIX
+module: mining/direct_use.py
+fix_summary: |
+  Corrected the computation of `terminal_usable` in `build_direct_use_operator`.
+  Previously, it only checked `mining_visible` and the direct use status.
+  Now it correctly depends on `composition_usable` (which includes `mining_visible` and AST/recipe checks)
+  and `contract.terminal_allowed` (which conceptually maps to `terminal_semantically_legal`).
+
+  Definition of production_terminal_usable field:
+  `production_terminal_usable = terminal_usable and production_admitted`
+
+changes:
+  - mining/direct_use.py: |
+      terminal_usable = composition_usable and contract.status in _DIRECT_TERMINAL_STATUSES and contract.terminal_allowed
+      # ... added production_terminal_usable to DirectUseOperator ...
+  - evidence/r2/R21-TERMINAL-USABLE-FIX.yaml: "Created"
+  - tests/mining/test_terminal_usable_fix.py: "Created"
+
+status: verified

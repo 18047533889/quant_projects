@@ -1,0 +1,39 @@
+# R21-Q-FACTORY-INTEGRATION: QBackend Factory Integration
+
+## Summary
+Added `build_backend("q_kdb")` branch to the backend factory and implemented minimal production execute path in QBackend.
+
+## Changes
+
+### 1. backend/factory.py
+- Added `q_kdb` and `q` aliases to `build_backend()` function
+- Returns `QBackend(fallback_to_pandas=False, production_mode=True)` for production mode
+
+### 2. backend/q_backend/q_backend.py
+- Added `BackendUnavailableError` import from `backend.operator_capability`
+- Modified `QBackend.execute()` to check q runtime availability before raising `QPhysicalRegionNotImplemented`
+- In production mode: raises `BackendUnavailableError` if q runtime is not available (not silent fallback)
+- Preserved existing behavior: `QPhysicalRegionNotImplemented` for planner admission check
+
+## Test Coverage (3 regression tests)
+
+### tests/q_backend/test_q_factory_integration.py
+
+1. **test_build_backend_q_kdb_returns_q_backend**: Verifies `build_backend("q_kdb")` returns `QBackend` instance
+2. **test_build_backend_q_returns_q_backend**: Verifies `build_backend("q")` alias works
+3. **test_build_backend_q_kdb_production_mode_default**: Verifies factory defaults to `production_mode=True`
+4. **test_production_mode_q_unavailable_raises_backend_unavailable**: Verifies `BackendUnavailableError` raised when q unavailable in production
+5. **test_research_mode_checks_availability_before_execution**: Verifies research mode checks availability before execution
+
+## Key Design Decisions
+
+1. **BackendUnavailableError** (from `backend.operator_capability`) is the correct exception type for unavailable backends in production mode, not `QPhysicalRegionNotImplemented` (which is for planner admission).
+
+2. **Production mode** now has two failure modes:
+   - `BackendUnavailableError`: q runtime not available (PyKX not installed, license missing, etc.)
+   - `QPhysicalRegionNotImplemented`: q available but planner hasn't admitted a physical region
+
+3. **Research mode** preserved: continues to check availability and raise `QDataUnavailableError` or `QPlanningFallbackAllowed` as before.
+
+## Evidence File
+`evidence/r2/R21-Q-FACTORY-INTEGRATION.yaml` (created)

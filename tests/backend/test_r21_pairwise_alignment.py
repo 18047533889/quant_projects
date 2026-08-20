@@ -7,6 +7,9 @@ Four tests that must all pass before the contract is considered wired:
 2. Long-panel exact alignment (Polars) — missing counterpart column raises.
 3. Missing counterpart column raises PanelSchemaMismatchError (fail-closed).
 4. Exact match passes through without error.
+5. 6-axis check (date_axis, instrument_axis, ordering, universe_snapshot, grain, session).
+6. LEFT_JOIN_ALIGNMENT in production mode raises ProductionAlignmentPolicyError.
+7. Duplicate key fail (long-panel duplicate (ts, inst) keys raise).
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from backend.pairwise_alignment import (
     AlignmentMode,
     PanelSchemaMismatchError,
     PairwiseAlignmentSpec,
+    ProductionAlignmentPolicyError,
     assert_long_frames_exact,
     assert_wide_pairwise_aligned,
     pairwise_alignment_evidence,
@@ -88,6 +92,17 @@ def _long_missing_c() -> pl.LazyFrame:
     ).lazy()
 
 
+def _long_duplicate_keys() -> pl.LazyFrame:
+    """Long frame with duplicate (ts, inst) keys."""
+    return pl.DataFrame(
+        {
+            "ts": [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            "inst": ["A", "B", "C"] * 5,
+            "_v": list(range(15)),
+        }
+    ).lazy()
+
+
 # ---------------------------------------------------------------------------
 # 1. Wide-panel exact alignment — mismatched columns raise
 # ---------------------------------------------------------------------------
@@ -95,7 +110,7 @@ def _long_missing_c() -> pl.LazyFrame:
 
 class TestWidePanelExactAlignment:
     def test_mismatched_columns_raise(self):
-        """Missing counterpart column (GOOG only in left) → PanelSchemaMismatchError."""
+        """Missing counterpart column (GOOG only in left) -> PanelSchemaMismatchError."""
         left = _wide_a()
         right = _wide_b()
         with pytest.raises(PanelSchemaMismatchError, match="instrument axis mismatch"):
@@ -104,7 +119,7 @@ class TestWidePanelExactAlignment:
             )
 
     def test_mismatched_date_axis_raise(self):
-        """Shifted date axis → PanelSchemaMismatchError."""
+        """Shifted date axis -> PanelSchemaMismatchError."""
         left = _wide_a()
         right = _wide_a().copy()
         right.index = right.index + pd.Timedelta(days=1)
@@ -128,7 +143,7 @@ class TestWidePanelExactAlignment:
 
 class TestLongPanelExactAlignment:
     def test_missing_counterpart_column_raises(self):
-        """Left has inst C, right does not → PanelSchemaMismatchError."""
+        """Left has inst C, right does not -> PanelSchemaMismatchError."""
         left = _long_base()
         right = _long_missing_c()
         with pytest.raises(PanelSchemaMismatchError, match="missing"):
@@ -145,7 +160,7 @@ class TestLongPanelExactAlignment:
 
 
 # ---------------------------------------------------------------------------
-# 3. Missing counterpart column → PanelSchemaMismatchError (fail-closed)
+# 3. Missing counterpart column -> PanelSchemaMismatchError (fail-closed)
 # ---------------------------------------------------------------------------
 
 
@@ -190,3 +205,99 @@ class TestExactMatchPasses:
         assert isinstance(ev, dict)
         assert ev["mode"] == "exact_alignment"
         assert "ts_corr" in ev["canon_map"]
+
+
+# ---------------------------------------------------------------------------
+# 5. 6-axis check (all axes enabled)
+# ---------------------------------------------------------------------------
+
+
+class TestSixAxisCheck:
+    def test_all_six_axes_enabled(self):
+        """Default EXACT spec enables all 6 alignment axes."""
+        spec = PairwiseAlignmentSpec()
+        assert spec.date_axis is True
+        assert spec.instrument_axis is True
+        assert spec.ordering is True
+        assert spec.universe_snapshot is True
+        assert spec.grain is True
+        assert spec.session is True
+
+    def test_checked_axes_returns_all_six(self):
+        """checked_axes() returns all 6 axis names."""
+        spec = PairwiseAlignmentSpec()
+        axes = spec.checked_axes()
+        assert len(axes) == 6
+        assert set(axes) == {
+            "date_axis", "instrument_axis", "ordering",
+            "universe_snapshot", "grain", "session"
+        }
+
+    def test_spec_with_axes_disabled(self):
+        """Spec with some axes disabled only checks enabled axes."""
+        spec = PairwiseAlignmentSpec(
+            date_axis=True,
+            instrument_axis=True,
+            ordering=False,
+            universe_snapshot=False,
+            grain=False,
+            session=False,
+        )
+        axes = spec.checked_axes()
+        assert set(axes) == {"date_axis", "instrument_axis"}
+
+
+# ---------------------------------------------------------------------------
+# 6. LEFT_JOIN_ALIGNMENT in production mode raises ProductionAlignmentPolicyError
+# ---------------------------------------------------------------------------
+
+
+class TestProductionAlignmentPolicy:
+    def test_left_join_in_production_raises(self):
+        """LEFT_JOIN_ALIGNMENT in production mode raises ProductionAlignmentPolicyError."""
+        spec = PairwiseAlignmentSpec(mode=AlignmentMode.LEFT_JOIN_ALIGNMENT)
+        left = _wide_a()
+        right = _wide_b()
+        with pytest.raises(ProductionAlignmentPolicyError, match="LEFT_JOIN_ALIGNMENT is forbidden"):
+            assert_wide_pairwise_aligned(
+                left, right, canonical="ts_corr", spec=spec, mode="production",
+            )
+
+    def test_left_join_in_research_ok(self):
+        """LEFT_JOIN_ALIGNMENT in research mode is allowed."""
+        spec = PairwiseAlignmentSpec(mode=AlignmentMode.LEFT_JOIN_ALIGNMENT)
+        left = _long_base()
+        right = _long_missing_c()
+        # should not raise under research mode
+        assert_long_frames_exact(
+            left, right, canonical="ts_corr", spec=spec, mode="research",
+        )
+
+    def test_production_alignment_policy_error_is_value_error(self):
+        """ProductionAlignmentPolicyError is a ValueError."""
+        assert issubclass(ProductionAlignmentPolicyError, ValueError)
+
+
+# ---------------------------------------------------------------------------
+# 7. Duplicate key fail (long-panel duplicate (ts, inst) keys raise)
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicateKeyFail:
+    def test_duplicate_keys_raise(self):
+        """Duplicate (ts, inst) keys in long-panel raise AlignmentError (wrapped as PanelSchemaMismatchError)."""
+        from backend.long_alignment import AlignmentError
+
+        # Create a frame with duplicate keys
+        lf = pl.DataFrame(
+            {
+                "ts": [1, 1, 1, 1],  # duplicate ts=1 with inst=A
+                "inst": ["A", "A", "B", "C"],
+                "_v": [1, 2, 3, 4],
+            }
+        ).lazy()
+        right = _long_base()
+        with pytest.raises(PanelSchemaMismatchError, match="重复 key"):
+            assert_long_frames_exact(
+                lf, right, canonical="ts_corr",
+            )

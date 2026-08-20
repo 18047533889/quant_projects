@@ -1657,6 +1657,7 @@ class DirectUseOperator:
     mining_visible: bool
     composition_usable: bool
     terminal_usable: bool
+    production_terminal_usable: bool
     production_admitted: bool
     context_admitted: bool
 
@@ -2099,7 +2100,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
     # verdict.  Roles and admission are orthogonal:
     #   mining_visible     = retained public ∧ role resolved ∧ not delete/tool/internal
     #   composition_usable = mining_visible ∧ legal AST position ∧ contract complete
-    #   terminal_usable    = composition_usable ∧ status ∈ terminal statuses
+    #   terminal_usable    = composition_usable ∧ terminal_status ∈ terminal statuses ∧ terminal_semantically_legal
     #   production_admitted= certification ∧ cost contract ∧ sources ∧ not denied
     #   context_admitted   = at least one market/source context supported
     mining_visible = (
@@ -2113,7 +2114,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         and bool(default_input_recipe(canonical))
         and bool(market_support(canonical))
     )
-    terminal_usable = mining_visible and contract.status in _DIRECT_TERMINAL_STATUSES
+    terminal_usable = composition_usable and contract.status in _DIRECT_TERMINAL_STATUSES and contract.terminal_allowed
     production_admitted = (
         bool(catalog.get("production_certified"))
         and cost_contract_declared(canonical, catalog)
@@ -2186,6 +2187,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         mining_visible=mining_visible,
         composition_usable=composition_usable,
         terminal_usable=terminal_usable,
+        production_terminal_usable=terminal_usable and production_admitted,
         production_admitted=production_admitted,
         context_admitted=context_admitted,
         min_effective_samples=eff_sample,
@@ -2246,7 +2248,10 @@ def get_direct_use_mining_operators(
                 continue
             if ctx.max_cost is not None and row.runtime_cost > ctx.max_cost:
                 continue
-            if ctx.available_sources:
+            # R21-FAILCLOSED-SOURCES: None = unknown (hard fail), empty = no sources
+            if ctx.available_sources is None and row.source_recipes:
+                continue
+            if ctx.available_sources is not None:
                 missing = [
                     s for s in row.source_recipes if s not in ctx.available_sources
                 ]
@@ -2630,8 +2635,10 @@ def get_direct_use_mining_operators_from_manifest(
             if context.max_cost is not None and row.runtime_cost > context.max_cost:
                 continue
 
-            # Source availability filtering
-            if context.available_sources:
+            # R21-FAILCLOSED-SOURCES: None = unknown (hard fail), empty = no sources
+            if context.available_sources is None and row.source_recipes:
+                continue
+            if context.available_sources is not None:
                 missing = [s for s in row.source_recipes if s not in context.available_sources]
                 if missing:
                     continue

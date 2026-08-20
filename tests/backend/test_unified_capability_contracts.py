@@ -145,10 +145,10 @@ def test_physical_spec_production_eligibility():
         canonical="test",
         backend="polars",
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
-        implementation_source_hash="test-source-sha256",
+        implementation_source_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
         emitter_identity="test.polars.expr:v1",
-        parameter_domain_hash="test-params-sha256",
-        semantic_contract_hash="test-contract-sha256",
+        parameter_domain_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        semantic_contract_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     )
     assert spec_native.is_production_eligible()
 
@@ -271,6 +271,73 @@ def test_is_native_execution_covers_q_native():
         execution_kind=ExecutionKind.Q_NATIVE,
     )
     assert cap.is_native_execution()
+
+
+# ---------------------------------------------------------------------------
+# R21-HASH-FORMAT-ENFORCE regression tests
+# ---------------------------------------------------------------------------
+
+def test_valid_sha256_hashes_pass_validation():
+    """R21-HASH-FORMAT-ENFORCE: Valid 64-char lowercase hex SHA256 hashes pass."""
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    assert len(valid_hash) == 64
+    assert all(c in "0123456789abcdef" for c in valid_hash)
+
+    spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="pandas_numpy",
+        execution_kind=ExecutionKind.NATIVE_GROUP,
+        implementation_source_hash=valid_hash,
+        parameter_domain_hash=valid_hash,
+        semantic_contract_hash=valid_hash,
+        emitter_identity="test.pandas:v1",
+    )
+    errors = spec.validation_errors()
+    # Should have no hash-related errors
+    hash_errors = [e for e in errors if "hash" in e.lower()]
+    assert hash_errors == [], f"Unexpected hash errors: {hash_errors}"
+    assert spec.is_production_eligible()
+
+
+def test_invalid_hash_format_with_label_prefix():
+    """R21-HASH-FORMAT-ENFORCE: Hash with label prefix 'ts_mean:v2' fails validation."""
+    spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="pandas_numpy",
+        execution_kind=ExecutionKind.NATIVE_GROUP,
+        implementation_source_hash="ts_mean:v2",
+        parameter_domain_hash="valid_hash_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        semantic_contract_hash="valid_hash_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        emitter_identity="test.pandas:v1",
+    )
+    errors = spec.validation_errors()
+    # Should fail validation due to invalid implementation_source_hash format
+    assert "implementation_source_hash" in errors[0]
+    assert "invalid" in errors[0].lower()
+    assert "format" in errors[0].lower()
+    # Should NOT be production eligible
+    assert not spec.is_production_eligible()
+
+
+def test_invalid_hash_format_uppercase_hex():
+    """R21-HASH-FORMAT-ENFORCE: Uppercase hex hash fails (must be lowercase)."""
+    uppercase_hash = "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2"
+    assert len(uppercase_hash) == 64
+
+    spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="pandas_numpy",
+        execution_kind=ExecutionKind.NATIVE_GROUP,
+        implementation_source_hash=uppercase_hash,
+        parameter_domain_hash=uppercase_hash,
+        semantic_contract_hash=uppercase_hash,
+        emitter_identity="test.pandas:v1",
+    )
+    errors = spec.validation_errors()
+    # Should fail validation due to uppercase characters
+    hash_errors = [e for e in errors if "hash" in e.lower()]
+    assert len(hash_errors) == 3  # All three hash fields should fail
+    assert not spec.is_production_eligible()
 
 
 if __name__ == "__main__":

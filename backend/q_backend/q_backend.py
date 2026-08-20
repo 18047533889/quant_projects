@@ -23,6 +23,7 @@ import pandas as pd
 
 from backend.base import Backend
 from backend.context import ExecutionContext
+from backend.operator_capability import BackendUnavailableError
 from backend.q_backend.q_adapter import get_q_type_adapter
 from backend.q_backend.q_capability import get_q_capability
 from backend.q_backend.q_compiler import QRegionPlan, get_q_compiler
@@ -114,6 +115,14 @@ class QBackend(Backend):
             QPlanningFallbackAllowed: Planning-time 允许的 fallback (Q2-P0-018)
         """
         if self._production_mode:
+            # Production: must have planner-admitted physical region
+            # AND q runtime must be available
+            if not self._process_manager.is_available():
+                info = self._process_manager.check_availability()
+                raise BackendUnavailableError(
+                    f"q runtime unavailable in production mode: {info.status.value}. "
+                    f"Error: {info.error_message}"
+                )
             raise QPhysicalRegionNotImplemented(
                 "Production q execution requires a planner-admitted physical "
                 "region; whole-tree PlanNode self-routing is disabled"

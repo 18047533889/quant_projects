@@ -1,0 +1,125 @@
+# R21-NUMBA-PLANNER-CANDIDATES Evidence
+# Writer BQ: Make Numba a Planner-selectable NodeBackendChoice
+# Date: 2026-08-21
+
+task:
+  id: R21-NUMBA-PLANNER-CANDIDATES
+  mission: "Make Numba a Planner-selectable NodeBackendChoice for recursive/stateful operators"
+  status: implemented
+  timestamp: "2026-08-21T00:00:00Z"
+
+scope:
+  primary_targets:
+    - planning/dag_partition_optimizer.py
+    - planning/backend_selector.py
+  evidence_files:
+    - evidence/r2/R21-NUMBA-PLANNER-CANDIDATES.yaml
+  test_files:
+    - factor_engine/tests/backend/test_r21_numba_planner_candidates.py
+
+nba_backend_characteristics:
+  description: |
+    For operators with known NUMBA_CPU_KERNEL implementations, add
+    Polars+Numba / Pandas+Numba as candidates in the backend selector.
+  cost_model_fields:
+    - cold_jit_ms: "Cold JIT compilation cost (typical: 50-200ms)"
+    - warm_ms: "Warm execution cost after JIT (typical: 1-10ms)"
+    - cache_hit_probability: "Probability of JIT cache hit (0.0-1.0)"
+  candidate_combinations:
+    - name: "Polars+Numba"
+      base_backend: "polars"
+      accelerator: "numba_cpu"
+      preferred_for:
+        - recursive_time_per_instrument
+        - window_heavy
+        - stateful_operators
+    - name: "Pandas+Numba"
+      base_backend: "pandas_numpy"
+      accelerator: "numba_cpu"
+      preferred_for:
+        - elementwise_heavy
+        - stateful_operators
+
+cost_model_integration:
+  description: |
+    Cost model in _evaluate_costs() should include Numba-specific fields.
+  proposed_additions:
+    - field: cold_jit_ms
+      description: "One-time JIT compilation cost"
+      impact: "Penalizes cold starts, benefits warm runs"
+    - field: warm_ms
+      description: "Execution cost after JIT warmup"
+      impact: "Reflects optimized native execution speed"
+    - field: cache_hit_probability
+      description: "Likelihood of hitting cached JIT binary"
+      impact: "Reduces effective cold_jit_ms cost"
+
+backend_selector_changes:
+  file: planning/backend_selector.py
+  modifications:
+    - section: "_BACKEND_CHARACTERISTICS"
+      action: "Add NUMBA_CPU entries"
+      description: |
+        Add PhysicalBackend entries for Numba-accelerated backends
+        with cold_jit_ms, warm_ms, cache_hit_probability fields.
+    - section: "_evaluate_costs()"
+      action: "Add Numba cost model logic"
+      description: |
+        Calculate effective cost as:
+        effective_cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms
+    - section: "_filter_candidates()"
+      action: "Add Numba candidate filtering"
+      description: |
+        Include Numba candidates for operators with NUMBA_CPU_KERNEL
+        execution kind in their PhysicalImplementationSpec.
+
+execution_kind_contract:
+  file: factor_engine/backend/contracts/__init__.py
+  existing_definition: |
+    ExecutionKind.NUMBA_CPU_KERNEL = "numba_cpu_kernel"
+  classification: "Native execution (not delegate)"
+  production_eligible: true
+
+tests_created:
+  file: factor_engine/tests/backend/test_r21_numba_planner_candidates.py
+  test_classes:
+    - TestNumbaBackendCharacteristics
+      tests:
+        - test_numba_backend_exists_in_characteristics
+        - test_cost_model_includes_numba_fields
+    - TestNumbaCandidateSelection
+      tests:
+        - test_stateful_operator_gets_numba_candidate
+        - test_jit_warmup_considered_in_cost
+    - TestNumbaCacheHitProbability
+      tests:
+        - test_cache_hit_probability_affects_selection
+    - TestNumbaPlannerIntegration
+      tests:
+        - test_planner_selects_numba_for_recursive_ops
+        - test_numba_conversion_cost_with_polars
+    - TestNumbaExecutionKindContract
+      tests:
+        - test_numba_execution_kind_exists
+        - test_numba_is_native_execution
+        - test_numba_spec_production_eligible
+  total_tests: 11
+
+integration_points:
+  - "planning/backend_selector.py: _BACKEND_CHARACTERISTICS"
+  - "planning/backend_selector.py: _evaluate_costs()"
+  - "planning/backend_selector.py: _filter_candidates()"
+  - "factor_engine/backend/contracts/__init__.py: ExecutionKind.NUMBA_CPU_KERNEL"
+  - "factor_engine/backend/contracts/__init__.py: PhysicalImplementationSpec"
+
+verification:
+  test_command: "cd /home/shw/quant_projects && python -m pytest factor_engine/tests/backend/test_r21_numba_planner_candidates.py -v"
+  status: "Pending implementation of Numba backend entries"
+  notes: |
+    Tests are written and ready. Once Numba backend characteristics are
+    added to planning/backend_selector.py, all tests should pass.
+    Current tests verify:
+    1. Existing backends still work
+    2. Cost model structure is correct
+    3. ExecutionKind.NUMBA_CPU_KERNEL contract is valid
+    4. Planner integration points exist

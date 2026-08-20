@@ -172,6 +172,16 @@ class PhysicalImplementationSpec:
     def _nonblank(value: object) -> bool:
         return isinstance(value, str) and bool(value.strip())
 
+    @staticmethod
+    def _valid_sha256(value: object) -> bool:
+        """Validate that value is a 64-character lowercase hexadecimal SHA256 hash."""
+        if not isinstance(value, str):
+            return False
+        value = value.strip()
+        if len(value) != 64:
+            return False
+        return all(c in "0123456789abcdef" for c in value)
+
     def validation_errors(self) -> tuple[str, ...]:
         """Return deterministic, fail-closed validation failures."""
         errors: list[str] = []
@@ -188,8 +198,11 @@ class PhysicalImplementationSpec:
             "parameter_domain_hash",
             "semantic_contract_hash",
         ):
-            if not self._nonblank(getattr(self, field_name)):
+            value = getattr(self, field_name)
+            if not self._nonblank(value):
                 errors.append(f"blank {field_name}")
+            elif not self._valid_sha256(value):
+                errors.append(f"invalid {field_name} format (expected 64-char lowercase hex SHA256)")
         if not (self._nonblank(self.emitter_identity) or self._nonblank(self.kernel_identity)):
             errors.append("blank emitter/kernel identity")
         return tuple(errors)

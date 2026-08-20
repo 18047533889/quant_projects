@@ -1,0 +1,107 @@
+# R21-OPTIMIZER-CANDIDATES: Batch Global Optimizer Candidate Backends
+# Evidence file for adding DuckDB, ClickHouse, Q/KDB, and Numba as eligible candidates
+# in PhysicalBatchGlobalOptimizer._eligible_choices()
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-08-21T00:00:00Z"
+  author: "Writer BO (optimizer candidates)"
+  description: "Extends PhysicalBatchGlobalOptimizer to consider DuckDB, ClickHouse, Q/KDB, and Numba backends"
+
+changes:
+  - id: "R21-OPTIMIZER-CANDIDATES-001"
+    description: "Add DuckDB SQL backend candidate"
+    file: "runtime/multibackend/batch_global_optimizer.py"
+    method: "_eligible_choices"
+    backend: "duckdb_sql"
+    physical_backend: "DUCKDB_SQL"
+    representation: "DUCKDB_RELATION"
+    execution_kind: "DUCKDB_NATIVE_SQL"
+    evidence: "SQL backends are production-eligible when supports_sql() returns True"
+
+  - id: "R21-OPTIMIZER-CANDIDATES-002"
+    description: "Add ClickHouse SQL backend candidate"
+    file: "runtime/multibackend/batch_global_optimizer.py"
+    method: "_eligible_choices"
+    backend: "clickhouse_sql"
+    physical_backend: "CLICKHOUSE_SQL"
+    representation: "ARROW_TABLE"
+    execution_kind: "CLICKHOUSE_NATIVE_SQL"
+    evidence: "ClickHouse backends are production-eligible when supports_sql(data_source_kind='clickhouse') returns True"
+
+  - id: "R21-OPTIMIZER-CANDIDATES-003"
+    description: "Add Q/KDB backend candidate"
+    file: "runtime/multibackend/batch_global_optimizer.py"
+    method: "_eligible_choices"
+    backend: "q_kdb"
+    physical_backend: "Q_KDB"
+    representation: "Q_TABLE"
+    execution_kind: "Q_NATIVE"
+    evidence: "Q/KDB backends are production-eligible when QPhysicalImplementationRegistry.has_lowering() returns True"
+
+  - id: "R21-OPTIMIZER-CANDIDATES-004"
+    description: "Add Numba CPU kernel candidate"
+    file: "runtime/multibackend/batch_global_optimizer.py"
+    method: "_eligible_choices"
+    backend: "numba"
+    physical_backend: "PANDAS_NUMPY"
+    representation: "NUMPY_PANEL"
+    execution_kind: "NUMBA_CPU_KERNEL"
+    evidence: "Numba backends are production-eligible when supports_numba() returns True"
+
+candidate_integration:
+  - backend: "duckdb_sql"
+    capability_function: "supports_sql(op, mode=mode)"
+    cost_function: "estimate_backend_cost(op, PhysicalBackend.DUCKDB_SQL.value, row_count_estimate=rows)"
+    representation_function: "infer_representation(PhysicalBackend.DUCKDB_SQL)"
+
+  - backend: "clickhouse_sql"
+    capability_function: "supports_sql(op, mode=mode, data_source_kind='clickhouse')"
+    cost_function: "estimate_backend_cost(op, PhysicalBackend.CLICKHOUSE_SQL.value, row_count_estimate=rows)"
+    representation_function: "infer_representation(PhysicalBackend.CLICKHOUSE_SQL)"
+
+  - backend: "q_kdb"
+    capability_function: "registry.has_lowering(op)"
+    cost_function: "estimate_backend_cost(op, PhysicalBackend.Q_KDB.value, row_count_estimate=rows)"
+    representation_function: "infer_representation(PhysicalBackend.Q_KDB)"
+
+  - backend: "numba"
+    capability_function: "supports_numba(op)"
+    cost_function: "estimate_backend_cost(op, 'numba', row_count_estimate=rows)"
+    representation_function: "infer_representation(PhysicalBackend.PANDAS_NUMPY)"
+
+production_eligibility:
+  - backend: "duckdb_sql"
+    requirement: "capability.is_production_eligible() or mode != 'production'"
+
+  - backend: "clickhouse_sql"
+    requirement: "capability.is_production_eligible() or mode != 'production'"
+
+  - backend: "q_kdb"
+    requirement: "capability.is_production_eligible() or mode != 'production'"
+
+  - backend: "numba"
+    requirement: "capability.is_production_eligible() or mode != 'production'"
+
+test_coverage:
+  - test_name: "test_duckdb_sql_candidate_added"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify DuckDB SQL backend appears as candidate for supported operators"
+
+  - test_name: "test_clickhouse_sql_candidate_added"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify ClickHouse SQL backend appears as candidate for supported operators"
+
+  - test_name: "test_q_kdb_candidate_added"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify Q/KDB backend appears as candidate for operators with lowering"
+
+  - test_name: "test_numba_candidate_added"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify Numba backend appears as candidate for supported operators"
+
+constraints:
+  - "LOCAL ONLY. Working tree."
+  - "Serial pytest, no xdist."
+  - "Thread env vars set."
+  - "Each NodeBackendChoice must bind exact PhysicalImplementationID, parameter-domain, semantic-contract, execution_kind, accelerator, representation, current evidence"

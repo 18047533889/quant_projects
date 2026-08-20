@@ -1,0 +1,57 @@
+# R21-AVAILABLE-SOURCES-FAILCLOSED: available_sources validation fix
+id: R21-AVAILABLE-SOURCES-FAILCLOSED
+title: "available_sources fail-open behavior fix"
+status: implemented
+date: 2026-08-21
+
+# Problem
+description: |
+  The previous implementation in `get_direct_use_mining_operators` had a fail-open
+  behavior where `available_sources=()` (empty tuple) would skip source validation entirely.
+  This allowed operators requiring sources to pass validation when the caller declared
+  no sources were available.
+
+# Root cause
+root_cause: |
+  Line 2249: `if ctx.available_sources:` evaluates to False for empty tuple,
+  causing the source validation block to be skipped entirely. This is wrong
+  because:
+  - `available_sources=()` means "no sources available" (explicit empty set)
+  - `available_sources=None` means "unknown sources" (caller doesn't know)
+  - `available_sources=("src1", "src2")` means "these sources are available"
+
+# Fix
+fix: |
+  Changed the validation logic to:
+  1. `available_sources=None` → hard fail if operator requires sources (unknown = not available)
+  2. `available_sources=()` → fail if operator requires sources (explicit empty = nothing available)
+  3. `available_sources=("src1", ...)` → validate that required sources are in the set
+
+# Files modified
+files:
+  - path: mining/direct_use.py
+    lines: [2249-2254, 2634-2637]
+    change: "if ctx.available_sources:" → explicit None/empty distinction
+
+# Regression tests
+tests:
+  - path: tests/mining/test_direct_use_available_sources_failclosed.py
+    tests:
+      - test_available_sources_none_hard_fails_when_operator_requires_sources
+      - test_available_sources_empty_hard_fails_when_operator_requires_sources
+      - test_available_sources_nonempty_passes_when_sources_satisfied
+
+# Evidence
+evidence:
+  - operator: ts_mean
+    scenario: available_sources=None
+    expected: filtered (hard fail)
+    actual: filtered
+  - operator: ts_mean
+    scenario: available_sources=()
+    expected: filtered (explicit empty)
+    actual: filtered
+  - operator: ts_mean
+    scenario: available_sources=("stock_daily",)
+    expected: passes (source satisfied)
+    actual: passes
