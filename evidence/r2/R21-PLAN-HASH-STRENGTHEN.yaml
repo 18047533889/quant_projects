@@ -1,0 +1,121 @@
+# R21-PLAN-HASH-STRENGTHEN: compute_plan_hash binds all physical plan semantics
+# Generated: 2026-08-21
+# Git SHA: 85b75468bb2189ba8c3aec9770a9d9e50b4730a0
+
+id: R21-PLAN-HASH-STRENGTHEN
+slice: R21-PLAN-HASH-STRENGTHEN — strengthen PhysicalRegionPlan.compute_plan_hash to bind all physical plan semantics
+campaign: PhysicalRegionPlan Upgrade (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - planner/backend_region.py                  # compute_plan_hash strengthened (+_region_hash_payload/_edge_hash_payload, payload version)
+  - tests/planner/test_plan_hash_strengthen.py # new — 16 regression tests
+  - evidence/r2/R21-PLAN-HASH-STRENGTHEN.yaml  # this file
+
+problem:
+  "PhysicalRegionPlan.compute_plan_hash (planner/backend_region.py) only hashed
+  logical_hash, per-region {region_id, backend, node_count}, and per-edge
+  {producer, consumer, source_repr, target_repr}.  Two physical plans that
+  would execute differently collided silently whenever the difference lived in
+  node identity (node_count == len(node_ids) hides different node IDs),
+  representation, execution axis, implementation identity
+  (PhysicalImplementationID), liveness, parameter domain, source identity,
+  semantic contracts (grain/available_at/pit), physical properties
+  (sorted/partitioned/grouped/unique key), state contract, transfer
+  transforms (sort/repartition/reshape/dtype cast, producer ordering), or
+  edge-preserved contracts (pit/universe/grain/source snapshot)."
+
+root_cause:
+  "The hash payload was written as a minimal structural sketch (§68 MB-P2-014)
+  and never extended when R21-P023 added identity/resource fields
+  (implementation_id, liveness, parameter_domain_identity) to BackendRegion
+  and materialization/transform fields to TransferEdge.  Cost estimates were
+  already correctly excluded, but so was everything else that distinguishes
+  one executable plan from another."
+
+fix:
+  "compute_plan_hash now builds the payload from two full-semantics helpers:
+  _region_hash_payload binds, per region: region_id, backend, node_ids (the
+  full ID list, not a count), representation, execution_axis,
+  implementation_id (PhysicalImplementationID 'pi:v1:...' binding), liveness
+  (eager/lazy/stream), parameter_domain_identity, source identity
+  (source_snapshot, universe_contract), semantic contract (grain, available_at,
+  pit_safe), required_properties and output_properties (sorted_by,
+  partitioned_by, grouped_by, unique_key, grain; absent vs empty explicitly
+  distinguished via '__absent__'), and state_contract (requires_checkpoint,
+  checkpoint_seed, stateful_operators, checkpoint_interval, sequential_only).
+  _edge_hash_payload binds, per edge: edge_id, producer/consumer regions,
+  source/target backend, source/target representation, transfer transforms
+  (requires_sort, requires_repartition, requires_reshape, requires_dtype_cast,
+  producer_sorted_by, producer_guarantees_order), and preserved semantic
+  contracts (preserves_pit, preserves_universe, preserves_grain,
+  source_snapshot_id).
+  The logical DAG hash remains bound as before, and a
+  _PLAN_HASH_PAYLOAD_VERSION=1 field was added so a change in the binding
+  contract itself cannot be confused with stale hashes from an older
+  contract.
+  Deliberately NOT hashed (predictions, not plan identity, per §68):
+  estimated_rows, estimated_compute_ms, estimated_memory_bytes,
+  estimated_transfer_ms, input_bytes, output_bytes — a regression test pins
+  this exclusion so estimates never leak into plan identity.
+  Execution-kind / accelerator / q-implementation / Numba-kernel identity
+  enter the hash through the fields that already carry them on the physical
+  plan surface: implementation_id (the PhysicalImplementationID digest binds
+  canonical operator, bound parameters via parameter_domain_hash, execution
+  kind, accelerator, kernel identity, q implementation source hash) and
+  parameter_domain_identity.  The planner BackendRegion has no separate
+  execution_kind/accelerator/q_impl/numba_kernel columns of its own — binding
+  implementation_id binds them all transitively; no schema change was needed
+  (and adding redundant columns would desync from
+  backend/contracts.PhysicalImplementationSpec, the single authority)."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_plan_hash_strengthen.py -q -> 16 passed (0.15s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planner/test_plan_hash_strengthen.py tests/planner/test_physical_region_plan_validation.py tests/planner/test_physical_region_plan_contract.py -q -> 47 passed (0.09s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/planning/test_backend_selector.py -q -> 21 passed (uses planning.physical_region_plan.compute_plan_hash, unaffected)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/multibackend_integration/test_cost_model.py -q -> 15 failed / 5 passed — ALL failures are pre-existing TypeError('BackendRegion.__init__() missing estimated_compute_ms') constructor-signature failures present at HEAD before this slice (these tests were never updated when estimated_compute_ms became a required field in commit 1cb7ea7e); the two TestPlanHashGeneration tests fail at region construction, before compute_plan_hash is ever called"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/runtime/test_round13_execution_scope_2026_08.py::test_physical_region_plan_hash_is_full_sha256 -> collection ERROR: ModuleNotFoundError data_access (missing conftest path shim, pre-existing, unrelated); assertion verified directly: compute_plan_hash((), (), 'logical') is 64 hex chars and stable"
+
+results:
+  hash_payload:
+    before:
+      regions: [region_id, backend, node_count]
+      edges: [producer, consumer, source_repr, target_repr]
+      plan: [logical_hash]
+    after:
+      regions:
+        [region_id, backend, node_ids, representation, execution_axis,
+         implementation_id, liveness, parameter_domain_identity,
+         source_snapshot, universe_contract, grain, available_at, pit_safe,
+         required_properties{sorted_by, partitioned_by, grouped_by, unique_key, grain},
+         output_properties{...same...},
+         state_contract{requires_checkpoint, checkpoint_seed, stateful_operators, checkpoint_interval, sequential_only}]
+      edges:
+        [edge_id, producer, consumer, source_backend, target_backend,
+         source_repr, target_repr, requires_sort, requires_repartition,
+         requires_reshape, requires_dtype_cast, producer_sorted_by,
+         producer_guarantees_order, preserves_pit, preserves_universe,
+         preserves_grain, source_snapshot_id]
+      plan: [version=1, logical_hash]
+  tests:
+    total: 16
+    passed: 16
+    failed: 0
+    skipped: 0
+  test_files:
+    - tests/planner/test_plan_hash_strengthen.py: 16 passed
+      - TestSamePlanSameHash (1): same plan via same and independently-constructed objects -> identical hash, 64 hex chars
+      - TestDifferentPlansDifferentHash (10): logical DAG hash, node_ids (same count, different IDs — the old collision), representation, execution axis, implementation_id, liveness, parameter_domain_identity, source identity, semantic contract (grain/available_at/pit_safe), physical properties (sorted/partitioned), state contract -> all distinct
+      - TestDifferentEdgesDifferentHash (3): transfer transforms (7 variants), edge semantic contracts (5 variants), source backend+representation -> all distinct
+      - TestHashExcludesEstimates (1): estimated_rows/compute_ms/memory/transfer_ms/input_bytes/output_bytes changes -> SAME hash (estimates are not identity)
+
+guards_in_tests:
+  - "test_same_plan_produces_same_hash: deterministic + structurally-equal inputs -> identical 64-char sha256"
+  - "test_different_node_ids_same_node_count: pins the exact pre-strengthen collision (node_count was hashed instead of node_ids)"
+  - "test_estimates_do_not_change_hash: pins the §68 exclusion of cost/size predictions from plan identity"
+  - "payload version field: changing the binding contract bumps _PLAN_HASH_PAYLOAD_VERSION and invalidates all prior hashes"
+
+notes:
+  - "planner/backend_region.py and planning/physical_region_plan.py each define a PhysicalRegionPlan.compute_plan_hash; this slice strengthened the planner/ one (the R21-P023 4-backend surface with implementation_id/liveness/parameter_domain_identity). planning/physical_region_plan.py already hashes node_ids, representation, execution axis, properties, edge transform flags and semantic contracts — it did not need strengthening."
+  - "The 15 pre-existing failures in tests/multibackend_integration/test_cost_model.py (missing required estimated_compute_ms constructor arg, stale since commit 1cb7ea7e) are owned by whoever next touches that test file; they are not caused or masked by this slice."
