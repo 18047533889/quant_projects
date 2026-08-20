@@ -116,7 +116,10 @@ def _estimate_from_scan_shape(scan_shape: Any, ctx: Any) -> DataShapeEstimate:
     # MB-P1-001: Get actual instrument count from universe/filter
     estimated_instruments = _estimate_instruments_from_context(ctx)
 
-    if estimated_rows == 0 and estimated_dates > 0 and estimated_instruments > 0:
+    # Empty universe -> rows=0 (R21-P029)
+    if estimated_instruments == 0:
+        estimated_rows = 0
+    elif estimated_rows == 0 and estimated_dates > 0 and estimated_instruments > 0:
         estimated_rows = estimated_dates * estimated_instruments
 
     avg_row_width = (
@@ -161,7 +164,11 @@ def _estimate_from_data_source(ds: Any, ctx: Any) -> DataShapeEstimate:
     # MB-P1-003: Get real trading calendar dates
     estimated_dates = _estimate_dates_from_data_source(ds, ctx)
 
-    estimated_rows = estimated_dates * estimated_instruments
+    # Empty universe -> rows=0 (R21-P029)
+    if estimated_instruments == 0:
+        estimated_rows = 0
+    else:
+        estimated_rows = estimated_dates * estimated_instruments
 
     # Estimate columns from schema if available
     schema = getattr(ds, "schema", None) or getattr(ds, "_schema", None)

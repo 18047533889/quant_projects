@@ -406,6 +406,36 @@ def _resolve_operator(
     *,
     row_count_estimate: int | None = None,
 ):
+    # R21-P022: if the cost optimizer has already selected a backend for this
+    # whole plan, honor it and skip per-operator BackendRouter.select(auto).
+    selected_backend = getattr(ctx, "selected_backend", None)
+    if selected_backend is not None:
+        from backend.operator_capability import resolve_canonical as _rc
+        from cleaned_operators.registry import OperatorRegistry
+
+        name = _rc(canonical)
+        try:
+            operator = OperatorRegistry.get(name)
+        except Exception:
+            operator = None
+        # Map whole-plan backend labels to operator-level backend keys.
+        _backend_map = {
+            "polars_panel": "polars",
+            "polars_long": "polars",
+            "duckdb_sql": "sql",
+            "clickhouse_sql": "sql",
+            "hybrid": "auto",
+            "pandas_numpy": "pandas_numpy",
+        }
+        op_backend = _backend_map.get(selected_backend, selected_backend)
+        _record_backend_route(
+            ctx,
+            canonical=name,
+            backend=op_backend,
+            row_count_estimate=row_count_estimate,
+        )
+        return operator, op_backend
+
     from backend.backend_router import BackendRouter
 
     prefer = _operator_backend_preference(ctx)

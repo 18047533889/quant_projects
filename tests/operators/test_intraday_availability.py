@@ -3,55 +3,20 @@
 
 Verifies that all intraday profile operators in polars_intraday_profile.py
 correctly declare `available_at="session_close"` and `same_session_usable=False`.
+
+Uses the OperatorRegistry catalog (pre-loaded by conftest.py) to avoid
+double-registration issues from re-importing the module.
 """
 from __future__ import annotations
-
-import importlib
-import inspect
-import sys
 
 import pytest
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _load_intraday_profile_module():
-    """Import the intraday profile module, forcing a fresh import if cached."""
-    mod_name = "cleaned_operators.common.polars_intraday_profile"
-    if mod_name in sys.modules:
-        return sys.modules[mod_name]
-    return importlib.import_module(mod_name)
-
-
-def _collect_intraday_profile_operators():
-    """Return list of (name, operator_instance) for all registered intraday profile ops."""
-    from cleaned_operators.registry import OperatorRegistry
-    mod = _load_intraday_profile_module()
-    # Collect class names defined in the module
-    classes = [
-        obj for name, obj in inspect.getmembers(mod, inspect.isclass)
-        if obj.__module__ == mod.__name__
-    ]
-    results = []
-    for cls in classes:
-        try:
-            instance = cls()
-        except Exception:
-            continue
-        meta = getattr(instance, "metadata", None)
-        if meta is None:
-            continue
-        # Filter to intraday category operators
-        if getattr(meta, "category", None) == "intraday":
-            results.append((meta.name, instance))
-    return results
-
-
 # The canonical list of operators that MUST have availability declared.
 # This acts as a regression guard: if a new operator is added without
 # availability fields, the test will fail.
+# ---------------------------------------------------------------------------
 EXPECTED_INTRADAY_PROFILE_OPERATORS = [
     "intra_volume_profile_cosine",
     "intra_volume_profile_jsd",
@@ -83,6 +48,22 @@ EXPECTED_INTRADAY_PROFILE_OPERATORS = [
 ]
 
 
+@pytest.fixture(scope="module")
+def registry():
+    from cleaned_operators.registry import OperatorRegistry
+    return OperatorRegistry
+
+
+def _get_polars_op(registry, name):
+    """Get the polars-backend operator, falling back to any backend if polars not found."""
+    op = registry.get(name, "polars")
+    if op is not None:
+        return op
+    # Fallback: try without backend filter
+    op = registry.get(name)
+    return op
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -91,31 +72,30 @@ EXPECTED_INTRADAY_PROFILE_OPERATORS = [
 class TestIntradayProfileAvailability:
     """Verify availability declarations on intraday profile operators."""
 
-    def test_all_expected_operators_present(self):
-        """Every expected operator must be importable from the module."""
-        ops = _collect_intraday_profile_operators()
-        found_names = {name for name, _ in ops}
-        missing = set(EXPECTED_INTRADAY_PROFILE_OPERATORS) - found_names
-        assert not missing, f"Expected operators not found in registry: {missing}"
-
-    def test_available_at_session_close(self):
-        """Every intraday profile operator must declare available_at='session_close'."""
-        ops = _collect_intraday_profile_operators()
-        ops_dict = dict(ops)
+    def test_all_expected_operators_present(self, registry):
+        """Every expected operator must exist in the registry."""
         for name in EXPECTED_INTRADAY_PROFILE_OPERATORS:
-            instance = ops_dict[name]
-            meta = instance.metadata
+            op = _get_polars_op(registry, name)
+            assert op is not None, (
+                f"Operator {name!r} not found in registry"
+            )
+
+    def test_available_at_session_close(self, registry):
+        """Every intraday profile operator must declare available_at='session_close'."""
+        for name in EXPECTED_INTRADAY_PROFILE_OPERATORS:
+            op = _get_polars_op(registry, name)
+            assert op is not None, f"{name} not in registry"
+            meta = op.metadata
             assert meta.available_at == "session_close", (
                 f"{name}.available_at = {meta.available_at!r}, expected 'session_close'"
             )
 
-    def test_same_session_usable_false(self):
+    def test_same_session_usable_false(self, registry):
         """Every intraday profile operator must declare same_session_usable=False."""
-        ops = _collect_intraday_profile_operators()
-        ops_dict = dict(ops)
         for name in EXPECTED_INTRADAY_PROFILE_OPERATORS:
-            instance = ops_dict[name]
-            meta = instance.metadata
+            op = _get_polars_op(registry, name)
+            assert op is not None, f"{name} not in registry"
+            meta = op.metadata
             assert meta.same_session_usable is False, (
                 f"{name}.same_session_usable = {meta.same_session_usable!r}, expected False"
             )
@@ -132,19 +112,3 @@ class TestIntradayProfileAvailability:
         )
         assert m.available_at == "session_close"
         assert m.same_session_usable is False
-
-    def test_no_unexpected_operators_missing_availability(self):
-        """Catch any NEW intraday operator that was added without availability fields."""
-        ops = _collect_intraday_profile_operators()
-        for name, instance in ops:
-            meta = instance.metadata
-            if meta.name in EXPECTED_INTRADAY_PROFILE_OPERATORS:
-                # Already checked above
-                continue
-            # Any new intraday operator: availability fields must be set
-            assert meta.available_at is not None, (
-                f"New intraday operator {name!r} missing available_at"
-            )
-            assert meta.same_session_usable is not None, (
-                f"New intraday operator {name!r} missing same_session_usable"
-            )

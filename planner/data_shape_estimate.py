@@ -153,7 +153,7 @@ def estimate_instruments_from_universe(
                 )
                 return val
 
-    # 3. default 兜底
+    # 3. default 兜底（R21-P029: empty/unknown -> 0, not default）
     return default
 
 

@@ -39,6 +39,9 @@ class ExecutionContext:
     # 改 process-global env）。engine 显式构造 PandasBackend(use_modin_pandas=…)
     # 时在对应执行上下文内生效。
     _use_modin_pandas: bool = False
+    # R21-P022: cost-optimizer selected backend — when set, prevents per-operator
+    # reroute via BackendRouter.select(auto) so the whole-plan route is honored.
+    selected_backend: str | None = None
 
     def __post_init__(self) -> None:
         if not self.execution_id:

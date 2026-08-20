@@ -2106,7 +2106,13 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         contract.status.value.startswith("direct_")
         and role is not MiningRole.UNRESOLVED
     )
-    composition_usable = mining_visible and bool(contract.ast_positions)
+    composition_usable = (
+        mining_visible
+        and bool(contract.ast_positions)
+        and bool(input_slot_specs(canonical, catalog, panel_params=panel_params, scalar_params=scalar_params))
+        and bool(default_input_recipe(canonical))
+        and bool(market_support(canonical))
+    )
     terminal_usable = mining_visible and contract.status in _DIRECT_TERMINAL_STATUSES
     production_admitted = (
         bool(catalog.get("production_certified"))

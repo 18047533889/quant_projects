@@ -87,6 +87,10 @@ class HybridBackend(Backend):
                 )
 
         record_plan_route(ctx, route)
+        # R21-P022: stamp selected_backend on the context so per-operator
+        # reroute in cleaned_bridge is suppressed for this execution.
+        from dataclasses import replace as _ctx_replace
+        ctx = _ctx_replace(ctx, selected_backend=route.backend)
         if route.backend == "pandas_numpy":
             return self._pandas.execute(plan, ctx)
         if route.backend == "polars_panel":

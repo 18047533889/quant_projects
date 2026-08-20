@@ -1269,30 +1269,44 @@ def plan_native_subgraph_fraction(
 ) -> dict[str, Any]:
     """R33 §11.2/§75 Step 3：maximal native subgraph 覆盖评估。
 
-    ``backend`` 仅为调用方提示；SQL dialect 由 ``ctx`` 的 data source 决定
-    （R21-P026：ClickHouse 数据源不再默认按 duckdb 评估）。
+    ``backend`` 是调用方指定的目标 backend；函数按 **该 backend** 的实际
+    PhysicalImplementation 判定 native / unsupported（不再统一按 SQL capability）。
 
-    返回 ``{native_ops, unsupported_ops, native_fraction, tail_fraction}``：
-       - ``native_fraction``：SQL-native occurrence 占比（可下推的部分）。
+    返回 ``{native_ops, unsupported_ops, native_fraction, tail_fraction, backend}``：
+       - ``native_fraction``：该 backend native occurrence 占比（可下推/原生执行的部分）。
        - ``unsupported_ops``：不支持该 backend 的 occurrence（= 需经一次
          conversion boundary 交给 specialized kernel / pandas reference）。
+       - ``backend``：实际评估的 backend（用于上层区分）。
     用途：一个 unsupported op **不**再整 root 失去 native candidate
     （R33_SINGLE_UNSUPPORTED_OP_FULL_PANDAS_FALLBACK_ZERO）。
     """
-    from backend.operator_capability import supports_sql
+    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
 
     mode = mode or str(getattr(ctx, "run_mode", "research") or "research").lower()
+    # R21-P027：用传入的 backend，不再 fallback 到 data_source_kind。
+    resolved_backend = (backend or "duckdb_sql").lower()
     data_kind = _data_source_kind(ctx)
     occs = plan_occurrences(plan)
     native: list[str] = []
     unsupported: list[str] = []
     for occ in occs:
-        if supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
+        # R21-P027：按 PhysicalImplementation 查询具体 backend，不查 generic SQL。
+        if resolved_backend in ("duckdb_sql", "clickhouse_sql"):
+            ok = supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode)
+        elif resolved_backend in ("polars_panel", "polars_long"):
+            ok = supports_polars(occ.canonical, mode=mode)
+        elif resolved_backend == "pandas_numpy":
+            ok = supports_pandas(occ.canonical, mode=mode)
+        else:
+            # 未知 backend：保守视为 unsupported（不误报 native）。
+            ok = False
+        if ok:
             native.append(occ.canonical)
         else:
             unsupported.append(occ.canonical)
     total = max(1, len(occs))
     return {
+        "backend": resolved_backend,
         "native_ops": list(dict.fromkeys(native)),
         "unsupported_ops": list(dict.fromkeys(unsupported)),
         "native_fraction": round(len(native) / total, 4),
