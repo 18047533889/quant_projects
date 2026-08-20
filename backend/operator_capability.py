@@ -1234,20 +1234,25 @@ def get_best_backend(
     row_count_estimate: int | None = None,
     prefer: str = "auto",
     allow_unverified_backend: bool = False,
+    registry: Any | None = None,
 ) -> tuple[object | None, str]:
     """Select the cheapest eligible operator backend.
 
     Production never silently falls back to an implementation that lacks
     current evidence.  SQL is normally selected at the plan/subtree layer, but
-    explicit ``prefer='sql'`` remains supported.
+    explicit ``prefer='sql'`` remains supported.  ``registry`` is an
+    injectable OperatorRegistry for tests (defaults to the global one).
     """
     import os
 
     from cleaned_operators.registry import OperatorRegistry
 
+    if registry is None:
+        registry = OperatorRegistry
+
     canonical = resolve_canonical(name)
     mode = str(mode or "research").lower()
-    backends = OperatorRegistry.backends_for(canonical)
+    backends = registry.backends_for(canonical)
     prod = mode == "production"
 
     def permitted(registry_backend: str) -> bool:
@@ -1288,13 +1293,13 @@ def get_best_backend(
                 raise UnsupportedOperatorBackendError(
                     f"{canonical!r} backend='q_kdb' is not eligible in mode={mode!r}"
                 )
-            op = OperatorRegistry.get(canonical, "q_kdb")
+            op = registry.get(canonical, "q_kdb")
             if op is None:
                 raise UnsupportedOperatorBackendError(
                     f"{canonical!r} backend='q_kdb' has no registered q operator"
                 )
             return op, "q_kdb"
-        op = OperatorRegistry.get(canonical, requested)
+        op = registry.get(canonical, requested)
         if op is None or not permitted(requested):
             raise UnsupportedOperatorBackendError(
                 f"{canonical!r} backend={requested!r} is not eligible in mode={mode!r}"
@@ -1355,7 +1360,7 @@ def get_best_backend(
         # round-trip); a ``pandas_materialization_fallback`` stays behind the
         # certified pandas reference unless benchmark evidence says otherwise.
         if any(candidate == "polars" for candidate, _ in candidates):
-            pl_op = OperatorRegistry.get(canonical, "polars")
+            pl_op = registry.get(canonical, "polars")
             from backend.polars_backend_kind import polars_backend_kind
 
             kind = polars_backend_kind(pl_op)
@@ -1366,7 +1371,7 @@ def get_best_backend(
         else:
             chosen = candidates[0][0]
 
-    op = OperatorRegistry.get(canonical, chosen)
+    op = registry.get(canonical, chosen)
     if op is None:
         raise UnsupportedOperatorBackendError(
             f"selected backend {chosen!r} disappeared for {canonical!r}"
@@ -1471,10 +1476,19 @@ class BackendCapabilityRegistry:
             BackendKind.CLICKHOUSE_SQL: "clickhouse_sql",
             BackendKind.Q_KDB: "q_kdb",
         }
+        if backend_kind not in backend_kind_map:
+            return CapabilityQueryResult(
+                supported=False,
+                production_safe=False,
+                record=None,
+                reason=f"Backend {backend_kind!r} not implemented",
+            )
+
         if backend_kind is BackendKind.Q_KDB:
             # R21-BACKENDNAME-Q-ALIGN: Q is not an SQL dialect, so the
             # bound-param SQL compile check does not apply. Status comes from
             # the q physical-implementation evidence authority (fail-closed).
+            backend_name: BackendName = backend_kind_map[backend_kind]  # type: ignore
             status = _q_status(canon)
             record = cls._build_record(canon, backend_kind, data_source_kind)
             return CapabilityQueryResult(
@@ -1506,15 +1520,7 @@ class BackendCapabilityRegistry:
                 reason=decision.reason,
             )
 
-        backend_name = backend_name_map[backend_kind]  # type: ignore[assignment]
-        if backend_kind not in backend_name_map:
-            return CapabilityQueryResult(
-                supported=False,
-                production_safe=False,
-                record=None,
-                reason=f"Backend {backend_kind} not yet implemented",
-            )
-
+        backend_name: BackendName = backend_kind_map[backend_kind]  # type: ignore
         status = backend_status(canon, backend_name, data_source_kind=data_source_kind)
 
         supported = status != "unsupported"

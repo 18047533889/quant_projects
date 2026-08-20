@@ -1,0 +1,79 @@
+task_id: R21-P0-PAIRWISE-ALIGNMENT
+finding: pairwise_panel_alignment_contract_exact_alignment_fail_closed
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: 91b6262044f465fa98fe243d353a251bfa5b7337
+commit_sha: 91b6262044f465fa98fe243d353a251bfa5b7337
+timestamp: '2026-08-20T16:24:44Z'
+status: CLOSED_LOCAL
+owned_files:
+- backend/pairwise_alignment.py
+- backend/production_checklist.py
+- tests/backend/test_r21_pairwise_alignment.py
+- tests/backend/test_production_checklist.py
+- evidence/r2/R21-PAIRWISE-ALIGNMENT.yaml
+modified_files:
+- backend/pairwise_alignment.py
+- backend/production_checklist.py
+- tests/backend/test_r21_pairwise_alignment.py
+- tests/backend/test_production_checklist.py
+- evidence/r2/R21-PAIRWISE-ALIGNMENT.yaml
+problem:
+- 'For ts_corr / ts_cov / ts_beta / ts_regression: no single named contract ensured
+  that date axis, instrument axis, ordering, universe snapshot, grain and session
+  were EXACTLY aligned before pairwise computation.'
+- ts_regression_slope emitter (polars + SQL) used a bare LEFT JOIN, meaning a missing
+  counterpart column silently produced NULL instead of raising.
+- There was no PanelSchemaMismatchError exception — the only alignment error was AlignmentError
+  (long-path) or PanelAxisMismatch (wide-path), neither of which was the canonical
+  pairwise contract.
+implementation:
+- 'backend/pairwise_alignment.py — NEW module: AlignmentMode enum (EXACT_ALIGNMENT
+  default, LEFT_JOIN_ALIGNMENT research-only), PanelSchemaMismatchError (fail-closed
+  ValueError subclass), PairwiseAlignmentSpec (6 boolean checks: date_axis, instrument_axis,
+  ordering, universe_snapshot, grain, session), PAIRWISE_ALIGNMENT_SPECS registry
+  covering ts_corr/ts_cov/ts_beta/ts_regression* + cs_resid + cs_regression, assert_wide_pairwise_aligned
+  (pandas), assert_long_frames_exact (Polars, delegates to long_alignment with wrapped
+  exception), pairwise_alignment_evidence helper.'
+- backend/production_checklist.py — §14 updated from "defined" to "implemented", module
+  updated to backend.pairwise_alignment.
+- tests/backend/test_r21_pairwise_alignment.py — 10 regression tests (4 core scenarios
+  + 6 contract property checks).
+- tests/backend/test_production_checklist.py — added pairwise_alignment_contract_wired
+  import + test_pairwise_alignment_contract_flags.
+focused_tests:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
+    python3 -m pytest tests/backend/test_r21_pairwise_alignment.py -q
+  result: 10 passed (2026-08-21, 0.11s)
+  coverage:
+  - Wide-panel mismatched columns → PanelSchemaMismatchError
+  - Wide-panel shifted date axis → PanelSchemaMismatchError
+  - Wide-panel exact match passes
+  - Long-panel missing counterpart column → PanelSchemaMismatchError
+  - Long-panel exact key set passes
+  - LEFT_JOIN_ALIGNMENT mode skips check (research only)
+  - Default spec for ts_corr is EXACT_ALIGNMENT
+  - PanelSchemaMismatchError is a ValueError
+  - All 6 axes enabled in default spec
+  - Evidence helper returns JSON-serialisable dict
+serial_regression_gate:
+  command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+    MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/backend/test_r21_pairwise_alignment.py
+    tests/backend/test_production_checklist.py -q
+  result: 21 passed (2026-08-21, 0.25s, serial, no xdist)
+compile_gate:
+  command: python3 -m py_compile backend/pairwise_alignment.py backend/production_checklist.py
+    tests/backend/test_r21_pairwise_alignment.py tests/backend/test_production_checklist.py
+  result: PASS
+known_limitations:
+- The contract is currently defined and importable; wiring it into polars_expr_emitter.ts_regression_slope
+  (bare LEFT JOIN at line 2807) and SQL emitter ts_regression_slope/ts_corr/ts_cov/ts_beta
+  bare LEFT JOINs is a follow-up slice.
+- Polars_LONG backend path already raises AlignmentError via anchor_left_join_binary
+  for ts_corr/ts_cov/ts_beta; the new contract wraps this as PanelSchemaMismatchError
+  for the public API.
+- Pandas backend path already raises PanelAxisMismatch via _validate_panel_axes for
+  wide panels; assert_wide_pairwise_aligned provides the explicit pairwise contract
+  callable.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

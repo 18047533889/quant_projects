@@ -71,6 +71,8 @@ class ExecutionKind(str, Enum):
     # Polars-specific native execution
     POLARS_NATIVE_EXPR = "polars_native_expr"
     POLARS_NUMPY_KERNEL = "polars_numpy_kernel"
+    # Backward-compatible alias kept for existing runtime/type-level consumers.
+    POLARS_NATIVE_KERNEL = "polars_numpy_kernel"
 
     # Numba CPU kernel execution (NUMBA_CPU_KERNEL is an accelerator, not a backend kind)
     NUMBA_CPU_KERNEL = "numba_cpu_kernel"
@@ -85,6 +87,7 @@ class ExecutionKind(str, Enum):
 
     # SQL execution
     DUCKDB_NATIVE_SQL = "duckdb_native_sql"
+    SQL_NATIVE = "duckdb_native_sql"
     CLICKHOUSE_NATIVE_SQL = "clickhouse_native_sql"
     SQL_PYTHON_UDF = "sql_python_udf"
 

@@ -17,6 +17,7 @@ from backend.ordering_spec import (
     duplicate_ts_inst_keys_forbidden,
     production_output_sorted_by_ts_inst,
 )
+from backend.pairwise_alignment import pairwise_alignment_contract_wired
 from backend.pairwise_spec import beta_uses_pairwise_var
 from backend.plan_params import PlanParamError, parse_winsorize_quantiles
 from backend.production_checklist import PRODUCTION_CHECKLIST, checklist_complete_for_phase1
@@ -47,6 +48,20 @@ def test_core_contract_flags():
     assert calendar_ops_require_explicit_spec()
     assert cumulative_batch_only_phase1()
     assert ffill_production_requires_limit()
+    assert pairwise_alignment_contract_wired()
+
+
+def test_pairwise_alignment_contract_flags():
+    from backend.pairwise_alignment import AlignmentMode, pairwise_alignment_spec_for
+
+    for canonical in ("ts_corr", "ts_cov", "ts_beta", "ts_regression_slope"):
+        spec = pairwise_alignment_spec_for(canonical)
+        assert spec.mode == AlignmentMode.EXACT_ALIGNMENT
+        assert spec.date_axis is True
+        assert spec.instrument_axis is True
+        assert spec.universe_snapshot is True
+        assert "date_axis" in spec.checked_axes()
+        assert "universe_snapshot" in spec.checked_axes()
 
 
 def test_zscore_zero_std_epsilon():

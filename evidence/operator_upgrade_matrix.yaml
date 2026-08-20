@@ -5,9 +5,9 @@ counts:
   certified_dual: 0
   backend_execution_certified: 0
   operational_production_certified: 0
-  batch_a_total: 45
+  batch_a_total: 0
   batch_a_certified: 0
-  batch_a_pending: 45
+  batch_a_pending: 0
 batches:
   A: []
   B: []
