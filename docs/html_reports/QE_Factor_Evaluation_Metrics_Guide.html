@@ -1,0 +1,856 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>QuantEvaluator 评估指标完整清单（全量）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"/>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});"></script>
+<style>
+:root{--ink:#13212e;--muted:#5a6a78;--line:#d7dee6;--bg:#f7f5f0;--card:#fff;--accent:#0e6b5c;--soft:#e6f3ef;--warn:#8a4b12;--code:#eef2f5}
+*{box-sizing:border-box}body{margin:0;font-family:"IBM Plex Sans","Source Han Sans SC","Noto Sans CJK SC",sans-serif;color:var(--ink);background:radial-gradient(1100px 480px at 8% -8%,#e8f2ef,transparent 55%),var(--bg);line-height:1.65}
+.wrap{max-width:1040px;margin:0 auto;padding:2.2rem 1.15rem 4.5rem}
+.eyebrow{color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:.76rem}
+h1{font-family:"IBM Plex Serif","Source Han Serif SC",Georgia,serif;font-size:clamp(1.7rem,3.2vw,2.35rem);margin:.4rem 0 .7rem;line-height:1.2}
+.sub{color:var(--muted);max-width:52rem}.meta{display:flex;flex-wrap:wrap;gap:.5rem 1rem;margin-top:.9rem;color:var(--muted);font-size:.9rem}
+.pill{background:var(--soft);color:var(--accent);border-radius:999px;padding:.12rem .65rem;font-size:.8rem;font-weight:650}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.15rem;margin:1.3rem 0 1.8rem}
+nav.toc ol{columns:2;gap:1.4rem;margin:.4rem 0 0;padding-left:1.2rem}@media(max-width:720px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--ink);text-decoration:none}nav.toc a:hover{color:var(--accent)}
+h2{font-family:"IBM Plex Serif",Georgia,serif;font-size:1.4rem;margin:2rem 0 .7rem;padding-top:.35rem;border-top:1px solid var(--line)}
+h3{font-size:1.05rem;margin:1.2rem 0 .35rem}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.85rem 1rem;margin:.65rem 0}
+.ok{background:var(--soft);border-left:4px solid var(--accent);padding:.7rem 1rem;margin:1rem 0;border-radius:0 8px 8px 0}
+.note{background:#fff8e8;border-left:4px solid var(--warn);padding:.7rem 1rem;margin:1rem 0;border-radius:0 8px 8px 0}
+.formula{background:#fbfcfa;border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;margin:.45rem 0 .7rem;overflow-x:auto}
+.fn{font-family:"IBM Plex Mono",Menlo,Consolas,monospace;font-weight:650;font-size:.92em}
+.sig{color:var(--muted);font-size:.84rem;margin:.2rem 0}.tag{display:inline-block;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.08rem .38rem;border-radius:4px;margin-right:.28rem;background:#e8eef3;color:#355064}
+.tag.risk{background:#fdecec;color:#8a3030}.tag.stats{background:#eef0ff;color:#3a3f8f}.tag.reg{background:#f3e8ff;color:#6b3fa0}.tag.perf{background:#eee;color:#555}.tag.diag{background:#e8f6ff;color:#1a5f8a}.tag.help{background:#e9f7e9;color:#2d6a2d}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);font-size:.88rem;margin:.7rem 0 1rem}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .55rem;text-align:left;vertical-align:top}th{background:#f0f4f7}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;overflow:auto;font-size:.84rem}
+footer{margin-top:2.5rem;padding-top:.9rem;border-top:1px solid var(--line);color:var(--muted);font-size:.86rem}
+</style></head><body><div class="wrap">
+<p class="eyebrow">quant_evaluator · absolute complete catalog</p>
+<h1>因子评估指标完整清单（全量版）</h1>
+<p class="sub">这次按「所有」口径收录：公开 API + 额外评估辅助函数 + Registry 注册名 + 诊断入口 + 性能实现变体。共 <strong>130</strong> 个唯一名称。</p>
+<div class="meta">
+<span class="pill">公开 API 98</span>
+<span class="pill">辅助 6</span>
+<span class="pill">Registry 14</span>
+<span class="pill">诊断 2</span>
+<span class="pill">性能变体 10</span>
+<span>日期 2026-08-16</span>
+</div>
+
+<nav class="toc"><h2 style="border:0;margin:0;font-size:1rem">目录</h2><ol>
+<li><a href="#public">一、全部公开评估指标 API（metrics / risk / stats）</a></li>
+<li><a href="#helper">二、额外指标辅助函数（未进 __all__，但仍是评估相关）</a></li>
+<li><a href="#registry">三、Registry 指标 ID（任务编排用的注册名/别名）</a></li>
+<li><a href="#diagnosis">四、诊断入口（对因子做体检，非单一指标）</a></li>
+<li><a href="#perf">五、同指标的性能实现变体（不是新指标，是加速路径）</a></li>
+<li><a href="#alltable">总表（全部唯一名）</a></li></ol></nav>
+<div class="ok"><strong>结论：</strong>评估指标相关的公开导出 <b>98</b> 项已全部收录；并额外补齐辅助函数、Registry 别名、诊断入口与加速实现，避免「漏网」。</div>
+<div class="note">性能变体与对应主指标语义相同（只是更快）。Registry 名是编排层 ID，通常映射到某个 <code>compute_*</code> 函数。</div>
+
+<section id="public"><h2>一、全部公开评估指标 API（metrics / risk / stats）</h2><p>本节约 <strong>98</strong> 项。</p>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_coverage</span>
+<div class="sig"><code>compute_coverage(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_assets: int = 10) -&gt; Tuple[float, int, int]</code></div>
+<p>Compute coverage: fraction of valid (factor, label) pairs.</p>
+<div class="formula">$$\mathrm{Coverage}=\#\mathrm{valid}/\#\mathrm{total}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_per_time_coverage</span>
+<div class="sig"><code>compute_per_time_coverage(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle) -&gt; numpy.ndarray</code></div>
+<p>Compute coverage per time period.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_daily_ic</span>
+<div class="sig"><code>compute_daily_ic(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, method: str = 'pearson', min_assets: int = 10) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute daily IC series for factor batch.</p>
+<div class="formula">$$\mathrm{IC}_{t,f}=\mathrm{Corr}(f_{t,\cdot},y_{t,\cdot}),\ \mathrm{RankIC}=\mathrm{Spearman}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_mean_ic</span>
+<div class="sig"><code>compute_mean_ic(ic_series: numpy.ndarray, valid_counts: Optional[numpy.ndarray] = None, min_periods: int = 20) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute mean IC across time.</p>
+<div class="formula">$$\overline{\mathrm{IC}}=\mathrm{nanmean}_t(\mathrm{IC}_t)$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">assign_quantiles</span>
+<div class="sig"><code>assign_quantiles(values: numpy.ndarray, n_quantiles: int = 5, method: str = 'max') -&gt; numpy.ndarray</code></div>
+<p>Assign quantile IDs to values with tie handling.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_quantile_returns</span>
+<div class="sig"><code>compute_quantile_returns(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, n_quantiles: int = 5, min_assets: int = 10) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute average returns per quantile per period.</p>
+<div class="formula">$$R_{t,q}=\mathrm{mean}\{y_i:i\in G_{t,q}\}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_top_bottom_spread</span>
+<div class="sig"><code>compute_top_bottom_spread(quantile_returns: numpy.ndarray, top_q: Optional[int] = None, bottom_q: int = 0) -&gt; numpy.ndarray</code></div>
+<p>Compute top-bottom quantile spread (highest group minus lowest group).</p>
+<div class="formula">$$\mathrm{Spread}=R_{\mathrm{top}}-R_{\mathrm{bottom}}\ (\mathrm{default\ high-low})$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_turnover</span>
+<div class="sig"><code>compute_turnover(weights_t0: numpy.ndarray, weights_t1: numpy.ndarray, method: str = 'half_sum_abs') -&gt; float</code></div>
+<p>Compute turnover between two weight vectors.</p>
+<div class="formula">$$\mathrm{TO}=\tfrac12\sum|w_{t+1}-w_t|$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_turnover_series</span>
+<div class="sig"><code>compute_turnover_series(weights: numpy.ndarray, method: str = 'half_sum_abs') -&gt; numpy.ndarray</code></div>
+<p>Compute turnover time series from weight matrix (vectorized).</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">estimate_turnover_from_ranks</span>
+<div class="sig"><code>estimate_turnover_from_ranks(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, window: int = 1) -&gt; numpy.ndarray</code></div>
+<p>Estimate turnover from factor rank changes (proxy, not actual portfolio).</p>
+<div class="formula">$$\widehat{\mathrm{TO}}=1-|\mathrm{Spearman}(R_t,R_{t-\ell})|$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_icir</span>
+<div class="sig"><code>compute_icir(ic_series: numpy.ndarray, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Information Coefficient Information Ratio (ICIR).</p>
+<div class="formula">$$\mathrm{ICIR}=\overline{\mathrm{IC}}/\sigma(\mathrm{IC})$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_ic_tstat</span>
+<div class="sig"><code>compute_ic_tstat(ic_series: numpy.ndarray, min_periods: int = 20) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute t-statistic for IC series testing H0: mean(IC) = 0.</p>
+<div class="formula">$$t=\overline{\mathrm{IC}}/(\sigma/\sqrt{n})$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_ic_decay</span>
+<div class="sig"><code>compute_ic_decay(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundles: Tuple[quant_evaluator.contracts.label_bundle.LabelBundle, ...], method: str = 'pearson', min_assets: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Compute IC decay across multiple horizons.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_ic_stability</span>
+<div class="sig"><code>compute_ic_stability(ic_series: numpy.ndarray, window_size: int = 60, min_periods: int = 20) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute rolling IC stability metrics.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_factor_loadings</span>
+<div class="sig"><code>compute_factor_loadings(factor_values: numpy.ndarray, risk_factors: numpy.ndarray, intercept: bool = True, min_obs: int = 10) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute factor loadings via cross-sectional OLS regression.</p>
+<div class="formula">$$f=\alpha+\sum\beta_k r_k+\varepsilon$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_sector_exposure</span>
+<div class="sig"><code>compute_sector_exposure(factor_values: numpy.ndarray, sector_labels: numpy.ndarray, weights: Optional[numpy.ndarray] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute weighted factor exposure by sector.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_style_exposure</span>
+<div class="sig"><code>compute_style_exposure(factor_values: numpy.ndarray, style_factors: numpy.ndarray, style_names: Tuple[str, ...]) -&gt; numpy.ndarray</code></div>
+<p>Compute time-series average exposure to style factors.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_concentration_hhi</span>
+<div class="sig"><code>compute_concentration_hhi(factor_values: numpy.ndarray, weights: Optional[numpy.ndarray] = None) -&gt; numpy.ndarray</code></div>
+<p>Compute Herfindahl-Hirschman Index (HHI) concentration metric.</p>
+<div class="formula">$$\mathrm{HHI}=\sum(w_i f_i/\sum w_j f_j)^2$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_autocorrelation</span>
+<div class="sig"><code>compute_autocorrelation(series: numpy.ndarray, max_lag: int = 20, min_obs: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute autocorrelation function (ACF) for time series.</p>
+<div class="formula">$$\rho(\ell)=\mathrm{Cov}(x_t,x_{t-\ell})/\mathrm{Var}(x_t)$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_ic_autocorrelation</span>
+<div class="sig"><code>compute_ic_autocorrelation(ic_series: numpy.ndarray, max_lag: int = 20, min_obs: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute autocorrelation of IC series.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_rank_stability</span>
+<div class="sig"><code>compute_rank_stability(factor_values: numpy.ndarray, lag: int = 1, method: str = 'spearman') -&gt; numpy.ndarray</code></div>
+<p>Compute rank stability across time.</p>
+<div class="formula">$$\mathrm{RankStab}=\mathrm{Corr}(R(f_t),R(f_{t+\ell}))$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_mean_rank_stability</span>
+<div class="sig"><code>compute_mean_rank_stability(factor_values: numpy.ndarray, lag: int = 1, method: str = 'spearman', min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute time-averaged rank stability.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_factor_turnover_rate</span>
+<div class="sig"><code>compute_factor_turnover_rate(factor_values: numpy.ndarray, quantile: float = 0.9) -&gt; numpy.ndarray</code></div>
+<p>Compute turnover rate of top/bottom quantile membership.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_half_life</span>
+<div class="sig"><code>compute_half_life(ic_series: numpy.ndarray, min_periods: int = 60) -&gt; numpy.ndarray</code></div>
+<p>Estimate IC half-life using AR(1) model.</p>
+<div class="formula">$$\mathrm{IC}_t=\phi\mathrm{IC}_{t-1}+\varepsilon,\ \mathrm{HL}=-\ln2/\ln|\phi|$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_subsample_ic</span>
+<div class="sig"><code>compute_subsample_ic(ic_series: numpy.ndarray, num_subsamples: int = 100, subsample_fraction: float = 0.8, random_seed: Optional[int] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute IC stability via bootstrap subsampling.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_subsample_ic_std</span>
+<div class="sig"><code>compute_subsample_ic_std(ic_series: numpy.ndarray, num_subsamples: int = 100, subsample_fraction: float = 0.8, random_seed: Optional[int] = None) -&gt; numpy.ndarray</code></div>
+<p>Compute standard deviation of mean IC across subsamples.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_hac_variance</span>
+<div class="sig"><code>compute_hac_variance(series: numpy.ndarray, max_lag: int = 5, kernel: str = 'bartlett') -&gt; numpy.ndarray</code></div>
+<p>Compute Heteroskedasticity and Autocorrelation Consistent (HAC) variance.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_hac_tstat</span>
+<div class="sig"><code>compute_hac_tstat(ic_series: numpy.ndarray, max_lag: int = 5, kernel: str = 'bartlett') -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute HAC-robust t-statistic for IC series.</p>
+<div class="formula">$$t^{\mathrm{HAC}}=\overline{\mathrm{IC}}/\widehat{\mathrm{SE}}_{\mathrm{HAC}}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_block_bootstrap_ci</span>
+<div class="sig"><code>compute_block_bootstrap_ci(ic_series: numpy.ndarray, block_length: int = 10, num_bootstrap: int = 1000, confidence_level: float = 0.95, random_seed: Optional[int] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute confidence interval via block bootstrap.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_skewness</span>
+<div class="sig"><code>compute_skewness(values: numpy.ndarray, axis: int = 0, min_obs: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Compute skewness along specified axis.</p>
+<div class="formula">$$\mathrm{Skew}=\mathbb{E}[(x-\mu)^3]/\sigma^3$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_kurtosis</span>
+<div class="sig"><code>compute_kurtosis(values: numpy.ndarray, axis: int = 0, min_obs: int = 10, excess: bool = True) -&gt; numpy.ndarray</code></div>
+<p>Compute kurtosis along specified axis.</p>
+<div class="formula">$$\mathrm{Kurt}_{ex}=\mathbb{E}[(x-\mu)^4]/\sigma^4-3$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">detect_outliers_iqr</span>
+<div class="sig"><code>detect_outliers_iqr(values: numpy.ndarray, axis: int = 0, multiplier: float = 1.5, min_obs: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Detect outliers using IQR method.</p>
+<div class="formula">$$\mathrm{outlier\ if\ }x\notin[Q_1-k\mathrm{IQR},Q_3+k\mathrm{IQR}]$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">detect_outliers_zscore</span>
+<div class="sig"><code>detect_outliers_zscore(values: numpy.ndarray, axis: int = 0, threshold: float = 3.0, min_obs: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Detect outliers using z-score method.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_outlier_ratio</span>
+<div class="sig"><code>compute_outlier_ratio(outlier_mask: numpy.ndarray, axis: int = 0) -&gt; numpy.ndarray</code></div>
+<p>Compute ratio of outliers along axis.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_higher_moments</span>
+<div class="sig"><code>compute_higher_moments(values: numpy.ndarray, axis: int = 0, min_obs: int = 20) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute mean, std, skewness, and kurtosis together.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_long_short_returns</span>
+<div class="sig"><code>compute_long_short_returns(factor_values: numpy.ndarray, forward_returns: numpy.ndarray, long_threshold: float = 0.8, short_threshold: float = 0.2, validity_mask: Optional[numpy.ndarray] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute long/short portfolio returns based on factor quantiles.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_sharpe_ratio</span>
+<div class="sig"><code>compute_sharpe_ratio(returns: numpy.ndarray, risk_free_rate: float = 0.0, periods_per_year: int = 252, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute annualized Sharpe ratio.</p>
+<div class="formula">$$\mathrm{Sharpe}=(\bar r-r_f)/\sigma\cdot\sqrt{P}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_maximum_drawdown</span>
+<div class="sig"><code>compute_maximum_drawdown(returns: numpy.ndarray) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute maximum drawdown from return series.</p>
+<div class="formula">$$\mathrm{MDD}=\min_t(W_t/\max_{s\le t}W_s-1)$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_calmar_ratio</span>
+<div class="sig"><code>compute_calmar_ratio(returns: numpy.ndarray, periods_per_year: int = 252, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Calmar ratio (annualized return / maximum drawdown).</p>
+<div class="formula">$$\mathrm{Calmar}=\mathrm{AnnRet}/|\mathrm{MDD}|$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_sortino_ratio</span>
+<div class="sig"><code>compute_sortino_ratio(returns: numpy.ndarray, risk_free_rate: float = 0.0, periods_per_year: int = 252, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Sortino ratio (excess return / downside deviation).</p>
+<div class="formula">$$\mathrm{Sortino}=(\bar r-r_f)/\sigma_{\mathrm{down}}\cdot\sqrt{P}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_win_rate</span>
+<div class="sig"><code>compute_win_rate(returns: numpy.ndarray) -&gt; numpy.ndarray</code></div>
+<p>Compute win rate (fraction of positive returns).</p>
+<div class="formula">$$\mathrm{WinRate}=\Pr(r>0)$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">bonferroni_correction</span>
+<div class="sig"><code>bonferroni_correction(p_values: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Apply Bonferroni correction for multiple testing.</p>
+<div class="formula">$$\alpha'=\alpha/m$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">benjamini_hochberg_correction</span>
+<div class="sig"><code>benjamini_hochberg_correction(p_values: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray, int]</code></div>
+<p>Apply Benjamini-Hochberg FDR correction for multiple testing.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">holm_bonferroni_correction</span>
+<div class="sig"><code>holm_bonferroni_correction(p_values: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray, int]</code></div>
+<p>Apply Holm-Bonferroni step-down correction.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">sidak_correction</span>
+<div class="sig"><code>sidak_correction(p_values: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Apply Šidák correction for multiple testing.</p>
+<div class="formula">$$\alpha'=1-(1-\alpha)^{1/m}$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_fdr</span>
+<div class="sig"><code>compute_fdr(p_values: numpy.ndarray, reject_mask: numpy.ndarray) -&gt; float</code></div>
+<p>Compute empirical false discovery rate.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">construct_long_short_portfolio</span>
+<div class="sig"><code>construct_long_short_portfolio(factor_values: numpy.ndarray, long_threshold: float = 0.8, short_threshold: float = 0.2, validity_mask: Optional[numpy.ndarray] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Construct long/short portfolio positions based on factor quantiles.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_equal_weighted_returns</span>
+<div class="sig"><code>compute_equal_weighted_returns(positions: numpy.ndarray, forward_returns: numpy.ndarray) -&gt; numpy.ndarray</code></div>
+<p>Compute equal-weighted portfolio returns.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_cap_weighted_returns</span>
+<div class="sig"><code>compute_cap_weighted_returns(positions: numpy.ndarray, forward_returns: numpy.ndarray, market_caps: numpy.ndarray, normalize: bool = True) -&gt; numpy.ndarray</code></div>
+<p>Compute cap-weighted portfolio returns.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_long_short_equal_weighted</span>
+<div class="sig"><code>compute_long_short_equal_weighted(factor_values: numpy.ndarray, forward_returns: numpy.ndarray, long_threshold: float = 0.8, short_threshold: float = 0.2, validity_mask: Optional[numpy.ndarray] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute long/short equal-weighted portfolio returns.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_long_short_cap_weighted</span>
+<div class="sig"><code>compute_long_short_cap_weighted(factor_values: numpy.ndarray, forward_returns: numpy.ndarray, market_caps: numpy.ndarray, long_threshold: float = 0.8, short_threshold: float = 0.2, validity_mask: Optional[numpy.ndarray] = None, normalize: bool = True) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute long/short cap-weighted portfolio returns.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_portfolio_weights</span>
+<div class="sig"><code>compute_portfolio_weights(positions: numpy.ndarray, market_caps: Optional[numpy.ndarray] = None, normalize: bool = True) -&gt; numpy.ndarray</code></div>
+<p>Compute portfolio weights from positions.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_portfolio_concentration</span>
+<div class="sig"><code>compute_portfolio_concentration(positions: numpy.ndarray, market_caps: Optional[numpy.ndarray] = None) -&gt; numpy.ndarray</code></div>
+<p>Compute Herfindahl-Hirschman Index (HHI) for portfolio concentration.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_turnover_from_positions</span>
+<div class="sig"><code>compute_turnover_from_positions(positions: numpy.ndarray, market_caps: Optional[numpy.ndarray] = None, normalize: bool = True) -&gt; numpy.ndarray</code></div>
+<p>Compute portfolio turnover from position changes.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_pairwise_correlation</span>
+<div class="sig"><code>compute_pairwise_correlation(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, method: str = 'pearson', min_obs: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute pairwise correlation matrix between factors across entire time period.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_rolling_pairwise_correlation</span>
+<div class="sig"><code>compute_rolling_pairwise_correlation(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, window: int, method: str = 'pearson', min_obs: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute rolling pairwise correlation over time.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_correlation_matrix</span>
+<div class="sig"><code>compute_correlation_matrix(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, cross_sectional: bool = False, method: str = 'pearson', min_obs: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Compute correlation matrix with configurable aggregation.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_conditional_ic</span>
+<div class="sig"><code>compute_conditional_ic(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, conditioning_factor_idx: int, quantiles: int = 5, method: str = 'pearson', min_assets: int = 10) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute IC of each factor conditional on quantiles of a conditioning factor.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_incremental_ic</span>
+<div class="sig"><code>compute_incremental_ic(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, base_factor_indices: Tuple[int, ...], test_factor_idx: int, method: str = 'pearson', min_assets: int = 30) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute incremental IC: IC contribution of test factor after controlling for base factors.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_partial_ic</span>
+<div class="sig"><code>compute_partial_ic(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, factor_idx: int, control_indices: Tuple[int, ...], method: str = 'pearson', min_assets: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute partial IC: correlation between factor and label after removing linear effects of control factors.</p>
+<div class="formula">$$\mathrm{PartialIC}=\mathrm{Corr}(f-\hat f(Z),y-\hat y(Z))$$</div>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_substitution_effect</span>
+<div class="sig"><code>compute_substitution_effect(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, factor_a_idx: int, factor_b_idx: int, method: str = 'pearson', min_assets: int = 30) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Measure substitution effect between two factors.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">detect_substitutable_factors</span>
+<div class="sig"><code>detect_substitutable_factors(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, threshold: float = 0.9, method: str = 'pearson', min_assets: int = 30, min_periods: int = 20) -&gt; List[Tuple[int, int, float]]</code></div>
+<p>Detect pairs of factors that are substitutable.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_marginal_contribution</span>
+<div class="sig"><code>compute_marginal_contribution(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, target_factor_idx: int, baseline_indices: Optional[Tuple[int, ...]] = None, method: str = 'pearson', min_assets: int = 30) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute marginal IC contribution of a factor given a baseline portfolio.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_complementarity_score</span>
+<div class="sig"><code>compute_complementarity_score(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, factor_a_idx: int, factor_b_idx: int, method: str = 'pearson', min_assets: int = 30, min_periods: int = 20) -&gt; Tuple[float, float, float]</code></div>
+<p>Compute complementarity score for a factor pair.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">detect_complementary_pairs</span>
+<div class="sig"><code>detect_complementary_pairs(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, threshold: float = 1.0, method: str = 'pearson', min_assets: int = 30, min_periods: int = 20) -&gt; List[Tuple[int, int, float, float]]</code></div>
+<p>Detect pairs of factors that exhibit complementarity.</p>
+</div>
+<div class="card">
+<span class="tag ">core</span><span class="fn">compute_interaction_strength</span>
+<div class="sig"><code>compute_interaction_strength(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, factor_a_idx: int, factor_b_idx: int, method: str = 'pearson', min_assets: int = 30) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute time-varying interaction strength between two factors.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_var_historical</span>
+<div class="sig"><code>compute_var_historical(returns: numpy.ndarray, confidence_level: float = 0.95, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Historical VaR using empirical quantile.</p>
+<div class="formula">$$\mathrm{VaR}_\alpha=-\mathrm{Quantile}_{1-\alpha}(r)$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_var_parametric</span>
+<div class="sig"><code>compute_var_parametric(returns: numpy.ndarray, confidence_level: float = 0.95, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Parametric VaR assuming normal distribution.</p>
+<div class="formula">$$\mathrm{VaR}_\alpha=-(\mu+z_{1-\alpha}\sigma)$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_var_cornish_fisher</span>
+<div class="sig"><code>compute_var_cornish_fisher(returns: numpy.ndarray, confidence_level: float = 0.95, min_periods: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Cornish-Fisher VaR adjusting for skewness and kurtosis.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_cvar</span>
+<div class="sig"><code>compute_cvar(returns: numpy.ndarray, confidence_level: float = 0.95, method: str = 'historical', min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Conditional Value at Risk (CVaR / Expected Shortfall).</p>
+<div class="formula">$$\mathrm{CVaR}_\alpha=-\mathbb{E}[r|r\le-\mathrm{VaR}_\alpha]$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_drawdown_series</span>
+<div class="sig"><code>compute_drawdown_series(returns: numpy.ndarray) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute drawdown series from returns.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_drawdown_statistics</span>
+<div class="sig"><code>compute_drawdown_statistics(returns: numpy.ndarray, min_periods: int = 10) -&gt; Dict[str, numpy.ndarray]</code></div>
+<p>Compute comprehensive drawdown statistics.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">identify_drawdown_periods</span>
+<div class="sig"><code>identify_drawdown_periods(returns: numpy.ndarray, threshold: float = 0.05, min_duration: int = 1) -&gt; List[Dict[str, int]]</code></div>
+<p>Identify distinct drawdown periods exceeding threshold.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_drawdown_duration</span>
+<div class="sig"><code>compute_drawdown_duration(returns: numpy.ndarray, min_periods: int = 10) -&gt; Dict[str, numpy.ndarray]</code></div>
+<p>Compute drawdown duration statistics.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_ulcer_index</span>
+<div class="sig"><code>compute_ulcer_index(returns: numpy.ndarray, min_periods: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Compute Ulcer Index (square root of mean squared drawdown).</p>
+<div class="formula">$$\mathrm{Ulcer}=\sqrt{\mathrm{mean}(\mathrm{DD}^2)}$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_pain_index</span>
+<div class="sig"><code>compute_pain_index(returns: numpy.ndarray, min_periods: int = 10) -&gt; numpy.ndarray</code></div>
+<p>Compute Pain Index (mean absolute drawdown).</p>
+<div class="formula">$$\mathrm{Pain}=\mathrm{mean}(|\mathrm{DD}|)$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_tail_ratio</span>
+<div class="sig"><code>compute_tail_ratio(returns: numpy.ndarray, upper_percentile: float = 0.95, lower_percentile: float = 0.05, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute tail ratio (ratio of right tail to left tail).</p>
+<div class="formula">$$\mathrm{TailRatio}=|q_{0.95}|/|q_{0.05}|$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_gain_loss_ratio</span>
+<div class="sig"><code>compute_gain_loss_ratio(returns: numpy.ndarray, threshold: float = 0.0, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute gain/loss ratio (average gain / average loss).</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_upside_potential_ratio</span>
+<div class="sig"><code>compute_upside_potential_ratio(returns: numpy.ndarray, minimum_acceptable_return: float = 0.0, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Upside Potential Ratio (UPR).</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_omega_ratio</span>
+<div class="sig"><code>compute_omega_ratio(returns: numpy.ndarray, threshold: float = 0.0, min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Omega ratio (probability-weighted gains / probability-weighted losses).</p>
+<div class="formula">$$\Omega(\theta)=\int_{\theta}^{\infty}(1-F)/\int_{-\infty}^{\theta}F$$</div>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_expected_shortfall_ratio</span>
+<div class="sig"><code>compute_expected_shortfall_ratio(returns: numpy.ndarray, confidence_level: float = 0.95, risk_free_rate: float = 0.0, periods_per_year: int = 252, min_periods: int = 30) -&gt; numpy.ndarray</code></div>
+<p>Compute Expected Shortfall Ratio (excess return / CVaR).</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_tail_dependence</span>
+<div class="sig"><code>compute_tail_dependence(returns_x: numpy.ndarray, returns_y: numpy.ndarray, quantile: float = 0.05, min_periods: int = 30) -&gt; Tuple[float, float]</code></div>
+<p>Compute lower and upper tail dependence between two return series.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">apply_historical_scenario</span>
+<div class="sig"><code>apply_historical_scenario(returns: numpy.ndarray, scenario_returns: numpy.ndarray, scaling_method: str = 'direct') -&gt; numpy.ndarray</code></div>
+<p>Apply historical scenario to current returns distribution.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">apply_hypothetical_scenario</span>
+<div class="sig"><code>apply_hypothetical_scenario(returns: numpy.ndarray, shock_size: float, shock_type: str = 'absolute', correlation_adjustment: Optional[float] = None) -&gt; numpy.ndarray</code></div>
+<p>Apply hypothetical shock scenario.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_scenario_impact</span>
+<div class="sig"><code>compute_scenario_impact(returns: numpy.ndarray, scenario_returns: numpy.ndarray, metrics: List[str] = ['mean', 'sharpe', 'max_drawdown'], periods_per_year: int = 252) -&gt; Dict[str, Union[float, numpy.ndarray]]</code></div>
+<p>Compute impact of scenario on portfolio metrics.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_correlation_breakdown</span>
+<div class="sig"><code>compute_correlation_breakdown(returns_x: numpy.ndarray, returns_y: numpy.ndarray, stress_quantile: float = 0.05, min_periods: int = 20) -&gt; Dict[str, float]</code></div>
+<p>Analyze correlation during stress periods vs normal periods.</p>
+</div>
+<div class="card">
+<span class="tag risk">risk</span><span class="fn">compute_worst_case_scenarios</span>
+<div class="sig"><code>compute_worst_case_scenarios(returns: numpy.ndarray, n_scenarios: int = 10, window_size: int = 20, metric: str = 'cumulative') -&gt; List[Dict[str, Union[int, float, numpy.ndarray]]]</code></div>
+<p>Identify worst-case historical scenarios.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">granger_causality_test</span>
+<div class="sig"><code>granger_causality_test(y: numpy.ndarray, x: numpy.ndarray, max_lags: int = 5, min_obs: int = 30) -&gt; Tuple[float, float, float, int]</code></div>
+<p>Test whether x Granger-causes y using F-test.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">pairwise_granger_causality</span>
+<div class="sig"><code>pairwise_granger_causality(data: numpy.ndarray, max_lags: int = 5, min_obs: int = 30, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute pairwise Granger causality matrix for multiple time series.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">johansen_test</span>
+<div class="sig"><code>johansen_test(data: numpy.ndarray, det_order: int = 0, lags: int = 1, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, numpy.ndarray, int, numpy.ndarray]</code></div>
+<p>Johansen cointegration test via maximum likelihood.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">engle_granger_test</span>
+<div class="sig"><code>engle_granger_test(y: numpy.ndarray, x: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[float, float, bool, numpy.ndarray]</code></div>
+<p>Engle-Granger two-step cointegration test for bivariate series.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">GaussianHMM</span>
+<p>Hidden Markov Model with Gaussian emissions.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">detect_regimes</span>
+<div class="sig"><code>detect_regimes(data: numpy.ndarray, n_states: int = 2, n_iter: int = 100, random_state: Optional[int] = None) -&gt; Tuple[numpy.ndarray, numpy.ndarray, quant_evaluator.metrics.stats.regime_detection.GaussianHMM]</code></div>
+<p>Detect market regimes using Hidden Markov Model.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">chow_test</span>
+<div class="sig"><code>chow_test(y: numpy.ndarray, X: numpy.ndarray, breakpoint: int, min_obs: int = 10) -&gt; Tuple[float, float, int, int, int]</code></div>
+<p>Chow test for structural break at known breakpoint.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">cusum_test</span>
+<div class="sig"><code>cusum_test(residuals: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, float, float, bool]</code></div>
+<p>CUSUM (Cumulative Sum) test for parameter stability.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">cusum_of_squares_test</span>
+<div class="sig"><code>cusum_of_squares_test(residuals: numpy.ndarray, alpha: float = 0.05) -&gt; Tuple[numpy.ndarray, Tuple[float, float], float, bool]</code></div>
+<p>CUSUM of Squares test for variance stability.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">sup_wald_test</span>
+<div class="sig"><code>sup_wald_test(y: numpy.ndarray, X: numpy.ndarray, trim: float = 0.15, min_obs: int = 10) -&gt; Tuple[float, int, float]</code></div>
+<p>Supremum Wald test for structural break at unknown location.</p>
+</div>
+<div class="card">
+<span class="tag stats">stats</span><span class="fn">bai_perron_test</span>
+<div class="sig"><code>bai_perron_test(y: numpy.ndarray, X: numpy.ndarray, max_breaks: int = 5, trim: float = 0.15, min_obs: int = 10) -&gt; Tuple[int, List[int], float]</code></div>
+<p>Bai-Perron test for multiple structural breaks.</p>
+</div>
+</section>
+<section id="helper"><h2>二、额外指标辅助函数（未进 __all__，但仍是评估相关）</h2><p>本节约 <strong>6</strong> 项。</p>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_turnover_matrix_batch</span>
+<div class="sig"><code>compute_turnover_matrix_batch(weights: numpy.ndarray, method: str = 'half_sum_abs') -&gt; numpy.ndarray</code></div>
+<p>Compute turnover for a batch of weight matrices (fully vectorized with einsum).</p>
+</div>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_cross_sectional_turnover</span>
+<div class="sig"><code>compute_cross_sectional_turnover(weights: numpy.ndarray, method: str = 'half_sum_abs') -&gt; float</code></div>
+<p>Compute average turnover across all time periods (single scalar).</p>
+</div>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_weighted_turnover</span>
+<div class="sig"><code>compute_weighted_turnover(weights: numpy.ndarray, position_sizes: numpy.ndarray, method: str = 'half_sum_abs') -&gt; numpy.ndarray</code></div>
+<p>Compute position-size-weighted turnover.</p>
+</div>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_turnover_contribution</span>
+<div class="sig"><code>compute_turnover_contribution(weights: numpy.ndarray, method: str = 'half_sum_abs') -&gt; numpy.ndarray</code></div>
+<p>Compute per-asset turnover contribution (vectorized with einsum).</p>
+</div>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_var</span>
+<div class="sig"><code>compute_var(returns: numpy.ndarray, confidence_level: float = 0.95, method: str = 'historical', min_periods: int = 20) -&gt; numpy.ndarray</code></div>
+<p>Compute Value at Risk (VaR) at specified confidence level.</p>
+</div>
+<div class="card">
+<span class="tag help">helper</span><span class="fn">compute_var_cvar</span>
+<div class="sig"><code>compute_var_cvar(returns: numpy.ndarray, confidence_level: float = 0.95, method: str = 'historical', min_periods: int = 20) -&gt; Tuple[numpy.ndarray, numpy.ndarray]</code></div>
+<p>Compute both VaR and CVaR efficiently.</p>
+</div>
+</section>
+<section id="registry"><h2>三、Registry 指标 ID（任务编排用的注册名/别名）</h2><p>本节约 <strong>14</strong> 项。</p>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">block_bootstrap_ci</span>
+<p>Block Bootstrap Confidence Interval: 95% confidence interval for mean IC via block bootstrap</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">coverage</span>
+<p>Coverage Rate: Fraction of universe with valid factor values</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">factor_turnover_rate</span>
+<p>Factor Turnover Rate: Turnover rate of top/bottom quantile membership</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">hac_tstat</span>
+<p>HAC t-statistic: Heteroskedasticity and autocorrelation consistent t-statistic for IC</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">half_life</span>
+<p>IC Half-Life: Estimated half-life of IC decay via AR(1)</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">ic_autocorr_lag1</span>
+<p>IC Autocorrelation (Lag 1): First-order autocorrelation of IC series</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">ic_ir</span>
+<p>IC Information Ratio: Mean IC divided by IC standard deviation</p>
+<div class="formula">$$\mathrm{ic\_ir}\equiv\mathrm{ICIR}=\overline{\mathrm{IC}}/\sigma(\mathrm{IC})$$</div>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">ic_std</span>
+<p>IC Standard Deviation: Standard deviation of IC series</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">mean_ic</span>
+<p>Mean IC: Time-averaged information coefficient</p>
+<div class="formula">$$\mathrm{mean\_ic}\equiv\overline{\mathrm{IC}}$$</div>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">quantile_returns_full</span>
+<p>Full Quantile Returns: Return distribution across all quantiles</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">quantile_spread</span>
+<p>Top-Bottom Quantile Spread: Return spread between top and bottom quantiles</p>
+<div class="formula">$$\mathrm{quantile\_spread}\equiv R_{\mathrm{top}}-R_{\mathrm{bottom}}$$</div>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">rank_stability</span>
+<p>Rank Stability: Spearman correlation of factor ranks across time</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">subsample_stability</span>
+<p>Subsample IC Stability: Standard deviation of mean IC across bootstrap subsamples</p>
+</div>
+<div class="card">
+<span class="tag reg">registry</span><span class="fn">turnover</span>
+<p>Portfolio Turnover: Average turnover rate for factor-based portfolios</p>
+</div>
+</section>
+<section id="diagnosis"><h2>四、诊断入口（对因子做体检，非单一指标）</h2><p>本节约 <strong>2</strong> 项。</p>
+<div class="card">
+<span class="tag diag">diagnosis</span><span class="fn">diagnose_factor</span>
+<div class="sig"><code>diagnose_factor(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, factor_idx: int = 0) -&gt; quant_evaluator.api.requests.FactorDiagnosis</code></div>
+<p>Generate diagnostic information for a single factor.</p>
+</div>
+<div class="card">
+<span class="tag diag">diagnosis</span><span class="fn">diagnose_all_factors</span>
+<div class="sig"><code>diagnose_all_factors(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch) -&gt; dict</code></div>
+<p>Generate diagnostics for all factors in batch.</p>
+</div>
+</section>
+<section id="perf"><h2>五、同指标的性能实现变体（不是新指标，是加速路径）</h2><p>本节约 <strong>10</strong> 项。</p>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">assign_quantiles_fast</span>
+<p>assign_quantiles 的加速实现</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">assign_quantiles_batch</span>
+<p>批量分位赋值加速</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">assign_quantiles_numba</span>
+<p>Numba JIT 分位赋值</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">assign_quantiles_vectorized_v2</span>
+<p>向量化分位赋值</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">compute_quantile_returns_fast</span>
+<p>分位收益加速</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">compute_quantile_returns_optimized</span>
+<p>分位收益优化实现</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">compute_quantile_returns_ultra_fast</span>
+<p>分位收益极速实现</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">compute_quantile_returns_numba</span>
+<p>Numba 分位收益</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">compute_quantile_statistics_batch</span>
+<p>批量分位统计</p>
+</div>
+<div class="card">
+<span class="tag perf">perf</span><span class="fn">is_numba_available</span>
+<p>检测 Numba 是否可用（非指标）</p>
+</div>
+</section>
+<section id="alltable"><h2>总表（全部唯一名）</h2>
+<table><thead><tr><th>#</th><th>类别</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td>1</td><td>public</td><td><code>compute_coverage</code></td><td>Compute coverage: fraction of valid (factor, label) pairs.</td></tr>
+<tr><td>2</td><td>public</td><td><code>compute_per_time_coverage</code></td><td>Compute coverage per time period.</td></tr>
+<tr><td>3</td><td>public</td><td><code>compute_daily_ic</code></td><td>Compute daily IC series for factor batch.</td></tr>
+<tr><td>4</td><td>public</td><td><code>compute_mean_ic</code></td><td>Compute mean IC across time.</td></tr>
+<tr><td>5</td><td>public</td><td><code>assign_quantiles</code></td><td>Assign quantile IDs to values with tie handling.</td></tr>
+<tr><td>6</td><td>public</td><td><code>compute_quantile_returns</code></td><td>Compute average returns per quantile per period.</td></tr>
+<tr><td>7</td><td>public</td><td><code>compute_top_bottom_spread</code></td><td>Compute top-bottom quantile spread (highest group minus lowest group).</td></tr>
+<tr><td>8</td><td>public</td><td><code>compute_turnover</code></td><td>Compute turnover between two weight vectors.</td></tr>
+<tr><td>9</td><td>public</td><td><code>compute_turnover_series</code></td><td>Compute turnover time series from weight matrix (vectorized).</td></tr>
+<tr><td>10</td><td>public</td><td><code>estimate_turnover_from_ranks</code></td><td>Estimate turnover from factor rank changes (proxy, not actual portfolio).</td></tr>
+<tr><td>11</td><td>public</td><td><code>compute_icir</code></td><td>Compute Information Coefficient Information Ratio (ICIR).</td></tr>
+<tr><td>12</td><td>public</td><td><code>compute_ic_tstat</code></td><td>Compute t-statistic for IC series testing H0: mean(IC) = 0.</td></tr>
+<tr><td>13</td><td>public</td><td><code>compute_ic_decay</code></td><td>Compute IC decay across multiple horizons.</td></tr>
+<tr><td>14</td><td>public</td><td><code>compute_ic_stability</code></td><td>Compute rolling IC stability metrics.</td></tr>
+<tr><td>15</td><td>public</td><td><code>compute_factor_loadings</code></td><td>Compute factor loadings via cross-sectional OLS regression.</td></tr>
+<tr><td>16</td><td>public</td><td><code>compute_sector_exposure</code></td><td>Compute weighted factor exposure by sector.</td></tr>
+<tr><td>17</td><td>public</td><td><code>compute_style_exposure</code></td><td>Compute time-series average exposure to style factors.</td></tr>
+<tr><td>18</td><td>public</td><td><code>compute_concentration_hhi</code></td><td>Compute Herfindahl-Hirschman Index (HHI) concentration metric.</td></tr>
+<tr><td>19</td><td>public</td><td><code>compute_autocorrelation</code></td><td>Compute autocorrelation function (ACF) for time series.</td></tr>
+<tr><td>20</td><td>public</td><td><code>compute_ic_autocorrelation</code></td><td>Compute autocorrelation of IC series.</td></tr>
+<tr><td>21</td><td>public</td><td><code>compute_rank_stability</code></td><td>Compute rank stability across time.</td></tr>
+<tr><td>22</td><td>public</td><td><code>compute_mean_rank_stability</code></td><td>Compute time-averaged rank stability.</td></tr>
+<tr><td>23</td><td>public</td><td><code>compute_factor_turnover_rate</code></td><td>Compute turnover rate of top/bottom quantile membership.</td></tr>
+<tr><td>24</td><td>public</td><td><code>compute_half_life</code></td><td>Estimate IC half-life using AR(1) model.</td></tr>
+<tr><td>25</td><td>public</td><td><code>compute_subsample_ic</code></td><td>Compute IC stability via bootstrap subsampling.</td></tr>
+<tr><td>26</td><td>public</td><td><code>compute_subsample_ic_std</code></td><td>Compute standard deviation of mean IC across subsamples.</td></tr>
+<tr><td>27</td><td>public</td><td><code>compute_hac_variance</code></td><td>Compute Heteroskedasticity and Autocorrelation Consistent (HAC) variance.</td></tr>
+<tr><td>28</td><td>public</td><td><code>compute_hac_tstat</code></td><td>Compute HAC-robust t-statistic for IC series.</td></tr>
+<tr><td>29</td><td>public</td><td><code>compute_block_bootstrap_ci</code></td><td>Compute confidence interval via block bootstrap.</td></tr>
+<tr><td>30</td><td>public</td><td><code>compute_skewness</code></td><td>Compute skewness along specified axis.</td></tr>
+<tr><td>31</td><td>public</td><td><code>compute_kurtosis</code></td><td>Compute kurtosis along specified axis.</td></tr>
+<tr><td>32</td><td>public</td><td><code>detect_outliers_iqr</code></td><td>Detect outliers using IQR method.</td></tr>
+<tr><td>33</td><td>public</td><td><code>detect_outliers_zscore</code></td><td>Detect outliers using z-score method.</td></tr>
+<tr><td>34</td><td>public</td><td><code>compute_outlier_ratio</code></td><td>Compute ratio of outliers along axis.</td></tr>
+<tr><td>35</td><td>public</td><td><code>compute_higher_moments</code></td><td>Compute mean, std, skewness, and kurtosis together.</td></tr>
+<tr><td>36</td><td>public</td><td><code>compute_long_short_returns</code></td><td>Compute long/short portfolio returns based on factor quantiles.</td></tr>
+<tr><td>37</td><td>public</td><td><code>compute_sharpe_ratio</code></td><td>Compute annualized Sharpe ratio.</td></tr>
+<tr><td>38</td><td>public</td><td><code>compute_maximum_drawdown</code></td><td>Compute maximum drawdown from return series.</td></tr>
+<tr><td>39</td><td>public</td><td><code>compute_calmar_ratio</code></td><td>Compute Calmar ratio (annualized return / maximum drawdown).</td></tr>
+<tr><td>40</td><td>public</td><td><code>compute_sortino_ratio</code></td><td>Compute Sortino ratio (excess return / downside deviation).</td></tr>
+<tr><td>41</td><td>public</td><td><code>compute_win_rate</code></td><td>Compute win rate (fraction of positive returns).</td></tr>
+<tr><td>42</td><td>public</td><td><code>bonferroni_correction</code></td><td>Apply Bonferroni correction for multiple testing.</td></tr>
+<tr><td>43</td><td>public</td><td><code>benjamini_hochberg_correction</code></td><td>Apply Benjamini-Hochberg FDR correction for multiple testing.</td></tr>
+<tr><td>44</td><td>public</td><td><code>holm_bonferroni_correction</code></td><td>Apply Holm-Bonferroni step-down correction.</td></tr>
+<tr><td>45</td><td>public</td><td><code>sidak_correction</code></td><td>Apply Šidák correction for multiple testing.</td></tr>
+<tr><td>46</td><td>public</td><td><code>compute_fdr</code></td><td>Compute empirical false discovery rate.</td></tr>
+<tr><td>47</td><td>public</td><td><code>construct_long_short_portfolio</code></td><td>Construct long/short portfolio positions based on factor quantiles.</td></tr>
+<tr><td>48</td><td>public</td><td><code>compute_equal_weighted_returns</code></td><td>Compute equal-weighted portfolio returns.</td></tr>
+<tr><td>49</td><td>public</td><td><code>compute_cap_weighted_returns</code></td><td>Compute cap-weighted portfolio returns.</td></tr>
+<tr><td>50</td><td>public</td><td><code>compute_long_short_equal_weighted</code></td><td>Compute long/short equal-weighted portfolio returns.</td></tr>
+<tr><td>51</td><td>public</td><td><code>compute_long_short_cap_weighted</code></td><td>Compute long/short cap-weighted portfolio returns.</td></tr>
+<tr><td>52</td><td>public</td><td><code>compute_portfolio_weights</code></td><td>Compute portfolio weights from positions.</td></tr>
+<tr><td>53</td><td>public</td><td><code>compute_portfolio_concentration</code></td><td>Compute Herfindahl-Hirschman Index (HHI) for portfolio concentration.</td></tr>
+<tr><td>54</td><td>public</td><td><code>compute_turnover_from_positions</code></td><td>Compute portfolio turnover from position changes.</td></tr>
+<tr><td>55</td><td>public</td><td><code>compute_pairwise_correlation</code></td><td>Compute pairwise correlation matrix between factors across entire time period.</td></tr>
+<tr><td>56</td><td>public</td><td><code>compute_rolling_pairwise_correlation</code></td><td>Compute rolling pairwise correlation over time.</td></tr>
+<tr><td>57</td><td>public</td><td><code>compute_correlation_matrix</code></td><td>Compute correlation matrix with configurable aggregation.</td></tr>
+<tr><td>58</td><td>public</td><td><code>compute_conditional_ic</code></td><td>Compute IC of each factor conditional on quantiles of a conditioning factor.</td></tr>
+<tr><td>59</td><td>public</td><td><code>compute_incremental_ic</code></td><td>Compute incremental IC: IC contribution of test factor after controlling for base factors.</td></tr>
+<tr><td>60</td><td>public</td><td><code>compute_partial_ic</code></td><td>Compute partial IC: correlation between factor and label after removing linear effects of control factors.</td></tr>
+<tr><td>61</td><td>public</td><td><code>compute_substitution_effect</code></td><td>Measure substitution effect between two factors.</td></tr>
+<tr><td>62</td><td>public</td><td><code>detect_substitutable_factors</code></td><td>Detect pairs of factors that are substitutable.</td></tr>
+<tr><td>63</td><td>public</td><td><code>compute_marginal_contribution</code></td><td>Compute marginal IC contribution of a factor given a baseline portfolio.</td></tr>
+<tr><td>64</td><td>public</td><td><code>compute_complementarity_score</code></td><td>Compute complementarity score for a factor pair.</td></tr>
+<tr><td>65</td><td>public</td><td><code>detect_complementary_pairs</code></td><td>Detect pairs of factors that exhibit complementarity.</td></tr>
+<tr><td>66</td><td>public</td><td><code>compute_interaction_strength</code></td><td>Compute time-varying interaction strength between two factors.</td></tr>
+<tr><td>67</td><td>public</td><td><code>compute_var_historical</code></td><td>Historical VaR using empirical quantile.</td></tr>
+<tr><td>68</td><td>public</td><td><code>compute_var_parametric</code></td><td>Parametric VaR assuming normal distribution.</td></tr>
+<tr><td>69</td><td>public</td><td><code>compute_var_cornish_fisher</code></td><td>Cornish-Fisher VaR adjusting for skewness and kurtosis.</td></tr>
+<tr><td>70</td><td>public</td><td><code>compute_cvar</code></td><td>Compute Conditional Value at Risk (CVaR / Expected Shortfall).</td></tr>
+<tr><td>71</td><td>public</td><td><code>compute_drawdown_series</code></td><td>Compute drawdown series from returns.</td></tr>
+<tr><td>72</td><td>public</td><td><code>compute_drawdown_statistics</code></td><td>Compute comprehensive drawdown statistics.</td></tr>
+<tr><td>73</td><td>public</td><td><code>identify_drawdown_periods</code></td><td>Identify distinct drawdown periods exceeding threshold.</td></tr>
+<tr><td>74</td><td>public</td><td><code>compute_drawdown_duration</code></td><td>Compute drawdown duration statistics.</td></tr>
+<tr><td>75</td><td>public</td><td><code>compute_ulcer_index</code></td><td>Compute Ulcer Index (square root of mean squared drawdown).</td></tr>
+<tr><td>76</td><td>public</td><td><code>compute_pain_index</code></td><td>Compute Pain Index (mean absolute drawdown).</td></tr>
+<tr><td>77</td><td>public</td><td><code>compute_tail_ratio</code></td><td>Compute tail ratio (ratio of right tail to left tail).</td></tr>
+<tr><td>78</td><td>public</td><td><code>compute_gain_loss_ratio</code></td><td>Compute gain/loss ratio (average gain / average loss).</td></tr>
+<tr><td>79</td><td>public</td><td><code>compute_upside_potential_ratio</code></td><td>Compute Upside Potential Ratio (UPR).</td></tr>
+<tr><td>80</td><td>public</td><td><code>compute_omega_ratio</code></td><td>Compute Omega ratio (probability-weighted gains / probability-weighted losses).</td></tr>
+<tr><td>81</td><td>public</td><td><code>compute_expected_shortfall_ratio</code></td><td>Compute Expected Shortfall Ratio (excess return / CVaR).</td></tr>
+<tr><td>82</td><td>public</td><td><code>compute_tail_dependence</code></td><td>Compute lower and upper tail dependence between two return series.</td></tr>
+<tr><td>83</td><td>public</td><td><code>apply_historical_scenario</code></td><td>Apply historical scenario to current returns distribution.</td></tr>
+<tr><td>84</td><td>public</td><td><code>apply_hypothetical_scenario</code></td><td>Apply hypothetical shock scenario.</td></tr>
+<tr><td>85</td><td>public</td><td><code>compute_scenario_impact</code></td><td>Compute impact of scenario on portfolio metrics.</td></tr>
+<tr><td>86</td><td>public</td><td><code>compute_correlation_breakdown</code></td><td>Analyze correlation during stress periods vs normal periods.</td></tr>
+<tr><td>87</td><td>public</td><td><code>compute_worst_case_scenarios</code></td><td>Identify worst-case historical scenarios.</td></tr>
+<tr><td>88</td><td>public</td><td><code>granger_causality_test</code></td><td>Test whether x Granger-causes y using F-test.</td></tr>
+<tr><td>89</td><td>public</td><td><code>pairwise_granger_causality</code></td><td>Compute pairwise Granger causality matrix for multiple time series.</td></tr>
+<tr><td>90</td><td>public</td><td><code>johansen_test</code></td><td>Johansen cointegration test via maximum likelihood.</td></tr>
+<tr><td>91</td><td>public</td><td><code>engle_granger_test</code></td><td>Engle-Granger two-step cointegration test for bivariate series.</td></tr>
+<tr><td>92</td><td>public</td><td><code>GaussianHMM</code></td><td>Hidden Markov Model with Gaussian emissions.</td></tr>
+<tr><td>93</td><td>public</td><td><code>detect_regimes</code></td><td>Detect market regimes using Hidden Markov Model.</td></tr>
+<tr><td>94</td><td>public</td><td><code>chow_test</code></td><td>Chow test for structural break at known breakpoint.</td></tr>
+<tr><td>95</td><td>public</td><td><code>cusum_test</code></td><td>CUSUM (Cumulative Sum) test for parameter stability.</td></tr>
+<tr><td>96</td><td>public</td><td><code>cusum_of_squares_test</code></td><td>CUSUM of Squares test for variance stability.</td></tr>
+<tr><td>97</td><td>public</td><td><code>sup_wald_test</code></td><td>Supremum Wald test for structural break at unknown location.</td></tr>
+<tr><td>98</td><td>public</td><td><code>bai_perron_test</code></td><td>Bai-Perron test for multiple structural breaks.</td></tr>
+<tr><td>99</td><td>helper</td><td><code>compute_turnover_matrix_batch</code></td><td>Compute turnover for a batch of weight matrices (fully vectorized with einsum).</td></tr>
+<tr><td>100</td><td>helper</td><td><code>compute_cross_sectional_turnover</code></td><td>Compute average turnover across all time periods (single scalar).</td></tr>
+<tr><td>101</td><td>helper</td><td><code>compute_weighted_turnover</code></td><td>Compute position-size-weighted turnover.</td></tr>
+<tr><td>102</td><td>helper</td><td><code>compute_turnover_contribution</code></td><td>Compute per-asset turnover contribution (vectorized with einsum).</td></tr>
+<tr><td>103</td><td>helper</td><td><code>compute_var</code></td><td>Compute Value at Risk (VaR) at specified confidence level.</td></tr>
+<tr><td>104</td><td>helper</td><td><code>compute_var_cvar</code></td><td>Compute both VaR and CVaR efficiently.</td></tr>
+<tr><td>105</td><td>perf</td><td><code>assign_quantiles_fast</code></td><td>assign_quantiles 的加速实现</td></tr>
+<tr><td>106</td><td>perf</td><td><code>assign_quantiles_batch</code></td><td>批量分位赋值加速</td></tr>
+<tr><td>107</td><td>perf</td><td><code>assign_quantiles_numba</code></td><td>Numba JIT 分位赋值</td></tr>
+<tr><td>108</td><td>perf</td><td><code>assign_quantiles_vectorized_v2</code></td><td>向量化分位赋值</td></tr>
+<tr><td>109</td><td>perf</td><td><code>compute_quantile_returns_fast</code></td><td>分位收益加速</td></tr>
+<tr><td>110</td><td>perf</td><td><code>compute_quantile_returns_optimized</code></td><td>分位收益优化实现</td></tr>
+<tr><td>111</td><td>perf</td><td><code>compute_quantile_returns_ultra_fast</code></td><td>分位收益极速实现</td></tr>
+<tr><td>112</td><td>perf</td><td><code>compute_quantile_returns_numba</code></td><td>Numba 分位收益</td></tr>
+<tr><td>113</td><td>perf</td><td><code>compute_quantile_statistics_batch</code></td><td>批量分位统计</td></tr>
+<tr><td>114</td><td>perf</td><td><code>is_numba_available</code></td><td>检测 Numba 是否可用（非指标）</td></tr>
+<tr><td>115</td><td>diagnosis</td><td><code>diagnose_factor</code></td><td>Generate diagnostic information for a single factor.</td></tr>
+<tr><td>116</td><td>diagnosis</td><td><code>diagnose_all_factors</code></td><td>Generate diagnostics for all factors in batch.</td></tr>
+<tr><td>117</td><td>registry</td><td><code>block_bootstrap_ci</code></td><td>Block Bootstrap Confidence Interval: 95% confidence interval for mean IC via block bootstrap</td></tr>
+<tr><td>118</td><td>registry</td><td><code>coverage</code></td><td>Coverage Rate: Fraction of universe with valid factor values</td></tr>
+<tr><td>119</td><td>registry</td><td><code>factor_turnover_rate</code></td><td>Factor Turnover Rate: Turnover rate of top/bottom quantile membership</td></tr>
+<tr><td>120</td><td>registry</td><td><code>hac_tstat</code></td><td>HAC t-statistic: Heteroskedasticity and autocorrelation consistent t-statistic for IC</td></tr>
+<tr><td>121</td><td>registry</td><td><code>half_life</code></td><td>IC Half-Life: Estimated half-life of IC decay via AR(1)</td></tr>
+<tr><td>122</td><td>registry</td><td><code>ic_autocorr_lag1</code></td><td>IC Autocorrelation (Lag 1): First-order autocorrelation of IC series</td></tr>
+<tr><td>123</td><td>registry</td><td><code>ic_ir</code></td><td>IC Information Ratio: Mean IC divided by IC standard deviation</td></tr>
+<tr><td>124</td><td>registry</td><td><code>ic_std</code></td><td>IC Standard Deviation: Standard deviation of IC series</td></tr>
+<tr><td>125</td><td>registry</td><td><code>mean_ic</code></td><td>Mean IC: Time-averaged information coefficient</td></tr>
+<tr><td>126</td><td>registry</td><td><code>quantile_returns_full</code></td><td>Full Quantile Returns: Return distribution across all quantiles</td></tr>
+<tr><td>127</td><td>registry</td><td><code>quantile_spread</code></td><td>Top-Bottom Quantile Spread: Return spread between top and bottom quantiles</td></tr>
+<tr><td>128</td><td>registry</td><td><code>rank_stability</code></td><td>Rank Stability: Spearman correlation of factor ranks across time</td></tr>
+<tr><td>129</td><td>registry</td><td><code>subsample_stability</code></td><td>Subsample IC Stability: Standard deviation of mean IC across bootstrap subsamples</td></tr>
+<tr><td>130</td><td>registry</td><td><code>turnover</code></td><td>Portfolio Turnover: Average turnover rate for factor-based portfolios</td></tr>
+</tbody></table></section>
+<footer>全量唯一名 <strong>130</strong>。公开评估指标 API 子集为 98。生成日期 2026-08-16。</footer></div></body></html>
