@@ -6,7 +6,7 @@ status: implemented
 
 summary: |
   Enforced SHA256 format validation for PhysicalImplementationSpec hash fields.
-  Hash fields (implementation_source_hash, parameter_domain_hash, semantic_contract_hash)
+  Hash fields (implementation_source_hash, parameter_domain_hash, semantic_contract_hash, implementation_closure_hash)
   now validate against pattern ^[0-9a-f]{64}$ (64-character lowercase hexadecimal SHA256).
 
 changes:
@@ -30,6 +30,7 @@ validation:
     - implementation_source_hash
     - parameter_domain_hash
     - semantic_contract_hash
+    - implementation_closure_hash
 
 examples:
   valid:

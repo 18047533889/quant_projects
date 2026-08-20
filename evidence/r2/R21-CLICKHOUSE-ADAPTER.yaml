@@ -41,6 +41,7 @@ Refactored `backend/duckdb_pushdown_backend.py` and `backend/factory.py`:
 tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_backend_has_expected_identity_and_base PASSED
 tests/backend/test_clickhouse_adapter.py::test_clickhouse_certificate_chain_inherits_adapter_identity PASSED
 tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_compiler_identity_matches_factory PASSED
+tests/r40/test_r40_backend_factory_140_141.py::TestClickhouseCertificateChain::test_clickhouse_sql_certificate_records_backend_chain PASSED
 ```
 
 # Files

@@ -3,7 +3,7 @@ COLD-START OPERATOR CONTRACT - GENERATION MANIFEST
 ================================================================================
 
 Generated: 2026-08-21
-HEAD Commit: 4b2b39bfce16e2dfa5d1449a344157a31631aa17
+HEAD Commit: 7938b79b00329897a37111d405f6167ad3691e57
 Source Data: operator_surface.py, primitive_verified.json, factor_operator_verified.json
 Total Operators Analyzed: 1,266
 

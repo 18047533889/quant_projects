@@ -8,6 +8,11 @@ counts:
   batch_a_total: 0
   batch_a_certified: 0
   batch_a_pending: 0
+  batch_b_total: 0
+  batch_c_total: 2
+  batch_d_total: 0
+  batch_e_total: 0
+  batch_f_total: 0
 batches:
   A: []
   B: []
