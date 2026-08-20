@@ -246,6 +246,12 @@ def write_evidence(results: list[dict[str, Any]]) -> Path:
               "RECLASSIFY_GLOBAL": 0, "RECLASSIFY_GROUP": 0}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
+    counts["total"] = len(results)
+    counts["evaluable"] = counts.get("PASS", 0) + counts.get("FAIL", 0)
+    counts["non_degenerate_pass_rate"] = (
+        round(counts.get("PASS", 0) / counts["evaluable"], 4)
+        if counts["evaluable"] > 0 else 0.0
+    )
 
     data = {
         "metadata": {
