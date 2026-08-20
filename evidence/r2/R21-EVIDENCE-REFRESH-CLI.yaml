@@ -53,9 +53,9 @@ fix: |
   - --dry-run: Show what would be done without making changes
 
 commands_run:
-  - "python3 -m evidence.refresh --help"
-  - "python3 -m evidence.refresh --dry-run"
-  - "python3 -m evidence.refresh"
+  - "python3 -m evidence --help"
+  - "python3 -m evidence --dry-run"
+  - "python3 -m evidence"
   - "pytest tests/evidence/test_evidence_refresh_cli.py -v"
 
 results:

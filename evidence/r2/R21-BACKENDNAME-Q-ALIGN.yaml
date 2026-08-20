@@ -22,7 +22,7 @@ focused_tests:
   result: 20 passed
 adjacent_regression:
   command_2: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/q_backend/test_q_capability_evidence.py -q -p no:xdist
-  result_2: 36 passed, 2 pre-existing q registry declaration mismatches unrelated to BackendName alignment
+  result_2: 34 passed, 2 pre-existing q registry declaration mismatches unrelated to BackendName alignment
 limitations:
   - OperatorRegistry currently registers only pandas_numpy / polars / sql slots; therefore OperatorRegistry.get(canonical, "q_kdb") returns None in this environment, so get_best_backend raises when forcing prefer="q_kdb" because no registered q operator object is available.
   - Q runtime is not available in this environment; q capability tests that depend on pykx remain skipped.

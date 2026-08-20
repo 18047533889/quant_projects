@@ -4,3 +4,6 @@
 [submodule "dataaccess"]
 	path = dataaccess
 	url = https://github.com/HKUST-QUANT-SOCIETY/data_access.git
+[submodule "vectorbt_qs"]
+	path = vectorbt_qs
+	url = https://github.com/HKUST-QUANT-SOCIETY/vectorbt_qs.git

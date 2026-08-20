@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Evidence refresh CLI: `python -m evidence.refresh` entry point.
+"""Evidence refresh CLI: `python -m evidence` entry point.
 
 Provides local-only evidence autopilot with the following steps:
 1. scan_source → Merkle-tree source snapshot
@@ -357,7 +357,7 @@ def print_summary_table(
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        prog="python -m evidence.refresh",
+        prog="python -m evidence",
         description="Evidence refresh CLI: local-only evidence autopilot",
     )
     parser.add_argument(

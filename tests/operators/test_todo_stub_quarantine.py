@@ -81,6 +81,24 @@ def test_batch5_quarantine_pattern_exists() -> None:
     assert "register_operator as _register_operator" in source
 
 
+def test_quarantined_modules_do_not_register_new_canonicals_into_registry() -> None:
+    """After a full load, direct import of the four modules must not add new canonicals."""
+    load_all()
+    before = set(OperatorRegistry._catalog)
+
+    import importlib
+    for mod in (
+        "cleaned_operators.polars_native.ts_advanced_batch1",
+        "cleaned_operators.polars_native.ts_advanced_batch3",
+        "cleaned_operators.common.polars_ts_complex",
+    ):
+        importlib.import_module(mod)
+
+    after = set(OperatorRegistry._catalog)
+    added = sorted(after - before)
+    assert not added, f"unexpected post-load registry additions: {added[:20]}"
+
+
 def test_classified_daily_implied_by_surface_sets() -> None:
     """classify_canonical('daily') implies canonical is in DAILY_CANONICALS or DAILY_FACTOR_MIGRATED."""
     load_all()

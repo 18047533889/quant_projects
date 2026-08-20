@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-20T17:22:46Z",
+  "source_snapshot_id": "src:v1:2a47c2deb28cff58",
+  "artifacts": {
+    "operator-benchmark-manifest": {
+      "artifact_id": "operator-benchmark-manifest",
+      "status": "CURRENT",
+      "details": "All inputs unchanged",
+      "stale_inputs": []
+    },
+    "operator-certification": {
+      "artifact_id": "operator-certification",
+      "status": "CURRENT",
+      "details": "All inputs unchanged",
+      "stale_inputs": []
+    },
+    "operator-inventory": {
+      "artifact_id": "operator-inventory",
+      "status": "CURRENT",
+      "details": "All inputs unchanged",
+      "stale_inputs": []
+    }
+  },
+  "summary": {
+    "total": 3,
+    "current": 3,
+    "stale": 0,
+    "failed": 0,
+    "not_run": 0
+  }
+}
