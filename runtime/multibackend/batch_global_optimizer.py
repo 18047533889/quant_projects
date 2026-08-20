@@ -28,6 +28,7 @@ from planner.backend_region import (
     PhysicalRegionPlan,
     Representation,
     TransferEdge,
+    TransferTransform,
     infer_representation,
 )
 from planner.logical_plan import PlanNode
@@ -1200,6 +1201,7 @@ class PhysicalBatchGlobalOptimizer:
                         target_backend=consumer.backend,
                         source_representation=producer.representation,
                         target_representation=consumer.representation,
+                        transform=TransferTransform.SAME_BACKEND_NATIVE,
                         estimated_rows=edge_rows,
                         estimated_bytes=edge_bytes,
                         estimated_transfer_ms=(

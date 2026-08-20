@@ -1,0 +1,49 @@
+# R21-SHARED-BENEFIT-RECOMPUTE: Recompute shared benefit from selected backend
+# Evidence file for recalculating SharedNodeBenefit after physical assignment
+# rather than using the Pandas baseline cost.
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-08-21T00:00:00Z"
+  author: "Writer CA (shared benefit fix)"
+  description: "Recomputes SharedNodeBenefit based on selected physical implementation, not Pandas baseline"
+
+problem:
+  description: |
+    The batch-global optimizer initially estimates shared node costs using
+    Pandas baseline (pandas_numpy backend). After physical assignment, a
+    shared node may be assigned to Polars, DuckDB, Q/KDB, or Numba.
+    The shared benefit (avoided recompute) should reflect the actual
+    assigned backend's cost, not the Pandas baseline.
+  impact: "Shared benefit overestimates or underestimates avoided work when
+    the selected backend has different cost characteristics than Pandas."
+
+solution:
+  id: "R21-SHARED-BENEFIT-RECOMPUTE-001"
+  file: "runtime/multibackend/batch_global_optimizer.py"
+  changes:
+    - method: "optimize_batch"
+      description: "After _optimize_graph() completes, call _recompute_shared_benefits_after_assignment() to recalculate benefits using assigned backend costs"
+      before: "shared_benefits and total_benefit computed once before physical assignment"
+      after: "shared_benefits recomputed after physical assignment using per_node_choices"
+    - method: "_recompute_shared_benefits_after_assignment"
+      description: "New method that recalculates per-node shared benefits using estimate_backend_cost() with the assigned backend value"
+      logic: |
+        For each shared node with consumers > 1:
+          1. Look up assigned backend from per_node_choices
+          2. Call estimate_backend_cost(occ.canonical, choice.backend.value, rows)
+          3. Compute avoided_recompute = compute_cost * (consumers - 1)
+          4. Recompute scan benefit for source nodes
+          5. Sum to total_node_benefit
+
+test_evidence:
+  file: "tests/planner/test_shared_benefit_recompute.py"
+  tests:
+    - "test_shared_benefit_uses_polars_cost_when_assigned_to_polars"
+    - "test_shared_benefit_differs_between_pandas_and_polars_assignments"
+    - "test_total_shared_benefit_reflects_selected_backend_costs"
+
+verification:
+  all_27_tests_pass: true
+  existing_tests_unaffected: true
+  new_tests_validate_recalculation: true
