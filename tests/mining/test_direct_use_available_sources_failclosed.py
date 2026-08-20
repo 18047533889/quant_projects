@@ -14,6 +14,7 @@ from mining.direct_use import (
     DirectUseContext,
     get_direct_use_mining_operators,
 )
+from market.context import Market
 
 
 # `_has_physical_production_evidence` imports the inventory lazily from
@@ -73,7 +74,7 @@ class TestAvailableSourcesFailClosed:
 
         load_all()
         # ts_mean requires stock_daily source
-        context = DirectUseContext(market="ashare", available_sources=None)
+        context = DirectUseContext(market=Market.ASHARE, available_sources=None)
 
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
@@ -109,7 +110,7 @@ class TestAvailableSourcesFailClosed:
 
         load_all()
         # ts_mean requires stock_daily source
-        context = DirectUseContext(market="ashare", available_sources=())
+        context = DirectUseContext(market=Market.ASHARE, available_sources=())
 
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
@@ -142,7 +143,7 @@ class TestAvailableSourcesFailClosed:
 
         load_all()
         # ts_mean requires stock_daily source
-        context = DirectUseContext(market="ashare", available_sources=("stock_daily",))
+        context = DirectUseContext(market=Market.ASHARE, available_sources=("stock_daily",))
 
         # Patch admission gates to focus only on source validation
         record = _admitted_record("ts_mean")
