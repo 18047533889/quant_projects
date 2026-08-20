@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "source_snapshot_id": "src:v1:2a47c2deb28cff58",
-  "merkle_root": "2a47c2deb28cff58c796c46eb9d33d46061950eaa9bd92c551c437eba55cd852",
+  "source_snapshot_id": "src:v1:dcfc1dd953dd53cd",
+  "merkle_root": "dcfc1dd953dd53cd058ca1a04d95aa1220dc77ec458dbf1e89d82419871a762c",
   "tree_count": 7,
   "file_count": 843,
   "trees": {
-    "backend": "e97f77f7a5eb906d773f80a139d8ebf88f1c09050b7a1b90598c4b36ec873f7c",
+    "backend": "78f2d076f1d20c5fa192840273a0442896161edc234c4b1bcbae345cb30f1bef",
     "cleaned_operators": "aa2cc497137c42d4b1500c24d592cb34a86e84633452746c856b27b838e0e949",
-    "mining": "77869204f5e7e9779c9facf8d9abf5d936889fa0d1e86265f2b4c5929ab70648",
+    "mining": "87d56b9d47a71bf73945c9bfb8fd375a3f576ea82443d8d39372bc7474d65a3b",
     "planner": "bdcc8d32c61422a413080ad0c56d9941d30bae563a6ac364b9cbd9d27506eb9b",
-    "runtime": "f6320218731915f7c4c8698dfa8193d6a3cfc5f915c6932aa7b20384f509b06d",
+    "runtime": "8350bbe1451acb0fb511aa9136abdb5d48c4bb74a8d7a6272465fff50685323a",
     "market": "e40a6456b4292976e413140ec6db37703a36512d100f2e00d5779492af7d0a64",
     "fields": "63b65d77f090c0d42e2ab017bb5fbfed64500178e2c9842959b9b7b3846e1d7c"
   },
@@ -60,7 +60,7 @@
     },
     {
       "path": "backend/contracts/__init__.py",
-      "sha256": "cd93c928e53d3bec7bb5aa6adbf6a683de70e1e590b841c95b425abf75513d03"
+      "sha256": "96195897d7c1c3a636cd08407d1739679739d53dc4491d47c26bd93238cc1fa3"
     },
     {
       "path": "backend/cost_calibration.py",
@@ -116,7 +116,7 @@
     },
     {
       "path": "backend/factory.py",
-      "sha256": "ef6131d0c703b995438d25c1fbd77e6361fb2be61051a226de81073d3fd41549"
+      "sha256": "06d61631ee0a2f339d19a6fd7f5434a70f0bdd4ee8253c4875528ed488e873b1"
     },
     {
       "path": "backend/fast_linear_window.py",
@@ -308,7 +308,7 @@
     },
     {
       "path": "backend/pairwise_alignment.py",
-      "sha256": "0f83c30170a6d823808f3be20a43db44c471b450501a1992c3b96db238b4db78"
+      "sha256": "b94867223bf145ead6aa14fc5cac7bb2cbfb7e281bc31e053b4b74a7a7c94425"
     },
     {
       "path": "backend/pairwise_rolling.py",
@@ -440,7 +440,7 @@
     },
     {
       "path": "backend/production_checklist.py",
-      "sha256": "876d48dfa990ccb24a91bb1931d981b8768843740f83fef712e801638fdff805"
+      "sha256": "75dc80e29452111e2bed59332f0007df282be3c2e99a8bbccda65843ac6a2b15"
     },
     {
       "path": "backend/production_fast_path.py",
@@ -480,7 +480,7 @@
     },
     {
       "path": "backend/q_backend/q_backend.py",
-      "sha256": "ca3711012cf96b2954ab3e8e399eb3a94437dc451e5ffea276899d627b8ad3e0"
+      "sha256": "0feeb89d364c187d277422c343ec0ae4065222887da34c5cea866c9834b693ba"
     },
     {
       "path": "backend/q_backend/q_capability.py",
@@ -2548,7 +2548,7 @@
     },
     {
       "path": "mining/direct_use.py",
-      "sha256": "5ab978b70c8a878e59858df6fd69f37b4f1f906defdf29364e19d1cd9a39ea5a"
+      "sha256": "988f35995695e86d222fec762bab1de1d546a51e90082589f4566a538a92acde"
     },
     {
       "path": "mining/operator_catalog.py",
@@ -3040,7 +3040,7 @@
     },
     {
       "path": "runtime/multibackend/batch_global_optimizer.py",
-      "sha256": "cfa73d3b3063a89a08388eca3340c4a00f37c99d659ebdba02145da3c72558a3"
+      "sha256": "6df60e727fbd25684246d1e1ad2bb482fe6a91331ce3c656f320e8ec37ab4478"
     },
     {
       "path": "runtime/multibackend/batch_transfer_optimizer.py",
@@ -3396,5 +3396,5 @@
     "market",
     "fields"
   ],
-  "generated_at": "2026-08-20T18:15:45.866224+00:00"
+  "generated_at": "2026-08-20T18:34:30.678202+00:00"
 }

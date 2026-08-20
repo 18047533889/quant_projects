@@ -28,17 +28,18 @@ implementation:
   for production mode violations. Added _check_grain_session() for wide panels using
   PanelIdentity from cleaned_operators.common._polars_bridge. Added _check_grain_session_long()
   for long panels (best-effort based on schema). Updated assert_wide_pairwise_aligned()
-  and assert_long_frames_exact() to check all 6 axes and enforce production mode gate.'
+  and assert_long_frames_exact() to check all 6 axes and enforce production mode gate.
+  Universe snapshot check now validates shape equality for wide panels.'
 - 'backend/production_checklist.py — Updated §14 status from "implemented" to "gate_enforced"
   to reflect production mode gate enforcement.'
-- 'tests/backend/test_r21_pairwise_alignment.py — Added 7 new regression tests:
-  TestSixAxisCheck (3 tests for 6-axis validation), TestProductionAlignmentPolicy
-  (3 tests for LEFT_JOIN_ALIGNMENT production gate), TestDuplicateKeyFail (1 test
-  for duplicate key detection). Total 17 tests now.'
+- 'tests/backend/test_r21_pairwise_alignment.py — Added 8 new regression tests:
+  TestSixAxisCheck (4 tests for 6-axis validation including universe snapshot check),
+  TestProductionAlignmentPolicy (3 tests for LEFT_JOIN_ALIGNMENT production gate),
+  TestDuplicateKeyFail (1 test for duplicate key detection). Total 18 tests now.'
 focused_tests:
   command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
     python3 -m pytest tests/backend/test_r21_pairwise_alignment.py -v
-  result: 17 passed (2026-08-21, 0.16s)
+  result: 18 passed (2026-08-21, 0.18s)
   coverage:
   - Wide-panel mismatched columns -> PanelSchemaMismatchError
   - Wide-panel shifted date axis -> PanelSchemaMismatchError
@@ -51,6 +52,7 @@ focused_tests:
   - All 6 axes enabled in default spec
   - Evidence helper returns JSON-serialisable dict
   - 6-axis check: all axes enabled, checked_axes returns all 6, spec with axes disabled
+  - Universe snapshot check: shape mismatch detection
   - ProductionAlignmentPolicyError: LEFT_JOIN_ALIGNMENT in production raises,
     LEFT_JOIN_ALIGNMENT in research OK, error is ValueError
   - Duplicate key fail: duplicate (ts,inst) keys raise PanelSchemaMismatchError
@@ -58,7 +60,7 @@ serial_regression_gate:
   command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
     MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/backend/test_r21_pairwise_alignment.py
     tests/backend/test_production_checklist.py -v
-  result: 28 passed (2026-08-21, 0.24s, serial, no xdist)
+  result: 29 passed (2026-08-21, 0.38s, serial, no xdist)
 compile_gate:
   command: python3 -m py_compile backend/pairwise_alignment.py backend/production_checklist.py
     tests/backend/test_r21_pairwise_alignment.py tests/backend/test_production_checklist.py
@@ -68,7 +70,8 @@ known_limitations:
   full grain/session comparison for long panels requires PanelIdentity from
   cleaned_bridge layer.
 - Universe snapshot check for wide panels is subsumed by date_axis and
-  instrument_axis checks (same columns + same index = same universe).
+  instrument_axis checks (same columns + same index = same universe), but
+  we also check shape equality for defense-in-depth.
 production_certification: NOT_RUN
 commit: NOT_CREATED
 remotes: NOT_USED

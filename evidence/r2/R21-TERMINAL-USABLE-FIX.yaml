@@ -6,7 +6,7 @@ fix_summary: |
   Now it correctly depends on `composition_usable` (which includes `mining_visible` and AST/recipe checks)
   and `contract.terminal_allowed` (which conceptually maps to `terminal_semantically_legal`).
 
-  Definition of production_terminal_usable field:
+  Added `production_terminal_usable` field combining all admission gates:
   `production_terminal_usable = terminal_usable and production_admitted`
 
 changes:

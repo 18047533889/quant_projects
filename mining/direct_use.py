@@ -39,6 +39,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 import pandas as pd  # noqa: F401  (used by the R25 parameter-injectivity probe)
 
+from market.context import Market
 from mining.operator_catalog import (
     MiningRole,
     RoleSource,
@@ -1704,7 +1705,7 @@ class DirectUseContext:
     market so no caller can silently construct a market-less context.
     """
 
-    market: str  # Required: "ashare" | "us"
+    market: Market  # Required: Market.ASHARE | Market.US
     available_sources: tuple[str, ...] = ()
     target_frequency: str | None = None
     max_cost: int | None = None
@@ -1712,6 +1713,12 @@ class DirectUseContext:
     def __post_init__(self) -> None:
         if not self.market:
             raise ValueError("market is required (R21-P033)")
+        # Validate market is a valid Market enum value
+        if not isinstance(self.market, Market):
+            raise TypeError(
+                f"market must be a Market enum, got {type(self.market).__name__}; "
+                f"expected Market.ASHARE or Market.US"
+            )
 
 
 def _alias_map() -> dict[str, str]:

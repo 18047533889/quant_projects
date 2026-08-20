@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-20T18:15:45Z",
-  "source_snapshot_id": "src:v1:2a47c2deb28cff58",
+  "generated_at": "2026-08-20T18:34:30Z",
+  "source_snapshot_id": "src:v1:dcfc1dd953dd53cd",
   "artifacts": {
     "operator-benchmark-manifest": {
       "artifact_id": "operator-benchmark-manifest",

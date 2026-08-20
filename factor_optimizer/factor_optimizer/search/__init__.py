@@ -19,6 +19,15 @@ from factor_optimizer.search.lineage import (
     LineageTree,
     LineageAnalyzer,
 )
+from factor_optimizer.search.strategies import (
+    ParameterSpace,
+    SearchSpace,
+    SearchStrategy,
+    RandomSearch,
+    GridSearch,
+    BayesianSearch,
+    TPESearch,
+)
 
 __all__ = [
     "SearchRunner",
@@ -38,4 +47,11 @@ __all__ = [
     "LineageNode",
     "LineageTree",
     "LineageAnalyzer",
+    "ParameterSpace",
+    "SearchSpace",
+    "SearchStrategy",
+    "RandomSearch",
+    "GridSearch",
+    "BayesianSearch",
+    "TPESearch",
 ]

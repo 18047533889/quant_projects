@@ -8,6 +8,7 @@ all resolve against the same market contract.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from enum import Enum
 from typing import Any, Literal
 
 try:
@@ -15,7 +16,15 @@ try:
 except Exception:  # pragma: no cover - optional
     pd = None  # type: ignore[assignment]
 
-Market = Literal["ashare", "us"]
+
+class Market(str, Enum):
+    """Market type enum for type-safe market identification.
+
+    Inherits from str so it can be compared with string values directly.
+    This provides type safety while maintaining backward compatibility.
+    """
+    ASHARE = "ashare"
+    US = "us"
 
 _MARKETS = ("ashare", "us")
 _CURRENCIES = {"ashare": "CNY", "us": "USD"}

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
+from market.context import Market
 from mining.direct_use import (
     build_direct_use_operator,
     DirectUseContext,
@@ -204,7 +205,7 @@ class TestDirectUseMiningOperatorsAdmission:
 
         with patch(_INVENTORY, return_value=[]):
             operators = get_direct_use_mining_operators(
-                context=DirectUseContext(market="ashare"),
+                context=DirectUseContext(market=Market.ASHARE),
                 admission="eligible",
             )
             for op in operators:

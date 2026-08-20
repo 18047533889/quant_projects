@@ -1,0 +1,100 @@
+# R21-MARKET-ENUM-FIX: DirectUseContext.market type change to Market enum
+id: R21-MARKET-ENUM-FIX
+title: "DirectUseContext.market type change from str to Market enum"
+status: implemented
+date: 2026-08-21
+
+# Problem
+description: |
+  DirectUseContext.market was typed as `str` with a comment "Required: "ashare" | "us"",
+  but this allowed arbitrary strings to be passed, weakening type safety.
+  The field should be typed as Market enum to enforce valid values at the type level.
+
+# Root cause
+root_cause: |
+  The original implementation used `market: str` with a runtime check in `__post_init__`
+  to validate the value. While this caught empty strings, it did not prevent arbitrary
+  strings like "invalid_market" from being passed. The codebase already has a `Market`
+  type defined in `market/context.py` as `Literal["ashare", "us"]`, but this type was
+  not used in DirectUseContext.
+
+# Fix
+fix: |
+  1. Import Market enum from market.context in mining/direct_use.py
+  2. Change DirectUseContext.market type from `str` to `Market`
+  3. Update all callers to use Market enum values (Market.ASHARE, Market.US)
+  4. Maintain backward compatibility: Market enum inherits from str, so comparisons
+     with string values still work (e.g., `ctx.market == "ashare"` remains valid)
+  5. Update existing tests to use Market enum
+  6. Add regression tests for Market enum enforcement
+
+# Files modified
+files:
+  - path: mining/direct_use.py
+    lines: [32-42, 1698-1714]
+    change: "Added Market import; changed market: str to market: Market"
+  - path: api/mining_integration.py
+    lines: [1168-1186, 1242-1253]
+    change: "Updated DirectUseContext instantiation to use Market enum"
+  - path: tests/market/test_market_context_enforcement.py
+    lines: [1-51]
+    change: "Updated tests to use Market enum"
+  - path: tests/mining/test_direct_use_admission.py
+    lines: [1-22, 206-208]
+    change: "Updated tests to use Market enum"
+
+# New test file
+tests:
+  - path: tests/mining/test_direct_use_market_enum.py
+    tests:
+      - test_market_enum_ashare
+      - test_market_enum_us
+      - test_market_enum_in_tuple
+      - test_market_enum_not_none
+      - test_market_enum_not_empty_string
+      - test_market_enum_rejects_arbitrary_string
+      - test_market_enum_comparison_with_string
+
+# Evidence
+evidence:
+  - operator: DirectUseContext
+    scenario: Construct with Market.ASHARE
+    expected: ctx.market == Market.ASHARE
+    actual: ctx.market == Market.ASHARE
+  - operator: DirectUseContext
+    scenario: Construct with Market.US
+    expected: ctx.market == Market.US
+    actual: ctx.market == Market.US
+  - operator: DirectUseContext
+    scenario: Construct with None
+    expected: TypeError/ValueError
+    actual: TypeError/ValueError
+  - operator: DirectUseContext
+    scenario: Construct with empty string
+    expected: ValueError
+    actual: ValueError
+  - operator: DirectUseContext
+    scenario: Construct with arbitrary string
+    expected: TypeError/ValueError
+    actual: TypeError/ValueError
+  - operator: DirectUseContext
+    scenario: String comparison (backward compat)
+    expected: ctx.market == "ashare" is True
+    actual: True
+
+# Backward compatibility
+backward_compatibility: |
+  The Market enum inherits from str, so all existing code that compares
+  `ctx.market == "ashare"` or `ctx.market in ("ashare", "us")` continues to work.
+  The only breaking change is that callers must now pass Market enum values
+  instead of arbitrary strings, which is the intended behavior.
+
+# Regression tests
+regression_tests:
+  - test_market_enum_ashare: Verifies Market.ASHARE works
+  - test_market_enum_us: Verifies Market.US works
+  - test_market_enum_in_tuple: Verifies tuple membership checks work
+  - test_market_enum_not_none: Verifies None is rejected
+  - test_market_enum_not_empty_string: Verifies empty string is rejected
+  - test_market_enum_rejects_arbitrary_string: Verifies arbitrary strings are rejected
+  - test_market_enum_comparison_with_string: Verifies backward compatibility with string comparisons

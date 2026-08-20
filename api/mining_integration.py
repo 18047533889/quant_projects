@@ -1165,6 +1165,7 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
       ``direct_all_context`` / ``research_tools``；旧 ``research`` / ``production`` /
       ``production_fastpath`` 保留为别名。
     """
+    from market.context import Market
     from mining.direct_use import (
         DirectUseContext,
         DirectUseStatus,
@@ -1182,7 +1183,7 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
         )
     lane = _R22_MINING_TIER_LANES.get(tier_key, "all")
     rows = get_direct_use_mining_operators(
-        DirectUseContext(market="ashare"), admission="all"
+        DirectUseContext(market=Market.ASHARE), admission="all"
     )
     direct = [r for r in rows if lane == "all" or r.mining_lane == lane]
     return sorted(r.canonical for r in direct)
@@ -1238,16 +1239,28 @@ def get_mining_operators_from_manifest(
         ManifestValidationError: When manifest validation fails in
             production/cold-start mode
     """
+    from market.context import Market
     from mining.direct_use import (
         DirectUseContext,
         get_direct_use_mining_operators_from_manifest,
     )
 
     # Build context for filtering (performs real work, not a pass stub)
+    # Convert string market to Market enum if provided
+    market_enum: Market | None = None
+    if market is not None:
+        market_str = str(market).strip().lower()
+        if market_str in ("ashare", "cn", "china", "a_share"):
+            market_enum = Market.ASHARE
+        elif market_str in ("us", "usa"):
+            market_enum = Market.US
+        else:
+            raise ValueError(f"unknown market {market!r}; expected ashare|us")
+
     context = DirectUseContext(
         available_sources=tuple(available_sources) if available_sources else (),
         target_frequency=target_frequency,
-        market=market,
+        market=market_enum,
         max_cost=max_cost,
     )
 

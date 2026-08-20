@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from api.mining_integration import export_dsl_allowlist_json, validate_production_dsl
+from market.context import Market
 from mining.direct_use import DirectUseContext
 
 
@@ -46,5 +47,6 @@ class TestDirectUseContextRequiresMarket:
             DirectUseContext(market=None)  # type: ignore[arg-type]
 
     def test_direct_use_context_accepts_explicit_market(self) -> None:
-        ctx = DirectUseContext(market="ashare")
-        assert ctx.market == "ashare"
+        ctx = DirectUseContext(market=Market.ASHARE)
+        assert ctx.market == Market.ASHARE
+        assert ctx.market == "ashare"  # Enum value comparison

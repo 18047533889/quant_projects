@@ -392,6 +392,7 @@ class PhysicalBatchGlobalOptimizer:
             capability_for,
             supports_pandas,
             supports_polars,
+            supports_sql,
         )
         from backend.operator_cost import estimate_backend_cost
         from backend.polars_backend_kind import canonical_polars_is_delegate
@@ -462,6 +463,78 @@ class PhysicalBatchGlobalOptimizer:
                         capability.is_production_eligible() and not is_delegate
                     ) or mode != "production",
                 ))
+        # Add DuckDB/ClickHouse/Q/Numba candidates
+        if supports_sql(op, mode=mode):
+            capability = capability_for(op, "duckdb_sql")
+            candidates.append(NodeBackendChoice(
+                node_id=node_id,
+                backend=PhysicalBackend.DUCKDB_SQL,
+                compute_cost_ms=estimate_backend_cost(
+                    op, PhysicalBackend.DUCKDB_SQL.value, row_count_estimate=rows
+                ),
+                transfer_from_children_ms=0.0,
+                total_cost_ms=0.0,
+                representation=infer_representation(PhysicalBackend.DUCKDB_SQL),
+                execution_kind=capability.execution_kind,
+                production_certified=capability.is_production_eligible() or mode != "production",
+            ))
+        if supports_sql(op, mode=mode, data_source_kind="clickhouse"):
+            capability = capability_for(op, "clickhouse_sql")
+            candidates.append(NodeBackendChoice(
+                node_id=node_id,
+                backend=PhysicalBackend.CLICKHOUSE_SQL,
+                compute_cost_ms=estimate_backend_cost(
+                    op, PhysicalBackend.CLICKHOUSE_SQL.value, row_count_estimate=rows
+                ),
+                transfer_from_children_ms=0.0,
+                total_cost_ms=0.0,
+                representation=infer_representation(PhysicalBackend.CLICKHOUSE_SQL),
+                execution_kind=capability.execution_kind,
+                production_certified=capability.is_production_eligible() or mode != "production",
+            ))
+        # Q/KDB backend
+        try:
+            from backend.q_backend.q_physical_implementation_registry import (
+                get_q_physical_implementation_registry,
+            )
+            registry = get_q_physical_implementation_registry()
+            if registry.has_lowering(op):
+                capability = capability_for(op, "q_kdb")
+                candidates.append(NodeBackendChoice(
+                    node_id=node_id,
+                    backend=PhysicalBackend.Q_KDB,
+                    compute_cost_ms=estimate_backend_cost(
+                        op, PhysicalBackend.Q_KDB.value, row_count_estimate=rows
+                    ),
+                    transfer_from_children_ms=0.0,
+                    total_cost_ms=0.0,
+                    representation=infer_representation(PhysicalBackend.Q_KDB),
+                    execution_kind=capability.execution_kind,
+                    production_certified=capability.is_production_eligible() or mode != "production",
+                ))
+        except Exception:
+            pass
+        # Numba backend
+        try:
+            from backend.routing import numba_enabled_for_op
+            # Numba requires window and panel_rows parameters for full check
+            # Use defaults when not available
+            if numba_enabled_for_op(op, window=0, panel_rows=rows):
+                capability = capability_for(op, "pandas_numpy")  # Numba uses pandas_numpy backend
+                candidates.append(NodeBackendChoice(
+                    node_id=node_id,
+                    backend=PhysicalBackend.PANDAS_NUMPY,  # Numba uses pandas_numpy backend
+                    compute_cost_ms=estimate_backend_cost(
+                        op, "numba", row_count_estimate=rows
+                    ),
+                    transfer_from_children_ms=0.0,
+                    total_cost_ms=0.0,
+                    representation=infer_representation(PhysicalBackend.PANDAS_NUMPY),
+                    execution_kind=ExecutionKind.NUMBA_CPU_KERNEL,
+                    production_certified=capability.is_production_eligible() or mode != "production",
+                ))
+        except Exception:
+            pass
         if not candidates:
             raise UnsupportedOperatorBackendError(
                 f"no {'production-certified ' if mode == 'production' else ''}"

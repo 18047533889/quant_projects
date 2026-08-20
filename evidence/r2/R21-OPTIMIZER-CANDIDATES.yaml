@@ -47,7 +47,7 @@ changes:
     physical_backend: "PANDAS_NUMPY"
     representation: "NUMPY_PANEL"
     execution_kind: "NUMBA_CPU_KERNEL"
-    evidence: "Numba backends are production-eligible when supports_numba() returns True"
+    evidence: "Numba backends are production-eligible when numba_enabled_for_op() returns True"
 
 candidate_integration:
   - backend: "duckdb_sql"
@@ -66,7 +66,7 @@ candidate_integration:
     representation_function: "infer_representation(PhysicalBackend.Q_KDB)"
 
   - backend: "numba"
-    capability_function: "supports_numba(op)"
+    capability_function: "numba_enabled_for_op(op)"
     cost_function: "estimate_backend_cost(op, 'numba', row_count_estimate=rows)"
     representation_function: "infer_representation(PhysicalBackend.PANDAS_NUMPY)"
 
@@ -100,8 +100,21 @@ test_coverage:
     file: "tests/planner/test_batch_global_optimizer_candidates.py"
     description: "Verify Numba backend appears as candidate for supported operators"
 
+  - test_name: "test_multiple_candidates_present"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify multiple backend candidates are present for a given operator"
+
+  - test_name: "test_production_mode_eligibility"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify production mode eligibility logic for new backends"
+
+  - test_name: "test_cost_estimation_includes_new_backends"
+    file: "tests/planner/test_batch_global_optimizer_candidates.py"
+    description: "Verify cost estimation considers new backend candidates"
+
 constraints:
   - "LOCAL ONLY. Working tree."
   - "Serial pytest, no xdist."
   - "Thread env vars set."
   - "Each NodeBackendChoice must bind exact PhysicalImplementationID, parameter-domain, semantic-contract, execution_kind, accelerator, representation, current evidence"
+
