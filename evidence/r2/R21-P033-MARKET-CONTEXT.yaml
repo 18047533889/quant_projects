@@ -20,13 +20,26 @@ evidence:
   - file: api/mining_integration.py
     function: export_dsl_allowlist_json
     change: "market parameter changed from `str | None = None` to required `str`. Removed default fallback to 'us'."
+  - file: api/mining_integration.py
+    function: validate_production_fastpath_dsl
+    change: "market parameter changed from `str | None = None` to required `str`."
+  - file: api/mining_integration.py
+    function: get_mining_operators_from_manifest
+    change: "market parameter changed from `str | None = None` to required `str`."
   - file: mining/direct_use.py
     class: DirectUseContext
-    change: "market field changed from `str | None = None` to required `str` (no None default)."
+    change: "market field changed from `str | None = None` to required `str` (no None default). Added __post_init__ validation."
+  - file: mining/direct_use.py
+    function: get_direct_use_mining_operators
+    change: "context parameter changed from `DirectUseContext | None = None` to required `DirectUseContext`."
 
 tests:
   - file: tests/market/test_market_context_enforcement.py
     tests:
       - test_validate_production_dsl_requires_market
+      - test_validate_production_dsl_rejects_none_explicit
       - test_export_dsl_allowlist_json_requires_market
+      - test_export_dsl_allowlist_json_rejects_none_explicit
       - test_direct_use_context_requires_market
+      - test_direct_use_context_rejects_none_explicit
+      - test_direct_use_context_accepts_explicit_market

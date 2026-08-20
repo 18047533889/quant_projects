@@ -67,12 +67,8 @@ _EPS = 1e-12
 
 
 def _pi(v, name, minimum=1):
-    if isinstance(v, bool):
-        raise ValueError(f"{name} must be integer")
-    v = int(v)
-    if v < minimum:
-        raise ValueError(f"{name} must be >= {minimum}")
-    return v
+    from cleaned_operators.common.strict_params import strict_int
+    return strict_int(v, name, minimum=minimum)
 
 
 def _frame(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:

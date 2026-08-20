@@ -135,7 +135,7 @@ def _estimate_from_scan_shape(scan_shape: Any, ctx: Any) -> DataShapeEstimate:
     projected_columns = tuple(getattr(scan_shape, "projected_column_names", ()) or ())
 
     return DataShapeEstimate(
-        estimated_rows=estimated_rows or 1,
+        estimated_rows=estimated_rows,
         estimated_dates=estimated_dates,
         estimated_instruments=estimated_instruments,
         estimated_columns=total_cols or projected_cols or 1,
@@ -161,7 +161,7 @@ def _estimate_from_data_source(ds: Any, ctx: Any) -> DataShapeEstimate:
     # MB-P1-003: Get real trading calendar dates
     estimated_dates = _estimate_dates_from_data_source(ds, ctx)
 
-    estimated_rows = max(1, estimated_dates * estimated_instruments)
+    estimated_rows = estimated_dates * estimated_instruments
 
     # Estimate columns from schema if available
     schema = getattr(ds, "schema", None) or getattr(ds, "_schema", None)
@@ -211,10 +211,10 @@ def _estimate_from_data_source(ds: Any, ctx: Any) -> DataShapeEstimate:
 
 def _conservative_default_shape() -> DataShapeEstimate:
     """Conservative default when no metadata available."""
-    # Use conservative ALL_A stock market estimate
-    estimated_instruments = 5500
-    estimated_dates = 250  # ~1 year of trading days
-    estimated_rows = estimated_instruments * estimated_dates
+    # Unknown = 0, not ALL_A
+    estimated_instruments = 0
+    estimated_dates = 0
+    estimated_rows = 0
 
     return DataShapeEstimate(
         estimated_rows=estimated_rows,
@@ -250,8 +250,8 @@ def _estimate_instruments_from_context(ctx: Any) -> int:
             except Exception:
                 pass
 
-    # Conservative ALL_A default
-    return 5500
+    # Unknown = 0
+    return 0
 
 
 def _estimate_instruments_from_data_source(ds: Any) -> int:
@@ -259,18 +259,18 @@ def _estimate_instruments_from_data_source(ds: Any) -> int:
     filt = getattr(ds, "instrument_filter", None)
 
     if filt is None:
-        # No filter = all available instruments (conservative estimate)
-        return 5500
+        # No filter = unknown, not ALL_A
+        return 0
 
     if isinstance(filt, (list, tuple, set, frozenset)):
         count = len(filt)
         if count == 0:
             # Empty filter = no instruments
-            return 1
+            return 0
         return count
 
-    # Unknown filter type, use conservative estimate
-    return 5500
+    # Unknown filter type = unknown
+    return 0
 
 
 def _estimate_dates_from_context(ctx: Any) -> int:

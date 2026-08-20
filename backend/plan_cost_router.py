@@ -410,15 +410,15 @@ def estimate_plan_rows(ctx: Any) -> int:
         filt = getattr(ds, "instrument_filter", None)
         if isinstance(filt, (list, tuple, set, frozenset)) and len(filt) == 0:
             # R13 P0-69: an explicit EMPTY instrument filter means zero rows.
-            return 1
+            return 0
         # MB-P1-001: Get actual instrument count, not fixed 3000
         if isinstance(filt, (list, tuple, set, frozenset)):
             instruments = len(filt)
         elif filt is None:
-            # No filter = ALL_A conservative estimate
-            instruments = 5500
+            # No filter = unknown, not ALL_A
+            instruments = 0
         else:
-            instruments = 3000  # Unknown filter type fallback
+            instruments = 0  # Unknown filter type = unknown
 
         start = getattr(ds, "start_date", None)
         end = getattr(ds, "end_date", None)
@@ -505,7 +505,7 @@ def _cost(
         return pandas_cost + _delegate_penalty(rows)
 
     # MB-P1-001: Use actual instruments from occ.cost_ctx if available
-    instruments = 3000  # Default fallback
+    instruments = 0  # Default: unknown
     if occ is not None:
         ctx = occ.cost_ctx(rows, instruments)
         # Try to get better instrument estimate from context
@@ -829,6 +829,7 @@ def _build_execution_certificate(
     chosen_backend: str,
     rows: int,
     occurrence_count: int,
+    data_kind: str = "duckdb",
 ) -> Any:
     """R39-P1-PERF-082: build the compile-time ProductionExecutionCertificate.
 
@@ -836,6 +837,9 @@ def _build_execution_certificate(
     O(1) validation); routing behavior is unchanged.  Uses the plan's
     ``structural_key`` plus the bound-ops / backend-eligibility the router has
     already computed — no extra work beyond the existing compile-time walk.
+
+    R40 #141: pass data_kind for requested_backend / resolved_dialect /
+    datasource_identity so clickhouse_sql route is not silently mapped to duckdb.
     """
     try:
         from runtime.production_execution_certificate import (
@@ -849,11 +853,19 @@ def _build_execution_certificate(
         eligible = {normalize_backend(b) for b in candidates} | {
             normalize_backend(chosen_backend)
         }
+        # R40 #141: requested_backend / resolved_dialect / datasource_identity
+        # so clickhouse_sql route is not silently mapped to duckdb.
+        requested_backend = chosen_backend
+        resolved_dialect = data_kind
+        datasource_identity = data_kind
         return ProductionExecutionCertificate.build(
             structural_hash=structural_hash,
             bound_ops=bound_ops,
             backend_eligibility=eligible,
             output_shape_hash=_output_shape_hash(rows, occurrence_count, ops),
+            requested_backend=requested_backend,
+            resolved_dialect=resolved_dialect,
+            datasource_identity=datasource_identity,
         )
     except Exception:
         # Fail-open additive: routing must never break because certificate

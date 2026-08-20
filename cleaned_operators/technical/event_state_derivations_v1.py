@@ -757,6 +757,130 @@ def state_flip_age(state, window):
     return _frame(state, _trailing_map(arr, w, _flip_age))
 
 
+# ---------------------------------------------------------------------------
+# CENSORING VARIANTS (lower-bound / capped / flag operators)
+# ---------------------------------------------------------------------------
+def state_episode_age_lower_bound(state, window):
+    """Lower-bound episode age: if no state change is visible in the trailing
+    window (censored), returns float(window) instead of NaN.
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  A state change AT t gives exactly 0.0.  A window whose
+    codes are ALL identical has its change point outside the window — the
+    episode age is at LEAST window (lower bound), so float(window) is returned.
+    Window >= 2.
+
+    Distinct from ``state_episode_age`` (returns NaN on censored windows) and
+    ``state_age`` (STATE family).  This operator provides a conservative lower
+    bound for episode age when the true age is unknown."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _age_lb(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # first index of the current run: scan change points right-to-left
+        start = 0
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        else:
+            return float(chunk.size)  # no in-window change: lower bound = window
+        return float(chunk.size - 1 - start)
+
+    return _frame(state, _trailing_map(arr, w, _age_lb))
+
+
+def state_episode_age_capped(state, window, max_cap):
+    """Capped episode age: min(exact_age, float(max_cap)) when a state change
+    is visible; NaN when the window is censored (constant, age unknown).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  A state change AT t gives exactly min(0.0, max_cap) = 0.0.
+    A window whose codes are ALL identical has its change point outside the
+    window — the age is unknown/censored -> NaN (cannot cap an unknown).
+    Window >= 2.  max_cap >= 1 (int).
+
+    Distinct from ``state_episode_age`` (uncapped, NaN on censored) and
+    ``state_episode_age_lower_bound`` (lower bound on censored)."""
+    w = _pi(window, "window", 2)
+    mc = _pi(max_cap, "max_cap", 1)
+    arr = _state_panel(state)
+
+    def _age_cap(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        start = 0
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        else:
+            return np.nan  # censored: age unknown, cannot cap
+        age = float(chunk.size - 1 - start)
+        return min(age, float(mc))
+
+    return _frame(state, _trailing_map(arr, w, _age_cap))
+
+
+def state_episode_censored_flag(state, window):
+    """Indicator of censoring: 1.0 when the window is constant (episode start
+    censored outside), 0.0 when a state change is visible (age known).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  Window >= 2.  Dimensionless indicator in {0.0, 1.0, NaN}.
+
+    Distinct from ``state_episode_age`` (returns age or NaN) and
+    ``state_episode_age_lower_bound`` (returns age or window).  This flag
+    signals *whether* the age is censored, not the age itself."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _flag(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # check if any adjacent pair differs
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                return 0.0  # change visible: not censored
+        return 1.0  # constant window: censored
+
+    return _frame(state, _trailing_map(arr, w, _flag))
+
+
+def category_age_lower_bound(state, window):
+    """Lower-bound category age: if no state change is visible in the trailing
+    window (censored), returns float(window) instead of NaN.
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  A state change AT t gives exactly 0.0.  A window whose
+    codes are ALL identical has its change point outside the window — the
+    episode age is at LEAST window (lower bound), so float(window) is returned.
+    Window >= 2.
+
+    Distinct from ``category_age`` (returns NaN on censored windows) and
+    ``state_episode_age_lower_bound`` (STATE family).  This operator provides
+    a conservative lower bound for category-level episode age when the true
+    age is unknown."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _age_lb(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        start = 0
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        else:
+            return float(chunk.size)  # no in-window change: lower bound = window
+        return float(chunk.size - 1 - start)
+
+    return _frame(state, _trailing_map(arr, w, _age_lb))
+
+
 def state_persistence(state, window):
     """Fraction of the trailing window spent in the CURRENT state — regime
     persistence in (0, 1] (dimensionless).  The STATE-family naming-symmetry
@@ -907,6 +1031,14 @@ _SPECS = [
      "Bars since the state last changed — current state episode age; constant window (episode start censored) -> NaN; change at t -> 0.0; NaN in window -> NaN."),
     ("state_flip_age", ["state", "window"], state_flip_age,
      "Bars since the last state flip (alternation between distinct successive states); no flip in window -> NaN (flip age censored); NaN in window -> NaN."),
+    ("state_episode_age_lower_bound", ["state", "window"], state_episode_age_lower_bound,
+     "Lower-bound episode age: float(window) when constant window (censored); exact age when change visible; NaN in window -> NaN."),
+    ("state_episode_age_capped", ["state", "window", "max_cap"], state_episode_age_capped,
+     "Capped episode age: min(exact_age, max_cap) when change visible; NaN when censored (age unknown); NaN in window -> NaN."),
+    ("state_episode_censored_flag", ["state", "window"], state_episode_censored_flag,
+     "Censoring indicator: 1.0 when constant window (censored), 0.0 when change visible; NaN in window -> NaN."),
+    ("category_age_lower_bound", ["state", "window"], category_age_lower_bound,
+     "Lower-bound category age: float(window) when constant window (censored); exact age when change visible; NaN in window -> NaN."),
 ]
 
 _PARAM_SPECS = {
@@ -933,6 +1065,10 @@ _PARAM_SPECS = {
     "state_flip_density": {"window": _WIN_GE2},
     "state_episode_age": {"window": _WIN_GE2},
     "state_flip_age": {"window": _WIN_GE2},
+    "state_episode_age_lower_bound": {"window": _WIN_GE2},
+    "state_episode_age_capped": {"window": _WIN_GE2, "max_cap": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC)},
+    "state_episode_censored_flag": {"window": _WIN_GE2},
+    "category_age_lower_bound": {"window": _WIN_GE2},
 }
 
 # halflife must not exceed the window (a decay slower than the window is an
@@ -956,6 +1092,8 @@ STATE_FAMILY_NAMES = (
     "category_transition_surprise", "state_age", "state_persistence",
     "state_transition_count", "state_transition_rate", "state_flip_density",
     "state_episode_age", "state_flip_age",
+    "state_episode_age_lower_bound", "state_episode_age_capped",
+    "state_episode_censored_flag", "category_age_lower_bound",
 )
 
 

@@ -53,6 +53,10 @@ class UnsupportedOperatorBackendError(RuntimeError):
     """Raised when the requested/automatic backend has no eligible implementation."""
 
 
+class BackendUnavailableError(RuntimeError):
+    """Raised when a requested backend is unavailable at runtime."""
+
+
 class CapabilityInfrastructureError(RuntimeError):
     """Raised when capability identity computation hits an infrastructure error.
 

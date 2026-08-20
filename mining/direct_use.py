@@ -1696,10 +1696,14 @@ class DirectUseContext:
     production contexts.
     """
 
+    market: str  # Required: "ashare" | "us"
     available_sources: tuple[str, ...] = ()
     target_frequency: str | None = None
-    market: str  # Required: "ashare" | "us"
     max_cost: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.market:
+            raise ValueError("market is required (R21-P033)")
 
 
 def _alias_map() -> dict[str, str]:
@@ -1912,6 +1916,31 @@ def _is_production_denied(canonical: str) -> bool:
         from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
 
         return canonical in PRODUCTION_DENIED_CANONICALS
+    except Exception:
+        return False
+
+
+def _has_physical_production_evidence(canonical: str) -> bool:
+    """R21-P030: at least one physical implementation with exact production evidence.
+
+    Checks that at least one PhysicalImplementationID has:
+    - Valid PhysicalImplementationSpec (complete)
+    - Evidence of production safety (parity/edge/no-fallback verified)
+    - Not in NOT_RUN state
+
+    Returns False if no backend has verifiable production evidence.
+    """
+    try:
+        from backend.operator_capability import enumerate_physical_inventory
+
+        for record in enumerate_physical_inventory():
+            if record.canonical != canonical:
+                continue
+            if record.implementation_id is None:
+                continue
+            if record.admission.spec_complete and record.admission.evidence_production_safe:
+                return True
+        return False
     except Exception:
         return False
 
@@ -2165,7 +2194,7 @@ def _aliases_of(canonical: str) -> tuple[str, ...]:
 
 
 def get_direct_use_mining_operators(
-    context: DirectUseContext | None = None,
+    context: DirectUseContext,
     *,
     admission: str = "eligible",
 ) -> list[DirectUseOperator]:
@@ -2175,12 +2204,14 @@ def get_direct_use_mining_operators(
     layer: ``eligible`` (production_certified + role-admissible + sources +
     cost contract) or ``all`` (every retained DIRECT_* row, including not-yet-
     certified — used by the DirectUse Matrix / manifests).
+
+    R21-P033: context is required; market=None is not allowed.
     """
     from cleaned_operators import load_all
     from cleaned_operators.registry import OperatorRegistry
 
     load_all()
-    ctx = context or DirectUseContext()
+    ctx = context
     mode = str(admission or "eligible").strip().lower()
     if mode not in {"eligible", "all"}:
         raise ValueError("admission must be eligible or all")
@@ -2193,7 +2224,7 @@ def get_direct_use_mining_operators(
             DirectUseStatus.MOVE_INTERNAL,
         ):
             continue
-        if ctx.market is not None and ctx.market not in row.supported_markets:
+        if ctx.market not in row.supported_markets:
             continue
         if mode == "eligible":
             # intrinsic direct usability: certified + role-admissible + declared

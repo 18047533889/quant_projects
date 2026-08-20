@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""物理计划：标注 SQL / Python / 物化子树执行方式。"""
+"""物理计划：标注 SQL / Python / 物化子树执行方式（R21-P023-Four-Backend-Plan）。"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,11 +10,28 @@ from planner.logical_plan import PlanNode
 
 
 class ExecKind(str, Enum):
-    """节点执行后端种类。"""
+    """节点执行后端种类（R21-P023-Four-Backend-Plan）。"""
 
     SQL = "sql"  # 整棵 SQL 可编译子树
     PYTHON = "python"  # pandas/polars 算子
     MATERIALIZED = "materialized"  # 已 SQL 预计算的 Series 引用
+
+    # Pandas/NumPy 执行
+    PANDAS_NUMPY = "pandas_numpy"  # pandas DataFrame + NumPy ufunc
+
+    # Polars 原生执行
+    POLARS_NATIVE_EXPR = "polars_native_expr"  # Polars 表达式引擎
+    POLARS_NUMPY_KERNEL = "polars_numpy_kernel"  # Polars 列 + NumPy 内核
+
+    # Numba CPU 内核执行
+    NUMBA_CPU_KERNEL = "numba_cpu_kernel"  # Numba JIT 编译 CPU 内核
+
+    # SQL 后端原生执行
+    DUCKDB_NATIVE_SQL = "duckdb_native_sql"  # DuckDB 原生 SQL 执行
+    CLICKHOUSE_NATIVE_SQL = "clickhouse_native_sql"  # ClickHouse 原生 SQL 执行
+
+    # Q 后端原生执行
+    Q_NATIVE = "q_native"  # Q/kdb+ 原生执行
 
 
 @dataclass(frozen=True)

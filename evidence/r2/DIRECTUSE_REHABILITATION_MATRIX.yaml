@@ -1,8 +1,8 @@
 schema_version: 1
-task_id: R19-OPERATOR-REHABILITATION
-current_sha: bce4c0a98e638734aca32b212c586c3b59c1562f
-generation_timestamp: '2026-08-19'
-status: DESIGN_INVENTORY
+task_id: R21-MATRIX-CONSOLIDATION-DIRECTUSE
+current_sha: 83f4fef31db85567b6e8b1657fc2b5ef1f9e92e7
+generation_timestamp: '2026-08-20'
+status: COMPLETED_LOCAL
 production_certification: NOT_RUN
 current_roles:
   direct_intermediate: 62
@@ -15,6 +15,13 @@ current_roles:
 target:
   estimated_new_direct_alpha_canonicals: 100-160
   rule: preserve raw primitives; add causal dimensionless mineable siblings
+direct_use_split:
+  total_canonicals: 1620
+  mining_visible: 1561
+  composition_usable: 1561
+  terminal_usable: 1388
+  production_admitted: 0
+  directly_usable: 0
 p0_families:
   - ATR/true-range normalized, surprise, and regime
   - EMA/DEMA/TEMA/KAMA distance, slope, acceleration, and crossover
@@ -56,5 +63,6 @@ gates:
   DIRECT_MINING_CATALOG_EXPORT: NOT_RUN
   PRODUCTION_CERTIFICATION: NOT_RUN
 limitations:
-  - Counts are the supplied current R18 role inventory and require current-tree regeneration.
+  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (HEAD 83f4fef3).
   - Role promotion alone is forbidden and no operator is certified by this artifact.
+  - Consolidated from R21-MATRIX-REGEN-V2 authority.

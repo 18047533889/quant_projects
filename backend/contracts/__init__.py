@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Single authority for backend capability contracts.
+"""Single authority for backend capability contracts (R21-P023-Four-Backend-Plan).
 
 This module defines the canonical enums and dataclasses for backend capability
 classification. All other modules must import from here to ensure ABI consistency.
@@ -56,6 +56,9 @@ class ExecutionKind(str, Enum):
     POLARS_NATIVE_EXPR = "polars_native_expr"
     POLARS_NUMPY_KERNEL = "polars_numpy_kernel"
 
+    # Numba CPU kernel execution
+    NUMBA_CPU_KERNEL = "numba_cpu_kernel"
+
     # Delegation to other backends
     DELEGATE_PYTHON = "delegate_python"
     DELEGATE_PANDAS = "delegate_pandas"
@@ -66,7 +69,11 @@ class ExecutionKind(str, Enum):
 
     # SQL execution
     DUCKDB_NATIVE_SQL = "duckdb_native_sql"
+    CLICKHOUSE_NATIVE_SQL = "clickhouse_native_sql"
     SQL_PYTHON_UDF = "sql_python_udf"
+
+    # Q backend native execution
+    Q_NATIVE = "q_native"
 
 
 class CapabilityLevel(str, Enum):
@@ -215,5 +222,8 @@ class PhysicalImplementationSpec:
             ExecutionKind.NATIVE_STREAMING,
             ExecutionKind.POLARS_NATIVE_EXPR,
             ExecutionKind.POLARS_NUMPY_KERNEL,
+            ExecutionKind.NUMBA_CPU_KERNEL,
             ExecutionKind.DUCKDB_NATIVE_SQL,
+            ExecutionKind.CLICKHOUSE_NATIVE_SQL,
+            ExecutionKind.Q_NATIVE,
         }

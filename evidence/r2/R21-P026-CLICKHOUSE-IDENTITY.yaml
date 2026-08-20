@@ -1,0 +1,55 @@
+---
+id: R21-P026-CLICKHOUSE-IDENTITY
+title: "ClickHouse route identity fix — candidate key written as duckdb_sql"
+date: 2026-08-20
+status: PASS
+owner: Writer AF (ClickHouse identity fix)
+---
+
+# Problem
+
+When `sql_backend = "clickhouse_sql"` for a ClickHouse data source, the candidate
+key was still written as `"duckdb_sql"` in `choose_plan_route`. This caused:
+
+1. The candidate key in `candidates` was `"duckdb_sql"` even for ClickHouse routes.
+2. The execution certificate was built without `requested_backend`, `resolved_dialect`,
+   and `datasource_identity`, causing ClickHouse routes to be silently mapped to DuckDB.
+3. The `plan_native_subgraph_fraction` function had a hardcoded default of `"duckdb_sql"`.
+
+# Fix
+
+Modified `backend/plan_cost_router.py`:
+
+1. **Candidate key fix** (line ~1074): Changed `candidates["duckdb_sql"]` to `candidates[sql_backend]`
+   and `_within_budget("duckdb_sql", rows)` to `_within_budget(sql_backend, rows)`.
+
+2. **Certificate identity** (line ~834): Added `data_kind` parameter to `_build_execution_certificate`
+   and passed `requested_backend`, `resolved_dialect`, and `datasource_identity` to
+   `ProductionExecutionCertificate.build`.
+
+3. **DuckDB fused penalty** (line ~1089): Changed to check for either `"duckdb_sql"` or
+   `"clickhouse_sql"` in candidates.
+
+4. **plan_native_subgraph_fraction** (line ~1270): Changed default from `"duckdb_sql"` to `None`.
+
+5. **record_plan_route** (line ~1163): Added `requested_backend`, `resolved_dialect`, and
+   `datasource_identity` to the runtime stats.
+
+# Evidence
+
+- 2 regression tests created and passing.
+- Certificate identity fields verified for ClickHouse backend.
+- Candidate key verified to be `clickhouse_sql` for ClickHouse data source.
+
+# Tests
+
+```
+tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_sql_candidate_key PASSED
+tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_certificate_identity PASSED
+```
+
+# Files Modified
+
+- `backend/plan_cost_router.py`
+- `tests/backend/test_clickhouse_identity_regression.py` (created)
+- `evidence/r2/R21-P026-CLICKHOUSE-IDENTITY.yaml` (created)

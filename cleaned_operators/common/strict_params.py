@@ -41,29 +41,49 @@ from cleaned_operators.base import (
     _coerce_declared_numeric_string,
     _normalise_integer,
     strict_bool_param,
-    strict_int_param,
-    strict_int_runtime,
 )
 
 
 def strict_int(value: Any, name: str, *, minimum: int | None = None,
                maximum: int | None = None) -> int:
-    """Exact finite integer (no bool, no float truncation).
+    """Strict integer (type-only) — no bool, no float, no string, no NaN/Inf.
+
+    Accepts only pure Python ``int`` (and integer numpy scalars).  Integral
+    floats (``5.0``), booleans, strings, NaN, Inf and None are all rejected —
+    never truncated or silently reinterpreted.
 
     R19-005: this is the RUNTIME kernel gate — a numeric string (``"20"``) is
     REJECTED.  Numeric-string conversion happens once at the DSL/binder
     declaration layer (:func:`cleaned_operators.base.bind_numeric_string_if_declared`);
     a string reaching a kernel means the parameter was not declared numeric.
     """
-    return strict_int_runtime(value, name, lower=minimum, upper=maximum)
+    if isinstance(value, (bool, np.bool_)):
+        raise OperatorParameterError(f"{name} must be an integer, not bool")
+    if isinstance(value, str):
+        raise OperatorParameterError(
+            f"{name} must be an integer, not a string ({value!r})"
+        )
+    if value is None:
+        raise OperatorParameterError(f"{name} must be an integer, not None")
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if not isinstance(value, int):
+        raise OperatorParameterError(
+            f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+        )
+    if minimum is not None and value < minimum:
+        raise OperatorParameterError(f"{name} must be >= {minimum}, got {value}")
+    if maximum is not None and value > maximum:
+        raise OperatorParameterError(f"{name} must be <= {maximum}, got {value}")
+    return value
 
 
 def strict_nonnegative_int(value: Any, name: str) -> int:
-    return strict_int_param(value, name, lower=0)
+    return strict_int(value, name, minimum=0)
 
 
 def strict_positive_int(value: Any, name: str) -> int:
-    return strict_int_param(value, name, lower=1)
+    return strict_int(value, name, minimum=1)
 
 
 def strict_float(value: Any, name: str, *, minimum: float | None = None,
