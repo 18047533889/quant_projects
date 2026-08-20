@@ -124,8 +124,8 @@ class TestInfMaskPositiveInf:
 class TestInfMaskNegativeInf:
     """When ref converts -Inf to NaN but numba keeps -Inf, parity must FAIL."""
 
-    def _neg_inf_ref(arr: np.ndarray) -> np.ndarray:
-        out = arr.copy()
+    def _neg_inf_ref(a: np.ndarray) -> np.ndarray:
+        out = a.copy()
         out[np.isneginf(out)] = np.nan
         return out
 
@@ -136,9 +136,12 @@ class TestInfMaskNegativeInf:
             kernel_name=kernel_name,
             semantic_version="0.0",
         )
+        def neg_inf_ref(a: np.ndarray) -> np.ndarray:
+            return TestInfMaskNegativeInf._neg_inf_ref(a)
+
         k = NumbaKernel(
             spec=spec,
-            reference_fn=self._neg_inf_ref,
+            reference_fn=neg_inf_ref,
             numba_fn=_inf_passthrough_numba,
         )
         fixture = np.array([1.0, np.inf, 2.0, -np.inf, 3.0], dtype=np.float64)
@@ -155,17 +158,18 @@ class TestInfMaskNegativeInf:
 class TestFiniteMask:
     """Finite mask mismatch must be detected independently of allclose."""
 
-    def _finite_only_ref(arr: np.ndarray) -> np.ndarray:
-        """Reference: returns only finite values, NaN for Inf positions."""
-        out = arr.copy()
-        out[~np.isfinite(out)] = np.nan
-        return out
-
-    def _all_passthrough_numba(arr: np.ndarray) -> np.ndarray:
-        """Buggy numba: passes Inf through (finite mask differs)."""
-        return arr.copy()
-
     def test_finite_mask_mismatch_detected(self):
+        """Ref produces NaN at pos0; numba produces finite 1.0 at pos0 -> finite masks differ."""
+        def ref_nans_first(arr: np.ndarray) -> np.ndarray:
+            """Reference: NaN at index 0."""
+            out = arr.copy()
+            out[0] = np.nan
+            return out
+
+        def numba_identity(arr: np.ndarray) -> np.ndarray:
+            """Numba: passes everything through."""
+            return arr.copy()
+
         kernel_name = "_test_finite_mask_parity"
         spec = NumbaKernelSpec(
             canonical_family="test",
@@ -174,8 +178,8 @@ class TestFiniteMask:
         )
         k = NumbaKernel(
             spec=spec,
-            reference_fn=self._finite_only_ref,
-            numba_fn=self._all_passthrough_numba,
+            reference_fn=ref_nans_first,
+            numba_fn=numba_identity,
         )
         fixture = np.array([1.0, np.inf, 2.0, -np.inf, 3.0], dtype=np.float64)
         result = parity_check(k, fixture)
@@ -183,6 +187,11 @@ class TestFiniteMask:
         assert result["finite_mask_ok"] is False, "finite mask must mismatch"
 
     def test_finite_mask_both_agree_passes(self):
+        def finite_only_ref(a: np.ndarray) -> np.ndarray:
+            out = a.copy()
+            out[~np.isfinite(out)] = np.nan
+            return out
+
         kernel_name = "_test_finite_mask_pass"
         spec = NumbaKernelSpec(
             canonical_family="test",
@@ -191,8 +200,8 @@ class TestFiniteMask:
         )
         k = NumbaKernel(
             spec=spec,
-            reference_fn=self._finite_only_ref,
-            numba_fn=self._finite_only_ref,
+            reference_fn=finite_only_ref,
+            numba_fn=finite_only_ref,
         )
         fixture = np.array([1.0, np.inf, 2.0, -np.inf, 3.0], dtype=np.float64)
         result = parity_check(k, fixture)
