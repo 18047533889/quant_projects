@@ -196,6 +196,7 @@ class IntraPriceVwapMaxPositiveExcursion(SeriesOperator):
 
     metadata = metadata(
         "intra_price_vwap_max_positive_excursion", "相对累计 VWAP 最大正偏离。", ["close", "amount", "volume"], unit="ratio",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(self, close, amount, volume, **_):
@@ -216,6 +217,7 @@ class IntraPriceVwapMaxNegativeExcursion(SeriesOperator):
 
     metadata = metadata(
         "intra_price_vwap_max_negative_excursion", "相对累计 VWAP 最大负偏离。", ["close", "amount", "volume"], unit="ratio",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(self, close, amount, volume, **_):

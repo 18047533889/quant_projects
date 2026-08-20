@@ -1137,6 +1137,7 @@ class IntraConsolidationQuality(SessionAggregationOperator):
         "脉冲后整固窗口质量（紧度/水平/波动压缩/量能枯竭/抬升地板/突破准备度）。",
         ["price", "volume", "amount", "trigger", "trigger_z", "horizon", "output"],
         unit="ratio", cost=8,
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(

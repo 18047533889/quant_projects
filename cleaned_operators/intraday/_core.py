@@ -196,6 +196,8 @@ def metadata(
     domain: str = "intraday",
     cost: int = 6,
     extra_tags: list[str] | None = None,
+    available_at: str | None = None,
+    same_session_usable: bool | None = None,
 ) -> OperatorMetadata:
     """Standard metadata for intraday -> daily aggregation operators."""
     tags = [
@@ -215,6 +217,8 @@ def metadata(
         tags=tags,
         input_grain="minute",
         output_grain="daily",
+        available_at=available_at,
+        same_session_usable=same_session_usable,
     )
 
 

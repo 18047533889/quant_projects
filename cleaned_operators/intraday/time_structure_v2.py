@@ -290,6 +290,7 @@ class IntraBarRangePersistence(SessionAggregationOperator):
     metadata = metadata(
         "intra_bar_range_persistence", "日内 bar 区间曲线跨日延续（余弦）。",
         ["high", "low", "window"], unit="cosine",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(self, high, low, window=20, session_tz=None, **_):
@@ -314,6 +315,7 @@ class IntraBarRangeDeviation(SessionAggregationOperator):
     metadata = metadata(
         "intra_bar_range_deviation", "日内 bar 区间整体高于/低于历史均值。",
         ["high", "low", "window"], unit="level",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(self, high, low, window=20, session_tz=None, **_):
@@ -342,6 +344,7 @@ class IntraTailVolumeShare(SessionAggregationOperator):
     metadata = metadata(
         "intra_tail_volume_share", "极端分钟涨跌 bar 成交量占比。",
         ["close", "volume", "tail_quantile"], unit="ratio",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(self, close, volume, tail_quantile=0.75, session_tz=None, **_):

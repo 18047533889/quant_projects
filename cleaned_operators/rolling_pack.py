@@ -268,6 +268,17 @@ def register_polars_udf(canonical: str) -> None:
                     param_names=[],
                     param_specs=_filtered,
                 )
+        # Copy available_at and same_session_usable from pandas reference
+        _ref_available_at = getattr(getattr(_pandas_ref, "metadata", None), "available_at", None)
+        _ref_same_session_usable = getattr(getattr(_pandas_ref, "metadata", None), "same_session_usable", None)
+        if _ref_available_at is not None or _ref_same_session_usable is not None:
+            _PolarsUdf.metadata = PolarsMetadata(
+                name=canonical,
+                category="polars_udf",
+                param_names=[],
+                available_at=_ref_available_at,
+                same_session_usable=_ref_same_session_usable,
+            )
 
     # Check if there's already a polars backend registered
     existing = OperatorRegistry.get(canonical, "polars")

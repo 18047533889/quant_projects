@@ -81,6 +81,10 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:intraday_session",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        # R6-196: EOD-realised availability contract — output at session close,
+        # never usable in the same session (history-based session operators).
+        available_at="session_close",
+        same_session_usable=False,
     )
 
 

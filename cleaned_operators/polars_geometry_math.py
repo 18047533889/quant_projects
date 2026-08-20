@@ -117,11 +117,19 @@ def _register_polars_backends() -> None:
         if pandas_op is None:
             continue
 
+        # R6-196: carry the availability contract from the pandas reference so
+        # the polars delegate slot reports the same session-close availability.
+        _ref_meta = getattr(pandas_op, "metadata", None)
+        _ref_available_at = getattr(_ref_meta, "available_at", None)
+        _ref_same_session = getattr(_ref_meta, "same_session_usable", None)
+
         class _PolarsGeometryMathBackend(PolarsSeriesOperator):
             # ``_canon`` is bound per-iteration via the default arg (loop-var
             # closure over ``canonical`` would resolve every op to the last one).
             metadata = PolarsMetadata(
-                name=_canon, category="geometry_math_polars", param_names=[]
+                name=_canon, category="geometry_math_polars", param_names=[],
+                available_at=_ref_available_at,
+                same_session_usable=_ref_same_session,
             )
 
             def _calculate_series(self, *frames, _canon=_canon, **params):

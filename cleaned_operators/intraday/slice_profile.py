@@ -953,7 +953,7 @@ class IntraVolumeAtPriceProfile(SessionAggregationOperator):
     metadata = metadata(
         "intra_volume_at_price_profile", "量价分布直方图统计。",
         ["price", "volume", "bins", "weighting", "price_basis", "normalize", "output"],
-        unit="level",
+        unit="level", available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -1060,7 +1060,7 @@ class IntraVolumeProfilePeakGeometry(SessionAggregationOperator):
     metadata = metadata(
         "intra_volume_profile_peak_geometry", "量价分布峰形几何。",
         ["price", "volume", "bins", "smooth", "min_prominence", "output"],
-        unit="level",
+        unit="level", available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -1152,6 +1152,7 @@ class IntraVolumeProfileSupplyStructure(SessionAggregationOperator):
     metadata = metadata(
         "intra_volume_profile_supply_structure", "量价分布的供给结构。",
         ["price", "volume", "bins", "decay", "output"], unit="ratio",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -1219,6 +1220,7 @@ class IntraVolumeProfileValueArea(SessionAggregationOperator):
     metadata = metadata(
         "intra_volume_profile_value_area", "量价分布价值区间。",
         ["price", "volume", "bins", "target_mass", "output"], unit="ratio",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -1269,7 +1271,7 @@ class IntraRoundPriceClusteringShare(SessionAggregationOperator):
     metadata = metadata(
         "intra_round_price_clustering_share", "整价位聚类占比 / 超额 / 连串长度。",
         ["price", "lattice", "tolerance_ticks", "window", "output", "min_bars"],
-        unit="ratio",
+        unit="ratio", available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -1425,7 +1427,7 @@ class IntraRoundPriceBarrierResponse(SessionAggregationOperator):
     metadata = metadata(
         "intra_round_price_barrier_response", "整价位屏障穿越率与磁吸强度。",
         ["price", "lattice", "lookback_days", "tolerance_ticks", "output", "min_events"],
-        unit="ratio",
+        unit="ratio", available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(

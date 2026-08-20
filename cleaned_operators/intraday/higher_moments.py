@@ -433,7 +433,7 @@ def _tail_op(name: str, description: str, unit: str, index: int):
         backend="pandas_numpy",
         status="experimental")
     class _TailOp(SessionAggregationOperator):
-        metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit)
+        metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit, available_at="session_close", same_session_usable=False)
 
         def _calculate_series(self, close, threshold_scale=3.0, **_):
             ts = _check_scale(threshold_scale)
@@ -476,7 +476,8 @@ class IntraSignedTailVariationRatio(SessionAggregationOperator):
     """有符号尾部比 (pos-neg)/(pos+neg+eps)。"""
 
     metadata = metadata(
-        "intra_signed_tail_variation_ratio", "有符号尾部比。", ["close", "threshold_scale"], unit="ratio"
+        "intra_signed_tail_variation_ratio", "有符号尾部比。", ["close", "threshold_scale"], unit="ratio",
+        available_at="session_close", same_session_usable=False
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):

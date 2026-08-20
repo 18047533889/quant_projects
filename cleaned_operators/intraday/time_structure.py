@@ -446,7 +446,7 @@ def _mk_profile_close_op(name: str, description: str, absolute: bool):
         status="experimental",
     )
     class _ProfileCloseOp(SeriesOperator):
-        metadata = metadata(name, description, ["close", "window"], unit="cosine", cost=7)
+        metadata = metadata(name, description, ["close", "window"], unit="cosine", cost=7, available_at="session_close", same_session_usable=False)
 
         def _calculate_series(self, close, window=20, session_tz=None, **_):
             from cleaned_operators.intraday._core import session_local
@@ -486,7 +486,7 @@ def _mk_profile_op(name: str, description: str, unit: str, fn):
         status="experimental",
     )
     class _ProfileOp(SeriesOperator):
-        metadata = metadata(name, description, ["x", "window"], unit=unit, cost=7)
+        metadata = metadata(name, description, ["x", "window"], unit=unit, cost=7, available_at="session_close", same_session_usable=False)
 
         def _calculate_series(self, x, window=20, session_tz=None, **_):
             from cleaned_operators.intraday._core import session_local

@@ -961,3 +961,17 @@ class IntraSignedReturnProfileCosinePolarsNative(SeriesOperator):
             .select("returns")
             .to_series()
         )
+
+    @property
+    def metadata(self):
+        from cleaned_operators.base_polars import OperatorMetadata
+        return OperatorMetadata(
+            name="intra_signed_return_profile_cosine",
+            category="intraday_microstructure",
+            description="Cosine similarity between current day and average signed return profile.",
+            param_names=["returns", "lookback"],
+            return_type="series",
+            tags=["polars", "intraday", "minute", "native", "typed_v2"],
+            available_at="session_close",
+            same_session_usable=False,
+        )

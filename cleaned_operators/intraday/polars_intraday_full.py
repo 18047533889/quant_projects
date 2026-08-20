@@ -83,7 +83,7 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
-def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None):
+def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None, available_at=None, same_session_usable=None):
     tags = ["polars", "intraday", "minute", "native", "typed_v2"]
     if extra_tags:
         tags.extend(extra_tags)
@@ -94,6 +94,8 @@ def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None
         param_names=params,
         return_type="series",
         tags=tags,
+        available_at=available_at,
+        same_session_usable=same_session_usable,
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -955,7 +957,7 @@ for _name, _desc, _fn in (
     ("intra_amount_profile_jsd", "成交额分布与历史基准 JSD（Polars）。", _profile_jsd),
     ("intra_profile_earth_mover_distance", "分布与历史基准 Wasserstein 距离（Polars）。", _profile_emd),
 ):
-    _mk(_name, _desc, ["x", "window"], lambda x, window=20, _fn=_fn: _fn(x, int(window)))
+    _mk(_name, _desc, ["x", "window"], lambda x, window=20, _fn=_fn: _fn(x, int(window)), available_at="session_close", same_session_usable=False)
 
 
 # ---------------------------------------------------------------------------
