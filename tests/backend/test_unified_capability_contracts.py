@@ -141,14 +141,16 @@ def test_explicit_spec_overrides_heuristics():
 def test_physical_spec_production_eligibility():
     """FE-BE-P0-004: PhysicalImplementationSpec.is_production_eligible() works correctly."""
     # Native implementations are production-eligible
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     spec_native = PhysicalImplementationSpec(
         canonical="test",
         backend="polars",
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
-        implementation_source_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        implementation_source_hash=valid_hash,
         emitter_identity="test.polars.expr:v1",
-        parameter_domain_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-        semantic_contract_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        parameter_domain_hash=valid_hash,
+        semantic_contract_hash=valid_hash,
+        implementation_closure_hash=valid_hash,
     )
     assert spec_native.is_production_eligible()
 

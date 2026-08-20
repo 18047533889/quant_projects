@@ -160,6 +160,13 @@ class PhysicalImplementationSpec:
 
     # R2-P0-017 identity/evidence bindings. Defaults preserve constructor ABI,
     # but an omitted binding is deliberately ineligible for production.
+    #
+    # ``implementation_closure_hash`` binds the full semantic closure of the
+    # implementation: source/AST, transitive helper source, emitter/kernel
+    # identity, production parameter signature (ParamSpec), and numerical
+    # semantic policies.  The digest must be a 64-hex SHA-256 computed from the
+    # canonical closure payload returned by
+    # :func:`backend.evidence_provenance.implementation_closure_hash_for`.
     implementation_source_hash: str = ""
     emitter_identity: str = ""
     kernel_identity: str = ""

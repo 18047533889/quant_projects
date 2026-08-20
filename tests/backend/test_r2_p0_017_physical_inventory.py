@@ -119,14 +119,16 @@ def test_live_production_slots_have_bound_native_physical_specs():
 
 
 def _spec(**overrides):
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     values = {
         "canonical": "ts_demo",
         "backend": "polars",
         "execution_kind": ExecutionKind.POLARS_NATIVE_EXPR,
-        "implementation_source_hash": "source-sha256",
+        "implementation_source_hash": valid_hash,
         "emitter_identity": "polars.expr:v1",
-        "parameter_domain_hash": "params-sha256",
-        "semantic_contract_hash": "contract-sha256",
+        "parameter_domain_hash": valid_hash,
+        "semantic_contract_hash": valid_hash,
+        "implementation_closure_hash": valid_hash,
     }
     values.update(overrides)
     return PhysicalImplementationSpec(**values)
@@ -144,6 +146,7 @@ def test_physical_id_binds_complete_identity_and_rejects_blank_names():
         _spec(emitter_identity="", kernel_identity=""),
         _spec(parameter_domain_hash=""),
         _spec(semantic_contract_hash=""),
+        _spec(implementation_closure_hash=""),
     ):
         assert not incomplete.is_production_eligible()
         assert incomplete.physical_implementation_id is None

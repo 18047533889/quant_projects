@@ -58,6 +58,8 @@ def test_physical_implementation_spec_authority():
     """FE-P0-004: PhysicalImplementationSpec single authority."""
     from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
     # Can construct spec
     spec = PhysicalImplementationSpec(
         canonical="test_op",
@@ -66,10 +68,11 @@ def test_physical_implementation_spec_authority():
         supports_lazy=True,
         supports_streaming=True,
         supports_nulls=True,
-        implementation_source_hash="test-source-sha256",
+        implementation_source_hash=valid_hash,
         emitter_identity="test.polars.expr:v1",
-        parameter_domain_hash="test-params-sha256",
-        semantic_contract_hash="test-contract-sha256",
+        parameter_domain_hash=valid_hash,
+        semantic_contract_hash=valid_hash,
+        implementation_closure_hash=valid_hash,
     )
 
     assert spec.canonical == "test_op"
@@ -113,6 +116,8 @@ def test_production_mode_defaults_to_fail_closed():
     from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
     from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
     # Mock operator without _physical_spec
     class MockOperatorNoSpec:
         canonical = "test_no_spec"
@@ -131,6 +136,8 @@ def test_production_mode_defaults_to_fail_closed():
 def test_explicit_research_mode():
     """FE-P0-005: Explicit production_mode=False allows heuristic fallback."""
     from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind
+
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
     class MockOperatorNoSpec:
         canonical = "test_no_spec"
@@ -152,6 +159,8 @@ def test_explicit_spec_works_in_production_mode():
     from backend.polars_backend_kind import polars_backend_kind, PolarsImplementationKind, get_physical_spec
     from backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
     class MockOperatorWithSpec:
         canonical = "test_with_spec"
         _physical_spec = PhysicalImplementationSpec(
@@ -159,6 +168,11 @@ def test_explicit_spec_works_in_production_mode():
             backend="polars",
             execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
             supports_lazy=True,
+            implementation_source_hash=valid_hash,
+            emitter_identity="test.polars.expr:v1",
+            parameter_domain_hash=valid_hash,
+            semantic_contract_hash=valid_hash,
+            implementation_closure_hash=valid_hash,
         )
 
     op = MockOperatorWithSpec()

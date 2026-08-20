@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import platform
@@ -501,6 +502,141 @@ def parameter_domain_hash_for(canonical: str) -> str:
             sort_keys=True,
         )
     )
+
+
+@lru_cache(maxsize=None)
+def implementation_closure_hash_for(canonical: str) -> str:
+    """Compute the implementation closure hash for one canonical operator.
+
+    The closure binds every source-level and policy-level input that can
+    change the observable behaviour of the implementation:
+
+    * source/AST of the operator class owning the implementation,
+    * transitive helper sources discovered through the operator module,
+    * emitter / kernel identity sources,
+    * production parameter signature (ParamSpec snapshot),
+    * numerical semantic policies.
+
+    The returned digest is always a 64-character lowercase hex SHA-256 so
+    ``PhysicalImplementationSpec`` can consume it directly.
+    """
+
+    def _safe_text(path: Path) -> str:
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def _relative(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(FE_ROOT.resolve()))
+        except ValueError:
+            return str(path)
+
+    # 1. Source / AST surface for the operator implementation.
+    impl_sources = implementation_sources_for(canonical)
+    source_text = ""
+    source_path = ""
+    for key in ("implementation_source_pandas", "implementation_source_polars", "implementation_source_duckdb"):
+        candidate = impl_sources.get(key, "")
+        if not candidate:
+            continue
+        resolved = (FE_ROOT / candidate).resolve()
+        if resolved.is_file():
+            source_path = candidate
+            source_text = _safe_text(resolved)
+            break
+
+    # 2. Operator module + transitive helper discovery.
+    operator_module_path: Path | None = None
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        for backend in ("pandas_numpy", "polars"):
+            impl = OperatorRegistry.get(canonical, backend)
+            if impl is None:
+                continue
+            mod = __import__(impl.__class__.__module__, fromlist=["*"])
+            candidate = Path(getattr(mod, "__file__") or "")
+            if candidate.is_file():
+                operator_module_path = candidate
+                break
+    except Exception:
+        pass
+
+    # Walk the operator module import graph (bounded depth) to collect helper
+    # sources that may influence the implementation behaviour.
+    helper_sources: dict[str, str] = {}
+    if operator_module_path is not None and operator_module_path.is_file():
+        boundary = operator_module_path.resolve().parent
+        pending = [operator_module_path.resolve()]
+        visited: set[Path] = set()
+        while pending and len(helper_sources) < 64:
+            current = pending.pop()
+            if current in visited or not current.is_file():
+                continue
+            visited.add(current)
+            try:
+                text = current.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            rel = _relative(current)
+            helper_sources[rel] = text
+            # Discover direct imports that live under the same package boundary.
+            for match in re.findall(r"from\s+([A-Za-z0-9_.]+)\s+import", text):
+                mod_path = match.replace(".", "/") + ".py"
+                candidate_file = (FE_ROOT / mod_path).resolve()
+                if candidate_file.is_file() and candidate_file.resolve().parent == boundary and candidate_file not in visited:
+                    pending.append(candidate_file)
+            for match in re.findall(r"import\s+([A-Za-z0-9_.]+)", text):
+                mod_path = match.replace(".", "/") + ".py"
+                candidate_file = (FE_ROOT / mod_path).resolve()
+                if candidate_file.is_file() and candidate_file.resolve().parent == boundary and candidate_file not in visited:
+                    pending.append(candidate_file)
+
+    # 3. Emitter / kernel identity sources.
+    emitter_sources: dict[str, str] = {}
+    emitter_path = FE_ROOT / "backend" / "sql_pushdown" / "emitter.py"
+    if emitter_path.is_file():
+        emitter_sources["backend/sql_pushdown/emitter.py"] = _safe_text(emitter_path)
+    polars_emitter = FE_ROOT / "backend" / "polars_expr_emitter.py"
+    if polars_emitter.is_file():
+        emitter_sources["backend/polars_expr_emitter.py"] = _safe_text(polars_emitter)
+    kernel_identity_text = ""
+    if operator_module_path is not None and operator_module_path.is_file():
+        kernel_identity_text = _safe_text(operator_module_path)
+
+    # 4. Production parameter signature (ParamSpec snapshot).
+    parameter_signature_text = ""
+    parameter_domain_hash = parameter_domain_hash_for(canonical)
+    if parameter_domain_hash:
+        parameter_signature_text = f"parameter_domain_hash:{parameter_domain_hash}"
+
+    # 5. Numerical semantic policies.
+    semantic_sources = {
+        "backend/numeric_semantics.py": FE_ROOT / "backend" / "numeric_semantics.py",
+        "backend/cross_section_spec.py": FE_ROOT / "backend" / "cross_section_spec.py",
+        "backend/production_signature.py": FE_ROOT / "backend" / "production_signature.py",
+        "cleaned_operators/operator_policy.py": FE_ROOT / "cleaned_operators" / "operator_policy.py",
+    }
+    semantic_text = "".join(
+        f"{name}:{_safe_text(path)}" for name, path in semantic_sources.items() if path.is_file()
+    )
+
+    # Assemble canonical closure payload.
+    payload = {
+        "closure_version": 1,
+        "canonical": canonical,
+        "source_path": source_path,
+        "source_text": source_text,
+        "operator_module": str(operator_module_path) if operator_module_path is not None else "",
+        "helpers": dict(sorted(helper_sources.items())),
+        "emitter_sources": dict(sorted(emitter_sources.items())),
+        "kernel_identity_text": kernel_identity_text,
+        "parameter_signature_text": parameter_signature_text,
+        "semantic_text": semantic_text,
+    }
+    return compute_payload_hash(payload)
 
 
 def implementation_hashes_for(canonical: str) -> dict[str, str]:

@@ -1,0 +1,97 @@
+# R21-IMPL-CLOSURE-HASH: ImplementationClosureHash binding
+# Generated: 2026-08-21
+
+id: R21-IMPL-CLOSURE-HASH
+slice: R21-IMPL-CLOSURE-HASH — bind PhysicalImplementationSpec to real implementation closure semantics
+campaign: PhysicalImplementationSpec Upgrade (R21; LOCAL ONLY, working tree is truth)
+timestamp: "2026-08-21"
+status: COMPLETED_LOCAL
+
+owned_files:
+  - backend/contracts/__init__.py                                 # implementation_closure_hash field + validation + pi:v3 binding
+  - backend/evidence_provenance.py                                # implementation_closure_hash_for (closure hash source-of-truth)
+  - tests/backend/test_capability_contracts.py                    # closure-hash required for production-eligible specs
+  - tests/backend/test_unified_capability_contracts.py            # SHA-256 validation covers closure field
+  - tests/backend/test_pi_id_accelerator_signature.py             # pi:v3 payload includes closure hash
+  - tests/backend/test_r2_p0_017_physical_inventory.py            # blank closure-hash fails inventory
+  - evidence/r2/R21-IMPL-CLOSURE-HASH.yaml                       # this file
+
+problem:
+  "implementation_source_hash accepted arbitrary label strings such as
+  'ts_mean:v2' or 'ts_mean:v1' and did not semantically bind the full
+  closure of the operator implementation.  The missing signal meant two
+  operator snapshots differing only in transitive helper source, emitter/
+  kernel identity source, production ParamSpec, or numerical semantic
+  policy could still compare as identical for certification / admission."
+
+root_cause:
+  "The implementation-source binding was originally a review label.  R7
+  added _impl_source_hash and evidence_provenance began binding file-level
+  digests, but PhysicalImplementationSpec never gained a dedicated closure
+  field and never enforced SHA-256 format, so loose strings remained
+  admissible and production-eligible."
+
+fix:
+  "1. Added a new frozen field implementation_closure_hash to
+  PhysicalImplementationSpec (backend/contracts/__init__.py).
+  2. validation_errors() now requires implementation_closure_hash to be
+  present and to match ^[0-9-a-f]{64}$ (SHA-256); blank or malformed
+  values fail closed and make the spec ineligible for production.
+  3. physical_implementation_id payload was upgraded to pi:v3 to include
+  implementation_closure_hash in the deterministic digest, so any change
+  to closure semantics invalidates the physical identity.
+  4. Added backend.evidence_provenance.implementation_closure_hash_for()
+  as the canonical computation site.  It binds:
+     - source/AST of the implementation module,
+     - transitive helper sources discovered within the operator package,
+     - emitter sources (Polars + DuckDB),
+     - kernel identity text,
+     - production parameter signature via parameter_domain_hash_for(),
+     - numerical semantic policies (numeric_semantics, cross_section_spec,
+       production_signature, operator_policy).
+  5. Existing tests were hardened to supply valid 64-hex closure hashes
+  before asserting production eligibility, and new regression coverage
+  confirms blank closure-hash rejection."
+
+commands_run:
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/backend/test_unified_capability_contracts.py -q -> 21 passed"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/backend/test_capability_contracts.py tests/backend/test_pi_id_accelerator_signature.py tests/backend/test_r2_p0_017_physical_inventory.py -q -> 19 passed"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/backend/test_capability_contracts.py tests/backend/test_unified_capability_contracts.py tests/backend/test_pi_id_accelerator_signature.py tests/backend/test_r2_p0_017_physical_inventory.py -q -> 33 passed (serial, no xdist)"
+
+results:
+  contract_change:
+    field_added: implementation_closure_hash
+    field_type: str
+    default: ""
+    validation: blank prohibited + ^[0-9-a-f]{64}$ (SHA-256)
+    physical_id_version: pi:v3
+    payload新增字段: implementation_closure_hash
+  closure_hash_surfaces:
+    - "source/AST of operator implementation module"
+    - "transitive helper sources within the same operator package boundary"
+    - "Polars expr emitter source"
+    - "DuckDB SQL emitter source"
+    - "kernel module identity text"
+    - "production parameter signature snapshot (parameter_domain_hash_for)"
+    - "numerical semantic policy sources (numeric_semantics / cross_section_spec / production_signature / operator_policy)"
+  tests:
+    total: 33
+    passed: 33
+    failed: 0
+    skipped: 0
+  regression_coverage:
+    - "blank implementation_closure_hash is now rejected by PhysicalImplementationSpec.validation_errors()"
+    - "spec with blank closure hash is not production-eligible and yields no PhysicalImplementationID"
+    - "physical_implementation_id includes implementation_closure_hash and uses pi:v3: prefix"
+    - "SHA-256 format enforcement covers the new closure hash identically to source/param/semantic fields"
+
+guards_in_tests:
+  - "test_valid_sha256_hashes_pass_validation: valid 64-hex closure hash accepted"
+  - "test_invalid_hash_format_uppercase_hex: uppercase closure hash rejected"
+  - "test_physical_id_binds_complete_identity_and_rejects_blank_names: blank implementation_closure_hash fails admission"
+  - "test_version_prefix_is_v3: confirms payload version bump for closure-bound identity"
+
+notes:
+  - "Existing operator _physical_spec declarations in cleaned_operators/ still carry legacy label strings for implementation_source_hash and other fields; those remain valid but not production-complete until backfilled with true SHA-256 digests."
+  - "implementation_closure_hash_for is intentionally high-fidelity (it reads actual source text and package helpers), so backfill should be run from the same canonical / registry state used for certification."
+  - "The slice is intentionally focused on the contract + provenance + tests; the matrix generator and admission scripts can consume the new hash on the next audit pass."

@@ -25,10 +25,11 @@ _BASE_KW = dict(
     supports_lazy=True,
     supports_streaming=True,
     supports_nulls=True,
-    implementation_source_hash="src-sha-aaa",
+    implementation_source_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     emitter_identity="test.polars.expr:v1",
-    parameter_domain_hash="param-sha-aaa",
-    semantic_contract_hash="contract-sha-aaa",
+    parameter_domain_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    semantic_contract_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    implementation_closure_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
 )
 
 
@@ -97,12 +98,12 @@ class TestPIIDAcceleratorSignature:
         assert id_2 is not None
         assert id_1 == id_2, "Identical specs must yield the same PI ID"
 
-    def test_version_prefix_is_v2(self) -> None:
-        """New payloads must use the pi:v2: prefix."""
+    def test_version_prefix_is_v3(self) -> None:
+        """New payloads must use the pi:v3: prefix."""
         spec = _spec()
         pid = spec.physical_implementation_id
         assert pid is not None
-        assert str(pid).startswith("pi:v2:"), f"Expected pi:v2: prefix, got {pid}"
+        assert str(pid).startswith("pi:v3:"), f"Expected pi:v3: prefix, got {pid}"
 
 
 if __name__ == "__main__":
