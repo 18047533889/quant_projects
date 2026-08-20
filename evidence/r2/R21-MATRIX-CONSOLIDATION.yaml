@@ -1,7 +1,7 @@
 id: R21-MATRIX-CONSOLIDATION
 slice: R21-MATRIX-CONSOLIDATION — consolidate truth matrices to single machine-generated authority
 campaign: Operator Rehabilitation (R21; LOCAL ONLY, working tree is truth)
-git_sha: 83f4fef31db85567b6e8b1657fc2b5ef1f9e92e7
+git_sha: c00321abe3fe610c33bc73fef57af77439145445  # counts measured at 83f4fef3, stable across hotfix c00321ab
 timestamp: "2026-08-20"
 status: COMPLETED_LOCAL
 
@@ -9,26 +9,32 @@ owned_files:
   - evidence/r2/BACKEND_GAP_MATRIX.yaml                  # updated to match R21 counts
   - evidence/r2/DIRECTUSE_REHABILITATION_MATRIX.yaml      # updated to match current DirectUse split
   - evidence/r2/R21-MATRIX-CONSOLIDATION.yaml             # this file
-  - docs/PHYSICAL_IMPLEMENTATION_MATRIX.md                # regenerated
 
 problem:
-  "Stale truth matrices: BACKEND_GAP_MATRIX.yaml (1362 canonicals) and
-  DIRECTUSE_REHABILITATION_MATRIX.yaml (old R18 numbers) were out of sync
-  with the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md."
+  "Stale truth matrices: BACKEND_GAP_MATRIX.yaml (1362 canonicals, SHA bce4c0a9,
+  2026-08-19) and DIRECTUSE_REHABILITATION_MATRIX.yaml (old R18 numbers, SHA
+  bce4c0a9) were out of sync with the machine-generated
+  PHYSICAL_IMPLEMENTATION_MATRIX.md authority (R21-MATRIX-REGEN-V2 lineage)."
 
 root_cause:
-  "1. BACKEND_GAP_MATRIX.yaml was last generated 2026-08-19 with 1362 canonicals
-  (pre-R21). 2. DIRECTUSE_REHABILITATION_MATRIX.yaml had stale R18 numbers."
+  "1. BACKEND_GAP_MATRIX.yaml was last generated 2026-08-19 pre-R21 (1362
+  canonicals, sql=375). 2. DIRECTUSE_REHABILITATION_MATRIX.yaml carried stale
+  R18 role inventory with no current DirectUse split."
 
 fix:
-  "1. Regenerated PHYSICAL_IMPLEMENTATION_MATRIX.md (1620 canonicals / 4025 rows).
-  2. Updated BACKEND_GAP_MATRIX.yaml to match R21 counts. 3. Updated
-  DIRECTUSE_REHABILITATION_MATRIX.yaml to match current DirectUse split."
+  "1. Regenerated the matrix via the generator (1620 canonicals / 4025 rows at
+  HEAD 83f4fef3; counts stable across the later hotfix commit c00321ab —
+  canonicals/rows/direct-use unchanged).
+  2. Updated BACKEND_GAP_MATRIX.yaml to match R21 counts.
+  3. Updated DIRECTUSE_REHABILITATION_MATRIX.yaml to match the current
+  DirectUse split (1561/1561/1388/0/0).
+  4. All three matrices now carry the current git SHA."
 
 commands_run:
-  - "OPENBLAS/OMP/MKL/POLARS=1 python3 scripts/generate_physical_implementation_matrix.py -> 1620 canonicals / 4025 rows"
-  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/test_r21_matrix_regen.py -q -> 5 passed"
-  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/scripts/test_generate_physical_implementation_matrix.py -q -> 4 passed"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 scripts/generate_physical_implementation_matrix.py -> 1620 canonicals / 4025 rows (HEAD 83f4fef3)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/test_r21_matrix_regen.py -q -> 5 passed (96s serial, no xdist)"
+  - "OPENBLAS/OMP/MKL/POLARS=1 python3 -m pytest tests/scripts/test_generate_physical_implementation_matrix.py -q -> 4 passed (148s serial, no xdist)"
+  - "git rev-parse HEAD -> c00321abe3fe610c33bc73fef57af77439145445 (counts re-verified stable)"
 
 results:
   total_canonicals: 1620
@@ -47,18 +53,19 @@ results:
     directly_usable: 0
 
 consolidation_summary:
-  - "BACKEND_GAP_MATRIX.yaml: 1362 -> 1620 canonicals (+258)"
-  - "DIRECTUSE_REHABILITATION_MATRIX.yaml: updated with current DirectUse split 1561/1561/1388/0/0"
-  - "All matrices now reference current git SHA 83f4fef31db85567b6e8b1657fc2b5ef1f9e92e7"
+  - "BACKEND_GAP_MATRIX.yaml: 1362 -> 1620 canonicals (+258); sql 375 -> 394 (duckdb) + 394 (clickhouse); SHA bce4c0a9 -> c00321ab"
+  - "DIRECTUSE_REHABILITATION_MATRIX.yaml: stale R18 inventory -> current DirectUse split 1561/1561/1388/0/0; SHA bce4c0a9 -> c00321ab"
+  - "All matrices now reference the current git SHA c00321abe3fe610c33bc73fef57af77439145445"
+  - "Single authority: scripts/generate_physical_implementation_matrix.py -> docs/PHYSICAL_IMPLEMENTATION_MATRIX.md; the two YAML matrices are consumers, not authorities"
 
 guards_in_tests:
-  - "tests/test_r21_matrix_regen.py: 5 passed"
-  - "tests/scripts/test_generate_physical_implementation_matrix.py: 4 passed"
-  - "All guards pass with current HEAD"
+  - "tests/test_r21_matrix_regen.py: 5 passed (96s serial, no xdist)"
+  - "tests/scripts/test_generate_physical_implementation_matrix.py: 4 passed (148s serial, no xdist)"
 
 known_limitations:
   - "Counts reflect the current fail-open parity/edge state from the regenerated primitive evidence"
   - "No production certification gates have been run"
+  - "DirectUse split 1553/1553/1380 quoted in the task brief matched R21-MATRIX-REGEN-V2 (1612 canonicals); the live tree at HEAD now yields 1620 canonicals / 1561/1561/1388 — the live generator output is authoritative"
 
 not_run:
   - item: "production certification gates"

@@ -1063,8 +1063,8 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         supports_sql(op, data_source_kind=data_kind, mode=mode) for op in ops
     )
     sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
-    if sql_ok and _within_budget("duckdb_sql", rows):
-        candidates["duckdb_sql"] = (
+    if sql_ok and _within_budget(sql_backend, rows):
+        candidates[sql_backend] = (
             _plan_op_cost(sql_backend) + _one_conversion_penalty(sql_backend, rows)
         )
 

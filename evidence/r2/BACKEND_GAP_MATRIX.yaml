@@ -1,6 +1,6 @@
 schema_version: 1
 task_id: R21-MATRIX-CONSOLIDATION-BACKEND-GAP
-current_sha: 83f4fef31db85567b6e8b1657fc2b5ef1f9e92e7
+current_sha: c00321abe3fe610c33bc73fef57af77439145445
 generation_timestamp: '2026-08-20'
 status: CURRENT_HEAD_INVENTORY_ONLY
 production_certification: NOT_RUN
@@ -44,7 +44,7 @@ gates:
   REGION_PLANNER_SINGLE_AUTHORITY: NOT_RUN
   CI_FINAL_HEAD: NOT_RUN
 notes:
-  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (HEAD 83f4fef3).
+  - Counts are from the machine-generated PHYSICAL_IMPLEMENTATION_MATRIX.md (HEAD 83f4fef3; counts stable across batch-5 hotfix c00321ab).
   - Manifest has no current-head SHA binding; counts are inventory observations only.
   - No production-ready claim is made.
   - Consolidated from R21-MATRIX-REGEN-V2 authority.

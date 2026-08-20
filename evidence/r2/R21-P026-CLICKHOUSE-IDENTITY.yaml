@@ -20,7 +20,7 @@ key was still written as `"duckdb_sql"` in `choose_plan_route`. This caused:
 
 Modified `backend/plan_cost_router.py`:
 
-1. **Candidate key fix** (line ~1074): Changed `candidates["duckdb_sql"]` to `candidates[sql_backend]`
+1. **Candidate key fix** (line ~1067): Changed `candidates["duckdb_sql"]` to `candidates[sql_backend]`
    and `_within_budget("duckdb_sql", rows)` to `_within_budget(sql_backend, rows)`.
 
 2. **Certificate identity** (line ~834): Added `data_kind` parameter to `_build_execution_certificate`
@@ -40,12 +40,16 @@ Modified `backend/plan_cost_router.py`:
 - 2 regression tests created and passing.
 - Certificate identity fields verified for ClickHouse backend.
 - Candidate key verified to be `clickhouse_sql` for ClickHouse data source.
+- Existing ClickHouse executor tests pass (2/2).
+- Existing ClickHouse SQL pushdown tests have pre-existing failures (5/9) unrelated to this fix.
 
 # Tests
 
 ```
 tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_sql_candidate_key PASSED
 tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_certificate_identity PASSED
+tests/backend/test_clickhouse_executor.py::test_execute_clickhouse_delegates_to_execute_query PASSED
+tests/backend/test_clickhouse_executor.py::test_try_execute_sql_pushdown_none_without_ch_source PASSED
 ```
 
 # Files Modified

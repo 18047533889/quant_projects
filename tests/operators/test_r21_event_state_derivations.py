@@ -88,6 +88,8 @@ CAT_EVENT_NAMES = (
     "category_age", "category_frequency", "category_transition_rate",
     "category_transition_surprise", "event_direction_persistence",
     "state_episode_age", "state_flip_age",
+    "state_episode_age_lower_bound", "state_episode_age_capped",
+    "state_episode_censored_flag", "category_age_lower_bound",
 )
 ALL_NAMES = BOOL_NAMES + SIGNED_NAMES + STATE_NAMES + CAT_EVENT_NAMES
 HALFLIFE_NAMES = ("event_decay_window", "signed_event_decay")
@@ -1093,3 +1095,277 @@ def test_categorical_event_family_available_at():
         # The test verifies they are registered and have the expected metadata structure
         assert hasattr(meta, "available_at"), f"{name} missing available_at attribute"
         assert hasattr(meta, "same_session_usable"), f"{name} missing same_session_usable attribute"
+
+
+# ---------------------------------------------------------------------------
+# Censoring variants: oracles + tests
+# ---------------------------------------------------------------------------
+def _oracle_state_age_lower_bound(st, window):
+    """Independent oracle for state_episode_age_lower_bound."""
+    arr = st.to_numpy(float).ravel()
+    out = []
+    for t in range(len(arr)):
+        if t < window - 1:
+            out.append(np.nan)
+            continue
+        chunk = arr[t - window + 1 : t + 1]
+        if np.any(np.isnan(chunk)):
+            out.append(np.nan)
+            continue
+        start = None
+        for i in range(len(chunk) - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        if start is None:
+            out.append(float(window))  # censored: lower bound = window
+        else:
+            out.append(float(len(chunk) - 1 - start))
+    return pd.DataFrame(out, index=st.index, columns=st.columns)
+
+
+def _oracle_state_age_capped(st, window, max_cap):
+    """Independent oracle for state_episode_age_capped."""
+    arr = st.to_numpy(float).ravel()
+    out = []
+    for t in range(len(arr)):
+        if t < window - 1:
+            out.append(np.nan)
+            continue
+        chunk = arr[t - window + 1 : t + 1]
+        if np.any(np.isnan(chunk)):
+            out.append(np.nan)
+            continue
+        start = None
+        for i in range(len(chunk) - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        if start is None:
+            out.append(np.nan)  # censored: age unknown, cannot cap
+        else:
+            age = float(len(chunk) - 1 - start)
+            out.append(min(age, float(max_cap)))
+    return pd.DataFrame(out, index=st.index, columns=st.columns)
+
+
+def _oracle_state_censored_flag(st, window):
+    """Independent oracle for state_episode_censored_flag."""
+    arr = st.to_numpy(float).ravel()
+    out = []
+    for t in range(len(arr)):
+        if t < window - 1:
+            out.append(np.nan)
+            continue
+        chunk = arr[t - window + 1 : t + 1]
+        if np.any(np.isnan(chunk)):
+            out.append(np.nan)
+            continue
+        # check if any adjacent pair differs
+        censored = True
+        for i in range(len(chunk) - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                censored = False
+                break
+        out.append(1.0 if censored else 0.0)
+    return pd.DataFrame(out, index=st.index, columns=st.columns)
+
+
+def _oracle_category_age_lower_bound(st, window):
+    """Independent oracle for category_age_lower_bound (same kernel as state_episode_age_lower_bound)."""
+    return _oracle_state_age_lower_bound(st, window)
+
+
+def test_censoring_variants_oracle_match():
+    """Oracle match for all 4 censoring variant operators on random panels."""
+    st = _state_panel(n=150, k=3, seed=60)
+    w = 12
+    max_cap = 5
+
+    # state_episode_age_lower_bound
+    expected_lb = _oracle_state_age_lower_bound(st, w)
+    got_lb = _op("state_episode_age_lower_bound").calculate(st, window=w)
+    pd.testing.assert_frame_equal(expected_lb, got_lb)
+
+    # state_episode_age_capped
+    expected_cap = _oracle_state_age_capped(st, w, max_cap)
+    got_cap = _op("state_episode_age_capped").calculate(st, window=w, max_cap=max_cap)
+    pd.testing.assert_frame_equal(expected_cap, got_cap)
+
+    # state_episode_censored_flag
+    expected_flag = _oracle_state_censored_flag(st, w)
+    got_flag = _op("state_episode_censored_flag").calculate(st, window=w)
+    pd.testing.assert_frame_equal(expected_flag, got_flag)
+
+    # category_age_lower_bound
+    expected_cat_lb = _oracle_category_age_lower_bound(st, w)
+    got_cat_lb = _op("category_age_lower_bound").calculate(st, window=w)
+    pd.testing.assert_frame_equal(expected_cat_lb, got_cat_lb)
+
+
+def test_censoring_variants_prefix_invariance():
+    """Prefix invariance: first 70 rows of full == calculate(frame.iloc[:70])."""
+    st = _state_panel(n=120, k=3, seed=61)
+    w = 10
+    max_cap = 4
+
+    cases = [
+        ("state_episode_age_lower_bound", {"window": w}),
+        ("state_episode_age_capped", {"window": w, "max_cap": max_cap}),
+        ("state_episode_censored_flag", {"window": w}),
+        ("category_age_lower_bound", {"window": w}),
+    ]
+    for name, kw in cases:
+        full = _op(name).calculate(st, **kw)
+        head = _op(name).calculate(st.iloc[:70], **kw)
+        pd.testing.assert_frame_equal(full.iloc[:70], head)
+
+
+def test_censoring_variants_causality():
+    """Causality: mutating a late row cannot touch earlier rows."""
+    st = _state_panel(n=80, k=3, seed=62)
+    st_mut = st.copy()
+    st_mut.iloc[30, 0] = 7.0  # unseen state appears late
+    w = 10
+    max_cap = 3
+
+    for name, kw in [
+        ("state_episode_age_lower_bound", {"window": w}),
+        ("state_episode_age_capped", {"window": w, "max_cap": max_cap}),
+        ("state_episode_censored_flag", {"window": w}),
+        ("category_age_lower_bound", {"window": w}),
+    ]:
+        a = _op(name).calculate(st, **kw)
+        b = _op(name).calculate(st_mut, **kw)
+        pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
+
+
+def test_censoring_variants_semantics():
+    """Censoring semantics: constant window vs change detected."""
+    w = 8
+
+    # Constant window -> censored
+    st_const = pd.DataFrame({"A": np.full(40, 2.0)})
+
+    # state_episode_age_lower_bound: constant -> float(window)
+    lb = _op("state_episode_age_lower_bound").calculate(st_const, window=w)
+    np.testing.assert_allclose(lb.iloc[w - 1:].to_numpy(), float(w), rtol=1e-12)
+
+    # state_episode_age_capped: constant -> NaN (cannot cap unknown)
+    cap = _op("state_episode_age_capped").calculate(st_const, window=w, max_cap=3)
+    assert cap.iloc[w - 1:].isna().all().all()
+
+    # state_episode_censored_flag: constant -> 1.0
+    flag = _op("state_episode_censored_flag").calculate(st_const, window=w)
+    np.testing.assert_allclose(flag.iloc[w - 1:].to_numpy(), 1.0, rtol=1e-12)
+
+    # category_age_lower_bound: constant -> float(window)
+    cat_lb = _op("category_age_lower_bound").calculate(st_const, window=w)
+    np.testing.assert_allclose(cat_lb.iloc[w - 1:].to_numpy(), float(w), rtol=1e-12)
+
+    # Window with change at t=20 -> exact age
+    arr = np.full(40, 1.0)
+    arr[20:] = 2.0
+    st_change = pd.DataFrame({"A": arr})
+
+    lb_change = _op("state_episode_age_lower_bound").calculate(st_change, window=w)
+    assert lb_change.iloc[20, 0] == 0.0
+    np.testing.assert_allclose(lb_change.iloc[24, 0], 4.0, rtol=1e-12)
+
+    max_cap = 3
+    cap_change = _op("state_episode_age_capped").calculate(st_change, window=w, max_cap=max_cap)
+    assert cap_change.iloc[20, 0] == 0.0
+    # age 4 > max_cap 3, so capped at 3
+    np.testing.assert_allclose(cap_change.iloc[24, 0], float(max_cap), rtol=1e-12)
+
+    flag_change = _op("state_episode_censored_flag").calculate(st_change, window=w)
+    # from t=20 to t=26, the change is visible in the window (flag 0)
+    # from t=27 onwards, window is [2,2,...,2] (censored, flag 1)
+    np.testing.assert_allclose(flag_change.iloc[20:27].to_numpy(), 0.0, atol=1e-12)
+    np.testing.assert_allclose(flag_change.iloc[27:].to_numpy(), 1.0, atol=1e-12)
+
+    cat_lb_change = _op("category_age_lower_bound").calculate(st_change, window=w)
+    assert cat_lb_change.iloc[20, 0] == 0.0
+    np.testing.assert_allclose(cat_lb_change.iloc[24, 0], 4.0, rtol=1e-12)
+
+
+def test_censoring_variants_nan_fail_closed():
+    """Any NaN in the window -> NaN (fail-closed)."""
+    st = _state_panel(n=80, k=3, seed=63)
+    st.iloc[20, 0] = np.nan
+    w = 10
+    max_cap = 4
+
+    for name, kw in [
+        ("state_episode_age_lower_bound", {"window": w}),
+        ("state_episode_age_capped", {"window": w, "max_cap": max_cap}),
+        ("state_episode_censored_flag", {"window": w}),
+        ("category_age_lower_bound", {"window": w}),
+    ]:
+        out = _op(name).calculate(st, **kw)
+        # First w-1 rows are NaN (warmup)
+        assert out.iloc[: w - 1].isna().all().all(), name
+        # Rows that include the NaN in their window are NaN (fail-closed)
+        assert out.iloc[20:30].isna().all().all(), name
+        # Rows after the NaN window are not NaN
+        assert out.iloc[30:].notna().all().all(), name
+
+
+def test_censoring_variants_window_validation():
+    """Reject invalid window and max_cap parameters."""
+    st = _state_panel(n=40, k=3, seed=64)
+
+    for bad_window in [1, True, 5.5, 0, -3]:
+        with pytest.raises(ValueError):
+            _op("state_episode_age_lower_bound").calculate(st, window=bad_window)
+        with pytest.raises(ValueError):
+            _op("state_episode_age_capped").calculate(st, window=bad_window, max_cap=3)
+        with pytest.raises(ValueError):
+            _op("state_episode_censored_flag").calculate(st, window=bad_window)
+        with pytest.raises(ValueError):
+            _op("category_age_lower_bound").calculate(st, window=bad_window)
+
+    # max_cap validation
+    for bad_cap in [0, True, 1.5, -1]:
+        with pytest.raises(ValueError):
+            _op("state_episode_age_capped").calculate(st, window=8, max_cap=bad_cap)
+
+
+def test_censoring_variants_governance():
+    """Verify ParamSpec, tags, and surface classification for censoring variants."""
+    from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS, classify_canonical
+
+    for name in ["state_episode_age_lower_bound", "state_episode_age_capped",
+                  "state_episode_censored_flag", "category_age_lower_bound"]:
+        op = _op(name)
+        meta = op.metadata
+        specs = meta.param_specs
+        assert "window" in specs, name
+        assert specs["window"].min == 2, name
+        assert specs["window"].dtype is int, name
+        assert specs["window"].param_role is not None, name
+        tags = meta.tags
+        assert "causal" in tags and "pit_safe" in tags, name
+        assert "stateful" not in tags and "full_replay" not in tags, name
+        assert name in EXTENDED_ONLY_CANONICALS, name
+        assert classify_canonical(name) == "extended", name
+
+    # max_cap param spec for state_episode_age_capped
+    cap_specs = _op("state_episode_age_capped").metadata.param_specs
+    assert "max_cap" in cap_specs
+    assert cap_specs["max_cap"].dtype is int
+    assert cap_specs["max_cap"].min == 1
+    assert cap_specs["max_cap"].param_role is not None
+
+
+def test_censoring_variants_available_at():
+    """All censoring variant operators must have available_at='close_of_t'."""
+    from cleaned_operators.registry import OperatorRegistry
+    _ensure_chain()
+    for name in ["state_episode_age_lower_bound", "state_episode_age_capped",
+                  "state_episode_censored_flag", "category_age_lower_bound"]:
+        op = OperatorRegistry.get(name, "pandas_numpy")
+        assert op is not None, f"{name} not registered"
+        meta = op.metadata
+        assert meta.available_at == "close_of_t", f"{name} available_at != 'close_of_t'"
+        assert meta.same_session_usable is False, f"{name} same_session_usable != False"

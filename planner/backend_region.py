@@ -140,6 +140,12 @@ class BackendRegion:
     # MB-P1-016, MB-P1-017: Streaming and direct sink capabilities
     streaming_capable: bool = False
     supports_direct_sink: bool = False
+    # R21-P023: Four-backend plan identity and resource tracking
+    implementation_id: str = ""  # PhysicalImplementationID ("pi:v1:...") binding
+    input_bytes: int = 0  # estimated input data volume
+    output_bytes: int = 0  # estimated output data volume
+    liveness: str = "eager"  # "eager" / "lazy" / "stream"
+    parameter_domain_identity: str = ""  # parameter-domain hash identity
 
     def __post_init__(self):
         """Validate region constraints (MB-P0-011, MB-P0-012)."""
@@ -171,6 +177,12 @@ class BackendRegion:
             "estimated_memory_bytes": self.estimated_memory_bytes,
             "streaming_capable": self.streaming_capable,
             "supports_direct_sink": self.supports_direct_sink,
+            # R21-P023: identity/resource surface
+            "implementation_id": self.implementation_id,
+            "input_bytes": self.input_bytes,
+            "output_bytes": self.output_bytes,
+            "liveness": self.liveness,
+            "parameter_domain_identity": self.parameter_domain_identity,
         }
 
 
@@ -208,6 +220,11 @@ class TransferEdge:
     preserves_universe: bool = True
     preserves_grain: bool = True
     source_snapshot_id: str | None = None
+    # R21-P023: per-representation materialization cost decomposition
+    materialization_cost_arrow_ms: float = 0.0  # Arrow IPC/conversion cost
+    materialization_cost_numpy_ms: float = 0.0  # NumPy buffer materialization cost
+    materialization_cost_polars_ms: float = 0.0  # Polars DataFrame/LazyFrame cost
+    materialization_cost_sql_ms: float = 0.0  # SQL result materialization cost
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -221,6 +238,11 @@ class TransferEdge:
             "requires_repartition": self.requires_repartition,
             "requires_reshape": self.requires_reshape,
             "estimated_transfer_ms": round(self.estimated_transfer_ms, 3),
+            # R21-P023: materialization cost decomposition
+            "materialization_cost_arrow_ms": round(self.materialization_cost_arrow_ms, 3),
+            "materialization_cost_numpy_ms": round(self.materialization_cost_numpy_ms, 3),
+            "materialization_cost_polars_ms": round(self.materialization_cost_polars_ms, 3),
+            "materialization_cost_sql_ms": round(self.materialization_cost_sql_ms, 3),
         }
 
 
