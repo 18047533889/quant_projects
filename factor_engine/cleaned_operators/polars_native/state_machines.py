@@ -38,11 +38,7 @@ class StateAdaptiveDeadbandPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "polars_native"],
     )
-    metadata.param_specs = {
-        "base_threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, base_threshold=0.02, window=20, **kwargs):
         """
         Signal only changes when it moves beyond adaptive threshold from last state.
@@ -103,11 +99,7 @@ class StateAdaptiveSlewLimitPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "polars_native"],
     )
-    metadata.param_specs = {
-        "base_rate": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, base_rate=0.1, window=20, **kwargs):
         """
         State can only change by max_rate * rolling_std per step.
@@ -167,10 +159,7 @@ class StateConfidenceWeightedEmaPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "ema", "polars_native"],
     )
-    metadata.param_specs = {
-        "base_halflife": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, confidence, base_halflife=10, **kwargs):
         """
         Effective alpha = base_alpha * confidence
@@ -221,11 +210,7 @@ class StateCostAwareDeadbandPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "cost", "polars_native"],
     )
-    metadata.param_specs = {
-        "transaction_cost": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "base_threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, transaction_cost=0.001, base_threshold=0.02, **kwargs):
         """
         Effective threshold = base_threshold + transaction_cost
@@ -268,11 +253,7 @@ class StateCostAwareSlewPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "cost", "polars_native"],
     )
-    metadata.param_specs = {
-        "base_rate": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "cost_factor": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, base_rate=0.1, cost_factor=0.01, **kwargs):
         """
         Max change decreases as cost_factor increases
@@ -638,10 +619,7 @@ class StateL1TurnoverProxPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "regularization", "polars_native"],
     )
-    metadata.param_specs = {
-        "lambda_penalty": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, lambda_penalty=0.01, **kwargs):
         """
         Proximal operator: new_state = soft_threshold(signal - old_state, lambda)
@@ -688,10 +666,7 @@ class StateL2PartialAdjustmentPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "adjustment", "polars_native"],
     )
-    metadata.param_specs = {
-        "adjustment_speed": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, target, adjustment_speed=0.5, **kwargs):
         """
         Partial adjustment: state[t] = state[t-1] + alpha * (target[t] - state[t-1])
@@ -736,12 +711,7 @@ class StateQuantileHysteresisPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "hysteresis", "polars_native"],
     )
-    metadata.param_specs = {
-        "high_quantile": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.STATE_THRESHOLD),
-        "low_quantile": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, high_quantile=0.8, low_quantile=0.2, window=20, **kwargs):
         """
         State = +1 when signal > rolling high quantile
@@ -802,11 +772,7 @@ class StateRankDeadbandPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "rank", "polars_native"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, threshold=0.1, window=20, **kwargs):
         """
         Convert to rolling rank percentile, then apply deadband
@@ -1021,10 +987,7 @@ class StateSlewLimitPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "polars_native"],
     )
-    metadata.param_specs = {
-        "max_rate": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, max_rate=0.1, **kwargs):
         """
         State can only change by max_rate per step
@@ -1064,10 +1027,7 @@ class StateUncertaintyDeadbandPolarsNative(SeriesOperator):
         return_type="series",
         tags=["state", "filter", "uncertainty", "polars_native"],
     )
-    metadata.param_specs = {
-        "base_threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, signal, uncertainty, base_threshold=0.02, **kwargs):
         """
         Effective threshold = base_threshold * (1 + uncertainty)

@@ -273,6 +273,9 @@ def register_dual(
     OperatorRegistry.register(
         _PolarsOp(), canonical=canonical, backend="polars",
         source=source + "_polars", backend_explicit=True,
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into " + source + "_polars",
     )
 
 

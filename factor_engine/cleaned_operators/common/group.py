@@ -74,7 +74,7 @@ def _strict_group_panel(group: pd.DataFrame | None, x: pd.DataFrame) -> pd.DataF
 
 
 # canonical=deltas backend=pandas_numpy selected=deltas source=time_series/panel_ops.py
-@register_operator(name="deltas", category="time_series", business_category="group_neutralization", canonical="deltas", source="factor_dsl_np")
+@register_operator(name="deltas", category="time_series", business_category="group_neutralization", canonical="deltas", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Deltas(SeriesOperator):
     """n期差分 (与Delta相同) x - Ref(x, n)"""
     metadata = OperatorMetadata(
@@ -140,7 +140,7 @@ def _group_rank_weighted_value_panel(
 
 
 # canonical=group_rank_weighted_value backend=pandas_numpy selected=group_rank_weighted_value source=cross_sectional/group_ops.py
-@register_operator(name="group_rank_weighted_value", category="cross_sectional", business_category="group_neutralization", canonical="group_rank_weighted_value", source="factor_dsl_np")
+@register_operator(name="group_rank_weighted_value", category="cross_sectional", business_category="group_neutralization", canonical="group_rank_weighted_value", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupRankWeightedValue(SeriesOperator):
     """组内按**平均排名**线性加权（跨截面 rank weighting，非时间衰减）。
 
@@ -170,7 +170,7 @@ class GroupRankWeightedValue(SeriesOperator):
 
 
 # canonical=group_decay_linear backend=pandas_numpy selected=group_decay_linear source=cross_sectional/group_ops.py
-@register_operator(name="group_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_decay_linear", source="factor_dsl_np")
+@register_operator(name="group_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_decay_linear", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupDecayLinear(SeriesOperator):
     """兼容名：组内按排名线性加权（诚实名称 ``group_rank_weighted_value``）。
 
@@ -201,7 +201,7 @@ class GroupDecayLinear(SeriesOperator):
 
 
 # canonical=group_ts_decay_linear backend=pandas_numpy selected=group_ts_decay_linear source=cross_sectional/group_ops.py
-@register_operator(name="group_ts_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_ts_decay_linear", source="factor_dsl_np")
+@register_operator(name="group_ts_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_ts_decay_linear", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupTSDecayLinear(SeriesOperator):
     """组内**时间位置**线性衰减加权（真实时间衰减，窗口参数参与计算）。
 
@@ -268,7 +268,7 @@ class GroupTSDecayLinear(SeriesOperator):
 
 
 # canonical=group_demean backend=pandas_numpy selected=group_demean source=cross_sectional/group_ops.py
-@register_operator(name="group_demean", category="cross_sectional", business_category="group_neutralization", canonical="group_neutralize", source="factor_dsl_np")
+@register_operator(name="group_demean", category="cross_sectional", business_category="group_neutralization", canonical="group_neutralize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupDemean(SeriesOperator):
     """在指定分组内进行去均值处理 (x - group_mean)"""
 
@@ -306,7 +306,7 @@ class GroupDemean(SeriesOperator):
 
 
 # canonical=group_mean backend=pandas_numpy selected=group_mean source=cross_sectional/group_ops.py
-@register_operator(name="group_mean", category="cross_sectional", business_category="group_neutralization", canonical="group_mean", source="factor_dsl_np")
+@register_operator(name="group_mean", category="cross_sectional", business_category="group_neutralization", canonical="group_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupMean(SeriesOperator):
     """组内均值"""
 
@@ -356,7 +356,7 @@ class GroupMean(SeriesOperator):
 
 
 # canonical=group_sum backend=pandas_numpy selected=group_sum source=cross_sectional/group_ops.py
-@register_operator(name="group_sum", category="cross_sectional", business_category="group_neutralization", canonical="group_sum", source="factor_dsl_np")
+@register_operator(name="group_sum", category="cross_sectional", business_category="group_neutralization", canonical="group_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupSum(SeriesOperator):
     """组内求和"""
 
@@ -396,7 +396,7 @@ class GroupSum(SeriesOperator):
 
 
 # canonical=group_min backend=pandas_numpy selected=group_min source=cross_sectional/group_ops.py
-@register_operator(name="group_min", category="cross_sectional", business_category="group_neutralization", canonical="group_min", source="factor_dsl_np")
+@register_operator(name="group_min", category="cross_sectional", business_category="group_neutralization", canonical="group_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupMin(SeriesOperator):
     """组内最小值"""
 
@@ -436,7 +436,7 @@ class GroupMin(SeriesOperator):
 
 
 # canonical=group_max backend=pandas_numpy selected=group_max source=cross_sectional/group_ops.py
-@register_operator(name="group_max", category="cross_sectional", business_category="group_neutralization", canonical="group_max", source="factor_dsl_np")
+@register_operator(name="group_max", category="cross_sectional", business_category="group_neutralization", canonical="group_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupMax(SeriesOperator):
     """组内最大值"""
 
@@ -476,7 +476,7 @@ class GroupMax(SeriesOperator):
 
 
 # canonical=group_count backend=pandas_numpy selected=group_count source=cross_sectional/group_ops.py
-@register_operator(name="group_count", category="cross_sectional", business_category="group_neutralization", canonical="group_count", source="factor_dsl_np")
+@register_operator(name="group_count", category="cross_sectional", business_category="group_neutralization", canonical="group_count", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupCount(SeriesOperator):
     """组内非空计数"""
 
@@ -515,7 +515,7 @@ class GroupCount(SeriesOperator):
 
 
 # canonical=group_normalize backend=pandas_numpy selected=group_normalize source=cross_sectional/group_ops.py
-@register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_np")
+@register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupNormalize(SeriesOperator):
     """在指定分组内对股票进行归一化到[0,1]"""
 
@@ -582,7 +582,7 @@ class GroupNormalize(SeriesOperator):
 
 
 # canonical=group_percentile backend=pandas_numpy selected=group_percentile source=cross_sectional/group_ops.py
-@register_operator(name="group_percentile", category="cross_sectional", business_category="group_neutralization", canonical="group_percentile", source="factor_dsl_np")
+@register_operator(name="group_percentile", category="cross_sectional", business_category="group_neutralization", canonical="group_percentile", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupPercentile(SeriesOperator):
     """组内分位数判断"""
 
@@ -646,7 +646,7 @@ class GroupPercentile(SeriesOperator):
 
 
 # canonical=group_rank backend=pandas_numpy selected=group_rank source=cross_sectional/group_ops.py
-@register_operator(name="group_rank", category="cross_sectional", business_category="group_neutralization", canonical="group_rank", source="factor_dsl_np")
+@register_operator(name="group_rank", category="cross_sectional", business_category="group_neutralization", canonical="group_rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupRank(SeriesOperator):
     """组内排名 - 按分组进行截面排名"""
 
@@ -712,7 +712,7 @@ class GroupRank(SeriesOperator):
 
 
 # canonical=group_std backend=pandas_numpy selected=group_std source=cross_sectional/group_ops.py
-@register_operator(name="group_std", category="cross_sectional", business_category="group_neutralization", canonical="group_std", source="factor_dsl_np")
+@register_operator(name="group_std", category="cross_sectional", business_category="group_neutralization", canonical="group_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupStd(SeriesOperator):
     """组内标准差"""
 
@@ -764,7 +764,7 @@ class GroupStd(SeriesOperator):
 
 
 # canonical=group_winsorize backend=pandas_numpy selected=group_winsorize source=cross_sectional/group_ops.py
-@register_operator(name="group_winsorize", category="cross_sectional", business_category="group_neutralization", canonical="group_winsorize", source="factor_dsl_np")
+@register_operator(name="group_winsorize", category="cross_sectional", business_category="group_neutralization", canonical="group_winsorize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupWinsorize(SeriesOperator):
     """在指定分组内进行缩尾处理，将超出分位数a的值截断"""
 
@@ -820,7 +820,7 @@ class GroupWinsorize(SeriesOperator):
 
 
 # canonical=group_zscore backend=pandas_numpy selected=group_zscore source=cross_sectional/group_ops.py
-@register_operator(name="group_zscore", category="cross_sectional", business_category="group_neutralization", canonical="group_zscore", source="factor_dsl_np")
+@register_operator(name="group_zscore", category="cross_sectional", business_category="group_neutralization", canonical="group_zscore", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GroupZScore(SeriesOperator):
     """组内Z-Score标准化"""
 
@@ -894,7 +894,7 @@ class GroupZScore(SeriesOperator):
 
 
 # canonical=move backend=pandas_numpy selected=move source=time_series/panel_ops.py
-@register_operator(name="move", category="time_series", business_category="group_neutralization", canonical="move", source="factor_dsl_np")
+@register_operator(name="move", category="time_series", business_category="group_neutralization", canonical="move", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Move(SeriesOperator):
     """滑动窗口均值 (与m_avg相同)"""
     metadata = OperatorMetadata(
@@ -910,7 +910,7 @@ class Move(SeriesOperator):
 
 
 # canonical=panel_neutralize backend=pandas_numpy selected=panel_neutralize source=time_series/panel_ops.py
-@register_operator(name="panel_neutralize", category="time_series", business_category="group_neutralization", canonical="panel_neutralize", source="factor_dsl_np")
+@register_operator(name="panel_neutralize", category="time_series", business_category="group_neutralization", canonical="panel_neutralize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class PanelNeutralize(SeriesOperator):
     """多维中性化 (按组去均值)"""
     metadata = OperatorMetadata(
@@ -940,7 +940,7 @@ class PanelNeutralize(SeriesOperator):
 
 
 # canonical=panel_rank backend=pandas_numpy selected=panel_rank source=time_series/panel_ops.py
-@register_operator(name="panel_rank", category="time_series", business_category="group_neutralization", canonical="panel_rank", source="factor_dsl_np")
+@register_operator(name="panel_rank", category="time_series", business_category="group_neutralization", canonical="panel_rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class PanelRank(SeriesOperator):
     """面板排名 (按行百分位排名)"""
     metadata = OperatorMetadata(
@@ -956,7 +956,7 @@ class PanelRank(SeriesOperator):
 
 
 # canonical=panel_standardize backend=pandas_numpy selected=panel_standardize source=time_series/panel_ops.py
-@register_operator(name="panel_standardize", category="time_series", business_category="group_neutralization", canonical="panel_standardize", source="factor_dsl_np")
+@register_operator(name="panel_standardize", category="time_series", business_category="group_neutralization", canonical="panel_standardize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class PanelStandardize(SeriesOperator):
     """面板Z-Score标准化 (按行标准化)"""
     metadata = OperatorMetadata(
@@ -974,7 +974,7 @@ class PanelStandardize(SeriesOperator):
 
 
 # canonical=panel_zscore backend=pandas_numpy selected=panel_zscore source=time_series/panel_ops.py
-@register_operator(name="panel_zscore", category="time_series", business_category="group_neutralization", canonical="panel_zscore", source="factor_dsl_np")
+@register_operator(name="panel_zscore", category="time_series", business_category="group_neutralization", canonical="panel_zscore", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class PanelZscore(SeriesOperator):
     """面板Z-Score (按行Z-Score标准化)"""
     metadata = OperatorMetadata(
@@ -992,7 +992,7 @@ class PanelZscore(SeriesOperator):
 
 
 # canonical=ratios backend=pandas_numpy selected=ratios source=time_series/panel_ops.py
-@register_operator(name="ratios", category="time_series", business_category="group_neutralization", canonical="ts_ratio", source="factor_dsl_np")
+@register_operator(name="ratios", category="time_series", business_category="group_neutralization", canonical="ts_ratio", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Ratios(SeriesOperator):
     """当前值与前一期之比 x / Ref(x, 1)"""
     metadata = OperatorMetadata(
@@ -1045,7 +1045,7 @@ class IndustryNeutralize(SeriesOperator):
         return result
 
 
-@register_operator(name="size_neutralize", category="group_neutralization", business_category="group_neutralization", canonical="size_neutralize", source="factor_dsl_np")
+@register_operator(name="size_neutralize", category="group_neutralization", business_category="group_neutralization", canonical="size_neutralize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SizeNeutralize(SeriesOperator):
     """市值中性化：每日对 ``log(market_cap)`` 做截面 OLS，取残差。
 
@@ -1081,7 +1081,7 @@ class SizeNeutralize(SeriesOperator):
     business_category="group_neutralization",
     canonical="industry_size_neutralize",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IndustrySizeNeutralize(SeriesOperator):
     """行业+市值双中性（FWL / R19-023）。
 

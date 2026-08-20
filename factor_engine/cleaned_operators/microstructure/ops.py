@@ -29,7 +29,7 @@ from cleaned_operators.base import (
     source="factor_dsl_np",
     backend="pandas_numpy",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LqtpRealturnoverrateOp(TwoVarOperator):
     """真实流通盘换手率：volume / float_shares"""
     metadata = OperatorMetadata(
@@ -54,7 +54,7 @@ class LqtpRealturnoverrateOp(TwoVarOperator):
     source="factor_dsl_np",
     backend="pandas_numpy",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IntradayVwapDeviationOp(SeriesOperator):
     """收盘价相对 session 内累计 VWAP 的偏差。"""
 
@@ -91,7 +91,7 @@ class IntradayVwapDeviationOp(SeriesOperator):
     source="factor_dsl_np",
     backend="pandas_numpy",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroRealizedVolOp(SeriesOperator):
     """滚动已实现波动率：sqrt(sum(r^2, window))，按 session 边界 reset。"""
 
@@ -128,7 +128,7 @@ class MicroRealizedVolOp(SeriesOperator):
     canonical="micro_spread",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroSpreadOp(SeriesOperator):
     """相对价差代理：(high - low) / close。"""
 
@@ -155,7 +155,7 @@ class MicroSpreadOp(SeriesOperator):
     canonical="micro_amihud_hf",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroAmihudHfOp(SeriesOperator):
     """Amihud 非流动性：|r| / (close × volume)。"""
 
@@ -186,7 +186,7 @@ class MicroAmihudHfOp(SeriesOperator):
     canonical="micro_mid_return",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroMidReturnOp(SeriesOperator):
     """中间价收益：mid=(high+low)/2 的 pct_change。"""
 
@@ -237,7 +237,7 @@ def _bipower_bv(
     canonical="micro_bipower_var",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroBipowerVarOp(SeriesOperator):
     """Standard realised bipower variation（求和 + 有限样本修正，与 RV 同尺度）。
 
@@ -278,7 +278,7 @@ class MicroBipowerVarOp(SeriesOperator):
     canonical="micro_jump_indicator",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroJumpIndicatorOp(SeriesOperator):
     """跳跃指示：max(RV - BV, 0)，RV=rolling sum(r^2)，BV 用修正后标准 BV。"""
 
@@ -315,7 +315,7 @@ class MicroJumpIndicatorOp(SeriesOperator):
     canonical="micro_trade_imbalance",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroTradeImbalanceOp(SeriesOperator):
     """成交不平衡代理：rolling sum(volume * sign(r)) / rolling sum(volume)。"""
 
@@ -350,7 +350,7 @@ class MicroTradeImbalanceOp(SeriesOperator):
     canonical="micro_vpin",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroVpinOp(SeriesOperator):
     """LEGACY PROXY —— 不是严格 VPIN。
 
@@ -396,7 +396,7 @@ class MicroVpinOp(SeriesOperator):
     canonical="micro_kyle_lambda",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MicroKyleLambdaOp(SeriesOperator):
     """LEGACY PROXY —— 不是严格 Kyle lambda。
 

@@ -80,10 +80,7 @@ class TSDistanceCorrelationPartialProxyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "dependence", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Placeholder: coefficient of variation (NOT distance correlation)
         return feature.rolling_std(window) / (feature.rolling_mean(window).abs() + 1e-8)
@@ -101,10 +98,7 @@ class TSFeatureModeSharePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "distribution", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper mode detection and share calculation
         # Placeholder: concentration measure
@@ -174,9 +168,7 @@ class TSFirstPassageBiasPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "threshold", "pit_safe"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, threshold, **kwargs):
         # TODO: Implement proper first passage time calculation
@@ -196,10 +188,7 @@ class TSFirstPassageConditionalTimePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "threshold", "pit_safe"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
         # TODO: Implement conditional first passage time
@@ -219,10 +208,7 @@ class TSFirstPassageHitProbabilityPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "threshold", "pit_safe"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
         # Fraction of window where threshold is crossed
@@ -266,11 +252,7 @@ class TSForbiddenOrdinalPatternRatioPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "complexity", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-        "pattern_length": ParamSpec(dtype=int, min=3, max=6, param_role=ParamRole.MODEL_ORDER),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, pattern_length=3, **kwargs):
         # TODO: Implement ordinal pattern detection
         # Placeholder: trend consistency measure
@@ -293,11 +275,7 @@ class TSFractionalDifferencePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "memory", "pit_safe"],
     )
-    metadata.param_specs = {
-        "d": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, d=0.5, window=20, **kwargs):
         # TODO: Implement proper fractional differencing with binomial weights
         # Placeholder: weighted difference
@@ -316,11 +294,7 @@ class TSFractionalDifferenceDiscardedWeightMassPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "memory", "pit_safe"],
     )
-    metadata.param_specs = {
-        "d": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, d=0.5, window=20, **kwargs):
         # TODO: Implement proper weight mass calculation
         # Placeholder: constant based on d and window
@@ -343,11 +317,7 @@ class TSGeneralizedHurstExponentPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "multifractal", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "q": ParamSpec(dtype=float, min=-5.0, max=5.0, param_role=ParamRole.ECONOMIC),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, q=2.0, **kwargs):
         # TODO: Implement proper GHE via DFA or structure function
         # Placeholder: Hurst proxy via rescaled range
@@ -366,10 +336,7 @@ class TSGeneralizedHurstSpreadQ1Q4PolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "multifractal", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement H(1) - H(4)
         # Placeholder: volatility clustering measure
@@ -393,11 +360,7 @@ class TSGPDShapePWMPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "extreme_tail", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "threshold_quantile": ParamSpec(dtype=float, min=0.5, max=0.99, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, threshold_quantile=0.9, **kwargs):
         # TODO: Implement proper GPD PWM estimator
         # Placeholder: tail volatility
@@ -440,11 +403,7 @@ class TSHampelFilterCausalPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "filter", "robust", "causal", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-        "n_sigma": ParamSpec(dtype=float, min=1.0, max=10.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, n_sigma=3.0, **kwargs):
         # Hampel: replace values > n_sigma * MAD from median
         median = feature.rolling_median(window)
@@ -466,10 +425,7 @@ class TSHankelEffectiveRankPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "ssa", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Hankel SVD and effective rank
         # Placeholder: normalized variance
@@ -488,10 +444,7 @@ class TSHankelSingularGapPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "ssa", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Hankel SVD
         # Placeholder: autocorrelation strength
@@ -514,10 +467,7 @@ class TSHartiganDipPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "distribution", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Hartigan dip test
         # Placeholder: bimodality proxy via kurtosis
@@ -539,10 +489,7 @@ class TSHiguchiFractalDimensionPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "complexity", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Higuchi algorithm
         # Placeholder: path length measure
@@ -565,11 +512,7 @@ class TSHillTailIndexPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "extreme_tail", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "tail_fraction": ParamSpec(dtype=float, min=0.01, max=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, tail_fraction=0.1, **kwargs):
         # TODO: Implement proper Hill estimator
         # Placeholder: tail quantile ratio
@@ -590,11 +533,7 @@ class TSHSICPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "dependence", "pit_safe"],
     )
-    metadata.param_specs = {
-        "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, lag, window, **kwargs):
         # TODO: Implement proper HSIC with kernel matrices
         # Placeholder: lagged correlation
@@ -617,10 +556,7 @@ class TSHurstDFAPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "long_memory", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper DFA algorithm
         # Placeholder: rescaled range Hurst estimate
@@ -645,10 +581,7 @@ class TSHVGAssortativityPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "network", "hvg", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=8, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper HVG construction and degree assortativity
         # Placeholder: autocorrelation proxy
@@ -667,10 +600,7 @@ class TSHVGClusteringCoefficientPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "network", "hvg", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=8, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper HVG clustering
         # Placeholder: local smoothness measure
@@ -689,10 +619,7 @@ class TSHVGDegreeEntropyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "network", "hvg", "entropy", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=8, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper HVG degree entropy
         # Placeholder: distribution entropy proxy
@@ -711,10 +638,7 @@ class TSHVGForwardBackwardAsymmetryPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "network", "hvg", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=8, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper forward/backward degree asymmetry
         # Placeholder: trend asymmetry
@@ -735,10 +659,7 @@ class TSHVGMotifEntropyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "network", "hvg", "motif", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper motif detection and entropy
         # Placeholder: pattern entropy proxy
@@ -808,10 +729,7 @@ class TSIndustryLiquidityBetaPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "regression", "liquidity", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, industry_liquidity, window, **kwargs):
         # Rolling beta = cov(feature, industry) / var(industry)
         cov = (feature * industry_liquidity).rolling_mean(window) - \
@@ -832,10 +750,7 @@ class TSMarketLiquidityBetaPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "regression", "liquidity", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, market_liquidity, window, **kwargs):
         # Rolling beta
         cov = (feature * market_liquidity).rolling_mean(window) - \
@@ -860,10 +775,7 @@ class TSIntervalExplorationEfficiencyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "geometry", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper interval exploration tracking
         # Placeholder: range coverage
@@ -883,10 +795,7 @@ class TSIntervalNestingDepthPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "geometry", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper interval nesting analysis
         # Placeholder: volatility regime count
@@ -905,11 +814,7 @@ class TSIntervalOccupancyEntropyPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "entropy", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-        "n_bins": ParamSpec(dtype=int, min=3, max=20, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, n_bins=10, **kwargs):
         # TODO: Implement proper binning and entropy calculation
         # Placeholder: normalized spread
@@ -928,10 +833,7 @@ class TSIntervalOccupancyModeDistancePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "geometry", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement mode detection
         # Placeholder: distance from mean
@@ -950,10 +852,7 @@ class TSIntervalOverlapConnectedComponentRatioPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "graph", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement interval overlap graph analysis
         # Placeholder: regime fragmentation proxy
@@ -972,10 +871,7 @@ class TSIntervalUnionCoveragePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "geometry", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Range covered
         return feature.rolling_max(window) - feature.rolling_min(window)
@@ -997,10 +893,7 @@ class TSJointEnergyShiftPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "distribution", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper joint energy statistic
         # Placeholder: squared moment shift
@@ -1024,10 +917,7 @@ class TSJumpBipowerPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "jumps", "volatility", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Bipower variation: sum of products of consecutive absolute returns
         abs_ret = feature.diff().abs()
@@ -1047,9 +937,7 @@ class TSKMDiffusionGradientPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "stochastic", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper Kramers-Moyal expansion
@@ -1075,10 +963,7 @@ class TSDeviationFromMeanPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "deviation", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Absolute deviation from rolling mean
         return (feature - feature.rolling_mean(window)).abs()
@@ -1096,9 +981,7 @@ class TSKMQuasipotentialDepthPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "stochastic", "stability", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement quasipotential calculation
@@ -1118,10 +1001,7 @@ class TSKramersMoyalDiffusionPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "stochastic", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # KM diffusion: local variance of increments
         return (feature.diff() ** 2).rolling_mean(window)
@@ -1158,9 +1038,7 @@ class TSKramersMoyalLocalStabilityPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "stochastic", "stability", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement drift gradient
@@ -1185,10 +1063,7 @@ class TSKSShiftPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "distribution", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper KS test between windows
         # Placeholder: quantile shift
@@ -1208,10 +1083,7 @@ class TSLKurtosisPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "moments", "robust", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper L-moments
         # Placeholder: robust kurtosis proxy
@@ -1234,10 +1106,7 @@ class TSLSkewnessPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "moments", "robust", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper L-moments
         # Placeholder: robust skewness proxy
@@ -1263,11 +1132,7 @@ class TSLagOfPeakCorrPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "autocorrelation", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, max=50, param_role=ParamRole.ECONOMIC),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, max_lag=10, **kwargs):
         # TODO: Implement proper lag search
         # Placeholder: fixed lag-1 correlation
@@ -1286,11 +1151,7 @@ class TSLaggedMutualInformationPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "information", "pit_safe"],
     )
-    metadata.param_specs = {
-        "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, lag, window, **kwargs):
         # TODO: Implement proper MI estimation
         # Placeholder: squared correlation
@@ -1314,9 +1175,7 @@ class TSLempelZivComplexityPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "complexity", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper LZ76 complexity
@@ -1336,10 +1195,7 @@ class TSLevelShiftScorePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "breakpoint", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # TODO: Implement proper CUSUM or likelihood ratio test
         # Placeholder: deviation from long-term mean
@@ -1364,10 +1220,7 @@ class TSLeverageEffectPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "volatility", "asymmetry", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Pair r[t-1] with volatility known at t: the PIT-safe historical form
         # of corr(r[tau], vol[tau+1]).
@@ -1396,11 +1249,7 @@ class TSLineConvergencePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "trend", "pit_safe"],
     )
-    metadata.param_specs = {
-        "short_window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-        "long_window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, short_window, long_window, **kwargs):
         # Convergence: rate of change of spread
         short_trend = feature.rolling_mean(short_window)
@@ -1421,11 +1270,7 @@ class TSLineParallelismPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "trend", "pit_safe"],
     )
-    metadata.param_specs = {
-        "short_window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-        "long_window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, short_window, long_window, **kwargs):
         # Parallelism: ratio of slopes
         short_slope = feature.rolling_mean(short_window).diff()
@@ -1449,11 +1294,7 @@ class TSLoMackinlayVRPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "random_walk", "pit_safe"],
     )
-    metadata.param_specs = {
-        "q": ParamSpec(dtype=int, min=2, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, q, window, **kwargs):
         # VR(q) = Var(q-period return) / (q * Var(1-period return))
         ret_1 = feature.diff()
@@ -1475,11 +1316,7 @@ class TSLoMackinlayZPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "random_walk", "pit_safe"],
     )
-    metadata.param_specs = {
-        "q": ParamSpec(dtype=int, min=2, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, q, window, **kwargs):
         # Z = (VR - 1) / sqrt(asymptotic variance)
         ret_1 = feature.diff()
@@ -1517,10 +1354,7 @@ class TSLocalLyapunovExponentPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "chaos", "nonlinear", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, **kwargs):
         # Placeholder: volatility expansion rate (NOT true Lyapunov exponent)
         vol = feature.rolling_std(window)
@@ -1539,12 +1373,7 @@ class TSLowerTailCoexceedanceProbabilityPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "tail_dependence", "pit_safe"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.ECONOMIC),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, threshold, lag, window, **kwargs):
         # Joint exceedance probability
         exceed_t = (feature < threshold).cast(pl.Int32)
@@ -1578,12 +1407,7 @@ class TSMarkovCommittorPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "markov", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "lower_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "upper_threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, lower_threshold, upper_threshold, window, **kwargs):
         # Placeholder: normalized position in band (NOT true committor probability)
         position = (feature - lower_threshold) / (upper_threshold - lower_threshold + 1e-8)
@@ -1610,10 +1434,7 @@ class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "markov", "entropy", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "n_bins": ParamSpec(dtype=int, min=3, max=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, n_bins=5, **kwargs):
         # Placeholder: directional bias (NOT true entropy production)
@@ -1642,10 +1463,7 @@ class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "markov", "pit_safe", "research_only"],
     )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, threshold, window, **kwargs):
         # Placeholder: inverse crossing rate (NOT true MFPT)
@@ -1672,11 +1490,7 @@ class TSLag1AutocorrPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "autocorrelation", "persistence", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "n_bins": ParamSpec(dtype=int, min=3, max=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
-
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
     def _calculate_series(self, feature, window, n_bins=5, **kwargs):
         # Lag-1 autocorrelation
         return feature.rolling_corr(feature.shift(1), window_size=window)

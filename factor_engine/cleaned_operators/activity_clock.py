@@ -441,6 +441,9 @@ def _register() -> None:
         OperatorRegistry.register(
             _PolarsOp(), canonical=canonical, backend="polars",
             source="activity_clock_polars", backend_explicit=True,
+            replace=True,
+            expected_old_source="factor_dsl_np",
+            replacement_reason="Consolidating polars native operators into activity_clock_polars",
         )
 
     import cleaned_operators.operator_surface as _surface

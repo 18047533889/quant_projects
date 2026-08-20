@@ -122,7 +122,7 @@ def _forward_fill_panel(
 
 
 # canonical=dropna backend=pandas_numpy selected=dropna source=data_handling/missing_values.py
-@register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np", status="research")
+@register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np", status="research", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class DropNA(SeriesOperator):
     """删除缺失值"""
 
@@ -142,7 +142,7 @@ class DropNA(SeriesOperator):
 
 
 # canonical=ewm backend=pandas_numpy selected=ewm source=data_handling/window_ops.py
-@register_operator(name="ewm", category="data_handling", business_category="data_cleaning", canonical="ewm", source="factor_dsl_np")
+@register_operator(name="ewm", category="data_handling", business_category="data_cleaning", canonical="ewm", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWM(SeriesOperator):
     """指数加权移动"""
 
@@ -162,7 +162,7 @@ class EWM(SeriesOperator):
 
 
 # canonical=ewm_corr backend=pandas_numpy selected=ewm_corr source=data_handling/window_ops.py
-@register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_np", backend="pandas_numpy")
+@register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_np", backend="pandas_numpy", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWMCorr(SeriesOperator):
     """指数加权相关系数"""
     metadata = OperatorMetadata(
@@ -184,7 +184,7 @@ class EWMCorr(SeriesOperator):
 
 
 # canonical=ewm_cov backend=pandas_numpy selected=ewm_cov source=data_handling/window_ops.py
-@register_operator(name="ewm_cov", category="data_handling", business_category="data_cleaning", canonical="ewm_cov", source="factor_dsl_np", backend="pandas_numpy")
+@register_operator(name="ewm_cov", category="data_handling", business_category="data_cleaning", canonical="ewm_cov", source="factor_dsl_np", backend="pandas_numpy", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWMCov(SeriesOperator):
     """指数加权协方差"""
     metadata = OperatorMetadata(
@@ -204,7 +204,7 @@ class EWMCov(SeriesOperator):
 
 
 # canonical=ewm_mean backend=pandas_numpy selected=ewm_mean source=data_handling/window_ops.py
-@register_operator(name="ewm_mean", category="data_handling", business_category="data_cleaning", canonical="ewm_mean", source="factor_dsl_np")
+@register_operator(name="ewm_mean", category="data_handling", business_category="data_cleaning", canonical="ewm_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWMMean(SeriesOperator):
     """指数移动平均"""
 
@@ -224,7 +224,7 @@ class EWMMean(SeriesOperator):
 
 
 # canonical=ewm_std backend=pandas_numpy selected=ewm_std source=data_handling/window_ops.py
-@register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_np")
+@register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWMStd(SeriesOperator):
     """EW标准差"""
 
@@ -244,7 +244,7 @@ class EWMStd(SeriesOperator):
 
 
 # canonical=ewm_var backend=pandas_numpy selected=ewm_var source=data_handling/window_ops.py
-@register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_np")
+@register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class EWMVar(SeriesOperator):
     """指数加权方差"""
     metadata = OperatorMetadata(
@@ -263,7 +263,7 @@ class EWMVar(SeriesOperator):
 
 
 # canonical=expanding_max backend=pandas_numpy selected=expanding_max source=data_handling/window_ops.py
-@register_operator(name="expanding_max", category="data_handling", business_category="data_cleaning", canonical="expanding_max", source="factor_dsl_np")
+@register_operator(name="expanding_max", category="data_handling", business_category="data_cleaning", canonical="expanding_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingMax(SeriesOperator):
     """扩展窗口最大值"""
     metadata = OperatorMetadata(
@@ -282,7 +282,7 @@ class ExpandingMax(SeriesOperator):
 
 
 # canonical=expanding_mean backend=pandas_numpy selected=expanding_mean source=data_handling/window_ops.py
-@register_operator(name="expanding_mean", category="data_handling", business_category="data_cleaning", canonical="expanding_mean", source="factor_dsl_np")
+@register_operator(name="expanding_mean", category="data_handling", business_category="data_cleaning", canonical="expanding_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingMean(SeriesOperator):
     """扩展窗口均值"""
     metadata = OperatorMetadata(
@@ -316,7 +316,7 @@ class ExpandingMean(SeriesOperator):
 
 
 # canonical=expanding_min backend=pandas_numpy selected=expanding_min source=data_handling/window_ops.py
-@register_operator(name="expanding_min", category="data_handling", business_category="data_cleaning", canonical="expanding_min", source="factor_dsl_np")
+@register_operator(name="expanding_min", category="data_handling", business_category="data_cleaning", canonical="expanding_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingMin(SeriesOperator):
     """扩展窗口最小值"""
     metadata = OperatorMetadata(
@@ -335,7 +335,7 @@ class ExpandingMin(SeriesOperator):
 
 
 # canonical=expanding_rank backend=pandas_numpy selected=expanding_rank source=data_handling/window_ops.py
-@register_operator(name="expanding_rank", category="data_handling", business_category="data_cleaning", canonical="expanding_rank", source="factor_dsl_np")
+@register_operator(name="expanding_rank", category="data_handling", business_category="data_cleaning", canonical="expanding_rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingRank(SeriesOperator):
     """扩展窗口排名（当前值在历史中的百分位排名）"""
     metadata = OperatorMetadata(
@@ -354,7 +354,7 @@ class ExpandingRank(SeriesOperator):
 
 
 # canonical=expanding_std backend=pandas_numpy selected=expanding_std source=data_handling/window_ops.py
-@register_operator(name="expanding_std", category="data_handling", business_category="data_cleaning", canonical="expanding_std", source="factor_dsl_np")
+@register_operator(name="expanding_std", category="data_handling", business_category="data_cleaning", canonical="expanding_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingStd(SeriesOperator):
     """扩展窗口标准差"""
     metadata = OperatorMetadata(
@@ -373,7 +373,7 @@ class ExpandingStd(SeriesOperator):
 
 
 # canonical=expanding_sum backend=pandas_numpy selected=expanding_sum source=data_handling/window_ops.py
-@register_operator(name="expanding_sum", category="data_handling", business_category="data_cleaning", canonical="expanding_sum", source="factor_dsl_np")
+@register_operator(name="expanding_sum", category="data_handling", business_category="data_cleaning", canonical="expanding_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpandingSum(SeriesOperator):
     """扩展窗口求和"""
     metadata = OperatorMetadata(
@@ -405,7 +405,7 @@ class ExpandingSum(SeriesOperator):
 
 
 # canonical=ffill backend=pandas_numpy selected=ffill source=data_handling/missing_values.py
-@register_operator(name="ffill", category="data_handling", business_category="data_cleaning", canonical="ffill", source="factor_dsl_np")
+@register_operator(name="ffill", category="data_handling", business_category="data_cleaning", canonical="ffill", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FillForward(SeriesOperator):
     """前向填充（受字段前向填充许可门控）"""
 
@@ -444,7 +444,7 @@ class FillForward(SeriesOperator):
 
 
 # canonical=fillna backend=pandas_numpy selected=fillna source=data_handling/missing_values.py
-@register_operator(name="fillna", category="data_handling", business_category="data_cleaning", canonical="fillna", source="factor_dsl_np")
+@register_operator(name="fillna", category="data_handling", business_category="data_cleaning", canonical="fillna", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FillNA(SeriesOperator):
     """缺失值填充"""
 
@@ -497,7 +497,7 @@ class FillNA(SeriesOperator):
 
 
 # canonical=fillna_const backend=pandas_numpy selected=fillna_const source=data_handling/missing_values.py
-@register_operator(name="fillna_const", category="data_handling", business_category="data_cleaning", canonical="fillna_const", source="factor_dsl_np")
+@register_operator(name="fillna_const", category="data_handling", business_category="data_cleaning", canonical="fillna_const", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FillNAConst(SeriesOperator):
     """常量填充"""
 
@@ -517,7 +517,7 @@ class FillNAConst(SeriesOperator):
 
 
 # canonical=causal_linear_extrapolate backend=pandas_numpy source=data_handling/missing_values.py
-@register_operator(name="causal_linear_extrapolate", category="data_handling", business_category="data_cleaning", canonical="causal_linear_extrapolate", source="factor_dsl_np", status="research")
+@register_operator(name="causal_linear_extrapolate", category="data_handling", business_category="data_cleaning", canonical="causal_linear_extrapolate", source="factor_dsl_np", status="research", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CausalLinearExtrapolate(SeriesOperator):
     """仅使用历史已知点做线性外推。"""
     metadata = OperatorMetadata(
@@ -536,7 +536,7 @@ class CausalLinearExtrapolate(SeriesOperator):
 
 
 # canonical=is_inf backend=pandas_numpy selected=is_inf source=data_handling/missing_values.py
-@register_operator(name="is_inf", category="data_handling", business_category="data_cleaning", canonical="is_inf", source="factor_dsl_np")
+@register_operator(name="is_inf", category="data_handling", business_category="data_cleaning", canonical="is_inf", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsInf(SeriesOperator):
     """判断是否为无穷"""
 
@@ -558,7 +558,7 @@ class IsInf(SeriesOperator):
 
 
 # canonical=is_nan backend=pandas_numpy selected=is_nan source=data_handling/missing_values.py
-@register_operator(name="is_nan", category="data_handling", business_category="data_cleaning", canonical="is_nan", source="factor_dsl_np")
+@register_operator(name="is_nan", category="data_handling", business_category="data_cleaning", canonical="is_nan", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsNaN(SeriesOperator):
     """判断是否为NaN"""
 
@@ -581,7 +581,7 @@ class IsNaN(SeriesOperator):
 
 
 # canonical=is_null backend=pandas_numpy
-@register_operator(name="is_null", category="data_handling", business_category="data_cleaning", canonical="is_null", source="factor_dsl_np")
+@register_operator(name="is_null", category="data_handling", business_category="data_cleaning", canonical="is_null", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsNull(SeriesOperator):
     """判断是否为 NULL/缺失。"""
 
@@ -600,7 +600,7 @@ class IsNull(SeriesOperator):
 
 
 # canonical=is_not_null backend=pandas_numpy
-@register_operator(name="is_not_null", category="data_handling", business_category="data_cleaning", canonical="is_not_null", source="factor_dsl_np")
+@register_operator(name="is_not_null", category="data_handling", business_category="data_cleaning", canonical="is_not_null", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsNotNull(SeriesOperator):
     """判断是否非 NULL。"""
 
@@ -619,7 +619,7 @@ class IsNotNull(SeriesOperator):
 
 
 # canonical=is_infinite backend=pandas_numpy
-@register_operator(name="is_infinite", category="data_handling", business_category="data_cleaning", canonical="is_infinite", source="factor_dsl_np")
+@register_operator(name="is_infinite", category="data_handling", business_category="data_cleaning", canonical="is_infinite", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsInfinite(SeriesOperator):
     """判断是否为 ±Inf（NULL/NaN/有限 → 0）。"""
 
@@ -661,7 +661,7 @@ def _nonfinite_to_num(arr: np.ndarray, num: float) -> np.ndarray:
 
 
 # canonical=nan_to_num backend=pandas_numpy selected=nan_to_num source=data_handling/missing_values.py
-@register_operator(name="nan_to_num", category="data_handling", business_category="data_cleaning", canonical="nan_to_num", source="factor_dsl_np")
+@register_operator(name="nan_to_num", category="data_handling", business_category="data_cleaning", canonical="nan_to_num", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class NaNToNum(SeriesOperator):
     """NaN转数值（仅 NaN；±Inf 透传）"""
 
@@ -684,7 +684,7 @@ class NaNToNum(SeriesOperator):
 
 
 # canonical=nonfinite_to_num backend=pandas_numpy
-@register_operator(name="nonfinite_to_num", category="data_handling", business_category="data_cleaning", canonical="nonfinite_to_num", source="factor_dsl_np", status="research")
+@register_operator(name="nonfinite_to_num", category="data_handling", business_category="data_cleaning", canonical="nonfinite_to_num", source="factor_dsl_np", status="research", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class NonFiniteToNum(SeriesOperator):
     """NaN 与 ±Inf 全部转为 num（旧 nan_to_num 行为，显式命名）。"""
 
@@ -706,7 +706,7 @@ class NonFiniteToNum(SeriesOperator):
 
 
 # canonical=window_max backend=pandas_numpy selected=window_max source=data_handling/window_ops.py
-@register_operator(name="window_max", category="data_handling", business_category="data_cleaning", canonical="window_max", source="factor_dsl_np")
+@register_operator(name="window_max", category="data_handling", business_category="data_cleaning", canonical="window_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WindowMax(SeriesOperator):
     """窗口最大值"""
 
@@ -726,7 +726,7 @@ class WindowMax(SeriesOperator):
 
 
 # canonical=window_mean backend=pandas_numpy selected=window_mean source=data_handling/window_ops.py
-@register_operator(name="window_mean", category="data_handling", business_category="data_cleaning", canonical="window_mean", source="factor_dsl_np")
+@register_operator(name="window_mean", category="data_handling", business_category="data_cleaning", canonical="window_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WindowMean(SeriesOperator):
     """窗口均值"""
 
@@ -746,7 +746,7 @@ class WindowMean(SeriesOperator):
 
 
 # canonical=window_min backend=pandas_numpy selected=window_min source=data_handling/window_ops.py
-@register_operator(name="window_min", category="data_handling", business_category="data_cleaning", canonical="window_min", source="factor_dsl_np")
+@register_operator(name="window_min", category="data_handling", business_category="data_cleaning", canonical="window_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WindowMin(SeriesOperator):
     """窗口最小值"""
 
@@ -766,7 +766,7 @@ class WindowMin(SeriesOperator):
 
 
 # canonical=window_std backend=pandas_numpy selected=window_std source=data_handling/window_ops.py
-@register_operator(name="window_std", category="data_handling", business_category="data_cleaning", canonical="window_std", source="factor_dsl_np")
+@register_operator(name="window_std", category="data_handling", business_category="data_cleaning", canonical="window_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WindowStd(SeriesOperator):
     """窗口标准差"""
 
@@ -786,7 +786,7 @@ class WindowStd(SeriesOperator):
 
 
 # canonical=window_sum backend=pandas_numpy selected=window_sum source=data_handling/window_ops.py
-@register_operator(name="window_sum", category="data_handling", business_category="data_cleaning", canonical="window_sum", source="factor_dsl_np")
+@register_operator(name="window_sum", category="data_handling", business_category="data_cleaning", canonical="window_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WindowSum(SeriesOperator):
     """窗口求和"""
 

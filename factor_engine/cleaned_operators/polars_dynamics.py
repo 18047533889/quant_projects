@@ -83,6 +83,9 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         business_category="state_dynamics",
         canonical=canonical,
         source="polars_dynamics",
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into polars_dynamics",
     )(cls)
     return cls
 

@@ -25,7 +25,7 @@ from cleaned_operators.base import (
 )
 
 
-@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="deprecated")
+@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="deprecated", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LqtpTtmOp(SeriesOperator):
     """Deprecated 滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期。
 
@@ -48,7 +48,7 @@ class LqtpTtmOp(SeriesOperator):
         return compute_ttm(x, fiscal_quarter)
 
 
-@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="deprecated")
+@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="deprecated", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LqtpQuarterOp(SeriesOperator):
     """Deprecated 累计值转单季度；可选 fiscal_quarter。
 
@@ -70,7 +70,7 @@ class LqtpQuarterOp(SeriesOperator):
         return compute_quarter(x, fiscal_quarter)
 
 
-@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="deprecated")
+@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="deprecated", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LqtpYoyOp(SeriesOperator):
     """Deprecated 同比增速；默认 lag=4 行。
 
@@ -111,7 +111,7 @@ class LqtpYoyOp(SeriesOperator):
     canonical="operating_margin",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class OperatingMarginOp(TwoVarOperator):
     """营业利润率：operating_income / revenue（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(
@@ -137,7 +137,7 @@ class OperatingMarginOp(TwoVarOperator):
     canonical="current_ratio",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CurrentRatioOp(TwoVarOperator):
     """流动比率：current_assets / current_liabilities（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(
@@ -169,7 +169,7 @@ class CurrentRatioOp(TwoVarOperator):
     canonical="quick_ratio",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class QuickRatioOp(SeriesOperator):
     """速动比率：(current_assets - inventory) / current_liabilities"""
     metadata = OperatorMetadata(
@@ -210,7 +210,7 @@ class QuickRatioOp(SeriesOperator):
     canonical="debt_to_equity",
     source="factor_dsl_np",
     status="experimental",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class DebtToEquityOp(TwoVarOperator):
     """负债权益比：total_debt / total_equity（分母为 0 时 NaN）"""
     metadata = OperatorMetadata(

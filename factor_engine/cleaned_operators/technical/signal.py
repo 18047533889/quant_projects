@@ -113,7 +113,7 @@ def _compute_dmi_adx(
 # ---------------------------------------------------------------------------
 
 # canonical=ADX backend=pandas_numpy selected=ADX source=financial/__init__.py
-@register_operator(name="ADX", category="financial", business_category="technical_signal", canonical="ADX", source="factor_dsl_np")
+@register_operator(name="ADX", category="financial", business_category="technical_signal", canonical="ADX", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ADX(SeriesOperator):
     """平均趋向指数"""
     metadata = OperatorMetadata(
@@ -135,7 +135,7 @@ class ADX(SeriesOperator):
 
 
 # canonical=ADXR backend=pandas_numpy selected=ADXR source=financial/__init__.py
-@register_operator(name="ADXR", category="financial", business_category="technical_signal", canonical="ADXR", source="factor_dsl_np")
+@register_operator(name="ADXR", category="financial", business_category="technical_signal", canonical="ADXR", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ADXR(SeriesOperator):
     """平滑平均趋向指数"""
     metadata = OperatorMetadata(
@@ -160,7 +160,7 @@ class ADXR(SeriesOperator):
 
 
 # canonical=AROON backend=pandas_numpy selected=AROON source=financial/__init__.py
-@register_operator(name="AROON", category="financial", business_category="technical_signal", canonical="AROON", source="factor_dsl_np")
+@register_operator(name="AROON", category="financial", business_category="technical_signal", canonical="AROON", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Aroon(SeriesOperator):
     """Aroon指标（Aroon Up - Aroon Down）"""
     metadata = OperatorMetadata(
@@ -186,7 +186,7 @@ class Aroon(SeriesOperator):
 
 
 # canonical=AROON_down backend=pandas_numpy selected=AROON_down source=financial/__init__.py
-@register_operator(name="AROON_down", category="financial", business_category="technical_signal", canonical="AROON_down", source="factor_dsl_np")
+@register_operator(name="AROON_down", category="financial", business_category="technical_signal", canonical="AROON_down", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class AroonDown(SeriesOperator):
     """Aroon下降指标"""
     metadata = OperatorMetadata(
@@ -209,7 +209,7 @@ class AroonDown(SeriesOperator):
 
 
 # canonical=AROON_up backend=pandas_numpy selected=AROON_up source=financial/__init__.py
-@register_operator(name="AROON_up", category="financial", business_category="technical_signal", canonical="AROON_up", source="factor_dsl_np")
+@register_operator(name="AROON_up", category="financial", business_category="technical_signal", canonical="AROON_up", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class AroonUp(SeriesOperator):
     """Aroon上升指标"""
     metadata = OperatorMetadata(
@@ -232,7 +232,7 @@ class AroonUp(SeriesOperator):
 
 
 # canonical=ATR backend=pandas_numpy selected=ATR source=financial/__init__.py
-@register_operator(name="ATR", category="financial", business_category="technical_signal", canonical="ATR", source="factor_dsl_np")
+@register_operator(name="ATR", category="financial", business_category="technical_signal", canonical="ATR", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ATR(SeriesOperator):
     """平均真实波幅"""
     metadata = OperatorMetadata(
@@ -259,7 +259,7 @@ class ATR(SeriesOperator):
     business_category="technical_signal",
     canonical="ATR_WILDER",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ATRWilder(SeriesOperator):
     """Wilder 平均真实波幅"""
     metadata = OperatorMetadata(
@@ -278,7 +278,7 @@ class ATRWilder(SeriesOperator):
 
 
 # canonical=BollingerBands backend=pandas_numpy selected=BollingerBands source=financial/__init__.py
-@register_operator(name="BollingerBands", category="financial", business_category="technical_signal", canonical="BollingerBands", source="factor_dsl_np")
+@register_operator(name="BollingerBands", category="financial", business_category="technical_signal", canonical="BollingerBands", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class BollingerBands(SeriesOperator):
     """布林带中轨（移动平均）"""
     metadata = OperatorMetadata(
@@ -297,7 +297,7 @@ class BollingerBands(SeriesOperator):
 
 
 # canonical=BollingerLower backend=pandas_numpy selected=BollingerLower source=financial/__init__.py
-@register_operator(name="BollingerLower", category="financial", business_category="technical_signal", canonical="BollingerLower", source="factor_dsl_np")
+@register_operator(name="BollingerLower", category="financial", business_category="technical_signal", canonical="BollingerLower", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class BollingerLower(SeriesOperator):
     """布林带下轨"""
     metadata = OperatorMetadata(
@@ -318,7 +318,7 @@ class BollingerLower(SeriesOperator):
 
 
 # canonical=BollingerUpper backend=pandas_numpy selected=BollingerUpper source=financial/__init__.py
-@register_operator(name="BollingerUpper", category="financial", business_category="technical_signal", canonical="BollingerUpper", source="factor_dsl_np")
+@register_operator(name="BollingerUpper", category="financial", business_category="technical_signal", canonical="BollingerUpper", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class BollingerUpper(SeriesOperator):
     """布林带上轨"""
     metadata = OperatorMetadata(
@@ -339,7 +339,7 @@ class BollingerUpper(SeriesOperator):
 
 
 # canonical=CCI backend=pandas_numpy selected=CCI source=financial/__init__.py
-@register_operator(name="CCI", category="financial", business_category="technical_signal", canonical="CCI", source="factor_dsl_np")
+@register_operator(name="CCI", category="financial", business_category="technical_signal", canonical="CCI", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CCI(SeriesOperator):
     """商品通道指数"""
     metadata = OperatorMetadata(
@@ -361,7 +361,7 @@ class CCI(SeriesOperator):
 
 
 # canonical=DPO backend=pandas_numpy selected=DPO source=financial/__init__.py
-@register_operator(name="DPO", category="financial", business_category="technical_signal", canonical="DPO", source="factor_dsl_np")
+@register_operator(name="DPO", category="financial", business_category="technical_signal", canonical="DPO", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class DPO(SeriesOperator):
     """去趋势价格振荡器"""
     metadata = OperatorMetadata(
@@ -381,7 +381,7 @@ class DPO(SeriesOperator):
 
 
 # canonical=KAMA backend=pandas_numpy selected=KAMA source=financial/__init__.py
-@register_operator(name="KAMA", category="financial", business_category="technical_signal", canonical="KAMA", source="factor_dsl_np")
+@register_operator(name="KAMA", category="financial", business_category="technical_signal", canonical="KAMA", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class KAMA(SeriesOperator):
     """考夫曼自适应移动平均"""
     metadata = OperatorMetadata(
@@ -433,7 +433,7 @@ class KAMA(SeriesOperator):
 
 
 # canonical=MACD backend=pandas_numpy selected=MACD source=financial/__init__.py
-@register_operator(name="MACD", category="financial", business_category="technical_signal", canonical="MACD", source="factor_dsl_np")
+@register_operator(name="MACD", category="financial", business_category="technical_signal", canonical="MACD", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MACD(SeriesOperator):
     """MACD指标"""
     metadata = OperatorMetadata(
@@ -457,7 +457,7 @@ class MACD(SeriesOperator):
 
 
 # canonical=MACD_hist backend=pandas_numpy selected=MACD_hist source=financial/__init__.py
-@register_operator(name="MACD_hist", category="financial", business_category="technical_signal", canonical="MACD_hist", source="factor_dsl_np")
+@register_operator(name="MACD_hist", category="financial", business_category="technical_signal", canonical="MACD_hist", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MACDHist(SeriesOperator):
     """MACD柱状图（MACD线 - 信号线）"""
     metadata = OperatorMetadata(
@@ -480,7 +480,7 @@ class MACDHist(SeriesOperator):
 
 
 # canonical=MACD_line backend=pandas_numpy selected=MACD_line source=financial/__init__.py
-@register_operator(name="MACD_line", category="financial", business_category="technical_signal", canonical="MACD_line", source="factor_dsl_np")
+@register_operator(name="MACD_line", category="financial", business_category="technical_signal", canonical="MACD_line", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MACDLine(SeriesOperator):
     """MACD线（快线EMA - 慢线EMA）"""
     metadata = OperatorMetadata(
@@ -516,7 +516,7 @@ class MACDLine(SeriesOperator):
 
 
 # canonical=MACD_signal backend=pandas_numpy selected=MACD_signal source=financial/__init__.py
-@register_operator(name="MACD_signal", category="financial", business_category="technical_signal", canonical="MACD_signal", source="factor_dsl_np")
+@register_operator(name="MACD_signal", category="financial", business_category="technical_signal", canonical="MACD_signal", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MACDSignal(SeriesOperator):
     """MACD信号线"""
     metadata = OperatorMetadata(
@@ -538,7 +538,7 @@ class MACDSignal(SeriesOperator):
 
 
 # canonical=MOM backend=pandas_numpy selected=MOM source=financial/__init__.py
-@register_operator(name="MOM", category="financial", business_category="technical_signal", canonical="MOM", source="factor_dsl_np")
+@register_operator(name="MOM", category="financial", business_category="technical_signal", canonical="MOM", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MOM(SeriesOperator):
     """动量指标"""
     metadata = OperatorMetadata(
@@ -559,7 +559,7 @@ class MOM(SeriesOperator):
 
 
 # canonical=OBV backend=pandas_numpy selected=OBV source=financial/__init__.py
-@register_operator(name="OBV", category="financial", business_category="technical_signal", canonical="OBV", source="factor_dsl_np")
+@register_operator(name="OBV", category="financial", business_category="technical_signal", canonical="OBV", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class OBV(SeriesOperator):
     """能量潮"""
     metadata = OperatorMetadata(
@@ -579,7 +579,7 @@ class OBV(SeriesOperator):
 
 
 # canonical=ROC backend=pandas_numpy selected=ROC source=financial/__init__.py
-@register_operator(name="ROC", category="financial", business_category="technical_signal", canonical="ROC", source="factor_dsl_np")
+@register_operator(name="ROC", category="financial", business_category="technical_signal", canonical="ROC", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ROC(SeriesOperator):
     """变动率指标"""
     metadata = OperatorMetadata(
@@ -603,7 +603,7 @@ class ROC(SeriesOperator):
 
 
 # canonical=RSI backend=pandas_numpy selected=RSI source=financial/__init__.py
-@register_operator(name="RSI", category="financial", business_category="technical_signal", canonical="RSI", source="factor_dsl_np")
+@register_operator(name="RSI", category="financial", business_category="technical_signal", canonical="RSI", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RSI(SeriesOperator):
     """相对强弱指数"""
     metadata = OperatorMetadata(
@@ -634,7 +634,7 @@ class RSI(SeriesOperator):
     business_category="technical_signal",
     canonical="RSI_WILDER",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RSIWilder(SeriesOperator):
     """Wilder 相对强弱指数"""
     metadata = OperatorMetadata(
@@ -655,7 +655,7 @@ class RSIWilder(SeriesOperator):
 
 
 # canonical=StochasticD backend=pandas_numpy selected=StochasticD source=financial/__init__.py
-@register_operator(name="StochasticD", category="financial", business_category="technical_signal", canonical="StochasticD", source="factor_dsl_np")
+@register_operator(name="StochasticD", category="financial", business_category="technical_signal", canonical="StochasticD", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class StochasticD(SeriesOperator):
     """随机指标%D（%K的移动平均）"""
     metadata = OperatorMetadata(
@@ -677,7 +677,7 @@ class StochasticD(SeriesOperator):
 
 
 # canonical=StochasticK backend=pandas_numpy selected=StochasticK source=financial/__init__.py
-@register_operator(name="StochasticK", category="financial", business_category="technical_signal", canonical="StochasticK", source="factor_dsl_np")
+@register_operator(name="StochasticK", category="financial", business_category="technical_signal", canonical="StochasticK", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class StochasticK(SeriesOperator):
     """随机指标%K"""
     metadata = OperatorMetadata(
@@ -698,7 +698,7 @@ class StochasticK(SeriesOperator):
 
 
 # canonical=TRIX backend=pandas_numpy selected=TRIX source=financial/__init__.py
-@register_operator(name="TRIX", category="financial", business_category="technical_signal", canonical="TRIX", source="factor_dsl_np")
+@register_operator(name="TRIX", category="financial", business_category="technical_signal", canonical="TRIX", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class TRIX(SeriesOperator):
     """三重指数平滑移动平均变化率"""
     metadata = OperatorMetadata(
@@ -720,7 +720,7 @@ class TRIX(SeriesOperator):
 
 
 # canonical=WilliamsR backend=pandas_numpy selected=WilliamsR source=financial/__init__.py
-@register_operator(name="WilliamsR", category="financial", business_category="technical_signal", canonical="WilliamsR", source="factor_dsl_np")
+@register_operator(name="WilliamsR", category="financial", business_category="technical_signal", canonical="WilliamsR", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WilliamsR(SeriesOperator):
     """威廉指标%R"""
     metadata = OperatorMetadata(
@@ -766,7 +766,7 @@ class Clamp(SeriesOperator):
 
 
 # canonical=hump_decay backend=pandas_numpy selected=hump_decay source=signal/__init__.py
-@register_operator(name="hump_decay", category="signal", business_category="technical_signal", canonical="hump_decay", source="factor_dsl_np")
+@register_operator(name="hump_decay", category="signal", business_category="technical_signal", canonical="hump_decay", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class HumpDecay(SeriesOperator):
     """阈值衰减：仅当变化量绝对值超过hump时才更新值"""
     metadata = OperatorMetadata(
@@ -806,7 +806,7 @@ def _truthy_condition(condition: pd.Series | pd.DataFrame) -> pd.Series | pd.Dat
     return condition.notna() & (condition != 0)
 
 
-@register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_np")
+@register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IfElse(SeriesOperator):
     """条件选择"""
 
@@ -838,7 +838,7 @@ class IfElse(SeriesOperator):
 
 
 # canonical=ifnan backend=pandas_numpy selected=ifnan source=signal/__init__.py
-@register_operator(name="ifnan", category="signal", business_category="technical_signal", canonical="ifnan", source="factor_dsl_np")
+@register_operator(name="ifnan", category="signal", business_category="technical_signal", canonical="ifnan", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IfNaN(SeriesOperator):
     """NaN替换"""
 
@@ -858,7 +858,7 @@ class IfNaN(SeriesOperator):
 
 
 # canonical=is_finite backend=pandas_numpy selected=is_finite source=signal/__init__.py
-@register_operator(name="is_finite", category="signal", business_category="technical_signal", canonical="is_finite", source="factor_dsl_np")
+@register_operator(name="is_finite", category="signal", business_category="technical_signal", canonical="is_finite", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class IsFinite(SeriesOperator):
     """判断有限"""
 
@@ -880,7 +880,7 @@ class IsFinite(SeriesOperator):
 
 
 # canonical=saturate backend=pandas_numpy selected=saturate source=signal/__init__.py
-@register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_np")
+@register_operator(name="saturate", category="signal", business_category="technical_signal", canonical="saturate", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Saturate(SeriesOperator):
     """饱和"""
 
@@ -900,7 +900,7 @@ class Saturate(SeriesOperator):
 
 
 # canonical=signed_log backend=pandas_numpy selected=signed_log source=signal/__init__.py
-@register_operator(name="signed_log", category="signal", business_category="technical_signal", canonical="signed_log", source="factor_dsl_np")
+@register_operator(name="signed_log", category="signal", business_category="technical_signal", canonical="signed_log", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SignedLog(SeriesOperator):
     """符号对数"""
 
@@ -920,7 +920,7 @@ class SignedLog(SeriesOperator):
 
 
 # canonical=signed_power backend=pandas_numpy selected=signed_power source=signal/__init__.py
-@register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_np")
+@register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SignedPower(SeriesOperator):
     """符号保持幂"""
 
@@ -940,7 +940,7 @@ class SignedPower(SeriesOperator):
 
 
 # canonical=trade_when backend=pandas_numpy selected=trade_when source=signal/__init__.py
-@register_operator(name="trade_when", category="signal", business_category="technical_signal", canonical="trade_when", source="factor_dsl_np")
+@register_operator(name="trade_when", category="signal", business_category="technical_signal", canonical="trade_when", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class TradeWhen(SeriesOperator):
     """条件信号：condition为真时返回signal，否则返回fallback"""
     metadata = OperatorMetadata(
@@ -968,7 +968,7 @@ class TradeWhen(SeriesOperator):
 
 
 # canonical=vp_weighted_price backend=pandas_numpy selected=vp_weighted_price source=signal/vpmacd_ops.py
-@register_operator(name="vp_weighted_price", category="signal", business_category="technical_signal", canonical="vp_weighted_price", source="factor_dsl_np")
+@register_operator(name="vp_weighted_price", category="signal", business_category="technical_signal", canonical="vp_weighted_price", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class VPWeightedPrice(SeriesOperator):
     """量价加权价格"""
 
@@ -1021,7 +1021,7 @@ class VPWeightedPrice(SeriesOperator):
 
 
 # canonical=vpmacd backend=pandas_numpy selected=vpmacd source=signal/vpmacd_ops.py
-@register_operator(name="vpmacd", category="signal", business_category="technical_signal", canonical="vpmacd", source="factor_dsl_np")
+@register_operator(name="vpmacd", category="signal", business_category="technical_signal", canonical="vpmacd", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class VPMACD(SeriesOperator):
     """VP-MACD（量价调整MACD）"""
 
@@ -1083,7 +1083,7 @@ class VPMACD(SeriesOperator):
 
 
 # canonical=vpmacd_signal backend=pandas_numpy selected=vpmacd_signal source=signal/vpmacd_ops.py
-@register_operator(name="vpmacd_signal", category="signal", business_category="technical_signal", canonical="vpmacd_signal", source="factor_dsl_np")
+@register_operator(name="vpmacd_signal", category="signal", business_category="technical_signal", canonical="vpmacd_signal", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class VPMACDSignal(SeriesOperator):
     """VP-MACD交易信号"""
 
@@ -1182,7 +1182,7 @@ class IfElse(SeriesOperator):
             return v1.where(truthy, v2)
         return np.where(truthy, v1, v2)
 
-@register_operator(name="where", category="signal", business_category="technical_signal", canonical="where", source="factor_dsl_np")
+@register_operator(name="where", category="signal", business_category="technical_signal", canonical="where", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Where(IfElse):
     """条件选择（if_else的别名）"""
 

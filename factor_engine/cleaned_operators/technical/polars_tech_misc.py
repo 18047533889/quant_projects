@@ -570,6 +570,9 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         source="polars_tech_misc",
         backend="polars",
         status="production",
+        replace=True,
+        expected_old_source="polars_native_technical_final",
+        replacement_reason="Consolidating polars native operators into polars_tech_misc",
     )(cls)
 
 

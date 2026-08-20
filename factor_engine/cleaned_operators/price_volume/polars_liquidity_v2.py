@@ -858,6 +858,9 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         source="polars_liquidity_v2",
         backend="polars",
         status="production",
+        replace=True,
+        expected_old_source="factor_dsl_np",
+        replacement_reason="Consolidating polars native operators into polars_liquidity_v2",
     )(cls)
 
 

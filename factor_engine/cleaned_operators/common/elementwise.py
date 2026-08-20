@@ -44,7 +44,7 @@ except ImportError:
     sp_stats = None  # type: ignore
 
 # canonical=abs backend=pandas_numpy selected=abs source=math/elementary.py
-@register_operator(name="abs", category="math", business_category="elementwise_math", canonical="abs", source="factor_dsl_np")
+@register_operator(name="abs", category="math", business_category="elementwise_math", canonical="abs", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Abs(SeriesOperator):
     """绝对值"""
 
@@ -66,7 +66,7 @@ class Abs(SeriesOperator):
 
 
 # canonical=acos backend=pandas_numpy selected=acos source=math/trigonometric.py
-@register_operator(name="acos", category="math", business_category="elementwise_math", canonical="acos", source="factor_dsl_np")
+@register_operator(name="acos", category="math", business_category="elementwise_math", canonical="acos", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Acos(SeriesOperator):
     """反余弦（定义域 [-1,1]，越界 → NaN）"""
 
@@ -93,7 +93,7 @@ class Acos(SeriesOperator):
 
 
 # canonical=arg backend=pandas_numpy selected=arg source=math/complex_ops.py
-@register_operator(name="arg", category="math", business_category="elementwise_math", canonical="arg", source="factor_dsl_np")
+@register_operator(name="arg", category="math", business_category="elementwise_math", canonical="arg", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Arg(SeriesOperator):
     """复数相位（弧度）"""
     metadata = OperatorMetadata(
@@ -113,7 +113,7 @@ class Arg(SeriesOperator):
 
 
 # canonical=asin backend=pandas_numpy selected=asin source=math/trigonometric.py
-@register_operator(name="asin", category="math", business_category="elementwise_math", canonical="asin", source="factor_dsl_np")
+@register_operator(name="asin", category="math", business_category="elementwise_math", canonical="asin", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Asin(SeriesOperator):
     """反正弦（定义域 [-1,1]，越界 → NaN）"""
 
@@ -142,7 +142,7 @@ class Asin(SeriesOperator):
 # R22-047..049: bounded-input inverse-trig building blocks.  Only correlation /
 # bounded-ratio / normalized-state inputs are legal (domain [-1,1]); out-of-range
 # values are NaN, identical to the generic asin semantics.
-@register_operator(name="asin_bounded", category="math", business_category="elementwise_math", canonical="asin_bounded", source="factor_dsl_np")
+@register_operator(name="asin_bounded", category="math", business_category="elementwise_math", canonical="asin_bounded", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class AsinBounded(SeriesOperator):
     """反正弦（bounded-input variant: only correlation / bounded-ratio / normalized-state [-1,1]）"""
 
@@ -165,7 +165,7 @@ class AsinBounded(SeriesOperator):
         return result.replace([np.inf, -np.inf], np.nan)
 
 
-@register_operator(name="acos_bounded", category="math", business_category="elementwise_math", canonical="acos_bounded", source="factor_dsl_np")
+@register_operator(name="acos_bounded", category="math", business_category="elementwise_math", canonical="acos_bounded", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class AcosBounded(SeriesOperator):
     """反余弦（bounded-input variant: only correlation / bounded-ratio / normalized-state [-1,1]）"""
 
@@ -190,7 +190,7 @@ class AcosBounded(SeriesOperator):
 
 
 # canonical=atan backend=pandas_numpy selected=atan source=math/trigonometric.py
-@register_operator(name="atan", category="math", business_category="elementwise_math", canonical="atan", source="factor_dsl_np")
+@register_operator(name="atan", category="math", business_category="elementwise_math", canonical="atan", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Atan(SeriesOperator):
     """反正切"""
 
@@ -210,7 +210,7 @@ class Atan(SeriesOperator):
 
 
 # canonical=atan2 backend=pandas_numpy selected=atan2 source=math/trigonometric.py
-@register_operator(name="atan2", category="math", business_category="elementwise_math", canonical="atan2", source="factor_dsl_np")
+@register_operator(name="atan2", category="math", business_category="elementwise_math", canonical="atan2", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Atan2(SeriesOperator):
     """坐标反正切"""
 
@@ -230,7 +230,7 @@ class Atan2(SeriesOperator):
 
 
 # canonical=blom_transform backend=pandas_numpy selected=blom_transform source=math/utility_ops.py
-@register_operator(name="blom_transform", category="math", business_category="elementwise_math", canonical="blom_transform", source="factor_dsl_np")
+@register_operator(name="blom_transform", category="math", business_category="elementwise_math", canonical="blom_transform", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class BlomTransform(SeriesOperator):
     """Blom变换（秩的逆正态CDF）"""
     metadata = OperatorMetadata(
@@ -260,7 +260,7 @@ class BlomTransform(SeriesOperator):
 
 
 # canonical=cbrt backend=pandas_numpy selected=cbrt source=math/elementary.py
-@register_operator(name="cbrt", category="math", business_category="elementwise_math", canonical="cbrt", source="factor_dsl_np")
+@register_operator(name="cbrt", category="math", business_category="elementwise_math", canonical="cbrt", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cbrt(SeriesOperator):
     """立方根"""
 
@@ -280,7 +280,7 @@ class Cbrt(SeriesOperator):
 
 
 # canonical=ceil backend=pandas_numpy selected=ceil source=math/rounding.py
-@register_operator(name="ceil", category="math", business_category="elementwise_math", canonical="ceil", source="factor_dsl_np")
+@register_operator(name="ceil", category="math", business_category="elementwise_math", canonical="ceil", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Ceil(SeriesOperator):
     """向上取整"""
 
@@ -300,7 +300,7 @@ class Ceil(SeriesOperator):
 
 
 # canonical=cap backend=pandas_numpy selected=clip source=math/utility_ops.py
-@register_operator(name="cap", category="math", business_category="elementwise_math", canonical="clip", source="factor_dsl_np")
+@register_operator(name="cap", category="math", business_category="elementwise_math", canonical="clip", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cap(SeriesOperator):
     """裁剪到 [lo, hi] 区间"""
     metadata = OperatorMetadata(
@@ -332,7 +332,7 @@ class Cap(SeriesOperator):
 
 
 # canonical=complex backend=pandas_numpy selected=complex source=math/complex_ops.py
-@register_operator(name="complex", category="math", business_category="elementwise_math", canonical="complex", source="factor_dsl_np")
+@register_operator(name="complex", category="math", business_category="elementwise_math", canonical="complex", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Complex(SeriesOperator):
     """构造复数DataFrame"""
     metadata = OperatorMetadata(
@@ -352,7 +352,7 @@ class Complex(SeriesOperator):
 
 
 # canonical=conj backend=pandas_numpy selected=conj source=math/complex_ops.py
-@register_operator(name="conj", category="math", business_category="elementwise_math", canonical="conj", source="factor_dsl_np")
+@register_operator(name="conj", category="math", business_category="elementwise_math", canonical="conj", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Conj(SeriesOperator):
     """复数共轭"""
     metadata = OperatorMetadata(
@@ -372,7 +372,7 @@ class Conj(SeriesOperator):
 
 
 # canonical=constant backend=pandas_numpy selected=constant source=math/utility_ops.py
-@register_operator(name="constant", category="math", business_category="elementwise_math", canonical="constant", source="factor_dsl_np")
+@register_operator(name="constant", category="math", business_category="elementwise_math", canonical="constant", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Constant(ScalarOperator):
     """返回常量值"""
     metadata = OperatorMetadata(
@@ -391,7 +391,7 @@ class Constant(ScalarOperator):
 
 
 # canonical=convolve backend=pandas_numpy selected=convolve source=math/fourier_ops.py
-@register_operator(name="convolve", category="math", business_category="elementwise_math", canonical="convolve", source="factor_dsl_np")
+@register_operator(name="convolve", category="math", business_category="elementwise_math", canonical="convolve", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Convolve(SeriesOperator):
     """卷积"""
     metadata = OperatorMetadata(
@@ -417,7 +417,7 @@ class Convolve(SeriesOperator):
 
 
 # canonical=correlate backend=pandas_numpy selected=correlate source=math/fourier_ops.py
-@register_operator(name="correlate", category="math", business_category="elementwise_math", canonical="correlate", source="factor_dsl_np")
+@register_operator(name="correlate", category="math", business_category="elementwise_math", canonical="correlate", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Correlate(SeriesOperator):
     """互相关"""
     metadata = OperatorMetadata(
@@ -443,7 +443,7 @@ class Correlate(SeriesOperator):
 
 
 # canonical=cos backend=pandas_numpy selected=cos source=math/trigonometric.py
-@register_operator(name="cos", category="math", business_category="elementwise_math", canonical="cos", source="factor_dsl_np")
+@register_operator(name="cos", category="math", business_category="elementwise_math", canonical="cos", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cos(SeriesOperator):
     """余弦"""
 
@@ -463,7 +463,7 @@ class Cos(SeriesOperator):
 
 
 # canonical=cosh backend=pandas_numpy selected=cosh source=math/trigonometric.py
-@register_operator(name="cosh", category="math", business_category="elementwise_math", canonical="cosh", source="factor_dsl_np")
+@register_operator(name="cosh", category="math", business_category="elementwise_math", canonical="cosh", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cosh(SeriesOperator):
     """双曲余弦"""
 
@@ -483,7 +483,7 @@ class Cosh(SeriesOperator):
 
 
 # canonical=cot backend=pandas_numpy selected=cot source=math/trigonometric.py
-@register_operator(name="cot", category="math", business_category="elementwise_math", canonical="cot", source="factor_dsl_np")
+@register_operator(name="cot", category="math", business_category="elementwise_math", canonical="cot", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cot(SeriesOperator):
     """余切"""
 
@@ -503,7 +503,7 @@ class Cot(SeriesOperator):
 
 
 # canonical=csc backend=pandas_numpy selected=csc source=math/trigonometric.py
-@register_operator(name="csc", category="math", business_category="elementwise_math", canonical="csc", source="factor_dsl_np")
+@register_operator(name="csc", category="math", business_category="elementwise_math", canonical="csc", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Csc(SeriesOperator):
     """余割"""
 
@@ -523,7 +523,7 @@ class Csc(SeriesOperator):
 
 
 # canonical=cube backend=pandas_numpy selected=cube source=math/utility_ops.py
-@register_operator(name="cube", category="math", business_category="elementwise_math", canonical="cube", source="factor_dsl_np")
+@register_operator(name="cube", category="math", business_category="elementwise_math", canonical="cube", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Cube(SeriesOperator):
     """返回x的立方（已弃用：请使用 power(x, 3)）。保留注册仅为兼容显式引用。"""
     metadata = OperatorMetadata(
@@ -542,7 +542,7 @@ class Cube(SeriesOperator):
 
 
 # canonical=cumulative_max backend=pandas_numpy selected=cumulative_max source=math/utility_ops.py
-@register_operator(name="cumulative_max", category="math", business_category="elementwise_math", canonical="cumulative_max", source="factor_dsl_np")
+@register_operator(name="cumulative_max", category="math", business_category="elementwise_math", canonical="cumulative_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CumulativeMax(SeriesOperator):
     """累计最大值"""
     metadata = OperatorMetadata(
@@ -561,7 +561,7 @@ class CumulativeMax(SeriesOperator):
 
 
 # canonical=cumulative_mean backend=pandas_numpy selected=cumulative_mean source=math/utility_ops.py
-@register_operator(name="cumulative_mean", category="math", business_category="elementwise_math", canonical="cumulative_mean", source="factor_dsl_np")
+@register_operator(name="cumulative_mean", category="math", business_category="elementwise_math", canonical="cumulative_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CumulativeMean(SeriesOperator):
     """累计均值"""
     metadata = OperatorMetadata(
@@ -580,7 +580,7 @@ class CumulativeMean(SeriesOperator):
 
 
 # canonical=cumulative_min backend=pandas_numpy selected=cumulative_min source=math/utility_ops.py
-@register_operator(name="cumulative_min", category="math", business_category="elementwise_math", canonical="cumulative_min", source="factor_dsl_np")
+@register_operator(name="cumulative_min", category="math", business_category="elementwise_math", canonical="cumulative_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CumulativeMin(SeriesOperator):
     """累计最小值"""
     metadata = OperatorMetadata(
@@ -599,7 +599,7 @@ class CumulativeMin(SeriesOperator):
 
 
 # canonical=decimate backend=pandas_numpy selected=decimate source=math/fourier_ops.py
-@register_operator(name="decimate", category="math", business_category="elementwise_math", canonical="decimate", source="factor_dsl_np")
+@register_operator(name="decimate", category="math", business_category="elementwise_math", canonical="decimate", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Decimate(SeriesOperator):
     """降采样"""
     metadata = OperatorMetadata(
@@ -633,7 +633,7 @@ class Decimate(SeriesOperator):
 
 
 # canonical=dft backend=pandas_numpy selected=dft source=math/fourier_ops.py
-@register_operator(name="dft", category="math", business_category="elementwise_math", canonical="dft", source="factor_dsl_np")
+@register_operator(name="dft", category="math", business_category="elementwise_math", canonical="dft", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Dft(SeriesOperator):
     """离散傅里叶变换"""
     metadata = OperatorMetadata(
@@ -655,7 +655,7 @@ class Dft(SeriesOperator):
 
 
 # canonical=eig backend=pandas_numpy selected=eig source=math/matrix_ops.py
-@register_operator(name="eig", category="math", business_category="elementwise_math", canonical="eig", source="factor_dsl_np")
+@register_operator(name="eig", category="math", business_category="elementwise_math", canonical="eig", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Eig(SeriesOperator):
     """特征值分解"""
     metadata = OperatorMetadata(
@@ -677,7 +677,7 @@ class Eig(SeriesOperator):
 
 
 # canonical=exp backend=pandas_numpy selected=exp source=math/elementary.py
-@register_operator(name="exp", category="math", business_category="elementwise_math", canonical="exp", source="factor_dsl_np")
+@register_operator(name="exp", category="math", business_category="elementwise_math", canonical="exp", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Exp(SeriesOperator):
     """指数函数（溢出 → ±Inf 保留，见 exp_overflow_policy）"""
 
@@ -701,7 +701,7 @@ class Exp(SeriesOperator):
 
 
 # canonical=exp_neg backend=pandas_numpy selected=exp_neg source=math/utility_ops.py
-@register_operator(name="exp_neg", category="math", business_category="elementwise_math", canonical="exp_neg", source="factor_dsl_np")
+@register_operator(name="exp_neg", category="math", business_category="elementwise_math", canonical="exp_neg", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ExpNeg(SeriesOperator):
     """返回exp(-x)"""
     metadata = OperatorMetadata(
@@ -720,7 +720,7 @@ class ExpNeg(SeriesOperator):
 
 
 # canonical=fft backend=pandas_numpy selected=fft source=math/fourier_ops.py
-@register_operator(name="fft", category="math", business_category="elementwise_math", canonical="fft", source="factor_dsl_np")
+@register_operator(name="fft", category="math", business_category="elementwise_math", canonical="fft", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Fft(SeriesOperator):
     """快速傅里叶变换"""
     metadata = OperatorMetadata(
@@ -742,7 +742,7 @@ class Fft(SeriesOperator):
 
 
 # canonical=filter_bandpass backend=pandas_numpy selected=filter_bandpass source=math/fourier_ops.py
-@register_operator(name="filter_bandpass", category="math", business_category="elementwise_math", canonical="filter_bandpass", source="factor_dsl_np")
+@register_operator(name="filter_bandpass", category="math", business_category="elementwise_math", canonical="filter_bandpass", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FilterBandpass(SeriesOperator):
     """带通滤波器"""
     metadata = OperatorMetadata(
@@ -770,7 +770,7 @@ class FilterBandpass(SeriesOperator):
 
 
 # canonical=filter_highpass backend=pandas_numpy selected=filter_highpass source=math/fourier_ops.py
-@register_operator(name="filter_highpass", category="math", business_category="elementwise_math", canonical="filter_highpass", source="factor_dsl_np")
+@register_operator(name="filter_highpass", category="math", business_category="elementwise_math", canonical="filter_highpass", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FilterHighpass(SeriesOperator):
     """高通滤波器"""
     metadata = OperatorMetadata(
@@ -797,7 +797,7 @@ class FilterHighpass(SeriesOperator):
 
 
 # canonical=filter_lowpass backend=pandas_numpy selected=filter_lowpass source=math/fourier_ops.py
-@register_operator(name="filter_lowpass", category="math", business_category="elementwise_math", canonical="filter_lowpass", source="factor_dsl_np")
+@register_operator(name="filter_lowpass", category="math", business_category="elementwise_math", canonical="filter_lowpass", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FilterLowpass(SeriesOperator):
     """低通滤波器"""
     metadata = OperatorMetadata(
@@ -824,7 +824,7 @@ class FilterLowpass(SeriesOperator):
 
 
 # canonical=filter_notch backend=pandas_numpy selected=filter_notch source=math/fourier_ops.py
-@register_operator(name="filter_notch", category="math", business_category="elementwise_math", canonical="filter_notch", source="factor_dsl_np")
+@register_operator(name="filter_notch", category="math", business_category="elementwise_math", canonical="filter_notch", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FilterNotch(SeriesOperator):
     """陷波滤波器"""
     metadata = OperatorMetadata(
@@ -852,7 +852,7 @@ class FilterNotch(SeriesOperator):
 
 
 # canonical=fix backend=pandas_numpy selected=fix source=math/rounding.py
-@register_operator(name="fix", category="math", business_category="elementwise_math", canonical="fix", source="factor_dsl_np")
+@register_operator(name="fix", category="math", business_category="elementwise_math", canonical="fix", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Fix(SeriesOperator):
     """取整数部分"""
 
@@ -872,7 +872,7 @@ class Fix(SeriesOperator):
 
 
 # canonical=floor backend=pandas_numpy selected=floor source=math/rounding.py
-@register_operator(name="floor", category="math", business_category="elementwise_math", canonical="floor", source="factor_dsl_np")
+@register_operator(name="floor", category="math", business_category="elementwise_math", canonical="floor", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Floor(SeriesOperator):
     """向下取整"""
 
@@ -892,7 +892,7 @@ class Floor(SeriesOperator):
 
 
 # canonical=flex_max backend=pandas_numpy selected=flex_max source=math/special.py
-@register_operator(name="flex_max", category="math", business_category="elementwise_math", canonical="flex_max", source="factor_dsl_np")
+@register_operator(name="flex_max", category="math", business_category="elementwise_math", canonical="flex_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FlexMax(SeriesOperator):
     """逐点 max 或滚动 max：第二参数为序列时逐点，为整数时滚动窗口。"""
 
@@ -928,7 +928,7 @@ class FlexMax(SeriesOperator):
 
 
 # canonical=flex_min backend=pandas_numpy selected=flex_min source=math/special.py
-@register_operator(name="flex_min", category="math", business_category="elementwise_math", canonical="flex_min", source="factor_dsl_np")
+@register_operator(name="flex_min", category="math", business_category="elementwise_math", canonical="flex_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class FlexMin(SeriesOperator):
     """逐点 min 或滚动 min：第二参数为序列时逐点，为整数时滚动窗口。"""
 
@@ -963,7 +963,7 @@ class FlexMin(SeriesOperator):
 
 
 # canonical=fmax backend=pandas_numpy selected=fmax source=math/special.py
-@register_operator(name="fmax", category="math", business_category="elementwise_math", canonical="fmax", source="factor_dsl_np")
+@register_operator(name="fmax", category="math", business_category="elementwise_math", canonical="fmax", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Fmax(SeriesOperator):
     """NaN感知的最大值（若一个为NaN则返回另一个）"""
     metadata = OperatorMetadata(
@@ -983,7 +983,7 @@ class Fmax(SeriesOperator):
 
 
 # canonical=fmin backend=pandas_numpy selected=fmin source=math/special.py
-@register_operator(name="fmin", category="math", business_category="elementwise_math", canonical="fmin", source="factor_dsl_np")
+@register_operator(name="fmin", category="math", business_category="elementwise_math", canonical="fmin", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Fmin(SeriesOperator):
     """NaN感知的最小值（若一个为NaN则返回另一个）"""
     metadata = OperatorMetadata(
@@ -1003,7 +1003,7 @@ class Fmin(SeriesOperator):
 
 
 # canonical=geometric_mean backend=pandas_numpy selected=geometric_mean source=math/utility_ops.py
-@register_operator(name="geometric_mean", category="math", business_category="elementwise_math", canonical="geometric_mean", source="factor_dsl_np")
+@register_operator(name="geometric_mean", category="math", business_category="elementwise_math", canonical="geometric_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class GeometricMean(SeriesOperator):
     """几何平均数"""
     metadata = OperatorMetadata(
@@ -1022,7 +1022,7 @@ class GeometricMean(SeriesOperator):
 
 
 # canonical=harmonic_mean backend=pandas_numpy selected=harmonic_mean source=math/utility_ops.py
-@register_operator(name="harmonic_mean", category="math", business_category="elementwise_math", canonical="harmonic_mean", source="factor_dsl_np")
+@register_operator(name="harmonic_mean", category="math", business_category="elementwise_math", canonical="harmonic_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class HarmonicMean(SeriesOperator):
     """调和平均数"""
     metadata = OperatorMetadata(
@@ -1041,7 +1041,7 @@ class HarmonicMean(SeriesOperator):
 
 
 # canonical=identity backend=pandas_numpy selected=identity source=math/utility_ops.py
-@register_operator(name="identity", category="math", business_category="elementwise_math", canonical="identity", source="factor_dsl_np")
+@register_operator(name="identity", category="math", business_category="elementwise_math", canonical="identity", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Identity(SeriesOperator):
     """返回x不变"""
     metadata = OperatorMetadata(
@@ -1060,7 +1060,7 @@ class Identity(SeriesOperator):
 
 
 # canonical=idft backend=pandas_numpy selected=idft source=math/fourier_ops.py
-@register_operator(name="idft", category="math", business_category="elementwise_math", canonical="idft", source="factor_dsl_np")
+@register_operator(name="idft", category="math", business_category="elementwise_math", canonical="idft", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Idft(SeriesOperator):
     """逆离散傅里叶变换"""
     metadata = OperatorMetadata(
@@ -1082,7 +1082,7 @@ class Idft(SeriesOperator):
 
 
 # canonical=ifft backend=pandas_numpy selected=ifft source=math/fourier_ops.py
-@register_operator(name="ifft", category="math", business_category="elementwise_math", canonical="ifft", source="factor_dsl_np")
+@register_operator(name="ifft", category="math", business_category="elementwise_math", canonical="ifft", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Ifft(SeriesOperator):
     """逆快速傅里叶变换"""
     metadata = OperatorMetadata(
@@ -1104,7 +1104,7 @@ class Ifft(SeriesOperator):
 
 
 # canonical=imag backend=pandas_numpy selected=imag source=math/complex_ops.py
-@register_operator(name="imag", category="math", business_category="elementwise_math", canonical="imag", source="factor_dsl_np")
+@register_operator(name="imag", category="math", business_category="elementwise_math", canonical="imag", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Imag(SeriesOperator):
     """取复数虚部"""
     metadata = OperatorMetadata(
@@ -1142,7 +1142,7 @@ class Reciprocal(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return 1 / x
 
-@register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_np")
+@register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Inv(Reciprocal):
     """倒数（inv的别名）"""
 
@@ -1159,7 +1159,7 @@ class Inv(Reciprocal):
 
 
 # canonical=lerp backend=pandas_numpy selected=lerp source=math/special.py
-@register_operator(name="lerp", category="math", business_category="elementwise_math", canonical="lerp", source="factor_dsl_np")
+@register_operator(name="lerp", category="math", business_category="elementwise_math", canonical="lerp", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Lerp(SeriesOperator):
     """线性插值 a + f*(b-a)"""
     metadata = OperatorMetadata(
@@ -1179,7 +1179,7 @@ class Lerp(SeriesOperator):
 
 
 # canonical=log backend=pandas_numpy selected=log source=math/elementary.py
-@register_operator(name="log", category="math", business_category="elementwise_math", canonical="log", source="factor_dsl_np")
+@register_operator(name="log", category="math", business_category="elementwise_math", canonical="log", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Log(SeriesOperator):
     """自然对数"""
 
@@ -1200,7 +1200,7 @@ class Log(SeriesOperator):
 
 
 # canonical=log10 backend=pandas_numpy selected=log10 source=math/elementary.py
-@register_operator(name="log10", category="math", business_category="elementwise_math", canonical="log10", source="factor_dsl_np")
+@register_operator(name="log10", category="math", business_category="elementwise_math", canonical="log10", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Log10(SeriesOperator):
     """以10为底的对数"""
 
@@ -1220,7 +1220,7 @@ class Log10(SeriesOperator):
 
 
 # canonical=log2 backend=pandas_numpy selected=log2 source=math/elementary.py
-@register_operator(name="log2", category="math", business_category="elementwise_math", canonical="log2", source="factor_dsl_np")
+@register_operator(name="log2", category="math", business_category="elementwise_math", canonical="log2", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Log2(SeriesOperator):
     """以2为底的对数"""
 
@@ -1240,7 +1240,7 @@ class Log2(SeriesOperator):
 
 
 # canonical=log_abs backend=pandas_numpy selected=log_abs source=math/utility_ops.py
-@register_operator(name="log_abs", category="math", business_category="elementwise_math", canonical="log_abs", source="factor_dsl_np")
+@register_operator(name="log_abs", category="math", business_category="elementwise_math", canonical="log_abs", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LogAbs(SeriesOperator):
     """返回log(abs(x))"""
     metadata = OperatorMetadata(
@@ -1259,7 +1259,7 @@ class LogAbs(SeriesOperator):
 
 
 # canonical=lu_decompose backend=pandas_numpy selected=lu_decompose source=math/matrix_ops.py
-@register_operator(name="lu_decompose", category="math", business_category="elementwise_math", canonical="lu_decompose", source="factor_dsl_np")
+@register_operator(name="lu_decompose", category="math", business_category="elementwise_math", canonical="lu_decompose", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class LuDecompose(SeriesOperator):
     """LU分解"""
     metadata = OperatorMetadata(
@@ -1284,7 +1284,7 @@ class LuDecompose(SeriesOperator):
 
 
 # canonical=mat_add backend=pandas_numpy selected=mat_add source=math/matrix_ops.py
-@register_operator(name="mat_add", category="math", business_category="elementwise_math", canonical="mat_add", source="factor_dsl_np")
+@register_operator(name="mat_add", category="math", business_category="elementwise_math", canonical="mat_add", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatAdd(SeriesOperator):
     """矩阵加法"""
     metadata = OperatorMetadata(
@@ -1304,7 +1304,7 @@ class MatAdd(SeriesOperator):
 
 
 # canonical=mat_determinant backend=pandas_numpy selected=mat_determinant source=math/matrix_ops.py
-@register_operator(name="mat_determinant", category="math", business_category="elementwise_math", canonical="mat_determinant", source="factor_dsl_np")
+@register_operator(name="mat_determinant", category="math", business_category="elementwise_math", canonical="mat_determinant", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatDeterminant(SeriesOperator):
     """矩阵行列式"""
     metadata = OperatorMetadata(
@@ -1328,7 +1328,7 @@ class MatDeterminant(SeriesOperator):
 
 
 # canonical=mat_inverse backend=pandas_numpy selected=mat_inverse source=math/matrix_ops.py
-@register_operator(name="mat_inverse", category="math", business_category="elementwise_math", canonical="mat_inverse", source="factor_dsl_np")
+@register_operator(name="mat_inverse", category="math", business_category="elementwise_math", canonical="mat_inverse", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatInverse(SeriesOperator):
     """矩阵求逆"""
     metadata = OperatorMetadata(
@@ -1351,7 +1351,7 @@ class MatInverse(SeriesOperator):
 
 
 # canonical=mat_multiply backend=pandas_numpy selected=mat_multiply source=math/matrix_ops.py
-@register_operator(name="mat_multiply", category="math", business_category="elementwise_math", canonical="mat_multiply", source="factor_dsl_np")
+@register_operator(name="mat_multiply", category="math", business_category="elementwise_math", canonical="mat_multiply", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatMultiply(SeriesOperator):
     """矩阵乘法"""
     metadata = OperatorMetadata(
@@ -1374,7 +1374,7 @@ class MatMultiply(SeriesOperator):
 
 
 # canonical=mat_rank backend=pandas_numpy selected=mat_rank source=math/matrix_ops.py
-@register_operator(name="mat_rank", category="math", business_category="elementwise_math", canonical="mat_rank", source="factor_dsl_np")
+@register_operator(name="mat_rank", category="math", business_category="elementwise_math", canonical="mat_rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatRank(SeriesOperator):
     """矩阵秩"""
     metadata = OperatorMetadata(
@@ -1398,7 +1398,7 @@ class MatRank(SeriesOperator):
 
 
 # canonical=mat_subtract backend=pandas_numpy selected=mat_subtract source=math/matrix_ops.py
-@register_operator(name="mat_subtract", category="math", business_category="elementwise_math", canonical="mat_subtract", source="factor_dsl_np")
+@register_operator(name="mat_subtract", category="math", business_category="elementwise_math", canonical="mat_subtract", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatSubtract(SeriesOperator):
     """矩阵减法"""
     metadata = OperatorMetadata(
@@ -1418,7 +1418,7 @@ class MatSubtract(SeriesOperator):
 
 
 # canonical=mat_transpose backend=pandas_numpy selected=mat_transpose source=math/matrix_ops.py
-@register_operator(name="mat_transpose", category="math", business_category="elementwise_math", canonical="mat_transpose", source="factor_dsl_np")
+@register_operator(name="mat_transpose", category="math", business_category="elementwise_math", canonical="mat_transpose", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class MatTranspose(SeriesOperator):
     """矩阵转置"""
     metadata = OperatorMetadata(
@@ -1438,7 +1438,7 @@ class MatTranspose(SeriesOperator):
 
 
 # canonical=neg backend=pandas_numpy selected=neg source=math/elementary.py
-@register_operator(name="neg", category="math", business_category="elementwise_math", canonical="neg", source="factor_dsl_np")
+@register_operator(name="neg", category="math", business_category="elementwise_math", canonical="neg", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Neg(SeriesOperator):
     """取负数"""
 
@@ -1458,7 +1458,7 @@ class Neg(SeriesOperator):
 
 
 # canonical=negate backend=pandas_numpy selected=negate source=math/utility_ops.py
-@register_operator(name="negate", category="math", business_category="elementwise_math", canonical="negate", source="factor_dsl_np")
+@register_operator(name="negate", category="math", business_category="elementwise_math", canonical="negate", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Negate(SeriesOperator):
     """返回-x"""
     metadata = OperatorMetadata(
@@ -1477,7 +1477,7 @@ class Negate(SeriesOperator):
 
 
 # canonical=normalize backend=pandas_numpy selected=normalize source=math/utility_ops.py
-@register_operator(name="normalize", category="math", business_category="elementwise_math", canonical="normalize", source="factor_dsl_np")
+@register_operator(name="normalize", category="math", business_category="elementwise_math", canonical="normalize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Normalize(SeriesOperator):
     """归一化到[0, 1]"""
     metadata = OperatorMetadata(
@@ -1500,7 +1500,7 @@ class Normalize(SeriesOperator):
 
 
 # canonical=pca backend=pandas_numpy selected=pca source=math/matrix_ops.py
-@register_operator(name="pca", category="math", business_category="elementwise_math", canonical="pca", source="factor_dsl_np")
+@register_operator(name="pca", category="math", business_category="elementwise_math", canonical="pca", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Pca(SeriesOperator):
     """PCA降维"""
     metadata = OperatorMetadata(
@@ -1545,7 +1545,7 @@ class Pca(SeriesOperator):
 
 
 # canonical=phase backend=pandas_numpy selected=phase source=math/complex_ops.py
-@register_operator(name="phase", category="math", business_category="elementwise_math", canonical="phase", source="factor_dsl_np")
+@register_operator(name="phase", category="math", business_category="elementwise_math", canonical="phase", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Phase(SeriesOperator):
     """复数相位（角度）"""
     metadata = OperatorMetadata(
@@ -1565,7 +1565,7 @@ class Phase(SeriesOperator):
 
 
 # canonical=polar backend=pandas_numpy selected=polar source=math/complex_ops.py
-@register_operator(name="polar", category="math", business_category="elementwise_math", canonical="polar", source="factor_dsl_np")
+@register_operator(name="polar", category="math", business_category="elementwise_math", canonical="polar", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Polar(SeriesOperator):
     """极坐标转复数"""
     metadata = OperatorMetadata(
@@ -1586,7 +1586,7 @@ class Polar(SeriesOperator):
 
 
 # canonical=power backend=pandas_numpy selected=pow source=math/elementary.py
-@register_operator(name="pow", category="math", business_category="elementwise_math", canonical="power", source="factor_dsl_np")
+@register_operator(name="pow", category="math", business_category="elementwise_math", canonical="power", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Pow(SeriesOperator):
     """幂函数（实数域：负数底数 & 非整数指数 → NaN）"""
 
@@ -1645,7 +1645,7 @@ class Pow(SeriesOperator):
 
 
 # canonical=qr_decompose backend=pandas_numpy selected=qr_decompose source=math/matrix_ops.py
-@register_operator(name="qr_decompose", category="math", business_category="elementwise_math", canonical="qr_decompose", source="factor_dsl_np")
+@register_operator(name="qr_decompose", category="math", business_category="elementwise_math", canonical="qr_decompose", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class QrDecompose(SeriesOperator):
     """QR分解"""
     metadata = OperatorMetadata(
@@ -1672,7 +1672,7 @@ class QrDecompose(SeriesOperator):
 
 
 # canonical=rank_transform backend=pandas_numpy selected=rank_transform source=math/utility_ops.py
-@register_operator(name="rank_transform", category="math", business_category="elementwise_math", canonical="rank_transform", source="factor_dsl_np")
+@register_operator(name="rank_transform", category="math", business_category="elementwise_math", canonical="rank_transform", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RankTransform(SeriesOperator):
     """秩变换"""
     metadata = OperatorMetadata(
@@ -1691,7 +1691,7 @@ class RankTransform(SeriesOperator):
 
 
 # canonical=rankavg_transform backend=pandas_numpy selected=rankavg_transform source=math/utility_ops.py
-@register_operator(name="rankavg_transform", category="math", business_category="elementwise_math", canonical="rankavg_transform", source="factor_dsl_np")
+@register_operator(name="rankavg_transform", category="math", business_category="elementwise_math", canonical="rankavg_transform", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RankavgTransform(SeriesOperator):
     """平均秩变换"""
     metadata = OperatorMetadata(
@@ -1710,7 +1710,7 @@ class RankavgTransform(SeriesOperator):
 
 
 # canonical=real backend=pandas_numpy selected=real source=math/complex_ops.py
-@register_operator(name="real", category="math", business_category="elementwise_math", canonical="real", source="factor_dsl_np")
+@register_operator(name="real", category="math", business_category="elementwise_math", canonical="real", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Real(SeriesOperator):
     """取复数实部"""
     metadata = OperatorMetadata(
@@ -1730,7 +1730,7 @@ class Real(SeriesOperator):
 
 
 # canonical=reciprocal backend=pandas_numpy selected=reciprocal source=math/elementary.py
-@register_operator(name="reciprocal", category="math", business_category="elementwise_math", canonical="reciprocal", source="factor_dsl_np")
+@register_operator(name="reciprocal", category="math", business_category="elementwise_math", canonical="reciprocal", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Reciprocal(SeriesOperator):
     """倒数"""
 
@@ -1750,7 +1750,7 @@ class Reciprocal(SeriesOperator):
 
 
 # canonical=round backend=pandas_numpy selected=round source=math/rounding.py
-@register_operator(name="round", category="math", business_category="elementwise_math", canonical="round", source="factor_dsl_np")
+@register_operator(name="round", category="math", business_category="elementwise_math", canonical="round", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Round(SeriesOperator):
     """四舍五入"""
 
@@ -1775,7 +1775,7 @@ class Round(SeriesOperator):
 
 
 # canonical=running_mean backend=pandas_numpy selected=running_mean source=math/utility_ops.py
-@register_operator(name="running_mean", category="math", business_category="elementwise_math", canonical="running_mean", source="factor_dsl_np")
+@register_operator(name="running_mean", category="math", business_category="elementwise_math", canonical="running_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RunningMean(SeriesOperator):
     """滚动均值"""
     metadata = OperatorMetadata(
@@ -1795,7 +1795,7 @@ class RunningMean(SeriesOperator):
 
 
 # canonical=running_std backend=pandas_numpy selected=running_std source=math/utility_ops.py
-@register_operator(name="running_std", category="math", business_category="elementwise_math", canonical="running_std", source="factor_dsl_np")
+@register_operator(name="running_std", category="math", business_category="elementwise_math", canonical="running_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RunningStd(SeriesOperator):
     """滚动标准差"""
     metadata = OperatorMetadata(
@@ -1815,7 +1815,7 @@ class RunningStd(SeriesOperator):
 
 
 # canonical=running_sum backend=pandas_numpy selected=running_sum source=math/utility_ops.py
-@register_operator(name="running_sum", category="math", business_category="elementwise_math", canonical="running_sum", source="factor_dsl_np")
+@register_operator(name="running_sum", category="math", business_category="elementwise_math", canonical="running_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RunningSum(SeriesOperator):
     """滚动求和"""
     metadata = OperatorMetadata(
@@ -1835,7 +1835,7 @@ class RunningSum(SeriesOperator):
 
 
 # canonical=sec backend=pandas_numpy selected=sec source=math/trigonometric.py
-@register_operator(name="sec", category="math", business_category="elementwise_math", canonical="sec", source="factor_dsl_np")
+@register_operator(name="sec", category="math", business_category="elementwise_math", canonical="sec", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sec(SeriesOperator):
     """正割"""
 
@@ -1855,7 +1855,7 @@ class Sec(SeriesOperator):
 
 
 # canonical=sign backend=pandas_numpy selected=sign source=math/elementary.py
-@register_operator(name="sign", category="math", business_category="elementwise_math", canonical="sign", source="factor_dsl_np")
+@register_operator(name="sign", category="math", business_category="elementwise_math", canonical="sign", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sign(SeriesOperator):
     """符号函数"""
 
@@ -1877,7 +1877,7 @@ class Sign(SeriesOperator):
 
 
 # canonical=sin backend=pandas_numpy selected=sin source=math/trigonometric.py
-@register_operator(name="sin", category="math", business_category="elementwise_math", canonical="sin", source="factor_dsl_np")
+@register_operator(name="sin", category="math", business_category="elementwise_math", canonical="sin", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sin(SeriesOperator):
     """正弦"""
 
@@ -1900,7 +1900,7 @@ class Sin(SeriesOperator):
 # generic names stay MOVE_INTERNAL (raw math is not a factor canonical); these
 # typed building blocks are DIRECT_INTERMEDIATE and only accept a phase /
 # cyclic-position / normalized-angular-state input (never a raw price/amount).
-@register_operator(name="sin_phase", category="math", business_category="elementwise_math", canonical="sin_phase", source="factor_dsl_np")
+@register_operator(name="sin_phase", category="math", business_category="elementwise_math", canonical="sin_phase", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SinPhase(SeriesOperator):
     """sin of a phase/cyclic-position signal (radians or normalized 0..2π)."""
 
@@ -1918,7 +1918,7 @@ class SinPhase(SeriesOperator):
         return np.sin(x)
 
 
-@register_operator(name="cos_phase", category="math", business_category="elementwise_math", canonical="cos_phase", source="factor_dsl_np")
+@register_operator(name="cos_phase", category="math", business_category="elementwise_math", canonical="cos_phase", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CosPhase(SeriesOperator):
     """cos of a phase/cyclic-position signal (radians or normalized 0..2π)."""
 
@@ -1937,7 +1937,7 @@ class CosPhase(SeriesOperator):
 
 
 # canonical=sinh backend=pandas_numpy selected=sinh source=math/trigonometric.py
-@register_operator(name="sinh", category="math", business_category="elementwise_math", canonical="sinh", source="factor_dsl_np")
+@register_operator(name="sinh", category="math", business_category="elementwise_math", canonical="sinh", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sinh(SeriesOperator):
     """双曲正弦"""
 
@@ -1957,7 +1957,7 @@ class Sinh(SeriesOperator):
 
 
 # canonical=sqr backend=pandas_numpy selected=sqr source=math/elementary.py
-@register_operator(name="sqr", category="math", business_category="elementwise_math", canonical="sqr", source="factor_dsl_np")
+@register_operator(name="sqr", category="math", business_category="elementwise_math", canonical="sqr", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sqr(SeriesOperator):
     """平方"""
 
@@ -1977,7 +1977,7 @@ class Sqr(SeriesOperator):
 
 
 # canonical=sqrt backend=pandas_numpy selected=sqrt source=math/elementary.py
-@register_operator(name="sqrt", category="math", business_category="elementwise_math", canonical="sqrt", source="factor_dsl_np")
+@register_operator(name="sqrt", category="math", business_category="elementwise_math", canonical="sqrt", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sqrt(SeriesOperator):
     """平方根"""
 
@@ -1999,7 +1999,7 @@ class Sqrt(SeriesOperator):
 
 
 # canonical=sqrt_abs backend=pandas_numpy selected=sqrt_abs source=math/utility_ops.py
-@register_operator(name="sqrt_abs", category="math", business_category="elementwise_math", canonical="sqrt_abs", source="factor_dsl_np")
+@register_operator(name="sqrt_abs", category="math", business_category="elementwise_math", canonical="sqrt_abs", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SqrtAbs(SeriesOperator):
     """返回sqrt(abs(x))"""
     metadata = OperatorMetadata(
@@ -2018,7 +2018,7 @@ class SqrtAbs(SeriesOperator):
 
 
 # canonical=square backend=pandas_numpy selected=square source=math/utility_ops.py
-@register_operator(name="square", category="math", business_category="elementwise_math", canonical="square", source="factor_dsl_np")
+@register_operator(name="square", category="math", business_category="elementwise_math", canonical="square", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Square(SeriesOperator):
     """返回x的平方"""
     metadata = OperatorMetadata(
@@ -2037,7 +2037,7 @@ class Square(SeriesOperator):
 
 
 # canonical=standardize backend=pandas_numpy selected=standardize source=math/utility_ops.py
-@register_operator(name="standardize", category="math", business_category="elementwise_math", canonical="standardize", source="factor_dsl_np")
+@register_operator(name="standardize", category="math", business_category="elementwise_math", canonical="standardize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Standardize(SeriesOperator):
     """Z-Score标准化"""
     metadata = OperatorMetadata(
@@ -2059,7 +2059,7 @@ class Standardize(SeriesOperator):
 
 
 # canonical=svd backend=pandas_numpy selected=svd source=math/matrix_ops.py
-@register_operator(name="svd", category="math", business_category="elementwise_math", canonical="svd", source="factor_dsl_np")
+@register_operator(name="svd", category="math", business_category="elementwise_math", canonical="svd", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Svd(SeriesOperator):
     """SVD奇异值分解"""
     metadata = OperatorMetadata(
@@ -2081,7 +2081,7 @@ class Svd(SeriesOperator):
 
 
 # canonical=tan backend=pandas_numpy selected=tan source=math/trigonometric.py
-@register_operator(name="tan", category="math", business_category="elementwise_math", canonical="tan", source="factor_dsl_np")
+@register_operator(name="tan", category="math", business_category="elementwise_math", canonical="tan", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Tan(SeriesOperator):
     """正切"""
 
@@ -2101,7 +2101,7 @@ class Tan(SeriesOperator):
 
 
 # canonical=tanh backend=pandas_numpy selected=tanh source=math/trigonometric.py
-@register_operator(name="tanh", category="math", business_category="elementwise_math", canonical="tanh", source="factor_dsl_np")
+@register_operator(name="tanh", category="math", business_category="elementwise_math", canonical="tanh", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Tanh(SeriesOperator):
     """双曲正切"""
 
@@ -2121,7 +2121,7 @@ class Tanh(SeriesOperator):
 
 
 # canonical=truncate backend=pandas_numpy selected=truncate source=math/rounding.py
-@register_operator(name="truncate", category="math", business_category="elementwise_math", canonical="truncate", source="factor_dsl_np")
+@register_operator(name="truncate", category="math", business_category="elementwise_math", canonical="truncate", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Truncate(SeriesOperator):
     """截断"""
 
@@ -2145,7 +2145,7 @@ class Truncate(SeriesOperator):
 
 
 # canonical=tukey_transform backend=pandas_numpy selected=tukey_transform source=math/utility_ops.py
-@register_operator(name="tukey_transform", category="math", business_category="elementwise_math", canonical="tukey_transform", source="factor_dsl_np")
+@register_operator(name="tukey_transform", category="math", business_category="elementwise_math", canonical="tukey_transform", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class TukeyTransform(SeriesOperator):
     """Tukey变换"""
     metadata = OperatorMetadata(
@@ -2166,7 +2166,7 @@ class TukeyTransform(SeriesOperator):
 
 
 # canonical=unitize backend=pandas_numpy selected=unitize source=math/utility_ops.py
-@register_operator(name="unitize", category="math", business_category="elementwise_math", canonical="unitize", source="factor_dsl_np")
+@register_operator(name="unitize", category="math", business_category="elementwise_math", canonical="unitize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Unitize(SeriesOperator):
     """归一化到[-1, 1]"""
     metadata = OperatorMetadata(
@@ -2187,7 +2187,7 @@ class Unitize(SeriesOperator):
 
 
 # canonical=unwrap backend=pandas_numpy selected=unwrap source=math/fourier_ops.py
-@register_operator(name="unwrap", category="math", business_category="elementwise_math", canonical="unwrap", source="factor_dsl_np")
+@register_operator(name="unwrap", category="math", business_category="elementwise_math", canonical="unwrap", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Unwrap(SeriesOperator):
     """相位展开"""
     metadata = OperatorMetadata(
@@ -2209,7 +2209,7 @@ class Unwrap(SeriesOperator):
 
 
 # canonical=van_der_waerden_transform backend=pandas_numpy selected=van_der_waerden_transform source=math/utility_ops.py
-@register_operator(name="van_der_waerden_transform", category="math", business_category="elementwise_math", canonical="van_der_waerden_transform", source="factor_dsl_np")
+@register_operator(name="van_der_waerden_transform", category="math", business_category="elementwise_math", canonical="van_der_waerden_transform", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class VanDerWaerdenTransform(SeriesOperator):
     """Van der Waerden变换"""
     metadata = OperatorMetadata(
@@ -2231,7 +2231,7 @@ class VanDerWaerdenTransform(SeriesOperator):
 
 
 # canonical=wavelet backend=pandas_numpy selected=wavelet source=math/fourier_ops.py
-@register_operator(name="wavelet", category="math", business_category="elementwise_math", canonical="wavelet", source="factor_dsl_np")
+@register_operator(name="wavelet", category="math", business_category="elementwise_math", canonical="wavelet", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Wavelet(SeriesOperator):
     """小波变换"""
     metadata = OperatorMetadata(
@@ -2255,7 +2255,7 @@ class Wavelet(SeriesOperator):
 
 
 # canonical=wavelet_denoise backend=pandas_numpy selected=wavelet_denoise source=math/fourier_ops.py
-@register_operator(name="wavelet_denoise", category="math", business_category="elementwise_math", canonical="wavelet_denoise", source="factor_dsl_np")
+@register_operator(name="wavelet_denoise", category="math", business_category="elementwise_math", canonical="wavelet_denoise", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WaveletDenoise(SeriesOperator):
     """小波去噪"""
     metadata = OperatorMetadata(
@@ -2277,7 +2277,7 @@ class WaveletDenoise(SeriesOperator):
 
 
 # canonical=weighted_mean backend=pandas_numpy selected=weighted_mean source=math/utility_ops.py
-@register_operator(name="weighted_mean", category="math", business_category="elementwise_math", canonical="weighted_mean", source="factor_dsl_np")
+@register_operator(name="weighted_mean", category="math", business_category="elementwise_math", canonical="weighted_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WeightedMean(SeriesOperator):
     """加权平均数"""
     metadata = OperatorMetadata(
@@ -2305,7 +2305,7 @@ class WeightedMean(SeriesOperator):
 
 
 # canonical=winsorize backend=pandas_numpy selected=winsorize source=math/utility_ops.py
-@register_operator(name="winsorize", category="math", business_category="elementwise_math", canonical="winsorize", source="factor_dsl_np")
+@register_operator(name="winsorize", category="math", business_category="elementwise_math", canonical="winsorize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Winsorize(SeriesOperator):
     """缩尾处理"""
     metadata = OperatorMetadata(
@@ -2329,7 +2329,7 @@ class Winsorize(SeriesOperator):
 
 
 # canonical=winsorize_mean backend=pandas_numpy selected=winsorize_mean source=math/utility_ops.py
-@register_operator(name="winsorize_mean", category="math", business_category="elementwise_math", canonical="winsorize_mean", source="factor_dsl_np")
+@register_operator(name="winsorize_mean", category="math", business_category="elementwise_math", canonical="winsorize_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class WinsorizeMean(SeriesOperator):
     """截尾均值"""
     metadata = OperatorMetadata(
@@ -2355,7 +2355,7 @@ class WinsorizeMean(SeriesOperator):
         ).replace([np.inf, -np.inf], np.nan)
 
 
-@register_operator(name="signed_sqrt", category="elementwise_math", business_category="elementwise_math", canonical="signed_sqrt", source="factor_dsl_np")
+@register_operator(name="signed_sqrt", category="elementwise_math", business_category="elementwise_math", canonical="signed_sqrt", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class SignedSqrt(SeriesOperator):
     """保留符号开方: sign(x)*sqrt(|x|)"""
     metadata = OperatorMetadata(
@@ -2373,7 +2373,7 @@ class SignedSqrt(SeriesOperator):
         return x.apply(lambda s: signed_sqrt_(s.values))
 
 
-@register_operator(name="sigmoid", category="elementwise_math", business_category="elementwise_math", canonical="sigmoid", source="factor_dsl_np")
+@register_operator(name="sigmoid", category="elementwise_math", business_category="elementwise_math", canonical="sigmoid", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Sigmoid(SeriesOperator):
     """Sigmoid 映射"""
     metadata = OperatorMetadata(
@@ -2391,7 +2391,7 @@ class Sigmoid(SeriesOperator):
         return x.apply(lambda s: sigmoid_(s.values))
 
 
-@register_operator(name="coalesce", category="elementwise_math", business_category="elementwise_math", canonical="coalesce", source="factor_dsl_np")
+@register_operator(name="coalesce", category="elementwise_math", business_category="elementwise_math", canonical="coalesce", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Coalesce(SeriesOperator):
     """返回第一个非 NaN 值"""
     metadata = OperatorMetadata(

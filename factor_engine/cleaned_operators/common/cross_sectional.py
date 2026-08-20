@@ -118,7 +118,7 @@ class CrossSectionSampleMask:
 
 
 # canonical=c_count backend=pandas_numpy selected=c_count source=cross_sectional/c_ops.py
-@register_operator(name="c_count", category="cross_sectional", business_category="cross_sectional", canonical="c_count", source="factor_dsl_np")
+@register_operator(name="c_count", category="cross_sectional", business_category="cross_sectional", canonical="c_count", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalCount(SeriesOperator):
     """截面计数"""
 
@@ -139,7 +139,7 @@ class CrossSectionalCount(SeriesOperator):
 
 
 # canonical=c_mean backend=pandas_numpy selected=c_mean source=cross_sectional/c_ops.py
-@register_operator(name="c_mean", category="cross_sectional", business_category="cross_sectional", canonical="c_mean", source="factor_dsl_np")
+@register_operator(name="c_mean", category="cross_sectional", business_category="cross_sectional", canonical="c_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMean(SeriesOperator):
     """截面均值"""
 
@@ -160,7 +160,7 @@ class CrossSectionalMean(SeriesOperator):
 
 
 # canonical=c_percentile backend=pandas_numpy selected=c_percentile source=cross_sectional/c_ops.py
-@register_operator(name="c_percentile", category="cross_sectional", business_category="cross_sectional", canonical="c_percentile", source="factor_dsl_np")
+@register_operator(name="c_percentile", category="cross_sectional", business_category="cross_sectional", canonical="c_percentile", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalPercentile(SeriesOperator):
     """截面分位数"""
 
@@ -182,7 +182,7 @@ class CrossSectionalPercentile(SeriesOperator):
 
 
 # canonical=c_std backend=pandas_numpy selected=c_std source=cross_sectional/c_ops.py
-@register_operator(name="c_std", category="cross_sectional", business_category="cross_sectional", canonical="c_std", source="factor_dsl_np")
+@register_operator(name="c_std", category="cross_sectional", business_category="cross_sectional", canonical="c_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalStd(SeriesOperator):
     """截面标准差"""
 
@@ -201,7 +201,7 @@ class CrossSectionalStd(SeriesOperator):
         return broadcast_row_stat_all_null_null(xm, xm.std(axis=1))
 
 
-@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np")
+@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMad(SeriesOperator):
     """截面中位绝对偏差（MAD，广播到各列）"""
     metadata = OperatorMetadata(
@@ -221,7 +221,7 @@ class CrossSectionalMad(SeriesOperator):
         return broadcast_row_stat(x, mad)
 
 
-@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np")
+@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMadZscore(SeriesOperator):
     """raw-MAD 标准化得分：(x - median) / MAD（不乘 0.6745）"""
     metadata = OperatorMetadata(
@@ -243,7 +243,7 @@ class CrossSectionalMadZscore(SeriesOperator):
 
 
 # canonical=c_sum backend=pandas_numpy selected=c_sum source=cross_sectional/c_ops.py
-@register_operator(name="c_sum", category="cross_sectional", business_category="cross_sectional", canonical="c_sum", source="factor_dsl_np")
+@register_operator(name="c_sum", category="cross_sectional", business_category="cross_sectional", canonical="c_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalSum(SeriesOperator):
     """截面求和"""
 
@@ -264,7 +264,7 @@ class CrossSectionalSum(SeriesOperator):
 
 
 # canonical=cs_demean backend=pandas_numpy selected=c_demean source=cross_sectional/c_ops.py
-@register_operator(name="c_demean", category="cross_sectional", business_category="cross_sectional", canonical="cs_demean", source="factor_dsl_np")
+@register_operator(name="c_demean", category="cross_sectional", business_category="cross_sectional", canonical="cs_demean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalDemean(SeriesOperator):
     """截面中心化"""
 
@@ -286,7 +286,7 @@ class CrossSectionalDemean(SeriesOperator):
 
 
 # canonical=neutralize backend=pandas_numpy selected=c_neutralize source=cross_sectional/c_ops.py
-@register_operator(name="c_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="neutralize", source="factor_dsl_np")
+@register_operator(name="c_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="neutralize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalNeutralize(SeriesOperator):
     """行业中性化"""
 
@@ -358,7 +358,7 @@ class CrossSectionalRank(SeriesOperator):
 # 数值等价已由 tests/operators/test_r19_truthiness_domain.py 证明。合并为一个
 # canonical + alias 需要 registry/surface 协调（unregister + register_alias），
 # 由中央协调处理；此处两个都保留并明示同一实现。
-@register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
+@register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Rank(SeriesOperator):
     """截面 0-1 排名（与 cs_rank_01 exact duplicate）。"""
 
@@ -382,7 +382,7 @@ class Rank(SeriesOperator):
     business_category="cross_sectional",
     canonical="rank_pct",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 # R19-067: ``rank_pct`` 与 ``cs_pct_rank`` 是 exact duplicate（同一实现
 # CrossSectionalRank._calculate_series = x.rank(pct=True)）。
 class RankPct(CrossSectionalRank):
@@ -404,7 +404,7 @@ class RankPct(CrossSectionalRank):
     business_category="cross_sectional",
     canonical="cs_quantile",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 # R19-068: ``cs_quantile`` 与 ``c_percentile`` 是 exact duplicate（同一实现
 # CrossSectionalPercentile._calculate_series = x.quantile(p, axis=1) 广播）。
 class CsQuantile(CrossSectionalPercentile):
@@ -426,7 +426,7 @@ class CsQuantile(CrossSectionalPercentile):
     business_category="cross_sectional",
     canonical="cs_pct_rank",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CsPctRank(CrossSectionalRank):
     """截面百分位排名（与 rank_pct exact duplicate）"""
     metadata = OperatorMetadata(
@@ -446,7 +446,7 @@ class CsPctRank(CrossSectionalRank):
     business_category="cross_sectional",
     canonical="cs_rank_01",
     source="factor_dsl_np",
-)
+, replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CsRank01(SeriesOperator):
     """截面 0-1 排名（与 rank exact duplicate，canonical 实现）"""
     metadata = OperatorMetadata(
@@ -467,7 +467,7 @@ class CsRank01(SeriesOperator):
 
 
 # canonical=row_avg backend=pandas_numpy selected=row_avg source=cross_sectional/row_ops.py
-@register_operator(name="row_avg", category="cross_sectional", business_category="cross_sectional", canonical="row_avg", source="factor_dsl_np")
+@register_operator(name="row_avg", category="cross_sectional", business_category="cross_sectional", canonical="row_avg", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowAvg(SeriesOperator):
     """对每行（每个日期截面）求均值"""
 
@@ -491,7 +491,7 @@ class RowAvg(SeriesOperator):
 
 
 # canonical=row_beta backend=pandas_numpy selected=row_beta source=cross_sectional/row_ops.py
-@register_operator(name="row_beta", category="cross_sectional", business_category="cross_sectional", canonical="row_beta", source="factor_dsl_np")
+@register_operator(name="row_beta", category="cross_sectional", business_category="cross_sectional", canonical="row_beta", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowBeta(SeriesOperator):
     """对每行（每个日期截面）计算y对x的beta系数"""
 
@@ -531,7 +531,7 @@ class RowBeta(SeriesOperator):
 
 
 # canonical=row_corr backend=pandas_numpy selected=row_corr source=cross_sectional/row_ops.py
-@register_operator(name="row_corr", category="cross_sectional", business_category="cross_sectional", canonical="row_corr", source="factor_dsl_np")
+@register_operator(name="row_corr", category="cross_sectional", business_category="cross_sectional", canonical="row_corr", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowCorr(SeriesOperator):
     """对每行（每个日期截面）计算y和x的相关系数"""
 
@@ -565,7 +565,7 @@ class RowCorr(SeriesOperator):
 
 
 # canonical=row_count backend=pandas_numpy selected=row_count source=cross_sectional/row_ops.py
-@register_operator(name="row_count", category="cross_sectional", business_category="cross_sectional", canonical="row_count", source="factor_dsl_np")
+@register_operator(name="row_count", category="cross_sectional", business_category="cross_sectional", canonical="row_count", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowCount(SeriesOperator):
     """对每行（每个日期截面）计算非空值数量"""
 
@@ -590,7 +590,7 @@ class RowCount(SeriesOperator):
 
 
 # canonical=row_kurt backend=pandas_numpy selected=row_kurt source=cross_sectional/row_ops.py
-@register_operator(name="row_kurt", category="cross_sectional", business_category="cross_sectional", canonical="row_kurt", source="factor_dsl_np")
+@register_operator(name="row_kurt", category="cross_sectional", business_category="cross_sectional", canonical="row_kurt", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowKurt(SeriesOperator):
     """对每行（每个日期截面）求峰度"""
 
@@ -619,7 +619,7 @@ class RowKurt(SeriesOperator):
 
 
 # canonical=row_max backend=pandas_numpy selected=row_max source=cross_sectional/row_ops.py
-@register_operator(name="row_max", category="cross_sectional", business_category="cross_sectional", canonical="row_max", source="factor_dsl_np")
+@register_operator(name="row_max", category="cross_sectional", business_category="cross_sectional", canonical="row_max", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowMax(SeriesOperator):
     """对每行（每个日期截面）求最大值"""
 
@@ -643,7 +643,7 @@ class RowMax(SeriesOperator):
 
 
 # canonical=row_median backend=pandas_numpy selected=row_median source=cross_sectional/row_ops.py
-@register_operator(name="row_median", category="cross_sectional", business_category="cross_sectional", canonical="row_median", source="factor_dsl_np")
+@register_operator(name="row_median", category="cross_sectional", business_category="cross_sectional", canonical="row_median", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowMedian(SeriesOperator):
     """对每行（每个日期截面）求中位数"""
 
@@ -667,7 +667,7 @@ class RowMedian(SeriesOperator):
 
 
 # canonical=row_min backend=pandas_numpy selected=row_min source=cross_sectional/row_ops.py
-@register_operator(name="row_min", category="cross_sectional", business_category="cross_sectional", canonical="row_min", source="factor_dsl_np")
+@register_operator(name="row_min", category="cross_sectional", business_category="cross_sectional", canonical="row_min", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowMin(SeriesOperator):
     """对每行（每个日期截面）求最小值"""
 
@@ -691,7 +691,7 @@ class RowMin(SeriesOperator):
 
 
 # canonical=row_prod backend=pandas_numpy selected=row_prod source=cross_sectional/row_ops.py
-@register_operator(name="row_prod", category="cross_sectional", business_category="cross_sectional", canonical="row_prod", source="factor_dsl_np")
+@register_operator(name="row_prod", category="cross_sectional", business_category="cross_sectional", canonical="row_prod", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowProd(SeriesOperator):
     """对每行（每个日期截面）求乘积"""
 
@@ -715,7 +715,7 @@ class RowProd(SeriesOperator):
 
 
 # canonical=row_skew backend=pandas_numpy selected=row_skew source=cross_sectional/row_ops.py
-@register_operator(name="row_skew", category="cross_sectional", business_category="cross_sectional", canonical="row_skew", source="factor_dsl_np")
+@register_operator(name="row_skew", category="cross_sectional", business_category="cross_sectional", canonical="row_skew", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowSkew(SeriesOperator):
     """对每行（每个日期截面）求偏度"""
 
@@ -744,7 +744,7 @@ class RowSkew(SeriesOperator):
 
 
 # canonical=row_std backend=pandas_numpy selected=row_std source=cross_sectional/row_ops.py
-@register_operator(name="row_std", category="cross_sectional", business_category="cross_sectional", canonical="row_std", source="factor_dsl_np")
+@register_operator(name="row_std", category="cross_sectional", business_category="cross_sectional", canonical="row_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowStd(SeriesOperator):
     """对每行（每个日期截面）求标准差"""
 
@@ -768,7 +768,7 @@ class RowStd(SeriesOperator):
 
 
 # canonical=row_sum backend=pandas_numpy selected=row_sum source=cross_sectional/row_ops.py
-@register_operator(name="row_sum", category="cross_sectional", business_category="cross_sectional", canonical="row_sum", source="factor_dsl_np")
+@register_operator(name="row_sum", category="cross_sectional", business_category="cross_sectional", canonical="row_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowSum(SeriesOperator):
     """对每行（每个日期截面）求和"""
 
@@ -792,7 +792,7 @@ class RowSum(SeriesOperator):
 
 
 # canonical=row_var backend=pandas_numpy selected=row_var source=cross_sectional/row_ops.py
-@register_operator(name="row_var", category="cross_sectional", business_category="cross_sectional", canonical="row_var", source="factor_dsl_np")
+@register_operator(name="row_var", category="cross_sectional", business_category="cross_sectional", canonical="row_var", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RowVar(SeriesOperator):
     """对每行（每个日期截面）求方差"""
 
@@ -835,7 +835,7 @@ class CrossSectionalScale(SeriesOperator):
         abs_sum = x.abs().sum(axis=1).replace(0, 1)
         return x.mul(to / abs_sum, axis=0)
 
-@register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
+@register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Scale(CrossSectionalScale):
     """缩放数据使sum(abs(x))=指定值（与c_scale相同）"""
 
@@ -875,7 +875,7 @@ class CrossSectionalZscore(SeriesOperator):
         std = std.replace(0, 1)
         return (x.sub(mean, axis=0)).div(std, axis=0)
 
-@register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np")
+@register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class Zscore(CrossSectionalZscore):
     """截面Z-Score（zscore的别名）"""
 
@@ -892,7 +892,7 @@ class Zscore(CrossSectionalZscore):
 # aliases: CS_ZSCORE, ZSCORE, c_zscore, cs_zscore
 
 
-@register_operator(name="cs_resid", category="cross_sectional", business_category="cross_sectional", canonical="cs_resid", source="factor_dsl_np")
+@register_operator(name="cs_resid", category="cross_sectional", business_category="cross_sectional", canonical="cs_resid", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CSResid(SeriesOperator):
     """截面线性回归残差 y - (α + βx)"""
     metadata = OperatorMetadata(
@@ -914,7 +914,7 @@ class CSResid(SeriesOperator):
         return result
 
 
-@register_operator(name="cs_regression", category="cross_sectional", business_category="cross_sectional", canonical="cs_regression", source="factor_dsl_np")
+@register_operator(name="cs_regression", category="cross_sectional", business_category="cross_sectional", canonical="cs_regression", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CSRegression(SeriesOperator):
     """截面回归: mode=0 残差, 1 beta, 2 拟合值"""
     metadata = OperatorMetadata(
@@ -957,7 +957,7 @@ register_operator = register_polars_operator
 
 
 # canonical=c_count backend=polars selected=c_count source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_count", category="cross_sectional", business_category="cross_sectional", canonical="c_count", source="factor_dsl_np")
+@register_operator(name="c_count", category="cross_sectional", business_category="cross_sectional", canonical="c_count", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalCountPolars(SeriesOperator):
     """截面计数"""
 
@@ -987,7 +987,7 @@ class CrossSectionalCountPolars(SeriesOperator):
 
 
 # canonical=c_mean backend=polars selected=c_mean source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_mean", category="cross_sectional", business_category="cross_sectional", canonical="c_mean", source="factor_dsl_np")
+@register_operator(name="c_mean", category="cross_sectional", business_category="cross_sectional", canonical="c_mean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMeanPolars(SeriesOperator):
     """截面均值"""
 
@@ -1012,7 +1012,7 @@ class CrossSectionalMeanPolars(SeriesOperator):
 
 
 # canonical=c_percentile backend=polars selected=c_percentile source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_percentile", category="cross_sectional", business_category="cross_sectional", canonical="c_percentile", source="factor_dsl_np")
+@register_operator(name="c_percentile", category="cross_sectional", business_category="cross_sectional", canonical="c_percentile", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalPercentilePolars(SeriesOperator):
     """截面分位数"""
 
@@ -1038,7 +1038,7 @@ class CrossSectionalPercentilePolars(SeriesOperator):
 
 
 # canonical=c_std backend=polars selected=c_std source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_std", category="cross_sectional", business_category="cross_sectional", canonical="c_std", source="factor_dsl_np")
+@register_operator(name="c_std", category="cross_sectional", business_category="cross_sectional", canonical="c_std", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalStdPolars(SeriesOperator):
     """截面标准差"""
 
@@ -1070,7 +1070,7 @@ class CrossSectionalStdPolars(SeriesOperator):
 
 
 # canonical=cs_mad backend=polars selected=cs_mad source=cross_sectional/c_ops_polars.py
-@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np", backend="polars")
+@register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np", backend="polars", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMadPolars(SeriesOperator):
     """Polars 截面中位绝对偏差（MAD，广播到各列）"""
     metadata = OperatorMetadata(
@@ -1096,7 +1096,7 @@ class CrossSectionalMadPolars(SeriesOperator):
 
 
 # canonical=cs_mad_zscore backend=polars selected=cs_mad_zscore source=cross_sectional/c_ops_polars.py
-@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np", backend="polars")
+@register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np", backend="polars", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalMadZscorePolars(SeriesOperator):
     """Polars raw-MAD 标准化得分：(x - median) / MAD（不乘 0.6745）"""
     metadata = OperatorMetadata(
@@ -1125,7 +1125,7 @@ class CrossSectionalMadZscorePolars(SeriesOperator):
 
 
 # canonical=c_sum backend=polars selected=c_sum source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_sum", category="cross_sectional", business_category="cross_sectional", canonical="c_sum", source="factor_dsl_np")
+@register_operator(name="c_sum", category="cross_sectional", business_category="cross_sectional", canonical="c_sum", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalSumPolars(SeriesOperator):
     """截面求和"""
 
@@ -1154,7 +1154,7 @@ class CrossSectionalSumPolars(SeriesOperator):
 
 
 # canonical=cs_demean backend=polars selected=c_demean source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_demean", category="cross_sectional", business_category="cross_sectional", canonical="cs_demean", source="factor_dsl_np")
+@register_operator(name="c_demean", category="cross_sectional", business_category="cross_sectional", canonical="cs_demean", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalDemeanPolars(SeriesOperator):
     """截面中心化"""
 
@@ -1180,7 +1180,7 @@ class CrossSectionalDemeanPolars(SeriesOperator):
 
 
 # canonical=group_neutralize backend=polars selected=c_neutralize source=cross_sectional/c_ops_polars.py
-@register_operator(name="group_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="group_neutralize", source="factor_dsl_np")
+@register_operator(name="group_neutralize", category="cross_sectional", business_category="cross_sectional", canonical="group_neutralize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalNeutralizePolars(SeriesOperator):
     """行业中性化"""
 
@@ -1279,7 +1279,7 @@ class CrossSectionalRank(SeriesOperator):
             for i, c in enumerate(numeric_cols)
         ])
 
-@register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
+@register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class RankPolars(SeriesOperator):
     """截面 0-1 排名（Polars）。"""
 
@@ -1411,7 +1411,7 @@ class CrossSectionalScale(SeriesOperator):
             (pl.col(c) * scale_factor).alias(c) for c in numeric_cols
         ])
 
-@register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
+@register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ScalePolars(CrossSectionalScale):
     """Polars 缩放数据使sum(abs(x))=指定值（与c_scale相同）"""
 
@@ -1430,7 +1430,7 @@ class ScalePolars(CrossSectionalScale):
 
 
 # canonical=winsorize backend=polars selected=c_winsorize source=cross_sectional/c_ops_polars.py
-@register_operator(name="c_winsorize", category="cross_sectional", business_category="cross_sectional", canonical="winsorize", source="factor_dsl_np")
+@register_operator(name="c_winsorize", category="cross_sectional", business_category="cross_sectional", canonical="winsorize", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class CrossSectionalWinsorizePolars(SeriesOperator):
     """截面去极值"""
 
@@ -1495,7 +1495,7 @@ class CrossSectionalZscore(SeriesOperator):
             pl.Series(name=c, values=z[c].to_numpy()) for c in numeric_cols
         ])
 
-@register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np")
+@register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Consolidating polars native operators")
 class ZscorePolars(CrossSectionalZscore):
     """截面Z-Score（zscore的别名）"""
 
