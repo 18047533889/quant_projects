@@ -167,6 +167,7 @@ class PhysicalImplementationSpec:
     kernel_signature: str = ""
     parameter_domain_hash: str = ""
     semantic_contract_hash: str = ""
+    implementation_closure_hash: str = ""
 
     @staticmethod
     def _nonblank(value: object) -> bool:
@@ -197,6 +198,7 @@ class PhysicalImplementationSpec:
             "implementation_source_hash",
             "parameter_domain_hash",
             "semantic_contract_hash",
+            "implementation_closure_hash",
         ):
             value = getattr(self, field_name)
             if not self._nonblank(value):
@@ -216,6 +218,7 @@ class PhysicalImplementationSpec:
                 implementation_source_hash, kernel_identity, parameter_domain_hash,
                 semantic_contract_hash).
             v2: added accelerator and kernel_signature to payload.
+            v3: added implementation_closure_hash binding (full semantic closure).
         """
         if self.validation_errors():
             return None
@@ -225,6 +228,7 @@ class PhysicalImplementationSpec:
             "canonical": self.canonical.strip(),
             "emitter_identity": self.emitter_identity.strip(),
             "execution_kind": self.execution_kind.value,
+            "implementation_closure_hash": self.implementation_closure_hash.strip(),
             "implementation_source_hash": self.implementation_source_hash.strip(),
             "kernel_identity": self.kernel_identity.strip(),
             "kernel_signature": self.kernel_signature.strip(),
@@ -234,7 +238,7 @@ class PhysicalImplementationSpec:
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        return PhysicalImplementationID(f"pi:v2:{digest}")
+        return PhysicalImplementationID(f"pi:v3:{digest}")
 
     def is_production_eligible(self) -> bool:
         """Check if this spec allows production eligibility.

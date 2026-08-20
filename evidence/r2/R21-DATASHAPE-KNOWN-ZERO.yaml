@@ -1,6 +1,7 @@
 # R21-DATASHAPE-KNOWN-ZERO: DataShapeEstimate rows_known field
 # Date: 2026-08-21
 # Author: Writer BZ
+# Task: Add known=True/False distinction to DataShapeEstimate
 
 summary: |
   Added rows_known: bool = True field to DataShapeEstimate to distinguish

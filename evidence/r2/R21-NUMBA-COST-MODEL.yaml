@@ -1,0 +1,171 @@
+# R21-NUMBA-COST-MODEL Evidence
+# Writer CI: Add cold_jit_ms, warm_ms, cache_hit_probability to Numba cost model
+# Date: 2026-08-21
+
+task:
+  id: R21-NUMBA-COST-MODEL
+  mission: "Add cold_jit_ms, warm_ms, cache_hit_probability to Numba cost model for TTDC calculation"
+  status: implemented
+  timestamp: "2026-08-21T03:00:00Z"
+
+scope:
+  primary_targets:
+    - planning/backend_selector.py
+    - planning/backend_region.py
+  evidence_files:
+    - evidence/r2/R21-NUMBA-COST-MODEL.yaml
+  test_files:
+    - tests/backend/test_r21_numba_cost_model.py
+
+changes:
+  backend_region:
+    file: planning/backend_region.py
+    modification: "Added NUMBA_CPU to PhysicalBackend enum"
+    details: |
+      PhysicalBackend.NUMBA_CPU = "numba_cpu"
+      Classification: Native execution (not delegate)
+      Production eligible: true
+
+  backend_selector_characteristics:
+    file: planning/backend_selector.py
+    modification: "Added cold_jit_ms, warm_ms, cache_hit_probability fields to BackendCharacteristics"
+    details: |
+      New fields in BackendCharacteristics dataclass:
+      - cold_jit_ms: float = 0.0  # Cold JIT compilation cost (one-time)
+      - warm_ms: float = 0.0  # Warm execution cost after JIT cache hit
+      - cache_hit_probability: float = 0.0  # Probability of JIT cache hit (0.0-1.0)
+
+  backend_selector_numba_entry:
+    file: planning/backend_selector.py
+    modification: "Added NUMBA_CPU entry to _BACKEND_CHARACTERISTICS"
+    details: |
+      PhysicalBackend.NUMBA_CPU: BackendCharacteristics(
+        backend=PhysicalBackend.NUMBA_CPU,
+        startup_cost_ms=5.0,
+        per_row_throughput_mrows_per_sec=2.0,
+        memory_overhead_factor=1.1,
+        supports_streaming=False,
+        preferred_scale=(DataScale.SMALL, DataScale.MEDIUM, DataScale.LARGE),
+        preferred_profiles=(WINDOW_HEAVY, ELEMENTWISE_HEAVY, MIXED),
+        parallel_efficiency=0.7,
+        conversion_penalty_ms=12.0,
+        cold_jit_ms=100.0,  # Cold JIT compilation: ~100ms
+        warm_ms=5.0,  # Warm execution: ~5ms
+        cache_hit_probability=0.8,  # 80% chance of JIT cache hit
+      )
+
+  backend_selector_cost_model:
+    file: planning/backend_selector.py
+    modification: "Added JIT cost model logic in _evaluate_costs()"
+    details: |
+      For NUMBA_CPU backend, effective cost is calculated as:
+      jit_effective_cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms
+
+      This replaces the generic compute cost for Numba, accounting for:
+      - One-time JIT compilation penalty on cold starts
+      - Fast execution after JIT warmup
+      - Cache hit probability reducing effective cold start cost
+
+jit_cost_model_formula:
+  description: "Effective JIT cost calculation for NUMBA_CPU backend"
+  formula: "jit_effective_cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms"
+  parameters:
+    cold_jit_ms:
+      description: "One-time JIT compilation cost (typical: 50-200ms)"
+      impact: "Penalizes cold starts, benefits warm runs"
+      default_value: 100.0
+    warm_ms:
+      description: "Execution cost after JIT cache hit (typical: 1-10ms)"
+      impact: "Reflects optimized native execution speed"
+      default_value: 5.0
+    cache_hit_probability:
+      description: "Probability of JIT cache hit (0.0-1.0)"
+      impact: "Reduces effective cold_jit_ms cost"
+      default_value: 0.8
+  example_calculations:
+    - scenario: "Cold start (cache miss)"
+      cache_hit_probability: 0.0
+      effective_cost: "1.0 * 100 + 5 = 105ms"
+    - scenario: "Warm cache hit (80%)"
+      cache_hit_probability: 0.8
+      effective_cost: "0.2 * 100 + 5 = 25ms"
+    - scenario: "High cache hit (95%)"
+      cache_hit_probability: 0.95
+      effective_cost: "0.05 * 100 + 5 = 10ms"
+
+backend_characteristics_summary:
+  numba_cpu:
+    backend: "NUMBA_CPU"
+    startup_cost_ms: 5.0
+    per_row_throughput_mrows_per_sec: 2.0
+    memory_overhead_factor: 1.1
+    supports_streaming: false
+    preferred_scale: ["SMALL", "MEDIUM", "LARGE"]
+    preferred_profiles: ["WINDOW_HEAVY", "ELEMENTWISE_HEAVY", "MIXED"]
+    parallel_efficiency: 0.7
+    conversion_penalty_ms: 12.0
+    cold_jit_ms: 100.0
+    warm_ms: 5.0
+    cache_hit_probability: 0.8
+
+ttdc_integration:
+  description: |
+    TTDC (Time To Durable Commit) calculation in predict_ttdc() now accounts for
+    Numba JIT cost model through BackendCharacteristics.cold_jit_ms, warm_ms, and
+    cache_hit_probability fields.
+  calculation: |
+    For NUMBA_CPU backend:
+    effective_cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms
+
+    This cost is added to the total TTDC estimate alongside:
+    - scan_ms: Data scan time
+    - conversion_ms: Representation conversion time
+    - execute_ms: Execution time (now includes JIT overhead for Numba)
+    - materialize_ms: Materialization time
+
+tests_created:
+  file: tests/backend/test_r21_numba_cost_model.py
+  test_classes:
+    - TestNumbaCostModelFields
+      tests:
+        - test_numba_backend_has_jit_cost_fields
+        - test_jit_cost_fields_positive
+    - TestNumbaCostModelCalculation
+      tests:
+        - test_effective_jit_cost_formula
+        - test_jit_cost_reduces_with_higher_cache_hit
+        - test_jit_cost_increases_with_cold_start
+    - TestNumbaBackendSelection
+      tests:
+        - test_numba_is_candidate_in_characteristics
+        - test_numba_cost_includes_jit_overhead
+    - TestNumbaCacheHitProbability
+      tests:
+        - test_high_cache_hit_reduces_effective_cost
+    - TestNumbaTTDCIntegration
+      tests:
+        - test_ttdc_includes_jit_cost
+  total_tests: 9
+  test_command: "cd /home/shw/quant_projects && PYTHONPATH=. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m pytest tests/backend/test_r21_numba_cost_model.py -v"
+
+verification:
+  test_command: "cd /home/shw/quant_projects && PYTHONPATH=. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m pytest tests/backend/test_r21_numba_cost_model.py -v"
+  status: "All 9 tests pass"
+  notes: |
+    Tests verify:
+    1. NUMBA_CPU backend exists in _BACKEND_CHARACTERISTICS
+    2. cold_jit_ms, warm_ms, cache_hit_probability fields are present and valid
+    3. Effective JIT cost formula is correct: (1 - cache_hit) * cold_jit + warm
+    4. Higher cache hit probability reduces effective cost
+    5. Cold start increases effective cost
+    6. TTDC calculation includes JIT cost model
+
+backward_compatibility:
+  description: |
+    All changes are backward compatible:
+    - New fields in BackendCharacteristics have default values (0.0)
+    - Existing backends (PANDAS_NUMPY, POLARS_*, DUCKDB_SQL) are unchanged
+    - NUMBA_CPU is an additive entry in PhysicalBackend enum
+    - JIT cost model only applies to NUMBA_CPU backend
+  risk_level: "low"
+  migration_required: false

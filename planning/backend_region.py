@@ -21,6 +21,7 @@ class PhysicalBackend(str, Enum):
     CLICKHOUSE_SQL = "clickhouse_sql"
     Q_TABLE = "q_table"
     ARROW_COMPUTE = "arrow_compute"
+    NUMBA_CPU = "numba_cpu"  # Numba JIT compiled CPU kernels
 
 
 class Representation(str, Enum):

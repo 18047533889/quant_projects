@@ -1,0 +1,55 @@
+# Evidence for R21-PLAN-HASH-PER-NODE
+# Task: Strengthen compute_plan_hash to bind each node's PI, bound params, accelerator, kernel signature
+# Date: 2026-08-21
+
+task_id: R21-PLAN-HASH-PER-NODE
+status: completed
+timestamp: 2026-08-21
+
+files_modified:
+  - file: factor_engine/planning/physical_region_plan.py
+    changes: |
+      Updated compute_plan_hash function to accept optional node_implementations dict parameter.
+      For each node in a region, if node_id exists in node_implementations, the hash now includes:
+        - node_id
+        - physical_implementation_id
+        - bound_params
+        - accelerator
+        - kernel_signature
+      This ensures that different node implementations produce different plan hashes.
+
+  - file: factor_engine/planner/backend_region.py
+    changes: |
+      Updated PhysicalRegionPlan.compute_plan_hash static method to accept optional node_implementations dict parameter.
+      For each node in a region, if node_id exists in node_implementations, the hash now includes:
+        - node_id
+        - physical_implementation_id
+        - bound_params
+        - accelerator
+        - kernel_signature
+      This ensures that different node implementations produce different plan hashes.
+
+  - file: factor_engine/tests/multibackend_integration/test_cost_model.py
+    changes: |
+      Added three regression tests to TestPlanHashGeneration class:
+        1. test_per_node_implementation_hash_binding: Verifies that including node implementations changes the hash.
+        2. test_same_node_implementations_same_hash: Verifies that same implementations produce same hash.
+        3. test_different_node_implementations_different_hash: Verifies that different implementations produce different hash.
+
+tests_added:
+  - test_per_node_implementation_hash_binding
+  - test_same_node_implementations_same_hash
+  - test_different_node_implementations_different_hash
+
+evidence:
+  - The updated compute_plan_hash function now includes per-node implementation details when provided.
+  - Regression tests verify that:
+    1. Hash changes when node implementations are added
+    2. Same implementations produce same hash (stability)
+    3. Different implementations produce different hash (sensitivity)
+  - This ensures plan identity is bound to specific node implementations, preventing accidental reuse of plans with different node-level details.
+
+conclusion: |
+  The compute_plan_hash function now binds each node's physical_implementation_id, bound_params, accelerator, and kernel_signature.
+  This strengthens plan identity by ensuring that two plans with identical region structure but different node implementations
+  will produce different hashes. The changes are backward compatible as the node_implementations parameter is optional.

@@ -290,6 +290,7 @@ def test_valid_sha256_hashes_pass_validation():
         implementation_source_hash=valid_hash,
         parameter_domain_hash=valid_hash,
         semantic_contract_hash=valid_hash,
+        implementation_closure_hash=valid_hash,
         emitter_identity="test.pandas:v1",
     )
     errors = spec.validation_errors()
@@ -301,13 +302,15 @@ def test_valid_sha256_hashes_pass_validation():
 
 def test_invalid_hash_format_with_label_prefix():
     """R21-HASH-FORMAT-ENFORCE: Hash with label prefix 'ts_mean:v2' fails validation."""
+    valid_hash = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     spec = PhysicalImplementationSpec(
         canonical="ts_mean",
         backend="pandas_numpy",
         execution_kind=ExecutionKind.NATIVE_GROUP,
         implementation_source_hash="ts_mean:v2",
-        parameter_domain_hash="valid_hash_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-        semantic_contract_hash="valid_hash_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        parameter_domain_hash=valid_hash,
+        semantic_contract_hash=valid_hash,
+        implementation_closure_hash=valid_hash,
         emitter_identity="test.pandas:v1",
     )
     errors = spec.validation_errors()
@@ -331,12 +334,13 @@ def test_invalid_hash_format_uppercase_hex():
         implementation_source_hash=uppercase_hash,
         parameter_domain_hash=uppercase_hash,
         semantic_contract_hash=uppercase_hash,
+        implementation_closure_hash=uppercase_hash,
         emitter_identity="test.pandas:v1",
     )
     errors = spec.validation_errors()
     # Should fail validation due to uppercase characters
     hash_errors = [e for e in errors if "hash" in e.lower()]
-    assert len(hash_errors) == 3  # All three hash fields should fail
+    assert len(hash_errors) == 4  # All four hash fields should fail
     assert not spec.is_production_eligible()
 
 

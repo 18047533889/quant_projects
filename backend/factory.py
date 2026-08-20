@@ -59,17 +59,9 @@ def build_backend(backend_type: str):
 
         return DuckDBPushdownBackend()
     if normalized in {"clickhouse_sql", "ch_sql", "clickhouse_pushdown"}:
-        from .duckdb_pushdown_backend import DuckDBPushdownBackend
+        from .duckdb_pushdown_backend import ClickHousePushdownBackend
 
-        # SqlBackend 按 data_source 自动选 DuckDB / ClickHouse 方言。
-        # R40 #141: 显式记录 backend 选择链（requested_backend / resolved_dialect /
-        # datasource_identity），供 ProductionExecutionCertificate.build() 纳入
-        # certificate —— runtime backend 事件校验可证明实际方言。
-        backend = DuckDBPushdownBackend()
-        backend._requested_backend = "clickhouse_sql"
-        backend._resolved_dialect = "clickhouse"
-        backend._datasource_identity = ""
-        return backend
+        return ClickHousePushdownBackend()
     if normalized in {"auto", "hybrid"}:
         from .hybrid_backend import HybridBackend
 

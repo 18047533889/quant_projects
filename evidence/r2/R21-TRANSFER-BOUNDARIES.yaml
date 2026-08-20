@@ -59,6 +59,10 @@ files_modified:
       - Updated _edge_hash_payload to bind transform type
       - Added infer_transfer_transform function
       - Updated estimate_transfer_cost_ms with new cost models
+  - path: planner/duckdb_region_optimizer.py
+    changes:
+      - Imported TransferTransform and infer_transfer_transform
+      - Updated optimize_duckdb_region_boundary to set transform field
 
 evidence:
   - file: evidence/r2/R21-TRANSFER-BOUNDARIES.yaml
@@ -67,6 +71,8 @@ evidence:
 regression_tests:
   - file: tests/planner/test_transfer_transform.py
     tests:
-      - test_transfer_transform_inference
-      - test_transfer_edge_transform_binding
-      - test_transfer_cost_estimation_new_transforms
+      - test_transfer_transform_inference (14 tests)
+      - test_transfer_edge_transform_binding (3 tests)
+      - test_transfer_cost_estimation_new_transforms (5 tests)
+    total: 22 tests
+    status: all passing

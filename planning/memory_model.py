@@ -63,6 +63,7 @@ class DataShapeEstimate:
     sorted_by: tuple[str, ...] = ()
     partition_by: tuple[str, ...] = ()
     projected_columns: tuple[str, ...] = ()
+    rows_known: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +82,7 @@ class DataShapeEstimate:
             "sorted_by": self.sorted_by,
             "partition_by": self.partition_by,
             "projected_columns": self.projected_columns,
+            "rows_known": self.rows_known,
         }
 
 
@@ -283,6 +285,7 @@ def estimate_shape_from_metadata(
         sorted_by=(),
         partition_by=(),
         projected_columns=(),
+        rows_known=True,
     )
 
 

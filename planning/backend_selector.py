@@ -62,6 +62,10 @@ class BackendCharacteristics:
     preferred_profiles: tuple[OperatorProfile, ...]  # 擅长的算子类型
     parallel_efficiency: float  # 并行效率（0.0-1.0）
     conversion_penalty_ms: float  # 转换惩罚（从其他 backend 转入）
+    # R21-NUMBA-COST-MODEL: Numba JIT specific fields for TTDC calculation
+    cold_jit_ms: float = 0.0  # Cold JIT compilation cost (one-time)
+    warm_ms: float = 0.0  # Warm execution cost after JIT cache hit
+    cache_hit_probability: float = 0.0  # Probability of JIT cache hit (0.0-1.0)
 
 
 # Backend 性能特征库（基于实测 + 架构特性）
@@ -124,6 +128,29 @@ _BACKEND_CHARACTERISTICS: dict[PhysicalBackend, BackendCharacteristics] = {
         ),
         parallel_efficiency=0.95,  # 最高并行效率（vectorized）
         conversion_penalty_ms=20.0,  # 最高转换成本（SQL 边界）
+    ),
+    # R21-NUMBA-COST-MODEL: Numba JIT backend for stateful/recursive operators
+    # cold_jit_ms: One-time JIT compilation cost (typical: 50-200ms)
+    # warm_ms: Execution cost after JIT cache hit (typical: 1-10ms)
+    # cache_hit_probability: Likelihood of hitting cached JIT binary (0.0-1.0)
+    PhysicalBackend.NUMBA_CPU: BackendCharacteristics(
+        backend=PhysicalBackend.NUMBA_CPU,
+        startup_cost_ms=5.0,  # Low import cost (numba already loaded)
+        per_row_throughput_mrows_per_sec=2.0,  # High throughput after JIT
+        memory_overhead_factor=1.1,  # Low memory overhead
+        supports_streaming=False,
+        preferred_scale=(DataScale.SMALL, DataScale.MEDIUM, DataScale.LARGE),
+        preferred_profiles=(
+            OperatorProfile.WINDOW_HEAVY,
+            OperatorProfile.ELEMENTWISE_HEAVY,
+            OperatorProfile.MIXED,
+        ),
+        parallel_efficiency=0.7,  # Good parallelism (GIL released in JIT)
+        conversion_penalty_ms=12.0,  # Moderate conversion cost (numpy array)
+        # JIT cost model fields
+        cold_jit_ms=100.0,  # Cold JIT compilation: ~100ms
+        warm_ms=5.0,  # Warm execution: ~5ms
+        cache_hit_probability=0.8,  # 80% chance of JIT cache hit
     ),
 }
 
@@ -410,6 +437,16 @@ class IntelligentBackendSelector:
                 + complexity_penalty
                 + distribution_penalty
             ) * adjustment
+
+            # R21-NUMBA-COST-MODEL: Apply Numba JIT cost model for NUMBA_CPU backend
+            if backend == PhysicalBackend.NUMBA_CPU and hasattr(chars, 'cold_jit_ms'):
+                # Effective cost = (1 - cache_hit_probability) * cold_jit_ms + warm_ms
+                jit_effective_cost = (
+                    (1.0 - chars.cache_hit_probability) * chars.cold_jit_ms
+                    + chars.warm_ms
+                )
+                # Add JIT cost to total (replaces generic compute for Numba)
+                total_cost = total_cost - compute_ms + jit_effective_cost
 
             results.append((backend, total_cost, memory_bytes))
 

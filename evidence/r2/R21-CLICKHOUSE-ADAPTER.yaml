@@ -1,0 +1,49 @@
+---
+id: R21-CLICKHOUSE-ADAPTER
+title: "ClickHouse adapter isolation — separate execution adapter from DuckDBPushdownBackend"
+date: 2026-08-21
+status: PASS
+owner: Writer CG (ClickHouse adapter)
+head_sha: "working-tree"
+---
+
+# Problem
+
+ClickHouse SQL execution was routed through `DuckDBPushdownBackend` with runtime
+attribute injection (`_requested_backend`, `_resolved_dialect`, `_datasource_identity`)
+to pretend a separate backend identity. This created a fragile boundary where:
+
+1. The concrete backend class was still `DuckDBPushdownBackend` for both engines.
+2. The factory had to patch private attributes after construction.
+3. The adapter identity depended on caller discipline instead of type structure.
+4. Telemetry, certificate chain, and adapter boundary relied on runtime monkey-patching.
+
+# Fix
+
+Refactored `backend/duckdb_pushdown_backend.py` and `backend/factory.py`:
+
+1. Introduced `ClickHousePushdownBackend(SqlBackend)` as a first-class adapter.
+2. `DuckDBPushdownBackend` remains the DuckDB adapter (shared compiler IR, independent runtime label).
+3. `build_backend('clickhouse_sql')` now returns `ClickHousePushdownBackend`.
+4. Removed runtime attribute injection for ClickHouse factory routing.
+5. `build_backend_execution_certificate` inherits adapter identity without extra patching.
+
+# Scope
+
+- Compiler IR / emitter / executor chain is still shared (no query generation duplication).
+- Adapter boundary is now explicit via subclass + `runtime_backend_label`.
+- Existing tests remain compatible; adapter regression tests added.
+
+# Tests
+
+```
+tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_backend_has_expected_identity_and_base PASSED
+tests/backend/test_clickhouse_adapter.py::test_clickhouse_certificate_chain_inherits_adapter_identity PASSED
+tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_sql_runtime_identity_matches_factory PASSED
+```
+
+# Files
+
+- `backend/duckdb_pushdown_backend.py`
+- `backend/factory.py`
+- `tests/backend/test_clickhouse_adapter.py`
