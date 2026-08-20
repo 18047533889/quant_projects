@@ -1139,9 +1139,7 @@ class TSKramersMoyalDriftPolarsNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "rolling", "stochastic", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
     def _calculate_series(self, feature, window, **kwargs):
         # KM drift: local mean of increments
