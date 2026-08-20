@@ -2634,23 +2634,23 @@ def get_direct_use_mining_operators_from_manifest(
             except Exception:
                 continue
 
-            # Market filtering
-            if context.market and context.market not in row.supported_markets:
+        # Market filtering
+        if context.market and context.market not in row.supported_markets:
+            continue
+
+        # Cost filtering
+        if context.max_cost is not None and row.runtime_cost > context.max_cost:
+            continue
+
+        # R21-FAILCLOSED-SOURCES: None = unknown (hard fail), empty = no sources
+        if context.available_sources is None and row.source_recipes:
+            continue
+        if context.available_sources is not None:
+            missing = [s for s in row.source_recipes if s not in context.available_sources]
+            if missing:
                 continue
 
-            # Cost filtering
-            if context.max_cost is not None and row.runtime_cost > context.max_cost:
-                continue
-
-            # R21-FAILCLOSED-SOURCES: None = unknown (hard fail), empty = no sources
-            if context.available_sources is None and row.source_recipes:
-                continue
-            if context.available_sources is not None:
-                missing = [s for s in row.source_recipes if s not in context.available_sources]
-                if missing:
-                    continue
-
-            # Frequency filtering
+        # Frequency filtering
             if context.target_frequency is not None:
                 if context.target_frequency == "minute" and row.output_semantic_kind == "daily":
                     continue
