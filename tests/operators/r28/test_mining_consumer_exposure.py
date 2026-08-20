@@ -107,7 +107,7 @@ def test_production_operators_reachable():
         "zscore(close, 20)",
         "ts_delta(close, 5)",
     ):
-        ok, msg = validate_production_dsl(formula)
+        ok, msg = validate_production_dsl(formula, market="ashare")
         # fail-closed is the current honest state (production evidence is not
         # fully certified), but the operator MUST be resolvable (not "unsupported")
         if not ok:

@@ -4,6 +4,7 @@ title: "ClickHouse route identity fix — candidate key written as duckdb_sql"
 date: 2026-08-20
 status: PASS
 owner: Writer AF (ClickHouse identity fix)
+head_sha: "4f1863e9ba147b5011e93cabecd8935fa027985b"
 ---
 
 # Problem
@@ -14,46 +15,52 @@ key was still written as `"duckdb_sql"` in `choose_plan_route`. This caused:
 1. The candidate key in `candidates` was `"duckdb_sql"` even for ClickHouse routes.
 2. The execution certificate was built without `requested_backend`, `resolved_dialect`,
    and `datasource_identity`, causing ClickHouse routes to be silently mapped to DuckDB.
-3. The `plan_native_subgraph_fraction` function had a hardcoded default of `"duckdb_sql"`.
+3. The DuckDB-fused penalty only fired when `"duckdb_sql"` was in `candidates`.
+4. The measured-baseline path could inherit DuckDB entries for ClickHouse routes.
 
 # Fix
 
-Modified `backend/plan_cost_router.py`:
+Modified the following files at HEAD `4f1863e9`:
 
-1. **Candidate key fix** (line ~1067): Changed `candidates["duckdb_sql"]` to `candidates[sql_backend]`
-   and `_within_budget("duckdb_sql", rows)` to `_within_budget(sql_backend, rows)`.
+## `backend/plan_cost_router.py`
 
-2. **Certificate identity** (line ~834): Added `data_kind` parameter to `_build_execution_certificate`
-   and passed `requested_backend`, `resolved_dialect`, and `datasource_identity` to
-   `ProductionExecutionCertificate.build`.
+1. **Candidate key**: `_within_budget(sql_backend, rows)` + `candidates[sql_backend]` (was hardcoded `"duckdb_sql"`).
+2. **Certificate identity**: `_build_execution_certificate(..., data_kind=data_kind)` with `requested_backend` / `resolved_dialect` / `datasource_identity`.
+3. **Fused penalty**: fires for either `"duckdb_sql"` or `"clickhouse_sql"` in `candidates`.
+4. **Measured baseline**: `clickhouse_sql` returns `False` (DuckDB entries must not inherit).
+5. **TTDC execute rate**: `clickhouse_sql` added to `_execute_ms_for_backend`.
+6. **TTDC predictor**: ClickHouse treated like DuckDB for scan-to-materialize path.
 
-3. **DuckDB fused penalty** (line ~1089): Changed to check for either `"duckdb_sql"` or
-   `"clickhouse_sql"` in candidates.
+## `runtime/production_execution_certificate.py`
 
-4. **plan_native_subgraph_fraction** (line ~1270): Changed default from `"duckdb_sql"` to `None`.
+4. **Dialect identity check**: if both certificate and runtime event declare a dialect, they must match — a DuckDB certificate must not validate a ClickHouse event.
 
-5. **record_plan_route** (line ~1163): Added `requested_backend`, `resolved_dialect`, and
-   `datasource_identity` to the runtime stats.
+## `runtime/hybrid_executor.py`
+
+5. **Runtime event dialect**: `record_runtime_backend_event(..., dialect=None)` records datasource dialect alongside executor backend.
 
 # Evidence
 
+- `evidence/r2/R21-P026-CLICKHOUSE-IDENTITY.yaml`
 - 2 regression tests created and passing.
-- Certificate identity fields verified for ClickHouse backend.
-- Candidate key verified to be `clickhouse_sql` for ClickHouse data source.
-- Existing ClickHouse executor tests pass (2/2).
-- Existing ClickHouse SQL pushdown tests have pre-existing failures (5/9) unrelated to this fix.
+- Related certificate/telemetry tests pass (26 total).
+- One pre-existing R31 test failure (`tests/r31/test_acceptance_gates.py::test_cost_counts_every_occurrence_with_bound_params`) is unrelated to this change (test already at HEAD did not pass `source_lowered` to `_dag_aware_mixed_cost`).
 
 # Tests
 
 ```
-tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_sql_candidate_key PASSED
-tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_certificate_identity PASSED
-tests/backend/test_clickhouse_executor.py::test_execute_clickhouse_delegates_to_execute_query PASSED
-tests/backend/test_clickhouse_executor.py::test_try_execute_sql_pushdown_none_without_ch_source PASSED
+tests/backend/test_clickhouse_identity_regression.py::test_clickhouse_route_candidate_key_is_clickhouse_sql PASSED
+tests/backend/test_clickhouse_identity_regression.py::test_duckdb_certificate_does_not_validate_clickhouse_event PASSED
+tests/r40/test_r40_backend_factory_140_141.py (4 tests) PASSED
+tests/r39/test_perf_telemetry_2026_08.py (12 tests) PASSED
+tests/r39/test_perf_duckdb_scan_2026_08.py (14 tests) PASSED
+tests/r33/test_r33_hard_gates_2026_08.py + tests/multibackend/test_p0_001_006.py (31 tests) PASSED
 ```
 
-# Files Modified
+# Files
 
 - `backend/plan_cost_router.py`
+- `runtime/production_execution_certificate.py`
+- `runtime/hybrid_executor.py`
 - `tests/backend/test_clickhouse_identity_regression.py` (created)
 - `evidence/r2/R21-P026-CLICKHOUSE-IDENTITY.yaml` (created)
