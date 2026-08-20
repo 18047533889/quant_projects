@@ -14,6 +14,7 @@ from planner.backend_region import (
     BackendRegion,
     ExecutionAxis,
     PhysicalBackend,
+    PhysicalProperties,
     Representation,
 )
 from planner.duckdb_region_optimizer import (
@@ -53,7 +54,7 @@ def test_sql_ordering_not_guaranteed_without_explicit_order_by():
         estimated_rows=1_000_000,
         estimated_compute_ms=100.0,
         estimated_memory_bytes=8_000_000,
-        sorted_by=(),  # No ORDER BY in SQL
+        required_properties=PhysicalProperties(sorted_by=()),  # No ORDER BY in SQL
     )
 
     props = infer_duckdb_region_output_properties(region, has_explicit_order_by=False)
@@ -74,7 +75,7 @@ def test_sql_ordering_guaranteed_with_order_by():
         estimated_rows=1_000_000,
         estimated_compute_ms=100.0,
         estimated_memory_bytes=8_000_000,
-        sorted_by=("instrument", "datetime"),
+        required_properties=PhysicalProperties(sorted_by=("instrument", "datetime")),
     )
 
     props = infer_duckdb_region_output_properties(region, has_explicit_order_by=True)
@@ -128,7 +129,7 @@ def test_transfer_edge_requires_sort_when_ordering_not_satisfied():
         estimated_rows=1_000_000,
         estimated_compute_ms=100.0,
         estimated_memory_bytes=8_000_000,
-        sorted_by=(),  # No ordering guarantee
+        required_properties=PhysicalProperties(sorted_by=()),  # No ordering guarantee
     )
 
     consumer = BackendRegion(
@@ -170,7 +171,7 @@ def test_transfer_edge_no_sort_when_ordering_satisfied():
         estimated_rows=1_000_000,
         estimated_compute_ms=100.0,
         estimated_memory_bytes=8_000_000,
-        sorted_by=("instrument", "datetime"),
+        required_properties=PhysicalProperties(sorted_by=("instrument", "datetime")),
     )
 
     consumer = BackendRegion(

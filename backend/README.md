@@ -12,6 +12,7 @@
 4. **HybridBackend**：`auto` — SQL 可编译子树 + Polars/Pandas fallback。  
 5. **不负责**：DSL（`api`）、Expr（`expr`）、计划优化（`planner`）。
 
+
 ---
 
 ## 1. 执行路径
@@ -44,7 +45,7 @@ flowchart TD
 | [`cleaned_bridge.py`](cleaned_bridge.py) | panel 转换、`make_cleaned_kernel`、`build_cleaned_dsl_allowlist` |
 | [`polars_backend.py`](polars_backend.py) | 委托 `PandasBackend` |
 | [`sql_backend.py`](sql_backend.py) | SqlBackend：DuckDB / ClickHouse 子树下推 + Python fallback |
-| [`duckdb_pushdown_backend.py`](duckdb_pushdown_backend.py) | `build_backend("duckdb_sql"|"clickhouse_sql")` 入口 |
+| [`duckdb_pushdown_backend.py`](duckdb_pushdown_backend.py) | `DuckDBPushdownBackend` / `ClickHousePushdownBackend`（共享编译 IR，独立运行时边界） |
 | [`hybrid_backend.py`](hybrid_backend.py) | `build_backend("auto")`：SQL + Polars |
 | [`factory.py`](factory.py) | `build_backend("pandas"|"polars"|"duckdb_sql"|"clickhouse_sql"|...)` |
 | [`kernels.py`](kernels.py) | `KernelRegistry`（op → callable） |

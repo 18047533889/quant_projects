@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "source_snapshot_id": "src:v1:36a6a694e2ab3b4d",
-  "merkle_root": "36a6a694e2ab3b4d09662f0fd38ae1f3408cc56b5433b4ce1147fca8ce9136a8",
+  "source_snapshot_id": "src:v1:1ceb05e03a08a411",
+  "merkle_root": "1ceb05e03a08a41124173d8e63d959ab1d9c43a5f50dd67910ef9d5647ab4946",
   "tree_count": 7,
   "file_count": 843,
   "trees": {
     "backend": "d5b360cf0e5dd83f0c641a1b7aea1801aa42eeb5cfeef06025a4feac5a5d664f",
     "cleaned_operators": "aa2cc497137c42d4b1500c24d592cb34a86e84633452746c856b27b838e0e949",
-    "mining": "ff41050a6353752eee316697ba1210e5529799b8e4b0d8f317964d5c7ddb8e65",
-    "planner": "d4e0f6ea33c1778512d1a10d57ef36e78c174c9df8b2887acba17120611c46fb",
+    "mining": "ac56c65291099579edbbe1d12b96e278aa1a901c95b46b6cb1c2bbdea0b769ce",
+    "planner": "5338ff9aa9e101f2d1aa5393188b3fe525f458b32958fd00461d343eb2016344",
     "runtime": "1afd2e1206834b1f3dbc4a8397d0e1921a72f9e489c657064c725d5bcd298b70",
     "market": "50ecdcf308689a343ad701674a22c895de0bd4d2fa0f21f31c4d952861c132ec",
     "fields": "63b65d77f090c0d42e2ab017bb5fbfed64500178e2c9842959b9b7b3846e1d7c"
@@ -2548,7 +2548,7 @@
     },
     {
       "path": "mining/direct_use.py",
-      "sha256": "1cb2108a6502f6045fa28e898b235754e79d50523ec515a6f28388fd745436b9"
+      "sha256": "f35cfa457ba2f3a4b5aa97b849c77380ddce27312367e26d72fd444901491bb7"
     },
     {
       "path": "mining/operator_catalog.py",
@@ -2568,7 +2568,7 @@
     },
     {
       "path": "planner/backend_region.py",
-      "sha256": "2d55045248eeb80ab3a250cfbb3124c8688c663a1fee2c344c2b8902851c85bf"
+      "sha256": "da615ab369fff1b4dae027b80b6b9c78a6d9daa2c3402d5502c2d0a1b26eecaa"
     },
     {
       "path": "planner/batch_data_request.py",
@@ -2628,7 +2628,7 @@
     },
     {
       "path": "planner/duckdb_region_optimizer.py",
-      "sha256": "49711645b713232abad7ffd016d63b3f3ec593bd48815f38f006a81523133dc4"
+      "sha256": "bf45f4ee1e8a60d65ba2df9ea8a3be9bc28cb2fc278c3d03d55d0b968958d300"
     },
     {
       "path": "planner/explain_plan.py",
@@ -3396,5 +3396,5 @@
     "market",
     "fields"
   ],
-  "generated_at": "2026-08-20T19:32:10.305389+00:00"
+  "generated_at": "2026-08-20T19:39:30.159337+00:00"
 }

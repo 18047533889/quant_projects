@@ -50,6 +50,7 @@ from mining.operator_catalog import (
     market_support,
     mining_eligible,
     source_status,
+    _output_grain as _catalog_output_grain,
 )
 
 # ---------------------------------------------------------------------------
@@ -1595,78 +1596,79 @@ def condition_slot(canonical: str) -> str | None:
 class DirectUseOperator:
     """R18-096 matrix row — every retained public canonical gets one."""
 
-    canonical: str
-    aliases: tuple[str, ...]
-    module: str
-    class_name: str
-    authoring_tier: str
+    canonical: str = ""
+    aliases: tuple[str, ...] = ()
+    module: str = ""
+    class_name: str = ""
+    authoring_tier: str = "unknown"
 
-    direct_use_status: DirectUseStatus
-    mining_role: str
-    terminal_allowed: bool
-    allowed_ast_positions: tuple[str, ...]
-    mining_lane: str
+    direct_use_status: DirectUseStatus = DirectUseStatus.DELETE_USELESS
+    mining_role: str = "unresolved"
+    terminal_allowed: bool = False
+    allowed_ast_positions: tuple[str, ...] = ()
+    mining_lane: str = "supporting"
 
-    retention_reason: str
-    delete_reason: str
-    replacement: str
+    retention_reason: str = ""
+    delete_reason: str = ""
+    replacement: str = ""
 
-    economic_effect_family: str
-    semantic_redundancy_group: str
-    monotonic_transform_class: str
+    economic_effect_family: str = "unknown"
+    semantic_redundancy_group: str = ""
+    monotonic_transform_class: str = ""
 
-    input_slots: tuple[InputSlotSpec, ...]
-    data_inputs: tuple[str, ...]
-    scalar_parameters: tuple[str, ...]
-    context_inputs: tuple[str, ...]
-    group_inputs: tuple[str, ...]
-    event_inputs: tuple[str, ...]
-    condition_slot: str
+    input_slots: tuple[InputSlotSpec, ...] = ()
+    data_inputs: tuple[str, ...] = ()
+    scalar_parameters: tuple[str, ...] = ()
+    context_inputs: tuple[str, ...] = ()
+    group_inputs: tuple[str, ...] = ()
+    event_inputs: tuple[str, ...] = ()
+    condition_slot: str = ""
 
-    output_semantic_kind: str
-    output_unit: str | None
-    output_cardinality: str
-    output_value_domain: str
+    output_semantic_kind: str = "series"
+    output_unit: str | None = None
+    output_cardinality: str = "panel"
+    output_value_domain: str = "continuous_signed"
+    output_grain: str | None = None
 
-    default_input_recipe: dict[str, str]
-    smoke_recipe_ids: tuple[str, ...]
+    default_input_recipe: dict[str, str] = field(default_factory=dict)
+    smoke_recipe_ids: tuple[str, ...] = ()
 
-    supported_markets: tuple[str, ...]
-    source_recipes: tuple[str, ...]
+    supported_markets: tuple[str, ...] = ()
+    source_recipes: tuple[str, ...] = ()
 
-    default_params: tuple[str, ...]
-    searchable_params: tuple[str, ...]
-    search_grade_by_param: dict[str, str]
-    parameter_injectivity_passed: bool
+    default_params: tuple[str, ...] = ()
+    searchable_params: tuple[str, ...] = ()
+    search_grade_by_param: dict[str, str] = field(default_factory=dict)
+    parameter_injectivity_passed: bool = False
 
-    stateful: bool
-    execution_model: str
-    checkpoint_supported: bool
-    full_history_replay_allowed: bool
+    stateful: bool = False
+    execution_model: str = "independent_with_warmup"
+    checkpoint_supported: bool = False
+    full_history_replay_allowed: bool = True
 
-    runtime_cost: int
-    memory_cost: int
-    preferred_backend: str
-    reference_backend: str
+    runtime_cost: int = 0
+    memory_cost: int = 0
+    preferred_backend: str = "pandas_numpy"
+    reference_backend: str = "pandas_numpy"
 
-    production_certified: bool
-    directly_usable: bool
+    production_certified: bool = False
+    directly_usable: bool = False
 
     # R22-003..008: the single ``directly_usable`` verdict is split into five
     # orthogonal fields.  ``directly_usable`` stays as the backward-compatible
     # alias ``mining_visible ∧ production_admitted`` (the R18 "eligible" notion).
-    mining_visible: bool
-    composition_usable: bool
-    terminal_usable: bool
-    production_terminal_usable: bool
-    production_admitted: bool
-    context_admitted: bool
+    mining_visible: bool = False
+    composition_usable: bool = False
+    terminal_usable: bool = False
+    production_terminal_usable: bool = False
+    production_admitted: bool = False
+    context_admitted: bool = False
 
-    min_effective_samples: dict[str, int]
-    scale_sensitive: dict[str, bool]
-    search_prior: float
-    family_budget: int
-    cost_budget: int
+    min_effective_samples: dict[str, int] = field(default_factory=dict)
+    scale_sensitive: dict[str, bool] = field(default_factory=dict)
+    search_prior: float = 0.5
+    family_budget: int = 4
+    cost_budget: int = 9
     retention_usage: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1873,6 +1875,30 @@ _OUTPUT_DOMAIN_ALPHA_PATTERNS: list[tuple[str, str]] = [
     ("_persistence", "bounded_0_1"),
     ("_smoothness", "bounded_0_1"),
 ]
+# R15-INC-003: per-canonical output grain overrides that win over the
+# suffix-based semantic-kind heuristic.  A minute-input/minute-output
+# intraday operator carries output_semantic_kind='' so the suffix
+# fallback does not invent a value-domain; the gate reads this table
+# first via `_effective_output_grain`.
+_OUTPUT_GRAIN_OVERRIDES: dict[str, str] = {
+    # R21-P033: intraday minute-output operators must pass through the
+    # bidirectional frequency gate as minute-grained, never daily.
+    "intra_neighbor_event_class": "minute",
+    "intra_range_gap_flag": "minute",
+}
+
+
+def _effective_output_grain(canonical: str, catalog: dict[str, Any], role: MiningRole) -> str:
+    """R15-INC-003: bidirectional frequency gate grain source.
+
+    Canonical override wins, then declared output_grain, then role-based
+    fallback.  The mining target-frequency filter must call this instead
+    of inferring grain from ``output_semantic_kind`` so raw minute
+    operators never silently pass into a daily mining grammar.
+    """
+    if canonical in _OUTPUT_GRAIN_OVERRIDES:
+        return _OUTPUT_GRAIN_OVERRIDES[canonical]
+    return _catalog_output_grain(canonical, catalog, role)
 
 
 def _output_value_domain(canonical: str, catalog: dict[str, Any], status: DirectUseStatus) -> str:
@@ -2212,6 +2238,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         reference_backend=reference,
         production_certified=bool(catalog.get("production_certified")),
         directly_usable=directly_usable,
+        output_grain=_effective_output_grain(canonical, catalog, role),
         mining_visible=mining_visible,
         composition_usable=composition_usable,
         terminal_usable=terminal_usable,
@@ -2286,8 +2313,13 @@ def get_direct_use_mining_operators(
                 if missing:
                     continue
             if ctx.target_frequency is not None:
-                if ctx.target_frequency == "minute" and row.output_semantic_kind == "daily":
-                    continue
+                output_grain = str(getattr(row, "output_grain", "") or "").lower()
+                if ctx.target_frequency == "minute":
+                    if output_grain != "minute":
+                        continue
+                else:
+                    if output_grain == "minute":
+                        continue
         out.append(row)
     out.sort(key=lambda r: (r.direct_use_status.value, r.canonical))
     return out
@@ -2671,10 +2703,15 @@ def get_direct_use_mining_operators_from_manifest(
                 if missing:
                     continue
 
-            # Frequency filtering
+            # Frequency filtering (bidirectional frequency gate).
             if context.target_frequency is not None:
-                if context.target_frequency == "minute" and row.output_semantic_kind == "daily":
-                    continue
+                output_grain = str(getattr(row, "output_grain", "") or "").lower()
+                if context.target_frequency == "minute":
+                    if output_grain != "minute":
+                        continue
+                else:
+                    if output_grain == "minute":
+                        continue
 
             filtered.append(canonical)
 

@@ -4,101 +4,53 @@ build-backend = "_build_backend"
 backend-path = ["."]
 
 [project]
-name = "factor-engine"
-version = "0.3.1"
-description = "Quantitative factor engine: DSL, IR compilation, cleaned operators, config-driven execution, and optional HTTP service"
+name = "quant-projects"
+version = "0.1.0"
+description = "Quantitative research umbrella project (orchestration only; FactorEngine lives in factor_engine/ submodule)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6.0",
-    "numpy>=1.24",
-    "pandas>=2.0",
-    "packaging>=23.0",
-    "pyarrow>=14.0",
-    "scipy>=1.10",
 ]
-
-[project.scripts]
-factor-engine-serve = "service.app:main"
 
 [tool.setuptools]
 py-modules = [
     "logging_utils",
-    "pit_contract",
-    "pipeline",
-    "pipeline_event",
-    "run_pipeline",
-    "stateful_contract",
-    "stateful_runtime",
     "workspace_paths",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-    "api*",
-    "backend*",
-    "cache*",
-    "cleaned_operators*",
-    "docs*",
-    "expr*",
-    "evidence*",
-    "factor_recipes*",
-    "fields*",
-    "ir*",
-    "market*",
-    "mining*",
+    "planning*",
     "modeling",
     "modeling.*",
-    "planner*",
-    "planning*",
-    "research_tools*",
-    "runtime*",
-    "security*",
-    "semantic*",
-    "service*",
-    "storage*",
-    "util*",
-    "validation*",
 ]
-exclude = ["tests", "tests.*", "benchmarks", "benchmarks.*", "audit", "audit.*", "*.tests", "*.tests.*", "*.__pycache__"]
+exclude = [
+    "tests", "tests.*",
+    "benchmarks", "benchmarks.*",
+    "audit", "audit.*",
+    "factor_engine", "factor_engine.*",
+    "dataaccess", "dataaccess.*",
+    "*.tests", "*.tests.*",
+    "*.__pycache__",
+]
 
 [tool.setuptools.package-data]
 "evidence" = ["*.json", "*.yaml"]
 "docs" = ["*.json", "*.yaml", "*.md"]
-"cleaned_operators" = ["docs/*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["tests", "tests.*", "benchmarks", "benchmarks.*", "audit", "audit.*", "*.pyc", "__pycache__", "test_*.py", "*_test.py"]
 
 [project.optional-dependencies]
-pandas = ["pandas>=2.0", "pyarrow>=14.0", "scipy>=1.10"]
-# 可选加速 / 技术指标（Deep Research 阶段 A；TA-Lib 需系统库或预编译 wheel）
-accel = ["bottleneck>=1.3", "numba>=0.58"]
-talib = ["TA-Lib>=0.4.28"]
-polars = ["polars>=0.20"]
-# Modin 并行 pandas API（依赖 Ray 或 Dask；与 factor-engine 同进程时设 FACTOR_ENGINE_USE_MODIN=1 或 backend.type=pandas_modin）
-modin = ["modin>=0.28"]
-# R31-118：核心 parallel 路径已统一到 concurrent.futures（as_completed 流式 sink），
-# joblib 不再是生产依赖；旧 `[parallel]` extra 移除，避免无效依赖。
-backtest = ["backtrader>=1.9.78.123"]
+dev = ["pytest>=8.0", "pydantic>=2.0"]
 data = ["data-access>=0.10.0"]
-# 性能运行时：ResourceBroker 的 live headroom / 进程族 RSS / IO pressure 依赖
-# psutil（R31-119：资源治理不是 optional 装饰，是生产约束）；threadpoolctl 用于
-# BLAS/OpenMP 运行时线程限制（R31-120/121）。
-performance = ["psutil>=5.9", "threadpoolctl>=3.1"]
-# R31_P0-031：最低版本 = 实际 CI 验证过的最小兼容版本（0.10.0 已含
-# ``data_access.read.scan_cost`` / ``semantic_catalog``，FE 全量依赖它们）。
-full = ["data-access>=0.10.0", "polars>=0.20", "duckdb>=0.10", "psutil>=5.9"]
-service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
-validation = ["pydantic>=2.0"]
-dev = ["pytest>=8.0", "fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27", "pydantic>=2.0"]
+full = ["data-access>=0.10.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "modin: 需要安装 modin，默认 CI 不跑",
     "integration: 需本地 parquet 或 RUN_* 环境变量",
-    "perf: 轻量性能回归 smoke（阈值宽松）",
     "slow: 大面板 nightly 基准",
 ]

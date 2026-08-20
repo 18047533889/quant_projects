@@ -1,0 +1,34 @@
+id: R21-FREQUENCY-GATE-BIDIRECTIONAL
+title: Bidirectional frequency gate for daily mining grammar
+status: implemented
+date: 2026-08-21
+scope:
+  - mining/direct_use.py
+  - tests/mining/test_direct_use_available_sources_failclosed.py
+summary: >
+  Prevent raw minute output operators from entering a daily mining grammar
+  while still allowing certified INTRADAY_EOD / GrainTransform operators
+  whose output grain is daily.
+files_changed:
+  - mining/direct_use.py
+  - tests/mining/test_direct_use_available_sources_failclosed.py
+evidence:
+  decision_points:
+    - location: mining/direct_use.py::DirectUseOperator
+      decision: Explicit `output_grain` field replaces semantic-kind inference for mining target-frequency gating.
+    - location: mining/direct_use.py::_effective_output_grain
+      decision: Canonical override table + catalog `_output_grain` becomes the single authority for grain.
+    - location: mining/direct_use.py::get_direct_use_mining_operators
+      decision: Daily target now rejects `output_grain == 'minute'`; minute target still rejects `output_grain != 'minute'`.
+    - location: tests/mining/test_direct_use_available_sources_failclosed.py::TestBidirectionalFrequencyGate
+      decision: Three targeted regressions prove daily and minute target gates behave bidirectionally.
+  regression_tests:
+    - tests/mining/test_direct_use_available_sources_failclosed.py::TestBidirectionalFrequencyGate::test_minute_target_blocks_daily_output
+    - tests/mining/test_direct_use_available_sources_failclosed.py::TestBidirectionalFrequencyGate::test_daily_target_blocks_raw_minute_output
+    - tests/mining/test_direct_use_available_sources_failclosed.py::TestBidirectionalFrequencyGate::test_daily_target_allows_intraday_eod_grain_transform
+key_findings:
+  - Prior gate only enforced minute-target filtering against daily output; it did not block raw minute output in a daily mining grammar.
+  - `output_grain` is now explicit in the `DirectUseOperator` row, making the frequency gate grain source machine-readable.
+  - Certified INTRADAY_EOD operators continue to pass because their catalog output grain resolves to daily.
+run_command: >
+  python3 -m pytest tests/mining/test_direct_use_available_sources_failclosed.py -k "test_minute_target_blocks_daily_output or test_daily_target_blocks_raw_minute_output or test_daily_target_allows_intraday_eod_grain_transform" -q

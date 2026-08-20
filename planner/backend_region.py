@@ -644,12 +644,23 @@ def supports_streaming(backend: PhysicalBackend, operators: tuple[str, ...]) -> 
 def infer_transfer_transform(
     source_repr: Representation,
     target_repr: Representation,
+    source_backend: PhysicalBackend | None = None,
+    target_backend: PhysicalBackend | None = None,
 ) -> TransferTransform:
     """Infer transfer transform from source and target representations.
 
     R21-TRANSFER-BOUNDARIES: Maps representation pairs to formal TransferTransform values.
+    When both representations are the same (e.g., both Arrow), the transform depends
+    on the backends (e.g., ClickHouse → DuckDB with both Arrow is CLICKHOUSE_TO_ARROW).
     """
     if source_repr == target_repr:
+        # Same representation: check if it's a cross-backend transfer
+        if source_backend and target_backend and source_backend != target_backend:
+            # Cross-backend with same representation: use backend-specific transform
+            if source_backend == PhysicalBackend.CLICKHOUSE_SQL:
+                return TransferTransform.CLICKHOUSE_TO_ARROW
+            if source_backend == PhysicalBackend.Q_KDB:
+                return TransferTransform.Q_TO_ARROW
         return TransferTransform.SAME_BACKEND_NATIVE
 
     # DuckDB → Arrow (Section 21: preferred boundary)
@@ -659,13 +670,6 @@ def infer_transfer_transform(
     # Q → Arrow (R21: Q → Arrow for cross-backend consumption)
     if source_repr in {Representation.Q_TABLE, Representation.Q_VECTOR, Representation.Q_KEYED_TABLE} and target_repr == Representation.ARROW_TABLE:
         return TransferTransform.Q_TO_ARROW
-
-    # ClickHouse → Arrow (R21: ClickHouse → Arrow boundary)
-    # Note: ClickHouse typically produces Arrow directly, but formalizing the boundary
-    if source_repr == Representation.ARROW_TABLE and target_repr == Representation.ARROW_TABLE:
-        # ClickHouse → Arrow is a no-op if already Arrow, but we keep the transform
-        # for explicit tracking
-        pass  # Fall through to other checks
 
     # Arrow → Polars
     if source_repr == Representation.ARROW_TABLE and target_repr in {

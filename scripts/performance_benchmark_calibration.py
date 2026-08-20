@@ -241,6 +241,7 @@ def run_benchmark(
         density=0.98,
         frequency="daily",
         storage_kind="memory",
+        rows_known=True,
     )
 
     # 预测成本

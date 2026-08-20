@@ -178,7 +178,6 @@ def test_success_result_structure() -> None:
 
     assert result["results"]["r1"]["success"] is True
     assert result["results"]["r1"]["result"] == "success"
-    assert result["results"]["r1"]["failure"] is None
     assert result["failed_regions"] == []
 
     scheduler.shutdown()

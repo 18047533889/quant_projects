@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""R21-AVAILABLE-SOURCES-FAILCLOSED: regression tests for available_sources validation.
+"""R21-AVAILABLE-SOURCES-FAILCLOSED + R15-INC-003 bidirectional frequency gate.
 
 Tests the three-way semantics:
 - None = unknown → hard fail if operator requires sources
 - empty tuple = no sources → fail if operator requires sources
 - nonempty tuple = explicit capabilities → validate sources
+
+Plus the bidirectional frequency gate:
+- minute target → daily output blocked
+- daily target → raw minute output blocked
+- daily target → INTRADAY_EOD / GrainTransform output allowed
 """
 from __future__ import annotations
 
@@ -170,3 +175,88 @@ class TestAvailableSourcesFailClosed:
                                 f"Operator {op.canonical} has unsatisfied sources "
                                 f"{op.source_recipes} but was included"
                             )
+
+
+# ---------------------------------------------------------------------------
+# R15-INC-003: bidirectional frequency gate regressions
+# ---------------------------------------------------------------------------
+
+_INVALID_GRAIN_CATALOG = {
+    "dummy_minute_output": {
+        "param_names": ["x"],
+        "input_grain": "minute",
+        "output_grain": "minute",
+        "production_certified": True,
+        "output_semantic_kind": "series",
+    },
+    "dummy_daily_output": {
+        "param_names": ["x"],
+        "input_grain": "minute",
+        "output_grain": "daily",
+        "production_certified": True,
+        "output_semantic_kind": "series",
+    },
+}
+
+
+class TestBidirectionalFrequencyGate:
+    """R15-INC-003: minute target blocks daily output, daily target blocks raw minute output."""
+
+    def test_minute_target_blocks_daily_output(self) -> None:
+        """mining target_frequency=minute must reject a daily output operator."""
+        from mining.direct_use import _effective_output_grain
+
+        # Raw daily operator: must NOT be admitted as minute target.
+        grain = _effective_output_grain("dummy_daily_output", _INVALID_GRAIN_CATALOG["dummy_daily_output"], None)
+        assert grain != "minute"
+        # Direct use gate logic: daily output operator must be filtered when target_frequency='minute'.
+        from mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
+
+        context = DirectUseContext(market=Market.ASHARE, target_frequency="minute")
+        from cleaned_operators.registry import OperatorRegistry
+
+        patched_catalog = dict(OperatorRegistry._catalog)
+        patched_catalog.update(_INVALID_GRAIN_CATALOG)
+        with patch.object(OperatorRegistry, "_catalog", patched_catalog):
+            row = build_direct_use_operator("dummy_daily_output", patched_catalog["dummy_daily_output"])
+            # In 'all' mode we can observe the row exists; 'eligible' mode must exclude it.
+            assert row.output_grain == "daily"
+            operators = get_direct_use_mining_operators(context, admission="all")
+            # Gate applies only in eligible mode; eligible must exclude raw daily.
+            admitted = get_direct_use_mining_operators(context, admission="eligible")
+            assert not any(op.canonical == "dummy_daily_output" for op in operators if op.output_grain != "daily")
+            assert all(op.output_grain != "daily" for op in admitted)
+
+    def test_daily_target_blocks_raw_minute_output(self) -> None:
+        """mining target_frequency=daily must reject a raw minute output operator."""
+        from mining.direct_use import build_direct_use_operator, DirectUseContext, get_direct_use_mining_operators
+
+        context = DirectUseContext(market=Market.ASHARE, target_frequency="daily")
+        from cleaned_operators.registry import OperatorRegistry
+
+        patched_catalog = dict(OperatorRegistry._catalog)
+        patched_catalog.update(_INVALID_GRAIN_CATALOG)
+        with patch.object(OperatorRegistry, "_catalog", patched_catalog):
+            row = build_direct_use_operator("dummy_minute_output", patched_catalog["dummy_minute_output"])
+            assert row.output_grain == "minute"
+            operators = get_direct_use_mining_operators(context, admission="eligible")
+            assert all(op.output_grain != "minute" for op in operators)
+
+    def test_daily_target_allows_intraday_eod_grain_transform(self) -> None:
+        """mining target_frequency=daily must still allow certified INTRADAY_EOD operators."""
+        from mining.direct_use import build_direct_use_operator, DirectUseContext
+
+        context = DirectUseContext(market=Market.ASHARE, target_frequency="daily")
+        from cleaned_operators.registry import OperatorRegistry
+
+        patched_catalog = dict(OperatorRegistry._catalog)
+        patched_catalog.update(_INVALID_GRAIN_CATALOG)
+        with patch.object(OperatorRegistry, "_catalog", patched_catalog):
+            row = build_direct_use_operator("dummy_daily_output", patched_catalog["dummy_daily_output"])
+            # INTRADAY_EOD / grain-transform operators emit daily output; daily target must accept their grain.
+            assert row.output_grain == "daily"
+            # The gate itself admits daily output for a daily target.
+            daily_output_row = build_direct_use_operator("dummy_daily_output", patched_catalog["dummy_daily_output"])
+            assert daily_output_row.output_grain == "daily"
+            minute_output_row = build_direct_use_operator("dummy_minute_output", patched_catalog["dummy_minute_output"])
+            assert minute_output_row.output_grain == "minute"

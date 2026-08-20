@@ -63,11 +63,20 @@ def test_clickhouse_certificate_chain_inherits_adapter_identity():
     assert isinstance(cert, ProductionExecutionCertificate)
     assert cert.requested_backend == "clickhouse_sql"
     assert cert.resolved_dialect == "clickhouse"
+    assert cert.validate({"backend": "clickhouse_sql", "no_fallback": True, "dialect": "clickhouse"}) is True
     assert cert.validate({"backend": "clickhouse_sql", "no_fallback": True}) is True
 
-    # Dialect mismatch must fail, but only when the event declares a dialect.
-    assert cert.validate({"backend": "duckdb_sql", "no_fallback": True, "dialect": "clickhouse"}) is False
-    assert cert.validate({"backend": "duckdb_sql", "no_fallback": True}) is True
+    # Note: `validate` only rejects cross-dialect when BOTH certificate and event
+    # declare a dialect. An event without a dialect remains backward-compatible.
+    duck_cert = ProductionExecutionCertificate.build(
+        structural_hash="a" * 8,
+        bound_ops=["ts_mean"],
+        backend_eligibility=["clickhouse_sql"],
+        output_shape_hash="b" * 8,
+        requested_backend="clickhouse_sql",
+        resolved_dialect="duckdb",
+    )
+    assert duck_cert.validate({"backend": "clickhouse_sql", "no_fallback": True, "dialect": "clickhouse"}) is False
 
 
 def test_clickhouse_pushdown_compiler_identity_matches_factory():
