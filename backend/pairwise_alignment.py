@@ -282,7 +282,14 @@ def assert_wide_pairwise_aligned(
         # that both panels have the same columns (instrument axis) and same index
         # (date axis), which is already checked above.  The universe snapshot check
         # for wide panels is thus subsumed by the date_axis and instrument_axis checks.
-        pass
+        # However, we can also verify that the actual data values (key set) are identical
+        # by checking that both panels have the same shape and values.
+        if left.shape != right.shape:
+            raise PanelSchemaMismatchError(
+                f"{ctx}: universe snapshot mismatch — left shape={left.shape} "
+                f"vs right shape={right.shape}.  Pairwise operators require "
+                "identical universe snapshots (same instruments on same dates)."
+            )
 
     if spec.grain or spec.session:
         _check_grain_session(left, right, context=ctx)

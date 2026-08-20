@@ -51,7 +51,7 @@ PRODUCTION_CHECKLIST: tuple[ChecklistItem, ...] = (
     ChecklistItem("§11", "sum(all null)→NULL", "defined", "backend.aggregation_spec"),
     ChecklistItem("§12", "min/max NaN→NULL", "defined", "backend.aggregation_spec"),
     ChecklistItem("§13", "power/exp/log overflow", "defined", "backend.math_domain_semantics"),
-    ChecklistItem("§14", "pairwise corr/cov/beta", "implemented", "backend.pairwise_alignment"),
+    ChecklistItem("§14", "pairwise corr/cov/beta", "gate_enforced", "backend.pairwise_alignment"),
     ChecklistItem("§15", "zscore std epsilon", "defined", "backend.cross_section_spec"),
     ChecklistItem("§16", "vwap 精度/溢出", "defined", "backend.financial_semantics"),
     ChecklistItem("§17", "cumulative incremental state", "deferred_phase2", "backend.cumulative_state_spec"),
