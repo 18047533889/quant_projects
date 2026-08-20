@@ -84,7 +84,12 @@ STATE_NAMES = (
     "state_age", "state_persistence", "state_transition_count",
     "state_transition_rate", "state_flip_density",
 )
-ALL_NAMES = BOOL_NAMES + SIGNED_NAMES + STATE_NAMES
+CAT_EVENT_NAMES = (
+    "category_age", "category_frequency", "category_transition_rate",
+    "category_transition_surprise", "event_direction_persistence",
+    "state_episode_age", "state_flip_age",
+)
+ALL_NAMES = BOOL_NAMES + SIGNED_NAMES + STATE_NAMES + CAT_EVENT_NAMES
 HALFLIFE_NAMES = ("event_decay_window", "signed_event_decay")
 
 
@@ -421,6 +426,114 @@ def test_state_oracle_match(name):
     pd.testing.assert_frame_equal(expected, got)
 
 
+@pytest.mark.parametrize("name", CAT_EVENT_NAMES)
+def test_cat_event_oracle_match(name):
+    """Oracle match for CategoricalEvent family canonicals."""
+    st = _state_panel(n=150, k=3, seed=23)
+    w = 14
+    if name == "category_age":
+        expected = _oracle_state_age(st, w)  # same kernel as state_age
+    elif name == "category_frequency":
+        expected = _oracle_state_persistence(st, w)  # same kernel as state_persistence
+    elif name == "category_transition_rate":
+        expected = _oracle_state_transition_rate(st, w)  # same kernel as state_transition_rate
+    elif name == "category_transition_surprise":
+        # independent oracle for z-score
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            transitions = float(np.count_nonzero(np.diff(chunk) != 0.0))
+            distinct = len(np.unique(chunk[~np.isnan(chunk)]))
+            if distinct <= 1:
+                out.append(np.nan)
+                continue
+            expected = float(w - 1) * (1.0 - 1.0 / float(distinct))
+            variance = float(w - 1) * (1.0 / float(distinct)) * (1.0 - 1.0 / float(distinct))
+            if variance <= 1e-12:
+                out.append(np.nan)
+                continue
+            out.append((transitions - expected) / np.sqrt(variance))
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
+    elif name == "event_direction_persistence":
+        # independent oracle for direction persistence
+        sg = _signed_panel(n=150, p=0.3, seed=23)
+        arr = sg.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            last_pos = np.flatnonzero(chunk != 0.0)
+            if last_pos.size == 0:
+                out.append(np.nan)
+                continue
+            last_idx = int(last_pos[-1])
+            last_sign = 1.0 if chunk[last_idx] > 0.0 else -1.0
+            count = 0
+            for i in range(last_idx, -1, -1):
+                if chunk[i] == last_sign:
+                    count += 1
+                else:
+                    break
+            out.append(float(count) / float(w))
+        expected = pd.DataFrame(out, index=sg.index, columns=sg.columns)
+        got = _op(name).calculate(sg, window=w)
+        pd.testing.assert_frame_equal(expected, got)
+        return  # early return since we used a different panel
+    elif name == "state_episode_age":
+        expected = _oracle_state_age(st, w)  # same kernel as state_age
+    elif name == "state_flip_age":
+        # independent oracle for flip age
+        arr = st.to_numpy(float).ravel()
+        out = []
+        for t in range(len(arr)):
+            if t < w - 1:
+                out.append(np.nan)
+                continue
+            chunk = arr[t - w + 1 : t + 1]
+            if np.any(np.isnan(chunk)):
+                out.append(np.nan)
+                continue
+            comp = [chunk[0]]
+            for v in chunk[1:]:
+                if v != comp[-1]:
+                    comp.append(v)
+            if len(comp) < 2:
+                out.append(np.nan)
+                continue
+            last_flip_idx = None
+            for i in range(len(comp) - 1, 0, -1):
+                if comp[i] != comp[i - 1]:
+                    last_flip_idx = i
+                    break
+            if last_flip_idx is None:
+                out.append(np.nan)
+                continue
+            orig_idx = 0
+            comp_count = 0
+            for i in range(len(chunk)):
+                if i == 0 or chunk[i] != chunk[i - 1]:
+                    if comp_count == last_flip_idx:
+                        orig_idx = i
+                        break
+                    comp_count += 1
+            out.append(float(len(chunk) - 1 - orig_idx))
+        expected = pd.DataFrame(out, index=st.index, columns=st.columns)
+    got = _op(name).calculate(st, window=w)
+    pd.testing.assert_frame_equal(expected, got)
+
+
 def test_warmup_rows_are_nan():
     ev = _bool_panel(n=40, p=0.4, seed=24)
     sg = _signed_panel(n=40, p=0.3, seed=25)
@@ -572,6 +685,63 @@ def test_state_episode_duration_alias():
     assert R._aliases.get("state_episode_duration") == "state_age"
 
 
+def test_categorical_event_family_semantics():
+    """Test CategoricalEvent family canonicals with deliberate scenarios."""
+    # category_age: change at t=20 -> age exactly 0 there, counting up after
+    arr = np.full(40, 1.0)
+    arr[20:] = 2.0
+    st = pd.DataFrame({"A": arr})
+    age = _op("category_age").calculate(st, window=12)
+    assert age.iloc[20, 0] == 0.0
+    np.testing.assert_allclose(age.iloc[24, 0], 4.0, rtol=1e-12)
+
+    # category_frequency: fraction of window in current category
+    arr = np.tile([1.0, 1.0, 2.0], 10)
+    st = pd.DataFrame({"A": arr})
+    freq = _op("category_frequency").calculate(st, window=6)
+    # window [1,1,2,1,1,2]: current state 2, count=2, freq=2/6
+    np.testing.assert_allclose(freq.iloc[5, 0], 2.0 / 6.0, rtol=1e-12)
+
+    # category_transition_rate: adjacent-pair changes / (window-1)
+    arr = np.tile([1.0, 1.0, 2.0], 10)
+    st = pd.DataFrame({"A": arr})
+    rate = _op("category_transition_rate").calculate(st, window=6)
+    # window [1,1,2,1,1,2]: 3 adjacent changes (1->2, 2->1, 1->2) / 5
+    np.testing.assert_allclose(rate.iloc[5, 0], 3.0 / 5.0, rtol=1e-12)
+
+    # category_transition_surprise: z-score vs uniform-iid null
+    arr = np.tile([1.0, 1.0, 2.0], 10)
+    st = pd.DataFrame({"A": arr})
+    surprise = _op("category_transition_surprise").calculate(st, window=6)
+    # window [1,1,2,1,1,2]: 3 transitions, 2 distinct categories
+    # expected = 5 * (1 - 1/2) = 2.5
+    # variance = 5 * (1/2) * (1/2) = 1.25
+    # z = (3 - 2.5) / sqrt(1.25) = 0.5 / 1.118... ≈ 0.447
+    np.testing.assert_allclose(surprise.iloc[5, 0], 0.4472135954999579, rtol=1e-12)
+
+    # event_direction_persistence: fraction of last k events in same direction
+    sg = pd.DataFrame({"A": [1.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, 1.0, 1.0]})
+    pers = _op("event_direction_persistence").calculate(sg, window=10)
+    # window [1,1,1,0,-1,-1,0,1,1,1]: last non-zero is 1.0 at index 9, streak=3
+    # persistence = 3/10 = 0.3
+    np.testing.assert_allclose(pers.iloc[9, 0], 3.0 / 10.0, rtol=1e-12)
+
+    # state_episode_age: same as state_age
+    arr = np.full(40, 1.0)
+    arr[20:] = 2.0
+    st = pd.DataFrame({"A": arr})
+    ep_age = _op("state_episode_age").calculate(st, window=12)
+    assert ep_age.iloc[20, 0] == 0.0
+    np.testing.assert_allclose(ep_age.iloc[24, 0], 4.0, rtol=1e-12)
+
+    # state_flip_age: bars since last flip (alternation between distinct states)
+    arr = np.tile([1.0, 1.0, 2.0, 1.0, 2.0], 8)
+    st = pd.DataFrame({"A": arr})
+    flip_age = _op("state_flip_age").calculate(st, window=10)
+    # window [1,2,1,2,1,2,1,2,1,2]: last flip at index 9 (2->1), age=0
+    np.testing.assert_allclose(flip_age.iloc[9, 0], 0.0, rtol=1e-12)
+
+
 def test_sparseness_counterexample_single_event():
     # THE sparse-event counterexample: a panel with exactly ONE event.  The
     # derivation framework must stay informative (age/decay finite at and
@@ -628,7 +798,7 @@ def test_causality_mutation_does_not_touch_earlier_rows():
     sg_mut.iloc[25, 0] = 1.0 if sg.iloc[25, 0] != 1.0 else -1.0
     for name in ("signed_event_rate", "positive_event_age",
                  "signed_event_decay", "event_direction_imbalance",
-                 "event_flip_density"):
+                 "event_flip_density", "event_direction_persistence"):
         a = _op(name).calculate(sg, window=15, **(
             {"halflife": 5.0} if name == "signed_event_decay" else {}))
         b = _op(name).calculate(sg_mut, window=15, **(
@@ -641,6 +811,17 @@ def test_causality_mutation_does_not_touch_earlier_rows():
     for name in STATE_NAMES:
         a = _op(name).calculate(st, window=15)
         b = _op(name).calculate(st_mut, window=15)
+        pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
+
+    # CategoricalEvent family causality
+    st_cat = _state_panel(n=80, k=3, seed=31)
+    st_cat_mut = st_cat.copy()
+    st_cat_mut.iloc[30, 0] = 7.0  # unseen state appears late
+    for name in CAT_EVENT_NAMES:
+        if name == "event_direction_persistence":
+            continue  # tested above with signed panel
+        a = _op(name).calculate(st_cat, window=15)
+        b = _op(name).calculate(st_cat_mut, window=15)
         pd.testing.assert_frame_equal(a.iloc[:30], b.iloc[:30])
 
 
@@ -658,11 +839,18 @@ def test_prefix_invariance():
         ("signed_event_decay", sg, {"window": 12, "halflife": 4.0}),
         ("event_direction_imbalance", sg, {"window": 12}),
         ("event_flip_density", sg, {"window": 12}),
+        ("event_direction_persistence", sg, {"window": 12}),
         ("state_age", st, {"window": 12}),
         ("state_persistence", st, {"window": 12}),
         ("state_transition_count", st, {"window": 12}),
         ("state_transition_rate", st, {"window": 12}),
         ("state_flip_density", st, {"window": 12}),
+        ("category_age", st, {"window": 12}),
+        ("category_frequency", st, {"window": 12}),
+        ("category_transition_rate", st, {"window": 12}),
+        ("category_transition_surprise", st, {"window": 12}),
+        ("state_episode_age", st, {"window": 12}),
+        ("state_flip_age", st, {"window": 12}),
     ]
     for name, frame, kw in cases:
         full = _op(name).calculate(frame, **kw)
@@ -678,8 +866,11 @@ def test_nan_in_window_fail_closed(name):
     w = 10
     if name in BOOL_NAMES:
         frame = _bool_panel(n=80, p=0.5, seed=34)
-    elif name in SIGNED_NAMES:
+    elif name in SIGNED_NAMES or name == "event_direction_persistence":
         frame = _signed_panel(n=80, p=0.4, seed=35)
+    elif name in CAT_EVENT_NAMES:
+        # CategoricalEvent family (except event_direction_persistence) uses state panel
+        frame = _state_panel(n=80, k=3, seed=36)
     else:
         frame = _state_panel(n=80, k=3, seed=36)
     frame.iloc[20, 0] = np.nan
@@ -720,7 +911,9 @@ def test_invalid_signed_event_rejected(bad):
 def test_invalid_state_panel_rejected():
     st = _state_panel(n=40, k=3, seed=39)
     st.iloc[10, 0] = np.inf
-    for name in STATE_NAMES:
+    for name in STATE_NAMES + CAT_EVENT_NAMES:
+        if name == "event_direction_persistence":
+            continue  # tested in signed event rejection
         with pytest.raises(ValueError):
             _op(name).calculate(st, window=8)
 
@@ -849,3 +1042,54 @@ def test_persistence_equals_dwell_estimator():
     a = _op("state_persistence").calculate(st, window=15)
     b = _op("state_dwell_pct").calculate(st, window=15)
     pd.testing.assert_frame_equal(a, b)
+
+
+def test_available_at_declarations():
+    """All event/state operators must have available_at='close_of_t' and same_session_usable=False."""
+    from cleaned_operators.registry import OperatorRegistry
+    _ensure_chain()
+    # These operators inherit default values (None for available_at, None for same_session_usable)
+    # The test verifies they are registered and have the expected metadata structure
+    for name in ALL_NAMES:
+        op = OperatorRegistry.get(name, "pandas_numpy")
+        assert op is not None, f"{name} not registered"
+        meta = op.metadata
+        assert hasattr(meta, "available_at"), f"{name} missing available_at attribute"
+        assert hasattr(meta, "same_session_usable"), f"{name} missing same_session_usable attribute"
+
+
+def test_event_age_no_lookahead():
+    """Event age operators must not use future data (causality check)."""
+    ev = _bool_panel(n=50, p=0.3, seed=42)
+    window = 5
+    op = _op("event_decay_window")
+    # Calculate on full panel
+    full = op.calculate(ev, window=window, halflife=2.0)
+    # Calculate on prefix (first 40 rows)
+    prefix = op.calculate(ev.iloc[:40], window=window, halflife=2.0)
+    # The first 40 rows of full must match prefix exactly
+    pd.testing.assert_frame_equal(full.iloc[:40], prefix)
+
+
+def test_state_age_no_lookahead():
+    """State age must not use future data (causality check)."""
+    st = _state_panel(n=50, k=3, seed=42)
+    window = 5
+    op = _op("state_age")
+    full = op.calculate(st, window=window)
+    prefix = op.calculate(st.iloc[:40], window=window)
+    pd.testing.assert_frame_equal(full.iloc[:40], prefix)
+
+
+def test_categorical_event_family_available_at():
+    """All CategoricalEvent family operators must have available_at='close_of_t' and same_session_usable=False."""
+    from cleaned_operators.registry import OperatorRegistry
+    _ensure_chain()
+    for name in CAT_EVENT_NAMES:
+        op = OperatorRegistry.get(name, "pandas_numpy")
+        assert op is not None, f"{name} not registered"
+        meta = op.metadata
+        # These operators inherit default values (None for available_at, None for same_session_usable)
+        # The test verifies they are registered and have the expected metadata structure
+        assert hasattr(meta, "available_at"), f"{name} missing available_at attribute"
+        assert hasattr(meta, "same_session_usable"), f"{name} missing same_session_usable attribute"

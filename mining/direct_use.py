@@ -424,6 +424,12 @@ _RELATIVE_ALPHA_OPS = frozenset(
         "event_direction_imbalance", "event_flip_density", "state_age",
         "state_persistence", "state_transition_count",
         "state_transition_rate", "state_flip_density",
+        # R21-P0-EVENTSTATE-FRAMEWORK-CATEGORICAL: CategoricalEvent family
+        # (category_age/frequency/transition_rate/transition_surprise),
+        # event_direction_persistence, state_episode_age, state_flip_age.
+        "category_age", "category_frequency", "category_transition_rate",
+        "category_transition_surprise", "event_direction_persistence",
+        "state_episode_age", "state_flip_age",
         # R20-BVC-VPIN-DIRECTUSE: dimensionless causal intraday BVC/VPIN
         # canonicals (trailing windows ending at t, fail-closed masking,
         # strict-positive close+volume).  Documented non-duplicates:

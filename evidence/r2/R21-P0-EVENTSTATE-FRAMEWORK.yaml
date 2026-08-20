@@ -1,7 +1,7 @@
 id: R21-P0-EVENTSTATE-FRAMEWORK
 slice: R21-P0-EVENTSTATE-FRAMEWORK
-git_sha: 724cf286c567512efeefb2e24622eb0bb665680d (working-tree; local only)
-timestamp: 2026-08-19T22:46:59Z
+git_sha: f56de261192ccf41086dbd8c0535d5e3d2740de7 (working-tree; local only)
+timestamp: 2026-08-20T17:00:00Z
 owned_files:
   - cleaned_operators/technical/event_state_derivations_v1.py (new)
   - tests/operators/test_r21_event_state_derivations.py (new)
@@ -20,7 +20,7 @@ fix: >
   _PARAM_SPECS + _RELATIONAL_SPECS, single _register loop, class prefix
   EventStateDerivationsV1_, source=technical_event_state_derivations_v1,
   backend=pandas_numpy, status=production, tags pit_safe/causal/
-  production_extension). 16 new canonicals, all strictly causal (trailing
+  production_extension). 23 new canonicals, all strictly causal (trailing
   windows END at t), fail-closed (min_periods=window: any NaN in window ->
   NaN; degenerate denominator -> NaN never 0; censored quantities -> NaN
   never fabricated), dimensionless. Validators: strict EventBool {0,1,NaN}
@@ -41,6 +41,9 @@ new_canonicals:
     signed_event_decay, event_direction_imbalance, event_flip_density]
   state_family: [state_age, state_persistence, state_transition_count,
     state_transition_rate, state_flip_density]
+  categorical_event_family: [category_age, category_frequency,
+    category_transition_rate, category_transition_surprise,
+    event_direction_persistence, state_episode_age, state_flip_age]
   alias: {state_episode_duration: state_age}
 duplicates_skipped:
   event_age: existing registry alias -> ts_days_since (alpha_language_aliases.py;
@@ -74,9 +77,9 @@ commands_run:
   - "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
      python3 -m pytest tests/operators/test_alpha_language_aliases.py -q"
 results:
-  test_r21_event_state_derivations_py: "73 passed, 2 warnings in 73.93s"
-  test_r20_event_state_direct_use_rehab_py: "31 passed, 2 warnings in 75.37s"
-  test_alpha_language_aliases_py: "3 passed, 2 warnings in 76.23s"
+  test_r21_event_state_derivations_py: "92 passed, 2 warnings in 85.94s"
+  test_r20_event_state_direct_use_rehab_py: "31 passed, 2 warnings in 84.99s"
+  test_alpha_language_aliases_py: "3 passed, 2 warnings in 84.87s"
   notes: >-
     Warnings are pre-existing UserWarnings from backend/polars_backend_kind.py
     (production-mode PhysicalImplementationSpec classification), unrelated to
@@ -85,12 +88,12 @@ guards_in_tests:
   - brute-force Python loop oracles independent of implementation helpers
     (no _trailing_map/_strict_event_bool/_state_panel reuse)
   - prefix invariance (full.iloc[:70] == calculate(frame.iloc[:70]) for all
-    16 canonicals)
+    23 canonicals)
   - causality mutation (late event/state mutation cannot touch earlier rows)
   - sparseness counterexample: single-event panel -> event_decay_window and
     positive_event_age FINITE at/after the event while event_recency_z is NaN
     (both asserted on the same panel)
-  - fail-closed NaN in window (all 16: rows [20,30) NaN, before/after finite)
+  - fail-closed NaN in window (all 23: rows [20,30) NaN, before/after finite)
   - invalid input rejection (EventBool [-1,0.5,2,±inf]; SignedEvent
     [-2,0.5,2,±inf]; state ±inf)
   - deliberate-NaN vs deliberate-0 scenarios (censored burst/episode/age NaN;
@@ -99,7 +102,7 @@ guards_in_tests:
     (0/-1/inf/True rejected; halflife <= window relational)
   - ParamSpec governance (window int min=2 HORIZON role; halflife float;
     tags causal+pit_safe, no stateful/full_replay)
-  - promotion membership (all 16 in _RELATIVE_ALPHA_OPS, none in
+  - promotion membership (all 23 in _RELATIVE_ALPHA_OPS, none in
     _PRICE_LEVEL_INTERMEDIATE_OPS, all in EXTENDED_ONLY_CANONICALS,
     classify_canonical == "extended")
   - duplicate-shadow check (event_age/event_decay remain the pre-existing
@@ -107,6 +110,10 @@ guards_in_tests:
   - state_persistence == state_dwell_pct asserted equal (documented twin)
   - state_age vs state_persistence distinctness on constant panel
     (dwell 1.0 vs episode age censored NaN)
+  - categorical_event_family_semantics: deliberate scenario tests for all 7
+    new canonicals (category_age, category_frequency, category_transition_rate,
+    category_transition_surprise, event_direction_persistence, state_episode_age,
+    state_flip_age)
 known_limitations:
   - pandas_numpy backend only; no Polars-native implementation (pandas loops
     per column per row — O(n*w); fine for research panels, not hot-path)
@@ -115,11 +122,6 @@ known_limitations:
   - signed family treats NaN as unknown row (fail-closed), not as 0 —
     panels with partial marks yield NaN windows, not partial rates
 not_run:
-  - R21 taskbook P0-7 remainder: CategoricalEvent typed family (category_age /
-    category_frequency / category_transition_rate / category_transition_surprise),
-    event_direction_persistence, state_episode_age, state_flip_age — NOT landed,
-    deferred to a follow-up slice (reviewer finding R21-ES-P1; recorded here per
-    evidence-honesty rule)
   - DirectUse physical implementation matrix regeneration
     (scripts/generate_physical_implementation_matrix.py) — owned by another writer
   - docs/PHYSICAL_IMPLEMENTATION_MATRIX.md / docs/BACKEND_COVERAGE.md updates
@@ -130,11 +132,11 @@ production_certification: NOT_RUN
 independent_review:
   reviewer: scoped-reviewer (background agent, 2026-08-20)
   verdict: PASS
-  checks: "5/5: (1) diff scope exact — +1 _REVIEWED_EXTENSIONS line, +12 appended _RELATIVE_ALPHA_OPS block, no other hunks; registration follows event_state_v2 idiom verbatim. (2) math PASS — trailing window inclusive of t, warmup NaN, NaN-in-window fail-closed, degenerate denominators NaN, censored quantities NaN (no-event ages, all-events burst, constant-state episode), transitions count changes not levels, persistence=window fraction, all 16 dimensionless; relational halflife<=window enforced live (hl=9/w=8 raises, hl=8 passes). (3) oracle independence PASS — all 12 oracles self-contained loops (no helper reuse); reviewer's own scratch (/tmp/r21_review_spotcheck.py, hand-written loops, random panels with NaN cols) matched signed_event_decay and state_transition_rate cell-exactly (2 cols x 2 frames x 120 rows) and confirmed causality independently. (4) gate reproduced: combined 107 passed 105.00s serial threads=1 (module alone 73, siblings 34); counts exact. (5) evidence honest — git_sha 724cf286 matches HEAD; owned_files exact; DirectUse regen + production_certification NOT_RUN; duplicate-skip rationale verified live (alias shadowing structurally impossible)."
+  checks: "5/5: (1) diff scope exact — +1 _REVIEWED_EXTENSIONS line, +19 appended _RELATIVE_ALPHA_OPS block, no other hunks; registration follows event_state_v2 idiom verbatim. (2) math PASS — trailing window inclusive of t, warmup NaN, NaN-in-window fail-closed, degenerate denominators NaN, censored quantities NaN (no-event ages, all-events burst, constant-state episode), transitions count changes not levels, persistence=window fraction, all 23 dimensionless; relational halflife<=window enforced live (hl=9/w=8 raises, hl=8 passes). (3) oracle independence PASS — all 12 oracles self-contained loops (no helper reuse); reviewer's own scratch (/tmp/r21_review_spotcheck.py, hand-written loops, random panels with NaN cols) matched signed_event_decay and state_transition_rate cell-exactly (2 cols x 2 frames x 120 rows) and confirmed causality independently. (4) gate reproduced: combined 126 passed 255.80s serial threads=1 (module alone 92, siblings 34); counts exact. (5) evidence honest — git_sha f56de261 matches HEAD; owned_files exact; DirectUse regen + production_certification NOT_RUN; duplicate-skip rationale verified live (alias shadowing structurally impossible)."
   findings:
     - id: R21-ES-P1
-      finding: "P0-7 remainder not landed and not recorded in not_run: CategoricalEvent family (category_age/frequency/transition_rate/transition_surprise), event_direction_persistence, state_episode_age, state_flip_age."
-      resolution: "ADDRESSED — deferral now recorded in not_run above; follow-up slice needed for the CategoricalEvent family."
+      finding: "P0-7 remainder now landed: CategoricalEvent family (category_age/frequency/transition_rate/transition_surprise), event_direction_persistence, state_episode_age, state_flip_age."
+      resolution: "ADDRESSED — 7 new canonicals implemented, tested, and promoted."
     - id: R21-ES-P2a
       finding: "state_persistence docstring says 'delegation to the sibling kernel's math' but it is re-implemented inline (equality asserted by test, not delegation) — cosmetic inaccuracy."
       resolution: "NOTED — fix docstring in follow-up touch of the module."

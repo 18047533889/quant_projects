@@ -310,8 +310,15 @@ class MACDLineNative(SeriesOperator):
 
         exprs = []
         for c in cols:
-            ema_fast = pl.col(c).ewm_mean(alpha=alpha_fast, adjust=False, ignore_nulls=True)
-            ema_slow = pl.col(c).ewm_mean(alpha=alpha_slow, adjust=False, ignore_nulls=True)
+            # R21-DEF2: ewm_mean with ignore_nulls=True publishes from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # count non-null observations and mask results where count < window.
+            ema_fast_raw = pl.col(c).ewm_mean(alpha=alpha_fast, adjust=False, ignore_nulls=True)
+            ema_fast_count = pl.col(c).is_not_null().cast(pl.Int64).cum_sum()
+            ema_fast = pl.when(ema_fast_count >= fast).then(ema_fast_raw).otherwise(None)
+            ema_slow_raw = pl.col(c).ewm_mean(alpha=alpha_slow, adjust=False, ignore_nulls=True)
+            ema_slow_count = pl.col(c).is_not_null().cast(pl.Int64).cum_sum()
+            ema_slow = pl.when(ema_slow_count >= slow).then(ema_slow_raw).otherwise(None)
             exprs.append((ema_fast - ema_slow).alias(c))
 
         return x.with_columns(exprs)
@@ -350,10 +357,19 @@ class MACDSignalNative(SeriesOperator):
 
         exprs = []
         for c in cols:
-            ema_fast = pl.col(c).ewm_mean(alpha=alpha_fast, adjust=False, ignore_nulls=True)
-            ema_slow = pl.col(c).ewm_mean(alpha=alpha_slow, adjust=False, ignore_nulls=True)
+            # R21-DEF2: ewm_mean with ignore_nulls=True publishes from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # count non-null observations and mask results where count < window.
+            ema_fast_raw = pl.col(c).ewm_mean(alpha=alpha_fast, adjust=False, ignore_nulls=True)
+            ema_fast_count = pl.col(c).is_not_null().cast(pl.Int64).cum_sum()
+            ema_fast = pl.when(ema_fast_count >= fast).then(ema_fast_raw).otherwise(None)
+            ema_slow_raw = pl.col(c).ewm_mean(alpha=alpha_slow, adjust=False, ignore_nulls=True)
+            ema_slow_count = pl.col(c).is_not_null().cast(pl.Int64).cum_sum()
+            ema_slow = pl.when(ema_slow_count >= slow).then(ema_slow_raw).otherwise(None)
             macd_line = ema_fast - ema_slow
-            signal_line = macd_line.ewm_mean(alpha=alpha_signal, adjust=False, ignore_nulls=True)
+            signal_line_raw = macd_line.ewm_mean(alpha=alpha_signal, adjust=False, ignore_nulls=True)
+            signal_line_count = macd_line.is_not_null().cast(pl.Int64).cum_sum()
+            signal_line = pl.when(signal_line_count >= signal).then(signal_line_raw).otherwise(None)
             exprs.append(signal_line.alias(c))
 
         return x.with_columns(exprs)
@@ -1219,9 +1235,12 @@ class ChoppinessIndexNative(SeriesOperator):
             tr3 = (l_col - c_prev).abs()
             tr = pl.max_horizontal(tr1, tr2, tr3)
 
-            sum_tr = tr.rolling_sum(window_size=w, min_samples=1)
-            h_max = h.rolling_max(window_size=w, min_samples=1)
-            l_min = l_col.rolling_min(window_size=w, min_samples=1)
+            # R21-DEF2: rolling operations with min_samples=1 publish from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # use min_samples=window for rolling operations.
+            sum_tr = tr.rolling_sum(window_size=w, min_samples=w)
+            h_max = h.rolling_max(window_size=w, min_samples=w)
+            l_min = l_col.rolling_min(window_size=w, min_samples=w)
 
             range_val = h_max - l_min
             ci = pl.when(range_val == 0).then(None).otherwise(
@@ -1274,16 +1293,19 @@ class UltimateOscillatorNative(SeriesOperator):
             bp = c_col - pl.min_horizontal(l_col, c_prev)
             tr = pl.max_horizontal(h, c_prev) - pl.min_horizontal(l_col, c_prev)
 
-            bp_s = bp.rolling_sum(window_size=s, min_samples=1)
-            tr_s = tr.rolling_sum(window_size=s, min_samples=1)
+            # R21-DEF2: rolling_sum with min_samples=1 publishes from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # use min_samples=window for rolling operations.
+            bp_s = bp.rolling_sum(window_size=s, min_samples=s)
+            tr_s = tr.rolling_sum(window_size=s, min_samples=s)
             avg_s = pl.when(tr_s != 0).then(bp_s / tr_s).otherwise(None)
 
-            bp_m = bp.rolling_sum(window_size=m, min_samples=1)
-            tr_m = tr.rolling_sum(window_size=m, min_samples=1)
+            bp_m = bp.rolling_sum(window_size=m, min_samples=m)
+            tr_m = tr.rolling_sum(window_size=m, min_samples=m)
             avg_m = pl.when(tr_m != 0).then(bp_m / tr_m).otherwise(None)
 
-            bp_l = bp.rolling_sum(window_size=l, min_samples=1)
-            tr_l = tr.rolling_sum(window_size=l, min_samples=1)
+            bp_l = bp.rolling_sum(window_size=l, min_samples=l)
+            tr_l = tr.rolling_sum(window_size=l, min_samples=l)
             avg_l = pl.when(tr_l != 0).then(bp_l / tr_l).otherwise(None)
 
             uo = 100.0 * (4 * avg_s + 2 * avg_m + avg_l) / 7.0
@@ -1537,14 +1559,21 @@ class KAMANative(SeriesOperator):
             # Efficiency Ratio
             net_change = (pl.col(c) - pl.col(c).shift(w - 1)).abs()
             delta = (pl.col(c) - pl.col(c).shift(1)).abs()
-            volatility = delta.rolling_sum(window_size=w, min_samples=1)
+            # R21-DEF2: rolling_sum with min_samples=1 publishes from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # use min_samples=window for rolling operations.
+            volatility = delta.rolling_sum(window_size=w, min_samples=w)
             er = pl.when(volatility == 0).then(0.0).otherwise(net_change / volatility)
 
             # Smoothing Constant
             sc = ((er * (fastest - slowest) + slowest) ** 2)
 
-            # KAMA (simplified without full state tracking)
-            kama = pl.col(c).ewm_mean(alpha=sc, adjust=False, ignore_nulls=True)
+            # R21-DEF2: ewm_mean with ignore_nulls=True publishes from first
+            # observation (one row early vs pandas min_periods=window). Fix:
+            # count non-null observations and mask results where count < window.
+            kama_raw = pl.col(c).ewm_mean(alpha=sc, adjust=False, ignore_nulls=True)
+            kama_count = pl.col(c).is_not_null().cast(pl.Int64).cum_sum()
+            kama = pl.when(kama_count >= w).then(kama_raw).otherwise(None)
             exprs.append(kama.alias(c))
 
         return x.with_columns(exprs)

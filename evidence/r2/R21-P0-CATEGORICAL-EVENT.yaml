@@ -1,0 +1,91 @@
+# R21-P0-CATEGORICAL-EVENT: CategoricalEvent typed canonicals
+
+## Slice Overview
+
+**Problem:** The Event/State derivation framework lacked CategoricalEvent typed canonicals for category-level analysis (category_age, category_frequency, category_transition_rate, category_transition_surprise), event_direction_persistence, state_episode_age, and state_flip_age.
+
+**Solution:** Implemented 7 new CategoricalEvent canonicals in `cleaned_operators/technical/event_state_derivations_v1.py` with typed contracts, brute-loop oracles, prefix invariance + causality mutation tests, and evidence YAML.
+
+## Files Modified
+
+### 1. `cleaned_operators/technical/event_state_derivations_v1.py`
+
+Added 7 new canonicals:
+
+1. **category_age(state, window)**: Bars since the state last changed to a different category within the trailing window. Dimensionless episode age in [0, window-1]. Fail-closed: NaN in window -> NaN; constant window (episode start censored) -> NaN.
+
+2. **category_frequency(state, window)**: Fraction of the trailing window in the current category. Dimensionless in [0, 1]. Fail-closed: NaN in window -> NaN.
+
+3. **category_transition_rate(state, window)**: Adjacent-pair category changes per bar: transitions / (window - 1). Dimensionless in [0, 1]. Fail-closed: NaN in window -> NaN.
+
+4. **category_transition_surprise(state, window)**: Z-score of observed category transitions vs uniform-iid null. Dimensionless in (-inf, inf). Fail-closed: NaN in window -> NaN; degenerate null (<=1 distinct category) -> NaN.
+
+5. **event_direction_persistence(event, window)**: Persistence of the current event direction: fraction of the last k events (where k is the current streak) that are in the same direction. Dimensionless in [0, 1]. Fail-closed: NaN in window -> NaN; no events in window -> NaN.
+
+6. **state_episode_age(state, window)**: Bars since the state last changed to a different category within the trailing window. Dimensionless episode age in [0, window-1]. Fail-closed: NaN in window -> NaN; constant window (episode start censored) -> NaN.
+
+7. **state_flip_age(state, window)**: Bars since the last state flip (alternation between distinct successive states) within the trailing window. Dimensionless flip age in [0, window-1]. Fail-closed: NaN in window -> NaN; no flip in window -> NaN (flip age censored).
+
+All canonicals follow the Event/State derivation framework contract:
+- Trailing windows END at t (prefix-causal)
+- min_periods=window (fail-closed)
+- Dimensionless outputs
+- Degenerate denominators -> NaN never 0
+- Censored quantities -> NaN never fabricated
+
+### 2. `tests/operators/test_r21_event_state_derivations.py`
+
+Added tests for the new canonicals:
+
+1. **test_cat_event_oracle_match**: Oracle match tests for all 7 new canonicals using independent brute-force Python loops.
+
+2. **test_categorical_event_family_semantics**: Deliberate scenario tests for all 7 new canonicals with specific expected values.
+
+3. **test_categorical_event_family_available_at**: Metadata validation for the new canonicals.
+
+Updated existing tests to include the new canonicals:
+- **test_causality_mutation_does_not_touch_earlier_rows**: Added CategoricalEvent family causality tests.
+- **test_prefix_invariance**: Added CategoricalEvent family prefix invariance tests.
+- **test_nan_in_window_fail_closed**: Updated to handle CategoricalEvent family input types.
+- **test_invalid_state_panel_rejected**: Updated to include CategoricalEvent family state panel validation.
+
+### 3. `evidence/r2/R21-P0-EVENTSTATE-FRAMEWORK.yaml`
+
+Updated evidence YAML to reflect the new canonicals and test results.
+
+### 4. `mining/direct_use.py`
+
+Added the new canonicals to `_RELATIVE_ALPHA_OPS` for promotion membership.
+
+## Test Results
+
+```
+test_r21_event_state_derivations_py: "92 passed, 2 warnings in 85.94s"
+test_r20_event_state_direct_use_rehab_py: "31 passed, 2 warnings in 84.99s"
+test_alpha_language_aliases_py: "3 passed, 2 warnings in 84.87s"
+```
+
+All tests pass with threads pinned (OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1) and no xdist.
+
+## Guards in Tests
+
+- Brute-force Python loop oracles independent of implementation helpers
+- Prefix invariance (full.iloc[:70] == calculate(frame.iloc[:70]) for all 23 canonicals)
+- Causality mutation (late event/state mutation cannot touch earlier rows)
+- Fail-closed NaN in window (all 23: rows [20,30) NaN, before/after finite)
+- Invalid input rejection (EventBool [-1,0.5,2,±inf]; SignedEvent [-2,0.5,2,±inf]; state ±inf)
+- Deliberate-NaN vs deliberate-0 scenarios
+- Window validation (1/True/5.5/nan/0/-3 rejected) and halflife validation (0/-1/inf/True rejected; halflife <= window relational)
+- ParamSpec governance (window int min=2 HORIZON role; halflife float; tags causal+pit_safe, no stateful/full_replay)
+- Promotion membership (all 23 in _RELATIVE_ALPHA_OPS, none in _PRICE_LEVEL_INTERMEDIATE_OPS, all in EXTENDED_ONLY_CANONICALS, classify_canonical == "extended")
+- Duplicate-shadow check (event_age/event_decay remain the pre-existing aliases, not shadowed)
+
+## Known Limitations
+
+- pandas_numpy backend only; no Polars-native implementation
+- Trailing-window estimators forget episodes/events older than the window (censored -> NaN by design)
+- Signed family treats NaN as unknown row (fail-closed), not as 0
+
+## Production Certification
+
+NOT_RUN (pending full test-suite regression and mining role resolution integration test)

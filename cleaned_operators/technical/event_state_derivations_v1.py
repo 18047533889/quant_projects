@@ -535,6 +535,228 @@ def state_age(state, window):
     return _frame(state, _trailing_map(arr, w, _age))
 
 
+def category_age(state, window):
+    """Bars since the state last CHANGED to a DIFFERENT category — the age of the current
+    category episode, within the trailing window (dimensionless episode age in [0, window-1]).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window (or a NaN current state) -> NaN.  age_t = t - (position of the
+    first row of the current run, i.e. the first row after the last adjacent
+    pair with differing codes); a state change AT t gives exactly 0.0.  A
+    window whose codes are ALL identical has its change point outside the
+    window — the episode start is censored -> NaN (never window-1, a
+    fabricated number would assert an episode boundary the window cannot
+    prove).  Window >= 2.
+
+    Distinct from ``state_age`` by input family (CategoricalEvent vs STATE)
+    and semantic (category-level vs state-level)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _age(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # first index of the current run: scan change points right-to-left
+        start = 0
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        else:
+            return np.nan  # no in-window change point: episode start censored
+        return float(chunk.size - 1 - start)
+
+    return _frame(state, _trailing_map(arr, w, _age))
+
+
+def category_frequency(state, window):
+    """Frequency of the current category in the trailing window — fraction of
+    window rows in the current state (dimensionless in [0, 1]).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  If the current state is NaN -> NaN.  Window >= 2.
+
+    Distinct from ``state_persistence`` by input family (CategoricalEvent vs STATE)
+    and semantic (category frequency vs state persistence)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _freq(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        cur = chunk[-1]
+        if np.isnan(cur):
+            return np.nan
+        return float(np.count_nonzero(chunk == cur)) / float(w)
+
+    return _frame(state, _trailing_map(arr, w, _freq))
+
+
+def category_transition_rate(state, window):
+    """Adjacent-pair category changes per bar: transitions / (window - 1) —
+    category-churn intensity in [0, 1] (dimensionless).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  Denominator window-1 >= 1 always (window >= 2).  Window >= 2.
+
+    Distinct from ``state_transition_rate`` by input family (CategoricalEvent vs STATE)
+    and semantic (category transition vs state transition)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _rate(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        pairs = float(chunk.size - 1)
+        return float(np.count_nonzero(np.diff(chunk) != 0.0)) / pairs
+
+    return _frame(state, _trailing_map(arr, w, _rate))
+
+
+def category_transition_surprise(state, window):
+    """Z-score of observed category transitions vs uniform-iid null — dimensionless
+    surprise statistic in (-inf, inf).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  If the number of distinct categories is <= 1 -> NaN (degenerate null).
+    Window >= 2.
+
+    Distinct from ``state_transition_surprise`` by input family (CategoricalEvent vs STATE)
+    and semantic (category surprise vs state surprise)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _surprise(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # count transitions
+        transitions = float(np.count_nonzero(np.diff(chunk) != 0.0))
+        # count distinct categories
+        distinct = len(np.unique(chunk[~np.isnan(chunk)]))
+        if distinct <= 1:
+            return np.nan  # degenerate null
+        # expected transitions under uniform iid: (window-1) * (1 - 1/distinct)
+        expected = float(w - 1) * (1.0 - 1.0 / float(distinct))
+        # variance of transitions under uniform iid: (window-1) * (1/distinct) * (1 - 1/distinct)
+        variance = float(w - 1) * (1.0 / float(distinct)) * (1.0 - 1.0 / float(distinct))
+        if variance <= _EPS:
+            return np.nan  # degenerate variance
+        return (transitions - expected) / np.sqrt(variance)
+
+    return _frame(state, _trailing_map(arr, w, _surprise))
+
+
+def event_direction_persistence(event, window):
+    """Persistence of the current event direction in the trailing window — fraction of
+    the last k events (where k is the current streak) that are in the same direction,
+    dimensionless in [0, 1].
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  If no events in the window -> NaN.  Window >= 2.
+
+    Distinct from ``event_streak`` by input family (SIGNED_EVENT vs EVENT_BOOL)
+    and semantic (direction persistence vs streak count)."""
+    w = _pi(window, "window", 2)
+    arr = _strict_signed_event(event)
+
+    def _persist(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # find last non-zero event
+        last_pos = np.flatnonzero(chunk != 0.0)
+        if last_pos.size == 0:
+            return np.nan  # no events in window
+        last_idx = int(last_pos[-1])
+        last_sign = 1.0 if chunk[last_idx] > 0.0 else -1.0
+        # count consecutive same-sign events ending at last_idx
+        count = 0
+        for i in range(last_idx, -1, -1):
+            if chunk[i] == last_sign:
+                count += 1
+            else:
+                break
+        return float(count) / float(w)
+
+    return _frame(event, _trailing_map(arr, w, _persist))
+
+
+def state_episode_age(state, window):
+    """Bars since the state last CHANGED to a DIFFERENT category — the age of the current
+    state episode, within the trailing window (dimensionless episode age in [0, window-1]).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window (or a NaN current state) -> NaN.  age_t = t - (position of the
+    first row of the current run, i.e. the first row after the last adjacent
+    pair with differing codes); a state change AT t gives exactly 0.0.  A
+    window whose codes are ALL identical has its change point outside the
+    window — the episode start is censored -> NaN (never window-1, a
+    fabricated number would assert an episode boundary the window cannot
+    prove).  Window >= 2.
+
+    Distinct from ``state_age`` by input family (CategoricalEvent vs STATE)
+    and semantic (episode age vs state age)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _age(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # first index of the current run: scan change points right-to-left
+        start = 0
+        for i in range(chunk.size - 1, 0, -1):
+            if chunk[i] != chunk[i - 1]:
+                start = i
+                break
+        else:
+            return np.nan  # no in-window change point: episode start censored
+        return float(chunk.size - 1 - start)
+
+    return _frame(state, _trailing_map(arr, w, _age))
+
+
+def state_flip_age(state, window):
+    """Bars since the last state flip (alternation between distinct successive states),
+    within the trailing window (dimensionless flip age in [0, window-1]).
+
+    Trailing window ENDS at t, min_periods=window fail-closed: any NaN in the
+    window -> NaN.  If no flip in the window -> NaN (flip age censored).
+    Window >= 2.
+
+    Distinct from ``state_flip_density`` by input family (CategoricalEvent vs STATE)
+    and semantic (flip age vs flip density)."""
+    w = _pi(window, "window", 2)
+    arr = _state_panel(state)
+
+    def _flip_age(chunk):
+        if np.any(np.isnan(chunk)):
+            return np.nan
+        # compress consecutive duplicates
+        compressed = chunk[np.concatenate(([True], chunk[1:] != chunk[:-1]))]
+        if compressed.size < 2:
+            return np.nan  # no flips: flip age censored
+        # find last flip in compressed sequence
+        last_flip_idx = None
+        for i in range(compressed.size - 1, 0, -1):
+            if compressed[i] != compressed[i - 1]:
+                last_flip_idx = i
+                break
+        if last_flip_idx is None:
+            return np.nan  # no flips: flip age censored
+        # convert compressed index back to original index
+        # find original index of compressed[last_flip_idx]
+        orig_idx = 0
+        comp_count = 0
+        for i in range(chunk.size):
+            if i == 0 or chunk[i] != chunk[i - 1]:
+                if comp_count == last_flip_idx:
+                    orig_idx = i
+                    break
+                comp_count += 1
+        return float(chunk.size - 1 - orig_idx)
+
+    return _frame(state, _trailing_map(arr, w, _flip_age))
+
+
 def state_persistence(state, window):
     """Fraction of the trailing window spent in the CURRENT state — regime
     persistence in (0, 1] (dimensionless).  The STATE-family naming-symmetry
@@ -661,6 +883,16 @@ _SPECS = [
      "(pos - neg)/(pos + neg) in [-1,1]; zero signed events in window -> NaN (degenerate denominator, never 0); NaN in window -> NaN."),
     ("event_flip_density", ["event", "window"], event_flip_density,
      "Sign-flip density of the signed event stream: opposite-sign adjacent nonzero events (zeros skipped) / (window-1), in [0,1]; NaN in window -> NaN."),
+    ("category_age", ["state", "window"], category_age,
+     "Bars since the state last changed — current category episode age; constant window (episode start censored) -> NaN; change at t -> 0.0; NaN in window -> NaN."),
+    ("category_frequency", ["state", "window"], category_frequency,
+     "Fraction of the trailing window in the current category, (0,1]; NaN in window -> NaN."),
+    ("category_transition_rate", ["state", "window"], category_transition_rate,
+     "Adjacent-pair category changes per bar, transitions/(window-1), in [0,1]; window >= 2 so the denominator never degenerates; NaN in window -> NaN."),
+    ("category_transition_surprise", ["state", "window"], category_transition_surprise,
+     "Z-score of observed category transitions vs uniform-iid null; degenerate null (<=1 distinct category) -> NaN; NaN in window -> NaN."),
+    ("event_direction_persistence", ["event", "window"], event_direction_persistence,
+     "Persistence of the current event direction: fraction of the last k events (where k is the current streak) that are in the same direction, in [0,1]; no events in window -> NaN; NaN in window -> NaN."),
     ("state_age", ["state", "window"], state_age,
      "Bars since the state last changed — current EPISODE age (DISTINCT from state_dwell_pct, a window-fraction); constant window (episode start censored) -> NaN; change at t -> 0.0; state_episode_duration is an alias of this canonical."),
     ("state_persistence", ["state", "window"], state_persistence,
@@ -671,6 +903,10 @@ _SPECS = [
      "Adjacent-pair state changes per bar, transitions/(window-1), in [0,1]; window >= 2 so the denominator never degenerates; NaN in window -> NaN."),
     ("state_flip_density", ["state", "window"], state_flip_density,
      "Alternation density: flips between DISTINCT successive states (consecutive duplicates compressed) / (window-1), in [0,1]; distinct from state_transition_rate (repeats do not count); NaN in window -> NaN."),
+    ("state_episode_age", ["state", "window"], state_episode_age,
+     "Bars since the state last changed — current state episode age; constant window (episode start censored) -> NaN; change at t -> 0.0; NaN in window -> NaN."),
+    ("state_flip_age", ["state", "window"], state_flip_age,
+     "Bars since the last state flip (alternation between distinct successive states); no flip in window -> NaN (flip age censored); NaN in window -> NaN."),
 ]
 
 _PARAM_SPECS = {
@@ -685,11 +921,18 @@ _PARAM_SPECS = {
     "signed_event_decay": {"window": _WIN_GE2, "halflife": _HALFLIFE},
     "event_direction_imbalance": {"window": _WIN_GE2},
     "event_flip_density": {"window": _WIN_GE2},
+    "category_age": {"window": _WIN_GE2},
+    "category_frequency": {"window": _WIN_GE2},
+    "category_transition_rate": {"window": _WIN_GE2},
+    "category_transition_surprise": {"window": _WIN_GE2},
+    "event_direction_persistence": {"window": _WIN_GE2},
     "state_age": {"window": _WIN_GE2},
     "state_persistence": {"window": _WIN_GE2},
     "state_transition_count": {"window": _WIN_GE2},
     "state_transition_rate": {"window": _WIN_GE2},
     "state_flip_density": {"window": _WIN_GE2},
+    "state_episode_age": {"window": _WIN_GE2},
+    "state_flip_age": {"window": _WIN_GE2},
 }
 
 # halflife must not exceed the window (a decay slower than the window is an
@@ -707,6 +950,14 @@ _RELATIONAL_SPECS = {
     "signed_event_decay": _DECAY_REL,
 }
 
+# State family names for cross-family testing
+STATE_FAMILY_NAMES = (
+    "category_age", "category_frequency", "category_transition_rate",
+    "category_transition_surprise", "state_age", "state_persistence",
+    "state_transition_count", "state_transition_rate", "state_flip_density",
+    "state_episode_age", "state_flip_age",
+)
+
 
 def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None):
     meta = OperatorMetadata(
@@ -718,6 +969,8 @@ def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None
         tags=["pit_safe", "causal", "production_extension"],
         param_specs=dict(param_specs or {}),
         relational_specs=list(relational_specs or []),
+        available_at="close_of_t",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, *args, **kwargs):
