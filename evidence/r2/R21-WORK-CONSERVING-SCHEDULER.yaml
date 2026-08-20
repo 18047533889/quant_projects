@@ -32,7 +32,7 @@ implementation:
 focused_tests:
   command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1
     python3 -m pytest tests/runtime/test_r21_work_conserving_scheduler.py -v
-  result: 6 passed (2026-08-21, 0.45s)
+  result: 6 passed (2026-08-21, 0.42s)
   coverage:
   - Child runs immediately after parent, not waiting for sibling
   - Diamond DAG children start immediately after parent completes
@@ -44,7 +44,7 @@ serial_regression_gate:
   command: cd /home/shw/quant_projects && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
     MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/runtime/test_r21_work_conserving_scheduler.py
     -q
-  result: 6 passed (2026-08-21, 0.45s, serial, no xdist)
+  result: 6 passed (2026-08-21, 0.36s, serial, no xdist)
 compile_gate:
   command: python3 -m py_compile runtime/multibackend/parallel_region_scheduler.py
     tests/runtime/test_r21_work_conserving_scheduler.py

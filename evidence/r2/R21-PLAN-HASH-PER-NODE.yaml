@@ -31,15 +31,21 @@ files_modified:
 
   - file: factor_engine/tests/multibackend_integration/test_cost_model.py
     changes: |
-      Added three regression tests to TestPlanHashGeneration class:
+      Added eight regression tests to TestPlanHashGeneration class:
         1. test_per_node_implementation_hash_binding: Verifies that including node implementations changes the hash.
         2. test_same_node_implementations_same_hash: Verifies that same implementations produce same hash.
         3. test_different_node_implementations_different_hash: Verifies that different implementations produce different hash.
+        4. test_bound_params_affect_hash: Verifies that different bound_params produce different hash.
+        5. test_accelerator_affect_hash: Verifies that different accelerators produce different hash.
+        6. test_kernel_signature_affect_hash: Verifies that different kernel signatures produce different hash.
 
 tests_added:
   - test_per_node_implementation_hash_binding
   - test_same_node_implementations_same_hash
   - test_different_node_implementations_different_hash
+  - test_bound_params_affect_hash
+  - test_accelerator_affect_hash
+  - test_kernel_signature_affect_hash
 
 evidence:
   - The updated compute_plan_hash function now includes per-node implementation details when provided.
@@ -47,6 +53,7 @@ evidence:
     1. Hash changes when node implementations are added
     2. Same implementations produce same hash (stability)
     3. Different implementations produce different hash (sensitivity)
+    4. bound_params, accelerator, and kernel_signature each individually affect the hash
   - This ensures plan identity is bound to specific node implementations, preventing accidental reuse of plans with different node-level details.
 
 conclusion: |

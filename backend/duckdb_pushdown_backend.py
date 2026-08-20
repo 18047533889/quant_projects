@@ -6,6 +6,10 @@
 分别声明各自的执行身份与生产标注，使工厂、证书链与 telemetry 不再通过
 动态属性注入来区分方言。
 
+``ClickHousePushdownBackend`` 同时保留当前 R40 #141 所需的选择链属性默认值，
+以便 `build_backend_execution_certificate` 在不修改证书工厂的前提下，
+继续把 `requested_backend / resolved_dialect / datasource_identity` 传入证书。
+
 企业级别名 ``SqlPushdownBackend`` 保留为 DuckDB 默认，避免既有导入断裂。
 
 MB-P0-002: Uses concrete backend identity 'duckdb_sql' / 'clickhouse_sql'.
@@ -45,6 +49,12 @@ class ClickHousePushdownBackend(SqlBackend):
     """
 
     runtime_backend_label = "clickhouse_sql"
+
+    # R40 #141: 保留选择链字段默认值，供 `build_backend_execution_certificate`
+    # 直接读取，避免在证书工厂中增加新的适配器分支。
+    _requested_backend: str = "clickhouse_sql"
+    _resolved_dialect: str = "clickhouse"
+    _datasource_identity: str = ""
 
     def __init__(self) -> None:
         """初始化 ClickHouse SQL 下推后端，算子层使用 ``operator_backend='auto'``。"""

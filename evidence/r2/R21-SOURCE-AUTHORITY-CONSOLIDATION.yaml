@@ -95,5 +95,5 @@ tests_run:
   test_import_resolution: 15 passed
   test_no_root_fe_packages: 25 skipped (packages exist), 1 passed (pyproject now correct)
 ticket: R21-SOURCE-AUTHORITY-CONSOLIDATION
-timestamp: '2026-08-21T03:05:49.240363'
+timestamp: '2026-08-21T03:09:00'
 

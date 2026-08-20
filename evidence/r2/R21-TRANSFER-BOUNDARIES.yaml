@@ -63,6 +63,7 @@ files_modified:
     changes:
       - Imported TransferTransform and infer_transfer_transform
       - Updated optimize_duckdb_region_boundary to set transform field
+      - Fixed infer_duckdb_region_output_properties to use required_properties.sorted_by
 
 evidence:
   - file: evidence/r2/R21-TRANSFER-BOUNDARIES.yaml
@@ -76,3 +77,25 @@ regression_tests:
       - test_transfer_cost_estimation_new_transforms (5 tests)
     total: 22 tests
     status: all passing
+
+  - file: tests/planner/test_duckdb_region_optimization.py
+    tests:
+      - test_duckdb_to_arrow_is_cheaper_than_pandas
+      - test_sql_ordering_not_guaranteed_without_explicit_order_by
+      - test_sql_ordering_guaranteed_with_order_by
+      - test_producer_ordering_check_satisfied
+      - test_producer_ordering_check_not_satisfied
+      - test_producer_ordering_check_prefix_match
+      - test_transfer_edge_requires_sort_when_ordering_not_satisfied
+      - test_transfer_edge_no_sort_when_ordering_satisfied
+      - test_duckdb_to_polars_prefers_arrow_boundary
+      - test_duckdb_to_pandas_only_when_necessary
+      - test_should_keep_duckdb_relation_for_sql_downstream
+      - test_should_keep_duckdb_relation_for_polars_downstream
+      - test_sort_cost_included_when_required
+      - test_concrete_backend_identity_duckdb_sql
+    total: 14 tests
+    status: all passing
+
+total_regression_tests: 36
+all_passing: true

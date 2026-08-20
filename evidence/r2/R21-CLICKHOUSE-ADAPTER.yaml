@@ -26,12 +26,13 @@ Refactored `backend/duckdb_pushdown_backend.py` and `backend/factory.py`:
 2. `DuckDBPushdownBackend` remains the DuckDB adapter (shared compiler IR, independent runtime label).
 3. `build_backend('clickhouse_sql')` now returns `ClickHousePushdownBackend`.
 4. Removed runtime attribute injection for ClickHouse factory routing.
-5. `build_backend_execution_certificate` inherits adapter identity without extra patching.
+5. `ClickHousePushdownBackend` carries the R40 #141 choice-chain defaults (`_requested_backend`, `_resolved_dialect`, `_datasource_identity`), so `build_backend_execution_certificate` inherits adapter identity without new factory branches.
+6. `build_backend_execution_certificate` behavior unchanged for existing callers.
 
 # Scope
 
 - Compiler IR / emitter / executor chain is still shared (no query generation duplication).
-- Adapter boundary is now explicit via subclass + `runtime_backend_label`.
+- Adapter boundary is now explicit via subclass + `runtime_backend_label` + adapter-owned metadata defaults.
 - Existing tests remain compatible; adapter regression tests added.
 
 # Tests
@@ -39,7 +40,7 @@ Refactored `backend/duckdb_pushdown_backend.py` and `backend/factory.py`:
 ```
 tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_backend_has_expected_identity_and_base PASSED
 tests/backend/test_clickhouse_adapter.py::test_clickhouse_certificate_chain_inherits_adapter_identity PASSED
-tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_sql_runtime_identity_matches_factory PASSED
+tests/backend/test_clickhouse_adapter.py::test_clickhouse_pushdown_compiler_identity_matches_factory PASSED
 ```
 
 # Files
