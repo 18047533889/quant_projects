@@ -1,0 +1,46 @@
+schema_version: 1
+task_id: R2-BACKEND-GAP-MATRIX
+current_sha: bce4c0a98e638734aca32b212c586c3b59c1562f
+generation_timestamp: '2026-08-19'
+status: CURRENT_HEAD_INVENTORY_ONLY
+production_certification: NOT_RUN
+sources:
+  registry: factor_engine/cleaned_operators/registry.py
+  manifest: factor_engine/docs/operator_manifest.json
+inventory:
+  canonical_operators: 1362
+  backend_registrations:
+    pandas_numpy: 1362
+    polars: 1361
+    sql: 375
+  backend_status:
+    implemented: 1362
+  backend_passed: 0
+  implementation_certified: 0
+  operator_certification: 0
+  backend_signature_consistent: 1354
+  edge_case_passed: 1285
+gaps:
+  pandas_reference: status=IMPLEMENTED; certification=NOT_RUN
+  polars: status=IMPLEMENTED; missing_canonicals=1; parity=NOT_RUN
+  sql: status=IMPLEMENTED; registered=375; real_sql_and_parity=NOT_RUN
+  cross_backend_production: status=NOT_CERTIFIED; gate=NOT_RUN
+  q_backend: status=NOT_CERTIFIED; integration_and_parity=NOT_RUN
+gates:
+  FULL_REPO_COMPILE: NOT_RUN
+  REGISTRY_BOOTSTRAP: NOT_RUN
+  REGISTRY_DUPLICATE_AUTHORITY: NOT_RUN
+  OPERATOR_ABI: NOT_RUN
+  NO_PRODUCTION_PLACEHOLDER: NOT_RUN
+  PANDAS_REFERENCE: NOT_RUN
+  POLARS_PARITY: NOT_RUN
+  POLARS_NO_FAKE_NATIVE: NOT_RUN
+  Q_CANONICAL_IR_ONLY: NOT_RUN
+  Q_OPERATOR_PINGPONG_ZERO: NOT_RUN
+  Q_NULL_TIME_PARITY: NOT_RUN
+  BACKEND_CAPABILITY_SINGLE_AUTHORITY: NOT_RUN
+  REGION_PLANNER_SINGLE_AUTHORITY: NOT_RUN
+  CI_FINAL_HEAD: NOT_RUN
+notes:
+  - Manifest has no current-head SHA binding; counts are inventory observations only.
+  - No production-ready claim is made.

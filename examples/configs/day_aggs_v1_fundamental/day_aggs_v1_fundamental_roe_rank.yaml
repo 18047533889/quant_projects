@@ -1,0 +1,36 @@
+factor:
+  name: day_aggs_v1_fundamental_roe_rank_2016_2025_v1
+  expr: rank(col("roe"))
+  freq: 1d
+  universe: equities
+  description: 基本面质量因子 - ROE 截面排名，数值越高表示股东回报能力越强
+
+data_source:
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    roe: ratios.return_on_equity
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+    ratios:
+      type: data_access
+      dataset: financials_ratios
+      start_date: 2016-01-01
+      end_date: 2025-12-31 23:59:59
+  joins:
+    ratios: asof_backward
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true
+
+materialization:
+  lake_root: ~/quant_projects/data/factors/lake
+  factor_id: day_aggs_v1_fundamental_roe_rank_2016_2025_v1

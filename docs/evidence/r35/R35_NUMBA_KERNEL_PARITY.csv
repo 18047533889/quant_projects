@@ -1,0 +1,5 @@
+kernel,status,max_abs_diff
+kalman_level,PASS,0.0
+kalman_trend,PASS,0.0
+kalman_beta,PASS,0.0
+ar_prior_forecast,PASS,3.3306690738754696e-16

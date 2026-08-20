@@ -1,0 +1,48 @@
+operator,pandas,polars_native,polars_long,duckdb_emitter,duckdb_exec,parity,surface,prod_safe,reason
+ALMA,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily Gaussian-window MA
+CoppockCurve,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily WMA(ROC(a)+ROC(b))
+ElderRay,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily bull/bear power vs EMA
+FisherTransform,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily rolling-normalized Fisher transform; recursive
+HMA,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily Hull moving average; trailing WMA composition
+QQE,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily RSI+band oscillator; stateful recursion
+RSX,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily Jurik-style smoothed RSI; recursive cascade
+cs_predictability_mosaic_score,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily cs predictability mosaic (bucket rank-IC)
+intra_consolidation_quality,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily consolidation quality
+intra_eod_reversal_decomposition,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily EOD move decomposition
+intra_event_pre_post_contrast,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily pre/post contrast
+intra_event_window_reduce,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily event-window reducer
+intra_impulse_event_detector,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily impulse detection
+intra_limit_pre_hit_pressure_profile,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily limit pre-hit profile (bar+limit fields only)
+intra_liquidity_resilience_curve_fit,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily resilience half-life fit
+intra_multiresolution_resample_reduce,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily multi-resolution resample reducer
+intra_neighbor_event_class,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute-per-bar event neighbor classification
+intra_post_impulse_response,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily post-impulse response
+intra_probe_outcome_score,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily probe composite
+intra_range_gap_flag,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute-per-bar range gap flag
+intra_response_curve_features,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily response curve geometry
+intra_round_price_barrier_response,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily round-price barrier response
+intra_round_price_clustering_share,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily round-price clustering
+intra_same_slot_zscore,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily same-slot cross-day zscore
+intra_session_boundary_jump,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily session boundary discontinuity
+intra_slice_mask_pair_reduce,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily pair slice mask reducer
+intra_slice_mask_reduce,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily slice+quantile-mask reducer
+intra_state_count,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily discrete-state count; pandas reference; complex kernel
+intra_state_dwell_stats,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state dwell runs
+intra_state_follow_beta,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state follow OLS
+intra_state_follow_corr,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state follow correlation
+intra_state_follow_ratio,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state follow ratio
+intra_state_interval_moment,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state event-gap moments
+intra_state_pair_same_slot_corr,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state-pair same-slot corr
+intra_state_sum,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state-conditioned sum
+intra_state_transition_entropy,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state transition entropy
+intra_state_vwap,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily state VWAP
+intra_supply_absorption_score,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily supply absorption
+intra_volume_at_price_profile,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily volume-at-price profile
+intra_volume_profile_peak_geometry,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily profile peak geometry
+intra_volume_profile_supply_structure,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily profile supply structure
+intra_volume_profile_value_area,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,minute->daily value area / POC
+panel_async_beta_ex_self,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily ex-self async-refresh beta (O(NT) total-minus-self)
+panel_factor_pocket_strength,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily factor-payout regime persistence
+panel_predictability_mosaic_score,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily panel-mean predictability mosaic
+turnover_chip_age_cost_surface,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily 2D age x cost turnover-implied chip surface
+turnover_chip_overhang_surface,YES,NO,NO,NO,NO,pandas_polars_delegate_parity_tested,extended,PIT_SAFE_NOT_CERTIFIED,daily turnover-implied overhang supply surface

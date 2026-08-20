@@ -1,0 +1,39 @@
+{
+  "count": 29,
+  "fingerprint": {
+    "dirty": true,
+    "head": "19d2ff954b56f5dfd034d8ec8e8631af0ff271d4"
+  },
+  "operators": [
+    "intra_idiosyncratic_variance",
+    "intra_realized_beta",
+    "intra_realized_correlation",
+    "micro_bvc_vpin",
+    "nonfinite_to_num",
+    "ts_ar_fitted_value",
+    "ts_ar_forecast",
+    "ts_ar_in_sample_resid",
+    "ts_ar_innovation",
+    "ts_ar_innovation_z",
+    "ts_expectile_regression_coeff",
+    "ts_expectile_regression_resid",
+    "ts_huber_regression_coeff",
+    "ts_huber_regression_in_sample_resid",
+    "ts_huber_regression_resid_z",
+    "ts_mean_reversion_half_life",
+    "ts_multi_regression_coeff",
+    "ts_multi_regression_r2",
+    "ts_multi_regression_resid",
+    "ts_multi_regression_resid_z",
+    "ts_poly2_coeff",
+    "ts_poly2_resid",
+    "ts_quantile_regression_beta",
+    "ts_quantile_regression_coeff",
+    "ts_quantile_regression_resid",
+    "ts_quantile_regression_slope",
+    "ts_ridge_regression_coeff",
+    "ts_ridge_regression_in_sample_resid",
+    "ts_ridge_regression_resid_z"
+  ],
+  "schema_version": "factor_engine.r18.research_operator_manifest.v1"
+}

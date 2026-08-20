@@ -1,0 +1,1827 @@
+{
+  "schema_version": "factor_engine.market_field_manifest.v1",
+  "generated_by": "factor_engine/scripts/build_market_field_manifest.py",
+  "concept_count": 41,
+  "concepts": {
+    "amount_local": {
+      "concept": "amount_local",
+      "canonical_unit": "local_money",
+      "domain": "price_volume",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Amount"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_amount"
+        ],
+        "notes": "Amount ~= Vwap * Volume (rel err ~2e-5)"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Amount"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_amount"
+        ],
+        "notes": "Amount == VWAP * Volume exactly (~96.65% rows)"
+      }
+    },
+    "cash_dividend_per_share": {
+      "concept": "cash_dividend_per_share",
+      "canonical_unit": "local/share",
+      "domain": "corporate_action",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "PIT_BLOCKED",
+        "dataset": "ashare_stock_dividend",
+        "physical": [
+          "StockDividend.CashDividend"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "EVENT_ONLY",
+        "pit": "effective_only",
+        "knowledge_time": null,
+        "effective_time": "ExDividendDate",
+        "available_at": "ex_date",
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "ashare_cash_dividend"
+        ],
+        "notes": "NO PubDate/announcement time; strict PIT blocks; usable only with allow_effective_time_only"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_dividend",
+        "physical": [
+          "StockDividend.cash_amount",
+          "StockDividend.declaration_date"
+        ],
+        "transform": "cash_amount with declaration_date strict-PIT guard (missing declaration_date -> NaN; never ex-date fallback)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "declaration_date",
+        "effective_time": "ex_dividend_date",
+        "available_at": "declaration",
+        "required_filters": [
+          {
+            "field": "currency",
+            "operator": "eq",
+            "value": "USD",
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_cash_dividend_declared"
+        ],
+        "notes": "declaration_date PIT (~0.51% null; missing rows fail closed to NaN, never ex-date fallback); effective_time=ex_dividend_date; ~12.2% non-USD excluded (no COS FX table); ex_date may be future; DataAccess contract us_stock_dividend pit=strict/declaration_date"
+      }
+    },
+    "continuous_close": {
+      "concept": "continuous_close",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "CONTINUOUS",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Close",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Close * Factor (backward multiplier, verified)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_close"
+        ],
+        "notes": "Factor is a backward cumulative multiplier; adjusted = raw * Factor"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Close",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "Close * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_close"
+        ],
+        "notes": "clamp flag (adj_factor > 1e6) -> use returns for long windows"
+      }
+    },
+    "continuous_high": {
+      "concept": "continuous_high",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "CONTINUOUS",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.High",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "High * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_high"
+        ],
+        "notes": "same backward Factor as continuous_close"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.High",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "High * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_high"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
+      }
+    },
+    "continuous_low": {
+      "concept": "continuous_low",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "CONTINUOUS",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Low",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Low * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_low"
+        ],
+        "notes": "same backward Factor as continuous_close"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Low",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "Low * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_low"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
+      }
+    },
+    "continuous_open": {
+      "concept": "continuous_open",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "CONTINUOUS",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Open",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Open * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_open"
+        ],
+        "notes": "same backward Factor as continuous_close"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Open",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "Open * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_open"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
+      }
+    },
+    "continuous_vwap": {
+      "concept": "continuous_vwap",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "CONTINUOUS",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Vwap",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Vwap * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_vwap"
+        ],
+        "notes": "same backward Factor as continuous_close"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.VWAP",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "VWAP * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_vwap"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
+      }
+    },
+    "dividend_ex_date": {
+      "concept": "dividend_ex_date",
+      "canonical_unit": "date",
+      "domain": "corporate_action",
+      "value_kind": "date",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "dividend_yield_decimal": {
+      "concept": "dividend_yield_decimal",
+      "canonical_unit": "ratio",
+      "domain": "fundamental",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_valuation_daily",
+        "physical": [
+          "StockValuationDaily.DividendRatio"
+        ],
+        "transform": "DividendRatio / 100 (percent -> decimal)",
+        "source_unit": "percent",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_dividend_yield"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "SPARSE",
+        "dataset": "us_stock_valuation_daily",
+        "physical": [
+          "StockValuationDaily.dividend_yield"
+        ],
+        "transform": "identity (already decimal)",
+        "source_unit": "ratio",
+        "canonical_unit": "ratio",
+        "coverage": "CURRENT_ONLY",
+        "pit": "sparse_snapshot",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_dividend_yield_sparse"
+        ],
+        "notes": "X0 sparse; do NOT ffill as full-history daily"
+      }
+    },
+    "earnings_per_share": {
+      "concept": "earnings_per_share",
+      "canonical_unit": "local/share",
+      "domain": "fundamental",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "equity": {
+      "concept": "equity",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_balance",
+        "physical": [
+          "StockBalance.EquitiesParentCompanyOwners"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_equity"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_balance",
+        "physical": [
+          "StockBalance.total_equity"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_equity"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "free_float_market_cap_local": {
+      "concept": "free_float_market_cap_local",
+      "canonical_unit": "local_money",
+      "domain": "valuation",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "free_float_shares": {
+      "concept": "free_float_shares",
+      "canonical_unit": "share",
+      "domain": "capital",
+      "value_kind": "count",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "gross_margin_decimal": {
+      "concept": "gross_margin_decimal",
+      "canonical_unit": "ratio",
+      "domain": "fundamental",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "holder_concentration": {
+      "concept": "holder_concentration",
+      "canonical_unit": "ratio",
+      "domain": "alternative",
+      "value_kind": "ratio",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "index_member": {
+      "concept": "index_member",
+      "canonical_unit": "boolean",
+      "domain": "index",
+      "value_kind": "boolean",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_index_constituent",
+        "physical": [
+          "IndexConstituent.IndexSymbol"
+        ],
+        "transform": "identity",
+        "source_unit": "boolean",
+        "canonical_unit": "boolean",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [
+          {
+            "field": "IndexSymbol",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "ashare_index_constituent"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_index_components",
+        "physical": [
+          "StockIndicesComponents.IndexName"
+        ],
+        "transform": "identity",
+        "source_unit": "boolean",
+        "canonical_unit": "boolean",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [
+          {
+            "field": "IndexName",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_index_components"
+        ],
+        "notes": ""
+      }
+    },
+    "index_weight": {
+      "concept": "index_weight",
+      "canonical_unit": "ratio",
+      "domain": "index",
+      "value_kind": "ratio",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_index_constituent",
+        "physical": [
+          "IndexConstituent.Weight"
+        ],
+        "transform": "Weight / 100 (percent -> decimal)",
+        "source_unit": "percent",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_index_weight"
+        ],
+        "notes": "same-index sum ~100"
+      },
+      "us": {
+        "status": "UNAVAILABLE",
+        "dataset": null,
+        "physical": [],
+        "transform": "identity",
+        "source_unit": "ratio",
+        "canonical_unit": "ratio",
+        "coverage": "UNKNOWN",
+        "pit": "unavailable",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": null,
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_index_weight_unavailable"
+        ],
+        "notes": "US StockIndicesComponents has NO Weight field; equal-weight is a different operator"
+      }
+    },
+    "industry_group": {
+      "concept": "industry_group",
+      "canonical_unit": "identifier",
+      "domain": "classification",
+      "value_kind": "group",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_industry",
+        "physical": [
+          "StockIndustry.IndustryCode"
+        ],
+        "transform": "identity",
+        "source_unit": "identifier",
+        "canonical_unit": "identifier",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [
+          {
+            "field": "IndustrySource",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "ashare_industry"
+        ],
+        "notes": "filter IndustrySource=sw_l1; IndustrySource is a required filter"
+      },
+      "us": {
+        "status": "UNAVAILABLE",
+        "dataset": null,
+        "physical": [],
+        "transform": "identity",
+        "source_unit": "identifier",
+        "canonical_unit": "identifier",
+        "coverage": "UNKNOWN",
+        "pit": "unavailable",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": null,
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_industry_unavailable"
+        ],
+        "notes": "US StockIndustry is EMPTY (0 rows); GICS/SIC/NAICS provider required"
+      }
+    },
+    "lower_price_limit": {
+      "concept": "lower_price_limit",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW_OFFICIAL_LIMIT",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.LowLimit"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_open",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_low_limit"
+        ],
+        "notes": "RAW official limit price; never adjusted"
+      },
+      "us": {
+        "status": "UNAVAILABLE",
+        "dataset": null,
+        "physical": [],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "UNKNOWN",
+        "pit": "unavailable",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": null,
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_no_price_limit"
+        ],
+        "notes": "US has no daily static price limit"
+      }
+    },
+    "market_cap_local": {
+      "concept": "market_cap_local",
+      "canonical_unit": "local_money",
+      "domain": "valuation",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_valuation_daily",
+        "physical": [
+          "StockValuationDaily.MarketCap"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_market_cap"
+        ],
+        "notes": "MarketCap ~= Capitalization * Close (verified)"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_shares_snapshot",
+        "physical": [
+          "TickerSharesSnapshot.weighted_shares_outstanding",
+          "StockDailyBar.Close"
+        ],
+        "transform": "Close * weighted_shares_outstanding",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_market_cap_shares_snapshot"
+        ],
+        "notes": "~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap; coverage_gate<0.8 -> production flags"
+      }
+    },
+    "net_profit": {
+      "concept": "net_profit",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_income",
+        "physical": [
+          "StockIncome.NetProfit"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_net_profit"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_income",
+        "physical": [
+          "StockIncome.net_income_loss_attributable_common_shareholders"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_net_profit"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "net_profit_margin_decimal": {
+      "concept": "net_profit_margin_decimal",
+      "canonical_unit": "ratio",
+      "domain": "fundamental",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "news_sentiment": {
+      "concept": "news_sentiment",
+      "canonical_unit": "ratio",
+      "domain": "alternative",
+      "value_kind": "ratio",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "operating_cash_flow": {
+      "concept": "operating_cash_flow",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_cashflow",
+        "physical": [
+          "StockCashFlow.NetOperateCashFlow"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_operating_cash_flow"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_cashflow",
+        "physical": [
+          "StockCashFlow.net_cash_from_operating_activities"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_operating_cash_flow"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "operating_revenue": {
+      "concept": "operating_revenue",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_income",
+        "physical": [
+          "StockIncome.OperatingRevenue"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_operating_revenue"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_income",
+        "physical": [
+          "StockIncome.revenue"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_operating_revenue"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "raw_close": {
+      "concept": "raw_close",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Close"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_close"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Close"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_close"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_high": {
+      "concept": "raw_high",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.High"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_high"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.High"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_high"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_low": {
+      "concept": "raw_low",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Low"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_low"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Low"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_low"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_open": {
+      "concept": "raw_open",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Open"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_open"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Open"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_open"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_pre_close": {
+      "concept": "raw_pre_close",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.PreClose"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_preclose"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.PreClose"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_preclose"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_volume_shares": {
+      "concept": "raw_volume_shares",
+      "canonical_unit": "share",
+      "domain": "price_volume",
+      "value_kind": "volume",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Volume"
+        ],
+        "transform": "identity (raw shares; no adjustment applied)",
+        "source_unit": "share",
+        "canonical_unit": "share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_volume"
+        ],
+        "notes": "generic volume is raw shares; NEVER divided by any adjustment factor (split-adjusted volume is a separate concept)"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Volume"
+        ],
+        "transform": "identity",
+        "source_unit": "share",
+        "canonical_unit": "share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_volume"
+        ],
+        "notes": ""
+      }
+    },
+    "raw_vwap": {
+      "concept": "raw_vwap",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Vwap"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_raw_vwap"
+        ],
+        "notes": ""
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.VWAP"
+        ],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_raw_vwap"
+        ],
+        "notes": ""
+      }
+    },
+    "return_decimal": {
+      "concept": "return_decimal",
+      "canonical_unit": "ratio",
+      "domain": "price_volume",
+      "value_kind": "return",
+      "cross_market_comparable": true,
+      "price_basis": "RETURN",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Return"
+        ],
+        "transform": "x * 0.0001 (bp -> decimal)",
+        "source_unit": "basis_point",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_return_bp"
+        ],
+        "notes": "Return = (Close/PreClose - 1) * 10000, verified error=0"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Ret"
+        ],
+        "transform": "identity (already decimal)",
+        "source_unit": "ratio",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_ret_decimal"
+        ],
+        "notes": "Ret = Close/PreClose - 1, verified"
+      }
+    },
+    "roa_decimal": {
+      "concept": "roa_decimal",
+      "canonical_unit": "ratio",
+      "domain": "fundamental",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "roe_decimal": {
+      "concept": "roe_decimal",
+      "canonical_unit": "ratio",
+      "domain": "fundamental",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_indicator",
+        "physical": [
+          "StockIndicator.Roe"
+        ],
+        "transform": "Roe / 100 (percent -> decimal)",
+        "source_unit": "percent",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_roe_indicator"
+        ],
+        "notes": "asof(PubDate); often unannualized"
+      },
+      "us": {
+        "status": "SPARSE",
+        "dataset": "us_stock_valuation_daily",
+        "physical": [
+          "StockValuationDaily.return_on_equity"
+        ],
+        "transform": "identity (already decimal)",
+        "source_unit": "ratio",
+        "canonical_unit": "ratio",
+        "coverage": "CURRENT_ONLY",
+        "pit": "sparse_snapshot",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_roe_valuation_sparse"
+        ],
+        "notes": "X0 sparse (~49 files 2026-05..07). Production preferred: net_income/equity derived"
+      }
+    },
+    "total_assets": {
+      "concept": "total_assets",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_balance",
+        "physical": [
+          "StockBalance.TotalAssets"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_total_assets"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_balance",
+        "physical": [
+          "StockBalance.total_assets"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_total_assets"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "total_liabilities": {
+      "concept": "total_liabilities",
+      "canonical_unit": "local_money",
+      "domain": "fundamental",
+      "value_kind": "amount",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_balance",
+        "physical": [
+          "StockBalance.TotalLiability"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY",
+        "canonical_unit": "CNY",
+        "coverage": "FULL",
+        "pit": "financial_pit",
+        "knowledge_time": "PubDate",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_total_liabilities"
+        ],
+        "notes": "asof(PubDate); flow fields are cumulative YTD"
+      },
+      "us": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_balance",
+        "physical": [
+          "StockBalance.total_liabilities"
+        ],
+        "transform": "identity",
+        "source_unit": "USD",
+        "canonical_unit": "USD",
+        "coverage": "PARTIAL",
+        "pit": "financial_pit",
+        "knowledge_time": "filing_date",
+        "effective_time": null,
+        "available_at": "filing",
+        "required_filters": [
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": true,
+        "providers": [
+          "us_total_liabilities"
+        ],
+        "notes": "asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)"
+      }
+    },
+    "total_shares": {
+      "concept": "total_shares",
+      "canonical_unit": "share",
+      "domain": "capital",
+      "value_kind": "count",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "UNKNOWN",
+        "providers": []
+      },
+      "us": {
+        "status": "UNKNOWN",
+        "providers": []
+      }
+    },
+    "tradability_state": {
+      "concept": "tradability_state",
+      "canonical_unit": "boolean",
+      "domain": "classification",
+      "value_kind": "status",
+      "cross_market_comparable": false,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.IsSuspend"
+        ],
+        "transform": "NOT IsSuspend (not_suspended_state; known-suspended->0, known-not-suspended->1, NaN->NaN; does NOT claim listing membership)",
+        "source_unit": "boolean",
+        "canonical_unit": "boolean",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_open",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_tradability"
+        ],
+        "notes": "IsSuspend lives in StockDailyBar; transform negates it preserving NaN (unknown suspension stays unknown); no listing/public-status mask is included"
+      },
+      "us": {
+        "status": "SEMANTIC_EQUIVALENT",
+        "dataset": "us_stock_list",
+        "physical": [
+          "StockList.type",
+          "StockDailyBar.Close"
+        ],
+        "transform": "StockList.type=='CS' AND finite DailyBar close -> 1/0 (unknown membership -> 0)",
+        "source_unit": "boolean",
+        "canonical_unit": "boolean",
+        "coverage": "PARTIAL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [
+          {
+            "field": "universe_daily",
+            "operator": "present",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          },
+          {
+            "field": "StockDailyBar",
+            "operator": "present",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
+        "source_certified": false,
+        "providers": [
+          "us_tradability_universe"
+        ],
+        "notes": "real boolean from CS list type + finite DailyBar close (universe_daily membership declared via required_filters); is_ticker_halt is far too sparse to be an IsSuspend equivalent"
+      }
+    },
+    "turnover_ratio_decimal": {
+      "concept": "turnover_ratio_decimal",
+      "canonical_unit": "ratio",
+      "domain": "valuation",
+      "value_kind": "ratio",
+      "cross_market_comparable": true,
+      "price_basis": null,
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_valuation_daily",
+        "physical": [
+          "StockValuationDaily.TurnoverRatio"
+        ],
+        "transform": "TurnoverRatio / 100 (percent -> decimal)",
+        "source_unit": "percent",
+        "canonical_unit": "ratio",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_turnover"
+        ],
+        "notes": "~= Volume/CirculatingCap*100"
+      },
+      "us": {
+        "status": "UNAVAILABLE",
+        "dataset": null,
+        "physical": [],
+        "transform": "identity",
+        "source_unit": "ratio",
+        "canonical_unit": "ratio",
+        "coverage": "UNKNOWN",
+        "pit": "unavailable",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": null,
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_turnover_unavailable"
+        ],
+        "notes": "US has no turnover field"
+      }
+    },
+    "upper_price_limit": {
+      "concept": "upper_price_limit",
+      "canonical_unit": "local/share",
+      "domain": "price_volume",
+      "value_kind": "price",
+      "cross_market_comparable": false,
+      "price_basis": "RAW_OFFICIAL_LIMIT",
+      "ashare": {
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.HighLimit"
+        ],
+        "transform": "identity",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_open",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_high_limit"
+        ],
+        "notes": "RAW official limit price; never adjusted"
+      },
+      "us": {
+        "status": "UNAVAILABLE",
+        "dataset": null,
+        "physical": [],
+        "transform": "identity",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "UNKNOWN",
+        "pit": "unavailable",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": null,
+        "required_filters": [],
+        "source_certified": false,
+        "providers": [
+          "us_no_price_limit"
+        ],
+        "notes": "US has no daily static price limit (LULD/halt is a different mechanism)"
+      }
+    }
+  }
+}

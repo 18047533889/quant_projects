@@ -1,0 +1,22 @@
+factor:
+  name: stocks_floats_zscore_free_float_pct
+  expr: zscore(col("free_float_percent"))
+  freq: 1d
+  universe: equities
+  description: 流通股 - 自由流通比例截面标准化，负值代表流通受限（潜在低流动性）
+
+data_source:
+  type: data_access
+  dataset: stocks_floats
+  fields:
+    free_float: free_float
+    free_float_percent: free_float_percent
+    ticker: ticker
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

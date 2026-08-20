@@ -1,0 +1,21 @@
+# 性能回归阈值（nightly / 本地 perf 门禁）
+compile_many:
+  max_sec: 8.0
+
+run_many_smoke:
+  n_days: 120
+  n_inst: 50
+  n_factors: 8
+  max_sec: 20.0
+
+run_many_1m:
+  n_days: 250
+  n_inst: 4000
+  n_factors: 6
+  max_sec: 90.0
+
+run_many_10m:
+  n_days: 500
+  n_inst: 20000
+  n_factors: 4
+  max_sec: 180.0

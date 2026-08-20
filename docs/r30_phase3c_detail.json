@@ -1,0 +1,602 @@
+{
+  "cleaned_operators.cross_section.panel_model": [
+    {
+      "canonical": "cs_autoencoder_reconstruction_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "industry_rolling_pca_loading",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_mixture_of_experts_score",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_regime_conditioned_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_elastic_net_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pca_explained_ratio",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pca_loading",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pca_resid",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pca_resid_momentum",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pca_resid_vol",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pcr_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "panel_rolling_pls_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_feature_pca_reconstruction_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.dmd": [],
+  "cleaned_operators.research_polars": [],
+  "cleaned_operators.research_spectral": [],
+  "cleaned_operators.research_transform": [
+    {
+      "canonical": "ts_persistence_birth_dispersion",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_signature_mahalanobis_anomaly",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_wavelet_lowpass_reconstruct",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.ar_meanrev": [
+    {
+      "canonical": "ts_ar_coeff_stability",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_fitted_value",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_ar_forecast",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_in_sample_resid",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_ar_innovation",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_innovation_z",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_prior_coeff",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_prior_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_mean_reversion_half_life",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_mean_reversion_ou_approx_half_life",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_variance_ratio_slope",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    }
+  ],
+  "cleaned_operators.ts_model.complexity": [
+    {
+      "canonical": "ts_change_point_probability",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_cusum_vol_break_score",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_dfa_hurst",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_lz_complexity",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_multiscale_entropy_slope",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_pseudocount_sample_entropy",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_regime_duration",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_turning_point_ratio",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_two_state_regime_probability",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.dynamic_regression": [
+    {
+      "canonical": "ts_expectile_beta_spread",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_expectile_regression_coeff",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_expectile_regression_coeff_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_expectile_regression_forecast_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_expectile_regression_resid",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_huber_regression_coeff",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_huber_regression_coeff_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_huber_regression_resid_z",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_adjusted_r2_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_stability",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_r2",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_r2_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_resid",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_multi_regression_resid_z",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_quantile_beta_spread",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_quantile_regression_coeff",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_quantile_regression_coeff_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_quantile_regression_resid",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff_prior",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "daily"
+    },
+    {
+      "canonical": "ts_ridge_regression_resid_z",
+      "production_certified": null,
+      "status": "production",
+      "surface": "daily"
+    }
+  ],
+  "cleaned_operators.ts_model.path_signature": [
+    {
+      "canonical": "ts_path_leadlag_area",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_path_signature_area",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_path_signature_depth2_norm",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.polars_regression": [],
+  "cleaned_operators.ts_model.sequence_anomaly": [
+    {
+      "canonical": "ts_matrix_profile_discord_score",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_motif_recurrence_count",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.state_space": [
+    {
+      "canonical": "ts_kalman_beta",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_kalman_beta_change",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_kalman_beta_uncertainty",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_kalman_innovation_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_kalman_level",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_kalman_trend",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.volatility": [
+    {
+      "canonical": "ts_garch_next_vol_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_garch_persistence",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_garch_standardized_shock",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_garch_vol_surprise",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_gjr_garch_vol_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_gjr_leverage",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_from_return_forecast_error_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_from_return_next_vol",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_rv_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_rv_forecast_error_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_rv_innovation_z",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_rv_next_var_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_har_rv_next_vol_forecast",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ],
+  "cleaned_operators.ts_model.wavelet_spectral": [
+    {
+      "canonical": "ts_spectral_low_frequency_ratio",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_wavelet_energy_slope",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_wavelet_entropy",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_wavelet_high_frequency_ratio",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    },
+    {
+      "canonical": "ts_wavelet_low_frequency_ratio",
+      "production_certified": false,
+      "status": "experimental",
+      "surface": "extended"
+    }
+  ]
+}

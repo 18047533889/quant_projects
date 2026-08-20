@@ -1,0 +1,30 @@
+task_id: p0-pairwise-panel-alignment
+base_sha: 066bf9d2
+owned_files:
+  - factor_engine/backend/long_alignment.py
+  - factor_engine/cleaned_operators/common/polars_ts_rolling.py
+  - factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py
+modified_files:
+  - factor_engine/backend/long_alignment.py
+  - factor_engine/cleaned_operators/common/polars_ts_rolling.py
+  - factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py
+canonicals_touched:
+  - ts_corr
+  - ts_cov
+  - ts_regression_slope
+  - ts_regression_intercept
+  - ts_regression_resid
+  - ts_regression_r2
+backends_touched:
+  - polars
+change: exact binary key-set and duplicate validation; wide pairwise counterpart schema fail-closed; triple join validates all operands
+focused_tests: 9 passed
+compile: passed
+import_smoke: passed
+independent_review: found and fixed triple-join missing right validation
+known_limitations:
+  - alignment validation eagerly collects key columns from LazyFrames
+  - full backend parity and root CI not run
+production_certification: NOT_RUN
+evidence_generated:
+  - factor_engine/.r2_pairwise_alignment_manifest.yaml

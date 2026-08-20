@@ -1,0 +1,37 @@
+task_id: Q2-P0-023
+finding: resident_handle_stale_check_and_shared_workspace_cleanup
+base_sha: bce4c0a98e638734aca32b212c586c3b59c1562f
+current_head: bce4c0a98e638734aca32b212c586c3b59c1562f
+dirty_count_before_evidence: 85
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/backend/q_backend/q_executor.py
+  - factor_engine/backend/q_backend/test_q_residency.py
+  - factor_engine/evidence/r2/Q2-P0-023.yaml
+modified_files:
+  - factor_engine/backend/q_backend/q_executor.py
+  - factor_engine/backend/q_backend/test_q_residency.py
+  - factor_engine/evidence/r2/Q2-P0-023.yaml
+status: CLOSED_LOCAL
+implementation:
+  - Resident handle validation rejects connection, workspace, generation, and physical-symbol mismatches.
+  - Direct cleanup on a shared batch workspace now preserves the pre-existing lease symbol set.
+  - Physical q identifiers encode unsafe characters injectively, preventing logical-name aliasing.
+  - Added regressions for direct materialized cleanup and unsafe logical names.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest backend/q_backend/test_q_residency.py -q
+  result: 27 passed
+syntax_compile:
+  command: python3 -m py_compile backend/q_backend/q_executor.py backend/q_backend/test_q_residency.py
+  result: PASS
+git_diff_check:
+  result: NOT_RUN (pre-existing unrelated whitespace in shared status files)
+broader_q_recovery_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest backend/q_backend/test_q_executor_recovery.py -q
+  result: NOT_RUN (existing cleanup expectations conflict with current generated physical namespace)
+known_limitations:
+  - runtime/schema/source/snapshot/PIT identity gates are NOT_RUN and unavailable in QResidentTableHandle.
+  - full repository compile, imports, registry, backend parity, PIT poison tests, q runtime, CI, and production certification are NOT_RUN.
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

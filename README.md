@@ -1,0 +1,547 @@
+# Factor Engine
+
+可扩展的量化因子引擎：DSL / 表达式树、编译优化、多后端执行、配置驱动运行，并提供可选 HTTP 服务适配层。
+
+仓库：https://github.com/HKUST-QUANT-SOCIETY/factor_engine （组织私有仓，需有权限）
+
+> **本模块总指南** → [`docs/FactorEngine完全指南.md`](docs/FactorEngine完全指南.md)  
+> **HTTP 服务** → [`service/README.md`](service/README.md)
+
+### 协作者速览（新人约 5 分钟）
+
+1. **库调用**：`pip install -e .` 后用 `api` + `runtime.engine.FactorEngine`。  
+2. **服务调用**：`pip install -e ".[service]"` 后 `factor-engine-serve --port 8088`。  
+3. **规范**：算子白名单见 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md)。
+
+---
+
+## 别人怎么拿到并调用
+
+### A. 当 Python 库用（推荐）
+
+```bash
+git clone https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+cd factor_engine
+pip install -e .
+# 或私有仓一次性安装：
+# pip install "git+https://<GITHUB_TOKEN>@github.com/HKUST-QUANT-SOCIETY/factor_engine.git"
+```
+
+```python
+from api import col, rank, ts_mean
+from api.factor import Factor
+from backend.factory import build_backend
+from runtime.engine import FactorEngine
+from storage.factory import build_data_source
+
+source = build_data_source(
+    {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {"close": "close"},
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+    }
+)
+engine = FactorEngine(backend=build_backend("auto"), data_source=source)
+factor = Factor(name="mom3_rank", expr=rank(ts_mean(col("close"), 3)))
+result = engine.run(factor)
+print(result["result"].head())
+```
+
+校验 DSL（不跑数）：
+
+```python
+from api.mining_integration import validate_factor_engine_dsl
+ok, msg = validate_factor_engine_dsl("rank(ts_mean(close, 5))")
+```
+
+### B. 当 HTTP 服务用
+
+```bash
+pip install -e ".[service]"
+PYTHONPATH=. factor-engine-serve --host 0.0.0.0 --port 8088
+```
+
+```bash
+curl -s localhost:8088/health
+curl -s localhost:8088/factor-engine/operators | head
+curl -s -X POST localhost:8088/factor-engine/validate-spec \
+  -H 'content-type: application/json' \
+  -d '{"formula":"rank(ts_mean(close, 5))"}'
+```
+
+接口说明见 [`service/README.md`](service/README.md)。内核仍是 `FactorEngine`；HTTP 只是薄适配层（见 `IT_HANDOFF.md` §8–9）。
+
+---
+
+## 快速开始（库）
+
+```python
+from api import col, rank, ts_mean
+from api.factor import Factor
+from backend.pandas_backend import PandasBackend
+from runtime.engine import FactorEngine
+from storage.factory import build_data_source
+
+source = build_data_source(
+    {
+        "type": "data_access",
+        "dataset": "us_stocks_sip_day_aggs",
+        "fields": {"close": "close"},
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+    }
+)
+engine = FactorEngine(backend=PandasBackend(), data_source=source)
+
+factor = Factor(name="mom3_rank", expr=rank(ts_mean(col("close"), 3)))
+result = engine.run(factor)
+print(result["result"].head())
+```
+
+或配置驱动：`FactorEngine.run_from_config("examples/config_driven_factor.yaml")`
+
+---
+
+## 配置驱动运行
+
+引擎支持通过 YAML 文件描述因子和数据源，无需编写 Python 代码即可运行。
+
+**步骤：**
+1. 编写包含 `factor`、`data_source`、`backend`、`engine` 四个字段的 YAML 文件。
+2. 调用 `FactorEngine.run_from_config(path)` 或 `FactorEngine.from_config(path)` 获取引擎实例。
+
+**推荐的数据源类型（企业级默认）：**
+
+| 类型 | 说明 |
+|---|---|
+| **`data_access`** | **推荐**：经 `datasets.yaml` 登记的数据集，支持 `start_date`/`end_date`、`instrument_filter`、参数化 `kind` |
+| `composite` | 多表 asof 对齐（价量 anchor + 基本面 / universe） |
+| `clickhouse` | ClickHouse 长表 + 可选 `clickhouse_sql` 下推 |
+| `parquet_kline` | legacy：直连 K 线 parquet 目录 |
+| `multi_parquet` | legacy：通用多文件 parquet |
+| `parquet` | legacy：单文件 parquet |
+
+**配置示例（日K线动量因子，`data_access`）：**
+
+```yaml
+factor:
+  name: day_aggs_rank_ts_mean_close_3
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: 日K线 - 3日收盘价均线截面排名，动量方向因子
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  fields:
+    close: close
+  start_date: 2024-01-01
+  end_date: 2024-12-31
+
+backend:
+  type: auto
+
+engine:
+  enable_cache: true
+```
+
+**配置示例（fundamentals 复合因子）：**
+
+```yaml
+factor:
+  name: balance_sheet_rank_total_assets
+  expr: rank(col("total_assets"))
+  freq: 1d
+  description: 资产负债表 - 总资产截面排名，越高代表规模越大
+
+data_source:
+  type: composite
+  anchor: price
+  anchor_column: close
+  aliases:
+    total_assets: balance_sheet.total_assets
+  sources:
+    price:
+      type: data_access
+      dataset: us_stocks_sip_day_aggs
+    balance_sheet:
+      type: data_access
+      dataset: fundamentals_balance_sheet
+  joins:
+    balance_sheet: asof_backward
+
+backend:
+  type: auto
+```
+
+**Legacy 直连 parquet 示例（仅调试 / 无 registry 时）：**
+
+```yaml
+data_source:
+  type: parquet_kline
+  root: /data/us_stocks_sip/day_aggs_v1
+  instrument_column: ticker
+  timestamp_column: window_start
+  fields:
+    close: close
+  max_files: 5
+```
+
+`examples/configs/` 目录下收录了覆盖全部数据集的 **`data_access`** 配置（见下文[数据集列表](#数据集列表)）。
+
+### 企业级批量配置（Phase 14–16）
+
+多因子 YAML 可用类方法批量执行，**按数据源 scope 分组**，再按 run / 物化参数子分组：
+
+```python
+from runtime.engine import FactorEngine
+
+paths = ["configs/fa.yaml", "configs/fb.yaml", "configs/fc.yaml"]
+
+# 仅计算（同 scope + 相同 run 开关 → run_many + CSE）
+out = FactorEngine.run_many_from_config(paths)
+out = FactorEngine.run_many_from_config_parallel(paths, n_jobs=4)
+
+# 计算 + 落盘（同 scope + 相同物化参数 → 共享一次 run_many）
+mat = FactorEngine.materialize_many_from_config(paths, batch_run=True)
+
+# 单文件物化 / 增量
+FactorEngine.materialize_from_config("configs/fa.yaml")
+FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-06-01")
+```
+
+| API | 说明 |
+|-----|------|
+| `run_many_from_config` | `config_data_scope_key` → `config_run_batch_key` → `run_many` |
+| `run_many_from_config_parallel` | R31：默认走 `AdaptiveBatchScheduler`（真实 physical DAG + 资源 admission + as_completed 流式 sink）；旧 layer-loop 仅 `FACTOR_ENGINE_LAYER_LOOP=1` 兼容用 |
+| `materialize_many_from_config(batch_run=True)` | 同组共享 `run_many`，再 `execute_materialize_from_resolved` |
+| `materialize_from_config` | 单 YAML；`ResolvedMaterializeKwargs` 含 `resume_materialize` / CH 等 |
+
+生产 profile 示例：[`examples/profiles/prod.yaml`](examples/profiles/prod.yaml)（`auto_warmup`、DQ、PIT、`staging_clickhouse`）。写目标：`local` / `staging` / `clickhouse` / `staging_clickhouse`（见 [`storage/write_targets.py`](storage/write_targets.py)）。
+
+读端审计与 SQL 限额：monorepo [`dataaccess/README.md`](../dataaccess/README.md)（`QueryBudget`、`sql_stream`、`verify_factor_write`）。
+
+### 底层栈与 backend 选择（2026-07）
+
+| 层 | 组件 | 说明 |
+|----|------|------|
+| **读** | `data_access` + **DuckDB** | parquet 批量读、`sql()`/`sql_stream()`、registry 白名单 |
+| **读** | `clickhouse` | 长表 panel 只读 |
+| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → 认证的 Polars 快路径 → Pandas reference 兜底。算子数量以 `cleaned_operators/docs/operators_catalog.json` 为准（当前 canonical 与 SQL emitter 数字由 CI 生成，见 `docs/evidence/r31/R31_BACKEND_TARGET_MATRIX.csv` 与 `docs/sql_pushdown_coverage.md`，README 不维护硬编码数字） |
+| **算** | `duckdb_sql` | 强制 DuckDB 方言 SQL 下推（当前 **147** 个已实现 canonical，见 [`sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)） |
+| **算** | `clickhouse_sql` | ClickHouse 方言 SQL 下推（fail-closed，未逐算子认证不得继承 DuckDB evidence） |
+| **写** | Parquet factor lake / staging / CH | 经 `write_targets`；DuckDB 不做持久化写目标 |
+
+**推荐 YAML**（未写 `backend` 时默认 **`auto`**）：
+
+```yaml
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+backend:
+  type: auto   # 或 duckdb_sql / clickhouse_sql / pandas（调试对齐）
+```
+
+示例：[`configs/data_access_auto_smoke.yaml`](examples/configs/data_access_auto_smoke.yaml)、[`configs/data_access_duckdb_sql_smoke.yaml`](examples/configs/data_access_duckdb_sql_smoke.yaml)。
+
+---
+
+## 支持的算子
+
+算子 runtime 统一在 **`cleaned_operators/`**；正常 manifest 只暴露可生成日频标量因子值的 **daily DSL surface**。统计检验、矩阵/PCA、信号处理和非因果工具移至 **`research_operators/`** 显式调用。最终数量与分类以 `cleaned_operators/docs/operators_catalog.json` 为准。
+
+| 层级 | 说明 |
+|------|------|
+| **已实现** | 算术 / 逻辑 / 时序 / 截面 / 分组 / 清洗 / 技术指标 / 上下文 / transformational 等 — 经 `cleaned_bridge` 在 `PandasBackend` 执行 |
+| **catalog-only / stub** | 在 [`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md) 标注为 `stub` 或 `api_expr_only` 的名字 **不在 DSL 白名单**，投递勿用（见 `scripts/audit_stub_surface.py`） |
+| **PolarsBackend** | 非完全 Polars-native DAG：`FACTOR_ENGINE_POLARS_EXPR=1` 时对已认证算子走原生 Expr 快路径，其余经 Pandas reference 递归路由；无 Polars 环境下注册核心算子不受影响 |
+
+权威清单与状态：**[`cleaned_operators/docs/operators_catalog.md`](cleaned_operators/docs/operators_catalog.md)**；语义细节：**[`docs/operators_semantics.md`](docs/operators_semantics.md)**。本地枚举白名单：
+
+```python
+from api.operator_registry import build_dsl_allowlist
+sorted(build_dsl_allowlist().keys())
+```
+
+**常用示例**（完整白名单见 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md)）：
+
+| 算子 | 类型 | 说明 |
+|---|---|---|
+| `close` / `col("close")` | 字段 | 裸写列名是挖掘标准；`col()` 等价 |
+| `rank(x)` | 截面 | 每个时间截面内百分位排名 [0,1] |
+| `zscore(x)` | 截面 | 每个时间截面内 Z-score 标准化 |
+| `ts_mean(x, d)` | 时序 | 滚动均值（窗口 `d` 为 bar 数） |
+| `ts_std_dev(x, d)` / `ts_std(x, d)` | 时序 | 滚动标准差 |
+| `ts_delay(x, d)` / `delay(x, d)` | 时序 | 滞后 |
+| `group_rank` `group_neutralize` 等 | 分组 | 组内排名 / 去均值 |
+| `protected_div` `protected_log` 等 | 清洗 | 除零 / log 安全 |
+| `SMA(x,d)` / `EMA(x,d)` | 均线 | **不是** `ts_sma`/`ts_ema` |
+| `ts_rsi` `ts_macd` `ts_atr` `ts_adx` `ts_obv` 等 | 技术指标 | HLC/V 列契约见 `operators_semantics.md` |
+| `trade_when` `neutralize` | 信号 / 截面 | 条件持仓 / OLS 残差 |
+| 四则 `+ - * /` | 算术 | 或 `add`/`multiply`/… |
+
+**可选依赖**：`pip install "factor-engine[pandas]"`（含 scipy）；`[talib]`（部分技术指标优先 C 实现）；**`[polars]`**；**`[modin]`**（`FACTOR_ENGINE_USE_MODIN=1` 或 `backend.type: pandas_modin`）；**`[performance]`**（psutil + threadpoolctl，R31：ResourceBroker 的 live headroom / IO pressure 需要）；**`[backtest]`**（Backtrader，见 monorepo `backtest_layer`）。R31-118：并行路径统一 `concurrent.futures`（as_completed 流式），`[parallel]`（joblib）extra 已移除。性能脚本：`scripts/profile_pandas_backend.py`、`scripts/bench_pandas_vs_modin.py`、`scripts/sql_certification_factory.py`（R31 SQL parity 认证）。
+
+**回测接口与语义 ADR**：[`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md)（输出协议、策略版本、真实数据路径、分层指标、可复现字段、**信号时点 / 防前视** §13、**多资产执行与指纹** §14）。回测执行层若在独立仓 `backtest_layer/`（本 monorepo 可能未附带），以其 README 为准。
+
+### 多资产组合回测（Portfolio Mode）
+
+当前多资产路径采用**组合会计口径**（research/audit friendly），并保持冻结协议 `returns/metrics/summary` 必需键不变。
+
+- 执行入口：`single_asset_backtest.runner.run_multi_asset_backtest`
+- 目标权重输入：`target_weights`，支持：
+  - DataFrame 列：`timestamp`, `symbol`, `target_weight`
+  - 或 MultiIndex Series：`['timestamp','symbol']`
+- 契约处理：按时间对齐后 `ffill`，缺失补 `0.0`，并做权重边界与每时点 gross leverage 校验
+- 组合收益口径：`realized_weights = executed_weights.shift(portfolio_weight_lag_bars)` 后与当期资产收益相乘；**默认 `portfolio_weight_lag_bars=1`**（即 **t−1** 权重 × **t** 期收益），**不允许为 0**（避免组合层面零滞后前视）
+- 组合执行约束：
+  - `portfolio_min_trade_weight`：最小调仓阈值（小于阈值的 delta 直接忽略）
+  - `portfolio_adv_participation_cap`：按 `price*volume*cap/initial_cash` 约束每 bar 可执行权重变化
+- 成本模型（`portfolio_cost_model`）：
+  - `simple_bps`：`(commission_bps + spread_bps) * turnover`
+  - `linear_impact`：在 `simple_bps` 基础上叠加线性冲击项（受 `portfolio_impact_coeff` 与参与率影响）
+  - `square_impact`：在 `simple_bps` 基础上叠加平方冲击项（受 `portfolio_impact_coeff` 与参与率影响）
+- 执行内核选择（`portfolio_execution_engine`）：`python` / `numpy` / `numba` / `auto`。若 YAML 写 **`python`**，实际参与解析的请求来自环境变量 **`FACTOR_BACKTEST_EXECUTION_ENGINE`**（`PerfConfig.from_env().backtest_execution_engine`，默认 `python`），便于不改业务配置切换内核；若写 **`numpy`/`numba`/`auto`**，则按该字面值解析（`numba` 不可用时回退 `numpy`，`auto` 优先 `numba`）。`summary` 记录 **requested/resolved**
+
+输出在不破坏冻结必需键前提下增量包含：
+- `returns.portfolio_turnover`
+- `returns.portfolio_cost`
+- `returns.portfolio_participation`
+- `metrics.portfolio_turnover_total`
+- `metrics.portfolio_cost_total`
+- `metrics.portfolio_participation_max`
+- `summary.mode = "multi"`
+
+### 单资产：信号时点与 `target_lag_bars`
+
+单资产路径**不能**自动检测因子是否误用「当日收盘后才可得」的信息；若因子层已对信号滞后，请保持 **`target_lag_bars=0`**（默认），避免双重滞后。
+
+- **`BacktestConfig.target_lag_bars`**：在与行情对齐并 `ffill` 之后，对目标仓位再 **`shift(target_lag_bars)`**（空缺填 `0`）。设为 **`1`** 时，第 `t` 根 K 线使用原序列在 `t−1` 的值。该字段写入 `summary.strategy_params`，并参与 **`data_fingerprint`**（与**滞后后的有效目标**一致）。
+
+### 回测可复现元数据（single / multi）
+
+`run_single_asset_backtest` 与 `run_multi_asset_backtest` 均会在 `summary` 注入审计字段：
+
+- `run_id`：单次运行唯一 ID（每次运行不同）
+- `mode`：`single` 或 `multi`
+- `data_fingerprint`：对 OHLCV 与目标序列做**结构化统计摘要**后 SHA256；**同逻辑输入应稳定**；**不是**原始文件字节级 hash
+- `dependency_versions`：至少包含 `python`、`pandas`、`numpy`、`backtrader`（未安装时为 `null`）
+- `git_sha`：当前仓库提交（best-effort，获取失败时为 `null`）
+- `signal_timestamp`：信号时间语义标注（当前为 `bar_close_t`）
+- `decision_timestamp`：决策时间语义标注（当前为 `bar_close_t`）
+- `execution_effective_lag_bars`：收益归因使用的有效滞后 bar 数（single 来自 `target_lag_bars`，multi 来自 `portfolio_weight_lag_bars`）
+- `return_attribution`：收益归因公式字符串（如 `weights(t-1) * returns(t)`）
+- `execution_engine_requested`：多资产执行层请求内核（来自配置或环境变量）
+- `execution_engine_resolved`：当前实际执行内核（`python` / `numpy` / `numba`）
+
+
+### 真实黄金回测（IBKR）
+
+工业回测建议使用 `BacktestConfig.strict_real_data=True`，该模式下回测器只会从 `data_root` 加载真实 OHLCV，传入 inline `ohlcv` 会直接报错，不存在 synthetic/fallback 路径。
+
+- 数据抓取脚本：各环境自备（如 IBKR 黄金数据脚本）
+- 默认落盘目录：通过 `data_root=` 或 YAML 配置，支持 `~/quant_projects/data/...`
+- 文件命名兼容：`XAU_1_hour_30_D.parquet`、`XAUUSD_*.parquet` 等（按 `symbol+frequency` 别名自动匹配）
+
+最小配置示例：
+
+```python
+from single_asset_backtest.config import BacktestConfig
+
+cfg = BacktestConfig(
+    strict_real_data=True,
+    data_root="~/quant_projects/data/ibkr",
+    symbol="XAUUSD",
+    frequency="1h",
+    metrics_profile="industrial",
+    include_trade_ledger=True,
+)
+```
+
+运行示例（在 **monorepo 根目录**，且本机另有 `backtest_layer` 时）：
+
+```bash
+python backtest_layer/examples/backtest_single_asset.py
+```
+
+
+**完整列表、DSL 限制（如 `and_`/`or_`/`not_`）与待迁移算子**：见 [`docs/dsl_operators_reference.md`](docs/dsl_operators_reference.md) 与 [`docs/operators_semantics.md`](docs/operators_semantics.md)。
+
+---
+
+## 数据集列表
+
+| 配置文件 | 数据集 | 因子示例 |
+|---|---|---|
+| `fundamentals_balance_sheet.yaml` | 资产负债表 | `rank(total_assets)` |
+| `fundamentals_cash_flow_statement.yaml` | 现金流量表 | `zscore(net_cash_from_operating_activities)` |
+| `fundamentals_financials_ratios.yaml` | 财务比率 | `rank(price_to_earnings)` |
+| `fundamentals_income_statement.yaml` | 利润表 | `zscore(revenue)` |
+| `fundamentals_short_interest.yaml` | 融券兴趣 | `rank(days_to_cover)` |
+| `fundamentals_short_volume.yaml` | 融券成交量 | `zscore(short_volume_ratio)` |
+| `fundamentals_stocks_floats.yaml` | 流通股 | `zscore(free_float_percent)` |
+| `us_stocks_sip_day_aggs_v1.yaml` | 日K线 | `rank(ts_mean(close, 3))` |
+| `us_stocks_sip_minute_aggs_v1.yaml` | 分钟K线 | `rank(ts_mean(close, 5))` |
+| `us_stocks_sip_quotes_v1.yaml` | 报价 | `zscore(bid_price / ask_price)` |
+| `us_stocks_sip_trades_v1.yaml` | 逐笔成交 | `rank(price)` |
+
+详细字段说明见 `docs/massive_parquet_data_dictionary.md`。
+
+---
+
+## 项目结构
+
+```
+factor_engine/
+│
+├── api/                        # 用户接口层（薄封装）
+│   ├── columns.py              #   col() 列引用
+│   ├── cleaned_ops.py          #   CleanedCall 工厂生成
+│   ├── operator_registry.py    #   build_dsl_allowlist() ← cleaned_operators
+│   ├── factor.py               #   Factor 数据类
+│   └── dsl_parser.py           #   parse_expr / parse_factor
+│
+├── cleaned_operators/          # 算子 runtime 库（唯一实现源）
+│   ├── __init__.py             #   calculate() 分派
+│   ├── operators_catalog.md    #   全量 catalog + 状态
+│   └── …                     #   按业务域分模块
+│
+├── expr/                       # 表达式树（仅三种节点）
+│   ├── base.py                 #   Expr + 四则 → CleanedCall
+│   ├── column.py               #   ColumnRef
+│   ├── literal.py              #   Literal
+│   └── cleaned_call.py         #   CleanedCall(op, args, kwargs)
+│
+├── ir/                         # 中间表示层（IR）
+│   ├── nodes.py                #   IR 节点定义
+│   ├── types.py                #   类型系统
+│   ├── schema.py               #   Schema 推导
+│   └── analyzer.py             #   Expr → IR 转换与依赖分析
+│
+├── planner/                    # 编译与规划层
+│   ├── logical_plan.py         #   逻辑计划节点（PlanNode）
+│   ├── lowerer.py              #   IR → 逻辑计划（Lowerer）
+│   ├── optimizer.py            #   逻辑计划优化（常量折叠等）
+│   ├── plan_hash.py            #   计划子树结构化哈希（缓存键 / CSE）
+│   ├── cse.py                  #   多因子公共子式消除（CSE → plan_ref）
+│   ├── rules.py                #   优化规则抽象（Rule）
+│   ├── physical_plan.py        #   物理计划
+│   └── dag.py                  #   多因子 DAG 计划（DAGPlan / FactorPlan）
+│
+├── backend/                    # 执行后端
+│   ├── pandas_backend.py       #   委托 cleaned_bridge（~70 行）
+│   ├── cleaned_bridge.py       #   panel 转换 + kernel 注册
+│   ├── polars_backend.py       #   委托 PandasBackend
+│   ├── pandas_compat.py        #   可选 Modin
+│   ├── debug_backend.py        #   打印计划树
+│   ├── context.py              #   ExecutionContext
+│   ├── kernels.py              #   KernelRegistry
+│   └── factory.py              #   build_backend
+│
+├── storage/                    # 存储与数据源层
+│   ├── datasource.py           #   DataSource 抽象基类
+│   ├── kline_parquet_source.py #   KlineParquetSource（K线 parquet）
+│   ├── parquet_source.py       #   ParquetSource（通用 parquet）
+│   ├── factory.py              #   build_data_source()
+│   ├── cache.py                #   CacheManager（列缓存）
+│   ├── materializer.py         #   Materializer
+│   └── result_store.py         #   ResultStore 抽象
+│
+├── runtime/                    # 运行时编排层
+│   ├── engine.py               #   FactorEngine（compile / run / compile_many / run_many）
+│   ├── perf_config.py          #   性能与环境变量（并行、CSE、Modin/Numba 提示）
+│   ├── config.py               #   YAML 配置 + load_config（路径经 workspace_paths）
+│   ├── exceptions.py           #   FactorEngineError
+│   └── real_data_factor_smoke.py # DatasetSpec / MultiParquetSeriesSource / smoke 工具
+│
+├── workspace_paths.py          #   quant_projects 根 / ~ 展开 / 默认 data 目录
+│
+├── （回测实现已迁至 monorepo **`../../backtest_layer/single_asset_backtest/`**，示例见 **`../../backtest_layer/examples/`**，测试见 **`../../backtest_layer/tests/test_backtest_*.py`**）
+│
+├── examples/                   # 示例脚本与配置
+│   ├── simple_factor.py        #   最简因子示例
+│   ├── pandas_factor.py        #   Pandas 后端示例
+│   ├── multi_factor_dag.py     #   多因子 DAG 示例
+│   ├── run_factors_joblib.py   #   Joblib 多因子并行示例
+│   ├── profile_pandas_backend.py # cProfile 热点（Pandas 路径）
+│   ├── bench_pandas_vs_modin.py  # Pandas vs Modin 耗时对比（可选 modin）
+│   ├── config_driven_factor.yaml   # 配置驱动示例（K线）
+│   ├── notebook_config_smoke.yaml  # Notebook smoke 配置
+│   └── configs/                #   11 个数据集的因子配置文件
+│       ├── fundamentals_*.yaml
+│       └── us_stocks_sip_*.yaml
+│
+├── tests/                      # 测试套件（回测专项在 monorepo ../../backtest_layer/tests/）
+│   ├── test_expr.py            #   表达式树单元测试
+│   ├── test_planner.py         #   编译规划测试
+│   ├── test_backend.py         #   后端执行测试
+│   ├── test_pandas_backend.py  #   Pandas 后端详细测试
+│   ├── test_dsl_parser.py      #   DSL 解析器测试
+│   ├── test_config_runtime.py  #   配置加载与运行时测试
+│   ├── test_end_to_end.py      #   端到端集成测试
+│   ├── test_factor_templates.py #  11 类数据集合成数据参数化测试
+│   ├── test_cleaned_operators_comprehensive.py  # cleaned 全链路（DSL/IR/执行）
+│   ├── test_cleaned_integration.py              # cleaned 集成冒烟
+│   ├── test_polars_backend.py  #  Polars 子集对齐（importorskip polars）
+│   ├── helpers.py              #  测试共享（如 InMemorySeriesSource）
+│   └── test_real_data_factor_smoke.py # 真实 parquet 集成测试（需 RUN_REAL_PARQUET_SMOKE=1）
+│
+├── docs/
+│   ├── README.md                # 文档索引
+│   ├── miner_delivery_spec.md   # 投递 JSON 契约（组员必读）
+│   ├── 算子与导入教程.md         # factor_engine DSL 写法与 import
+│   ├── dsl_operators_reference.md  # 白名单与不可 parse 名
+│   ├── dsl_allowlist.json       # 机器可读白名单
+│   ├── operators_semantics.md   # 算子语义、DSL 限制
+│   ├── canonical_data_fields.md # 字段四层命名
+│   ├── adr_backtest_target_position.md
+│   ├── adr_trade_when.md
+│   ├── changelog_shw.md
+│   └── massive_parquet_data_dictionary.md
+│
+└── factor_generation_process.ipynb  # 因子生成过程演示 Notebook
+```
+
+---
+
+## 运行测试
+
+```bash
+# 运行全部单元测试（不含真实数据）
+cd /path/to/factor_engine
+PYTHONPATH=. pytest tests/
+
+# 回测专项测试（位于 monorepo backtest_layer/tests/；需安装 factor-engine[backtest]）
+cd /path/to/quantsociety_backend_project
+pytest backtest_layer/tests/test_backtest_*.py -q
+
+# 运行真实 parquet 集成测试（需要 massive_parquet 数据集）
+RUN_REAL_PARQUET_SMOKE=1 pytest tests/test_real_data_factor_smoke.py -v
+```
+
+回测专项测试依赖 **`backtrader`**（`pip install "factor-engine[backtest]"`）；`backtest_layer/tests/conftest.py` 会注入 `PYTHONPATH`，一般无需手写。
+
+---
+
+## 执行流程
+
+```
+Factor(expr)
+    │
+    ▼ Analyzer
+  IR Nodes  ─── 依赖列分析 ──▶ 数据源拉取
+    │
+    ▼ Lowerer
+ LogicalPlan (PlanNode)
+    │
+    ▼ Optimizer
+ OptimizedPlan
+    │
+    ▼ Backend.execute()
+ pd.Series (MultiIndex: timestamp × instrument)
+```
+
+**多因子**：`compile_many` 可做 **CSE**（重复子式 → `DAGPlan.shared_nodes` + `plan_ref`），**`run_many`** 先算共享子式再算各因子根。YAML 中 `backend.type` 除 `pandas` / `polars` 外还可写 **`pandas_modin`**、**`polars_lazy`**（见上文可选依赖）。

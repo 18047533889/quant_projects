@@ -1,0 +1,12 @@
+{
+  "default_executor": "AdaptiveBatchScheduler (BatchCompiler -> PhysicalPlanner -> Scheduler -> StreamingSink)",
+  "layer_loop": "compat/debug only (FACTOR_ENGINE_LAYER_LOOP=1)",
+  "physical_dag": "real stages: SOURCE_SCAN/OPERATOR/ROLLING_SHARED/CROSS_SECTION/STATEFUL/ROOT via planner/physical_lowerer.py",
+  "resource": "ResourceBroker live headroom + memory/CPU/IO/spill token + ReservationLease (exactly-once) + CancellationToken",
+  "cost": "per-occurrence BoundNodeOccurrence + DAG-aware Volcano-lite + backend-specific memory + conversion-once",
+  "data_plan": "BatchDataRequest unions fields -> one/few source scans -> ScanCost -> read waves/admission",
+  "sql_cert": "48 core ops, 46 emitters, 39 DuckDB parity certified, ClickHouse separate",
+  "polars": "whole-tree expr auto-planned (env force-disable only)",
+  "incremental": "ChangeImpact DAG (runtime/change_impact.py) from source change -> affected intervals",
+  "service": "shared process-level ResourceBroker across jobs"
+}

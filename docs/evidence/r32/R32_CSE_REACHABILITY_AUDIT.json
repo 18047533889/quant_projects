@@ -1,0 +1,7 @@
+{
+  "cost_based": "cse_benefit = recompute_saved - materialize_cost - memory_cost",
+  "dangling_ref": 0,
+  "nested_dag_valid": true,
+  "orphan_shared": 0,
+  "typed_semantic_hash_only": true
+}

@@ -1,0 +1,18 @@
+factor:
+  name: day_aggs_rank_ts_mean_close_3
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: 日K线 - 3日收盘价均线截面排名，动量方向因子
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  start_date: "2003-01-01"
+  end_date: "2003-12-31"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

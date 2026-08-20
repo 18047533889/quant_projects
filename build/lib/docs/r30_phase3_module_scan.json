@@ -1,0 +1,912 @@
+{
+  "flagged_modules": [
+    "cleaned_operators.common.data_cleaning",
+    "cleaned_operators.fundamental.ops",
+    "cleaned_operators.microstructure.ops",
+    "cleaned_operators.price_volume.ops",
+    "cleaned_operators.return_decomp"
+  ],
+  "per_module": {
+    "cleaned_operators.activity_clock": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_expectile": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_information": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_intraday": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_quantile_dynamics": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_structure": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.advanced_topology": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_aliases": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_cross": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_distribution": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_events": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_shape": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_state": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_volatility": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ashare.limit_ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ashare.ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ashare.state_machine": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.binned_response": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.candle_state_space": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.cross_sectional": {
+      "status": {
+        "implemented": 33
+      },
+      "total": 33
+    },
+    "cleaned_operators.common.daily_panel": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.data_cleaning": {
+      "status": {
+        "implemented": 33,
+        "research": 2
+      },
+      "total": 35
+    },
+    "cleaned_operators.common.elementwise": {
+      "status": {
+        "implemented": 118
+      },
+      "total": 118
+    },
+    "cleaned_operators.common.group": {
+      "status": {
+        "implemented": 23
+      },
+      "total": 23
+    },
+    "cleaned_operators.common.group_polars": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.gtja_compat": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_auto": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_batch_mirror": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_cs_misc": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_daily_native": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_data_cleaning": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_extended": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_group": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_limit_misc": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_math_extended": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_misc_utils": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_np_parity": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_ops": {
+      "status": {
+        "implemented": 13
+      },
+      "total": 13
+    },
+    "cleaned_operators.common.polars_robust_stats": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_state_event": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_statistics": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.scalar_compare": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.scalar_where": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.shift_cum": {
+      "status": {
+        "implemented": 14
+      },
+      "total": 14
+    },
+    "cleaned_operators.common.shift_polars": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.stable_high_moments_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.common.statistics": {
+      "status": {
+        "implemented": 72
+      },
+      "total": 72
+    },
+    "cleaned_operators.common.time_series": {
+      "status": {
+        "implemented": 41
+      },
+      "total": 41
+    },
+    "cleaned_operators.complexity_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.composite_fastpath": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.composite_fastpath_fixes": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.composition": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.conditional_dependence": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.conditional_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.panel_model": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.peer_ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.polars_peer": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.robust_cs": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section_local": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_spectrum": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.crossing": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.cs_state_ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.dependence_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.direction_concentration": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.directional_change": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.distribution_break": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.dmd": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.downside_risk": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.dynamic_knn": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.envelope": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.event_interval": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.event_response": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.evt_allan": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.extrema_divergence": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.extreme_tail": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.feature_geometry": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.first_passage": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fiscal_event_ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.accruals_scores": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.component_score": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.expectation_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.flow_semantics_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.ops": {
+      "status": {
+        "deprecated": 3,
+        "experimental": 4
+      },
+      "total": 7
+    },
+    "cleaned_operators.fundamental.parameter_contract_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_component_score": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_fiscal_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_fundamental": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_quality_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.quality_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.transforms_repairs_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.transforms_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.gather_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.glr_change": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.group_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.group_spectrum": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.hankel": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.hvg_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.index_listing.ops_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.index_listing.polars_ops_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.interval_geometry": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.higher_moments": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.overnight": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.polars_intraday_full": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.polars_next_stage": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.realized_beta": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.time_structure": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.time_structure_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.vwap_path": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday_activity_duration": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday_impact": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday_session": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday_vol_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.intrinsic_dimension": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.jump_robust": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.layer_composite_fixes": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.layer_primitives": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.local_lyapunov": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.lqtp_compat": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.marked_event": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.markov_dynamics": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.memory_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.microstructure.flow_impact": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.microstructure.intraday_agg": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.microstructure.ops": {
+      "status": {
+        "experimental": 11
+      },
+      "total": 11
+    },
+    "cleaned_operators.microstructure.polars_flow_impact": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.microstructure.polars_microstructure": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.moments_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.multifractal": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.multifractal_asym": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.multiscale_trend": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.nonlinear_dependence": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ohlc_spread": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.operator_overhaul": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_chip_tail": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_dynamics": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_geometry_math": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_geometry_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_pattern_engine_repairs_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_pattern_engine_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_patterns_extended": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.liquidity_naming_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.liquidity_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.ops": {
+      "status": {
+        "experimental": 7,
+        "implemented": 8
+      },
+      "total": 15
+    },
+    "cleaned_operators.price_volume.polars_candle": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_liquidity_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_price_volume": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_structure": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.structure_patterns_extra_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.structure_patterns_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.technical_extensions": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.technical_structure_repairs": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.production_policy_extensions_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.production_repairs": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.prospect_theory": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.recurrence_analysis": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.regression_models": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.relation.distribution": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.relation.ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.relation.ops_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.report_timing": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.research_polars": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.research_spectral": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.research_transform": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.return_decomp": {
+      "status": {
+        "experimental": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.robust_scale": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.robust_stats": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.robust_tail": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.rough_vol": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.rqa_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.safe_ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.semantic_hardening": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.sequence_complexity": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.session_recovery": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.shareholder.churn_network": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.shareholder.ops": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.shareholder.polars_churn_network": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.spectral": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.spectral_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.spread_estimators": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.state_episode_excursion": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.state_event": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.state_geometry": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.drawdown_path": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.episode": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.events": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.rotation": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.rule_language": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.sequential": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.stateful.survival": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.structural_levels": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.tail_systemic": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.indicators_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_indicators_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_misc_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_signal": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_tech_misc": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.signal": {
+      "status": {
+        "implemented": 37
+      },
+      "total": 37
+    },
+    "cleaned_operators.threshold_cycle": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.topology_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.ar_meanrev": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.complexity": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.dynamic_regression": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.path_signature": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.polars_regression": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.sequence_anomaly": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.state_space": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.volatility": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.wavelet_spectral": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.turnover_survival": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.update_clock": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.valuation.ops_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.valuation.polars_ops_v2": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.vector_path": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.volume_clock": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.weighted_moment_ext": {
+      "status": {},
+      "total": 0
+    },
+    "cleaned_operators.weighted_tail": {
+      "status": {},
+      "total": 0
+    }
+  }
+}

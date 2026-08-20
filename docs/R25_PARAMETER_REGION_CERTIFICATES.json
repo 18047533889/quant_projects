@@ -1,0 +1,5746 @@
+{
+  "cs_mad": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_mad_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_demean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_quantile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_pct_rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "scale": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_regression": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_neutralize": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "winsorize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "expanding_rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fillna_const": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "is_nan": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "is_null": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "is_not_null": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "is_infinite": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "protected_div": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "safe_div_null": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "abs": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "acos": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "arg": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "asin": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "asin_bounded": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "acos_bounded": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "atan": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "atan2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cbrt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ceil": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "clip": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "constant": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cos": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cosh": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cot": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "csc": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cube": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "exp": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "exp_neg": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fix": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "floor": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "flex_max": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "flex_min": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "identity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "lerp": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "log": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "log10": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "log2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "log_abs": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "neg": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "normalize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "power": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "round": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sec": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sign": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sin": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sin_phase": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cos_phase": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sinh": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sqrt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sqrt_abs": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "square": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "tan": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "tanh": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "truncate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "unitize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "winsorize_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_sqrt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "sigmoid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "coalesce": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "add": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "subtract": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "multiply": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "divide": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "lt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "le": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "eq": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "gt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ge": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ne": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "and_": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "or_": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "not_": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "inverse": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_rank_weighted_value": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_decay_linear": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_ts_decay_linear": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_mean": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_min": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_max": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_normalize": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_percentile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_rank": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_std": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_winsorize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_zscore": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "size_neutralize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "industry_size_neutralize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "where": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_argmax": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_argmin": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_quantile": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "rank_corr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_topk_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_mean_abs_deviation": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_median_abs_deviation": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_decay_linear": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ema": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_beta": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_mad": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_median": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_log_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sharpe": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_autocorr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_var": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cov": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_decay_exp_window": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_delay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_delta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kurt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_max": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_min": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_product": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_rank": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_skew": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sum_decay": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "price_spread_deviation": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_moment": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_poly2_coeff": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_poly2_resid": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_poly2_prior_coeff": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_poly2_forecast_error": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_poly2_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "digital_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_max_buildup": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "rolling_beta_to_market": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "tail_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "residual_momentum_capm": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "coskewness_to_market": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "idio_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "idio_skew": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ADX": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ATR_WILDER": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "KAMA": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "MACD_hist": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "MACD_line": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "MACD_signal": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "RSI_WILDER": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "hump_decay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "is_finite": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "saturate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_log": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_power": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "trade_when": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "real_turnover_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_vwap_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "overnight_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "open_close_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "open_to_vwap_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "vwap_to_close_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_count_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sum_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mean_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_std_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_last_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_days_since": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_true_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_bucket": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_multi_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_wls_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_tstat": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_trend_tstat": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_max_drawdown": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_partial_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_nth_value": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_time_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sma_cn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "lqtp_historical_cvar": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "minimum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "maximum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "book_to_price": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "earnings_yield": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "float_share_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "free_float_share_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_positive_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_negative_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_zero_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_range": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_robust_zscore_inclusive": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_robust_zscore_prior": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_trimmed_mean": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_abs_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_abs_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_downside_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_upside_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_current_drawdown_duration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_time_under_water": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_best_lag_corr_raw": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_best_lag_corr_excess": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_price_delay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_max_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_min_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_corr_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_beta_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_resid_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_transition_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_time_since_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_event_spacing_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_event_spacing_cv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "limit_up_close": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "limit_down_close": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "tradable_state": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_intercept": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_up_touch": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_down_touch": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_open_at_upper_limit": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_open_failed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_one_price": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_failed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "benchmark_excess_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "benchmark_relative_price": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_applicability_mask": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cash_flow_lifecycle_stage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_decay_asof": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_ex_self_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_ex_self_weighted_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "hierarchical_group_neutralize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_trimmed_ols_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_component_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "period_lag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "period_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "period_average": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "period_cagr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "quarter_from_cumulative": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ttm_from_quarterly": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ttm_from_cumulative": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "yoy_by_period": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_true_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_sign_consistency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_reversal_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_autocorr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_standardized_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_sign_agreement": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_change_direction_agreement": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "true_turnover_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_company_ownership_hhi": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_concentration_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_count_change_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_segment_return": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_segment_volume_share": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_segment_amount_share": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_segment_vwap_deviation": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_segment_realized_vol": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_realized_variance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_semivariance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_bipower_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_path_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_high_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_low_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_above_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_cross_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_signed_imbalance_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_return_activity_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_amihud": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_kyle_lambda_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_extreme_bar_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_lunch_gap_return": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intra_limit_first_hit_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_limit_duration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_limit_reopen_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_bucket_fixed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_bucket_historical": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_tail_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_topk_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_topk_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_bottomk_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_bottomk_sum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_bottomk_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_in_sample_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_forecast_error": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_regression_resid_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_neutralize": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "true_range": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ffill_limit": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_fill_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_fill_median": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_rank_gaussian": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fundamental_staleness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "revision_delta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "period_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_weighted_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_weighted_demean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_weighted_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_weighted_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_weighted_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "row_sum_skipna": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_perpetual_inventory": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_ar_resid_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_asymmetric_elasticity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_regression_resid_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_accrual_quality": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_seasonal_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_seasonal_percentile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "date_diff_days": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_direction_consistency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fiscal_pair_direction_agreement": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_valid_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_coverage_ratio": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_staleness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_valid_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_coverage_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_valid_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_impute_median": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ffill_limited": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "log_positive_or_nan": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_argmax_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_argmin_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_argmax_index_from_oldest": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_argmin_index_from_oldest": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_impute_mean": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_impute_median": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_abs_entropy_normalized": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_abs_entropy_nats": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_huber_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_lad_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_hhi": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "holder_observed_topk_hhi": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_topk_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_rank_weighted_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_category_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_category_signed_contribution": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_peer_weighted_mean_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_entry_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_exit_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_weighted_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_member": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_weight_change": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "index_entry_exit_event": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_membership_age": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_cumulative_return_past": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_abnormal_return_past": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_return_since_last": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_arithmetic_return_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_log_return_sum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_active_count": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "calendar_day_diff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_announcement_lag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_distinct_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_overlap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_weight": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_in_sample_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_predictive_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_in_sample_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_predictive_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_regression_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_coefficient": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_variance_ratio_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lo_mackinlay_vr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lo_mackinlay_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cumulative_deviation_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_level_shift_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_shift_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_skewness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_quarticity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_tripower_quarticity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_continuous_variance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_positive_jump_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_negative_jump_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_signed_jump_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_positive_tail_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_negative_tail_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_tail_event_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_signed_tail_variation_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_first_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_last_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_jump_clustering": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_rv_signature_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_correlation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_down_down_semibeta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_up_up_semibeta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_down_up_semibeta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_up_down_semibeta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_beta_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_variance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_skewness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_market_model_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_beta_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_realized_correlation_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_variance_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_skewness_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_idiosyncratic_kurtosis_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_market_model_r2_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_volume_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_amount_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_realized_variance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_vwap_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_interval_illiquidity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_same_slot_momentum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_same_slot_reversal": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_signed_return_profile_cosine": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_abs_return_profile_cosine": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_return_profile_cosine": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_volume_profile_cosine": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_amount_profile_cosine": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_volume_profile_jsd": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_amount_profile_jsd": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_profile_earth_mover_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_path_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_path_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_path_slope_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_path_curvature_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_price_vwap_max_positive_excursion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_price_vwap_max_negative_excursion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_time_above_vwap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_longest_above_vwap_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_longest_below_vwap_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_vwap_reversion_speed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_max_drawdown": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_max_drawup": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_drawdown_depth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_drawdown_duration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_drawdown_recovery_half_life": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_overnight_intraday_cov": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_overnight_intraday_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_overnight_intraday_sign_agreement": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gap_reversion_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gap_fill_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gap_survival_duration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_opening_mispricing_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_resid_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_resid_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_resid_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_coeff_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_forecast_error": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_r2_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_adjusted_r2_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multi_regression_coeff_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_coeff_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_forecast_error": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_huber_regression_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_coeff_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_forecast_error": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ridge_regression_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile_regression_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile_regression_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile_regression_coeff_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile_regression_forecast_error": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile_beta_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_regression_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_regression_coeff_prior": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_regression_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_beta_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_fitted_value": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_in_sample_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_innovation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_innovation_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_prior_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_prior_innovation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_prior_innovation_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_prior_coeff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ar_coeff_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mean_reversion_half_life": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mean_reversion_ou_approx_half_life": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_variance_ratio_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_level": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_innovation_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_beta_uncertainty": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_trend": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kalman_beta_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_garch_next_vol_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_garch_vol_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_garch_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_garch_standardized_shock": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gjr_garch_vol_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gjr_leverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_rv_next_vol_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_rv_next_var_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_rv_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_from_return_next_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_from_return_forecast_error_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_rv_forecast": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_har_rv_innovation_z": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_permutation_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_sample_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pseudocount_sample_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lz_complexity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multiscale_entropy_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turning_point_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_dfa_hurst": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cusum_vol_break_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_two_state_regime_probability": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_regime_duration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_change_point_probability": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_wavelet_low_frequency_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_wavelet_high_frequency_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_wavelet_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_wavelet_energy_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_spectral_low_frequency_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_state_mahalanobis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_state_local_density": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_matrix_profile_novelty": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_matrix_profile_motif_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_matrix_profile_motif_frequency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_matrix_profile_neighbor_dispersion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_matrix_profile_discord_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_motif_recurrence_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_path_signature_area": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_path_signature_depth2_norm": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_path_leadlag_area": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_ridge_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_quantile_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_spline_resid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_mahalanobis_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_knn_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_local_density_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_shrinkage_mahalanobis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_robust_mahalanobis_mad": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_actual_lof_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_relative_density_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_residual_percentile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_peer_beta_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_peer_deviation_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_peer_information_diffusion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_leader_laggard_exposure": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_return_dispersion_exposure": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_multi_level_rank_consistency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_market_liquidity_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_industry_liquidity_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "panel_rolling_pca_loading": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pca_resid": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pca_explained_ratio": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pca_resid_vol": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pca_resid_momentum": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "industry_rolling_pca_loading": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pcr_forecast": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_pls_forecast": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_rolling_elastic_net_forecast": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_regime_conditioned_forecast": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "panel_mixture_of_experts_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_feature_pca_reconstruction_error": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_autoencoder_reconstruction_error": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "fin_lag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_diff": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_pct_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_log_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_qoq": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_yoy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_ttm": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_average_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cagr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_growth_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_mad": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_mean_abs_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_median_abs_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_range": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_zscore_history": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_zscore_vs_prior_history": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_percentile_history": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_percentile_vs_prior_history": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_trend_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_trend_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_trend_tstat": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_trend_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_monotonicity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_positive_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_negative_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_sign_change_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_common_size": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_turnover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cash_earnings_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_accrual_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cash_conversion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_working_capital_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_period_restated": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_period_revision_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_period_revision_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_working_capital_accruals": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_total_operating_accruals": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_delta_noa": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_roe_cash_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_earnings_cash_gap_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_earnings_smoothness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_earnings_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cashflow_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_margin_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_core_earnings_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_noncore_income_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_fair_value_income_dependence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_investment_income_dependence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_other_earnings_dependence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_comprehensive_income_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_oci_to_equity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_discontinued_operation_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_minority_profit_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_receivable_sales_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_inventory_sales_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cash_sales_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expense_sales_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_contract_asset_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_contract_asset_growth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_contract_liability_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_contract_liability_growth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_contract_asset_liability_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_lease_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_lease_asset_liability_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_goodwill_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_deferred_tax_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_impairment_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_goodwill_risk_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_net_debt_issuance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_borrowing_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_debt_repayment_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_net_borrowing_cashflow": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_equity_capital_growth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_financing_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_interest_coverage_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_debt_service_coverage_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_cash_burn_runway": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_capex_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_capex_growth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_acquisition_cash_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_rd_total_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_rd_capitalization_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "piotroski_f_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "piotroski_f_score_tolerant": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "piotroski_partial_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "piotroski_observed_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "altman_z_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "zmijewski_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_fundamental_strength_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_fundamental_strength_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_weighted_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_entry_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_exit_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_net_entry_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_rank_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_pledge_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_freeze_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_pledge_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_freeze_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_pledged_holder_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_pledge_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_pledge_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_float_concentration_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_locked_share_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_concentration_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_concentration_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_class_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_nature_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_common_holding_peer_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_peer_return_breadth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_shareholder_network_centrality": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_shareholder_overlap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_id_matched_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_id_matched_entry_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_id_matched_exit_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_id_overlap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_share_weighted_rank_migration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_disclosure_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_disclosure_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_topk_share_sum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pe_ttm_lyr_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pcf_definition_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pe_gap_signed_log": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pe_gap_positive": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pcf_gap_signed_log": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_pcf_gap_positive": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "free_float_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "free_to_circulating_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "a_share_cap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "free_float_turnover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "market_cap_free_cap_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_cashflow_disagreement": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "valuation_growth_mismatch": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "valuation_quality_mismatch": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "capital_change_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "capital_change_magnitude": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "circulating_cap_ratio_change": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "circulating_cap_unlock_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_weight_gap_to_free_float": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_reconstitution_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "multi_index_entry_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "listing_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "suspension_frequency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "suspension_status_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "index_event_decay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lower_partial_moment": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_upper_partial_moment": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expected_shortfall": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_skew": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_tail_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extreme_cluster_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_distance_corr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_distance_cov": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_mutual_information": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_lagged_mutual_information": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_upper_tail_coexceedance_probability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lower_tail_coexceedance_probability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_permutation_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_permutation_transition_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hurst_dfa": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_higuchi_fractal_dimension": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_variogram_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_autocorr_decay_half_life": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_up_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_down_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_days_since_limit_up": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_days_since_limit_down": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_touch_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_failed_limit_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_one_price_limit_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_event_density": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_suspension_episode_length": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_open_up_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_open_down_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_up_volume_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ashare_limit_down_volume_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_topk_concentration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_distribution_skew": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_distribution_pearson_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_distribution_excess_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_hhi_change": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_entropy_change": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_concentration_acceleration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_rank_mobility": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "relation_rank_entity_mobility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_share_mobility": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_skewness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_quantile_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_tail_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_bar_range_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_bar_range_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_tail_volume_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_volume_price_alignment": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_ute_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_ute_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_slot_volume_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_slot_amount_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_slot_volatility_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_market_lead_lag_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_industry_lead_lag_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_session_return_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_close_participation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intra_high_low_affinity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_run_strength": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_run_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_run_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_hysteresis_state": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hysteresis_age": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_state_integral": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_state_entry_strength": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_transition_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sign_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_sign_cluster_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_monotonicity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turning_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_effective_turning_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turning_intensity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_path_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_roughness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_trend_break_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_time_centroid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_endpoint_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mass_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_chord_excursion_area": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_max_chord_excursion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_tail_imbalance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expected_shortfall_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_wasserstein_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ks_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_location_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_scale_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_transport_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_transport_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mmd_rbf_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_of_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_term_structure": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_semivariance_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_realized_quarticity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_clustering": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_leverage_effect": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_jump_bipower_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_neighbor_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_local_density": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_isolation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_local_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_ex_self_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_ex_self_mad": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_ex_self_quantile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_weighted_std_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_frequency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_cluster_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_cluster_mean_size": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_rolling_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_yoy_lag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_change_breadth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_change_coherence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_latch": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_hold": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_slew_limit": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_deadband": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_refractory": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cross_event": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cusum_pressure": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_rank_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_ewm_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lag_of_peak_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_since_sum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_since_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_since_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_since_last": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "directional_change_state": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "directional_change_extent": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_since_trend_tstat": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_state_age_percentile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_state_exit_hazard": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_state_residual_life": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_rank_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_rank_composition_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_rank_combined_churn": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_tail_retention": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_tail_breadth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_recovery_fraction": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_current_drawdown_area": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_reference_price": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_dispersion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_profit_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_holding_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_near_cost_mass": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_quantile_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_mode_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_skew": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_age_dispersion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_old_mass": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_turnover_cost_entropy_vol_scaled": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_stratified_mean_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_semivariance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_downside_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_expected_shortfall": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_drawdown_area": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cpt_value": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_bvc_imbalance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_impact_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_impact_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_return_wasserstein_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "micro_bvc_vpin": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_transfer_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_effective_transfer_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_score_rank_weighted_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_benford_js_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_transfer_entropy_peak_strength": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_transfer_entropy_peak_lag": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_transfer_entropy_peak_excess": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_bures_corr_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kramers_moyal_drift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kramers_moyal_diffusion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_sliced_wasserstein_copula_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_spd_feature_structure_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "holder_class_js_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_wasserstein_pair_distance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "baseline_scaled_wasserstein_distance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_barrier_approach_acceleration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_quantile_curve_pca_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_quantile_curve_pca_residual": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_subsampled_rv_dispersion": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_volatility_signature_slope": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_realized_power_variation": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_profile_surprise_energy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_profile_phase_shift": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_betti_1_max_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_persistence_diagram_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_fisher_information_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantilogram": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cross_quantilogram": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_crossing_spectral_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extremogram": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cross_extremogram": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extremal_dependence_decay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_expectile": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_expectile_beta": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dc_overshoot_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_dc_event_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_dc_duration_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_dc_overshoot_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_feature_mode_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_feature_effective_rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_feature_subspace_rotation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_beta_break_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_conditional_transfer_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_modwt_band_corr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ohlc_corwin_schultz_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_roll_effective_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_knn_local_linear_residual": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_knn_local_gradient_norm": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_knn_tangent_residual": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_rank_copula_mi": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_rank_copula_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_tail_centrality": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_tail_lead_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relation_diffusion_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_mark_autocorr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_interval_mark_coupling": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "update_path_efficiency": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "update_acceleration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "update_surprise": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "update_direction_persistence": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_markov_persistence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_state_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_transition_surprisal": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_entropy_production": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_kramers_moyal_local_stability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_active_information_storage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_committor": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_mean_first_passage_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_spectral_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_markov_stationary_surprisal": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_km_equilibrium_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_km_diffusion_gradient": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_km_quasipotential_depth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_state_density": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ordinal_irreversibility": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_multiscale_permutation_entropy_slope": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_first_passage_bias": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_first_passage_hit_probability": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_first_passage_conditional_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_historical_response_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_historical_response_sign_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_hawkes_branching_ratio_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_peak_lag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_decay_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_dispersion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_reversal_strength": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_effective_events": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_response_overlap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_joint_energy_shift": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_energy_break_score": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_copula_central_asymmetry": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_feature_valid_member_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_feature_coverage_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_feature_mode_share": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_feature_effective_rank": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_feature_mode_localization": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_feature_spectral_gap": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_feature_second_mode_localization": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_volume_clock_path_efficiency": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_volume_clock_roughness": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "session_event_recovery_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_knn_peer_mean_ex_self": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_knn_neighbor_retention": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_knn_graph_dirichlet_energy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_hill_tail_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_quantile_regression_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extremal_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_mean_excess_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_gpd_shape_pwm": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_local_lyapunov_exponent": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "report_filing_delay_surprise": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "report_revision_magnitude": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_recurrence_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_recurrence_diagonal_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_recurrence_trapping_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_recurrence_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_union_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_occupancy_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_occupancy_mode_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_nesting_depth": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_exploration_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_interval_overlap_connected_component_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_structural_level_density": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_nearest_structural_level_distance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_structural_level_strength": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_multiscale_trend_consensus": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_multiscale_trend_dispersion": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_multiscale_trend_curvature": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_envelope_compression": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_envelope_pressure": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_envelope_boundary_dwell": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_crossing_speed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_crossing_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extrema_divergence_strength": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_extrema_confirmation_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_threshold_cycle_period": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_threshold_cycle_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_episode_mfe": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_episode_mae": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_episode_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_episode_retrace_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "state_episode_excursion_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_medrv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_minrv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_jump_test_stat": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_volatility_time_centroid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_volatility_concentration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_volatility_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_realized_semivariance_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_rv_signature_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vol_pvariation_roughness": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_vol_scaling_break": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_binned_response_monotonicity": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_binned_response_curvature": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_response_slope_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_chatterjee_xi": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_hsic": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_conditional_mutual_information": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_distance_correlation_partial_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_path_efficiency": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_turning_coherence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_path_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_vector_self_intersection_rate": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_interval_memory": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_local_variation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_fano_factor": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_fano_excess": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_lempel_ziv_complexity": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_forbidden_ordinal_pattern_excess": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_forbidden_ordinal_pattern_ratio": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_forbidden_ordinal_pattern_signed_excess": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_spectral_centroid": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_spectral_flatness": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_spectral_peak_concentration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_spectral_quality_factor": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hankel_effective_rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_hankel_singular_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ssa_reconstruction_residual": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_generalized_hurst_exponent": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_generalized_hurst_spread_q1_q4": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multifractal_spectrum_width": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_multifractal_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_autocorrelation_time": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_autocorrelation_time_initial_positive_sequence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_fractional_difference": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_fractional_difference_discarded_weight_mass": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_l_skewness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_l_kurtosis": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_hartigan_dip": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_delay_intrinsic_dimension": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_persistence_entropy_h0": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_persistence_entropy_h1": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_knn_local_moran": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_isotonic_residual": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_isotonic_residual_lagged_direction": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_current_members_tail_coexceedance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_corr_mst_length": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_session_shape_novelty": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_profile_pca_residual": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_topk_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_value_at_argextreme": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_weighted_percentile_rank": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_distribution_js_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "event_level_survival_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_weighted_standardized_moment": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_cov_if": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_multi_ridge_resid": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_activity_clock_lagged_value": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_activity_clock_lagged_value_prior": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_activity_clock_age": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_max_drawdown_activity_cost": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_return_spectral_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_spectral_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_detrended_level_spectral_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dominant_cycle_period": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "group_signal_attraction_share": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_activity_duration_curvature": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_wavelet_lowpass_reconstruct": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_signature_mahalanobis_anomaly": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_persistence_birth_dispersion": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hvg_degree_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hvg_forward_backward_asymmetry": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hvg_clustering_coefficient": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hvg_assortativity": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hvg_motif_entropy": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_recurrence_determinism": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_recurrence_laminarity": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_recurrence_mean_diagonal_length": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_recurrence_longest_vertical_length": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_rqa_determinism_fixed_rr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_rqa_laminarity_fixed_rr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_glr_mean_shift_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_glr_variance_shift_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_pettitt_change_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_edge_effective_spread": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_abdi_ranaldo_spread": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_pastor_stambaugh_liquidity_gamma": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_qn_scale": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_hodges_lehmann_location": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_pickands_tail_index": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_evt_threshold_stability": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_allan_factor": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_allan_scaling_slope": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "event_allan_log_mean": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "composition_clr_component": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "composition_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "composition_normalized_entropy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "composition_aitchison_distance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "composition_ilr_balance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "composition_js_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_cross_spectral_coherence": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_cross_spectral_phase": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_hartigan_dip": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "cs_physical_panel_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_universe_coverage": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "group_wasserstein_barycenter_distance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "intraday_impact_decay_rate": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_multifractal_asymmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_dmd_dominant_growth_rate": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_dominant_frequency": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_mode_concentration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_level_dominant_growth_rate": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_level_dominant_frequency": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_level_mode_concentration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_return_dominant_growth_rate": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_return_dominant_frequency": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_dmd_return_mode_concentration": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_bicoherence_top_decile_mean": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_bicoherence_top_decile_excess": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_kernel_granger_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_residualized_hsic": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_bds_statistic": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_rolling_sr_gaussian_mean_shift_score": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_prev_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_prev_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_distance_to_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_distance_to_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_breakout_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_breakdown_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_new_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_new_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_channel_position": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_days_since_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_days_since_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_range_expansion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_confirmed_pivot_high": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_confirmed_pivot_low": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_last_pivot_high": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_last_pivot_low": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_pivot_high_age": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_pivot_low_age": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_resistance_level": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_support_level": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_resistance_slope": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_support_slope": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_distance_to_resistance": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_distance_to_support": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_resistance_break": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_support_break": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "rolling_vwap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "vwap_deviation": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "relative_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "dollar_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "dollar_volume_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_momentum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_momentum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "return_volume_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "abs_return_volume_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_dollar_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "rolling_obv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "rolling_pvt": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "CMF": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "MFI": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "donchian_upper": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "donchian_lower": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "donchian_mid": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "donchian_position": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "bollinger_pct_b": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "bollinger_width": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "efficiency_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "choppiness_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "parkinson_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "garman_klass_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "rogers_satchell_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "yang_zhang_vol": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "overnight_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "intraday_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "range_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ulcer_index": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_body": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_abs_body": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_range": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_body_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_upper_shadow": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_lower_shadow": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_upper_shadow_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_lower_shadow_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_close_location": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_gap": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_gap_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_direction": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_range_atr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_doji": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_hammer": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_inverted_hammer": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_shooting_star": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_marubozu": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_spinning_top": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_engulfing": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_inside_bar": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_outside_bar": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_resistance_log_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_support_log_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_body_zscore": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_range_zscore": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_upper_shadow_zscore": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_lower_shadow_zscore": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_body_percentile": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_range_percentile": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_gap_atr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "candle_body_position": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_overlap_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_inside_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_close_strength": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_rejection_upper": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candle_rejection_lower": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_dragonfly_doji": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_gravestone_doji": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_hanging_man": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_harami": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_harami_cross": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_piercing": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_dark_cloud_cover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_morning_star": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_evening_star": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_three_white_soldiers": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_three_black_crows": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_tweezer_top": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cdl_tweezer_bottom": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "candlestick_pattern": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ts_nth_pivot_high": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_nth_pivot_low": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_nth_pivot_high_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_nth_pivot_low_age": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pivot_high_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pivot_low_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pivot_high_spacing": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pivot_low_spacing": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_swing_amplitude": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_swing_amplitude_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_swing_duration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_swing_velocity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_swing_amplitude_atr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_channel_width": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_channel_width_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_channel_width_atr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_channel_width_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_line_convergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_line_parallelism": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_resistance_fit_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_support_fit_r2": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_pattern_symmetry": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_impulse_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_impulse_strength": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_impulse_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_consolidation_width": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_consolidation_slope": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_consolidation_volume_decay": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_double_top": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_double_bottom": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_head_shoulders": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_inverse_head_shoulders": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_sym_triangle": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_ascending_triangle": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_descending_triangle": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_rising_wedge": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_falling_wedge": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_rectangle": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_rising_channel": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_falling_channel": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_broadening": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_bull_flag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_bear_flag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_triple_top": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_triple_bottom": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_123_bull": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_123_bear": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_rounding_bottom": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_rounding_top": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_cup": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_cup_handle": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_bull_pennant": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_bear_pennant": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_breakout_retest": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "pattern_breakdown_retest": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "average_turnover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "adv": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "abnormal_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "abnormal_turnover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_autocorr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "turnover_autocorr": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "amihud_illiquidity": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "price_impact": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "return_per_turnover": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_shock": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_shock": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_acceleration": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "up_volume_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "down_volume_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "signed_volume_imbalance": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "up_down_volume_ratio": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_weighted_return": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_weighted_momentum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "price_volume_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "price_turnover_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "return_volume_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "return_turnover_beta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "rolling_adl_flow": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ChaikinOscillator": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ForceIndex": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "EaseOfMovement": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "bounded_nvi": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "bounded_pvi": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "zero_return_ratio": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "roll_spread_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "corwin_schultz_spread": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "high_low_spread_proxy": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "turnover_adjusted_volatility": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "volume_price_range_density": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_average_volume": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "DMI_plus": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "DMI_minus": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "DX": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "NATR": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PPO": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PPO_signal": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PPO_hist": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PVO": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PVO_signal": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PVO_hist": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "CMO": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "VortexPlus": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "VortexMinus": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "KeltnerMid": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "KeltnerUpper": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "KeltnerLower": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "KeltnerPosition": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "TSI": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "TSI_signal": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "UltimateOscillator": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "DEMA": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "TEMA": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_tenkan": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_kijun": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_senkou_a": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_senkou_b": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_cloud_width": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "ichimoku_cloud_position": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "Supertrend": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "SupertrendDirection": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "PSAR": {
+    "searchable": [],
+    "certified_region": "declared"
+  },
+  "fin_revision_delta": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_revision_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_revision_direction": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_revision_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_revision_magnitude": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_restated_flag": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_days_since_update": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_staleness": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_ttm_quarterly": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_quarter_from_cumulative": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_ttm_cumulative": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_surprise": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_surprise_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_surprise_event_zscore": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_surprise_event_percentile": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_revision": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_revision_pct": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_revision_speed": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_revision_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_revision_magnitude": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_days_since_expectation_revision": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_expectation_dispersion": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_actual_expectation_divergence": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_beat_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "fin_miss_streak": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_count": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_mean": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "cs_sum": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ewm_std": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ewm_var": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ewm_cov": {
+    "searchable": [],
+    "certified_region": "default-only"
+  },
+  "ts_ewm_corr": {
+    "searchable": [],
+    "certified_region": "default-only"
+  }
+}

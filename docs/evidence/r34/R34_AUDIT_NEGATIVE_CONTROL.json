@@ -1,0 +1,181 @@
+{
+  "scanned_audit_scripts": [
+    "scripts/audit_all_factor_production.py",
+    "scripts/audit_all_operators_direct_use.py",
+    "scripts/audit_all_registered_operators.py",
+    "scripts/audit_cross_market_field_resolution.py",
+    "scripts/audit_cross_market_semantics.py",
+    "scripts/audit_execution_semantic_preservation.py",
+    "scripts/audit_fe_dataaccess_contract_drift.py",
+    "scripts/audit_final_runtime_state.py",
+    "scripts/audit_fundamental_1288.py",
+    "scripts/audit_lqtp_formula_pack.py",
+    "scripts/audit_new_ops_real_data.py",
+    "scripts/audit_operator_cross_market_matrix.py",
+    "scripts/audit_operator_differential_execution.py",
+    "scripts/audit_operator_math_contract.py",
+    "scripts/audit_pit_and_period_policy.py",
+    "scripts/audit_provider_execution_graph.py",
+    "scripts/audit_r11_longtail.py",
+    "scripts/audit_r15_fix_report.py",
+    "scripts/audit_r15_master.py",
+    "scripts/audit_r22_mining_closure.py",
+    "scripts/audit_r24_semantic_continuity.py",
+    "scripts/audit_r25_genuine_usability.py",
+    "scripts/audit_r26_default_feasibility.py",
+    "scripts/audit_r26_hidden_correctness.py",
+    "scripts/audit_r27_acceptance.py",
+    "scripts/audit_r27_dag_parallelism.py",
+    "scripts/audit_r27_external_pressure.py",
+    "scripts/audit_r27_native_fusion.py",
+    "scripts/audit_r27_resource_admission.py",
+    "scripts/audit_r27_shard_equivalence.py",
+    "scripts/audit_r28_artifact_coherence.py",
+    "scripts/audit_r28_evidence_tracking.py",
+    "scripts/audit_r28_inventory.py",
+    "scripts/audit_r28_lookahead_static.py",
+    "scripts/audit_r28_model_causality.py",
+    "scripts/audit_r30_availability.py",
+    "scripts/audit_r30_hard_gates.py",
+    "scripts/audit_r30_source_universe_pit.py",
+    "scripts/audit_r31_acceptance.py",
+    "scripts/audit_r31_artifacts.py",
+    "scripts/audit_r32_hard_gates.py",
+    "scripts/audit_r33_hard_gates.py",
+    "scripts/audit_r34_evidence.py",
+    "scripts/audit_r34_hard_gates.py",
+    "scripts/audit_r34_parameter_domains.py",
+    "scripts/audit_semantic_hash_completeness.py",
+    "scripts/audit_stub_surface.py",
+    "scripts/audit_unit_normalization_once.py",
+    "scripts/certify_factor_operator_evidence.py",
+    "scripts/certify_intraday_parity.py",
+    "scripts/certify_operator.py",
+    "scripts/certify_primitive_evidence.py",
+    "scripts/certify_recipe_evidence.py"
+  ],
+  "literal_true_false_gate_assignments": 20,
+  "in_exception_probe_context": [
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 39,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 120,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 387,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 394,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 41,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 52,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 122,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 203,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 389,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 396,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 489,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 54,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 205,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 208,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 491,
+      "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r32_hard_gates.py",
+      "line": 640,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r33_hard_gates.py",
+      "line": 217,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r33_hard_gates.py",
+      "line": 252,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r33_hard_gates.py",
+      "line": 256,
+      "literal": false,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r33_hard_gates.py",
+      "line": 254,
+      "literal": true,
+      "assign_type": "Assign"
+    }
+  ],
+  "suspicious_non_probe_literal_gates": []
+}

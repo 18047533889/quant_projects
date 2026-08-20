@@ -1,0 +1,118 @@
+task_id: R20-SUPERTREND-DIRECTUSE
+finding: supertrend_direct_use_rehabilitation
+base_sha: 60bb18ba02278b4e5c72da7d0924b78e336776be
+current_head: 60bb18ba02278b4e5c72da7d0924b78e336776be
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/technical/indicators_v2.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/mining/direct_use.py
+  - factor_engine/tests/operators/test_r20_supertrend_direct_use_rehab.py
+  - factor_engine/evidence/r2/R20-SUPERTREND-DIRECTUSE.yaml
+status: CLOSED_LOCAL
+implementation:
+  - "Existing recursive Supertrend REUSED (not reimplemented): a shared
+    _supertrend_state(high,low,close,atr_window,multiplier) helper mirrors the
+    _psar_state pattern and reads level + regime sign from the SAME registered
+    Supertrend machine (Wilder ATR + band ratchet/flip, no future
+    displacement)."
+  - supertrend_direction: +1 when close >= Supertrend line (bull regime), -1
+    below; NaN where Supertrend is NaN (warmup / post-gap UNKNOWN) or close is
+    not finite.  Sign contract matches SupertrendDirection exactly.
+  - supertrend_distance_pct: (close - Supertrend line) / close with
+    strict-positive close masking (bad close -> NaN, never an abs-flipped
+    ratio).
+  - supertrend_flip: +1 on flip up, -1 on flip down, 0 on hold; defined only
+    after both sides of the direction series are finite (same
+    both-sides-finite contract as psar_flip); NaN during warmup.
+  - supertrend_days_since_flip: bars since the last regime flip; NaN before
+    the first flip (mirrors psar_days_since_flip exactly).
+  - Registered via _SPECS with ParamSpecs (atr_window int>=2 HORIZON,
+    multiplier positive float STATE_THRESHOLD) — same param contract as
+    Supertrend itself.  No relational spec needed (atr_window/multiplier have
+    no ordering constraint; family precedent Supertrend has none either).
+  - All four names added to _RECURSIVE_EWM (stateful/full_replay tags;
+    recursive full-replay governance, not prefix-invariant by design).
+  - Classified in _TECHNICAL_V2_CANONICALS and in DAILY_FACTOR_MIGRATED via a
+    new _DAILY_SUPERTREND_PACK_2026_08 frozenset (mirrors
+    _DAILY_MA_DISTANCE_PACK_2026_08).  Raw price-scale
+    "Supertrend"/"SupertrendDirection" stay intermediate-only.
+  - Added the four dimensionless names to _RELATIVE_ALPHA_OPS
+    (mining/direct_use.py); raw Supertrend level NOT added.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_supertrend_direct_use_rehab.py tests/operators/test_r20_ma_distance_slope_rehab.py -q
+  result: 19 passed, 2 warnings (2026-08-19; warnings are the pre-existing
+    polars_backend_kind PhysicalImplementationSpec UserWarnings, unrelated)
+  oracles:
+    - direction sign == sign(close - Supertrend line) on every jointly-valid
+      bar (>= for at-line, matching SupertrendDirection); warmup NaN preserved;
+      values bounded to {-1,+1}
+    - distance formula (close - line) / close; non-positive close (-5 and 0)
+      -> NaN, never a laundered ratio
+    - constructed uptrend->downtrend reversal produces -1 flips exactly at
+      supertrend_direction sign changes; hold bars exactly 0
+    - days_since_flip: 0 on flip bar, +1 per hold bar, NaN before first flip
+      and wherever flip is NaN
+    - ParamSpec presence (atr_window int min>=2, multiplier float min>0) and
+      stateful/full_replay/causal/pit_safe tags on all four names
+    - ValueError rejection for atr_window=1 and multiplier=0
+    - full-history determinism (re-run bit-identical; duplicated column
+      identical) — prefix-invariance intentionally NOT asserted because
+      Supertrend is recursive full-replay
+    - _RELATIVE_ALPHA_OPS contains the 4 new names and NOT
+      "Supertrend"/"SupertrendDirection"
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/technical/indicators_v2.py cleaned_operators/operator_surface.py mining/direct_use.py tests/operators/test_r20_supertrend_direct_use_rehab.py
+  result: PASS
+surface_classification:
+  command: python3 -c "import cleaned_operators; cleaned_operators.load_all(); classify_canonical(n) + DAILY_FACTOR_MIGRATED membership for the 4 names" (threads pinned)
+  result: all four canonicals classify as "daily" and are in DAILY_FACTOR_MIGRATED; all four resolve via OperatorRegistry.get(name, 'pandas_numpy') with tags {causal, full_replay, pit_safe, production_extension, stateful}
+integration:
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_r20_supertrend_direct_use_rehab.py tests/operators/test_r20_ma_distance_slope_rehab.py -q
+  result: 19 passed (cross-slice combined run with the concurrent R20 MA-distance sibling, 2026-08-19)
+  registry_bootstrap: load_all() PASS; supertrend_* all resolve via OperatorRegistry
+known_limitations:
+  - Concurrent sibling slices (R20 ichimoku/other families) edited
+    indicators_v2.py / operator_surface.py in parallel; a transient
+    load_all() partition error from their not-yet-landed names resolved once
+    their surface edits landed — final combined run green on the shared tree.
+  - Polars/DuckDB/Numba backend parity for the new canonicals is NOT_RUN.
+  - DirectUse matrix regeneration, backend gap matrix refresh, segmented
+    checkpoint runtime wiring, and full registry/backend/root CI are NOT_RUN.
+  - supertrend_flip requires both sides of direction finite, so the first
+    valid bar after a post-gap UNKNOWN re-seed emits 0 (hold) rather than a
+    flip — documented behavior, matching psar_flip.
+  - No production certification claim; terminal usability is limited to the
+    mining-layer relative-alpha classification added here.
+independent_review:
+  reviewer: scoped-reviewer (read-only subagent, diff + evidence YAML only;
+    retry after an API-524 timeout killed the first dispatch)
+  date: 2026-08-19
+  verdict: PASS-with-findings (no P0/P1)
+  verified:
+    - _supertrend_state delegates to the registered Supertrend for level AND
+      sign — no reimplemented ATR/ratchet/flip math; sign contract matches
+      SupertrendDirection; isfinite guard defensive-only (no divergence in
+      reachable states).
+    - PIT clean: all reads at t; all four names in _RECURSIVE_EWM →
+      stateful/full_replay tags; evidence honestly declines prefix-invariance.
+    - Strict-positive close masking correct (numerator and denominator);
+      flip/days_since_flip contracts psar-consistent, no off-by-one;
+      ParamSpec/governance/promotion hygiene all verified.
+    - No NaN false-zero traps in any of the four kernels.
+  p2_findings_and_resolution:
+    - runtime execution_contract authority (_STATEFUL_CANONICALS /
+      _FULL_HISTORY_RECURSIVE) not extended to the supertrend_* names →
+      runtime layer resolves stateless/independent, relying on metadata tags.
+      Shared pre-existing gap with psar_* — ACCEPTED here; tracked as one
+      collective follow-up for all R20 recursive-derivative families.
+    - supertrend_days_since_flip runs the full recursive Supertrend twice per
+      call (performance-only, mirrors psar_days_since_flip precedent) —
+      ACCEPTED.
+    - SupertrendDirection in neither direct-use lane (generic classification)
+      — deliberate, ACCEPTED.
+  focused_tests_after_review: 9 passed (unchanged)
+independent_review_status: CLOSED_VERIFIED
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

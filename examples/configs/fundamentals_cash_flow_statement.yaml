@@ -1,0 +1,20 @@
+factor:
+  name: cash_flow_zscore_operating
+  expr: zscore(col("net_cash_from_operating_activities"))
+  freq: 1d
+  universe: equities
+  description: 现金流量表 - 经营活动现金流截面标准化，正值代表现金流强劲
+
+data_source:
+  type: data_access
+  dataset: fundamentals_cash_flow_statement
+  fields:
+    net_cash_from_operating_activities: net_cash_from_operating_activities
+  start_date: "2010-01-01"
+  end_date: "2011-12-31"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

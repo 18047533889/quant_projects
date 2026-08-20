@@ -1,0 +1,7 @@
+family,min_raw_obs,min_effective_obs,min_unique_dates,min_unique_stocks,min_obs_per_parameter,min_regime_obs,min_expert_obs,max_missing_fraction,min_date_coverage
+linear,50000,10000,252,30,200.0,,,0.3,0.5
+pcr,50000,10000,252,30,200.0,,,0.3,0.5
+pls,50000,10000,252,30,200.0,,,0.3,0.5
+elastic_net,50000,10000,252,30,200.0,,,0.3,0.5
+regime,100000,50000,504,30,300.0,5000,,0.3,0.5
+moe,200000,100000,504,30,300.0,,1000,0.3,0.5

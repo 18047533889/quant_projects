@@ -1,0 +1,7 @@
+{
+  "batch_request_compile": "build_batch_data_request -> SourceScopeId typed",
+  "fe_consumes_da_scan_cost": true,
+  "full_union_prefetch_scheduler_path": false,
+  "prepared_batch_session": "FE demand -> DA DataRequest \u7f16\u8bd1\u63a5\u7ebf\uff08R33-P0-002\uff09",
+  "read_wave_is_main_prefetch": true
+}

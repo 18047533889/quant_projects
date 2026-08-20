@@ -1,0 +1,19 @@
+# SIP 逐笔成交 tick 因子（``us_stocks_sip_trades``）
+profile: prod
+
+factor:
+  name: us_sip_trades_price_rank
+  expr: rank(col("price"))
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_trades
+  fields:
+    price: price
+  normalize_timestamp: true
+  timestamp_unit: ns
+  start_date: "2024-01-02"
+  end_date: "2024-01-31"
+
+materialization:
+  factor_id: us_sip_trades_price_rank_v1

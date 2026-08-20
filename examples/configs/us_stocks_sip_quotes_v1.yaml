@@ -1,0 +1,23 @@
+factor:
+  name: quotes_zscore_bid_ask_spread
+  expr: zscore(col("bid_price") / (col("ask_price") + 1e-9))
+  freq: 1d
+  universe: equities
+  description: 报价数据 - bid/ask 比值截面标准化，反映相对买卖价差（值越高买卖价差越小，流动性越好）
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_quotes
+  fields:
+    bid_price: bid_price
+    ask_price: ask_price
+  normalize_timestamp: true
+  timestamp_unit: ns
+  # start_date: "2003-01-01"
+  # end_date: "2003-12-31"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

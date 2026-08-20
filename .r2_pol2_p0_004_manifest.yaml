@@ -1,0 +1,28 @@
+task_id: POL2-P0-004
+base_sha: c35e7326
+commit_sha: 8ce311879fcacd82e1ed506db36135cf9551aacf
+owned_files:
+  - factor_engine/cleaned_operators/polars_native/ts_batch1.py
+  - factor_engine/cleaned_operators/research_polars.py
+modified_files:
+  - factor_engine/cleaned_operators/polars_native/ts_batch1.py
+  - factor_engine/cleaned_operators/research_polars.py
+canonicals_touched:
+  - ts_moment
+  - ts_kurt
+backends_touched:
+  - polars
+implementation:
+  ts_moment: finite-pair direct-window central moment with compensated mean summation
+  ts_kurt: finite-pair direct-window unbiased excess kurtosis with constant-window -3 contract
+source_identity: c35e7326
+integrated_identity: c35e7326
+focused_tests: tests/backend/test_r2_p0_021_window_moments.py (10 passed)
+syntax_compile: passed
+import_smoke: not_run
+known_limitations:
+  - PhysicalImplementationSpec is absent; production admission remains unsupported and uncertified.
+  - Full repository compile, registry bootstrap on clean process, and cross-backend certification were not run.
+  - No additional regression test was committed because existing direct-window tests already cover the repaired authority; selectable native bootstrap import is blocked by a pre-existing duplicate ElderRay registration.
+production_certification: NOT_RUN
+ evidence_generated: []

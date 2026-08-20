@@ -1,0 +1,178 @@
+{
+  "commit_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b",
+  "gates": {
+    "MODEL_ZERO_DEAD_EXPLICIT_CONTRACT_KEYS": {
+      "value": true,
+      "status": "PASS",
+      "check": "lane_dead=[] timing_dead=[]",
+      "detail": "lane_dead=[] timing_dead=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ZERO_UNCLASSIFIED_TRUE_MODELS": {
+      "value": true,
+      "status": "PASS",
+      "check": "unclassified=[]",
+      "detail": "unclassified=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING_KIND": {
+      "value": true,
+      "status": "PASS",
+      "check": "no_kind=[]",
+      "detail": "no_kind=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING": {
+      "value": true,
+      "status": "PASS",
+      "check": "missing=[]",
+      "detail": "missing=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ZERO_INSAMPLE_DIAGNOSTIC_IN_PREDICTIVE_LANE": {
+      "value": true,
+      "status": "PASS",
+      "check": "diag_in_alpha=[]",
+      "detail": "diag_in_alpha=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ZERO_GENERATED_TIMING_USED_FOR_PRODUCTION": {
+      "value": true,
+      "status": "PASS",
+      "check": "direct_use_with_generated_timing=[]",
+      "detail": "direct_use_with_generated_timing=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ZERO_SILENT_PARAMETER_CLAMP": {
+      "value": true,
+      "status": "PASS",
+      "check": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
+      "detail": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ZERO_DUPLICATE_MINING_CANONICAL_ALIASES": {
+      "value": true,
+      "status": "PASS",
+      "check": "duplicate_aliases=[]",
+      "detail": "duplicate_aliases=[]",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_PARAMETER_DOMAIN": {
+      "value": false,
+      "status": "FAIL",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 64,
+      "canonical_pass": 0,
+      "detail": "parameter_domain_certified: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; FAIL",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_ORACLE": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "oracle_pass: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_CAUSALITY_EVIDENCE": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "causality_pass: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_MISSING_POLICY_EVIDENCE": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "missing_gap_pass: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_UNIT_EVIDENCE": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "unit_contract_pass: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_OPTIMIZED_PATHS_REFERENCE_PARITY": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "optimized_reference_parity_pass: 0/64 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 6,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "batch_single_parity_pass: 0/6 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_NEGATIVE_CONTROLS_ALL_FIRE": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 310,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "future_poison_pass: 0/310 applicable fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS": {
+      "value": false,
+      "status": "FAIL",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 64,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "feature_inputs declaration present for 0/64 direct-use fresh rows; ledger_total=310 fresh_total=310; FAIL",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT": {
+      "value": false,
+      "status": "NOT_RUN",
+      "ledger_canonical_total": 310,
+      "fresh_canonical_total": 310,
+      "canonical_total": 6,
+      "canonical_executed": 0,
+      "canonical_pass": 0,
+      "detail": "state_contract_pass: 0/6 stateful fresh rows executed; ledger_total=310 fresh_total=310; NOT_RUN",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    },
+    "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
+      "value": true,
+      "status": "PASS",
+      "check": "evidence_sha='854bdc2278678e3db03c894c059cd5fdbb7dac1b' repository_HEAD='854bdc2278678e3db03c894c059cd5fdbb7dac1b'",
+      "detail": "evidence_sha='854bdc2278678e3db03c894c059cd5fdbb7dac1b' repository_HEAD='854bdc2278678e3db03c894c059cd5fdbb7dac1b'",
+      "evidence_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b"
+    }
+  }
+}

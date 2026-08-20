@@ -1,0 +1,1228 @@
+{
+  "per_module_surface": {
+    "cleaned_operators.activity_clock": {
+      "surface": {
+        "daily": 3,
+        "extended": 1
+      },
+      "total": 4
+    },
+    "cleaned_operators.advanced_expectile": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.advanced_information": {
+      "surface": {
+        "daily": 2,
+        "extended": 5
+      },
+      "total": 7
+    },
+    "cleaned_operators.advanced_intraday": {
+      "surface": {
+        "extended": 10
+      },
+      "total": 10
+    },
+    "cleaned_operators.advanced_quantile_dynamics": {
+      "surface": {
+        "extended": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.advanced_structure": {
+      "surface": {
+        "extended": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.advanced_topology": {
+      "surface": {
+        "extended": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.alpha_language_aliases": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.alpha_language_cross": {
+      "surface": {
+        "daily": 8
+      },
+      "total": 8
+    },
+    "cleaned_operators.alpha_language_distribution": {
+      "surface": {
+        "daily": 9
+      },
+      "total": 9
+    },
+    "cleaned_operators.alpha_language_events": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.alpha_language_shape": {
+      "surface": {
+        "daily": 11,
+        "extended": 1
+      },
+      "total": 12
+    },
+    "cleaned_operators.alpha_language_state": {
+      "surface": {
+        "daily": 10
+      },
+      "total": 10
+    },
+    "cleaned_operators.alpha_language_volatility": {
+      "surface": {
+        "daily": 8
+      },
+      "total": 8
+    },
+    "cleaned_operators.ashare.limit_ops": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.ashare.ops": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.ashare.state_machine": {
+      "surface": {
+        "daily": 14
+      },
+      "total": 14
+    },
+    "cleaned_operators.binned_response": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.candle_state_space": {
+      "surface": {
+        "daily": 4,
+        "extended": 2
+      },
+      "total": 6
+    },
+    "cleaned_operators.common.cross_sectional": {
+      "surface": {
+        "daily": 13
+      },
+      "total": 13
+    },
+    "cleaned_operators.common.daily_panel": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.data_cleaning": {
+      "surface": {
+        "daily": 10
+      },
+      "total": 10
+    },
+    "cleaned_operators.common.elementwise": {
+      "surface": {
+        "daily": 44,
+        "extended": 4,
+        "internal": 2,
+        "legacy": 1,
+        "unsafe": 7
+      },
+      "total": 58
+    },
+    "cleaned_operators.common.group": {
+      "surface": {
+        "daily": 16
+      },
+      "total": 16
+    },
+    "cleaned_operators.common.group_polars": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.gtja_compat": {
+      "surface": {
+        "internal": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.common.polars_auto": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_batch_mirror": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_cs_misc": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.common.polars_daily_native": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.common.polars_data_cleaning": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_extended": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.common.polars_group": {
+      "surface": {
+        "daily": 3,
+        "extended": 1
+      },
+      "total": 4
+    },
+    "cleaned_operators.common.polars_limit_misc": {
+      "surface": {
+        "daily": 12
+      },
+      "total": 12
+    },
+    "cleaned_operators.common.polars_math_extended": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_misc_utils": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.common.polars_np_parity": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.polars_ops": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.common.polars_robust_stats": {
+      "surface": {
+        "daily": 14,
+        "extended": 5
+      },
+      "total": 19
+    },
+    "cleaned_operators.common.polars_state_event": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.common.polars_statistics": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.scalar_compare": {
+      "surface": {
+        "daily": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.common.scalar_where": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.shift_cum": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.shift_polars": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.common.stable_high_moments_v2": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.common.statistics": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.common.time_series": {
+      "surface": {
+        "daily": 26,
+        "extended": 3
+      },
+      "total": 29
+    },
+    "cleaned_operators.complexity_ext": {
+      "surface": {
+        "daily": 2,
+        "extended": 2
+      },
+      "total": 4
+    },
+    "cleaned_operators.composite_fastpath": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.composite_fastpath_fixes": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.composition": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.conditional_dependence": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.conditional_ext": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.panel_model": {
+      "surface": {
+        "extended": 13
+      },
+      "total": 13
+    },
+    "cleaned_operators.cross_section.peer_ops": {
+      "surface": {
+        "daily": 8
+      },
+      "total": 8
+    },
+    "cleaned_operators.cross_section.polars_peer": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.cross_section.robust_cs": {
+      "surface": {
+        "daily": 11
+      },
+      "total": 11
+    },
+    "cleaned_operators.cross_section_ext": {
+      "surface": {
+        "daily": 4,
+        "extended": 1
+      },
+      "total": 5
+    },
+    "cleaned_operators.cross_section_local": {
+      "surface": {
+        "extended": 5
+      },
+      "total": 5
+    },
+    "cleaned_operators.cross_spectrum": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.crossing": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.cs_state_ops": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.dependence_ext": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.direction_concentration": {
+      "surface": {
+        "daily": 1,
+        "extended": 1
+      },
+      "total": 2
+    },
+    "cleaned_operators.directional_change": {
+      "surface": {
+        "extended": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.distribution_break": {
+      "surface": {
+        "daily": 2,
+        "extended": 1
+      },
+      "total": 3
+    },
+    "cleaned_operators.dmd": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.downside_risk": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.dynamic_knn": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.envelope": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.event_interval": {
+      "surface": {
+        "daily": 3,
+        "extended": 1
+      },
+      "total": 4
+    },
+    "cleaned_operators.event_response": {
+      "surface": {
+        "daily": 6,
+        "extended": 3
+      },
+      "total": 9
+    },
+    "cleaned_operators.evt_allan": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.extrema_divergence": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.extreme_tail": {
+      "surface": {
+        "daily": 4,
+        "research": 1
+      },
+      "total": 5
+    },
+    "cleaned_operators.feature_geometry": {
+      "surface": {
+        "extended": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.first_passage": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.fiscal_event_ops": {
+      "surface": {
+        "daily": 11
+      },
+      "total": 11
+    },
+    "cleaned_operators.fundamental.accruals_scores": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.component_score": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.fundamental.expectation_v2": {
+      "surface": {
+        "daily": 14
+      },
+      "total": 14
+    },
+    "cleaned_operators.fundamental.flow_semantics_v2": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.fundamental.ops": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.parameter_contract_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_component_score": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_fiscal_v2": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.fundamental.polars_fundamental": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.polars_quality_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.fundamental.quality_v2": {
+      "surface": {
+        "daily": 51,
+        "extended": 4
+      },
+      "total": 55
+    },
+    "cleaned_operators.fundamental.transforms_repairs_v2": {
+      "surface": {
+        "daily": 11
+      },
+      "total": 11
+    },
+    "cleaned_operators.fundamental.transforms_v2": {
+      "surface": {
+        "daily": 34,
+        "extended": 5
+      },
+      "total": 39
+    },
+    "cleaned_operators.gather_ext": {
+      "surface": {
+        "daily": 5
+      },
+      "total": 5
+    },
+    "cleaned_operators.glr_change": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.group_ext": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.group_spectrum": {
+      "surface": {
+        "daily": 5,
+        "extended": 2
+      },
+      "total": 7
+    },
+    "cleaned_operators.hankel": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.hvg_ext": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.index_listing.ops_v2": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.index_listing.polars_ops_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.interval_geometry": {
+      "surface": {
+        "daily": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.intraday.higher_moments": {
+      "surface": {
+        "daily": 19
+      },
+      "total": 19
+    },
+    "cleaned_operators.intraday.overnight": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.intraday.polars_intraday_full": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.polars_next_stage": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.intraday.realized_beta": {
+      "surface": {
+        "daily": 17
+      },
+      "total": 17
+    },
+    "cleaned_operators.intraday.time_structure": {
+      "surface": {
+        "daily": 16
+      },
+      "total": 16
+    },
+    "cleaned_operators.intraday.time_structure_v2": {
+      "surface": {
+        "daily": 14
+      },
+      "total": 14
+    },
+    "cleaned_operators.intraday.vwap_path": {
+      "surface": {
+        "daily": 15
+      },
+      "total": 15
+    },
+    "cleaned_operators.intraday_activity_duration": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.intraday_impact": {
+      "surface": {
+        "extended": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.intraday_session": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.intraday_vol_ext": {
+      "surface": {
+        "daily": 5
+      },
+      "total": 5
+    },
+    "cleaned_operators.intrinsic_dimension": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.jump_robust": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.layer_composite_fixes": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.layer_primitives": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.local_lyapunov": {
+      "surface": {
+        "extended": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.lqtp_compat": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.marked_event": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.markov_dynamics": {
+      "surface": {
+        "daily": 11,
+        "extended": 2
+      },
+      "total": 13
+    },
+    "cleaned_operators.memory_ext": {
+      "surface": {
+        "daily": 2,
+        "extended": 2
+      },
+      "total": 4
+    },
+    "cleaned_operators.microstructure.flow_impact": {
+      "surface": {
+        "daily": 4,
+        "research": 1
+      },
+      "total": 5
+    },
+    "cleaned_operators.microstructure.intraday_agg": {
+      "surface": {
+        "daily": 25
+      },
+      "total": 25
+    },
+    "cleaned_operators.microstructure.ops": {
+      "surface": {
+        "daily": 1,
+        "extended": 1
+      },
+      "total": 2
+    },
+    "cleaned_operators.microstructure.polars_flow_impact": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.microstructure.polars_microstructure": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.moments_ext": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.multifractal": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.multifractal_asym": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.multiscale_trend": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.nonlinear_dependence": {
+      "surface": {
+        "daily": 5,
+        "extended": 1
+      },
+      "total": 6
+    },
+    "cleaned_operators.ohlc_spread": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.operator_overhaul": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_chip_tail": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_dynamics": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.polars_geometry_math": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_geometry_v2": {
+      "surface": {
+        "daily": 13
+      },
+      "total": 13
+    },
+    "cleaned_operators.price_volume.candle_pattern_engine_repairs_v2": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.price_volume.candle_pattern_engine_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.candle_patterns_extended": {
+      "surface": {
+        "daily": 14
+      },
+      "total": 14
+    },
+    "cleaned_operators.price_volume.liquidity_naming_v2": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.price_volume.liquidity_v2": {
+      "surface": {
+        "daily": 37
+      },
+      "total": 37
+    },
+    "cleaned_operators.price_volume.ops": {
+      "surface": {
+        "daily": 5,
+        "extended": 1
+      },
+      "total": 6
+    },
+    "cleaned_operators.price_volume.polars_candle": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_liquidity_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_price_volume": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.polars_structure": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.price_volume.structure_patterns_extra_repairs_v2": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.price_volume.structure_patterns_extra_v2": {
+      "surface": {
+        "daily": 10
+      },
+      "total": 10
+    },
+    "cleaned_operators.price_volume.structure_patterns_v2": {
+      "surface": {
+        "daily": 43
+      },
+      "total": 43
+    },
+    "cleaned_operators.price_volume.technical_extensions": {
+      "surface": {
+        "daily": 68
+      },
+      "total": 68
+    },
+    "cleaned_operators.price_volume.technical_structure_repairs": {
+      "surface": {
+        "daily": 12,
+        "extended": 2
+      },
+      "total": 14
+    },
+    "cleaned_operators.production_policy_extensions_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.production_repairs": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.prospect_theory": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.recurrence_analysis": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.regression_models": {
+      "surface": {
+        "daily": 4,
+        "extended": 8
+      },
+      "total": 12
+    },
+    "cleaned_operators.relation.distribution": {
+      "surface": {
+        "daily": 11,
+        "extended": 3
+      },
+      "total": 14
+    },
+    "cleaned_operators.relation.ops": {
+      "surface": {
+        "daily": 22,
+        "extended": 4
+      },
+      "total": 26
+    },
+    "cleaned_operators.relation.ops_ext": {
+      "surface": {
+        "extended": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.report_timing": {
+      "surface": {
+        "daily": 1,
+        "extended": 1
+      },
+      "total": 2
+    },
+    "cleaned_operators.research_polars": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.research_spectral": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.research_transform": {
+      "surface": {
+        "extended": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.return_decomp": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.robust_scale": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.robust_stats": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.robust_tail": {
+      "surface": {
+        "daily": 7
+      },
+      "total": 7
+    },
+    "cleaned_operators.rough_vol": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.rqa_ext": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.safe_ops": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.semantic_hardening": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.sequence_complexity": {
+      "surface": {
+        "daily": 8
+      },
+      "total": 8
+    },
+    "cleaned_operators.session_recovery": {
+      "surface": {
+        "daily": 1
+      },
+      "total": 1
+    },
+    "cleaned_operators.shareholder.churn_network": {
+      "surface": {
+        "daily": 27,
+        "extended": 3
+      },
+      "total": 30
+    },
+    "cleaned_operators.shareholder.ops": {
+      "surface": {
+        "extended": 1,
+        "research": 2
+      },
+      "total": 3
+    },
+    "cleaned_operators.shareholder.polars_churn_network": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.spectral": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.spectral_ext": {
+      "surface": {
+        "daily": 2,
+        "extended": 2
+      },
+      "total": 4
+    },
+    "cleaned_operators.spread_estimators": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.state_episode_excursion": {
+      "surface": {
+        "daily": 5
+      },
+      "total": 5
+    },
+    "cleaned_operators.state_event": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.state_geometry": {
+      "surface": {
+        "daily": 2,
+        "extended": 1
+      },
+      "total": 3
+    },
+    "cleaned_operators.stateful.drawdown_path": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.stateful.episode": {
+      "surface": {
+        "daily": 3,
+        "extended": 4
+      },
+      "total": 7
+    },
+    "cleaned_operators.stateful.events": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.stateful.rotation": {
+      "surface": {
+        "daily": 2,
+        "extended": 3
+      },
+      "total": 5
+    },
+    "cleaned_operators.stateful.rule_language": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.stateful.sequential": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.stateful.survival": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.structural_levels": {
+      "surface": {
+        "daily": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.tail_systemic": {
+      "surface": {
+        "extended": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.technical.indicators_v2": {
+      "surface": {
+        "daily": 32
+      },
+      "total": 32
+    },
+    "cleaned_operators.technical.polars_indicators_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_misc_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_signal": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.polars_tech_misc": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.technical.signal": {
+      "surface": {
+        "daily": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.threshold_cycle": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.topology_ext": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.ts_model.ar_meanrev": {
+      "surface": {
+        "daily": 10,
+        "extended": 3
+      },
+      "total": 13
+    },
+    "cleaned_operators.ts_model.complexity": {
+      "surface": {
+        "extended": 9
+      },
+      "total": 9
+    },
+    "cleaned_operators.ts_model.dynamic_regression": {
+      "surface": {
+        "daily": 28,
+        "extended": 1
+      },
+      "total": 29
+    },
+    "cleaned_operators.ts_model.path_signature": {
+      "surface": {
+        "extended": 3
+      },
+      "total": 3
+    },
+    "cleaned_operators.ts_model.polars_regression": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.ts_model.sequence_anomaly": {
+      "surface": {
+        "extended": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.ts_model.state_space": {
+      "surface": {
+        "extended": 6
+      },
+      "total": 6
+    },
+    "cleaned_operators.ts_model.volatility": {
+      "surface": {
+        "extended": 13
+      },
+      "total": 13
+    },
+    "cleaned_operators.ts_model.wavelet_spectral": {
+      "surface": {
+        "extended": 5
+      },
+      "total": 5
+    },
+    "cleaned_operators.turnover_survival": {
+      "surface": {
+        "daily": 10,
+        "extended": 2
+      },
+      "total": 12
+    },
+    "cleaned_operators.update_clock": {
+      "surface": {
+        "extended": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.valuation.ops_v2": {
+      "surface": {
+        "daily": 13,
+        "extended": 5
+      },
+      "total": 18
+    },
+    "cleaned_operators.valuation.polars_ops_v2": {
+      "surface": {},
+      "total": 0
+    },
+    "cleaned_operators.vector_path": {
+      "surface": {
+        "daily": 4
+      },
+      "total": 4
+    },
+    "cleaned_operators.volume_clock": {
+      "surface": {
+        "daily": 2
+      },
+      "total": 2
+    },
+    "cleaned_operators.weighted_moment_ext": {
+      "surface": {
+        "daily": 2,
+        "extended": 1
+      },
+      "total": 3
+    },
+    "cleaned_operators.weighted_tail": {
+      "surface": {
+        "daily": 4,
+        "extended": 1
+      },
+      "total": 5
+    }
+  }
+}

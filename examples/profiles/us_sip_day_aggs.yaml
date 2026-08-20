@@ -1,0 +1,15 @@
+# Massive cleaned SIP 日 K 价量因子（us_stocks_sip_day_aggs）
+profile: prod
+
+factor:
+  name: us_sip_momentum
+  expr: rank(ts_mean(col("close"), 5))
+
+data_source:
+  type: data_access
+  dataset: us_stocks_sip_day_aggs
+  start_date: "2024-01-02"
+  end_date: "2024-06-30"
+
+materialization:
+  factor_id: us_sip_momentum_v1

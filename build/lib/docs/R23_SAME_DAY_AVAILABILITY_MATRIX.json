@@ -1,0 +1,101 @@
+{
+  "ashare::ashare_stock_daily::StockDailyBar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_minute::StockMinuteBar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_valuation_daily::StockValuationDaily": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_capital_daily::StockCapitalDaily": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_indicator::StockIndicator": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "ashare::ashare_stock_balance::StockBalance": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "ashare::ashare_stock_income::StockIncome": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "ashare::ashare_stock_cashflow::StockCashFlow": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "ashare::ashare_index_daily::IndexDailyBar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_index_constituent::IndexConstituent": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_etf_daily::EtfDailyBar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_calendar::Calendar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_list::StockList": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_etf_list::EtfList": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_index_list::IndexList": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_industry::StockIndustry": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_status::StockStatus": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "ashare::ashare_stock_topten_shareholder::StockTopTenShareholder": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "ashare::ashare_stock_topten_float_shareholder::StockTopTenFloatShareholder": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_stock_daily::StockDailyBar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_stock_list::StockList": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_security_master_daily_snap::SecurityMaster": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_ticker_shares_snapshot::TickerSharesSnapshot": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_stock_indices_components::StockIndicesComponents": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_stock_capital_shares::USTickerSharesPITEvent": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_stock_balance::StockBalance": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_stock_income::StockIncome": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_stock_cashflow::StockCashFlow": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_stock_dividend::StockDividend": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "us::us_fact_news::FactNews": {
+    "knowledge_time_resolution": "EXACT_TIMESTAMP"
+  },
+  "us::us_calendar::Calendar": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_is_early_close::EarlyClose": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  },
+  "us::us_universe_daily::UniverseDaily": {
+    "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"
+  }
+}

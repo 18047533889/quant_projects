@@ -1,0 +1,103 @@
+# -*- coding: utf-8 -*-
+"""R38 P0-041（§16）：运行中 read-wave JIT repartition。
+
+行为探针（§R38_DYNAMIC_READ_WAVE_SHRINK）：
+    - wave 预算显著缩小 → 对未执行 SOURCE_SCAN 重新生成更小 wave；
+    - 已执行 wave 覆盖的 task 不再重建（不重复扫）；
+    - 新 wave 的 wave_id 与已执行不冲突；
+    - 预算未显著缩小 / 无未执行 task → 不重建。
+"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from planner.physical_factor_dag import (
+    TASK_SOURCE_SCAN,
+    PhysicalFactorDAG,
+    PhysicalFactorTask,
+)
+from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+from runtime.resource_autopilot import ResourceDecision
+from runtime.resource_broker import ResourceBroker
+
+
+def _source_task(tid: str, n_cols: int) -> PhysicalFactorTask:
+    """一个 source scan task，携带 n_cols 个列（列越多 wave 内存越大）。"""
+    return PhysicalFactorTask(
+        task_id=tid,
+        op="source_scan",
+        task_type=TASK_SOURCE_SCAN,
+        required_columns=tuple(f"c{tid}_{j}" for j in range(n_cols)),
+        time_range=("2024-01-01", "2024-06-30"),
+        source_scope="market:us",
+        executable=True,
+    )
+
+
+def _decision(read_wave: int) -> ResourceDecision:
+    return ResourceDecision(
+        target_concurrency=4, target_cpu_tokens=4,
+        read_wave_bytes=read_wave, factor_block_bytes=64 * 1024**2,
+        result_queue_bytes=128 * 1024**2, io_concurrency=1,
+        remote_concurrency=1, cache_budget_bytes=128 * 1024**2,
+        spill_budget_bytes=0, pressure_state="PRESSURE_3",
+        memory_constrained=True, reasons=("pressure",),
+    )
+
+
+def _plan_and_sched() -> tuple[SimpleNamespace, AdaptiveBatchScheduler, PhysicalFactorDAG]:
+    dag = PhysicalFactorDAG()
+    for i in range(6):
+        # 每个 task 200 列 → 500k 行 × 200 列 × 8B ≈ 800MB/task。
+        dag.tasks[f"src:{i}"] = _source_task(f"src:{i}", 200)
+    plan = SimpleNamespace(
+        read_waves=SimpleNamespace(
+            waves=[SimpleNamespace(wave_id=i, task_ids=(f"src:{i}",),
+                                   columns=frozenset(), estimated_memory_bytes=0)
+                   for i in range(6)]
+        ),
+    )
+    sched = AdaptiveBatchScheduler(broker=ResourceBroker())
+    return plan, sched, dag
+
+
+def test_wave_budget_shrink_repartitions_unexecuted():
+    plan, sched, dag = _plan_and_sched()
+    # 大预算 → 1 个 wave 装下全部；模拟 src:0..2 已执行。
+    sched._wave_refs = {0: "ref0", 1: "ref1", 2: "ref2"}
+    sched._wave_covered_tasks = {f"src:{i}" for i in range(3)}
+    sched._last_wave_budget = 4 * 1024**3
+    sched._last_decision = _decision(read_wave=512 * 1024**2)  # 显著缩小
+    committed = set(sched._wave_covered_tasks)
+
+    sched._maybe_repartition_waves(plan, dag, committed)
+
+    # 未执行 task（src:3..5，每个 ~800MB）被拆成更小 wave。
+    new_waves = plan.read_waves.waves
+    assert len(new_waves) >= 2, f"expected repartition, got {len(new_waves)} waves"
+    ids = [w.wave_id for w in new_waves]
+    assert all(i not in sched._wave_refs for i in ids), "新 wave_id 不能与已执行冲突"
+    covered = set()
+    for w in new_waves:
+        covered.update(w.task_ids)
+    assert covered == {f"src:{i}" for i in range(3, 6)}
+    assert any("repartition:" in e for e in sched._wave_summary["events"])
+
+
+def test_no_repartition_when_budget_not_shrunk():
+    plan, sched, dag = _plan_and_sched()
+    rw = plan.read_waves
+    sched._last_wave_budget = 4 * 1024**3
+    sched._last_decision = _decision(read_wave=3 * 1024**3)  # 只缩 25% < 40%
+    sched._maybe_repartition_waves(plan, dag, set())
+    assert plan.read_waves is rw  # 未重排（同一 plan 对象）
+
+
+def test_no_repartition_when_all_covered():
+    plan, sched, dag = _plan_and_sched()
+    sched._wave_covered_tasks = {f"src:{i}" for i in range(6)}
+    sched._last_wave_budget = 4 * 1024**3
+    sched._last_decision = _decision(read_wave=512 * 1024**2)
+    rw = plan.read_waves
+    sched._maybe_repartition_waves(plan, dag, set(sched._wave_covered_tasks))
+    assert plan.read_waves is rw  # 无未执行 task → 不重建

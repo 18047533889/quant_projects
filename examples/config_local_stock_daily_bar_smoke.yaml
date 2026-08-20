@@ -1,0 +1,21 @@
+# 本地 massive_data/StockDailyBar smoke（COS 镜像，TradeDate + Symbol）
+factor:
+  name: local_stock_daily_bar_rank
+  expr: rank(ts_mean(col("close"), 3))
+  freq: 1d
+  universe: equities
+  description: Smoke on ~/quant_projects/data/us_stock/massive_data/StockDailyBar
+
+data_source:
+  type: data_access
+  dataset: us_stock_daily
+  fields:
+    close: Close
+  start_date: "2024-01-02"
+  end_date: "2024-01-10"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

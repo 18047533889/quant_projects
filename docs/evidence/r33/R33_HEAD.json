@@ -1,0 +1,14 @@
+{
+  "git_sha": "8449d9c253c55308f3e406a15739e984387e9691",
+  "package_version": "factor_engine",
+  "runtime_versions": {
+    "duckdb": "1.5.4",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "polars": "1.42.1",
+    "pyarrow": "25.0.0",
+    "python": "3.10.12",
+    "scipy": "1.15.3"
+  },
+  "timestamp": "2026-08-11"
+}

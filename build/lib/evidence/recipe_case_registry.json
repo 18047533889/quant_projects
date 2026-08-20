@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "case_registry",
+  "recipes": [
+    "annualized_volatility",
+    "bollinger_lower",
+    "bollinger_mid",
+    "bollinger_upper",
+    "current_ratio",
+    "debt_to_equity",
+    "intraday_return",
+    "momentum",
+    "net_debt_ratio",
+    "operating_margin",
+    "overnight_gap",
+    "quick_ratio",
+    "rate_of_change",
+    "rolling_sharpe",
+    "stochastic_d",
+    "stochastic_k",
+    "williams_r"
+  ]
+}

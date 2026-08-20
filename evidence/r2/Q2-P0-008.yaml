@@ -1,0 +1,30 @@
+task_id: Q2-P0-008
+git_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+commit: NONE
+modified_files:
+  - backend/q_backend/q_compiler.py
+  - tests/q_backend/test_q_compatibility_contract.py
+finding: ts_beta_q_lowering_unsupported_semantics
+repair:
+  defect: Production Q lowering emitted a scalar final-window result and omitted canonical min_periods semantics.
+  behavior: ts_beta was removed from the QCompiler lowering map and SPECIALIZED classification; the compiler now treats it as unsupported rather than emitting an incorrect lowering.
+  capability_contract: has_lowering=false; can_compile=false; executable_lowerings=false.
+  research_validation: rejects ts_beta as unsupported.
+  compile: unsupported.
+validation:
+  focused_compatibility_suite:
+    result: 23 passed
+  syntax_compile: PASS
+gates:
+  broad: NOT_RUN
+  registry: NOT_RUN
+  parity: NOT_RUN
+  ci: NOT_RUN
+  production: NOT_RUN
+production_certification: NOT_RUN
+status: LOCAL_FOCUSED_TESTED_FAIL_CLOSED
+known_limitations:
+  - Evidence is bound to an uncommitted dirty current tree at the recorded git SHA.
+  - The repair intentionally disables unsupported production Q ts_beta lowering; it does not implement canonical rolling-vector and min_periods semantics.
+  - Broad, registry, parity, CI, and production gates remain NOT_RUN.
+  - No production-readiness claim follows from the focused local evidence.

@@ -1,0 +1,54 @@
+task_id: R21-P09-SR-CAUSAL
+finding: causal_available_at_rebuild_for_structural_levels
+base_sha: UNCOMMITTED_CURRENT_TREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+owned_files:
+  - factor_engine/cleaned_operators/structural_levels.py
+  - factor_engine/evidence/r2/R21-P09-SR-CAUSAL.yaml
+  - factor_engine/tests/operators/test_structural_levels_causal.py
+status: CLOSED_LOCAL
+independent_review_status: PENDING
+implementation:
+  - Audited `cleaned_operators/structural_levels.py` and
+    `cleaned_operators/common/_pivot_ledger.py` for causal/availability
+    semantics.
+  - Confirmed that `StreamingConfirmedPivotLedger` uses confirmation
+    windows (`pivot_at + confirmation`) and `max_pivot_age` to ensure
+    pivots are only used after their confirmation window has passed,
+    maintaining PIT safety.
+  - Verified that the `causal` tag is present in the metadata for all
+    three structural level operators:
+    - `ts_structural_level_density`
+    - `ts_nearest_structural_level_distance`
+    - `ts_structural_level_strength`
+  - Updated `_metadata` helper in `structural_levels.py` to include
+    `available_at="close_of_t"` and `same_session_usable=False` fields
+    in the `OperatorMetadata` dataclass. This ensures that the registry
+    correctly declares when these operators become available and that they
+    are not used within the same session (preventing look-ahead bias).
+  - Confirmed that the output at row `t` only consumes data up to row
+    `t` — prefix-causal and PIT-safe.
+focused_tests:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -m pytest tests/operators/test_structural_levels_causal.py -v
+  result: PASS
+  coverage:
+    - Causality mutation test: verify that changing future data does not affect current row.
+    - Staleness cap test: verify that `max_pivot_age` correctly drops old pivots.
+syntax_compile:
+  command: cd /home/shw/quant_projects/factor_engine && python3 -m py_compile cleaned_operators/structural_levels.py
+  result: PASS
+registry_bootstrap:
+  command: cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 -c "import cleaned_operators; cleaned_operators.load_all(); print('PASS')"
+  result: PASS
+known_limitations:
+  - Polars/DuckDB/Numba backend parity for the three structural level
+    operators is NOT_RUN (only the pandas/numpy implementation was audited).
+  - No production certification claim.
+independent_review:
+  reviewer: pending
+  date: pending
+  verdict: pending
+production_certification: NOT_RUN
+commit: NOT_CREATED
+remotes: NOT_USED

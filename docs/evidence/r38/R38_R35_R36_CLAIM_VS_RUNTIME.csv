@@ -1,0 +1,19 @@
+claim_id,claim_text,report,real_runtime_entrypoint,wired,behavior_test_exists,status,note
+R29 DA session cache,"DataReadSession resolution cache is request-scoped, race-free",R29 closure,dataaccess/read/read_session.DataReadSession.__enter__,false,exists,NOT_WIRED,pre-fix: mutates shared Store attribute (concurrent clobber)
+R35 PCA shared state,model-family shared PCA state == canonical panel PCA semantics,R35 acceptance,backend.model_family_kernels PCABlock,true,none,WIRED,pre-fix: shared-block commonality != canonical 1-Var(resid)/Var(ret)
+R35 fast linear,FastLinearWindowEngine is true sliding sufficient-statistics O(T p^2),R35 acceptance,backend.fast_linear_window._roll_grams,true,none,WIRED,pre-fix: per-row rescan O(T*window*p^2)
+R35 numba main chain,Certified Numba kernels dispatch inside the cleaned-operator main chain,R35 acceptance,cleaned operator implementations,false,none,NOT_WIRED,pre-fix: kernels benchmarked standalone; operators run numpy reference
+R36 FE/DA one authority,FE and DA use the same host child-lease accounting,R36 FINAL ACCEPTANCE,HostResourceCoordinator.apply_da_envelope,true,none,WIRED,"pre-fix: cap-setter only, DA ReadPipeline uses its own governor"
+R36 OOM replan,"OOM drives smaller-shape replan, same shape never retried",R36 FINAL ACCEPTANCE,scheduler FAILED_FATAL path,true,exists,WIRED,pre-fix: MemoryError -> ERROR_PERMANENT (no replan)
+R36 auto-shard,AutoShard turns an oversized task into N executable shards + merge,R36 FINAL ACCEPTANCE,scheduler._auto_shard_replan,true,exists,WIRED,"pre-fix: contract-peak-only (no shard children, no merge)"
+R36 calibration,CalibrationStore receives real elapsed/peak/output observations,R36 FINAL ACCEPTANCE,scheduler._record_task_calibration,true,exists,WIRED,"pre-fix: elapsed=monotonic timestamp, peak=predicted contract"
+R36 decision fields consumed,Every ResourceDecision field has a unique consumer,R36 FINAL ACCEPTANCE,scheduler.run / materialize,true,none,WIRED,pre-fix: target_concurrency/io/remote/cache/spill not consumed
+R36 duckdb token truth,Backend thread tokens come from real lease/engine truth,R36 FINAL ACCEPTANCE,physical_lowerer._engine_threads_for,false,none,NOT_WIRED,pre-fix: env/default guesses (4 duckdb / 2 polars)
+R36 dynamic sink,Sink queue budget shrinks/grows with pressure,R36 FINAL ACCEPTANCE,BoundedResultQueue,true,none,WIRED,"pre-fix: set once at construction, no set_target_bytes"
+R36 dynamic wave,In-flight read waves repartition when memory pressure rises,R36 FINAL ACCEPTANCE,scheduler._execute_read_waves,true,none,WIRED,pre-fix: waves built once in plan(); not repartitioned
+R36 fixed-cadence controller,"ResourceController ticks on fixed time cadence, not scheduler loop count",R36 FINAL ACCEPTANCE,broker.resource_decision,true,none,WIRED,pre-fix: every scheduler loop ticks controller (loop-count driven)
+R36 governed buffer put,Buffer put refusal is handled by callers (no silent return),R36 FINAL ACCEPTANCE,batch_service._materialize_shared_subplan,true,none,WIRED,pre-fix: bare bool ignored; raw dict fallback remains
+R36 host lease tree,FE/DA/service share one HostResourceCoordinator lease tree,R36 FINAL ACCEPTANCE,HostResourceCoordinator.request_lease,false,none,NOT_WIRED,pre-fix: parent+child double count; CPU/IO/spill not enforced
+R36 raw CSE bypass zero,No production raw shared_result_cache[sid]=value fallback,R36 FINAL ACCEPTANCE,batch_service._materialize_shared_subplan,true,exists,WIRED,"pre-fix: raw fallback present, no run_mode guard"
+R36 service broker,"Service uses HostCoordinator job lease admission, not just fixed max_running",R36 FINAL ACCEPTANCE,service/queue.BoundedJobQueue.submit,true,none,WIRED,"pre-fix: count-based admission, no JobResourceEstimate->JobLease"
+R36 spill,"Buffer spill writes, verifies, reloads or recomputes per policy",R36 FINAL ACCEPTANCE,GovernedBufferStore.spill,false,exists,NOT_WIRED,"pre-fix: spill == release (drop), no SpillStore"

@@ -1,0 +1,123 @@
+id: R21-P0-EWM-PAIRWISE
+slice: R21-P0-EWM-PAIRWISE (resumed from R20-P0-EWM-PAIRWISE after API-521 kill)
+campaign: R21, LOCAL ONLY, working tree is truth (no checkout/restore/stash/clean/reset)
+git_sha: 724cf286c567512efeefb2e24622eb0bb665680d (working-tree; local only)
+timestamp: 2026-08-20T00:00:00Z
+owned_files:
+  - cleaned_operators/common/polars_ts_rolling.py (TSEwmCorrNative/TSEwmCovNative + _ewm_pairwise_columns + EWM contract block comment)
+  - tests/backend/test_polars_ts_rolling_pairwise.py (EWM pairwise battery, +~350 lines vs HEAD)
+  - evidence/r2/R21-P0-EWM-PAIRWISE.yaml (this file)
+problem: >
+  ts_ewm_corr/ts_ewm_cov were built from nested polars ewm_mean expressions
+  (EWM means of same-row EWM-centered products). That recursion is NOT the
+  pandas reference: it diverged on cov from row 0 (cov[1]=0.197 vs pandas
+  0.674 at window=6 on the recorded seed-11 case) and at every NaN hole,
+  because pandas ewm().corr/.cov is a gap-decayed sum_wt/sum_wt2 bias-corrected
+  state machine that cannot be expressed as nested ewm_mean of centered
+  products. The previous writer instance was killed by an API 521 mid-run
+  with the pandas-delegate rewrite in the tree and the new test battery
+  partially broken (one malformed expectation loop, unresolved None-vs-nan
+  assertion contract).
+fix: >
+  Kept and completed the pandas-reference delegation rewrite:
+  (1) _ewm_pairwise_columns pre-masks Inf to NaN, applies the
+  pairwise-finite cohort (row valid only when BOTH operands finite; either
+  invalid drops the row from BOTH streams), then calls pandas
+  Series.ewm(span=window, adjust=False, ignore_na=False,
+  min_periods=2).corr/.cov per column; pandas NaN output (warmup < 2 valid
+  pairs, zero-variance corr, all-invalid prefix) maps to polars null.
+  (2) Both kernels honor the span= alias explicitly (registry does not
+  forward it) and are declared POLARS_PANDAS_DELEGATE via _physical_spec
+  (execution_kind, emitter_identity, semantic_contract_hash
+  pandas_ewm_span_adjustfalse_pairwise_finite:v2, supports_inf=False).
+  (3) Test-side: fixed the malformed expectation loop in
+  test_ewm_pairwise_exact_linear_correlation_is_plus_minus_one (now a clean
+  [None, sign, sign, sign] per sign case); pinned the None contract in
+  _assert_ewm (kernel emits polars null -> Python None; pandas NaN in the
+  oracle maps to None; finite outputs compared at rel=1e-10/abs=1e-12).
+  (4) Added the missing property guards: corr(x,x)=1 wherever finite and
+  cov(x,x)=ewm_var(x) (with NaN holes), span/alpha alias (span=w ==
+  alpha=2/(w+1) via a dedicated alpha oracle), cov bias=False (unbiased
+  default; biased stream asserted different), window=2 minimum, warmup
+  min_periods=2 with leading-invalid delay, NaN holes carry-forward, Inf
+  invalid, constant-series corr null / cov 0, multi-column independent
+  alignment, random-series exact match to the oracle.
+oracle_independence: >
+  All EWM oracles (_ewm_oracle, _ewm_oracle_alpha, _ewm_oracle_var) are
+  brute-force pandas ewm().corr()/cov()/var() computations over raw Python
+  lists built inside the test file; they never call the kernel, the emitter,
+  or any factor_engine code path. The kernel's own delegation is what is
+  under test against them.
+commands_run:
+  - cmd: >
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      POLARS_MAX_THREADS=1 python3 -m pytest
+      tests/backend/test_polars_ts_rolling_pairwise.py -q
+    result: "30 passed, 2 warnings in 105.36s (0:01:45)"
+    note: "pre-finish state was 27 passed"
+  - cmd: >
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      POLARS_MAX_THREADS=1 python3 -m pytest
+      tests/operators/test_r20_pairwise_param_spec_repair.py -q
+    result: "14 passed, 2 warnings in 112.85s (0:01:52)"
+  - cmd: >
+      OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+      POLARS_MAX_THREADS=1 python3 -m pytest
+      tests/test_ts_batch1_corr_cov_direct.py -q
+    result: "2 passed in 0.37s"
+results:
+  pairwise_battery: 30 passed / 0 failed
+  r20_pairwise_param_spec_repair: 14 passed / 0 failed
+  ts_batch1_corr_cov_direct: 2 passed / 0 failed
+guards_in_tests:
+  - brute-force pandas ewm().corr/cov/var oracles independent of kernel code path
+  - ewm_corr(x,x) == 1 wherever finite; ewm_cov(x,x) == ewm_var(x) (incl. NaN holes)
+  - span/alpha alias: span=w == alpha=2/(w+1)
+  - cov default bias=False (unbiased); biased stream asserted numerically different
+  - warmup min_periods=2, first row always null, leading-invalid pair delays warmup
+  - NaN holes carry previous output forward, do not update EWM state (pandas parity)
+  - +/-Inf treated as invalid (pre-masked to NaN), never propagated
+  - constant series: corr null, cov 0
+  - exact linear relation: corr == +/-1 after warmup
+  - window < 2 fails closed; missing counterpart column fails closed
+  - multi-column panels align independently per column
+  - span= alias drives the kernel (not silently absorbed)
+  - delegation declared POLARS_PANDAS_DELEGATE, not POLARS_NATIVE_EXPR
+known_limitations:
+  - >
+    Kernels are pandas-delegate, NOT Polars-native (declared in _physical_spec
+    and module docstring); polars has no ewm_corr/ewm_cov expression and the
+    pandas gap-decayed bias-correction recursion cannot be reproduced from
+    nested ewm_mean expressions.
+  - >
+    EWM family has no ddof/min_periods parameters (pandas ewm pairwise pins
+    min_periods=2 and cov bias=False); the module's ddof/min_periods tests
+    cover the non-EWM ts_cov family only.
+  - >
+    2 UserWarnings during collection from
+    backend/polars_backend_kind.py:235 (operators without _physical_spec
+    classified UNSUPPORTED) — pre-existing, outside this slice's ownership.
+  - >
+    large-offset stability guard exists for the non-EWM pairwise family
+    (test_large_offset_* in the same file, passing); not separately
+    parametrized for EWM because EWM output is bounded in [-1,1]/centered
+    by construction.
+not_run:
+  - production certification
+  - DIRECTUSE matrix regeneration
+  - full backend/test-suite run beyond the three modules above
+  - runtime/latency benchmarking of the pandas delegation
+production_certification: NOT_RUN
+independent_review:
+  reviewer: scoped-reviewer (background agent, 2026-08-20)
+  verdict: PASS
+  checks: "5/5: (1) diff scope exact — module touched only at docstring delegation note, EWM contract block comment, new _ewm_pairwise_columns, TSEwmCorrNative/TSEwmCovNative rewrites (+170/-55; old nested-ewm_mean kernel removed, nothing else rewritten); both declare _physical_spec POLARS_PANDAS_DELEGATE (ExecutionKind confirmed at backend/contracts/__init__.py:62), tags polars,native -> polars,pandas_delegate; test diff +337. (2) math PASS — delegation to Series.ewm(span=w, adjust=False, ignore_na=False, min_periods=2).corr/.cov (pandas 2.3.3); cov bias=False asserted; span->alpha=2/(w+1) via dedicated oracle; corr(x,x)=1-where-finite, cov(x,x)=ewm_var, constant/warmup/Inf-pre-mask honest. (3) oracle independence PASS — oracles import only math/numpy/pandas over raw lists; reviewer's own independent pandas-ewm scratch loop on 30 random panels (n=15-25, w=3-7, ~15% None, ~5% +/-Inf) matched kernel elementwise incl. NaN locations: 0 mismatches. (4) gate reproduced: 3 modules 46 passed, 2 warnings in 98.31s serial threads=1 (claim 105.36s; same counts; warnings pre-existing polars_backend_kind.py:235). (5) evidence honest — owned_files exactly 3; per-module counts 30/14/2=46 match claim and rerun; NOT_RUN lists complete; production_certification NOT_RUN."
+  findings:
+    - id: R21-EWM-P2a
+      finding: "duplicate test name test_ewm_pairwise_rejects_window_below_two defined twice (tests/backend/test_polars_ts_rolling_pairwise.py:466 and :523); second shadows first (bodies equivalent, no coverage loss — dead code)."
+      resolution: "NOTED — remove the shadowed duplicate in a follow-up touch of the test module."
+    - id: R21-EWM-P2b
+      finding: "module block comment claims invalid rows 'output carries the previous value (pandas behavior)'; actual pandas ewm corr/cov emits NaN at rows where either operand is NaN (reviewer verified numerically — reference and kernel both emit null there); tests assert the true behavior, only the comment is inaccurate."
+      resolution: "NOTED — correct the comment in a follow-up touch of the module."
+  no_p0_p1: "No P0/P1 findings."
+independent_review_status: CLOSED_VERIFIED

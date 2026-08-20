@@ -1,0 +1,1179 @@
+"""
+Polars native implementations for event-driven operators (event_* and holder_* family) - Batch 1
+
+⚠️  PIT SAFETY WARNING ⚠️
+Many operators in this file use forward-looking operations (negative shifts) to measure
+event responses. These operators introduce look-ahead bias and are NOT suitable for:
+- Real-time prediction
+- Live trading systems
+- Production models
+
+These operators are intended for:
+- Historical event study analysis
+- Measuring realized event impact (ex-post analysis)
+- Research and diagnostics
+
+For production use, see the PIT-safe alternatives in event_patterns.py
+
+Event operators identify and analyze discrete events (earnings announcements, shareholder changes, etc.)
+Key patterns:
+- Use .is_not_null() or conditions to mark event occurrences
+- Use .cum_sum() to track cumulative event counts
+- Use .shift() to compute event timing and post-event responses
+- Use rolling operations for windowed event metrics
+"""
+
+
+import polars as pl
+import pandas as pd
+import numpy as np
+from typing import Optional, Union
+
+from cleaned_operators.base import (
+    SeriesOperator,
+    register_operator,
+    OperatorMetadata,
+    ParamSpec,
+    ParamRole,
+)
+
+
+# ============================================================================
+# Event Frequency and Timing
+# ============================================================================
+
+@register_operator(name="event_frequency", canonical="event_frequency", backend="polars")
+class EventFrequencyPolarsNative(SeriesOperator):
+    """Count of events in rolling window"""
+    metadata = OperatorMetadata(
+        name="event_frequency",
+        category="event",
+        description="Count of events in rolling window",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "frequency", "polars_native"],
+    )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    }
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        # event_flag: 1 for event occurrence, 0 otherwise
+        return (
+            pl.from_pandas(event_flag.to_frame())
+            .lazy()
+            .select([
+                pl.col(event_flag.name)
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_pandas()[event_flag.name]
+        )
+
+
+@register_operator(name="event_active_count", canonical="event_active_count", backend="polars")
+class EventActiveCountPolarsNative(SeriesOperator):
+    """Number of events still in their response window"""
+    metadata = OperatorMetadata(
+        name="event_active_count",
+        category="event",
+        description="Number of events still in their response window",
+        param_names=["event_flag", "response_window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+    metadata.param_specs = {
+        "response_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    }
+
+    def _calculate_series(self, event_flag, response_window=10, **kwargs):
+        # Count events within response_window periods ago
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .select([
+                pl.col(event_flag.name)
+                .rolling_sum(window_size=response_window, min_periods=1)
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_decay_asof", canonical="event_decay_asof", backend="polars")
+class EventDecayAsofPolarsNative(SeriesOperator):
+    """Time-decayed weight of recent events using exponential decay"""
+    metadata = OperatorMetadata(
+        name="event_decay_asof",
+        category="event",
+        description="Time-decayed weight of recent events using exponential decay",
+        param_names=["event_flag", "halflife"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+    metadata.param_specs = {
+        "halflife": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    }
+
+    def _calculate_series(self, event_flag, halflife=5, **kwargs):
+        # Exponential decay: weight = exp(-log(2) * age / halflife)
+        decay_rate = np.log(2) / halflife
+
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                pl.col("_event_idx").fill_null(strategy="forward").alias("_last_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_idx") - pl.col("_last_event_idx")).alias("_age")
+            ])
+            .select([
+                pl.when(pl.col("_age").is_not_null())
+                .then((-decay_rate * pl.col("_age")).exp())
+                .otherwise(0.0)
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_return_since_last", canonical="event_return_since_last", backend="polars")
+class EventReturnSinceLastPolarsNative(SeriesOperator):
+    """Cumulative return since the last event"""
+    metadata = OperatorMetadata(
+        name="event_return_since_last",
+        category="event",
+        description="Cumulative return since the last event",
+        param_names=["returns", "event_flag"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(0.0)
+                .otherwise(pl.col(returns.name))
+                .alias("_ret_adj")
+            ])
+            .with_columns([
+                pl.col("_ret_adj").cum_sum().alias("_cum_ret")
+            ])
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_cum_ret"))
+                .otherwise(None)
+                .forward_fill()
+                .alias("_event_baseline")
+            ])
+            .select([
+                (pl.col("_cum_ret") - pl.col("_event_baseline").fill_null(0.0))
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+# ============================================================================
+# Event Response Analysis
+# ============================================================================
+
+@register_operator(name="event_historical_response_mean", canonical="event_historical_response_mean", backend="polars")
+class EventHistoricalResponseMeanPolarsNative(SeriesOperator):
+    """Average return in response_window periods after events (historical average)"""
+    metadata = OperatorMetadata(
+        name="event_historical_response_mean",
+        category="event",
+        description="Average return in response_window periods after events (historical average)",
+        param_names=["returns", "event_flag", "response_window", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, response_window=5, lookback=252, **kwargs):
+        df = pl.from_pandas(returns.to_frame()).with_columns([
+            pl.from_pandas(event_flag.to_frame()).select(pl.col(event_flag.name).alias("_event")).to_series(),
+            pl.lit(returns).shift(-response_window).alias("_future_ret")
+        ])
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_future_ret"))
+                .otherwise(None)
+                .alias("_event_response")
+            ])
+            .select([
+                pl.col("_event_response")
+                .rolling_mean(window_size=lookback, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_response_peak_lag", canonical="event_response_peak_lag", backend="polars")
+class EventResponsePeakLagPolarsNative(SeriesOperator):
+    """Days until peak response after event (simplified: argmax in window)"""
+    metadata = OperatorMetadata(
+        name="event_response_peak_lag",
+        category="event",
+        description="Days until peak response after event (simplified: argmax in window)",
+        param_names=["returns", "event_flag", "max_lag"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, max_lag=10, **kwargs):
+        # For each event, find which lag had the highest cumulative return
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        # Simplified: track position of max return in forward window
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.col(returns.name)
+                .rolling_max(window_size=max_lag, min_periods=1)
+                .alias("_max_forward")
+            ])
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(
+                    pl.when(pl.col(returns.name) == pl.col("_max_forward"))
+                    .then(1.0)
+                    .otherwise(0.0)
+                )
+                .otherwise(None)
+                .alias(returns.name)
+            ])
+            .select(pl.col(returns.name))
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_response_dispersion", canonical="event_response_dispersion", backend="polars")
+class EventResponseDispersionPolarsNative(SeriesOperator):
+    """Standard deviation of post-event responses"""
+    metadata = OperatorMetadata(
+        name="event_response_dispersion",
+        category="event",
+        description="Standard deviation of post-event responses",
+        param_names=["returns", "event_flag", "response_window", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, response_window=5, lookback=252, **kwargs):
+        df = pl.from_pandas(returns.to_frame()).with_columns([
+            pl.from_pandas(event_flag.to_frame()).select(pl.col(event_flag.name).alias("_event")).to_series(),
+            pl.lit(returns).shift(-response_window).alias("_future_ret")
+        ])
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_future_ret"))
+                .otherwise(None)
+                .alias("_event_response")
+            ])
+            .select([
+                pl.col("_event_response")
+                .rolling_std(window_size=lookback, min_periods=2)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_historical_response_sign_balance", canonical="event_historical_response_sign_balance", backend="polars")
+class EventHistoricalResponseSignBalancePolarsNative(SeriesOperator):
+    """Balance of positive vs negative responses: (pos - neg) / (pos + neg)"""
+    metadata = OperatorMetadata(
+        name="event_historical_response_sign_balance",
+        category="event",
+        description="Balance of positive vs negative responses: (pos - neg) / (pos + neg)",
+        param_names=["returns", "event_flag", "response_window", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, response_window=5, lookback=252, **kwargs):
+        df = pl.from_pandas(returns.to_frame()).with_columns([
+            pl.from_pandas(event_flag.to_frame()).select(pl.col(event_flag.name).alias("_event")).to_series(),
+            pl.lit(returns).shift(-response_window).alias("_future_ret")
+        ])
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_future_ret"))
+                .otherwise(None)
+                .alias("_event_response")
+            ])
+            .with_columns([
+                pl.when(pl.col("_event_response") > 0).then(1.0).otherwise(0.0).alias("_pos"),
+                pl.when(pl.col("_event_response") < 0).then(1.0).otherwise(0.0).alias("_neg")
+            ])
+            .with_columns([
+                pl.col("_pos").rolling_sum(window_size=lookback, min_periods=1).alias("_pos_sum"),
+                pl.col("_neg").rolling_sum(window_size=lookback, min_periods=1).alias("_neg_sum")
+            ])
+            .select([
+                ((pl.col("_pos_sum") - pl.col("_neg_sum")) /
+                 (pl.col("_pos_sum") + pl.col("_neg_sum") + 1e-8))
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_response_reversal_strength", canonical="event_response_reversal_strength", backend="polars")
+class EventResponseReversalStrengthPolarsNative(SeriesOperator):
+    """Strength of reversal after initial response (compare early vs late window)"""
+    metadata = OperatorMetadata(
+        name="event_response_reversal_strength",
+        category="event",
+        description="Strength of reversal after initial response (compare early vs late window)",
+        param_names=["returns", "event_flag", "early_window", "late_window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, early_window=3, late_window=10, **kwargs):
+        df = pl.from_pandas(returns.to_frame()).with_columns([
+            pl.from_pandas(event_flag.to_frame()).select(pl.col(event_flag.name).alias("_event")).to_series(),
+            pl.lit(returns).shift(-early_window).alias("_early_ret"),
+            pl.lit(returns).shift(-late_window).alias("_late_ret")
+        ])
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_early_ret") * pl.col("_late_ret"))
+                .otherwise(None)
+                .alias("_reversal_signal")
+            ])
+            .select([
+                pl.when(pl.col("_reversal_signal") < 0)
+                .then(1.0)
+                .otherwise(0.0)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+# ============================================================================
+# Event Clustering and Patterns
+# ============================================================================
+
+@register_operator(name="event_cluster_count", canonical="event_cluster_count", backend="polars")
+class EventClusterCountPolarsNative(SeriesOperator):
+    """Number of distinct event clusters in window (events separated by min_gap)"""
+    metadata = OperatorMetadata(
+        name="event_cluster_count",
+        category="event",
+        description="Number of distinct event clusters in window (events separated by min_gap)",
+        param_names=["event_flag", "window", "min_gap"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, min_gap=3, **kwargs):
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_event_idx") - pl.col("_event_idx").shift(1))
+                .alias("_gap")
+            ])
+            .with_columns([
+                pl.when(pl.col("_gap").is_null() | (pl.col("_gap") > min_gap))
+                .then(1.0)
+                .otherwise(0.0)
+                .alias("_new_cluster")
+            ])
+            .select([
+                pl.col("_new_cluster")
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_refractory", canonical="event_refractory", backend="polars")
+class EventRefractoryPolarsNative(SeriesOperator):
+    """Time since last event (refractory period tracking)"""
+    metadata = OperatorMetadata(
+        name="event_refractory",
+        category="event",
+        description="Time since last event (refractory period tracking)",
+        param_names=["event_flag"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, **kwargs):
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                pl.col("_event_idx").fill_null(strategy="forward").alias("_last_event_idx")
+            ])
+            .select([
+                (pl.col("_idx") - pl.col("_last_event_idx").fill_null(0))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_interval_memory", canonical="event_interval_memory", backend="polars")
+class EventIntervalMemoryPolarsNative(SeriesOperator):
+    """Autocorrelation of inter-event intervals (are events periodic?)"""
+    metadata = OperatorMetadata(
+        name="event_interval_memory",
+        category="event",
+        description="Autocorrelation of inter-event intervals (are events periodic?)",
+        param_names=["event_flag", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, lookback=50, **kwargs):
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_event_idx") - pl.col("_event_idx").shift(1))
+                .alias("_interval")
+            ])
+            .with_columns([
+                pl.col("_interval").rolling_mean(window_size=lookback, min_periods=2).alias("_interval_mean"),
+                pl.col("_interval").rolling_std(window_size=lookback, min_periods=2).alias("_interval_std")
+            ])
+            .select([
+                (pl.col("_interval_std") / (pl.col("_interval_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_local_variation", canonical="event_local_variation", backend="polars")
+class EventLocalVariationPolarsNative(SeriesOperator):
+    """Coefficient of variation of recent inter-event times"""
+    metadata = OperatorMetadata(
+        name="event_local_variation",
+        category="event",
+        description="Coefficient of variation of recent inter-event times",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=10, **kwargs):
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_event_idx") - pl.col("_event_idx").shift(1))
+                .alias("_interval")
+            ])
+            .with_columns([
+                pl.col("_interval").rolling_mean(window_size=window, min_periods=2).alias("_mean"),
+                pl.col("_interval").rolling_std(window_size=window, min_periods=2).alias("_std")
+            ])
+            .select([
+                (pl.col("_std") / (pl.col("_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+# ============================================================================
+# Event Statistics (Fano factor, Allan variance family)
+# ============================================================================
+
+@register_operator(name="event_fano_factor", canonical="event_fano_factor", backend="polars")
+class EventFanoFactorPolarsNative(SeriesOperator):
+    """Fano factor: variance / mean of event counts (dispersion measure)"""
+    metadata = OperatorMetadata(
+        name="event_fano_factor",
+        category="event",
+        description="Fano factor: variance / mean of event counts (dispersion measure)",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_mean(window_size=window, min_periods=1).alias("_mean"),
+                pl.col(event_flag.name).rolling_var(window_size=window, min_periods=2).alias("_var")
+            ])
+            .select([
+                (pl.col("_var") / (pl.col("_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_fano_excess", canonical="event_fano_excess", backend="polars")
+class EventFanoExcessPolarsNative(SeriesOperator):
+    """Excess Fano factor: (variance - mean) / mean, measures overdispersion"""
+    metadata = OperatorMetadata(
+        name="event_fano_excess",
+        category="event",
+        description="Excess Fano factor: (variance - mean) / mean, measures overdispersion",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_mean(window_size=window, min_periods=1).alias("_mean"),
+                pl.col(event_flag.name).rolling_var(window_size=window, min_periods=2).alias("_var")
+            ])
+            .select([
+                ((pl.col("_var") - pl.col("_mean")) / (pl.col("_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_allan_factor", canonical="event_allan_factor", backend="polars")
+class EventAllanFactorPolarsNative(SeriesOperator):
+    """Allan factor: measure of clustering vs randomness in event timing"""
+    metadata = OperatorMetadata(
+        name="event_allan_factor",
+        category="event",
+        description="Allan factor: measure of clustering vs randomness in event timing",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    }
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        # Allan variance-inspired: variance of binned counts
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_sum(window_size=2, min_periods=1).alias("_binned")
+            ])
+            .with_columns([
+                pl.col("_binned").rolling_var(window_size=window//2, min_periods=2).alias("_var"),
+                pl.col("_binned").rolling_mean(window_size=window//2, min_periods=1).alias("_mean")
+            ])
+            .select([
+                (pl.col("_var") / (pl.col("_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_allan_log_mean", canonical="event_allan_log_mean", backend="polars")
+class EventAllanLogMeanPolarsNative(SeriesOperator):
+    """Log of mean event rate in Allan variance framework"""
+    metadata = OperatorMetadata(
+        name="event_allan_log_mean",
+        category="event",
+        description="Log of mean event rate in Allan variance framework",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .select([
+                (pl.col(event_flag.name)
+                 .rolling_mean(window_size=window, min_periods=1) + 1e-8)
+                .log()
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+# ============================================================================
+# Event Returns and Cumulative Analysis
+# ============================================================================
+
+@register_operator(name="event_cumulative_return_past", canonical="event_cumulative_return_past", backend="polars")
+class EventCumulativeReturnPastPolarsNative(SeriesOperator):
+    """Cumulative return from events that occurred in past window"""
+    metadata = OperatorMetadata(
+        name="event_cumulative_return_past",
+        category="event",
+        description="Cumulative return from events that occurred in past window",
+        param_names=["returns", "event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    }
+
+    def _calculate_series(self, returns, event_flag, window=20, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col(returns.name))
+                .otherwise(0.0)
+                .alias("_event_ret")
+            ])
+            .select([
+                pl.col("_event_ret")
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_abnormal_return_past", canonical="event_abnormal_return_past", backend="polars")
+class EventAbnormalReturnPastPolarsNative(SeriesOperator):
+    """Cumulative abnormal return from events (return - expected)"""
+    metadata = OperatorMetadata(
+        name="event_abnormal_return_past",
+        category="event",
+        description="Cumulative abnormal return from events (return - expected)",
+        param_names=["returns", "event_flag", "window", "baseline_window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, window=20, baseline_window=60, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.col(returns.name)
+                .rolling_mean(window_size=baseline_window, min_periods=1)
+                .alias("_expected")
+            ])
+            .with_columns([
+                (pl.col(returns.name) - pl.col("_expected")).alias("_abnormal")
+            ])
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_abnormal"))
+                .otherwise(0.0)
+                .alias("_event_abnormal")
+            ])
+            .select([
+                pl.col("_event_abnormal")
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_arithmetic_return_sum", canonical="event_arithmetic_return_sum", backend="polars")
+class EventArithmeticReturnSumPolarsNative(SeriesOperator):
+    """Simple sum of returns at event times"""
+    metadata = OperatorMetadata(
+        name="event_arithmetic_return_sum",
+        category="event",
+        description="Simple sum of returns at event times",
+        param_names=["returns", "event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, window=20, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col(returns.name))
+                .otherwise(0.0)
+                .alias("_event_ret")
+            ])
+            .select([
+                pl.col("_event_ret")
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_log_return_sum", canonical="event_log_return_sum", backend="polars")
+class EventLogReturnSumPolarsNative(SeriesOperator):
+    """Sum of log returns at event times"""
+    metadata = OperatorMetadata(
+        name="event_log_return_sum",
+        category="event",
+        description="Sum of log returns at event times",
+        param_names=["returns", "event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, window=20, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then((1.0 + pl.col(returns.name)).log())
+                .otherwise(0.0)
+                .alias("_event_log_ret")
+            ])
+            .select([
+                pl.col("_event_log_ret")
+                .rolling_sum(window_size=window, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+# ============================================================================
+# Advanced Event Metrics
+# ============================================================================
+
+@register_operator(name="event_response_effective_events", canonical="event_response_effective_events", backend="polars")
+class EventResponseEffectiveEventsPolarsNative(SeriesOperator):
+    """Shannon entropy-based effective number of events contributing to response"""
+    metadata = OperatorMetadata(
+        name="event_response_effective_events",
+        category="event",
+        description="Shannon entropy-based effective number of events contributing to response",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, **kwargs):
+        # Simplified: diversity measure of event distribution
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_sum(window_size=window, min_periods=1).alias("_count"),
+                pl.col(event_flag.name).rolling_mean(window_size=window, min_periods=1).alias("_mean")
+            ])
+            .select([
+                (pl.col("_count") * pl.col("_mean") / (pl.col("_mean") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_response_overlap_ratio", canonical="event_response_overlap_ratio", backend="polars")
+class EventResponseOverlapRatioPolarsNative(SeriesOperator):
+    """Ratio of time when multiple event response windows overlap"""
+    metadata = OperatorMetadata(
+        name="event_response_overlap_ratio",
+        category="event",
+        description="Ratio of time when multiple event response windows overlap",
+        param_names=["event_flag", "response_window", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, response_window=10, lookback=50, **kwargs):
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name)
+                .rolling_sum(window_size=response_window, min_periods=1)
+                .alias("_active_events")
+            ])
+            .with_columns([
+                pl.when(pl.col("_active_events") > 1).then(1.0).otherwise(0.0).alias("_overlap")
+            ])
+            .select([
+                pl.col("_overlap")
+                .rolling_mean(window_size=lookback, min_periods=1)
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_response_decay_rate", canonical="event_response_decay_rate", backend="polars")
+class EventResponseDecayRatePolarsNative(SeriesOperator):
+    """Estimated decay rate of event impact over time"""
+    metadata = OperatorMetadata(
+        name="event_response_decay_rate",
+        category="event",
+        description="Estimated decay rate of event impact over time",
+        param_names=["returns", "event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, window=20, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        # Simplified: compare near vs far event impacts
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col(returns.name))
+                .otherwise(0.0)
+                .alias("_event_ret")
+            ])
+            .with_columns([
+                pl.col("_event_ret").rolling_mean(window_size=window//2, min_periods=1).alias("_near"),
+                pl.col("_event_ret").rolling_mean(window_size=window, min_periods=1).alias("_far")
+            ])
+            .select([
+                ((pl.col("_near") - pl.col("_far")) / (pl.col("_near") + 1e-8))
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_cluster_mean_size", canonical="event_cluster_mean_size", backend="polars")
+class EventClusterMeanSizePolarsNative(SeriesOperator):
+    """Average number of events per cluster"""
+    metadata = OperatorMetadata(
+        name="event_cluster_mean_size",
+        category="event",
+        description="Average number of events per cluster",
+        param_names=["event_flag", "window", "min_gap"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=20, min_gap=3, **kwargs):
+        df = pl.from_pandas(event_flag.to_frame()).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col(event_flag.name) > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_event_idx") - pl.col("_event_idx").shift(1))
+                .alias("_gap")
+            ])
+            .with_columns([
+                pl.when(pl.col("_gap").is_null() | (pl.col("_gap") > min_gap))
+                .then(1.0)
+                .otherwise(0.0)
+                .alias("_new_cluster")
+            ])
+            .with_columns([
+                pl.col(event_flag.name).rolling_sum(window_size=window, min_periods=1).alias("_total_events"),
+                pl.col("_new_cluster").rolling_sum(window_size=window, min_periods=1).alias("_clusters")
+            ])
+            .select([
+                (pl.col("_total_events") / (pl.col("_clusters") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_level_survival_share", canonical="event_level_survival_share", backend="polars")
+class EventLevelSurvivalSharePolarsNative(SeriesOperator):
+    """Share of events where price level survived (didn't reverse) after window"""
+    metadata = OperatorMetadata(
+        name="event_level_survival_share",
+        category="event",
+        description="Share of events where price level survived (didn't reverse) after window",
+        param_names=["returns", "event_flag", "survival_window", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, survival_window=10, lookback=50, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.col(returns.name).shift(-survival_window).alias("_future_ret")
+            ])
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(
+                    pl.when((pl.col(returns.name) * pl.col("_future_ret")) > 0)
+                    .then(1.0)
+                    .otherwise(0.0)
+                )
+                .otherwise(None)
+                .alias("_survival")
+            ])
+            .select([
+                pl.col("_survival")
+                .rolling_mean(window_size=lookback, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_mark_autocorr", canonical="event_mark_autocorr", backend="polars")
+class EventMarkAutocorrPolarsNative(SeriesOperator):
+    """Autocorrelation of event marks (e.g., returns at event times)"""
+    metadata = OperatorMetadata(
+        name="event_mark_autocorr",
+        category="event",
+        description="Autocorrelation of event marks (e.g., returns at event times)",
+        param_names=["returns", "event_flag", "lookback", "lag"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, lookback=50, lag=1, **kwargs):
+        df = pl.from_pandas(pd.concat([returns.to_frame(), event_flag.to_frame().rename(columns={event_flag.name: "_event"})], axis=1))
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col(returns.name))
+                .otherwise(None)
+                .alias("_mark")
+            ])
+            .with_columns([
+                pl.col("_mark").shift(lag).alias("_mark_lag")
+            ])
+            .with_columns([
+                (pl.col("_mark") * pl.col("_mark_lag")).alias("_product")
+            ])
+            .select([
+                pl.col("_product")
+                .rolling_mean(window_size=lookback, min_periods=1)
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_interval_mark_coupling", canonical="event_interval_mark_coupling", backend="polars")
+class EventIntervalMarkCouplingPolarsNative(SeriesOperator):
+    """Correlation between inter-event intervals and event marks"""
+    metadata = OperatorMetadata(
+        name="event_interval_mark_coupling",
+        category="event",
+        description="Correlation between inter-event intervals and event marks",
+        param_names=["returns", "event_flag", "lookback"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, returns, event_flag, lookback=50, **kwargs):
+        df = pl.from_pandas(returns.to_frame()).with_columns([
+            pl.from_pandas(event_flag.to_frame()).select(pl.col(event_flag.name).alias("_event")).to_series()
+        ]).with_row_count("_idx")
+
+        return (
+            df
+            .lazy()
+            .with_columns([
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col("_idx"))
+                .otherwise(None)
+                .alias("_event_idx")
+            ])
+            .with_columns([
+                (pl.col("_event_idx") - pl.col("_event_idx").shift(1)).alias("_interval"),
+                pl.when(pl.col("_event") > 0)
+                .then(pl.col(returns.name))
+                .otherwise(None)
+                .alias("_mark")
+            ])
+            .with_columns([
+                (pl.col("_interval") * pl.col("_mark")).alias("_product"),
+                pl.col("_interval").alias("_int_sq"),
+                pl.col("_mark").alias("_mark_sq")
+            ])
+            .select([
+                (pl.col("_product").rolling_mean(window_size=lookback, min_periods=1) /
+                 ((pl.col("_int_sq").rolling_std(window_size=lookback, min_periods=2) *
+                   pl.col("_mark_sq").rolling_std(window_size=lookback, min_periods=2)) + 1e-8))
+                .alias(returns.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_hawkes_branching_ratio_proxy", canonical="event_hawkes_branching_ratio_proxy", backend="polars")
+class EventHawkesBranchingRatioProxyPolarsNative(SeriesOperator):
+    """Proxy for Hawkes process branching ratio (self-excitement measure)"""
+    metadata = OperatorMetadata(
+        name="event_hawkes_branching_ratio_proxy",
+        category="event",
+        description="Proxy for Hawkes process branching ratio (self-excitement measure)",
+        param_names=["event_flag", "window", "decay_window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=50, decay_window=10, **kwargs):
+        # Simplified: ratio of observed to baseline event rate after events
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_mean(window_size=window, min_periods=1).alias("_baseline"),
+                pl.col(event_flag.name).rolling_mean(window_size=decay_window, min_periods=1).alias("_recent")
+            ])
+            .select([
+                ((pl.col("_recent") - pl.col("_baseline")) / (pl.col("_baseline") + 1e-8))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )
+
+
+@register_operator(name="event_allan_scaling_slope", canonical="event_allan_scaling_slope", backend="polars")
+class EventAllanScalingSlopePolarsNative(SeriesOperator):
+    """Slope of Allan factor across scales (power law exponent)"""
+    metadata = OperatorMetadata(
+        name="event_allan_scaling_slope",
+        category="event",
+        description="Slope of Allan factor across scales (power law exponent)",
+        param_names=["event_flag", "window"],
+        return_type="series",
+        tags=["event", "polars_native"],
+    )
+
+    def _calculate_series(self, event_flag, window=50, **kwargs):
+        # Simplified: compare Allan factor at different scales
+        return (
+            pl.from_pandas(event_flag.to_frame()).lazy()
+            .with_columns([
+                pl.col(event_flag.name).rolling_sum(window_size=5, min_periods=1).alias("_w5"),
+                pl.col(event_flag.name).rolling_sum(window_size=20, min_periods=1).alias("_w20")
+            ])
+            .with_columns([
+                pl.col("_w5").rolling_var(window_size=window//4, min_periods=2).alias("_var5"),
+                pl.col("_w20").rolling_var(window_size=window//4, min_periods=2).alias("_var20"),
+                pl.col("_w5").rolling_mean(window_size=window//4, min_periods=1).alias("_mean5"),
+                pl.col("_w20").rolling_mean(window_size=window//4, min_periods=1).alias("_mean20")
+            ])
+            .select([
+                (((pl.col("_var20") / (pl.col("_mean20") + 1e-8)).log() -
+                  (pl.col("_var5") / (pl.col("_mean5") + 1e-8)).log()) /
+                 (np.log(20) - np.log(5)))
+                .alias(event_flag.name)
+            ])
+            .collect()
+            .to_series()
+        )

@@ -1,0 +1,64 @@
+task_id: POL2-P0-002
+base_sha: 8c326a56669965ec7afd78531fd691788e60bf23
+current_head_sha: 19d2ff954b56f5dfd034d8ec8e8631af0ff271d4
+implementation_commit_sha: null
+integrated_commit_sha: null
+owned_files:
+  - factor_engine/cleaned_operators/auto_polars_all.py
+  - factor_engine/scripts/auto_generate_polars_bridges.py
+  - factor_engine/tests/backend/test_polars_operator_ownership.py
+  - factor_engine/evidence/r2/POL2-P0-002.yaml
+  - LOOP_ENGINEERING_STATUS.md
+modified_files:
+  - factor_engine/cleaned_operators/auto_polars_all.py
+  - factor_engine/scripts/auto_generate_polars_bridges.py
+  - factor_engine/tests/backend/test_polars_operator_ownership.py
+  - factor_engine/evidence/r2/POL2-P0-002.yaml
+  - LOOP_ENGINEERING_STATUS.md
+canonicals_touched:
+  - ts_corr
+backends_touched:
+  - polars
+status: CLOSED_LOCAL
+production_not_proven: true
+dirty_state:
+  dirty_count_at_start: 26
+  dirty_count_at_evidence: 70
+  unrelated_changes_preserved: true
+  note: Dirty count includes concurrent/unrelated existing changes and this task's files; no cleanup or destructive git operation was used.
+reproduction:
+  registered_ts_corr_class_module: cleaned_operators.common.polars_ts_rolling
+  registered_ts_corr_class_name: TSCorrNative
+  generated_module_import: blocked
+  generated_module_import_error: "TypeError: Can't instantiate abstract class AcfPolars with abstract method _calculate_series"
+  generated_ts_corr_registration_removed: true
+  generator_quarantine: 'POLARS_NATIVE_CANONICALS = frozenset({"ts_corr"})'
+implementation_change:
+  - Removed the generated auto_polars_all ts_corr registration.
+  - Added a narrow generator exclusion for ts_corr so regeneration cannot restore the alternate bridge.
+  - Added static ownership and exact unrelated import-blocker regression tests.
+tests_run:
+  - command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 PYTHONPATH=factor_engine pytest -q tests/backend/test_polars_operator_ownership.py tests/backend/test_r2_p0_018_ts_corr_registration.py
+    result: 7 passed, 2 warnings
+  - command: python3 compile modified Python sources with compile(text, path, 'exec')
+    result: passed for auto_polars_all.py, auto_generate_polars_bridges.py, test_polars_operator_ownership.py
+  - command: git diff --check -- factor_engine/cleaned_operators/auto_polars_all.py factor_engine/scripts/auto_generate_polars_bridges.py factor_engine/tests/backend/test_polars_operator_ownership.py
+    result: passed
+  - command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q tests/backend/test_r2_p0_018_ts_corr_registration.py tests/test_ts_batch1_corr_cov_direct.py
+    result: 5 passed, 2 warnings
+  - command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 pytest -q tests/backend/test_ts_corr_parity.py
+    result: 9 passed, 2 warnings
+retry_verification:
+  active_class_module: cleaned_operators.common.polars_ts_rolling
+  active_class_name: TSCorrNative
+  direct_centered_oracle_passed: true
+  pandas_polars_parity_passed: true
+  implementation_change_required: false
+  warning: Production-mode classification warns that ts_corr lacks an explicit PhysicalImplementationSpec; this is outside the narrow authority/math retry.
+tests_not_run:
+  - full repository suite
+  - import of auto_polars_all beyond the expected abstract AcfPolars blocker
+known_limitations:
+  - auto_polars_all remains unimportable because of unrelated abstract generated bridge classes; broad repair is explicitly out of scope.
+  - No production readiness or full registry/bootstrap claim is made.
+evidence_generated_at: 2026-08-19T00:00:00Z

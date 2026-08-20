@@ -1,0 +1,96 @@
+{
+ "git_sha": "cec2390ac0fa0314efc604550eaa808445e57cc1",
+ "generated_at": "2026-08-12T01:31:58+0800",
+ "gates": {
+  "MODEL_ZERO_PREDICTIVE_LEARNER_FITTED_INSIDE_SCORE_PATH": {
+   "value": true,
+   "check": "dynamic probe: frozen predict under TrainOnlyFitGuard produced finite scores without invoking fit",
+   "status": "PASS"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_HAVE_WALK_FORWARD_SPEC": {
+   "value": true,
+   "check": "dynamic probe: 5 predictive learner(s) bound to WalkForwardSpec in ModelRegistry",
+   "status": "PASS"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_HAVE_VALIDATION": {
+   "value": true,
+   "check": "dynamic probe: 5 predictive learner(s) bound to WalkForwardSpec in ModelRegistry",
+   "status": "PASS"
+  },
+  "MODEL_ALL_PREDICTIVE_LEARNERS_PURGE_LABEL_OVERLAP": {
+   "value": true,
+   "check": "dynamic probe: purge_before_boundary keeps only rows whose label interval ends strictly before the evaluation boundary",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_RANDOM_TIME_SPLIT": {
+   "value": true,
+   "check": "dynamic probe: date-authoritative ordered splits, deterministic, no train/validation/test overlap",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_SCALER": {
+   "value": true,
+   "check": "dynamic probe: FrozenPreprocessing state hash unchanged after transforming a far-future poisoned row (frozen train-only stats)",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_PCA_PREPROCESS": {
+   "value": true,
+   "check": "PCR fits its PCA inside learner.fit on train rows only; the frozen preprocessing probe proves no full-sample recompute (scaler + no-fit probes both green)",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_FULL_SAMPLE_FEATURE_SELECTION": {
+   "value": false,
+   "check": "NOT_RUN: the model layer has no feature-selection module to exercise \u2014 this is a static audit claim, not a runnable invariant probe",
+   "status": "NOT_RUN"
+  },
+  "MODEL_ZERO_TEST_DRIVEN_HYPERPARAM_SELECTION": {
+   "value": true,
+   "check": "dynamic probe: all 7 \u00a758 negative controls pass \u2014 including hyperparam_poison (test-driven selection is detected as a leak)",
+   "status": "PASS"
+  },
+  "MODEL_ALL_ARTIFACTS_ASOF_RESOLVED": {
+   "value": true,
+   "check": "dynamic probe: \u00a750 as-of resolution returned the latest legal artifact, rejected future-trained artifacts for history and returned None before any training cutoff (fail closed)",
+   "status": "PASS"
+  },
+  "MODEL_ALL_MODELS_HAVE_SAMPLE_ADEQUACY_CONTRACT": {
+   "value": true,
+   "check": "dynamic probe: every registered predictive learner resolves its SampleAdequacyContract via an explicit sample_contract_family (pcr/pls/elastic_net \u2192 linear)",
+   "status": "PASS"
+  },
+  "MODEL_ALL_SEARCHABLE_PARAMS_HAVE_SEARCH_POLICY": {
+   "value": true,
+   "check": "dynamic probe: every \u00a769 recommended param has a ParameterSearchPolicy",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_NUMERICAL_POLICY_SEARCHABLE": {
+   "value": true,
+   "check": "dynamic probe: ParameterSearchPolicy raises on searchable NUMERICAL_POLICY; live registry policies are not searchable",
+   "status": "PASS"
+  },
+  "MODEL_ZERO_DATA_POLICY_SEARCHABLE_BY_FACTOR_MINER": {
+   "value": true,
+   "check": "dynamic probe: ParameterSearchPolicy raises on searchable DATA_POLICY; live registry policies are not searchable",
+   "status": "PASS"
+  },
+  "MODEL_REGIME_ALL_COMPONENTS_HAVE_SUPPORT": {
+   "value": true,
+   "check": "dynamic probe: RegimeLearner fitted 3 regimes with per-regime obs >= floor and an undersized sample raised ValueError (fail closed)",
+   "status": "PASS"
+  },
+  "MODEL_MOE_ALL_ACTIVE_EXPERTS_HAVE_SUPPORT": {
+   "value": true,
+   "check": "dynamic probe: MixtureOfExpertsLearner fitted 3 experts (obs >= floor, full-rank design, bounded condition) and an undersized sample raised ValueError (fail closed)",
+   "status": "PASS"
+  },
+  "MODEL_FINAL_HOLDOUT_NOT_EXPOSED_TO_SEARCH": {
+   "value": true,
+   "check": "dynamic probe: test windows are disjoint from the train/validation search windows in walk-forward folds",
+   "status": "PASS"
+  },
+  "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
+   "value": true,
+   "check": "evidence bound to cec2390ac0fa0314efc604550eaa808445e57cc1 == repository HEAD cec2390ac0fa0314efc604550eaa808445e57cc1",
+   "status": "PASS"
+  }
+ }
+}

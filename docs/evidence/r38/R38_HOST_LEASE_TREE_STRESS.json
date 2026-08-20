@@ -1,0 +1,18 @@
+{
+  "head": "d34cc9f50df92a10ca5c84a6d64d4682d2cd9f23",
+  "reconcile": {
+    "active_leases": 16,
+    "active_memory_bytes": 2415919104,
+    "active_root_leases": 8,
+    "cpu_over_commit": false,
+    "cpu_reserved": 8,
+    "io_reserved": 0,
+    "over_commit": false,
+    "rejected_count": 12,
+    "safe_memory_bytes": 15718423922,
+    "spill_reserved": 0,
+    "target_cpu_tokens": 8,
+    "terminal_count": 0
+  },
+  "root_accounting_memory": 2415919104
+}

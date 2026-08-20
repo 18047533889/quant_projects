@@ -1,0 +1,246 @@
+candidate,source_round,current_exact,current_alias,semantic_equivalent,composable,replacement,current_surface,pandas_backend,polars_backend,duckdb_backend,field_legal,pit_legal,stateful,checkpointable,parameter_evidence,disposition,reason
+fiscal_acceleration,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_delta,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fiscal_lag,R41,,,period_lag,,,,,,,YES,YES,,,,EXISTING_EQUIVALENT,Semantically equivalent to period_lag
+fiscal_pct_change,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_market_profile_corr_ex_self,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+report_asof,R41,,,,,,,,,,YES,YES,,,,ARCHITECTURE_SUPERSEDED,PIT join handled by DataAccess layer
+same_calendar_month_return,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+same_clock_lag,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+cn_sma,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+cs_isolation_forest_score,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+event_window_return_asof,R41,,,,,,,,,,YES,YES,,,,ARCHITECTURE_SUPERSEDED,PIT join handled by DataAccess layer
+financial_snapshot_lag,R41,,,period_lag,,,,,,,YES,YES,,,,EXISTING_EQUIVALENT,Semantically equivalent to period_lag
+fiscal_capital_stock,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fiscal_rolling_regression,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fiscal_rolling_std,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intraday_value_at_extreme_state,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+panel_peer_graph_aggregate,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+price_delay_score,R41,,,ts_price_delay,,,,,,,YES,YES,,,,EXISTING_EQUIVALENT,Semantically equivalent to ts_price_delay
+winsorized_ratio,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+HMA,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+KAMA,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+QQE,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+RSX,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+WMA,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+cs_factor_bucket_return,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+pastor_stambaugh_beta,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+same_calendar_day_mean,R41,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+ALMA,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+CoppockCurve,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ElderRay,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+FisherTransform,R41,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_same_slot_zscore,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_neighbor_event_class,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_count,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_sum,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_vwap,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_interval_moment,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_follow_ratio,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_follow_beta,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_follow_corr,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_pair_same_slot_corr,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_range_gap_flag,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_volume_peak_ridge_valley_state,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_price_peak_ridge_valley_state,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_smart_money_vwap_ratio,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_smart_money_fcm_score,R42,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+panel_apm_residual_tstat,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+panel_day_night_beta_gap,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+panel_async_beta_ex_self,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_jump_wavelet_morphology,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_cojump_breadth_ex_self,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+cs_topological_anomaly_score,R42,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+panel_predictability_mosaic_score,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+panel_factor_pocket_strength,R42,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_price_shape_cosine_match,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_distribution_moment,R42,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_slice_mask_reduce,R43,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_slice_mask_pair_reduce,R43,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_multiresolution_resample_reduce,R43,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+panel_intraday_ordered_reduce,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+ts_ewm_std,R43,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+panel_ewm_beta_ex_self,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+panel_cmra_ex_self,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+intra_idiosyncratic_semivariance_balance_ex_self,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+panel_similarity_crowding_score,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+panel_cluster_risk_score,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+intra_functional_beta_profile_ex_self,R43,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+fiscal_cost_stickiness_score,R44,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fundamental_cash_flow_duration,R44,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+intra_round_price_clustering_share,R44,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_round_price_barrier_response,R44,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_session_segment_reduce,R44,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_session_boundary_jump,R44,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+trading_calendar_mask,R44,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+suspension_restart_response,R44,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+intra_limit_pre_hit_pressure_profile,R44,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_impulse_event_detector,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_post_impulse_response,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_probe_outcome_score,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_supply_absorption_score,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_consolidation_quality,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_response_curve_features,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_volume_at_price_profile,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_volume_profile_peak_geometry,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_volume_profile_supply_structure,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+turnover_chip_distribution,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+turnover_chip_distribution_transport,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+turnover_chip_age_cost_surface,R45,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_log_signature_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_functional_pca_shape,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_functional_motif_score,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_shapelet_match,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_rqa_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_persistent_homology_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_topological_anomaly_score,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_optimal_transport_profile_shift,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_dmd_koopman_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_kalman_latent_price,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_state_space_volume_components,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_hmm_state_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_hsmm_duration_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_change_point_sequence_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_hawkes_event_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_multifractal_spectrum,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_wavelet_scattering_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_emd_hilbert_huang_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_visibility_graph_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_information_flow_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_covariance_manifold_shift,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_diffusion_map_state,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_common_trading_intensity,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_price_efficiency_state_space,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_neural_cde_embedding,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_contrastive_path_embedding,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_matrix_profile_session_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_dtw_archetype_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_local_conditional_entropy,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_business_time_deformation,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_quantile_dependence_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_kramers_moyal_dynamics,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_extreme_event_interval_memory,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_signature_lead_lag_network,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_validated_lead_lag_network,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_dynamic_stock_graph_features,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_tensor_common_mode,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_topological_peer_anomaly,R45,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_critical_transition_score,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_realized_measure_state_vector,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_symbolic_dynamics_features,R45,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_eod_reversal_decomposition,R46,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_volume_shock_state,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_comovement_curve_ex_self,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_price_volume_cross_wavelet,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_bicoherence_features,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_frequency_granger_price_volume,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_range_competition_profile,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_absorption_curve_area,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_volume_profile_value_area,R46,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+turnover_chip_overhang_surface,R46,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fundamental_latent_balance_sheet_factor,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fundamental_working_capital_financing_state,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fundamental_cost_stickiness_panel,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+intra_multiscale_state_residence,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_visibility_motif_transition,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_recurrence_network_features,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_transfer_operator_metastability,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_local_drift_diffusion_surface,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+intra_session_ot_map,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+panel_intraday_low_rank_residual_ex_self,R46,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+fin_schema_gate,R47,,,,,,,,,,NO,YES,,,,BLOCKED_BY_DATA_CONTRACT,Missing required data fields or needs schema contract
+ts_lagged_predictability_score,R47,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+cs_predictability_mosaic_score,R47,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_functional_autoencoder_score,R47,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_hmm_posterior_entropy,R47,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_liquidity_resilience_curve_fit,R47,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_function_on_function_anomaly_response,R47,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+intra_event_window_reduce,Primitives,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_event_pre_post_contrast,Primitives,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_event_decay_kernel,Primitives,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+intra_state_transition_entropy,Primitives,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+intra_state_dwell_stats,Primitives,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+cs_robust_mahalanobis_score,Primitives,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+intra_piecewise_linear_path_features,Primitives,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Intraday operator
+ts_online_change_point_score,Primitives,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+state_change_point_adaptive_ema,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; State-space/filter operator
+state_filter_reset_on_break,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; State-space/filter operator
+state_gain_scheduler,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; State-space/filter operator
+state_elastic_turnover_prox,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; State-space/filter operator
+cs_shrink_to_market_mean,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+cs_shrink_to_group_mean,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+cs_empirical_bayes_shrinkage,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_l1_trend_filter_trailing,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_total_variation_filter_trailing,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_robust_kalman_level,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+ts_one_euro_filter,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+ts_alpha_beta_filter,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_bessel_lowpass_causal,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_fir_lowpass_causal,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_causal_savgol_endpoint,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_vidya,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+ts_mcginley_dynamic,FilterState,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Time-series operator
+ts_nlms_filter,FilterState,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+ts_rls_filter,FilterState,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+ts_student_t_kalman_filter,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_adaptive_noise_kalman,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_wavelet_shrinkage_trailing,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_ssa_denoise_trailing,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+cs_peer_graph_smooth,FilterState,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+ts_h_infinity_level_filter,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+ts_particle_filter_level,FilterState,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+ts_modwt_denoise_trailing,FilterState,,,,,,,,,,YES,YES,,,,RESEARCH_ONLY_IMPLEMENT,Requires research validation before production
+ts_spectral_lowpass_trailing,FilterState,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+row_sum_skipna,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+industry_size_neutralize,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_perpetual_inventory,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_standardized_surprise,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_direction_consistency,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_pair_direction_agreement,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_autocorr,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_ar_resid_std,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_rolling_regression_resid,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fiscal_asymmetric_elasticity,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+industry_fiscal_resid,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_accrual_quality,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+accounting_comparability_score,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_asymmetric_timeliness,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_reversal_ratio,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_logit_score,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+cash_flow_lifecycle_stage,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+date_diff_days,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fin_seasonal_zscore,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fin_seasonal_percentile,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+fiscal_true_streak,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+group_cs_resid,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Cross-sectional operator
+holder_concentration_change,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+laborforce_efficiency,FiscalRelation,,,,,,,,,,NO,YES,,,,BLOCKED_BY_DATA_CONTRACT,Missing required data fields or needs schema contract
+relation_entropy,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+relation_jaccard,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+relation_period_change,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Relational operator
+revision_delta,FiscalRelation,YES,,,,,,NO,NO,NO,YES,YES,,,,EXISTING_EXACT,Exact canonical match in registry
+years_since_date,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found
+fundamental_staleness_days,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+fiscal_rolling_slope,FiscalRelation,,,,,,,,,,YES,YES,,,,TRUE_GAP_IMPLEMENT,No existing implementation found; Fundamental/fiscal operator
+ts_hampel_filter_causal,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_median3_causal,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_rolling_median_causal,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_robust_ema,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_super_smoother,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_kama,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_butterworth_lowpass_causal,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_causal_local_linear_smoother,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_adaptive_deadband,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_rank_deadband,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_quantile_hysteresis,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_adaptive_slew_limit,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_l1_turnover_prox,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_l2_partial_adjustment,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_cost_aware_deadband,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_cost_aware_slew,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_confidence_weighted_ema,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+state_uncertainty_deadband,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_quantile_range,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_trimmed_mean,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_robust_zscore_inclusive,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification
+ts_robust_zscore_prior,ExistingRecertify,YES,,,,,,NO,NO,NO,YES,YES,,,,PROD_RECERTIFY,Existing operator requiring production recertification

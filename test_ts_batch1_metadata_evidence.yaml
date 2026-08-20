@@ -1,0 +1,35 @@
+ticket: FE-MOCK-IMPORT
+status: RESOLVED
+summary: MockParamRole missing NUMERICAL attribute added, but deeper import issue remains: ImportError: cannot import name 'MISSING'
+
+findings:
+  - MISSING is defined in cleaned_operators/base.py as a singleton instance of _MissingDefaultType class (lines 25-43)
+  - registry.py imports MISSING from cleaned_operators.base (line 47)
+  - MockParamRole in test_ts_batch1_metadata.py was missing NUMERICAL attribute (now added)
+  - Mock module injection needed MISSING attribute to resolve import chain
+  - Additional mock classes needed: Operator, ScalarOperator, TwoVarOperator, TransformOperator
+  - MockParamRole needed POLICY attribute added
+  - ExecutionKind mock needed POLARS_NUMPY_KERNEL attribute
+  - PhysicalImplementationSpec mock needed __init__ with **kwargs support
+
+resolution:
+  - Added MISSING mock with _MockMissingDefaultType class
+  - Added Operator, ScalarOperator, TwoVarOperator, TransformOperator mock classes
+  - Added POLICY and all other ParamRole attributes (MODEL_ORDER, MISSING_POLICY, MARKET_POLICY, SUPPORT_POLICY, SOURCE_POLICY, SESSION_POLICY)
+  - Updated ExecutionKind mock with POLARS_NUMPY_KERNEL
+  - Updated PhysicalImplementationSpec mock with __init__ accepting kwargs
+  - All 111 operators now load successfully with complete metadata structure
+
+test_result:
+  command: "cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 POLARS_MAX_THREADS=1 python3 test_ts_batch1_metadata.py"
+  exit_code: 0
+  output: |
+    ✓ Total operators: 111
+    ✓ Operators with metadata: 111
+    ✓ Operators with param_specs: 111
+    ✓ Operators with _calculate_series: 111
+
+    ✓ SUCCESS: All operators have complete metadata structure!
+
+files_modified:
+  - /home/shw/quant_projects/factor_engine/test_ts_batch1_metadata.py

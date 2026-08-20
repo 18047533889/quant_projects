@@ -1,0 +1,20 @@
+factor:
+  name: balance_sheet_rank_total_assets
+  expr: rank(col("total_assets"))
+  freq: 1d
+  universe: equities
+  description: 资产负债表 - 总资产截面排名，越高代表规模越大
+
+data_source:
+  type: data_access
+  dataset: fundamentals_balance_sheet
+  fields:
+    total_assets: total_assets
+  start_date: "2010-01-01"
+  end_date: "2011-12-31"
+
+backend:
+  type: pandas
+
+engine:
+  enable_cache: true

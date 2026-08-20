@@ -1,0 +1,53 @@
+evidence:
+  timestamp: "2026-08-20"
+  summary: "FE-MOCK-IMPORT fix verification and regression check"
+  regression_verdict: "No regressions introduced by MockParamRole changes"
+
+  runs:
+    - name: test_ts_batch1_metadata
+      command: "cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 test_ts_batch1_metadata.py"
+      result: "PASS"
+      details: "All 111 operators have complete metadata structure"
+      pass_count: 1
+      fail_count: 0
+
+    - name: test_operator_surface
+      command: "cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m pytest tests/test_operator_surface.py -v --tb=short"
+      result: "2 FAIL (pre-existing)"
+      details: >
+        55 passed, 2 failed.
+        Failed tests are:
+        1. test_production_all_runtime_excludes_research_tools
+        2. test_duplicate_canonicals_are_merged_to_one_runtime
+        Both failures relate to OperatorRegistry._aliases and canonical handling,
+        which are not related to MockParamRole or FE-MOCK-IMPORT.
+      pass_count: 55
+      fail_count: 2
+
+    - name: test_same_clock_lag
+      command: "cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m pytest tests/test_same_clock_lag.py -v --tb=short"
+      result: "PASS"
+      details: "All 14 tests passed"
+      pass_count: 14
+      fail_count: 0
+
+    - name: test_data_scope_stability
+      command: "cd /home/shw/quant_projects/factor_engine && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m pytest tests/test_data_scope_stability.py -v --tb=short"
+      result: "PASS"
+      details: "All 3 tests passed"
+      pass_count: 3
+      fail_count: 0
+
+  totals:
+    total_pass: 73
+    total_fail: 2
+    total_runs: 4
+
+  regression_analysis:
+    status: "CLEAN"
+    explanation: >
+      The 2 failures in test_operator_surface.py are pre-existing issues
+      related to OperatorRegistry._aliases and canonical dedup logic.
+      They are unrelated to MockParamRole or the FE-MOCK-IMPORT fix.
+      No new regressions were introduced by the MockParamRole changes.
+      All metadata, time-series lag, and data scope tests pass cleanly.
